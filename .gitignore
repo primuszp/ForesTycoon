@@ -1,0 +1,19 @@
+# Visual Studio / Rider
+.vs/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Build outputs
+**/bin/
+**/obj/
+
+# Logs
+*.log
+
+# OS files
+Thumbs.db
+Desktop.ini
+
