@@ -668,10 +668,53 @@ namespace ForesTycoon
         private void InitWaterFromHydrology()
         {
             nodeWaterDepth = new float[nodes.Length];
-            for (int i = 0; i < nodes.Length; i++)
+            bool[] visited = new bool[nodes.Length];
+            Queue<Node> queue = new Queue<Node>();
+
+            // Seed 1: border W=0 nodes → ocean
+            for (int u = 0; u < nodeCols; u++)
             {
-                float depth = WATER_Z - nodes[i].zPos;
-                if (depth > 0f) nodeWaterDepth[i] = depth;
+                TryAddWaterSeed(getNodeByCoords(u, 0),            queue, visited);
+                TryAddWaterSeed(getNodeByCoords(u, nodeRows - 1), queue, visited);
+            }
+            for (int v = 1; v < nodeRows - 1; v++)
+            {
+                TryAddWaterSeed(getNodeByCoords(0,            v), queue, visited);
+                TryAddWaterSeed(getNodeByCoords(nodeCols - 1, v), queue, visited);
+            }
+
+            // Seed 2: W=0 corners of hydrology-designated inland lake tiles
+            foreach (int tileId in standingWaterTileIds)
+            {
+                Tile t = tiles[tileId];
+                TryAddWaterSeed(t.N, queue, visited);
+                TryAddWaterSeed(t.S, queue, visited);
+                TryAddWaterSeed(t.E, queue, visited);
+                TryAddWaterSeed(t.W, queue, visited);
+            }
+
+            // BFS: fill only W=0 nodes reachable from a seed
+            while (queue.Count > 0)
+            {
+                Node n = queue.Dequeue();
+                nodeWaterDepth[n.Id] = WATER_Z - n.zPos;
+                foreach (Node nb in getNeighbours(n))
+                {
+                    if (!visited[nb.Id] && nb.zPos < WATER_Z)
+                    {
+                        visited[nb.Id] = true;
+                        queue.Enqueue(nb);
+                    }
+                }
+            }
+        }
+
+        private void TryAddWaterSeed(Node n, Queue<Node> queue, bool[] visited)
+        {
+            if (!visited[n.Id] && n.zPos < WATER_Z)
+            {
+                visited[n.Id] = true;
+                queue.Enqueue(n);
             }
         }
 
@@ -1256,7 +1299,7 @@ namespace ForesTycoon
                 for (int v = 0; v < nodeRows - 1; v++)
                 {
                     Tile tile = getTileByCoords(u, v);
-                    if (!ShouldDrawStandingWater(tile)) continue;
+                    if (!HasDynamicWater(tile)) continue;
 
                     // Per-NODE magasság: osztott csúcsok szomszéd tile-oknál
                     // AZONOS értéket kapnak → nulla hézag a tile határain
