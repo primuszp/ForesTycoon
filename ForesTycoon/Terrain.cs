@@ -1219,8 +1219,8 @@ namespace ForesTycoon
         // Amplitúdó szándékosan kicsi: Transport Tycoon-szerű, finoman remegő felszín.
         private float WaveAt(float x, float y, float t)
         {
-            const float A1 = 0.06f, F1x = 0.055f, F1y = 0.038f, S1 = 1.1f;
-            const float A2 = 0.03f, F2x = 0.082f, F2y = 0.071f, S2 = 1.9f;
+            const float A1 = 0.30f, F1x = 0.040f, F1y = 0.028f, S1 = 1.3f;
+            const float A2 = 0.14f, F2x = 0.065f, F2y = 0.058f, S2 = 2.1f;
             return A1 * (float)Math.Sin(t * S1 + x * F1x + y * F1y)
                  + A2 * (float)Math.Sin(t * S2 - x * F2x + y * F2y);
         }
