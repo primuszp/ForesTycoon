@@ -53,6 +53,7 @@ namespace ForesTycoon
         private Terrain      terrain      = null;
 
         private bool         isLoaded     = false;
+        private System.Windows.Forms.Timer waterTimer;
 
         private static float SnapRotation(float angle)
         {
@@ -87,6 +88,10 @@ namespace ForesTycoon
                 isLoaded = true;
                 SetupViewport();
                 Focus();
+
+                waterTimer = new System.Windows.Forms.Timer { Interval = 120 };
+                waterTimer.Tick += (s, e) => { if (isLoaded) { terrain.WaterFlowStep(); Invalidate(); } };
+                waterTimer.Start();
             }
             catch (Exception ex)
             {
