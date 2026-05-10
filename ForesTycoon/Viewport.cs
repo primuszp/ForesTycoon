@@ -223,6 +223,13 @@ namespace ForesTycoon
             Render();
         }
 
+        protected override void OnHandleDestroyed(EventArgs e)
+        {
+            waterTimer?.Stop();
+            waterTimer?.Dispose();
+            base.OnHandleDestroyed(e);
+        }
+
         protected override void OnResize(EventArgs e)
         {
             base.OnResize(e);

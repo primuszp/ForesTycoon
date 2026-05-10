@@ -882,7 +882,7 @@ namespace ForesTycoon
 
         private uint ColorToUInt(Color color)
         {
-            return (((uint)color.A) << 24) | (((uint)color.B) << 16) + (((uint)color.G) << 8) + ((uint)color.R);
+            return ((uint)color.A << 24) | ((uint)color.B << 16) | ((uint)color.G << 8) | (uint)color.R;
         }
 
         /// <summary>Kettő szín lin. interpolációja t ∈ [0,1] alapján.</summary>
@@ -918,6 +918,7 @@ namespace ForesTycoon
 
             DrawSkirts();
             DrawWater();
+            DrawWaterWalls();
             DrawRivers();
             DrawTrees();
 
@@ -1260,12 +1261,29 @@ namespace ForesTycoon
 
         // Két egymásra szuperponált hullám egy adott (x,y) pozícióra.
         // Amplitúdó szándékosan kicsi: Transport Tycoon-szerű, finoman remegő felszín.
+        private const float WAVE_MAX = 0.51f;
+
         private float WaveAt(float x, float y, float t)
         {
             const float A1 = 0.30f, F1x = 0.040f, F1y = 0.028f, S1 = 1.3f;
             const float A2 = 0.14f, F2x = 0.065f, F2y = 0.058f, S2 = 2.1f;
+            const float A3 = 0.07f, F3x = 0.130f, F3y = 0.100f, S3 = 3.8f;
             return A1 * (float)Math.Sin(t * S1 + x * F1x + y * F1y)
-                 + A2 * (float)Math.Sin(t * S2 - x * F2x + y * F2y);
+                 + A2 * (float)Math.Sin(t * S2 - x * F2x + y * F2y)
+                 + A3 * (float)Math.Sin(t * S3 + x * F3x - y * F3y);
+        }
+
+        private void WaterVertex(Node node, float wz, float t, Color baseColor)
+        {
+            float wave = WaveAt(node.xPos, node.yPos, t);
+            float n = Math.Max(-1f, Math.Min(1f, wave / WAVE_MAX));
+            int shift = (int)(n * 20f);
+            int a = baseColor.A;
+            int r = Math.Max(0, Math.Min(255, baseColor.R + shift));
+            int g = Math.Max(0, Math.Min(255, baseColor.G + (int)(shift * 1.4f)));
+            int b = Math.Max(0, Math.Min(255, baseColor.B + (int)(shift * 0.6f)));
+            GL.Color4(Color.FromArgb(a, r, g, b));
+            GL.Vertex3(node.xPos, node.yPos, wz);
         }
 
         // Per-node vízfelszín + hullám. Száraz node-nál WATER_Z-t ad vissza (terep alá esik,
@@ -1281,18 +1299,18 @@ namespace ForesTycoon
         {
             if (nodeWaterDepth == null) return;
 
-            Color waterDeep    = Color.FromArgb(200,  45, 120, 190);
-            Color waterShallow = Color.FromArgb(140,  80, 165, 220);
-            Color waterGrid    = Color.FromArgb(180, 120, 190, 240);
+            Color waterDeep    = Color.FromArgb(200,  38, 110, 180);
+            Color waterShallow = Color.FromArgb(130,  70, 155, 215);
+            Color waterGrid    = Color.FromArgb(150, 110, 180, 235);
 
             float t = (float)(Environment.TickCount64 % 628318) * 0.001f;
 
             GL.Enable(EnableCap.Blend);
             GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
 
-            // Nincs PolygonOffset a vízre: a terep PolygonOffset(+1,+1)-je miatt
-            // a víz természetesen nyeri a partvonalnál a mélységtesztet,
-            // a magasabb terepnél pedig a terep nyeri – automatikus, hézagmentes vágás.
+            // Smooth shading: per-vertex wave-based color gives shimmer effect
+            GL.ShadeModel(ShadingModel.Smooth);
+
             GL.Begin(PrimitiveType.Quads);
             for (int u = 0; u < nodeCols - 1; u++)
             {
@@ -1301,8 +1319,6 @@ namespace ForesTycoon
                     Tile tile = getTileByCoords(u, v);
                     if (!HasDynamicWater(tile)) continue;
 
-                    // Per-NODE magasság: osztott csúcsok szomszéd tile-oknál
-                    // AZONOS értéket kapnak → nulla hézag a tile határain
                     float wzN = NodeWaterZ(tile.N, t);
                     float wzS = NodeWaterZ(tile.S, t);
                     float wzE = NodeWaterZ(tile.E, t);
@@ -1314,14 +1330,16 @@ namespace ForesTycoon
                     if (nodeWaterDepth[tile.E.Id] >= MIN_WATER_DEPTH) wetCount++;
                     if (nodeWaterDepth[tile.W.Id] >= MIN_WATER_DEPTH) wetCount++;
 
-                    GL.Color4(wetCount >= 3 ? waterDeep : waterShallow);
-                    GL.Vertex3(tile.W.xPos, tile.W.yPos, wzW);
-                    GL.Vertex3(tile.S.xPos, tile.S.yPos, wzS);
-                    GL.Vertex3(tile.E.xPos, tile.E.yPos, wzE);
-                    GL.Vertex3(tile.N.xPos, tile.N.yPos, wzN);
+                    Color baseColor = wetCount >= 3 ? waterDeep : waterShallow;
+                    WaterVertex(tile.W, wzW, t, baseColor);
+                    WaterVertex(tile.S, wzS, t, baseColor);
+                    WaterVertex(tile.E, wzE, t, baseColor);
+                    WaterVertex(tile.N, wzN, t, baseColor);
                 }
             }
             GL.End();
+
+            GL.ShadeModel(ShadingModel.Flat);
 
             // Rácsvonalak csak mélyvíz tile-okon (mind a 4 sarok nedves)
             GL.Begin(PrimitiveType.Lines);
@@ -1349,6 +1367,60 @@ namespace ForesTycoon
             }
             GL.End();
             GL.Disable(EnableCap.Blend);
+        }
+
+        private void DrawWaterWalls()
+        {
+            if (nodeWaterDepth == null) return;
+
+            float t = (float)(Environment.TickCount64 % 628318) * 0.001f;
+
+            GL.Enable(EnableCap.Blend);
+            GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
+            GL.ShadeModel(ShadingModel.Smooth);
+
+            GL.Begin(PrimitiveType.Quads);
+            for (int u = 0; u < nodeCols - 1; u++)
+            {
+                for (int v = 0; v < nodeRows - 1; v++)
+                {
+                    Tile tile = getTileByCoords(u, v);
+                    if (!HasDynamicWater(tile)) continue;
+
+                    // Edge W→S: szomszéd tile (u, v-1)
+                    TryDrawWaterWall(tile.W, tile.S, checkTile(u, v - 1) ? getTileByCoords(u, v - 1) : null, t);
+                    // Edge S→E: szomszéd tile (u+1, v)
+                    TryDrawWaterWall(tile.S, tile.E, checkTile(u + 1, v) ? getTileByCoords(u + 1, v) : null, t);
+                    // Edge E→N: szomszéd tile (u, v+1)
+                    TryDrawWaterWall(tile.E, tile.N, checkTile(u, v + 1) ? getTileByCoords(u, v + 1) : null, t);
+                    // Edge N→W: szomszéd tile (u-1, v)
+                    TryDrawWaterWall(tile.N, tile.W, checkTile(u - 1, v) ? getTileByCoords(u - 1, v) : null, t);
+                }
+            }
+            GL.End();
+
+            GL.ShadeModel(ShadingModel.Flat);
+            GL.Disable(EnableCap.Blend);
+        }
+
+        private void TryDrawWaterWall(Node a, Node b, Tile neighbor, float t)
+        {
+            if (neighbor != null && HasDynamicWater(neighbor)) return;
+
+            float dA = nodeWaterDepth[a.Id];
+            float dB = nodeWaterDepth[b.Id];
+            if (dA < MIN_WATER_DEPTH && dB < MIN_WATER_DEPTH) return;
+
+            float wzA = dA >= MIN_WATER_DEPTH ? a.zPos + dA + WaveAt(a.xPos, a.yPos, t) : a.zPos;
+            float wzB = dB >= MIN_WATER_DEPTH ? b.zPos + dB + WaveAt(b.xPos, b.yPos, t) : b.zPos;
+
+            if (wzA <= a.zPos + 0.02f && wzB <= b.zPos + 0.02f) return;
+
+            // Vízfelszínnél: félátlátszó kék; aljnál: sötét mélykék
+            GL.Color4(Color.FromArgb(155,  55, 130, 195)); GL.Vertex3(a.xPos, a.yPos, wzA);
+            GL.Color4(Color.FromArgb(155,  55, 130, 195)); GL.Vertex3(b.xPos, b.yPos, wzB);
+            GL.Color4(Color.FromArgb(225,   8,  35,  85)); GL.Vertex3(b.xPos, b.yPos, b.zPos);
+            GL.Color4(Color.FromArgb(225,   8,  35,  85)); GL.Vertex3(a.xPos, a.yPos, a.zPos);
         }
 
         public bool SearchPoint(double x, double y, double radius)
@@ -1380,44 +1452,43 @@ namespace ForesTycoon
 
         private void ElevationManager(int delta)
         {
-            List<Node> openList = new List<Node>();
-            List<Node> closedList = new List<Node>();
+            List<Node>  openList  = new List<Node>();
+            List<Node>  closedList = new List<Node>();
+            HashSet<Node> openSet   = new HashSet<Node>();
+            HashSet<Node> closedSet = new HashSet<Node>();
 
             if (actualNode != null)
             {
                 openList.Add(actualNode);
+                openSet.Add(actualNode);
 
                 while (openList.Count > 0)
                 {
                     Node oNode = openList[0];
-                    openList.Remove(oNode);
+                    openList.RemoveAt(0);
+                    openSet.Remove(oNode);
 
                     closedList.Add(oNode);
+                    closedSet.Add(oNode);
                     oNode.W = oNode.W + delta;
 
-                    List<Node> Neighbours = getNeighbours(oNode);
-
-                    foreach (Node nNode in Neighbours)
+                    foreach (Node nNode in getNeighbours(oNode))
                     {
-                        if (closedList.IndexOf(nNode) < 0 && openList.IndexOf(nNode) < 0)
+                        if (closedSet.Contains(nNode) || openSet.Contains(nNode)) continue;
+
+                        bool enqueue = delta > 0
+                            ? oNode.W - nNode.W > +1
+                            : oNode.W - nNode.W < -1;
+
+                        if (enqueue)
                         {
-                            if (delta > 0)
-                            {
-                                if (oNode.W - nNode.W > +1)
-                                    openList.Add(nNode);
-                            }
-                            else
-                            {
-                                if (oNode.W - nNode.W < -1)
-                                    openList.Add(nNode);
-                            }
+                            openList.Add(nNode);
+                            openSet.Add(nNode);
                         }
                     }
                 }
                 updateNodes(closedList);
 
-                // Azonnali egyensúlyosítás: gyorsan feltölti az új mélyedéseket
-                // ill. elvezeti a magasabbra emelt területről a vizet
                 if (nodeWaterDepth != null)
                     for (int i = 0; i < 30; i++) WaterFlowStep();
             }
@@ -1425,9 +1496,9 @@ namespace ForesTycoon
 
         private void DrawTrees()
         {
-            for (int u = 1; u < nodeCols - 2; u++)
+            for (int u = 1; u < nodeCols - 1; u++)
             {
-                for (int v = 1; v < nodeRows - 2; v++)
+                for (int v = 1; v < nodeRows - 1; v++)
                 {
                     Tile tile = getTileByCoords(u, v);
                     float moisture = tileMoisture[tile.Id];
