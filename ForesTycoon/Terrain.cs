@@ -1225,6 +1225,15 @@ namespace ForesTycoon
                  + A2 * (float)Math.Sin(t * S2 - x * F2x + y * F2y);
         }
 
+        // Per-node vízfelszín + hullám. Száraz node-nál WATER_Z-t ad vissza (terep alá esik,
+        // a mélységteszt elrejti) – így nincs szükség polygon-vágásra.
+        private float NodeWaterZ(Node node, float t)
+        {
+            float depth = nodeWaterDepth[node.Id];
+            if (depth < MIN_WATER_DEPTH) return WATER_Z;
+            return node.zPos + depth + WaveAt(node.xPos, node.yPos, t);
+        }
+
         private void DrawWater()
         {
             if (nodeWaterDepth == null) return;
@@ -1233,17 +1242,15 @@ namespace ForesTycoon
             Color waterShallow = Color.FromArgb(140,  80, 165, 220);
             Color waterGrid    = Color.FromArgb(180, 120, 190, 240);
 
-            float t = (float)(Environment.TickCount64 % 628318) * 0.001f;  // ~100 periódusnyi precíz tartomány
+            float t = (float)(Environment.TickCount64 % 628318) * 0.001f;
 
             GL.Enable(EnableCap.Blend);
             GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
 
-            // Negatív offset: a vízfelszín nyerje a Z-tesztet a partvonalnál,
-            // különben a +1 offset a vizet hátratolja és hézag keletkezik.
-            GL.Enable(EnableCap.PolygonOffsetFill);
-            GL.PolygonOffset(-1.0f, -1.0f);
-
-            // Vágott vízfelszín-sokszögek – per-tile vízszint + hullám
+            // Nincs PolygonOffset a vízre: a terep PolygonOffset(+1,+1)-je miatt
+            // a víz természetesen nyeri a partvonalnál a mélységtesztet,
+            // a magasabb terepnél pedig a terep nyeri – automatikus, hézagmentes vágás.
+            GL.Begin(PrimitiveType.Quads);
             for (int u = 0; u < nodeCols - 1; u++)
             {
                 for (int v = 0; v < nodeRows - 1; v++)
@@ -1251,58 +1258,44 @@ namespace ForesTycoon
                     Tile tile = getTileByCoords(u, v);
                     if (!ShouldDrawStandingWater(tile)) continue;
 
-                    float waterZ = GetTileWaterSurface(tile);
-                    if (float.IsNaN(waterZ)) waterZ = WATER_Z;
+                    // Per-NODE magasság: osztott csúcsok szomszéd tile-oknál
+                    // AZONOS értéket kapnak → nulla hézag a tile határain
+                    float wzN = NodeWaterZ(tile.N, t);
+                    float wzS = NodeWaterZ(tile.S, t);
+                    float wzE = NodeWaterZ(tile.E, t);
+                    float wzW = NodeWaterZ(tile.W, t);
 
-                    float cx = (tile.W.xPos + tile.E.xPos) * 0.5f;
-                    float cy = (tile.W.yPos + tile.N.yPos) * 0.5f;
-                    float wz = waterZ + WaveAt(cx, cy, t);
+                    int wetCount = 0;
+                    if (nodeWaterDepth[tile.N.Id] >= MIN_WATER_DEPTH) wetCount++;
+                    if (nodeWaterDepth[tile.S.Id] >= MIN_WATER_DEPTH) wetCount++;
+                    if (nodeWaterDepth[tile.E.Id] >= MIN_WATER_DEPTH) wetCount++;
+                    if (nodeWaterDepth[tile.W.Id] >= MIN_WATER_DEPTH) wetCount++;
 
-                    // Vágás és renderelés ugyanazon a wz magasságon – nincs hézag hullámnál sem
-                    List<Vector3> polygon = BuildClippedWaterPolygon(tile, wz);
-                    if (polygon.Count < 3) continue;
-
-                    int wetCorners = 0;
-                    if (tile.W.zPos < wz) wetCorners++;
-                    if (tile.S.zPos < wz) wetCorners++;
-                    if (tile.E.zPos < wz) wetCorners++;
-                    if (tile.N.zPos < wz) wetCorners++;
-
-                    GL.Color4(wetCorners >= 3 ? waterDeep : waterShallow);
-                    GL.Begin(PrimitiveType.TriangleFan);
-                    foreach (Vector3 pt in polygon) GL.Vertex3(pt);
-                    GL.End();
+                    GL.Color4(wetCount >= 3 ? waterDeep : waterShallow);
+                    GL.Vertex3(tile.W.xPos, tile.W.yPos, wzW);
+                    GL.Vertex3(tile.S.xPos, tile.S.yPos, wzS);
+                    GL.Vertex3(tile.E.xPos, tile.E.yPos, wzE);
+                    GL.Vertex3(tile.N.xPos, tile.N.yPos, wzN);
                 }
             }
-            GL.Disable(EnableCap.PolygonOffsetFill);
+            GL.End();
 
-            // Rácsvonalak – per-sarok hullám → rácsháló "lebeg"
+            // Rácsvonalak csak mélyvíz tile-okon (mind a 4 sarok nedves)
             GL.Begin(PrimitiveType.Lines);
             for (int u = 0; u < nodeCols - 1; u++)
             {
                 for (int v = 0; v < nodeRows - 1; v++)
                 {
                     Tile tile = getTileByCoords(u, v);
-                    if (!ShouldDrawStandingWater(tile)) continue;
+                    if (nodeWaterDepth[tile.N.Id] < MIN_WATER_DEPTH) continue;
+                    if (nodeWaterDepth[tile.S.Id] < MIN_WATER_DEPTH) continue;
+                    if (nodeWaterDepth[tile.E.Id] < MIN_WATER_DEPTH) continue;
+                    if (nodeWaterDepth[tile.W.Id] < MIN_WATER_DEPTH) continue;
 
-                    float waterZ = GetTileWaterSurface(tile);
-                    if (float.IsNaN(waterZ)) waterZ = WATER_Z;
-
-                    float cx = (tile.W.xPos + tile.E.xPos) * 0.5f;
-                    float cy = (tile.W.yPos + tile.N.yPos) * 0.5f;
-                    float wz = waterZ + WaveAt(cx, cy, t);
-
-                    int wetCorners = 0;
-                    if (tile.W.zPos < wz) wetCorners++;
-                    if (tile.S.zPos < wz) wetCorners++;
-                    if (tile.E.zPos < wz) wetCorners++;
-                    if (tile.N.zPos < wz) wetCorners++;
-                    if (wetCorners < 4) continue;
-
-                    float zwN = waterZ + WaveAt(tile.N.xPos, tile.N.yPos, t);
-                    float zwS = waterZ + WaveAt(tile.S.xPos, tile.S.yPos, t);
-                    float zwE = waterZ + WaveAt(tile.E.xPos, tile.E.yPos, t);
-                    float zwW = waterZ + WaveAt(tile.W.xPos, tile.W.yPos, t);
+                    float zwN = NodeWaterZ(tile.N, t);
+                    float zwS = NodeWaterZ(tile.S, t);
+                    float zwE = NodeWaterZ(tile.E, t);
+                    float zwW = NodeWaterZ(tile.W, t);
 
                     GL.Color4(waterGrid);
                     GL.Vertex3(tile.W.xPos, tile.W.yPos, zwW); GL.Vertex3(tile.S.xPos, tile.S.yPos, zwS);
@@ -1379,6 +1372,11 @@ namespace ForesTycoon
                     }
                 }
                 updateNodes(closedList);
+
+                // Azonnali egyensúlyosítás: gyorsan feltölti az új mélyedéseket
+                // ill. elvezeti a magasabbra emelt területről a vizet
+                if (nodeWaterDepth != null)
+                    for (int i = 0; i < 30; i++) WaterFlowStep();
             }
         }
 
