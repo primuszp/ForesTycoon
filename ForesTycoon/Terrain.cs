@@ -963,6 +963,8 @@ namespace ForesTycoon
             // Rácsszín – halvány kék vonalak a vízfelszínen
             Color riverGrid    = Color.FromArgb(160, 105, 185, 238);
 
+            float t = (float)(Environment.TickCount64 % 628318) * 0.001f;
+
             GL.Enable(EnableCap.Blend);
             GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
             GL.Enable(EnableCap.PolygonOffsetFill);
@@ -983,18 +985,23 @@ namespace ForesTycoon
                     if (rc < 2) continue;
                     if (rc == 2 && !HasAdjacentRiverBankPair(tile)) continue;
 
-                    float waterZ = tile.Low * tileSizeM + RIVER_WATER_H;
+                    float baseZ = tile.Low * tileSizeM + RIVER_WATER_H;
+                    float cx = (tile.W.xPos + tile.E.xPos) * 0.5f;
+                    float cy = (tile.W.yPos + tile.N.yPos) * 0.5f;
+                    // Folyónál felére csökkentett amplitúdó – gyorsabb, kisebb hullám
+                    float wz = baseZ + WaveAt(cx, cy, t * 1.4f) * 0.45f;
+
                     GL.Color4(rc == 4 ? riverDeep : riverShallow);
-                    GL.Vertex3(tile.W.xPos, tile.W.yPos, waterZ);
-                    GL.Vertex3(tile.S.xPos, tile.S.yPos, waterZ);
-                    GL.Vertex3(tile.E.xPos, tile.E.yPos, waterZ);
-                    GL.Vertex3(tile.N.xPos, tile.N.yPos, waterZ);
+                    GL.Vertex3(tile.W.xPos, tile.W.yPos, wz);
+                    GL.Vertex3(tile.S.xPos, tile.S.yPos, wz);
+                    GL.Vertex3(tile.E.xPos, tile.E.yPos, wz);
+                    GL.Vertex3(tile.N.xPos, tile.N.yPos, wz);
                 }
             }
             GL.End();
             GL.Disable(EnableCap.PolygonOffsetFill);
 
-            // Rácsvonalak a mély folyó tile-okon
+            // Rácsvonalak a mély folyó tile-okon – per-sarok hullám
             GL.Begin(PrimitiveType.Lines);
             for (int u = 0; u < nodeCols - 1; u++)
             {
@@ -1009,12 +1016,18 @@ namespace ForesTycoon
                            + (riverNodeIds.Contains(tile.W.Id) ? 1 : 0);
                     if (rc < 4) continue;
 
-                    float waterZ = tile.Low * tileSizeM + RIVER_WATER_H;
+                    float baseZ = tile.Low * tileSizeM + RIVER_WATER_H;
+                    float ts = t * 1.4f;
+                    float zwN = baseZ + WaveAt(tile.N.xPos, tile.N.yPos, ts) * 0.45f;
+                    float zwS = baseZ + WaveAt(tile.S.xPos, tile.S.yPos, ts) * 0.45f;
+                    float zwE = baseZ + WaveAt(tile.E.xPos, tile.E.yPos, ts) * 0.45f;
+                    float zwW = baseZ + WaveAt(tile.W.xPos, tile.W.yPos, ts) * 0.45f;
+
                     GL.Color4(riverGrid);
-                    GL.Vertex3(tile.W.xPos, tile.W.yPos, waterZ); GL.Vertex3(tile.S.xPos, tile.S.yPos, waterZ);
-                    GL.Vertex3(tile.S.xPos, tile.S.yPos, waterZ); GL.Vertex3(tile.E.xPos, tile.E.yPos, waterZ);
-                    GL.Vertex3(tile.E.xPos, tile.E.yPos, waterZ); GL.Vertex3(tile.N.xPos, tile.N.yPos, waterZ);
-                    GL.Vertex3(tile.N.xPos, tile.N.yPos, waterZ); GL.Vertex3(tile.W.xPos, tile.W.yPos, waterZ);
+                    GL.Vertex3(tile.W.xPos, tile.W.yPos, zwW); GL.Vertex3(tile.S.xPos, tile.S.yPos, zwS);
+                    GL.Vertex3(tile.S.xPos, tile.S.yPos, zwS); GL.Vertex3(tile.E.xPos, tile.E.yPos, zwE);
+                    GL.Vertex3(tile.E.xPos, tile.E.yPos, zwE); GL.Vertex3(tile.N.xPos, tile.N.yPos, zwN);
+                    GL.Vertex3(tile.N.xPos, tile.N.yPos, zwN); GL.Vertex3(tile.W.xPos, tile.W.yPos, zwW);
                 }
             }
             GL.End();
@@ -1202,6 +1215,16 @@ namespace ForesTycoon
                 || (northRiver && westRiver);
         }
 
+        // Két egymásra szuperponált hullám egy adott (x,y) pozícióra.
+        // Amplitúdó szándékosan kicsi: Transport Tycoon-szerű, finoman remegő felszín.
+        private float WaveAt(float x, float y, float t)
+        {
+            const float A1 = 0.06f, F1x = 0.055f, F1y = 0.038f, S1 = 1.1f;
+            const float A2 = 0.03f, F2x = 0.082f, F2y = 0.071f, S2 = 1.9f;
+            return A1 * (float)Math.Sin(t * S1 + x * F1x + y * F1y)
+                 + A2 * (float)Math.Sin(t * S2 - x * F2x + y * F2y);
+        }
+
         private void DrawWater()
         {
             if (nodeWaterDepth == null) return;
@@ -1210,12 +1233,14 @@ namespace ForesTycoon
             Color waterShallow = Color.FromArgb(140,  80, 165, 220);
             Color waterGrid    = Color.FromArgb(180, 120, 190, 240);
 
+            float t = (float)(Environment.TickCount64 % 628318) * 0.001f;  // ~100 periódusnyi precíz tartomány
+
             GL.Enable(EnableCap.Blend);
             GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
             GL.Enable(EnableCap.PolygonOffsetFill);
             GL.PolygonOffset(1.0f, 1.0f);
 
-            // Vágott vízfelszín-sokszögek – per-tile vízszint
+            // Vágott vízfelszín-sokszögek – per-tile vízszint + hullám
             for (int u = 0; u < nodeCols - 1; u++)
             {
                 for (int v = 0; v < nodeRows - 1; v++)
@@ -1235,15 +1260,21 @@ namespace ForesTycoon
                     if (tile.E.zPos < waterZ) wetCorners++;
                     if (tile.N.zPos < waterZ) wetCorners++;
 
+                    // Hullám a tile középpontja alapján – minden csúcs ugyanolyan magasan,
+                    // de szomszéd tile-ok picit eltérnek → fodrozódó hatás
+                    float cx = (tile.W.xPos + tile.E.xPos) * 0.5f;
+                    float cy = (tile.W.yPos + tile.N.yPos) * 0.5f;
+                    float wz = waterZ + WaveAt(cx, cy, t);
+
                     GL.Color4(wetCorners >= 3 ? waterDeep : waterShallow);
                     GL.Begin(PrimitiveType.TriangleFan);
-                    foreach (Vector3 pt in polygon) GL.Vertex3(pt);
+                    foreach (Vector3 pt in polygon) GL.Vertex3(pt.X, pt.Y, wz);
                     GL.End();
                 }
             }
             GL.Disable(EnableCap.PolygonOffsetFill);
 
-            // Rácsvonalak a teljesen elöntött tile-okon
+            // Rácsvonalak – per-sarok hullám → rácsháló "lebeg"
             GL.Begin(PrimitiveType.Lines);
             for (int u = 0; u < nodeCols - 1; u++)
             {
@@ -1262,11 +1293,16 @@ namespace ForesTycoon
                     if (tile.N.zPos < waterZ) wetCorners++;
                     if (wetCorners < 4) continue;
 
+                    float zwN = waterZ + WaveAt(tile.N.xPos, tile.N.yPos, t);
+                    float zwS = waterZ + WaveAt(tile.S.xPos, tile.S.yPos, t);
+                    float zwE = waterZ + WaveAt(tile.E.xPos, tile.E.yPos, t);
+                    float zwW = waterZ + WaveAt(tile.W.xPos, tile.W.yPos, t);
+
                     GL.Color4(waterGrid);
-                    GL.Vertex3(tile.W.xPos, tile.W.yPos, waterZ); GL.Vertex3(tile.S.xPos, tile.S.yPos, waterZ);
-                    GL.Vertex3(tile.S.xPos, tile.S.yPos, waterZ); GL.Vertex3(tile.E.xPos, tile.E.yPos, waterZ);
-                    GL.Vertex3(tile.E.xPos, tile.E.yPos, waterZ); GL.Vertex3(tile.N.xPos, tile.N.yPos, waterZ);
-                    GL.Vertex3(tile.N.xPos, tile.N.yPos, waterZ); GL.Vertex3(tile.W.xPos, tile.W.yPos, waterZ);
+                    GL.Vertex3(tile.W.xPos, tile.W.yPos, zwW); GL.Vertex3(tile.S.xPos, tile.S.yPos, zwS);
+                    GL.Vertex3(tile.S.xPos, tile.S.yPos, zwS); GL.Vertex3(tile.E.xPos, tile.E.yPos, zwE);
+                    GL.Vertex3(tile.E.xPos, tile.E.yPos, zwE); GL.Vertex3(tile.N.xPos, tile.N.yPos, zwN);
+                    GL.Vertex3(tile.N.xPos, tile.N.yPos, zwN); GL.Vertex3(tile.W.xPos, tile.W.yPos, zwW);
                 }
             }
             GL.End();
