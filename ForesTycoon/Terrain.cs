@@ -668,10 +668,43 @@ namespace ForesTycoon
         private void InitWaterFromHydrology()
         {
             nodeWaterDepth = new float[nodes.Length];
-            for (int i = 0; i < nodes.Length; i++)
+            bool[] visited = new bool[nodes.Length];
+            Queue<Node> queue = new Queue<Node>();
+
+            // Seed only border nodes that are below ocean level
+            for (int u = 0; u < nodeCols; u++)
             {
-                float depth = WATER_Z - nodes[i].zPos;
-                if (depth > 0f) nodeWaterDepth[i] = depth;
+                TryAddOceanSeed(getNodeByCoords(u, 0),            queue, visited);
+                TryAddOceanSeed(getNodeByCoords(u, nodeRows - 1), queue, visited);
+            }
+            for (int v = 1; v < nodeRows - 1; v++)
+            {
+                TryAddOceanSeed(getNodeByCoords(0,            v), queue, visited);
+                TryAddOceanSeed(getNodeByCoords(nodeCols - 1, v), queue, visited);
+            }
+
+            // BFS: spread water only through nodes connected to the ocean border
+            while (queue.Count > 0)
+            {
+                Node n = queue.Dequeue();
+                nodeWaterDepth[n.Id] = WATER_Z - n.zPos;
+                foreach (Node nb in getNeighbours(n))
+                {
+                    if (!visited[nb.Id] && nb.zPos < WATER_Z)
+                    {
+                        visited[nb.Id] = true;
+                        queue.Enqueue(nb);
+                    }
+                }
+            }
+        }
+
+        private void TryAddOceanSeed(Node n, Queue<Node> queue, bool[] visited)
+        {
+            if (!visited[n.Id] && n.zPos < WATER_Z)
+            {
+                visited[n.Id] = true;
+                queue.Enqueue(n);
             }
         }
 
@@ -1256,7 +1289,7 @@ namespace ForesTycoon
                 for (int v = 0; v < nodeRows - 1; v++)
                 {
                     Tile tile = getTileByCoords(u, v);
-                    if (!ShouldDrawStandingWater(tile)) continue;
+                    if (!HasDynamicWater(tile)) continue;
 
                     // Per-NODE magasság: osztott csúcsok szomszéd tile-oknál
                     // AZONOS értéket kapnak → nulla hézag a tile határain
