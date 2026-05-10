@@ -1237,8 +1237,11 @@ namespace ForesTycoon
 
             GL.Enable(EnableCap.Blend);
             GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
+
+            // Negatív offset: a vízfelszín nyerje a Z-tesztet a partvonalnál,
+            // különben a +1 offset a vizet hátratolja és hézag keletkezik.
             GL.Enable(EnableCap.PolygonOffsetFill);
-            GL.PolygonOffset(1.0f, 1.0f);
+            GL.PolygonOffset(-1.0f, -1.0f);
 
             // Vágott vízfelszín-sokszögek – per-tile vízszint + hullám
             for (int u = 0; u < nodeCols - 1; u++)
@@ -1251,24 +1254,23 @@ namespace ForesTycoon
                     float waterZ = GetTileWaterSurface(tile);
                     if (float.IsNaN(waterZ)) waterZ = WATER_Z;
 
-                    List<Vector3> polygon = BuildClippedWaterPolygon(tile, waterZ);
-                    if (polygon.Count < 3) continue;
-
-                    int wetCorners = 0;
-                    if (tile.W.zPos < waterZ) wetCorners++;
-                    if (tile.S.zPos < waterZ) wetCorners++;
-                    if (tile.E.zPos < waterZ) wetCorners++;
-                    if (tile.N.zPos < waterZ) wetCorners++;
-
-                    // Hullám a tile középpontja alapján – minden csúcs ugyanolyan magasan,
-                    // de szomszéd tile-ok picit eltérnek → fodrozódó hatás
                     float cx = (tile.W.xPos + tile.E.xPos) * 0.5f;
                     float cy = (tile.W.yPos + tile.N.yPos) * 0.5f;
                     float wz = waterZ + WaveAt(cx, cy, t);
 
+                    // Vágás és renderelés ugyanazon a wz magasságon – nincs hézag hullámnál sem
+                    List<Vector3> polygon = BuildClippedWaterPolygon(tile, wz);
+                    if (polygon.Count < 3) continue;
+
+                    int wetCorners = 0;
+                    if (tile.W.zPos < wz) wetCorners++;
+                    if (tile.S.zPos < wz) wetCorners++;
+                    if (tile.E.zPos < wz) wetCorners++;
+                    if (tile.N.zPos < wz) wetCorners++;
+
                     GL.Color4(wetCorners >= 3 ? waterDeep : waterShallow);
                     GL.Begin(PrimitiveType.TriangleFan);
-                    foreach (Vector3 pt in polygon) GL.Vertex3(pt.X, pt.Y, wz);
+                    foreach (Vector3 pt in polygon) GL.Vertex3(pt);
                     GL.End();
                 }
             }
@@ -1286,11 +1288,15 @@ namespace ForesTycoon
                     float waterZ = GetTileWaterSurface(tile);
                     if (float.IsNaN(waterZ)) waterZ = WATER_Z;
 
+                    float cx = (tile.W.xPos + tile.E.xPos) * 0.5f;
+                    float cy = (tile.W.yPos + tile.N.yPos) * 0.5f;
+                    float wz = waterZ + WaveAt(cx, cy, t);
+
                     int wetCorners = 0;
-                    if (tile.W.zPos < waterZ) wetCorners++;
-                    if (tile.S.zPos < waterZ) wetCorners++;
-                    if (tile.E.zPos < waterZ) wetCorners++;
-                    if (tile.N.zPos < waterZ) wetCorners++;
+                    if (tile.W.zPos < wz) wetCorners++;
+                    if (tile.S.zPos < wz) wetCorners++;
+                    if (tile.E.zPos < wz) wetCorners++;
+                    if (tile.N.zPos < wz) wetCorners++;
                     if (wetCorners < 4) continue;
 
                     float zwN = waterZ + WaveAt(tile.N.xPos, tile.N.yPos, t);
