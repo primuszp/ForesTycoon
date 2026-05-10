@@ -30,6 +30,10 @@ namespace ForesTycoon
         float[] tileMoisture = Array.Empty<float>();
         bool suppressHydrologyRebuild = false;
 
+        float[] nodeWaterDepth;
+        private const float MIN_WATER_DEPTH = 0.04f;
+        private const float WATER_EQUALIZE  = 0.45f;   // <0.5 → stabil, nem lő túl
+
         Dictionary<string, VertexBuffer> vbos = new Dictionary<string, VertexBuffer>();
 
         VertexBuffer edges = new VertexBuffer(PrimitiveType.Lines);
@@ -516,6 +520,11 @@ namespace ForesTycoon
                 node.zPos = node.W * tileSizeM;
                 vertices[node.Id].Position.Z = node.zPos;
 
+                // Ha a terep emelkedett, a víz nem lebeghet a magasban; ha süllyedt, marad szárazon (majd folyik bele)
+                if (nodeWaterDepth != null)
+                    nodeWaterDepth[node.Id] = Math.Max(0f,
+                        Math.Min(nodeWaterDepth[node.Id], WATER_Z - node.zPos));
+
                 List<Tile> tiles = getTilesByNode(node);
                 foreach (Tile tile in tiles)
                 {
@@ -650,6 +659,85 @@ namespace ForesTycoon
 
                 if (tile.Low <= 2) moisture = Math.Max(moisture, 0.35f);
                 tileMoisture[i] = moisture;
+            }
+
+            if (nodeWaterDepth == null)
+                InitWaterFromHydrology();
+        }
+
+        private void InitWaterFromHydrology()
+        {
+            nodeWaterDepth = new float[nodes.Length];
+            for (int i = 0; i < nodes.Length; i++)
+            {
+                float depth = WATER_Z - nodes[i].zPos;
+                if (depth > 0f) nodeWaterDepth[i] = depth;
+            }
+        }
+
+        private float GetTileWaterSurface(Tile tile)
+        {
+            float dN = nodeWaterDepth[tile.N.Id];
+            float dS = nodeWaterDepth[tile.S.Id];
+            float dE = nodeWaterDepth[tile.E.Id];
+            float dW = nodeWaterDepth[tile.W.Id];
+
+            if (dN < MIN_WATER_DEPTH && dS < MIN_WATER_DEPTH &&
+                dE < MIN_WATER_DEPTH && dW < MIN_WATER_DEPTH)
+                return float.NaN;
+
+            float sum = 0f; int count = 0;
+            if (dN >= MIN_WATER_DEPTH) { sum += tile.N.zPos + dN; count++; }
+            if (dS >= MIN_WATER_DEPTH) { sum += tile.S.zPos + dS; count++; }
+            if (dE >= MIN_WATER_DEPTH) { sum += tile.E.zPos + dE; count++; }
+            if (dW >= MIN_WATER_DEPTH) { sum += tile.W.zPos + dW; count++; }
+            return sum / count;
+        }
+
+        private bool HasDynamicWater(Tile tile)
+        {
+            return nodeWaterDepth[tile.N.Id] >= MIN_WATER_DEPTH
+                || nodeWaterDepth[tile.S.Id] >= MIN_WATER_DEPTH
+                || nodeWaterDepth[tile.E.Id] >= MIN_WATER_DEPTH
+                || nodeWaterDepth[tile.W.Id] >= MIN_WATER_DEPTH;
+        }
+
+        public void WaterFlowStep()
+        {
+            if (nodeWaterDepth == null) return;
+
+            int[] du = { 0, 1, 0, -1 };
+            int[] dv = { -1, 0, 1, 0 };
+
+            for (int pass = 0; pass < 4; pass++)
+            {
+                for (int i = 0; i < nodes.Length; i++)
+                {
+                    float depthA = nodeWaterDepth[i];
+                    if (depthA < MIN_WATER_DEPTH) continue;
+
+                    Node a = nodes[i];
+                    float surfA = a.zPos + depthA;
+
+                    for (int d = 0; d < 4; d++)
+                    {
+                        int nu = a.U + du[d], nv = a.V + dv[d];
+                        if (!checkNode(nu, nv)) continue;
+
+                        Node b = getNodeByCoords(nu, nv);
+                        float surfB = b.zPos + nodeWaterDepth[b.Id];
+                        if (surfA <= surfB + 0.001f) continue;
+
+                        float diff = surfA - surfB;
+                        float flow = Math.Min(diff * WATER_EQUALIZE,
+                                              nodeWaterDepth[i] - MIN_WATER_DEPTH * 0.5f);
+                        if (flow <= 0.001f) continue;
+
+                        nodeWaterDepth[i]     -= flow;
+                        nodeWaterDepth[b.Id]  += flow;
+                        surfA -= flow;
+                    }
+                }
             }
         }
 
@@ -875,19 +963,19 @@ namespace ForesTycoon
             // Rácsszín – halvány kék vonalak a vízfelszínen
             Color riverGrid    = Color.FromArgb(160, 105, 185, 238);
 
+            float t = (float)(Environment.TickCount64 % 628318) * 0.001f;
+
             GL.Enable(EnableCap.Blend);
             GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
             GL.Enable(EnableCap.PolygonOffsetFill);
-            GL.PolygonOffset(1.0f, 1.0f);   // tenger-szerű: a meder mögé tolja
+            GL.PolygonOffset(1.0f, 1.0f);
 
+            GL.Begin(PrimitiveType.Quads);
             for (int u = 0; u < nodeCols - 1; u++)
             {
                 for (int v = 0; v < nodeRows - 1; v++)
                 {
                     Tile tile = getTileByCoords(u, v);
-                    float moisture = tileMoisture[tile.Id];
-
-                    // Tengervíz (alap vízszint) már a DrawWater kezeli, ne duplikáljuk
                     if (ShouldDrawStandingWater(tile)) continue;
 
                     int rc = (riverNodeIds.Contains(tile.N.Id) ? 1 : 0)
@@ -897,45 +985,53 @@ namespace ForesTycoon
                     if (rc < 2) continue;
                     if (rc == 2 && !HasAdjacentRiverBankPair(tile)) continue;
 
-                    // Vízfelszín Z: tile legmélyebb sarkától mért fix magasság
-                    // → a quad vízszintes, alatta a lejtős meder eltérő mélységet mutat
-                    float waterZ = tile.Low * tileSizeM + RIVER_WATER_H;
+                    float baseZ = tile.Low * tileSizeM + RIVER_WATER_H;
+                    float cx = (tile.W.xPos + tile.E.xPos) * 0.5f;
+                    float cy = (tile.W.yPos + tile.N.yPos) * 0.5f;
+                    // Folyónál felére csökkentett amplitúdó – gyorsabb, kisebb hullám
+                    float wz = baseZ + WaveAt(cx, cy, t * 1.4f) * 0.45f;
 
                     GL.Color4(rc == 4 ? riverDeep : riverShallow);
-                    GL.Vertex3(tile.W.xPos, tile.W.yPos, waterZ);
-                    GL.Vertex3(tile.S.xPos, tile.S.yPos, waterZ);
-                    GL.Vertex3(tile.E.xPos, tile.E.yPos, waterZ);
-                    GL.Vertex3(tile.N.xPos, tile.N.yPos, waterZ);
+                    GL.Vertex3(tile.W.xPos, tile.W.yPos, wz);
+                    GL.Vertex3(tile.S.xPos, tile.S.yPos, wz);
+                    GL.Vertex3(tile.E.xPos, tile.E.yPos, wz);
+                    GL.Vertex3(tile.N.xPos, tile.N.yPos, wz);
                 }
             }
+            GL.End();
             GL.Disable(EnableCap.PolygonOffsetFill);
 
-            // Rácsvonalak csak a mély folyó tile-okon (mind a 4 sarok river node)
+            // Rácsvonalak a mély folyó tile-okon – per-sarok hullám
+            GL.Begin(PrimitiveType.Lines);
             for (int u = 0; u < nodeCols - 1; u++)
             {
                 for (int v = 0; v < nodeRows - 1; v++)
                 {
                     Tile tile = getTileByCoords(u, v);
-                    float moisture = tileMoisture[tile.Id];
                     if (ShouldDrawStandingWater(tile)) continue;
 
                     int rc = (riverNodeIds.Contains(tile.N.Id) ? 1 : 0)
                            + (riverNodeIds.Contains(tile.S.Id) ? 1 : 0)
                            + (riverNodeIds.Contains(tile.E.Id) ? 1 : 0)
                            + (riverNodeIds.Contains(tile.W.Id) ? 1 : 0);
-                    if (rc < 4) continue;   // sekély parton nincs rácsozás
+                    if (rc < 4) continue;
 
-                    float waterZ = tile.Low * tileSizeM + RIVER_WATER_H;
+                    float baseZ = tile.Low * tileSizeM + RIVER_WATER_H;
+                    float ts = t * 1.4f;
+                    float zwN = baseZ + WaveAt(tile.N.xPos, tile.N.yPos, ts) * 0.45f;
+                    float zwS = baseZ + WaveAt(tile.S.xPos, tile.S.yPos, ts) * 0.45f;
+                    float zwE = baseZ + WaveAt(tile.E.xPos, tile.E.yPos, ts) * 0.45f;
+                    float zwW = baseZ + WaveAt(tile.W.xPos, tile.W.yPos, ts) * 0.45f;
+
                     GL.Color4(riverGrid);
-                    GL.Vertex3(tile.W.xPos, tile.W.yPos, waterZ); GL.Vertex3(tile.S.xPos, tile.S.yPos, waterZ);
-                    GL.Vertex3(tile.S.xPos, tile.S.yPos, waterZ); GL.Vertex3(tile.E.xPos, tile.E.yPos, waterZ);
-                    GL.Vertex3(tile.E.xPos, tile.E.yPos, waterZ); GL.Vertex3(tile.N.xPos, tile.N.yPos, waterZ);
-                    GL.Vertex3(tile.N.xPos, tile.N.yPos, waterZ); GL.Vertex3(tile.W.xPos, tile.W.yPos, waterZ);
+                    GL.Vertex3(tile.W.xPos, tile.W.yPos, zwW); GL.Vertex3(tile.S.xPos, tile.S.yPos, zwS);
+                    GL.Vertex3(tile.S.xPos, tile.S.yPos, zwS); GL.Vertex3(tile.E.xPos, tile.E.yPos, zwE);
+                    GL.Vertex3(tile.E.xPos, tile.E.yPos, zwE); GL.Vertex3(tile.N.xPos, tile.N.yPos, zwN);
+                    GL.Vertex3(tile.N.xPos, tile.N.yPos, zwN); GL.Vertex3(tile.W.xPos, tile.W.yPos, zwW);
                 }
             }
             GL.End();
             GL.LineWidth(2.0f);
-
             GL.Disable(EnableCap.Blend);
         }
 
@@ -1102,7 +1198,8 @@ namespace ForesTycoon
 
         private bool ShouldDrawStandingWater(Tile tile)
         {
-            return standingWaterTileIds.Contains(tile.Id) || tile.Low < 0;
+            return standingWaterTileIds.Contains(tile.Id) || tile.Low < 0
+                || (nodeWaterDepth != null && HasDynamicWater(tile));
         }
 
         private bool HasAdjacentRiverBankPair(Tile tile)
@@ -1118,58 +1215,103 @@ namespace ForesTycoon
                 || (northRiver && westRiver);
         }
 
+        // Két egymásra szuperponált hullám egy adott (x,y) pozícióra.
+        // Amplitúdó szándékosan kicsi: Transport Tycoon-szerű, finoman remegő felszín.
+        private float WaveAt(float x, float y, float t)
+        {
+            const float A1 = 0.30f, F1x = 0.040f, F1y = 0.028f, S1 = 1.3f;
+            const float A2 = 0.14f, F2x = 0.065f, F2y = 0.058f, S2 = 2.1f;
+            return A1 * (float)Math.Sin(t * S1 + x * F1x + y * F1y)
+                 + A2 * (float)Math.Sin(t * S2 - x * F2x + y * F2y);
+        }
+
         private void DrawWater()
         {
-            Color waterDeep    = Color.FromArgb(200,  45, 120, 190);   // mély víz – sötét kék
-            Color waterShallow = Color.FromArgb(140,  80, 165, 220);   // sekély part – világos cián
-            Color waterGrid    = Color.FromArgb(180, 120, 190, 240);   // rácsvonal
+            if (nodeWaterDepth == null) return;
+
+            Color waterDeep    = Color.FromArgb(200,  45, 120, 190);
+            Color waterShallow = Color.FromArgb(140,  80, 165, 220);
+            Color waterGrid    = Color.FromArgb(180, 120, 190, 240);
+
+            float t = (float)(Environment.TickCount64 % 628318) * 0.001f;  // ~100 periódusnyi precíz tartomány
 
             GL.Enable(EnableCap.Blend);
             GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
-            GL.Enable(EnableCap.PolygonOffsetFill);
-            GL.PolygonOffset(1.0f, 1.0f);
 
-            GL.Begin(PrimitiveType.Quads);
+            // Negatív offset: a vízfelszín nyerje a Z-tesztet a partvonalnál,
+            // különben a +1 offset a vizet hátratolja és hézag keletkezik.
+            GL.Enable(EnableCap.PolygonOffsetFill);
+            GL.PolygonOffset(-1.0f, -1.0f);
+
+            // Vágott vízfelszín-sokszögek – per-tile vízszint + hullám
             for (int u = 0; u < nodeCols - 1; u++)
             {
                 for (int v = 0; v < nodeRows - 1; v++)
                 {
                     Tile tile = getTileByCoords(u, v);
-                    // Víz ott jelenik meg ahol legalább egy sarok a vízszint alatt van (W=0)
                     if (!ShouldDrawStandingWater(tile)) continue;
 
-                    // Mélységtől függő szín: ha minden sarok 0 → mély, ha van 1-es → sekély
-                    int wetCorners = CountCornersBelowWater(tile); int maxCorner = wetCorners < 4 ? 1 : 0;
-                    Color wc = wetCorners >= 3 ? waterDeep : waterShallow;
-                    List<Vector3> polygon = BuildClippedWaterPolygon(tile, WATER_Z);
+                    float waterZ = GetTileWaterSurface(tile);
+                    if (float.IsNaN(waterZ)) waterZ = WATER_Z;
+
+                    float cx = (tile.W.xPos + tile.E.xPos) * 0.5f;
+                    float cy = (tile.W.yPos + tile.N.yPos) * 0.5f;
+                    float wz = waterZ + WaveAt(cx, cy, t);
+
+                    // Vágás és renderelés ugyanazon a wz magasságon – nincs hézag hullámnál sem
+                    List<Vector3> polygon = BuildClippedWaterPolygon(tile, wz);
                     if (polygon.Count < 3) continue;
 
-                    GL.Color4(wc);
+                    int wetCorners = 0;
+                    if (tile.W.zPos < wz) wetCorners++;
+                    if (tile.S.zPos < wz) wetCorners++;
+                    if (tile.E.zPos < wz) wetCorners++;
+                    if (tile.N.zPos < wz) wetCorners++;
+
+                    GL.Color4(wetCorners >= 3 ? waterDeep : waterShallow);
                     GL.Begin(PrimitiveType.TriangleFan);
-                    foreach (Vector3 point in polygon)
-                        GL.Vertex3(point);
+                    foreach (Vector3 pt in polygon) GL.Vertex3(pt);
                     GL.End();
                 }
             }
             GL.Disable(EnableCap.PolygonOffsetFill);
 
-            // Rácsvonalak csak a teljesen vizes (mély) tile-okra
+            // Rácsvonalak – per-sarok hullám → rácsháló "lebeg"
+            GL.Begin(PrimitiveType.Lines);
             for (int u = 0; u < nodeCols - 1; u++)
             {
                 for (int v = 0; v < nodeRows - 1; v++)
                 {
                     Tile tile = getTileByCoords(u, v);
                     if (!ShouldDrawStandingWater(tile)) continue;
-                    int wetCorners = CountCornersBelowWater(tile); int maxCorner = wetCorners < 4 ? 1 : 0;
-                    if (maxCorner > 0) continue;   // sekély parton nincs rácsvonal
+
+                    float waterZ = GetTileWaterSurface(tile);
+                    if (float.IsNaN(waterZ)) waterZ = WATER_Z;
+
+                    float cx = (tile.W.xPos + tile.E.xPos) * 0.5f;
+                    float cy = (tile.W.yPos + tile.N.yPos) * 0.5f;
+                    float wz = waterZ + WaveAt(cx, cy, t);
+
+                    int wetCorners = 0;
+                    if (tile.W.zPos < wz) wetCorners++;
+                    if (tile.S.zPos < wz) wetCorners++;
+                    if (tile.E.zPos < wz) wetCorners++;
+                    if (tile.N.zPos < wz) wetCorners++;
+                    if (wetCorners < 4) continue;
+
+                    float zwN = waterZ + WaveAt(tile.N.xPos, tile.N.yPos, t);
+                    float zwS = waterZ + WaveAt(tile.S.xPos, tile.S.yPos, t);
+                    float zwE = waterZ + WaveAt(tile.E.xPos, tile.E.yPos, t);
+                    float zwW = waterZ + WaveAt(tile.W.xPos, tile.W.yPos, t);
 
                     GL.Color4(waterGrid);
-                    GL.Vertex3(tile.W.xPos, tile.W.yPos, WATER_Z); GL.Vertex3(tile.S.xPos, tile.S.yPos, WATER_Z);
-                    GL.Vertex3(tile.S.xPos, tile.S.yPos, WATER_Z); GL.Vertex3(tile.E.xPos, tile.E.yPos, WATER_Z);
-                    GL.Vertex3(tile.E.xPos, tile.E.yPos, WATER_Z); GL.Vertex3(tile.N.xPos, tile.N.yPos, WATER_Z);
-                    GL.Vertex3(tile.N.xPos, tile.N.yPos, WATER_Z); GL.Vertex3(tile.W.xPos, tile.W.yPos, WATER_Z);
+                    GL.Vertex3(tile.W.xPos, tile.W.yPos, zwW); GL.Vertex3(tile.S.xPos, tile.S.yPos, zwS);
+                    GL.Vertex3(tile.S.xPos, tile.S.yPos, zwS); GL.Vertex3(tile.E.xPos, tile.E.yPos, zwE);
+                    GL.Vertex3(tile.E.xPos, tile.E.yPos, zwE); GL.Vertex3(tile.N.xPos, tile.N.yPos, zwN);
+                    GL.Vertex3(tile.N.xPos, tile.N.yPos, zwN); GL.Vertex3(tile.W.xPos, tile.W.yPos, zwW);
                 }
             }
+            GL.End();
             GL.Disable(EnableCap.Blend);
         }
 
