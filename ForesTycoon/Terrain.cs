@@ -32,7 +32,7 @@ namespace ForesTycoon
 
         float[] nodeWaterDepth;
         private const float MIN_WATER_DEPTH = 0.04f;
-        private const float WATER_EQUALIZE  = 0.45f;   // <0.5 → stabil, nem lő túl
+        private const float RIVER_WATER_H   = 0.55f;
 
         Dictionary<string, VertexBuffer> vbos = new Dictionary<string, VertexBuffer>();
 
@@ -522,8 +522,7 @@ namespace ForesTycoon
 
                 // Ha a terep emelkedett, a víz nem lebeghet a magasban; ha süllyedt, marad szárazon (majd folyik bele)
                 if (nodeWaterDepth != null)
-                    nodeWaterDepth[node.Id] = Math.Max(0f,
-                        Math.Min(nodeWaterDepth[node.Id], WATER_Z - node.zPos));
+                    nodeWaterDepth[node.Id] = Math.Max(0f, nodeWaterDepth[node.Id]);
 
                 List<Tile> tiles = getTilesByNode(node);
                 foreach (Tile tile in tiles)
@@ -634,7 +633,7 @@ namespace ForesTycoon
                     }
                 }
 
-                if (!touchesBorder || basin.Count >= 24)
+                if (!touchesBorder)
                 {
                     foreach (Tile basinTile in basin)
                         standingWaterTileIds.Add(basinTile.Id);
@@ -661,80 +660,76 @@ namespace ForesTycoon
                 tileMoisture[i] = moisture;
             }
 
-            if (nodeWaterDepth == null)
-                InitWaterFromHydrology();
+            InitWaterFromHydrology();
         }
 
         private void InitWaterFromHydrology()
         {
             nodeWaterDepth = new float[nodes.Length];
-            bool[] visited = new bool[nodes.Length];
-            Queue<Node> queue = new Queue<Node>();
 
-            // Seed 1: border W=0 nodes → ocean
+            BuildGravityWaterFromTerrain();
+        }
+
+        private void BuildGravityWaterFromTerrain()
+        {
+            bool[] settled = new bool[nodes.Length];
+            float[] spillLevel = new float[nodes.Length];
+            for (int i = 0; i < spillLevel.Length; i++)
+                spillLevel[i] = float.PositiveInfinity;
+
+            PriorityQueue<Node, float> open = new PriorityQueue<Node, float>();
+
+            void EnqueueIfLower(Node node, float level)
+            {
+                if (level >= spillLevel[node.Id]) return;
+                spillLevel[node.Id] = level;
+                open.Enqueue(node, level);
+            }
+
+            void AddBoundary(Node node)
+            {
+                float boundaryLevel = node.zPos < WATER_Z ? WATER_Z : node.zPos;
+                EnqueueIfLower(node, boundaryLevel);
+            }
+
             for (int u = 0; u < nodeCols; u++)
             {
-                TryAddWaterSeed(getNodeByCoords(u, 0),            queue, visited);
-                TryAddWaterSeed(getNodeByCoords(u, nodeRows - 1), queue, visited);
+                AddBoundary(getNodeByCoords(u, 0));
+                AddBoundary(getNodeByCoords(u, nodeRows - 1));
             }
             for (int v = 1; v < nodeRows - 1; v++)
             {
-                TryAddWaterSeed(getNodeByCoords(0,            v), queue, visited);
-                TryAddWaterSeed(getNodeByCoords(nodeCols - 1, v), queue, visited);
+                AddBoundary(getNodeByCoords(0, v));
+                AddBoundary(getNodeByCoords(nodeCols - 1, v));
             }
 
-            // Seed 2: W=0 corners of hydrology-designated inland lake tiles
-            foreach (int tileId in standingWaterTileIds)
+            while (open.Count > 0)
             {
-                Tile t = tiles[tileId];
-                TryAddWaterSeed(t.N, queue, visited);
-                TryAddWaterSeed(t.S, queue, visited);
-                TryAddWaterSeed(t.E, queue, visited);
-                TryAddWaterSeed(t.W, queue, visited);
-            }
+                Node node = open.Dequeue();
+                if (settled[node.Id]) continue;
 
-            // BFS: fill only W=0 nodes reachable from a seed
-            while (queue.Count > 0)
-            {
-                Node n = queue.Dequeue();
-                nodeWaterDepth[n.Id] = WATER_Z - n.zPos;
-                foreach (Node nb in getNeighbours(n))
+                settled[node.Id] = true;
+                float currentLevel = spillLevel[node.Id];
+
+                foreach (Node neighbor in getNeighbours(node))
                 {
-                    if (!visited[nb.Id] && nb.zPos < WATER_Z)
-                    {
-                        visited[nb.Id] = true;
-                        queue.Enqueue(nb);
-                    }
+                    if (settled[neighbor.Id]) continue;
+
+                    float edgeLevel = GetEdgeBarrierLevel(node, neighbor);
+                    float neighborLevel = Math.Max(currentLevel, Math.Max(edgeLevel, neighbor.zPos));
+                    EnqueueIfLower(neighbor, neighborLevel);
                 }
             }
-        }
 
-        private void TryAddWaterSeed(Node n, Queue<Node> queue, bool[] visited)
-        {
-            if (!visited[n.Id] && n.zPos < WATER_Z)
+            for (int i = 0; i < nodes.Length; i++)
             {
-                visited[n.Id] = true;
-                queue.Enqueue(n);
+                if (float.IsPositiveInfinity(spillLevel[i])) continue;
+
+                float surfaceLevel = Math.Min(spillLevel[i], WATER_Z);
+                float depth = surfaceLevel - nodes[i].zPos;
+                if (depth >= MIN_WATER_DEPTH)
+                    nodeWaterDepth[i] = depth;
             }
-        }
-
-        private float GetTileWaterSurface(Tile tile)
-        {
-            float dN = nodeWaterDepth[tile.N.Id];
-            float dS = nodeWaterDepth[tile.S.Id];
-            float dE = nodeWaterDepth[tile.E.Id];
-            float dW = nodeWaterDepth[tile.W.Id];
-
-            if (dN < MIN_WATER_DEPTH && dS < MIN_WATER_DEPTH &&
-                dE < MIN_WATER_DEPTH && dW < MIN_WATER_DEPTH)
-                return float.NaN;
-
-            float sum = 0f; int count = 0;
-            if (dN >= MIN_WATER_DEPTH) { sum += tile.N.zPos + dN; count++; }
-            if (dS >= MIN_WATER_DEPTH) { sum += tile.S.zPos + dS; count++; }
-            if (dE >= MIN_WATER_DEPTH) { sum += tile.E.zPos + dE; count++; }
-            if (dW >= MIN_WATER_DEPTH) { sum += tile.W.zPos + dW; count++; }
-            return sum / count;
         }
 
         private bool HasDynamicWater(Tile tile)
@@ -747,60 +742,94 @@ namespace ForesTycoon
 
         public void WaterFlowStep()
         {
-            if (nodeWaterDepth == null) return;
+            // A vizszintet a hidrologia ujraepitese szamolja a terepbol.
+            // Ez a tick csak az animacio miatt marad meg; nem pumpal vagy mozgat vizet.
+        }
 
-            int[] du = { 0, 1, 0, -1 };
-            int[] dv = { -1, 0, 1, 0 };
+        private bool CanWaterFlowBetween(Node a, Node b, float waterLevel)
+        {
+            float edgeLevel = GetEdgeBarrierLevel(a, b);
+            if (waterLevel <= edgeLevel) return false;
 
-            for (int pass = 0; pass < 4; pass++)
+            if (b.zPos < waterLevel)
+                return true;
+
+            foreach (Tile tile in GetSharedTiles(a, b))
             {
-                for (int i = 0; i < nodes.Length; i++)
+                if (IsRiverWaterTile(tile))
                 {
-                    float depthA = nodeWaterDepth[i];
-                    if (depthA < MIN_WATER_DEPTH) continue;
-
-                    Node a = nodes[i];
-                    float surfA = a.zPos + depthA;
-
-                    for (int d = 0; d < 4; d++)
-                    {
-                        int nu = a.U + du[d], nv = a.V + dv[d];
-                        if (!checkNode(nu, nv)) continue;
-
-                        Node b = getNodeByCoords(nu, nv);
-                        float surfB = b.zPos + nodeWaterDepth[b.Id];
-                        if (surfA <= surfB + 0.001f) continue;
-
-                        float diff = surfA - surfB;
-                        float flow = Math.Min(diff * WATER_EQUALIZE,
-                                              nodeWaterDepth[i] - MIN_WATER_DEPTH * 0.5f);
-                        if (flow <= 0.001f) continue;
-
-                        nodeWaterDepth[i]     -= flow;
-                        nodeWaterDepth[b.Id]  += flow;
-                        surfA -= flow;
-                    }
+                    if (waterLevel <= tile.Low * tileSizeM + RIVER_WATER_H + 0.001f)
+                        return true;
+                    continue;
                 }
+
+                if (a.zPos < waterLevel && b.zPos < waterLevel)
+                    return true;
             }
+
+            return false;
         }
 
-        private bool IsBelowWater(Node node, float waterLevel)
+        private float GetEdgeBarrierLevel(Node a, Node b)
         {
-            return node.zPos < waterLevel;
+            float edgeLevel = Math.Max(a.zPos, b.zPos) + 0.001f;
+
+            foreach (Tile tile in GetSharedTiles(a, b))
+            {
+                if (!IsRiverWaterTile(tile)) continue;
+                edgeLevel = Math.Min(edgeLevel, tile.Low * tileSizeM + RIVER_WATER_H + 0.001f);
+            }
+
+            return edgeLevel;
         }
 
-        private Vector3 IntersectWaterEdge(Node a, Node b, float waterLevel)
+        private List<Tile> GetSharedTiles(Node a, Node b)
         {
-            float zA = a.zPos;
-            float zB = b.zPos;
-            float delta = zB - zA;
-            float t = Math.Abs(delta) < 0.0001f ? 0.5f : (waterLevel - zA) / delta;
+            List<Tile> shared = new List<Tile>(2);
+            foreach (Tile tile in getTilesByNode(a))
+            {
+                if (TileContainsNode(tile, b))
+                    shared.Add(tile);
+            }
+            return shared;
+        }
+
+        private bool TileContainsNode(Tile tile, Node node)
+        {
+            return tile.W.Id == node.Id
+                || tile.S.Id == node.Id
+                || tile.E.Id == node.Id
+                || tile.N.Id == node.Id;
+        }
+
+        private float NodeWaterSurfaceNoWave(Node node)
+        {
+            return node.zPos + nodeWaterDepth[node.Id];
+        }
+
+        private bool IsBelowWater(Node node)
+        {
+            return nodeWaterDepth[node.Id] >= MIN_WATER_DEPTH;
+        }
+
+        private Vector3 IntersectWaterEdge(Node a, Node b)
+        {
+            float depthA = nodeWaterDepth[a.Id];
+            float depthB = nodeWaterDepth[b.Id];
+            float delta = depthB - depthA;
+            float t = Math.Abs(delta) < 0.0001f
+                ? 0.5f
+                : (MIN_WATER_DEPTH - depthA) / delta;
             t = Math.Max(0.0f, Math.Min(1.0f, t));
+
+            float surfaceA = NodeWaterSurfaceNoWave(a);
+            float surfaceB = NodeWaterSurfaceNoWave(b);
+            float waterZ = surfaceA + (surfaceB - surfaceA) * t;
 
             return new Vector3(
                 a.xPos + (b.xPos - a.xPos) * t,
                 a.yPos + (b.yPos - a.yPos) * t,
-                waterLevel);
+                waterZ);
         }
 
         private void AddWaterPolygonPoint(List<Vector3> polygon, Vector3 point)
@@ -817,20 +846,20 @@ namespace ForesTycoon
             polygon.Add(point);
         }
 
-        private List<Vector3> BuildClippedWaterPolygon(Tile tile, float waterLevel)
+        private List<Vector3> BuildClippedWaterPolygon(Tile tile)
         {
             List<Vector3> polygon = new List<Vector3>(8);
 
             void AddEdge(Node start, Node end)
             {
-                bool startWet = IsBelowWater(start, waterLevel);
-                bool endWet = IsBelowWater(end, waterLevel);
+                bool startWet = IsBelowWater(start);
+                bool endWet = IsBelowWater(end);
 
                 if (startWet)
-                    AddWaterPolygonPoint(polygon, new Vector3(start.xPos, start.yPos, waterLevel));
+                    AddWaterPolygonPoint(polygon, new Vector3(start.xPos, start.yPos, NodeWaterSurfaceNoWave(start)));
 
                 if (startWet != endWet)
-                    AddWaterPolygonPoint(polygon, IntersectWaterEdge(start, end, waterLevel));
+                    AddWaterPolygonPoint(polygon, IntersectWaterEdge(start, end));
             }
 
             AddEdge(tile.W, tile.S);
@@ -998,7 +1027,6 @@ namespace ForesTycoon
             // mint a tengerné: lapos átlátszó quad, alatta látszik a meder → mélység illúzió.
             // A meder maga a vágott terep (tileSizeM=2, tehát W=1 → Z=2).
             // Vízfelszín: mederalap + RIVER_WATER_H
-            const float RIVER_WATER_H  = 1.2f;   // vízoszlop magassága a meder felett
 
             // Mély folyó (mind a 4 sarok river node) – sötétebb, több átlátszóság
             Color riverDeep    = Color.FromArgb(195,  38, 118, 188);
@@ -1020,20 +1048,15 @@ namespace ForesTycoon
                 for (int v = 0; v < nodeRows - 1; v++)
                 {
                     Tile tile = getTileByCoords(u, v);
-                    if (ShouldDrawStandingWater(tile)) continue;
+                    if (HasDynamicWater(tile) || !CanRenderFallbackRiver(tile)) continue;
 
-                    int rc = (riverNodeIds.Contains(tile.N.Id) ? 1 : 0)
-                           + (riverNodeIds.Contains(tile.S.Id) ? 1 : 0)
-                           + (riverNodeIds.Contains(tile.E.Id) ? 1 : 0)
-                           + (riverNodeIds.Contains(tile.W.Id) ? 1 : 0);
-                    if (rc < 2) continue;
-                    if (rc == 2 && !HasAdjacentRiverBankPair(tile)) continue;
+                    int rc = CountRiverCorners(tile);
 
                     float baseZ = tile.Low * tileSizeM + RIVER_WATER_H;
                     float cx = (tile.W.xPos + tile.E.xPos) * 0.5f;
                     float cy = (tile.W.yPos + tile.N.yPos) * 0.5f;
                     // Folyónál felére csökkentett amplitúdó – gyorsabb, kisebb hullám
-                    float wz = baseZ + WaveAt(cx, cy, t * 1.4f) * 0.45f;
+                    float wz = ApplyClampedWave(cx, cy, baseZ, RIVER_WATER_H, t * 1.4f);
 
                     GL.Color4(rc == 4 ? riverDeep : riverShallow);
                     GL.Vertex3(tile.W.xPos, tile.W.yPos, wz);
@@ -1052,20 +1075,17 @@ namespace ForesTycoon
                 for (int v = 0; v < nodeRows - 1; v++)
                 {
                     Tile tile = getTileByCoords(u, v);
-                    if (ShouldDrawStandingWater(tile)) continue;
+                    if (HasDynamicWater(tile) || !CanRenderFallbackRiver(tile)) continue;
 
-                    int rc = (riverNodeIds.Contains(tile.N.Id) ? 1 : 0)
-                           + (riverNodeIds.Contains(tile.S.Id) ? 1 : 0)
-                           + (riverNodeIds.Contains(tile.E.Id) ? 1 : 0)
-                           + (riverNodeIds.Contains(tile.W.Id) ? 1 : 0);
+                    int rc = CountRiverCorners(tile);
                     if (rc < 4) continue;
 
                     float baseZ = tile.Low * tileSizeM + RIVER_WATER_H;
                     float ts = t * 1.4f;
-                    float zwN = baseZ + WaveAt(tile.N.xPos, tile.N.yPos, ts) * 0.45f;
-                    float zwS = baseZ + WaveAt(tile.S.xPos, tile.S.yPos, ts) * 0.45f;
-                    float zwE = baseZ + WaveAt(tile.E.xPos, tile.E.yPos, ts) * 0.45f;
-                    float zwW = baseZ + WaveAt(tile.W.xPos, tile.W.yPos, ts) * 0.45f;
+                    float zwN = ApplyClampedWave(tile.N.xPos, tile.N.yPos, baseZ, RIVER_WATER_H, ts);
+                    float zwS = ApplyClampedWave(tile.S.xPos, tile.S.yPos, baseZ, RIVER_WATER_H, ts);
+                    float zwE = ApplyClampedWave(tile.E.xPos, tile.E.yPos, baseZ, RIVER_WATER_H, ts);
+                    float zwW = ApplyClampedWave(tile.W.xPos, tile.W.yPos, baseZ, RIVER_WATER_H, ts);
 
                     GL.Color4(riverGrid);
                     GL.Vertex3(tile.W.xPos, tile.W.yPos, zwW); GL.Vertex3(tile.S.xPos, tile.S.yPos, zwS);
@@ -1203,9 +1223,9 @@ namespace ForesTycoon
         }
 
         // Valódi vízszint: a W=0 alapszint FELETT lebegő vízfelszín.
-        // tileSizeM=2, tehát W=1 → Z=2. A vízszint Z=1.0f: a meder alján (Z=0) mélyen,
-        // a parton (W=1, Z=2) meg sem jelenik — valódi sekélység/mélység átmenet.
-        private const float WATER_Z = 1.0f;
+        // tileSizeM=2, tehát W=1 → Z=2 és W=2 → Z=4. A vízszint Z=3.0f:
+        // ez a sárga part és a zöld terepszint közötti félmagasság, itt hullámzik a felszín.
+        private const float WATER_Z = 3.0f;
 
         private int CountCornersBelowWater(Tile tile)
         {
@@ -1232,12 +1252,16 @@ namespace ForesTycoon
 
         private bool HasWaterSurfaceCandidate(Tile tile)
         {
-            int wetCorners = CountCornersBelowWater(tile);
-            if (wetCorners < 2) return false;
+            if (CountRiverCorners(tile) >= 2) return false;
 
-            if (wetCorners == 2 && !HasAdjacentWetBankPair(tile)) return false;
+            bool hasHigherBank = false;
+            foreach (Tile adjacent in GetAdjacentTiles(tile))
+            {
+                if (adjacent.Low < tile.Low) return false;
+                if (adjacent.Low > tile.Low) hasHigherBank = true;
+            }
 
-            return true;
+            return hasHigherBank;
         }
 
         private bool ShouldDrawStandingWater(Tile tile)
@@ -1259,18 +1283,70 @@ namespace ForesTycoon
                 || (northRiver && westRiver);
         }
 
+        private bool CanRenderFallbackRiver(Tile tile)
+        {
+            if (!IsRiverWaterTile(tile)) return false;
+            if (tile.Low * tileSizeM >= WATER_Z) return false;
+            return CountCornersBelowWater(tile) >= 2 && HasAdjacentWetBankPair(tile);
+        }
+
         // Két egymásra szuperponált hullám egy adott (x,y) pozícióra.
         // Amplitúdó szándékosan kicsi: Transport Tycoon-szerű, finoman remegő felszín.
-        private const float WAVE_MAX = 0.51f;
+        private const float WAVE_MAX = 0.36f;
+
+        private bool IsRiverWaterTile(Tile tile)
+        {
+            if (standingWaterTileIds.Contains(tile.Id)) return false;
+            int rc = CountRiverCorners(tile);
+            if (rc < 2) return false;
+            if (rc == 2 && !HasAdjacentRiverBankPair(tile)) return false;
+            return true;
+        }
 
         private float WaveAt(float x, float y, float t)
         {
-            const float A1 = 0.30f, F1x = 0.040f, F1y = 0.028f, S1 = 1.3f;
-            const float A2 = 0.14f, F2x = 0.065f, F2y = 0.058f, S2 = 2.1f;
-            const float A3 = 0.07f, F3x = 0.130f, F3y = 0.100f, S3 = 3.8f;
-            return A1 * (float)Math.Sin(t * S1 + x * F1x + y * F1y)
-                 + A2 * (float)Math.Sin(t * S2 - x * F2x + y * F2y)
-                 + A3 * (float)Math.Sin(t * S3 + x * F3x - y * F3y);
+            const float A1 = 0.20f, F1x = 0.028f, F1y = 0.021f, S1 = 0.95f;
+            const float A2 = 0.11f, F2x = 0.052f, F2y = 0.044f, S2 = 1.75f;
+            const float A3 = 0.05f, F3x = 0.094f, F3y = 0.070f, S3 = 3.20f;
+            float swell  = A1 * (float)Math.Sin(t * S1 + x * F1x + y * F1y);
+            float cross  = A2 * (float)Math.Sin(t * S2 - x * F2x + y * F2y + 0.8f);
+            float ripple = A3 * (float)Math.Sin(t * S3 + x * F3x - y * F3y + 1.7f);
+            return swell + cross + ripple;
+        }
+
+        private float GetShoreWaveFactor(float localDepth)
+        {
+            float usableDepth = Math.Max(0f, localDepth - MIN_WATER_DEPTH);
+            if (usableDepth <= 0f) return 0f;
+            float normalized = Math.Min(1f, usableDepth / 0.85f);
+            float rise = normalized * normalized * (3f - 2f * normalized);
+            float fade = 1f - Math.Min(1f, Math.Max(0f, (usableDepth - 0.55f) / 0.80f));
+            fade = fade * fade * (3f - 2f * fade);
+            return rise * fade;
+        }
+
+        private float GetWaveMotionBudget(float localDepth)
+        {
+            float usableDepth = Math.Max(0f, localDepth - MIN_WATER_DEPTH);
+            if (usableDepth <= 0f) return 0f;
+            float ramp = Math.Min(1f, usableDepth / 0.90f);
+            ramp = ramp * ramp * (3f - 2f * ramp);
+            float shore = GetShoreWaveFactor(localDepth);
+            return Math.Min(usableDepth * (0.30f + shore * 0.18f),
+                            0.025f + ramp * 0.34f + shore * 0.06f);
+        }
+
+        private float ApplyClampedWave(float x, float y, float baseWaterZ, float localDepth, float t)
+        {
+            float wave = WaveAt(x, y, t);
+            float shore = GetShoreWaveFactor(localDepth);
+            if (shore > 0f)
+            {
+                wave += 0.09f * shore * (float)Math.Sin(t * 4.1f + x * 0.115f - y * 0.082f + 0.4f)
+                      + 0.05f * shore * (float)Math.Sin(t * 5.6f - x * 0.160f + y * 0.126f + 1.3f);
+            }
+            float budget = GetWaveMotionBudget(localDepth);
+            return baseWaterZ + Math.Max(-budget, Math.Min(budget, wave));
         }
 
         private void WaterVertex(Node node, float wz, float t, Color baseColor)
@@ -1278,11 +1354,10 @@ namespace ForesTycoon
             float wave = WaveAt(node.xPos, node.yPos, t);
             float n = Math.Max(-1f, Math.Min(1f, wave / WAVE_MAX));
             int shift = (int)(n * 20f);
-            int a = baseColor.A;
-            int r = Math.Max(0, Math.Min(255, baseColor.R + shift));
-            int g = Math.Max(0, Math.Min(255, baseColor.G + (int)(shift * 1.4f)));
-            int b = Math.Max(0, Math.Min(255, baseColor.B + (int)(shift * 0.6f)));
-            GL.Color4(Color.FromArgb(a, r, g, b));
+            GL.Color4(Color.FromArgb(baseColor.A,
+                Math.Max(0, Math.Min(255, baseColor.R + shift)),
+                Math.Max(0, Math.Min(255, baseColor.G + (int)(shift * 1.4f))),
+                Math.Max(0, Math.Min(255, baseColor.B + (int)(shift * 0.6f)))));
             GL.Vertex3(node.xPos, node.yPos, wz);
         }
 
@@ -1292,7 +1367,21 @@ namespace ForesTycoon
         {
             float depth = nodeWaterDepth[node.Id];
             if (depth < MIN_WATER_DEPTH) return WATER_Z;
-            return node.zPos + depth + WaveAt(node.xPos, node.yPos, t);
+            return ApplyClampedWave(node.xPos, node.yPos, node.zPos + depth, depth, t);
+        }
+
+        private float GetPolygonPointDepth(Tile tile, Vector3 point)
+        {
+            if (Math.Abs(point.X - tile.W.xPos) < 0.001f && Math.Abs(point.Y - tile.W.yPos) < 0.001f)
+                return Math.Max(MIN_WATER_DEPTH, nodeWaterDepth[tile.W.Id]);
+            if (Math.Abs(point.X - tile.S.xPos) < 0.001f && Math.Abs(point.Y - tile.S.yPos) < 0.001f)
+                return Math.Max(MIN_WATER_DEPTH, nodeWaterDepth[tile.S.Id]);
+            if (Math.Abs(point.X - tile.E.xPos) < 0.001f && Math.Abs(point.Y - tile.E.yPos) < 0.001f)
+                return Math.Max(MIN_WATER_DEPTH, nodeWaterDepth[tile.E.Id]);
+            if (Math.Abs(point.X - tile.N.xPos) < 0.001f && Math.Abs(point.Y - tile.N.yPos) < 0.001f)
+                return Math.Max(MIN_WATER_DEPTH, nodeWaterDepth[tile.N.Id]);
+
+            return MIN_WATER_DEPTH;
         }
 
         private void DrawWater()
@@ -1359,13 +1448,15 @@ namespace ForesTycoon
                     float zwW = NodeWaterZ(tile.W, t);
 
                     GL.Color4(waterGrid);
+                    GL.Begin(PrimitiveType.Lines);
                     GL.Vertex3(tile.W.xPos, tile.W.yPos, zwW); GL.Vertex3(tile.S.xPos, tile.S.yPos, zwS);
                     GL.Vertex3(tile.S.xPos, tile.S.yPos, zwS); GL.Vertex3(tile.E.xPos, tile.E.yPos, zwE);
                     GL.Vertex3(tile.E.xPos, tile.E.yPos, zwE); GL.Vertex3(tile.N.xPos, tile.N.yPos, zwN);
                     GL.Vertex3(tile.N.xPos, tile.N.yPos, zwN); GL.Vertex3(tile.W.xPos, tile.W.yPos, zwW);
+                    GL.End();
                 }
             }
-            GL.End();
+
             GL.Disable(EnableCap.Blend);
         }
 

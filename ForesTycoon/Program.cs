@@ -19,7 +19,7 @@ namespace ForesTycoon
             AppDomain.CurrentDomain.UnhandledException += (_, args) =>
                 MessageBox.Show(args.ExceptionObject?.ToString() ?? "Unknown fatal error", "Unhandled fatal exception", MessageBoxButtons.OK, MessageBoxIcon.Error);
 
-            Application.Run(new Form1());
+            Application.Run(new MainForm());
         }
     }
 }
