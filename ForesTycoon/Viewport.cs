@@ -51,9 +51,18 @@ namespace ForesTycoon
         private MouseButtons activeButton = MouseButtons.None;
         private bool         nodeHovered  = false;
         private Terrain      terrain      = null;
+        private TerrainEditTool activeTool = TerrainEditTool.Inspect;
+        private bool toolbarPressed = false;
+        private bool suppressNextClick = false;
 
         private bool         isLoaded     = false;
         private System.Windows.Forms.Timer waterTimer;
+        private readonly Rectangle[] toolButtons =
+        {
+            new Rectangle(14, 14, 42, 42),
+            new Rectangle(62, 14, 42, 42),
+            new Rectangle(110, 14, 42, 42)
+        };
 
         private static float SnapRotation(float angle)
         {
@@ -131,9 +140,107 @@ namespace ForesTycoon
             GL.Rotate(rotx, 1f, 0f, 0f);
             GL.Rotate(roty, 0f, 0f, 1f);
 
-            terrain.Draw();
+            terrain.Draw(activeTool != TerrainEditTool.Inspect);
+            DrawEditorOverlay();
 
             SwapBuffers();
+        }
+
+        private void DrawEditorOverlay()
+        {
+            GL.MatrixMode(MatrixMode.Projection);
+            GL.PushMatrix();
+            GL.LoadIdentity();
+            GL.Ortho(0, Width, Height, 0, -1, 1);
+
+            GL.MatrixMode(MatrixMode.Modelview);
+            GL.PushMatrix();
+            GL.LoadIdentity();
+
+            GL.Disable(EnableCap.DepthTest);
+            GL.Enable(EnableCap.Blend);
+            GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
+
+            DrawToolbarBackground();
+            DrawToolButton(toolButtons[0], TerrainEditTool.Inspect);
+            DrawToolButton(toolButtons[1], TerrainEditTool.Raise);
+            DrawToolButton(toolButtons[2], TerrainEditTool.Lower);
+
+            GL.Disable(EnableCap.Blend);
+            GL.Enable(EnableCap.DepthTest);
+
+            GL.PopMatrix();
+            GL.MatrixMode(MatrixMode.Projection);
+            GL.PopMatrix();
+            GL.MatrixMode(MatrixMode.Modelview);
+        }
+
+        private void DrawToolbarBackground()
+        {
+            GL.Color4(Color.FromArgb(210, 30, 38, 46));
+            DrawRect(8, 8, 150, 54);
+            GL.Color4(Color.FromArgb(230, 84, 96, 108));
+            DrawLineLoop(8, 8, 150, 54);
+        }
+
+        private void DrawToolButton(Rectangle bounds, TerrainEditTool tool)
+        {
+            bool selected = activeTool == tool;
+            GL.Color4(selected
+                ? Color.FromArgb(235, 88, 122, 72)
+                : Color.FromArgb(220, 52, 62, 72));
+            DrawRect(bounds.X, bounds.Y, bounds.Width, bounds.Height);
+
+            GL.Color4(selected
+                ? Color.FromArgb(255, 220, 238, 184)
+                : Color.FromArgb(230, 150, 164, 176));
+            DrawLineLoop(bounds.X, bounds.Y, bounds.Width, bounds.Height);
+            DrawToolGlyph(bounds, tool);
+        }
+
+        private void DrawToolGlyph(Rectangle bounds, TerrainEditTool tool)
+        {
+            float cx = bounds.X + bounds.Width * 0.5f;
+            float cy = bounds.Y + bounds.Height * 0.5f;
+
+            GL.LineWidth(3f);
+            GL.Color4(Color.FromArgb(245, 235, 240, 220));
+            GL.Begin(PrimitiveType.Lines);
+            if (tool == TerrainEditTool.Inspect)
+            {
+                GL.Vertex2(cx - 9, cy - 9); GL.Vertex2(cx + 9, cy + 9);
+                GL.Vertex2(cx + 9, cy - 9); GL.Vertex2(cx - 9, cy + 9);
+            }
+            else
+            {
+                GL.Vertex2(cx - 11, cy); GL.Vertex2(cx + 11, cy);
+                if (tool == TerrainEditTool.Raise)
+                {
+                    GL.Vertex2(cx, cy - 11); GL.Vertex2(cx, cy + 11);
+                }
+            }
+            GL.End();
+            GL.LineWidth(2f);
+        }
+
+        private void DrawRect(float x, float y, float width, float height)
+        {
+            GL.Begin(PrimitiveType.Quads);
+            GL.Vertex2(x, y);
+            GL.Vertex2(x + width, y);
+            GL.Vertex2(x + width, y + height);
+            GL.Vertex2(x, y + height);
+            GL.End();
+        }
+
+        private void DrawLineLoop(float x, float y, float width, float height)
+        {
+            GL.Begin(PrimitiveType.LineLoop);
+            GL.Vertex2(x, y);
+            GL.Vertex2(x + width, y);
+            GL.Vertex2(x + width, y + height);
+            GL.Vertex2(x, y + height);
+            GL.End();
         }
 
         // ── OpenGL mátrixok kiolvasása (egér → világ koordináta) ────────────
@@ -152,6 +259,59 @@ namespace ForesTycoon
             GL.ReadPixels(e.X, fy, 1, 1, PixelFormat.DepthComponent, PixelType.Float, depth);
             Vector3 win = new Vector3(e.X, fy, depth[0]);
             CustomUnProject(win, modelMatrix, projMatrix, viewMatrix, out worldPos);
+        }
+
+        private void UpdateHover(MouseEventArgs e)
+        {
+            if (IsToolbarPoint(e.Location))
+            {
+                nodeHovered = false;
+                terrain.ClearHover();
+                return;
+            }
+
+            int screenPxY = Height - e.Y;
+            mouseX = screenX + e.X       / zoom;
+            mouseY = screenY + screenPxY / zoom;
+            UpdateWorldPosition(e);
+            nodeHovered = terrain.SearchPoint(worldPos.X, worldPos.Y, 5);
+            terrain.SearchTile(worldPos.X, worldPos.Y);
+        }
+
+        private bool IsToolbarPoint(Point point)
+        {
+            for (int i = 0; i < toolButtons.Length; i++)
+                if (toolButtons[i].Contains(point)) return true;
+
+            return false;
+        }
+
+        private bool TryHandleToolbarClick(Point point)
+        {
+            for (int i = 0; i < toolButtons.Length; i++)
+            {
+                if (!toolButtons[i].Contains(point)) continue;
+
+                activeTool = (TerrainEditTool)i;
+                toolbarPressed = true;
+                suppressNextClick = true;
+                activeButton = MouseButtons.None;
+                Invalidate();
+                return true;
+            }
+
+            toolbarPressed = false;
+            return false;
+        }
+
+        private void ApplyActiveTerrainTool()
+        {
+            if (!nodeHovered) return;
+
+            if (activeTool == TerrainEditTool.Raise)
+                terrain.UpElevation();
+            else if (activeTool == TerrainEditTool.Lower)
+                terrain.DownElevation();
         }
 
         private void CustomUnProject(Vector3 win, double[] model, double[] proj, int[] view, out Vector3 obj)
@@ -247,21 +407,19 @@ namespace ForesTycoon
             int dy = e.Y - lastMouseY;
             lastMouseX = e.X;
             lastMouseY = e.Y;
+            UpdateHover(e);
 
             switch (e.Button)
             {
                 case MouseButtons.None:
-                    int screenPxY = Height - e.Y;
-                    mouseX = screenX + e.X       / zoom;
-                    mouseY = screenY + screenPxY / zoom;
-                    UpdateWorldPosition(e);
-                    nodeHovered = terrain.SearchPoint(worldPos.X, worldPos.Y, 5);
-                    terrain.SearchTile(worldPos.X, worldPos.Y);
                     break;
 
                 case MouseButtons.Left:
-                    roty += 0.5f * dx;
-                    targetRotY = roty;
+                    if (activeTool == TerrainEditTool.Inspect && !toolbarPressed)
+                    {
+                        roty += 0.5f * dx;
+                        targetRotY = roty;
+                    }
                     break;
 
                 case MouseButtons.Right:
@@ -276,7 +434,9 @@ namespace ForesTycoon
         protected override void OnMouseUp(MouseEventArgs e)
         {
             base.OnMouseUp(e);
+            toolbarPressed = false;
             if (!isLoaded || e.Button != MouseButtons.Left) return;
+            if (activeTool != TerrainEditTool.Inspect) return;
             // Snap a legközelebbi 90°-ra
             targetRotY = SnapRotation(roty);
             Invalidate();
@@ -319,6 +479,10 @@ namespace ForesTycoon
         {
             base.OnMouseDown(e);
             if (!isLoaded) return;
+            Focus();
+            if (TryHandleToolbarClick(e.Location)) return;
+
+            UpdateHover(e);
             activeButton = e.Button;
             panStartX = mouseX;
             panStartY = mouseY;
@@ -341,13 +505,17 @@ namespace ForesTycoon
         {
             base.OnClick(e);
             if (!isLoaded) return;
-
-            if (!nodeHovered) return;
-
-            if (activeButton == MouseButtons.Left)
-                terrain.UpElevation();
-            else if (activeButton == MouseButtons.Right)
-                terrain.DownElevation();
+            if (suppressNextClick)
+            {
+                suppressNextClick = false;
+                return;
+            }
+            if (activeTool != TerrainEditTool.Inspect)
+            {
+                ApplyActiveTerrainTool();
+                Refresh();
+                return;
+            }
 
             Refresh();
         }
