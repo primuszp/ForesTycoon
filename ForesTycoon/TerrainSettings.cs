@@ -27,6 +27,11 @@ namespace ForesTycoon
         public int Seed { get; }
         public int MaxHeight { get; }
 
+        /// <summary>Másolat új seed-del (terep-regeneráláshoz).</summary>
+        public TerrainSettings WithSeed(int seed) => new TerrainSettings(
+            NodeColumns, NodeRows, TileWidth, TileHeight, HeightScale,
+            MinimumWaterDepth, RiverWaterHeight, SeaLevel, seed, MaxHeight);
+
         public int TileColumns => NodeColumns - 1;
         public int TileRows => NodeRows - 1;
         public int OffsetX => TileWidth * NodeColumns / 2;

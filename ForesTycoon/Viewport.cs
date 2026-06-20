@@ -55,6 +55,8 @@ namespace ForesTycoon
         private bool         nodeHovered  = false;
         private Terrain      terrain      = null;
         private TerrainEditTool activeTool = TerrainEditTool.Inspect;
+        private int brushSize = 1;       // 1 = egy node, nagyobb = korong sugár
+        private int brushStrength = 1;   // szintlépések száma kattintásonként
 
         private bool         isLoaded     = false;
         private ImGuiController imgui;
@@ -185,6 +187,8 @@ namespace ForesTycoon
 
             if (ImGui.BeginMenu("Fájl"))
             {
+                if (ImGui.MenuItem("Új terep (seed)")) RegenerateTerrain();
+                ImGui.Separator();
                 if (ImGui.MenuItem("Kilépés"))
                     BeginInvoke((MethodInvoker)(() => FindForm()?.Close()));
                 ImGui.EndMenu();
@@ -216,6 +220,11 @@ namespace ForesTycoon
             ToolButton("Vizsg.", TerrainEditTool.Inspect); ImGui.SameLine();
             ToolButton("Emel", TerrainEditTool.Raise); ImGui.SameLine();
             ToolButton("Süly.", TerrainEditTool.Lower);
+
+            ImGui.PushItemWidth(150);
+            ImGui.SliderInt("Méret", ref brushSize, 1, 5);
+            ImGui.SliderInt("Erő", ref brushStrength, 1, 5);
+            ImGui.PopItemWidth();
 
             ImGui.End();
         }
@@ -295,10 +304,21 @@ namespace ForesTycoon
         {
             if (!nodeHovered) return;
 
+            int radius = brushSize - 1;
             if (activeTool == TerrainEditTool.Raise)
-                terrain.UpElevation();
+                terrain.EditElevation(+1, radius, brushStrength);
             else if (activeTool == TerrainEditTool.Lower)
-                terrain.DownElevation();
+                terrain.EditElevation(-1, radius, brushStrength);
+        }
+
+        private void RegenerateTerrain()
+        {
+            if (!isLoaded) return;
+            // A GL-kontextus a render alatt aktuális, így a buffer-csere itt biztonságos.
+            terrain.Dispose();
+            int seed = new Random().Next();
+            terrain = new Terrain(TerrainSettings.Default.WithSeed(seed));
+            Invalidate();
         }
 
         private void CustomUnProject(Vector3 win, double[] model, double[] proj, int[] view, out Vector3 obj)

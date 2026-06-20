@@ -967,6 +967,52 @@ namespace ForesTycoon
             ElevationManager(-1);
         }
 
+        /// <summary>
+        /// Ecsetes terepszerkesztés a kijelölt (hover) node körül: korong alakú
+        /// terület, sugár = radius (0 = csak a középpont), erősség = ismétlésszám.
+        /// A hidrológiát csak egyszer, a végén építi újra.
+        /// </summary>
+        public void EditElevation(int delta, int radius, int strength)
+        {
+            if (actualNode == null) return;
+
+            Node center = actualNode;
+            int cu = center.U, cv = center.V;
+
+            suppressHydrologyRebuild = true;
+            try
+            {
+                for (int du = -radius; du <= radius; du++)
+                    for (int dv = -radius; dv <= radius; dv++)
+                    {
+                        if (du * du + dv * dv > radius * radius) continue;
+                        if (!checkNode(cu + du, cv + dv)) continue;
+
+                        Node n = getNodeByCoords(cu + du, cv + dv);
+                        for (int s = 0; s < strength; s++)
+                        {
+                            actualNode = n;
+                            ElevationManager(delta);
+                        }
+                    }
+            }
+            finally
+            {
+                suppressHydrologyRebuild = false;
+            }
+
+            actualNode = center;
+            RebuildHydrology();
+        }
+
+        /// <summary>GL-erőforrások felszabadítása (regeneráláskor a régi terep buffereihez).</summary>
+        public void Dispose()
+        {
+            foreach (VertexBuffer vbo in vbos.Values) vbo.Dispose();
+            vbos.Clear();
+            edges.Dispose();
+        }
+
         private void ElevationManager(int delta)
         {
             List<Node>  openList  = new List<Node>();
