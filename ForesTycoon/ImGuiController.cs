@@ -222,8 +222,13 @@ void main()
 
             GL.BindVertexArray(0);
             GL.UseProgram(0);
+            GL.BindTexture(TextureTarget.Texture2D, 0);
             GL.Disable(EnableCap.ScissorTest);
             GL.Disable(EnableCap.Blend);
+
+            // Állapot visszaállítása a terep immediate-mode renderjéhez: a depth-test
+            // nélkül a barna skirt/aljlapok ráfestődnének a terepre (a jelenet "elcsúszik").
+            GL.Enable(EnableCap.DepthTest);
         }
 
         public void Dispose()
