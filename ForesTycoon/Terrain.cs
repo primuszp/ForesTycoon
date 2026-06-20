@@ -452,19 +452,54 @@ namespace ForesTycoon
         {
             if (roads.Count == 0) return;
 
-            // Vékony z-emeléssel a terep fölé, hogy ne fightingoljon a felszínnel.
-            GL.LineWidth(7f);
-            GL.Color3(Color.FromArgb(58, 58, 64));
-            GL.Begin(PrimitiveType.Lines);
+            const float halfWidth = 1.1f;
+            const float zBias = 0.3f;   // a felszín fölé emelve, Z-fight ellen
+
+            // Aszfalt szalag + sárga felezővonal.
+            GL.Begin(PrimitiveType.Quads);
             foreach ((int a, int b) in roads.Segments)
             {
                 Node na = nodes[a];
                 Node nb = nodes[b];
-                GL.Vertex3(na.xPos, na.yPos, na.zPos + 0.15f);
-                GL.Vertex3(nb.xPos, nb.yPos, nb.zPos + 0.15f);
+                float dx = nb.xPos - na.xPos;
+                float dy = nb.yPos - na.yPos;
+                float len = (float)Math.Sqrt(dx * dx + dy * dy);
+                if (len < 1e-4f) continue;
+                float px = -dy / len * halfWidth;
+                float py = dx / len * halfWidth;
+
+                float az = na.zPos + zBias, bz = nb.zPos + zBias;
+                GL.Color3(Color.FromArgb(64, 64, 70));
+                GL.Vertex3(na.xPos + px, na.yPos + py, az);
+                GL.Vertex3(na.xPos - px, na.yPos - py, az);
+                GL.Vertex3(nb.xPos - px, nb.yPos - py, bz);
+                GL.Vertex3(nb.xPos + px, nb.yPos + py, bz);
             }
             GL.End();
-            GL.LineWidth(2f);
+
+            // Csomópontok kitöltése kis négyzettel, hogy a kanyarok/elágazások összeérjenek.
+            GL.Begin(PrimitiveType.Quads);
+            GL.Color3(Color.FromArgb(64, 64, 70));
+            foreach (int id in RoadNodeIds())
+            {
+                Node n = nodes[id];
+                float z = n.zPos + zBias;
+                GL.Vertex3(n.xPos - halfWidth, n.yPos - halfWidth, z);
+                GL.Vertex3(n.xPos + halfWidth, n.yPos - halfWidth, z);
+                GL.Vertex3(n.xPos + halfWidth, n.yPos + halfWidth, z);
+                GL.Vertex3(n.xPos - halfWidth, n.yPos + halfWidth, z);
+            }
+            GL.End();
+        }
+
+        private IEnumerable<int> RoadNodeIds()
+        {
+            HashSet<int> seen = new HashSet<int>();
+            foreach ((int a, int b) in roads.Segments)
+            {
+                if (seen.Add(a)) yield return a;
+                if (seen.Add(b)) yield return b;
+            }
         }
 
         private void DrawSphere(float radius, int rings, int sectors)
@@ -987,6 +1022,28 @@ namespace ForesTycoon
 
         /// <summary>Útszegmens a két szomszédos node között. true, ha új szegmens jött létre.</summary>
         public bool AddRoad(Node a, Node b) => AreAdjacent(a, b) && roads.Add(a.Id, b.Id);
+
+        /// <summary>
+        /// Útvonal építése két node között a rácson lépkedve (OpenTTD drag-build):
+        /// minden lépés egy szomszédos szegmens, így a kanyarok L-törésként, a
+        /// csatlakozások a közös node-okból adódnak.
+        /// </summary>
+        public void BuildRoadPath(Node a, Node b)
+        {
+            if (a == null || b == null) return;
+
+            int u = a.U, v = a.V;
+            Node prev = a;
+            while (u != b.U || v != b.V)
+            {
+                if (Math.Abs(b.U - u) >= Math.Abs(b.V - v)) u += Math.Sign(b.U - u);
+                else v += Math.Sign(b.V - v);
+
+                Node next = getNodeByCoords(u, v);
+                roads.Add(prev.Id, next.Id);
+                prev = next;
+            }
+        }
 
         public int RoadCount => roads.Count;
 

@@ -57,7 +57,8 @@ namespace ForesTycoon
         private TerrainEditTool activeTool = TerrainEditTool.Inspect;
         private int brushSize = 1;       // 1 = egy node, nagyobb = korong sugár
         private int brushStrength = 1;   // szintlépések száma kattintásonként
-        private Node roadStart;          // úthálózat: az aktuális lánc kezdőpontja
+        private Node roadDragStart;      // úthálózat: drag-build kezdő node-ja
+        private bool roadDragging;       // épp utat húzunk-e
 
         private bool         isLoaded     = false;
         private ImGuiController imgui;
@@ -263,7 +264,8 @@ namespace ForesTycoon
         private void SelectTool(TerrainEditTool tool)
         {
             activeTool = tool;
-            roadStart = null;   // úthálózat-lánc megszakítása eszközváltáskor
+            roadDragStart = null;   // úthálózat drag megszakítása eszközváltáskor
+            roadDragging = false;
             Invalidate();
         }
 
@@ -467,6 +469,17 @@ namespace ForesTycoon
             base.OnMouseUp(e);
             if (isLoaded) imgui?.MouseButton(MapMouseButton(e.Button), false);
             if (!isLoaded || e.Button != MouseButtons.Left) return;
+
+            if (activeTool == TerrainEditTool.Road)
+            {
+                if (roadDragging && roadDragStart != null)
+                    terrain.BuildRoadPath(roadDragStart, terrain.ActiveNode);
+                roadDragging = false;
+                roadDragStart = null;
+                Invalidate();
+                return;
+            }
+
             if (activeTool != TerrainEditTool.Inspect) return;
             // Snap a legközelebbi 90°-ra
             targetRotY = SnapRotation(roty);
@@ -519,6 +532,12 @@ namespace ForesTycoon
             activeButton = e.Button;
             panStartX = mouseX;
             panStartY = mouseY;
+
+            if (activeTool == TerrainEditTool.Road && e.Button == MouseButtons.Left)
+            {
+                roadDragStart = terrain.ActiveNode;
+                roadDragging = roadDragStart != null;
+            }
         }
 
         protected override void OnMouseWheel(MouseEventArgs e)
@@ -543,14 +562,8 @@ namespace ForesTycoon
             if (!isLoaded) return;
             if (imgui != null && imgui.WantCaptureMouse) return;
 
-            if (activeTool == TerrainEditTool.Road)
-            {
-                HandleRoadClick();
-                Refresh();
-                return;
-            }
-
-            if (activeTool != TerrainEditTool.Inspect)
+            // Az út-eszközt a drag-build (OnMouseDown/Up) kezeli, nem a klikk.
+            if (activeTool != TerrainEditTool.Inspect && activeTool != TerrainEditTool.Road)
             {
                 ApplyActiveTerrainTool();
                 Refresh();
@@ -558,18 +571,6 @@ namespace ForesTycoon
             }
 
             Refresh();
-        }
-
-        private void HandleRoadClick()
-        {
-            if (!nodeHovered) return;
-            Node node = terrain.ActiveNode;
-            if (node == null) return;
-
-            if (roadStart != null && Terrain.AreAdjacent(roadStart, node))
-                terrain.AddRoad(roadStart, node);
-
-            roadStart = node;   // a végpont az új lánc-kezdőpont
         }
 
     }
