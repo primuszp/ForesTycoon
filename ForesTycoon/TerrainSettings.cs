@@ -12,7 +12,9 @@ namespace ForesTycoon
             heightScale: 2,
             minimumWaterDepth: 0.04f,
             riverWaterHeight: 0.55f,
-            seaLevel: 3.0f);
+            seaLevel: 3.0f,
+            seed: 42,
+            maxHeight: 6);
 
         public int NodeColumns { get; }
         public int NodeRows { get; }
@@ -22,6 +24,8 @@ namespace ForesTycoon
         public float MinimumWaterDepth { get; }
         public float RiverWaterHeight { get; }
         public float SeaLevel { get; }
+        public int Seed { get; }
+        public int MaxHeight { get; }
 
         public int TileColumns => NodeColumns - 1;
         public int TileRows => NodeRows - 1;
@@ -36,7 +40,9 @@ namespace ForesTycoon
             int heightScale,
             float minimumWaterDepth,
             float riverWaterHeight,
-            float seaLevel)
+            float seaLevel,
+            int seed = 42,
+            int maxHeight = 6)
         {
             if (nodeColumns < 2) throw new ArgumentOutOfRangeException(nameof(nodeColumns));
             if (nodeRows < 2) throw new ArgumentOutOfRangeException(nameof(nodeRows));
@@ -54,6 +60,8 @@ namespace ForesTycoon
             MinimumWaterDepth = minimumWaterDepth;
             RiverWaterHeight = riverWaterHeight;
             SeaLevel = seaLevel;
+            Seed = seed;
+            MaxHeight = maxHeight;
         }
     }
 }

@@ -99,7 +99,7 @@ namespace ForesTycoon
                 Focus();
 
                 waterTimer = new System.Windows.Forms.Timer { Interval = 120 };
-                waterTimer.Tick += (s, e) => { if (isLoaded) { terrain.WaterFlowStep(); Invalidate(); } };
+                waterTimer.Tick += (s, e) => { if (isLoaded) Invalidate(); };
                 waterTimer.Start();
             }
             catch (Exception ex)

@@ -4,10 +4,11 @@ using OpenTK.Graphics.OpenGL;
 
 namespace ForesTycoon
 {
-    sealed public class VertexBuffer
+    sealed public class VertexBuffer : IDisposable
     {
         private int vboId;
         private int eboId;
+        private bool disposed;
         private uint[] indices;
         private Vertex[] vertices;
 
@@ -128,6 +129,14 @@ namespace ForesTycoon
             GL.DisableClientState(ArrayCap.VertexArray);
             GL.DisableClientState(ArrayCap.NormalArray);
             GL.DisableClientState(ArrayCap.ColorArray);
+        }
+
+        public void Dispose()
+        {
+            if (disposed) return;
+            disposed = true;
+            if (vboId != 0) { GL.DeleteBuffers(1, ref vboId); vboId = 0; }
+            if (eboId != 0) { GL.DeleteBuffers(1, ref eboId); eboId = 0; }
         }
     }
 }

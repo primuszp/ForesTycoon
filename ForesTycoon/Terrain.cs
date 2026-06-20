@@ -9,33 +9,35 @@ namespace ForesTycoon
     class Terrain
     {
         private readonly TerrainSettings settings;
-        private readonly HashSet<int> riverNodeIds = new HashSet<int>();
-        private readonly HashSet<int> standingWaterTileIds = new HashSet<int>();
+        private Hydrology hydro;
+        private HashSet<int> riverNodeIds => hydro.RiverNodeIds;
+        private HashSet<int> standingWaterTileIds => hydro.StandingWaterTileIds;
         private readonly Dictionary<string, VertexBuffer> vbos = new Dictionary<string, VertexBuffer>();
         private readonly VertexBuffer edges = new VertexBuffer(PrimitiveType.Lines);
         private readonly List<uint> indices = new List<uint>();
 
-        private Node[] nodes = null;
-        private Tile[] tiles = null;
+        private readonly TerrainData data;
+        private Node[] nodes => data.Nodes;
+        private Tile[] tiles => data.Tiles;
 
-        private readonly int nodeRows;
-        private readonly int nodeCols;
+        private int nodeRows => data.NodeRows;
+        private int nodeCols => data.NodeCols;
 
-        private readonly int tileSizeH;
-        private readonly int tileSizeV;
-        private readonly int tileSizeM;
+        private int tileSizeH => data.TileSizeH;
+        private int tileSizeV => data.TileSizeV;
+        private int tileSizeM => data.TileSizeM;
 
-        private readonly int offsetX;
-        private readonly int offsetY;
+        private int offsetX => data.OffsetX;
+        private int offsetY => data.OffsetY;
 
         private bool onpos = false;
         private Node actualNode;
         private Tile hoveredTile = null;
 
-        private float[] tileMoisture = Array.Empty<float>();
+        private float[] tileMoisture => hydro.TileMoisture;
         private bool suppressHydrologyRebuild = false;
 
-        private float[] nodeWaterDepth;
+        private float[] nodeWaterDepth => hydro.NodeWaterDepth;
         private Vertex[] vertices = null;
 
         private float MinimumWaterDepth => settings.MinimumWaterDepth;
@@ -50,15 +52,9 @@ namespace ForesTycoon
         public Terrain(TerrainSettings settings)
         {
             this.settings = settings ?? throw new ArgumentNullException(nameof(settings));
-            nodeRows = settings.NodeRows;
-            nodeCols = settings.NodeColumns;
-            tileSizeH = settings.TileWidth;
-            tileSizeV = settings.TileHeight;
-            tileSizeM = settings.HeightScale;
-            offsetX = settings.OffsetX;
-            offsetY = settings.OffsetY;
+            data = new TerrainData(settings);
+            hydro = new Hydrology(data, settings);
 
-            makeNodes();
             makeTiles();
             makeQuads();
 
@@ -67,190 +63,22 @@ namespace ForesTycoon
             GL.LineWidth(2.0f);
         }
 
-        // ── Perlin Noise – egyszerű 2D smooth noise .NET 3.5 kompatibilis ────────────────
-        private int[] perm;
-
-        private void InitNoise(int seed)
-        {
-            perm = new int[512];
-            int[] p = new int[256];
-            for (int i = 0; i < 256; i++) p[i] = i;
-            Random rnd = new Random(seed);
-            for (int i = 255; i > 0; i--)
-            {
-                int j = rnd.Next(i + 1);
-                int tmp = p[i]; p[i] = p[j]; p[j] = tmp;
-            }
-            for (int i = 0; i < 512; i++) perm[i] = p[i & 255];
-        }
-
-        private double Fade(double t) { return t * t * t * (t * (t * 6 - 15) + 10); }
-        private double Lerp(double a, double b, double t) { return a + t * (b - a); }
-        private double Grad(int hash, double x, double y)
-        {
-            int h = hash & 3;
-            double u = h < 2 ? x : y;
-            double v = h < 2 ? y : x;
-            return ((h & 1) == 0 ? u : -u) + ((h & 2) == 0 ? v : -v);
-        }
-
-        private double Noise2D(double x, double y)
-        {
-            int xi = (int)Math.Floor(x) & 255;
-            int yi = (int)Math.Floor(y) & 255;
-            double xf = x - Math.Floor(x);
-            double yf = y - Math.Floor(y);
-            double u = Fade(xf), v = Fade(yf);
-            int aa = perm[perm[xi    ] + yi    ];
-            int ab = perm[perm[xi    ] + yi + 1];
-            int ba = perm[perm[xi + 1] + yi    ];
-            int bb = perm[perm[xi + 1] + yi + 1];
-            return Lerp(Lerp(Grad(aa, xf,     yf    ), Grad(ba, xf - 1, yf    ), u),
-                        Lerp(Grad(ab, xf,     yf - 1), Grad(bb, xf - 1, yf - 1), u), v);
-        }
-
-        /// <summary>
-        /// Fractál Brownian Motion: több oktavon összegzett zaj → termeszetesebb domborzat.
-        /// </summary>
-        private double FBM(double x, double y, int octaves, double persistence)
-        {
-            double val = 0, amp = 1, freq = 1, max = 0;
-            for (int o = 0; o < octaves; o++)
-            {
-                val  += Noise2D(x * freq, y * freq) * amp;
-                max  += amp;
-                amp  *= persistence;
-                freq *= 2.0;
-            }
-            return val / max;  // normált: kb. [-1, 1]
-        }
-
         private void GenerateTerrain()
         {
-            const int    MAX_HEIGHT = 6;
-            const int    SEED       = 42;
-            const double ROUGHNESS  = 0.58;  // kisebb = simább (TT-szerű)
+            int maxHeight = settings.MaxHeight;
+            new TerrainGenerator(settings.Seed)
+                .Generate(nodeCols, nodeRows, maxHeight, out int[,] targetW, out bool[,] isRiver);
 
-            int size = nodeCols;  // 65 = 2^6 + 1
-            Random rnd = new Random(SEED);
-            double[,] h = new double[size, size];
-            InitNoise(SEED);
-
-            // ── 1. Diamond-Square ─────────────────────────────────────────────
-            h[0,      0     ] = rnd.NextDouble();
-            h[0,      size-1] = rnd.NextDouble();
-            h[size-1, 0     ] = rnd.NextDouble();
-            h[size-1, size-1] = rnd.NextDouble();
-
-            double range = 1.0;
-            for (int step = size - 1; step > 1; step /= 2)
-            {
-                int half = step / 2;
-                range *= ROUGHNESS;
-
-                // Diamond lépés: négyzetek közepei
-                for (int x = 0; x < size - 1; x += step)
-                    for (int y = 0; y < size - 1; y += step)
-                    {
-                        double avg = (h[x,y] + h[x+step,y] +
-                                      h[x,y+step] + h[x+step,y+step]) * 0.25;
-                        h[x+half, y+half] = avg + (rnd.NextDouble() * 2 - 1) * range;
-                    }
-
-                // Square lépés: rombuszok oldal-közepei
-                for (int x = 0; x < size; x += half)
-                    for (int y = ((x / half) % 2 == 0) ? half : 0; y < size; y += step)
-                    {
-                        double sum = 0; int cnt = 0;
-                        if (x - half >= 0)   { sum += h[x-half, y]; cnt++; }
-                        if (x + half < size) { sum += h[x+half, y]; cnt++; }
-                        if (y - half >= 0)   { sum += h[x, y-half]; cnt++; }
-                        if (y + half < size) { sum += h[x, y+half]; cnt++; }
-                        h[x, y] = sum / cnt + (rnd.NextDouble() * 2 - 1) * range;
-                    }
-            }
-
-            // ── 2. Normalizálás [0, 1]-re ─────────────────────────────────────
-            double hMin = double.MaxValue, hMax = double.MinValue;
-            for (int x = 0; x < size; x++)
-                for (int y = 0; y < size; y++)
-                {
-                    if (h[x,y] < hMin) hMin = h[x,y];
-                    if (h[x,y] > hMax) hMax = h[x,y];
-                }
-            double hRange = hMax - hMin;
-            for (int x = 0; x < size; x++)
-                for (int y = 0; y < size; y++)
-                    h[x,y] = (h[x,y] - hMin) / hRange;
-
-            // ── 3. Sziget falloff ─────────────────────────────────────────────
-            for (int x = 0; x < size; x++)
-                for (int y = 0; y < size; y++)
-                {
-                    double nx = x / (double)(size - 1);
-                    double ny = y / (double)(size - 1);
-                    double coastDrop = Math.Max(0.0, 0.32 - nx) * 2.4;
-                    double mountainBand = FBM(nx * 2.2 + 4.0, ny * 2.8 + 9.0, 5, 0.55);
-                    double ridge = Math.Max(0.0, mountainBand - 0.05) * 0.35;
-                    double basinNoise = FBM(nx * 3.6 + 11.0, ny * 3.8 + 17.0, 4, 0.55);
-                    double basinCarve = Math.Max(0.0, -basinNoise - 0.12) * 0.28;
-                    double inlandRise = Math.Max(0.0, nx - 0.25) * 0.18;
-                    h[x,y] = Math.Max(0.0, Math.Min(1.0, h[x,y] * 0.78 + ridge + inlandRise - coastDrop - basinCarve));
-                }
-
-            // ── 4. 3× simítás (TT cikk ajánlása) ─────────────────────────────
-            for (int pass = 0; pass < 3; pass++)
-            {
-                double[,] s = new double[size, size];
-                for (int x = 0; x < size; x++)
-                    for (int y = 0; y < size; y++)
-                    {
-                        double sum = h[x,y]; int cnt = 1;
-                        if (x > 0)       { sum += h[x-1,y]; cnt++; }
-                        if (x < size-1)  { sum += h[x+1,y]; cnt++; }
-                        if (y > 0)       { sum += h[x,y-1]; cnt++; }
-                        if (y < size-1)  { sum += h[x,y+1]; cnt++; }
-                        s[x,y] = sum / cnt;
-                    }
-                h = s;
-            }
-
-            // ── 5. Folyó generálás ────────────────────────────────────────────
-            // Flow accumulation: minden node gyűjti a felette lefolyó vizet
-            int[,] flowAcc  = ComputeFlowAccumulation(h, size);
-            bool[,] isRiver = new bool[size, size];
-
-            const int    RIVER_THRESHOLD = 55;   // min upstream node-szám a folyóhoz
-            const double RIVER_CARVE     = 0.14; // mennyit vágunk le a magasságból
-
-            for (int x = 0; x < size; x++)
-                for (int y = 0; y < size; y++)
-                    if (flowAcc[x,y] >= RIVER_THRESHOLD && h[x,y] > 0.08)
-                    {
-                        isRiver[x,y] = true;
-                        h[x,y] = Math.Max(0.02, h[x,y] - RIVER_CARVE);
-                    }
-
-            // ── 6. Terasz + kvantizálás ───────────────────────────────────────
-            int[,] targetW = new int[nodeCols, nodeRows];
-            for (int u = 0; u < nodeCols; u++)
-                for (int v = 0; v < nodeRows; v++)
-                {
-                    double val    = TerraceMap(h[u,v], MAX_HEIGHT);
-                    int    height = (int)Math.Round(val * MAX_HEIGHT);
-                    targetW[u,v] = Math.Max(0, Math.Min(MAX_HEIGHT, height));
-                }
-
-            // ── 7. ElevationManager – szomszéd-meredekség szabály ─────────────
+            // ── ElevationManager – szomszéd-meredekség szabály ────────────────
             suppressHydrologyRebuild = true;
             try
             {
-                for (int pass = 0; pass < MAX_HEIGHT; pass++)
+                for (int pass = 0; pass < maxHeight; pass++)
                     for (int u = 0; u < nodeCols; u++)
                         for (int v = 0; v < nodeRows; v++)
                         {
                             Node node = getNodeByCoords(u, v);
-                            if (node.W < targetW[u,v])
+                            if (node.W < targetW[u, v])
                             {
                                 actualNode = node;
                                 ElevationManager(+1);
@@ -262,7 +90,7 @@ namespace ForesTycoon
                 suppressHydrologyRebuild = false;
             }
 
-            // ── 8. River node-ok megjelölése ──────────────────────────────────
+            // ── River node-ok megjelölése ─────────────────────────────────────
             riverNodeIds.Clear();
             for (int u = 0; u < nodeCols; u++)
                 for (int v = 0; v < nodeRows; v++)
@@ -271,52 +99,6 @@ namespace ForesTycoon
 
             RebuildHydrology();
             actualNode = null;
-        }
-
-        // D4 flow accumulation: minden node a legmélyebb szomszédjának adja a vizet
-        private int[,] ComputeFlowAccumulation(double[,] h, int size)
-        {
-            int[,] acc = new int[size, size];
-            for (int x = 0; x < size; x++)
-                for (int y = 0; y < size; y++)
-                    acc[x, y] = 1;
-
-            // Magasság szerint csökkenő sorrend
-            var order = new List<(int x, int y)>(size * size);
-            for (int x = 0; x < size; x++)
-                for (int y = 0; y < size; y++)
-                    order.Add((x, y));
-            order.Sort((a, b) => h[b.x, b.y].CompareTo(h[a.x, a.y]));
-
-            int[] dx = { 0, 0, 1, -1 };
-            int[] dy = { 1, -1, 0, 0 };
-
-            foreach (var (x, y) in order)
-            {
-                double lowest = h[x, y];
-                int bx = -1, by = -1;
-                for (int d = 0; d < 4; d++)
-                {
-                    int nx = x + dx[d], ny = y + dy[d];
-                    if (nx >= 0 && nx < size && ny >= 0 && ny < size && h[nx, ny] < lowest)
-                    {
-                        lowest = h[nx, ny];
-                        bx = nx; by = ny;
-                    }
-                }
-                if (bx >= 0) acc[bx, by] += acc[x, y];
-            }
-            return acc;
-        }
-
-        // Smooth-step terasz: síkokat kiszélesíti, lejtőket élesíti
-        private double TerraceMap(double t, int levels)
-        {
-            double scaled = t * levels;
-            double floor  = Math.Floor(scaled);
-            double frac   = scaled - floor;
-            double smooth = frac * frac * (3.0 - 2.0 * frac);
-            return (floor + smooth) / levels;
         }
 
 
@@ -480,50 +262,10 @@ namespace ForesTycoon
             edges.SetElements(indices.ToArray());
         }
 
-        private void makeNodes()
-        {
-            nodes = new Node[nodeCols * nodeRows];
-
-            for (int u = 0; u < nodeCols; u++)
-            {
-                for (int v = 0; v < nodeRows; v++)
-                {
-                    Node node = new Node(u * nodeRows + v);
-                    node.U = u;
-                    node.V = v;
-                    node.W = 0;
-                    node.xPos = (u * tileSizeH) - offsetX;
-                    node.yPos = (v * tileSizeV) - offsetY;
-                    node.zPos = (0 * tileSizeM);
-
-                    nodes[node.Id] = node;
-                }
-            }
-        }
-
         private void makeTiles()
         {
-            tiles = new Tile[(nodeCols - 1) * (nodeRows - 1)];
-            tileMoisture = new float[tiles.Length];
-
-            for (var u = 0; u < nodeCols - 1; u++)
-            {
-                for (var v = 0; v < nodeRows - 1; v++)
-                {
-                    Node n = getNodeByCoords(u + 0, v + 1);
-                    Node s = getNodeByCoords(u + 1, v + 0);
-                    Node e = getNodeByCoords(u + 1, v + 1);
-                    Node w = getNodeByCoords(u + 0, v + 0);
-
-                    Tile tile = new Tile(n, s, e, w)
-                    {
-                        Id = u * (nodeRows - 1) + v
-                    };
-
-                    makeBuffer(tile.Code, tile.Low);
-                    tiles[tile.Id] = tile;
-                }
-            }
+            foreach (Tile tile in tiles)
+                makeBuffer(tile.Code, tile.Low);
         }
 
         private void updateNodes(List<Node> nodes)
@@ -552,268 +294,19 @@ namespace ForesTycoon
                 RebuildHydrology();
         }
 
-        private Node getNodeByCoords(int u, int v)
-        {
-            return nodes[u * nodeRows + v];
-        }
+        private Node getNodeByCoords(int u, int v) => data.GetNode(u, v);
 
-        private Tile getTileByCoords(int u, int v)
-        {
-            return tiles[u * (nodeRows - 1) + v];
-        }
+        private Tile getTileByCoords(int u, int v) => data.GetTile(u, v);
 
-        private bool checkNode(int u, int v)
-        {
-            if ((u >= 0 && u < nodeCols) && (v >= 0 && v < nodeRows))
-            {
-                return (true);
-            }
-            return (false);
-        }
+        private bool checkNode(int u, int v) => data.CheckNode(u, v);
 
-        private bool checkTile(int u, int v)
-        {
-            if ((u >= 0 && u < (nodeCols - 1) && (v >= 0 && v < (nodeRows - 1))))
-            {
-                return (true);
-            }
-            return (false);
-        }
+        private bool checkTile(int u, int v) => data.CheckTile(u, v);
 
-        private int CountRiverCorners(Tile tile)
-        {
-            int count = 0;
-            if (riverNodeIds.Contains(tile.W.Id)) count++;
-            if (riverNodeIds.Contains(tile.S.Id)) count++;
-            if (riverNodeIds.Contains(tile.E.Id)) count++;
-            if (riverNodeIds.Contains(tile.N.Id)) count++;
-            return count;
-        }
+        private int CountRiverCorners(Tile tile) => hydro.CountRiverCorners(tile);
 
-        private IEnumerable<Tile> GetAdjacentTiles(Tile tile)
-        {
-            int tilesPerColumn = nodeRows - 1;
-            int u = tile.Id / tilesPerColumn;
-            int v = tile.Id % tilesPerColumn;
+        private void RebuildHydrology() => hydro.Rebuild();
 
-            if (checkTile(u - 1, v)) yield return getTileByCoords(u - 1, v);
-            if (checkTile(u + 1, v)) yield return getTileByCoords(u + 1, v);
-            if (checkTile(u, v - 1)) yield return getTileByCoords(u, v - 1);
-            if (checkTile(u, v + 1)) yield return getTileByCoords(u, v + 1);
-        }
-
-        private bool IsBorderTile(Tile tile)
-        {
-            int tilesPerColumn = nodeRows - 1;
-            int u = tile.Id / tilesPerColumn;
-            int v = tile.Id % tilesPerColumn;
-            return u == 0 || v == 0 || u == nodeCols - 2 || v == nodeRows - 2;
-        }
-
-        private void RebuildHydrology()
-        {
-            standingWaterTileIds.Clear();
-            Array.Clear(tileMoisture, 0, tileMoisture.Length);
-
-            bool[] waterCandidates = new bool[tiles.Length];
-            for (int i = 0; i < tiles.Length; i++)
-                waterCandidates[i] = HasWaterSurfaceCandidate(tiles[i]);
-
-            bool[] visited = new bool[tiles.Length];
-            Queue<Tile> open = new Queue<Tile>();
-            List<Tile> basin = new List<Tile>();
-
-            for (int i = 0; i < tiles.Length; i++)
-            {
-                if (!waterCandidates[i] || visited[i]) continue;
-
-                open.Enqueue(tiles[i]);
-                visited[i] = true;
-                basin.Clear();
-
-                bool touchesBorder = false;
-                while (open.Count > 0)
-                {
-                    Tile current = open.Dequeue();
-                    basin.Add(current);
-                    if (IsBorderTile(current)) touchesBorder = true;
-
-                    foreach (Tile adjacent in GetAdjacentTiles(current))
-                    {
-                        if (!waterCandidates[adjacent.Id] || visited[adjacent.Id]) continue;
-                        visited[adjacent.Id] = true;
-                        open.Enqueue(adjacent);
-                    }
-                }
-
-                if (!touchesBorder)
-                {
-                    foreach (Tile basinTile in basin)
-                        standingWaterTileIds.Add(basinTile.Id);
-                }
-            }
-
-            for (int i = 0; i < tiles.Length; i++)
-            {
-                Tile tile = tiles[i];
-                float moisture = ShouldDrawStandingWater(tile) ? 1.0f : 0.0f;
-
-                int riverCorners = CountRiverCorners(tile);
-                if (riverCorners >= 2) moisture = Math.Max(moisture, 0.8f);
-
-                foreach (Tile adjacent in GetAdjacentTiles(tile))
-                {
-                    if (ShouldDrawStandingWater(adjacent))
-                        moisture = Math.Max(moisture, 0.6f);
-                    else if (CountRiverCorners(adjacent) >= 2)
-                        moisture = Math.Max(moisture, 0.45f);
-                }
-
-                if (tile.Low <= 2) moisture = Math.Max(moisture, 0.35f);
-                tileMoisture[i] = moisture;
-            }
-
-            InitWaterFromHydrology();
-        }
-
-        private void InitWaterFromHydrology()
-        {
-            nodeWaterDepth = new float[nodes.Length];
-
-            BuildGravityWaterFromTerrain();
-        }
-
-        private void BuildGravityWaterFromTerrain()
-        {
-            bool[] settled = new bool[nodes.Length];
-            float[] spillLevel = new float[nodes.Length];
-            for (int i = 0; i < spillLevel.Length; i++)
-                spillLevel[i] = float.PositiveInfinity;
-
-            PriorityQueue<Node, float> open = new PriorityQueue<Node, float>();
-
-            void EnqueueIfLower(Node node, float level)
-            {
-                if (level >= spillLevel[node.Id]) return;
-                spillLevel[node.Id] = level;
-                open.Enqueue(node, level);
-            }
-
-            void AddBoundary(Node node)
-            {
-                float boundaryLevel = node.zPos < SeaLevel ? SeaLevel : node.zPos;
-                EnqueueIfLower(node, boundaryLevel);
-            }
-
-            for (int u = 0; u < nodeCols; u++)
-            {
-                AddBoundary(getNodeByCoords(u, 0));
-                AddBoundary(getNodeByCoords(u, nodeRows - 1));
-            }
-            for (int v = 1; v < nodeRows - 1; v++)
-            {
-                AddBoundary(getNodeByCoords(0, v));
-                AddBoundary(getNodeByCoords(nodeCols - 1, v));
-            }
-
-            while (open.Count > 0)
-            {
-                Node node = open.Dequeue();
-                if (settled[node.Id]) continue;
-
-                settled[node.Id] = true;
-                float currentLevel = spillLevel[node.Id];
-
-                foreach (Node neighbor in getNeighbours(node))
-                {
-                    if (settled[neighbor.Id]) continue;
-
-                    float edgeLevel = GetEdgeBarrierLevel(node, neighbor);
-                    float neighborLevel = Math.Max(currentLevel, Math.Max(edgeLevel, neighbor.zPos));
-                    EnqueueIfLower(neighbor, neighborLevel);
-                }
-            }
-
-            for (int i = 0; i < nodes.Length; i++)
-            {
-                if (float.IsPositiveInfinity(spillLevel[i])) continue;
-
-                float surfaceLevel = Math.Min(spillLevel[i], SeaLevel);
-                float depth = surfaceLevel - nodes[i].zPos;
-                if (depth >= MinimumWaterDepth)
-                    nodeWaterDepth[i] = depth;
-            }
-        }
-
-        private bool HasDynamicWater(Tile tile)
-        {
-            return nodeWaterDepth[tile.N.Id] >= MinimumWaterDepth
-                || nodeWaterDepth[tile.S.Id] >= MinimumWaterDepth
-                || nodeWaterDepth[tile.E.Id] >= MinimumWaterDepth
-                || nodeWaterDepth[tile.W.Id] >= MinimumWaterDepth;
-        }
-
-        public void WaterFlowStep()
-        {
-            // A vizszintet a hidrologia ujraepitese szamolja a terepbol.
-            // Ez a tick csak az animacio miatt marad meg; nem pumpal vagy mozgat vizet.
-        }
-
-        private bool CanWaterFlowBetween(Node a, Node b, float waterLevel)
-        {
-            float edgeLevel = GetEdgeBarrierLevel(a, b);
-            if (waterLevel <= edgeLevel) return false;
-
-            if (b.zPos < waterLevel)
-                return true;
-
-            foreach (Tile tile in GetSharedTiles(a, b))
-            {
-                if (IsRiverWaterTile(tile))
-                {
-                    if (waterLevel <= tile.Low * tileSizeM + RiverWaterHeight + 0.001f)
-                        return true;
-                    continue;
-                }
-
-                if (a.zPos < waterLevel && b.zPos < waterLevel)
-                    return true;
-            }
-
-            return false;
-        }
-
-        private float GetEdgeBarrierLevel(Node a, Node b)
-        {
-            float edgeLevel = Math.Max(a.zPos, b.zPos) + 0.001f;
-
-            foreach (Tile tile in GetSharedTiles(a, b))
-            {
-                if (!IsRiverWaterTile(tile)) continue;
-                edgeLevel = Math.Min(edgeLevel, tile.Low * tileSizeM + RiverWaterHeight + 0.001f);
-            }
-
-            return edgeLevel;
-        }
-
-        private List<Tile> GetSharedTiles(Node a, Node b)
-        {
-            List<Tile> shared = new List<Tile>(2);
-            foreach (Tile tile in getTilesByNode(a))
-            {
-                if (TileContainsNode(tile, b))
-                    shared.Add(tile);
-            }
-            return shared;
-        }
-
-        private bool TileContainsNode(Tile tile, Node node)
-        {
-            return tile.W.Id == node.Id
-                || tile.S.Id == node.Id
-                || tile.E.Id == node.Id
-                || tile.N.Id == node.Id;
-        }
+        private bool HasDynamicWater(Tile tile) => hydro.HasDynamicWater(tile);
 
         private float NodeWaterSurfaceNoWave(Node node)
         {
@@ -891,36 +384,9 @@ namespace ForesTycoon
             return polygon;
         }
 
-        private List<Node> getNeighbours(Node node)
-        {
-            List<Node> neighbors = new List<Node>();
+        private List<Node> getNeighbours(Node node) => data.GetNeighbours(node);
 
-            if (checkNode(node.U, node.V - 1)) neighbors.Add(getNodeByCoords(node.U, node.V - 1));
-            if (checkNode(node.U + 1, node.V)) neighbors.Add(getNodeByCoords(node.U + 1, node.V));
-            if (checkNode(node.U, node.V + 1)) neighbors.Add(getNodeByCoords(node.U, node.V + 1));
-            if (checkNode(node.U - 1, node.V)) neighbors.Add(getNodeByCoords(node.U - 1, node.V));
-
-            return (neighbors);
-        }
-
-        private List<Tile> getTilesByNode(Node node)
-        {
-            List<Tile> tiles = new List<Tile>();
-
-            if (checkTile(node.U - 1, node.V - 1))
-                tiles.Add(getTileByCoords(node.U - 1, node.V - 1));
-
-            if (checkTile(node.U - 1, node.V - 0))
-                tiles.Add(getTileByCoords(node.U - 1, node.V - 0));
-
-            if (checkTile(node.U - 0, node.V - 1))
-                tiles.Add(getTileByCoords(node.U - 0, node.V - 1));
-
-            if (checkTile(node.U - 0, node.V - 0))
-                tiles.Add(getTileByCoords(node.U - 0, node.V - 0));
-
-            return (tiles);
-        }
+        private List<Tile> getTilesByNode(Node node) => data.GetTilesByNode(node);
 
         private uint ColorToUInt(Color color)
         {
@@ -1256,81 +722,13 @@ namespace ForesTycoon
         // Valódi vízszint: a W=0 alapszint FELETT lebegő vízfelszín.
         // tileSizeM=2, tehát W=1 → Z=2 és W=2 → Z=4. A vízszint Z=3.0f:
         // ez a sárga part és a zöld terepszint közötti félmagasság, itt hullámzik a felszín.
-        private int CountCornersBelowWater(Tile tile)
-        {
-            int count = 0;
-            if (tile.W.zPos < SeaLevel) count++;
-            if (tile.S.zPos < SeaLevel) count++;
-            if (tile.E.zPos < SeaLevel) count++;
-            if (tile.N.zPos < SeaLevel) count++;
-            return count;
-        }
+        private bool ShouldDrawStandingWater(Tile tile) => hydro.ShouldDrawStandingWater(tile);
 
-        private bool HasAdjacentWetBankPair(Tile tile)
-        {
-            bool westWet = tile.W.zPos < SeaLevel;
-            bool southWet = tile.S.zPos < SeaLevel;
-            bool eastWet = tile.E.zPos < SeaLevel;
-            bool northWet = tile.N.zPos < SeaLevel;
-
-            return (westWet && southWet)
-                || (southWet && eastWet)
-                || (eastWet && northWet)
-                || (northWet && westWet);
-        }
-
-        private bool HasWaterSurfaceCandidate(Tile tile)
-        {
-            if (CountRiverCorners(tile) >= 2) return false;
-
-            bool hasHigherBank = false;
-            foreach (Tile adjacent in GetAdjacentTiles(tile))
-            {
-                if (adjacent.Low < tile.Low) return false;
-                if (adjacent.Low > tile.Low) hasHigherBank = true;
-            }
-
-            return hasHigherBank;
-        }
-
-        private bool ShouldDrawStandingWater(Tile tile)
-        {
-            return standingWaterTileIds.Contains(tile.Id) || tile.Low < 0
-                || (nodeWaterDepth != null && HasDynamicWater(tile));
-        }
-
-        private bool HasAdjacentRiverBankPair(Tile tile)
-        {
-            bool westRiver = riverNodeIds.Contains(tile.W.Id);
-            bool southRiver = riverNodeIds.Contains(tile.S.Id);
-            bool eastRiver = riverNodeIds.Contains(tile.E.Id);
-            bool northRiver = riverNodeIds.Contains(tile.N.Id);
-
-            return (westRiver && southRiver)
-                || (southRiver && eastRiver)
-                || (eastRiver && northRiver)
-                || (northRiver && westRiver);
-        }
-
-        private bool CanRenderFallbackRiver(Tile tile)
-        {
-            if (!IsRiverWaterTile(tile)) return false;
-            if (tile.Low * tileSizeM >= SeaLevel) return false;
-            return CountCornersBelowWater(tile) >= 2 && HasAdjacentWetBankPair(tile);
-        }
+        private bool CanRenderFallbackRiver(Tile tile) => hydro.CanRenderFallbackRiver(tile);
 
         // Két egymásra szuperponált hullám egy adott (x,y) pozícióra.
         // Amplitúdó szándékosan kicsi: Transport Tycoon-szerű, finoman remegő felszín.
         private const float WAVE_MAX = 0.36f;
-
-        private bool IsRiverWaterTile(Tile tile)
-        {
-            if (standingWaterTileIds.Contains(tile.Id)) return false;
-            int rc = CountRiverCorners(tile);
-            if (rc < 2) return false;
-            if (rc == 2 && !HasAdjacentRiverBankPair(tile)) return false;
-            return true;
-        }
 
         private float WaveAt(float x, float y, float t)
         {
@@ -1607,9 +1005,6 @@ namespace ForesTycoon
                     }
                 }
                 updateNodes(closedList);
-
-                if (nodeWaterDepth != null)
-                    for (int i = 0; i < 30; i++) WaterFlowStep();
             }
         }
 
