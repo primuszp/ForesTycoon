@@ -1,5 +1,4 @@
 ﻿using System;
-using OpenTK;
 using OpenTK.Graphics.OpenGL;
 
 namespace ForesTycoon
@@ -21,8 +20,6 @@ namespace ForesTycoon
                 // Create an id on first use.
                 if (vboId == 0)
                 {
-                    OpenTK.Graphics.GraphicsContext.Assert();
-
                     GL.GenBuffers(1, out vboId);
                     if (vboId == 0) throw new Exception("Could not create VBO!");
                 }
@@ -37,8 +34,6 @@ namespace ForesTycoon
                 // Create an id on first use.
                 if (eboId == 0)
                 {
-                    OpenTK.Graphics.GraphicsContext.Assert();
-
                     GL.GenBuffers(1, out eboId);
                     if (eboId == 0) throw new Exception("Could not create VBO!");
                 }
@@ -65,7 +60,7 @@ namespace ForesTycoon
                 GL.BindBuffer(BufferTarget.ArrayBuffer, VboId);
                 GL.BufferData(BufferTarget.ArrayBuffer, new IntPtr(data.Length * Vertex.Stride), data, BufferUsageHint.StaticDraw);
                 GL.GetBufferParameter(BufferTarget.ArrayBuffer, BufferParameterName.BufferSize, out size);
-                if (vertices.Length * BlittableValueType.StrideOf(vertices) != size)
+                if (vertices.Length * Vertex.Stride != size)
                     throw new ApplicationException("Vertex data not uploaded correctly");
             }
         }

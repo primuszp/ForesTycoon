@@ -1,5 +1,5 @@
 ﻿using System.Runtime.InteropServices;
-using OpenTK;
+using OpenTK.Mathematics;
 
 namespace ForesTycoon
 {

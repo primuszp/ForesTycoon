@@ -1,7 +1,7 @@
 using System;
 using System.Drawing;
 using System.Windows.Forms;
-using OpenTK;
+using OpenTK.Mathematics;
 using OpenTK.Graphics.OpenGL;
 
 namespace ForesTycoon
@@ -12,7 +12,7 @@ namespace ForesTycoon
     /// Jobb egér: pan (eltolás).
     /// Görgő: zoom.
     /// </summary>
-    class Viewport : GLControl
+    class Viewport : OpenTK.GLControl.GLControl
     {
         // ── Vetítési paraméterek ─────────────────────────────────────────────
         private const double Z_NEAR = -1000.0;
@@ -73,7 +73,14 @@ namespace ForesTycoon
         private static readonly Color BG_COLOR = Color.FromArgb(44, 53, 64);
 
         // ────────────────────────────────────────────────────────────────────
-        public Viewport() : base()
+        public Viewport() : base(new OpenTK.GLControl.GLControlSettings
+        {
+            // Compatibility profil: a jelenlegi immediate-mode (fixed-function)
+            // renderer így OpenTK 4 alatt is fut. Core-profile shaderekre a
+            // következő migrációs körben térünk át.
+            Profile = OpenTK.Windowing.Common.ContextProfile.Compatability,
+            APIVersion = new System.Version(3, 3)
+        })
         {
             this.TabStop = true;   // billentyűzet fókusz
         }
@@ -85,6 +92,7 @@ namespace ForesTycoon
             try
             {
                 MakeCurrent();
+                Context.SwapInterval = 0;   // vsync ki (OpenTK 3 VSync=false megfelelője)
 
             // OpenGL alapbeállítások
             GL.Enable(EnableCap.DepthTest);

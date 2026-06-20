@@ -40,7 +40,6 @@
             viewport.Name = "viewport";
             viewport.Size = new System.Drawing.Size(1264, 681);
             viewport.TabIndex = 0;
-            viewport.VSync = false;
             // 
             // Form1
             // 
