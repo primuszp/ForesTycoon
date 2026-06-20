@@ -266,6 +266,7 @@ namespace ForesTycoon
             activeTool = tool;
             roadDragStart = null;   // úthálózat drag megszakítása eszközváltáskor
             roadDragging = false;
+            terrain?.ClearRoadPreview();
             Invalidate();
         }
 
@@ -442,6 +443,9 @@ namespace ForesTycoon
 
             UpdateHover(e);
 
+            if (roadDragging)
+                terrain.SetRoadPreview(roadDragStart, terrain.ActiveNode);
+
             switch (e.Button)
             {
                 case MouseButtons.None:
@@ -474,6 +478,7 @@ namespace ForesTycoon
             {
                 if (roadDragging && roadDragStart != null)
                     terrain.BuildRoadPath(roadDragStart, terrain.ActiveNode);
+                terrain.ClearRoadPreview();
                 roadDragging = false;
                 roadDragStart = null;
                 Invalidate();

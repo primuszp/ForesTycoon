@@ -448,48 +448,103 @@ namespace ForesTycoon
             }
         }
 
+        // ── Út-render konstansok ─────────────────────────────────────────────
+        private const float RoadZBias = 0.3f;            // felszín fölé emelés
+        private static readonly Color RoadAsphalt  = Color.FromArgb( 58,  58,  64);
+        private static readonly Color RoadCurb     = Color.FromArgb(176, 176, 168);  // padka (világos beton)
+        private static readonly Color RoadCenter   = Color.FromArgb(214, 200,  96);  // sárga felezővonal
+
+        private float RoadHalf => tileSizeH * 0.5f;       // pont csempényi széles
+        private float CurbWidth => RoadHalf * 0.20f;
+
+        // Húzás közbeni előnézet (még nem véglegesített) szegmensek.
+        private readonly List<(int a, int b)> previewSegments = new List<(int, int)>();
+
+        public void SetRoadPreview(Node a, Node b)
+        {
+            previewSegments.Clear();
+            if (a == null || b == null) return;
+
+            int u = a.U, v = a.V, prev = a.Id;
+            while (u != b.U || v != b.V)
+            {
+                if (Math.Abs(b.U - u) >= Math.Abs(b.V - v)) u += Math.Sign(b.U - u);
+                else v += Math.Sign(b.V - v);
+                int next = getNodeByCoords(u, v).Id;
+                previewSegments.Add((prev, next));
+                prev = next;
+            }
+        }
+
+        public void ClearRoadPreview() => previewSegments.Clear();
+
         private void DrawRoads()
         {
-            if (roads.Count == 0) return;
+            if (roads.Count == 0 && previewSegments.Count == 0) return;
 
-            const float halfWidth = 1.1f;
-            const float zBias = 0.3f;   // a felszín fölé emelve, Z-fight ellen
+            float half = RoadHalf;
+            float asphaltHalf = half - CurbWidth;
 
-            // Aszfalt szalag + sárga felezővonal.
-            GL.Begin(PrimitiveType.Quads);
-            foreach ((int a, int b) in roads.Segments)
+            // ── Véglegesített utak: padka → úttest → felezővonal, + csomópont-kitöltés.
+            if (roads.Count > 0)
             {
-                Node na = nodes[a];
-                Node nb = nodes[b];
-                float dx = nb.xPos - na.xPos;
-                float dy = nb.yPos - na.yPos;
-                float len = (float)Math.Sqrt(dx * dx + dy * dy);
-                if (len < 1e-4f) continue;
-                float px = -dy / len * halfWidth;
-                float py = dx / len * halfWidth;
-
-                float az = na.zPos + zBias, bz = nb.zPos + zBias;
-                GL.Color3(Color.FromArgb(64, 64, 70));
-                GL.Vertex3(na.xPos + px, na.yPos + py, az);
-                GL.Vertex3(na.xPos - px, na.yPos - py, az);
-                GL.Vertex3(nb.xPos - px, nb.yPos - py, bz);
-                GL.Vertex3(nb.xPos + px, nb.yPos + py, bz);
+                GL.Begin(PrimitiveType.Quads);
+                foreach ((int a, int b) in roads.Segments)
+                {
+                    RoadStrip(nodes[a], nodes[b], half, asphaltHalf, RoadCurb);   // bal padka
+                    RoadStrip(nodes[a], nodes[b], -asphaltHalf, -half, RoadCurb);  // jobb padka
+                    RoadStrip(nodes[a], nodes[b], -asphaltHalf, asphaltHalf, RoadAsphalt);
+                    RoadStrip(nodes[a], nodes[b], -0.12f, 0.12f, RoadCenter);
+                }
+                // Csomópont-kitöltés (úttest), hogy a kanyarok/elágazások összeérjenek.
+                foreach (int id in RoadNodeIds())
+                    RoadNodeSquare(nodes[id], asphaltHalf, RoadAsphalt);
+                GL.End();
             }
-            GL.End();
 
-            // Csomópontok kitöltése kis négyzettel, hogy a kanyarok/elágazások összeérjenek.
-            GL.Begin(PrimitiveType.Quads);
-            GL.Color3(Color.FromArgb(64, 64, 70));
-            foreach (int id in RoadNodeIds())
+            // ── Fehér előnézet (átlátszó), húzás közben.
+            if (previewSegments.Count > 0)
             {
-                Node n = nodes[id];
-                float z = n.zPos + zBias;
-                GL.Vertex3(n.xPos - halfWidth, n.yPos - halfWidth, z);
-                GL.Vertex3(n.xPos + halfWidth, n.yPos - halfWidth, z);
-                GL.Vertex3(n.xPos + halfWidth, n.yPos + halfWidth, z);
-                GL.Vertex3(n.xPos - halfWidth, n.yPos + halfWidth, z);
+                GL.Enable(EnableCap.Blend);
+                GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
+                GL.Begin(PrimitiveType.Quads);
+                Color preview = Color.FromArgb(150, 255, 255, 255);
+                foreach ((int a, int b) in previewSegments)
+                {
+                    RoadStrip(nodes[a], nodes[b], -half, half, preview);
+                    RoadNodeSquare(nodes[a], half, preview);
+                    RoadNodeSquare(nodes[b], half, preview);
+                }
+                GL.End();
+                GL.Disable(EnableCap.Blend);
             }
-            GL.End();
+        }
+
+        // Egy útszakasz menti sáv (a perp tengelyen o1..o2 eltolás között).
+        private void RoadStrip(Node a, Node b, float o1, float o2, Color color)
+        {
+            float dx = b.xPos - a.xPos;
+            float dy = b.yPos - a.yPos;
+            float len = (float)Math.Sqrt(dx * dx + dy * dy);
+            if (len < 1e-4f) return;
+            float px = -dy / len, py = dx / len;   // perp egységvektor
+
+            float az = a.zPos + RoadZBias, bz = b.zPos + RoadZBias;
+            GL.Color4(color);
+            GL.Vertex3(a.xPos + px * o1, a.yPos + py * o1, az);
+            GL.Vertex3(a.xPos + px * o2, a.yPos + py * o2, az);
+            GL.Vertex3(b.xPos + px * o2, b.yPos + py * o2, bz);
+            GL.Vertex3(b.xPos + px * o1, b.yPos + py * o1, bz);
+        }
+
+        private void RoadNodeSquare(Node n, float h, Color color)
+        {
+            float z = n.zPos + RoadZBias;
+            GL.Color4(color);
+            GL.Vertex3(n.xPos - h, n.yPos - h, z);
+            GL.Vertex3(n.xPos + h, n.yPos - h, z);
+            GL.Vertex3(n.xPos + h, n.yPos + h, z);
+            GL.Vertex3(n.xPos - h, n.yPos + h, z);
         }
 
         private IEnumerable<int> RoadNodeIds()
