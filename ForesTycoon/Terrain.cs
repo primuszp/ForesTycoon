@@ -449,112 +449,134 @@ namespace ForesTycoon
         }
 
         // ── Út-render konstansok ─────────────────────────────────────────────
-        private const float RoadZBias = 0.3f;            // felszín fölé emelés
-        private static readonly Color RoadAsphalt  = Color.FromArgb( 58,  58,  64);
-        private static readonly Color RoadCurb     = Color.FromArgb(176, 176, 168);  // padka (világos beton)
-        private static readonly Color RoadCenter   = Color.FromArgb(214, 200,  96);  // sárga felezővonal
+        private static readonly Color RoadAsphalt = Color.FromArgb( 40,  40,  46);
+        private static readonly Color RoadCurb    = Color.FromArgb(220, 220, 210);  // padka (világos beton)
+        private const float CurbFrac = 0.22f;   // padka szélessége a csempe-középpont felé
 
-        private float RoadHalf => tileSizeH * 0.5f;       // pont csempényi széles
-        private float CurbWidth => RoadHalf * 0.20f;
+        // Csempe-alapú úthálózat: a kapcsolatok a szomszédos út-csempékből adódnak.
+        public Tile HoveredTile => hoveredTile;
+        public int RoadCount => roads.Count;
 
-        // Húzás közbeni előnézet (még nem véglegesített) szegmensek.
-        private readonly List<(int a, int b)> previewSegments = new List<(int, int)>();
+        public bool AddRoadTile(Tile t) => t != null && roads.Add(t.Id);
 
-        public void SetRoadPreview(Node a, Node b)
+        public void BuildRoadTilePath(Tile a, Tile b) => WalkTilePath(a, b, id => roads.Add(id));
+
+        // Húzás közbeni előnézet csempéi.
+        private readonly List<int> previewTiles = new List<int>();
+        public void SetRoadPreview(Tile a, Tile b)
         {
-            previewSegments.Clear();
-            if (a == null || b == null) return;
+            previewTiles.Clear();
+            WalkTilePath(a, b, id => previewTiles.Add(id));
+        }
+        public void ClearRoadPreview() => previewTiles.Clear();
+        public int RoadPreviewCount => previewTiles.Count;
 
-            int u = a.U, v = a.V, prev = a.Id;
-            while (u != b.U || v != b.V)
+        // Csempe-útvonal bejárása a rácson (egyenes lépcsős út a → b között).
+        private void WalkTilePath(Tile a, Tile b, Action<int> visit)
+        {
+            if (a == null || b == null) return;
+            int tpc = nodeRows - 1;
+            int u = a.Id / tpc, v = a.Id % tpc;
+            int ub = b.Id / tpc, vb = b.Id % tpc;
+
+            visit(getTileByCoords(u, v).Id);
+            while (u != ub || v != vb)
             {
-                if (Math.Abs(b.U - u) >= Math.Abs(b.V - v)) u += Math.Sign(b.U - u);
-                else v += Math.Sign(b.V - v);
-                int next = getNodeByCoords(u, v).Id;
-                previewSegments.Add((prev, next));
-                prev = next;
+                if (Math.Abs(ub - u) >= Math.Abs(vb - v)) u += Math.Sign(ub - u);
+                else v += Math.Sign(vb - v);
+                visit(getTileByCoords(u, v).Id);
             }
         }
 
-        public void ClearRoadPreview() => previewSegments.Clear();
+        private bool IsRoadAt(int u, int v) =>
+            checkTile(u, v) && roads.Has(getTileByCoords(u, v).Id);
 
         private void DrawRoads()
         {
-            if (roads.Count == 0 && previewSegments.Count == 0) return;
+            if (roads.Count == 0 && previewTiles.Count == 0) return;
 
-            float half = RoadHalf;
-            float asphaltHalf = half - CurbWidth;
+            // Decal a terep fölé MÉLYSÉGBEN (nem geometria-z): polygon offset előrehúzza,
+            // így nincs Z-fighting a felszínnel.
+            GL.Enable(EnableCap.PolygonOffsetFill);
+            GL.PolygonOffset(-1.5f, -1.5f);
 
-            // ── Véglegesített utak: padka → úttest → felezővonal, + csomópont-kitöltés.
             if (roads.Count > 0)
             {
                 GL.Begin(PrimitiveType.Quads);
-                foreach ((int a, int b) in roads.Segments)
-                {
-                    RoadStrip(nodes[a], nodes[b], half, asphaltHalf, RoadCurb);   // bal padka
-                    RoadStrip(nodes[a], nodes[b], -asphaltHalf, -half, RoadCurb);  // jobb padka
-                    RoadStrip(nodes[a], nodes[b], -asphaltHalf, asphaltHalf, RoadAsphalt);
-                    RoadStrip(nodes[a], nodes[b], -0.12f, 0.12f, RoadCenter);
-                }
-                // Csomópont-kitöltés (úttest), hogy a kanyarok/elágazások összeérjenek.
-                foreach (int id in RoadNodeIds())
-                    RoadNodeSquare(nodes[id], asphaltHalf, RoadAsphalt);
+                foreach (int id in roads.Tiles)
+                    DrawRoadTile(tiles[id]);
                 GL.End();
             }
 
-            // ── Fehér előnézet (átlátszó), húzás közben.
-            if (previewSegments.Count > 0)
+            // ── Fehér előnézet csempék (kitöltés + körvonal).
+            if (previewTiles.Count > 0)
             {
                 GL.Enable(EnableCap.Blend);
                 GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
+
                 GL.Begin(PrimitiveType.Quads);
-                Color preview = Color.FromArgb(150, 255, 255, 255);
-                foreach ((int a, int b) in previewSegments)
+                GL.Color4(Color.FromArgb(70, 255, 255, 255));
+                foreach (int id in previewTiles)
                 {
-                    RoadStrip(nodes[a], nodes[b], -half, half, preview);
-                    RoadNodeSquare(nodes[a], half, preview);
-                    RoadNodeSquare(nodes[b], half, preview);
+                    Tile t = tiles[id];
+                    GL.Vertex3(t.W.xPos, t.W.yPos, t.W.zPos);
+                    GL.Vertex3(t.S.xPos, t.S.yPos, t.S.zPos);
+                    GL.Vertex3(t.E.xPos, t.E.yPos, t.E.zPos);
+                    GL.Vertex3(t.N.xPos, t.N.yPos, t.N.zPos);
                 }
                 GL.End();
+
+                GL.Enable(EnableCap.PolygonOffsetLine);
+                GL.PolygonOffset(-1.5f, -1.5f);
+                GL.LineWidth(2.5f);
+                GL.Color4(Color.FromArgb(235, 255, 255, 255));
+                foreach (int id in previewTiles)
+                {
+                    Tile t = tiles[id];
+                    GL.Begin(PrimitiveType.LineLoop);
+                    GL.Vertex3(t.W.xPos, t.W.yPos, t.W.zPos);
+                    GL.Vertex3(t.S.xPos, t.S.yPos, t.S.zPos);
+                    GL.Vertex3(t.E.xPos, t.E.yPos, t.E.zPos);
+                    GL.Vertex3(t.N.xPos, t.N.yPos, t.N.zPos);
+                    GL.End();
+                }
+                GL.LineWidth(2f);
+                GL.Disable(EnableCap.PolygonOffsetLine);
                 GL.Disable(EnableCap.Blend);
             }
+
+            GL.Disable(EnableCap.PolygonOffsetFill);
         }
 
-        // Egy útszakasz menti sáv (a perp tengelyen o1..o2 eltolás között).
-        private void RoadStrip(Node a, Node b, float o1, float o2, Color color)
+        // Egy út-csempe: úttest a csempe teljes felületén + padka a nyitott éleken
+        // (ahol nincs szomszédos út-csempe), így a kanyarok/elágazások összeérnek.
+        private void DrawRoadTile(Tile t)
         {
-            float dx = b.xPos - a.xPos;
-            float dy = b.yPos - a.yPos;
-            float len = (float)Math.Sqrt(dx * dx + dy * dy);
-            if (len < 1e-4f) return;
-            float px = -dy / len, py = dx / len;   // perp egységvektor
+            Vector3 W = new Vector3(t.W.xPos, t.W.yPos, t.W.zPos);
+            Vector3 S = new Vector3(t.S.xPos, t.S.yPos, t.S.zPos);
+            Vector3 E = new Vector3(t.E.xPos, t.E.yPos, t.E.zPos);
+            Vector3 N = new Vector3(t.N.xPos, t.N.yPos, t.N.zPos);
+            Vector3 C = (W + S + E + N) * 0.25f;
 
-            float az = a.zPos + RoadZBias, bz = b.zPos + RoadZBias;
-            GL.Color4(color);
-            GL.Vertex3(a.xPos + px * o1, a.yPos + py * o1, az);
-            GL.Vertex3(a.xPos + px * o2, a.yPos + py * o2, az);
-            GL.Vertex3(b.xPos + px * o2, b.yPos + py * o2, bz);
-            GL.Vertex3(b.xPos + px * o1, b.yPos + py * o1, bz);
+            GL.Color4(RoadAsphalt);
+            GL.Vertex3(W); GL.Vertex3(S); GL.Vertex3(E); GL.Vertex3(N);
+
+            int tpc = nodeRows - 1;
+            int u = t.Id / tpc, v = t.Id % tpc;
+
+            // Élek és a mögöttük lévő szomszéd csempe (lásd makeTiles sarok-hozzárendelés).
+            if (!IsRoadAt(u, v - 1)) Curb(W, S, C);
+            if (!IsRoadAt(u + 1, v)) Curb(S, E, C);
+            if (!IsRoadAt(u, v + 1)) Curb(E, N, C);
+            if (!IsRoadAt(u - 1, v)) Curb(N, W, C);
         }
 
-        private void RoadNodeSquare(Node n, float h, Color color)
+        private void Curb(Vector3 p1, Vector3 p2, Vector3 center)
         {
-            float z = n.zPos + RoadZBias;
-            GL.Color4(color);
-            GL.Vertex3(n.xPos - h, n.yPos - h, z);
-            GL.Vertex3(n.xPos + h, n.yPos - h, z);
-            GL.Vertex3(n.xPos + h, n.yPos + h, z);
-            GL.Vertex3(n.xPos - h, n.yPos + h, z);
-        }
-
-        private IEnumerable<int> RoadNodeIds()
-        {
-            HashSet<int> seen = new HashSet<int>();
-            foreach ((int a, int b) in roads.Segments)
-            {
-                if (seen.Add(a)) yield return a;
-                if (seen.Add(b)) yield return b;
-            }
+            Vector3 p1i = p1 + (center - p1) * CurbFrac;
+            Vector3 p2i = p2 + (center - p2) * CurbFrac;
+            GL.Color4(RoadCurb);
+            GL.Vertex3(p1); GL.Vertex3(p2); GL.Vertex3(p2i); GL.Vertex3(p1i);
         }
 
         private void DrawSphere(float radius, int rings, int sectors)
@@ -1067,40 +1089,6 @@ namespace ForesTycoon
             onpos = false;
             return (onpos);
         }
-
-        // ── Úthálózat ────────────────────────────────────────────────────────
-        /// <summary>A kurzor alatti (kijelölt) node, vagy null, ha nincs.</summary>
-        public Node ActiveNode => onpos ? actualNode : null;
-
-        public static bool AreAdjacent(Node a, Node b) =>
-            a != null && b != null && System.Math.Abs(a.U - b.U) + System.Math.Abs(a.V - b.V) == 1;
-
-        /// <summary>Útszegmens a két szomszédos node között. true, ha új szegmens jött létre.</summary>
-        public bool AddRoad(Node a, Node b) => AreAdjacent(a, b) && roads.Add(a.Id, b.Id);
-
-        /// <summary>
-        /// Útvonal építése két node között a rácson lépkedve (OpenTTD drag-build):
-        /// minden lépés egy szomszédos szegmens, így a kanyarok L-törésként, a
-        /// csatlakozások a közös node-okból adódnak.
-        /// </summary>
-        public void BuildRoadPath(Node a, Node b)
-        {
-            if (a == null || b == null) return;
-
-            int u = a.U, v = a.V;
-            Node prev = a;
-            while (u != b.U || v != b.V)
-            {
-                if (Math.Abs(b.U - u) >= Math.Abs(b.V - v)) u += Math.Sign(b.U - u);
-                else v += Math.Sign(b.V - v);
-
-                Node next = getNodeByCoords(u, v);
-                roads.Add(prev.Id, next.Id);
-                prev = next;
-            }
-        }
-
-        public int RoadCount => roads.Count;
 
         public void UpElevation()
         {

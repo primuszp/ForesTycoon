@@ -57,7 +57,7 @@ namespace ForesTycoon
         private TerrainEditTool activeTool = TerrainEditTool.Inspect;
         private int brushSize = 1;       // 1 = egy node, nagyobb = korong sugár
         private int brushStrength = 1;   // szintlépések száma kattintásonként
-        private Node roadDragStart;      // úthálózat: drag-build kezdő node-ja
+        private Tile roadDragStartTile;  // úthálózat: drag-build kezdő csempéje
         private bool roadDragging;       // épp utat húzunk-e
 
         private bool         isLoaded     = false;
@@ -158,7 +158,7 @@ namespace ForesTycoon
             GL.Rotate(rotx, 1f, 0f, 0f);
             GL.Rotate(roty, 0f, 0f, 1f);
 
-            terrain.Draw(activeTool != TerrainEditTool.Inspect);
+            terrain.Draw(activeTool == TerrainEditTool.Raise || activeTool == TerrainEditTool.Lower);
 
             DrawImGui();
 
@@ -242,7 +242,11 @@ namespace ForesTycoon
 
             ImGui.Text($"Eszköz: {ToolName(activeTool)}");
             if (activeTool == TerrainEditTool.Road)
-                ImGui.Text($"Útszegmensek: {terrain.RoadCount}");
+            {
+                ImGui.Text($"Út-csempék: {terrain.RoadCount}");
+                if (roadDragging)
+                    ImGui.Text($"Hossz: {terrain.RoadPreviewCount}");
+            }
             ImGui.Text($"{ImGui.GetIO().Framerate:F0} FPS");
 
             ImGui.End();
@@ -264,7 +268,7 @@ namespace ForesTycoon
         private void SelectTool(TerrainEditTool tool)
         {
             activeTool = tool;
-            roadDragStart = null;   // úthálózat drag megszakítása eszközváltáskor
+            roadDragStartTile = null;   // úthálózat drag megszakítása eszközváltáskor
             roadDragging = false;
             terrain?.ClearRoadPreview();
             Invalidate();
@@ -444,7 +448,7 @@ namespace ForesTycoon
             UpdateHover(e);
 
             if (roadDragging)
-                terrain.SetRoadPreview(roadDragStart, terrain.ActiveNode);
+                terrain.SetRoadPreview(roadDragStartTile, terrain.HoveredTile);
 
             switch (e.Button)
             {
@@ -476,11 +480,11 @@ namespace ForesTycoon
 
             if (activeTool == TerrainEditTool.Road)
             {
-                if (roadDragging && roadDragStart != null)
-                    terrain.BuildRoadPath(roadDragStart, terrain.ActiveNode);
+                if (roadDragging && roadDragStartTile != null)
+                    terrain.BuildRoadTilePath(roadDragStartTile, terrain.HoveredTile);
                 terrain.ClearRoadPreview();
                 roadDragging = false;
-                roadDragStart = null;
+                roadDragStartTile = null;
                 Invalidate();
                 return;
             }
@@ -540,8 +544,8 @@ namespace ForesTycoon
 
             if (activeTool == TerrainEditTool.Road && e.Button == MouseButtons.Left)
             {
-                roadDragStart = terrain.ActiveNode;
-                roadDragging = roadDragStart != null;
+                roadDragStartTile = terrain.HoveredTile;
+                roadDragging = roadDragStartTile != null;
             }
         }
 
