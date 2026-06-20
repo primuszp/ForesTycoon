@@ -14,6 +14,7 @@ namespace ForesTycoon
         private HashSet<int> standingWaterTileIds => hydro.StandingWaterTileIds;
         private readonly Dictionary<string, VertexBuffer> vbos = new Dictionary<string, VertexBuffer>();
         private readonly VertexBuffer edges = new VertexBuffer(PrimitiveType.Lines);
+        private readonly RoadNetwork roads = new RoadNetwork();
         private readonly List<uint> indices = new List<uint>();
 
         private readonly TerrainData data;
@@ -433,6 +434,7 @@ namespace ForesTycoon
             // Rácsvonal réteg – csúcspontok GRID_Z_BIAS-szal emelve, nincs Z-fighting
             edges.DrawElements();
 
+            DrawRoads();
             DrawHoveredTile();
 
             if (showNodeMarker && onpos)
@@ -444,6 +446,25 @@ namespace ForesTycoon
                 }
                 GL.PopMatrix();
             }
+        }
+
+        private void DrawRoads()
+        {
+            if (roads.Count == 0) return;
+
+            // Vékony z-emeléssel a terep fölé, hogy ne fightingoljon a felszínnel.
+            GL.LineWidth(7f);
+            GL.Color3(Color.FromArgb(58, 58, 64));
+            GL.Begin(PrimitiveType.Lines);
+            foreach ((int a, int b) in roads.Segments)
+            {
+                Node na = nodes[a];
+                Node nb = nodes[b];
+                GL.Vertex3(na.xPos, na.yPos, na.zPos + 0.15f);
+                GL.Vertex3(nb.xPos, nb.yPos, nb.zPos + 0.15f);
+            }
+            GL.End();
+            GL.LineWidth(2f);
         }
 
         private void DrawSphere(float radius, int rings, int sectors)
@@ -957,6 +978,18 @@ namespace ForesTycoon
             return (onpos);
         }
 
+        // ── Úthálózat ────────────────────────────────────────────────────────
+        /// <summary>A kurzor alatti (kijelölt) node, vagy null, ha nincs.</summary>
+        public Node ActiveNode => onpos ? actualNode : null;
+
+        public static bool AreAdjacent(Node a, Node b) =>
+            a != null && b != null && System.Math.Abs(a.U - b.U) + System.Math.Abs(a.V - b.V) == 1;
+
+        /// <summary>Útszegmens a két szomszédos node között. true, ha új szegmens jött létre.</summary>
+        public bool AddRoad(Node a, Node b) => AreAdjacent(a, b) && roads.Add(a.Id, b.Id);
+
+        public int RoadCount => roads.Count;
+
         public void UpElevation()
         {
             ElevationManager(+1);
@@ -1033,7 +1066,8 @@ namespace ForesTycoon
 
                     closedList.Add(oNode);
                     closedSet.Add(oNode);
-                    oNode.W = oNode.W + delta;
+                    // A legalsó szint (W=0) alá nem süllyedhet a terep.
+                    oNode.W = Math.Max(0, oNode.W + delta);
 
                     foreach (Node nNode in getNeighbours(oNode))
                     {

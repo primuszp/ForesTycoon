@@ -57,6 +57,7 @@ namespace ForesTycoon
         private TerrainEditTool activeTool = TerrainEditTool.Inspect;
         private int brushSize = 1;       // 1 = egy node, nagyobb = korong sugár
         private int brushStrength = 1;   // szintlépések száma kattintásonként
+        private Node roadStart;          // úthálózat: az aktuális lánc kezdőpontja
 
         private bool         isLoaded     = false;
         private ImGuiController imgui;
@@ -203,6 +204,7 @@ namespace ForesTycoon
                 ToolMenuItem("Vizsgálat", TerrainEditTool.Inspect);
                 ToolMenuItem("Emelés", TerrainEditTool.Raise);
                 ToolMenuItem("Süllyesztés", TerrainEditTool.Lower);
+                ToolMenuItem("Út építés", TerrainEditTool.Road);
                 ImGui.EndMenu();
             }
 
@@ -219,7 +221,8 @@ namespace ForesTycoon
 
             ToolButton("Vizsg.", TerrainEditTool.Inspect); ImGui.SameLine();
             ToolButton("Emel", TerrainEditTool.Raise); ImGui.SameLine();
-            ToolButton("Süly.", TerrainEditTool.Lower);
+            ToolButton("Süly.", TerrainEditTool.Lower); ImGui.SameLine();
+            ToolButton("Út", TerrainEditTool.Road);
 
             ImGui.PushItemWidth(150);
             ImGui.SliderInt("Méret", ref brushSize, 1, 5);
@@ -237,6 +240,8 @@ namespace ForesTycoon
                 ImGuiWindowFlags.NoMove | ImGuiWindowFlags.AlwaysAutoResize);
 
             ImGui.Text($"Eszköz: {ToolName(activeTool)}");
+            if (activeTool == TerrainEditTool.Road)
+                ImGui.Text($"Útszegmensek: {terrain.RoadCount}");
             ImGui.Text($"{ImGui.GetIO().Framerate:F0} FPS");
 
             ImGui.End();
@@ -246,19 +251,27 @@ namespace ForesTycoon
         {
             bool active = activeTool == tool;
             if (active) ImGui.PushStyleColor(ImGuiCol.Button, new NVec4(0.34f, 0.48f, 0.28f, 1f));
-            if (ImGui.Button(label, new NVec2(54, 40))) { activeTool = tool; Invalidate(); }
+            if (ImGui.Button(label, new NVec2(54, 40))) SelectTool(tool);
             if (active) ImGui.PopStyleColor();
         }
 
         private void ToolMenuItem(string label, TerrainEditTool tool)
         {
-            if (ImGui.MenuItem(label, "", activeTool == tool)) { activeTool = tool; Invalidate(); }
+            if (ImGui.MenuItem(label, "", activeTool == tool)) SelectTool(tool);
+        }
+
+        private void SelectTool(TerrainEditTool tool)
+        {
+            activeTool = tool;
+            roadStart = null;   // úthálózat-lánc megszakítása eszközváltáskor
+            Invalidate();
         }
 
         private static string ToolName(TerrainEditTool tool) => tool switch
         {
             TerrainEditTool.Raise => "Emelés",
             TerrainEditTool.Lower => "Süllyesztés",
+            TerrainEditTool.Road => "Út építés",
             _ => "Vizsgálat"
         };
 
@@ -529,6 +542,14 @@ namespace ForesTycoon
             base.OnClick(e);
             if (!isLoaded) return;
             if (imgui != null && imgui.WantCaptureMouse) return;
+
+            if (activeTool == TerrainEditTool.Road)
+            {
+                HandleRoadClick();
+                Refresh();
+                return;
+            }
+
             if (activeTool != TerrainEditTool.Inspect)
             {
                 ApplyActiveTerrainTool();
@@ -537,6 +558,18 @@ namespace ForesTycoon
             }
 
             Refresh();
+        }
+
+        private void HandleRoadClick()
+        {
+            if (!nodeHovered) return;
+            Node node = terrain.ActiveNode;
+            if (node == null) return;
+
+            if (roadStart != null && Terrain.AreAdjacent(roadStart, node))
+                terrain.AddRoad(roadStart, node);
+
+            roadStart = node;   // a végpont az új lánc-kezdőpont
         }
 
     }

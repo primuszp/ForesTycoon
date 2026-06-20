@@ -4,6 +4,7 @@ namespace ForesTycoon
     {
         Inspect,
         Raise,
-        Lower
+        Lower,
+        Road
     }
 }
