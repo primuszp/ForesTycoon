@@ -3,6 +3,9 @@ using System.Drawing;
 using System.Windows.Forms;
 using OpenTK.Mathematics;
 using OpenTK.Graphics.OpenGL;
+using ImGuiNET;
+using NVec2 = System.Numerics.Vector2;
+using NVec4 = System.Numerics.Vector4;
 
 namespace ForesTycoon
 {
@@ -52,20 +55,12 @@ namespace ForesTycoon
         private bool         nodeHovered  = false;
         private Terrain      terrain      = null;
         private TerrainEditTool activeTool = TerrainEditTool.Inspect;
-        private bool toolbarPressed = false;
-        private bool suppressNextClick = false;
 
         private bool         isLoaded     = false;
         private ImGuiController imgui;
         private readonly System.Diagnostics.Stopwatch clock = System.Diagnostics.Stopwatch.StartNew();
         private double lastTime;
         private System.Windows.Forms.Timer waterTimer;
-        private readonly Rectangle[] toolButtons =
-        {
-            new Rectangle(14, 14, 42, 42),
-            new Rectangle(62, 14, 42, 42),
-            new Rectangle(110, 14, 42, 42)
-        };
 
         private static int MapMouseButton(MouseButtons b)
         {
@@ -160,40 +155,10 @@ namespace ForesTycoon
             GL.Rotate(roty, 0f, 0f, 1f);
 
             terrain.Draw(activeTool != TerrainEditTool.Inspect);
-            DrawEditorOverlay();
 
             DrawImGui();
 
             SwapBuffers();
-        }
-
-        private void DrawEditorOverlay()
-        {
-            GL.MatrixMode(MatrixMode.Projection);
-            GL.PushMatrix();
-            GL.LoadIdentity();
-            GL.Ortho(0, Width, Height, 0, -1, 1);
-
-            GL.MatrixMode(MatrixMode.Modelview);
-            GL.PushMatrix();
-            GL.LoadIdentity();
-
-            GL.Disable(EnableCap.DepthTest);
-            GL.Enable(EnableCap.Blend);
-            GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
-
-            DrawToolbarBackground();
-            DrawToolButton(toolButtons[0], TerrainEditTool.Inspect);
-            DrawToolButton(toolButtons[1], TerrainEditTool.Raise);
-            DrawToolButton(toolButtons[2], TerrainEditTool.Lower);
-
-            GL.Disable(EnableCap.Blend);
-            GL.Enable(EnableCap.DepthTest);
-
-            GL.PopMatrix();
-            GL.MatrixMode(MatrixMode.Projection);
-            GL.PopMatrix();
-            GL.MatrixMode(MatrixMode.Modelview);
         }
 
         private void DrawImGui()
@@ -206,86 +171,96 @@ namespace ForesTycoon
 
             imgui.Update(Width, Height, delta);
 
-            // Ideiglenes teszt-panel: igazolja az ImGui + OpenTK 4 integrációt.
-            // A következő körben ezt váltja le a TT-stílusú toolbar.
-            ImGuiNET.ImGui.SetNextWindowPos(new System.Numerics.Vector2(170, 14), ImGuiNET.ImGuiCond.FirstUseEver);
-            ImGuiNET.ImGui.SetNextWindowSize(new System.Numerics.Vector2(240, 110), ImGuiNET.ImGuiCond.FirstUseEver);
-            ImGuiNET.ImGui.Begin("ForesTycoon");
-            ImGuiNET.ImGui.Text("ImGui fut OpenTK 4 alatt.");
-            ImGuiNET.ImGui.Text($"{ImGuiNET.ImGui.GetIO().Framerate:F0} FPS");
-            ImGuiNET.ImGui.Separator();
-            ImGuiNET.ImGui.Text($"Eszkoz: {activeTool}");
-            ImGuiNET.ImGui.End();
+            DrawMainMenu();
+            DrawToolbar();
+            DrawStatusPanel();
 
             imgui.Render();
         }
 
-        private void DrawToolbarBackground()
+        // ── Felső menüsor (Transport Tycoon stílus) ──────────────────────────
+        private void DrawMainMenu()
         {
-            GL.Color4(Color.FromArgb(210, 30, 38, 46));
-            DrawRect(8, 8, 150, 54);
-            GL.Color4(Color.FromArgb(230, 84, 96, 108));
-            DrawLineLoop(8, 8, 150, 54);
-        }
+            if (!ImGui.BeginMainMenuBar()) return;
 
-        private void DrawToolButton(Rectangle bounds, TerrainEditTool tool)
-        {
-            bool selected = activeTool == tool;
-            GL.Color4(selected
-                ? Color.FromArgb(235, 88, 122, 72)
-                : Color.FromArgb(220, 52, 62, 72));
-            DrawRect(bounds.X, bounds.Y, bounds.Width, bounds.Height);
-
-            GL.Color4(selected
-                ? Color.FromArgb(255, 220, 238, 184)
-                : Color.FromArgb(230, 150, 164, 176));
-            DrawLineLoop(bounds.X, bounds.Y, bounds.Width, bounds.Height);
-            DrawToolGlyph(bounds, tool);
-        }
-
-        private void DrawToolGlyph(Rectangle bounds, TerrainEditTool tool)
-        {
-            float cx = bounds.X + bounds.Width * 0.5f;
-            float cy = bounds.Y + bounds.Height * 0.5f;
-
-            GL.LineWidth(3f);
-            GL.Color4(Color.FromArgb(245, 235, 240, 220));
-            GL.Begin(PrimitiveType.Lines);
-            if (tool == TerrainEditTool.Inspect)
+            if (ImGui.BeginMenu("Fájl"))
             {
-                GL.Vertex2(cx - 9, cy - 9); GL.Vertex2(cx + 9, cy + 9);
-                GL.Vertex2(cx + 9, cy - 9); GL.Vertex2(cx - 9, cy + 9);
+                if (ImGui.MenuItem("Kilépés"))
+                    BeginInvoke((MethodInvoker)(() => FindForm()?.Close()));
+                ImGui.EndMenu();
             }
-            else
+            if (ImGui.BeginMenu("Nézet"))
             {
-                GL.Vertex2(cx - 11, cy); GL.Vertex2(cx + 11, cy);
-                if (tool == TerrainEditTool.Raise)
-                {
-                    GL.Vertex2(cx, cy - 11); GL.Vertex2(cx, cy + 11);
-                }
+                if (ImGui.MenuItem("Kamera alaphelyzet")) ResetCamera();
+                ImGui.EndMenu();
             }
-            GL.End();
-            GL.LineWidth(2f);
+            if (ImGui.BeginMenu("Eszközök"))
+            {
+                ToolMenuItem("Vizsgálat", TerrainEditTool.Inspect);
+                ToolMenuItem("Emelés", TerrainEditTool.Raise);
+                ToolMenuItem("Süllyesztés", TerrainEditTool.Lower);
+                ImGui.EndMenu();
+            }
+
+            ImGui.EndMainMenuBar();
         }
 
-        private void DrawRect(float x, float y, float width, float height)
+        // ── Eszköztár (terepalakítás) ────────────────────────────────────────
+        private void DrawToolbar()
         {
-            GL.Begin(PrimitiveType.Quads);
-            GL.Vertex2(x, y);
-            GL.Vertex2(x + width, y);
-            GL.Vertex2(x + width, y + height);
-            GL.Vertex2(x, y + height);
-            GL.End();
+            ImGui.SetNextWindowPos(new NVec2(8, 30), ImGuiCond.Always);
+            ImGui.Begin("##toolbar",
+                ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoResize |
+                ImGuiWindowFlags.NoMove | ImGuiWindowFlags.AlwaysAutoResize);
+
+            ToolButton("Vizsg.", TerrainEditTool.Inspect); ImGui.SameLine();
+            ToolButton("Emel", TerrainEditTool.Raise); ImGui.SameLine();
+            ToolButton("Süly.", TerrainEditTool.Lower);
+
+            ImGui.End();
         }
 
-        private void DrawLineLoop(float x, float y, float width, float height)
+        private void DrawStatusPanel()
         {
-            GL.Begin(PrimitiveType.LineLoop);
-            GL.Vertex2(x, y);
-            GL.Vertex2(x + width, y);
-            GL.Vertex2(x + width, y + height);
-            GL.Vertex2(x, y + height);
-            GL.End();
+            ImGui.SetNextWindowPos(new NVec2(8, Math.Max(80, Height - 64)), ImGuiCond.Always);
+            ImGui.Begin("##status",
+                ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoResize |
+                ImGuiWindowFlags.NoMove | ImGuiWindowFlags.AlwaysAutoResize);
+
+            ImGui.Text($"Eszköz: {ToolName(activeTool)}");
+            ImGui.Text($"{ImGui.GetIO().Framerate:F0} FPS");
+
+            ImGui.End();
+        }
+
+        private void ToolButton(string label, TerrainEditTool tool)
+        {
+            bool active = activeTool == tool;
+            if (active) ImGui.PushStyleColor(ImGuiCol.Button, new NVec4(0.34f, 0.48f, 0.28f, 1f));
+            if (ImGui.Button(label, new NVec2(54, 40))) { activeTool = tool; Invalidate(); }
+            if (active) ImGui.PopStyleColor();
+        }
+
+        private void ToolMenuItem(string label, TerrainEditTool tool)
+        {
+            if (ImGui.MenuItem(label, "", activeTool == tool)) { activeTool = tool; Invalidate(); }
+        }
+
+        private static string ToolName(TerrainEditTool tool) => tool switch
+        {
+            TerrainEditTool.Raise => "Emelés",
+            TerrainEditTool.Lower => "Süllyesztés",
+            _ => "Vizsgálat"
+        };
+
+        private void ResetCamera()
+        {
+            tiltIndex = 2;
+            rotx = TILT_ANGLES[tiltIndex];
+            roty = targetRotY = -45f;
+            targetZoom = 10f;
+            screenX = screenY = 0;
+            Invalidate();
         }
 
         // ── OpenGL mátrixok kiolvasása (egér → világ koordináta) ────────────
@@ -308,45 +283,12 @@ namespace ForesTycoon
 
         private void UpdateHover(MouseEventArgs e)
         {
-            if (IsToolbarPoint(e.Location))
-            {
-                nodeHovered = false;
-                terrain.ClearHover();
-                return;
-            }
-
             int screenPxY = Height - e.Y;
             mouseX = screenX + e.X       / zoom;
             mouseY = screenY + screenPxY / zoom;
             UpdateWorldPosition(e);
             nodeHovered = terrain.SearchPoint(worldPos.X, worldPos.Y, 5);
             terrain.SearchTile(worldPos.X, worldPos.Y);
-        }
-
-        private bool IsToolbarPoint(Point point)
-        {
-            for (int i = 0; i < toolButtons.Length; i++)
-                if (toolButtons[i].Contains(point)) return true;
-
-            return false;
-        }
-
-        private bool TryHandleToolbarClick(Point point)
-        {
-            for (int i = 0; i < toolButtons.Length; i++)
-            {
-                if (!toolButtons[i].Contains(point)) continue;
-
-                activeTool = (TerrainEditTool)i;
-                toolbarPressed = true;
-                suppressNextClick = true;
-                activeButton = MouseButtons.None;
-                Invalidate();
-                return true;
-            }
-
-            toolbarPressed = false;
-            return false;
         }
 
         private void ApplyActiveTerrainTool()
@@ -471,7 +413,7 @@ namespace ForesTycoon
                     break;
 
                 case MouseButtons.Left:
-                    if (activeTool == TerrainEditTool.Inspect && !toolbarPressed)
+                    if (activeTool == TerrainEditTool.Inspect)
                     {
                         roty += 0.5f * dx;
                         targetRotY = roty;
@@ -491,7 +433,6 @@ namespace ForesTycoon
         {
             base.OnMouseUp(e);
             if (isLoaded) imgui?.MouseButton(MapMouseButton(e.Button), false);
-            toolbarPressed = false;
             if (!isLoaded || e.Button != MouseButtons.Left) return;
             if (activeTool != TerrainEditTool.Inspect) return;
             // Snap a legközelebbi 90°-ra
@@ -541,8 +482,6 @@ namespace ForesTycoon
             imgui?.MouseButton(MapMouseButton(e.Button), true);
             if (imgui != null && imgui.WantCaptureMouse) { Invalidate(); return; }
 
-            if (TryHandleToolbarClick(e.Location)) return;
-
             UpdateHover(e);
             activeButton = e.Button;
             panStartX = mouseX;
@@ -570,11 +509,6 @@ namespace ForesTycoon
             base.OnClick(e);
             if (!isLoaded) return;
             if (imgui != null && imgui.WantCaptureMouse) return;
-            if (suppressNextClick)
-            {
-                suppressNextClick = false;
-                return;
-            }
             if (activeTool != TerrainEditTool.Inspect)
             {
                 ApplyActiveTerrainTool();
