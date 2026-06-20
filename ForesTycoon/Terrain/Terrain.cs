@@ -451,7 +451,9 @@ namespace ForesTycoon
         // ── Út-render konstansok ─────────────────────────────────────────────
         private static readonly Color RoadAsphalt = Color.FromArgb( 40,  40,  46);
         private static readonly Color RoadCurb    = Color.FromArgb(220, 220, 210);  // padka (világos beton)
-        private const float CurbFrac = 0.22f;   // padka szélessége a csempe-középpont felé
+        private static readonly Color RoadCenter  = Color.FromArgb(216, 196,  84);  // sárga sávjelzés
+        private const float CurbFrac = 0.22f;     // padka szélessége a csempe-középpont felé
+        private const float LaneHalf = 0.22f;     // felezővonal félszélessége
 
         // Csempe-alapú úthálózat: a kapcsolatok a szomszédos út-csempékből adódnak.
         public Tile HoveredTile => hoveredTile;
@@ -460,12 +462,15 @@ namespace ForesTycoon
         public bool AddRoadTile(Tile t) => t != null && roads.Add(t.Id);
 
         public void BuildRoadTilePath(Tile a, Tile b) => WalkTilePath(a, b, id => roads.Add(id));
+        public void RemoveRoadTilePath(Tile a, Tile b) => WalkTilePath(a, b, id => roads.Remove(id));
 
-        // Húzás közbeni előnézet csempéi.
+        // Húzás közbeni előnézet csempéi (remove = bontás, piros előnézet).
         private readonly List<int> previewTiles = new List<int>();
-        public void SetRoadPreview(Tile a, Tile b)
+        private bool previewRemove;
+        public void SetRoadPreview(Tile a, Tile b, bool remove)
         {
             previewTiles.Clear();
+            previewRemove = remove;
             WalkTilePath(a, b, id => previewTiles.Add(id));
         }
         public void ClearRoadPreview() => previewTiles.Clear();
@@ -514,8 +519,11 @@ namespace ForesTycoon
                 GL.Enable(EnableCap.Blend);
                 GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
 
+                Color fill = previewRemove ? Color.FromArgb(80, 235, 70, 70) : Color.FromArgb(70, 255, 255, 255);
+                Color outline = previewRemove ? Color.FromArgb(240, 248, 80, 80) : Color.FromArgb(235, 255, 255, 255);
+
                 GL.Begin(PrimitiveType.Quads);
-                GL.Color4(Color.FromArgb(70, 255, 255, 255));
+                GL.Color4(fill);
                 foreach (int id in previewTiles)
                 {
                     Tile t = tiles[id];
@@ -529,7 +537,7 @@ namespace ForesTycoon
                 GL.Enable(EnableCap.PolygonOffsetLine);
                 GL.PolygonOffset(-1.5f, -1.5f);
                 GL.LineWidth(2.5f);
-                GL.Color4(Color.FromArgb(235, 255, 255, 255));
+                GL.Color4(outline);
                 foreach (int id in previewTiles)
                 {
                     Tile t = tiles[id];
@@ -565,10 +573,20 @@ namespace ForesTycoon
             int u = t.Id / tpc, v = t.Id % tpc;
 
             // Élek és a mögöttük lévő szomszéd csempe (lásd makeTiles sarok-hozzárendelés).
-            if (!IsRoadAt(u, v - 1)) Curb(W, S, C);
-            if (!IsRoadAt(u + 1, v)) Curb(S, E, C);
-            if (!IsRoadAt(u, v + 1)) Curb(E, N, C);
-            if (!IsRoadAt(u - 1, v)) Curb(N, W, C);
+            bool ws = IsRoadAt(u, v - 1), se = IsRoadAt(u + 1, v);
+            bool en = IsRoadAt(u, v + 1), nw = IsRoadAt(u - 1, v);
+
+            if (!ws) Curb(W, S, C);
+            if (!se) Curb(S, E, C);
+            if (!en) Curb(E, N, C);
+            if (!nw) Curb(N, W, C);
+
+            // Felezővonal: a középponttól a csatlakozó élek felé (egyenesnél átmenő
+            // vonal, kereszteződésnél T/+ jelzés).
+            if (ws) Lane(C, (W + S) * 0.5f);
+            if (se) Lane(C, (S + E) * 0.5f);
+            if (en) Lane(C, (E + N) * 0.5f);
+            if (nw) Lane(C, (N + W) * 0.5f);
         }
 
         private void Curb(Vector3 p1, Vector3 p2, Vector3 center)
@@ -577,6 +595,19 @@ namespace ForesTycoon
             Vector3 p2i = p2 + (center - p2) * CurbFrac;
             GL.Color4(RoadCurb);
             GL.Vertex3(p1); GL.Vertex3(p2); GL.Vertex3(p2i); GL.Vertex3(p1i);
+        }
+
+        private void Lane(Vector3 c, Vector3 m)
+        {
+            float dx = m.X - c.X, dy = m.Y - c.Y;
+            float len = (float)Math.Sqrt(dx * dx + dy * dy);
+            if (len < 1e-4f) return;
+            float px = -dy / len * LaneHalf, py = dx / len * LaneHalf;
+            GL.Color4(RoadCenter);
+            GL.Vertex3(c.X + px, c.Y + py, c.Z);
+            GL.Vertex3(c.X - px, c.Y - py, c.Z);
+            GL.Vertex3(m.X - px, m.Y - py, m.Z);
+            GL.Vertex3(m.X + px, m.Y + py, m.Z);
         }
 
         private void DrawSphere(float radius, int rings, int sectors)

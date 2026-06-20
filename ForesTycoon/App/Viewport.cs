@@ -59,6 +59,10 @@ namespace ForesTycoon
         private int brushStrength = 1;   // szintlépések száma kattintásonként
         private Tile roadDragStartTile;  // úthálózat: drag-build kezdő csempéje
         private bool roadDragging;       // épp utat húzunk-e
+        private bool roadDragRemove;     // bontás (true) vagy építés (false)
+
+        private static bool IsRoadTool(TerrainEditTool t) =>
+            t == TerrainEditTool.Road || t == TerrainEditTool.RoadRemove;
 
         private bool         isLoaded     = false;
         private ImGuiController imgui;
@@ -206,6 +210,7 @@ namespace ForesTycoon
                 ToolMenuItem("Emelés", TerrainEditTool.Raise);
                 ToolMenuItem("Süllyesztés", TerrainEditTool.Lower);
                 ToolMenuItem("Út építés", TerrainEditTool.Road);
+                ToolMenuItem("Út bontás", TerrainEditTool.RoadRemove);
                 ImGui.EndMenu();
             }
 
@@ -223,7 +228,8 @@ namespace ForesTycoon
             ToolButton("Vizsg.", TerrainEditTool.Inspect); ImGui.SameLine();
             ToolButton("Emel", TerrainEditTool.Raise); ImGui.SameLine();
             ToolButton("Süly.", TerrainEditTool.Lower); ImGui.SameLine();
-            ToolButton("Út", TerrainEditTool.Road);
+            ToolButton("Út", TerrainEditTool.Road); ImGui.SameLine();
+            ToolButton("Bontás", TerrainEditTool.RoadRemove);
 
             ImGui.PushItemWidth(150);
             ImGui.SliderInt("Méret", ref brushSize, 1, 5);
@@ -241,7 +247,7 @@ namespace ForesTycoon
                 ImGuiWindowFlags.NoMove | ImGuiWindowFlags.AlwaysAutoResize);
 
             ImGui.Text($"Eszköz: {ToolName(activeTool)}");
-            if (activeTool == TerrainEditTool.Road)
+            if (IsRoadTool(activeTool))
             {
                 ImGui.Text($"Út-csempék: {terrain.RoadCount}");
                 if (roadDragging)
@@ -279,6 +285,7 @@ namespace ForesTycoon
             TerrainEditTool.Raise => "Emelés",
             TerrainEditTool.Lower => "Süllyesztés",
             TerrainEditTool.Road => "Út építés",
+            TerrainEditTool.RoadRemove => "Út bontás",
             _ => "Vizsgálat"
         };
 
@@ -448,7 +455,7 @@ namespace ForesTycoon
             UpdateHover(e);
 
             if (roadDragging)
-                terrain.SetRoadPreview(roadDragStartTile, terrain.HoveredTile);
+                terrain.SetRoadPreview(roadDragStartTile, terrain.HoveredTile, roadDragRemove);
 
             switch (e.Button)
             {
@@ -478,10 +485,13 @@ namespace ForesTycoon
             if (isLoaded) imgui?.MouseButton(MapMouseButton(e.Button), false);
             if (!isLoaded || e.Button != MouseButtons.Left) return;
 
-            if (activeTool == TerrainEditTool.Road)
+            if (IsRoadTool(activeTool))
             {
                 if (roadDragging && roadDragStartTile != null)
-                    terrain.BuildRoadTilePath(roadDragStartTile, terrain.HoveredTile);
+                {
+                    if (roadDragRemove) terrain.RemoveRoadTilePath(roadDragStartTile, terrain.HoveredTile);
+                    else terrain.BuildRoadTilePath(roadDragStartTile, terrain.HoveredTile);
+                }
                 terrain.ClearRoadPreview();
                 roadDragging = false;
                 roadDragStartTile = null;
@@ -542,9 +552,10 @@ namespace ForesTycoon
             panStartX = mouseX;
             panStartY = mouseY;
 
-            if (activeTool == TerrainEditTool.Road && e.Button == MouseButtons.Left)
+            if (IsRoadTool(activeTool) && e.Button == MouseButtons.Left)
             {
                 roadDragStartTile = terrain.HoveredTile;
+                roadDragRemove = activeTool == TerrainEditTool.RoadRemove;
                 roadDragging = roadDragStartTile != null;
             }
         }
@@ -571,8 +582,8 @@ namespace ForesTycoon
             if (!isLoaded) return;
             if (imgui != null && imgui.WantCaptureMouse) return;
 
-            // Az út-eszközt a drag-build (OnMouseDown/Up) kezeli, nem a klikk.
-            if (activeTool != TerrainEditTool.Inspect && activeTool != TerrainEditTool.Road)
+            // Az út-eszközöket a drag-build (OnMouseDown/Up) kezeli, nem a klikk.
+            if (activeTool != TerrainEditTool.Inspect && !IsRoadTool(activeTool))
             {
                 ApplyActiveTerrainTool();
                 Refresh();

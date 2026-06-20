@@ -5,6 +5,7 @@ namespace ForesTycoon
         Inspect,
         Raise,
         Lower,
-        Road
+        Road,
+        RoadRemove
     }
 }
