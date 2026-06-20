@@ -56,6 +56,9 @@ namespace ForesTycoon
         private bool suppressNextClick = false;
 
         private bool         isLoaded     = false;
+        private ImGuiController imgui;
+        private readonly System.Diagnostics.Stopwatch clock = System.Diagnostics.Stopwatch.StartNew();
+        private double lastTime;
         private System.Windows.Forms.Timer waterTimer;
         private readonly Rectangle[] toolButtons =
         {
@@ -63,6 +66,13 @@ namespace ForesTycoon
             new Rectangle(62, 14, 42, 42),
             new Rectangle(110, 14, 42, 42)
         };
+
+        private static int MapMouseButton(MouseButtons b)
+        {
+            if (b == MouseButtons.Right) return 1;
+            if (b == MouseButtons.Middle) return 2;
+            return 0; // Left / egyéb
+        }
 
         private static float SnapRotation(float angle)
         {
@@ -102,6 +112,7 @@ namespace ForesTycoon
             GL.LineWidth(2.0f);
 
                 terrain = new Terrain();
+                imgui = new ImGuiController();
                 isLoaded = true;
                 SetupViewport();
                 Focus();
@@ -151,6 +162,8 @@ namespace ForesTycoon
             terrain.Draw(activeTool != TerrainEditTool.Inspect);
             DrawEditorOverlay();
 
+            DrawImGui();
+
             SwapBuffers();
         }
 
@@ -181,6 +194,30 @@ namespace ForesTycoon
             GL.MatrixMode(MatrixMode.Projection);
             GL.PopMatrix();
             GL.MatrixMode(MatrixMode.Modelview);
+        }
+
+        private void DrawImGui()
+        {
+            if (imgui == null) return;
+
+            double now = clock.Elapsed.TotalSeconds;
+            float delta = (float)(now - lastTime);
+            lastTime = now;
+
+            imgui.Update(Width, Height, delta);
+
+            // Ideiglenes teszt-panel: igazolja az ImGui + OpenTK 4 integrációt.
+            // A következő körben ezt váltja le a TT-stílusú toolbar.
+            ImGuiNET.ImGui.SetNextWindowPos(new System.Numerics.Vector2(170, 14), ImGuiNET.ImGuiCond.FirstUseEver);
+            ImGuiNET.ImGui.SetNextWindowSize(new System.Numerics.Vector2(240, 110), ImGuiNET.ImGuiCond.FirstUseEver);
+            ImGuiNET.ImGui.Begin("ForesTycoon");
+            ImGuiNET.ImGui.Text("ImGui fut OpenTK 4 alatt.");
+            ImGuiNET.ImGui.Text($"{ImGuiNET.ImGui.GetIO().Framerate:F0} FPS");
+            ImGuiNET.ImGui.Separator();
+            ImGuiNET.ImGui.Text($"Eszkoz: {activeTool}");
+            ImGuiNET.ImGui.End();
+
+            imgui.Render();
         }
 
         private void DrawToolbarBackground()
@@ -395,6 +432,7 @@ namespace ForesTycoon
         {
             waterTimer?.Stop();
             waterTimer?.Dispose();
+            imgui?.Dispose();
             base.OnHandleDestroyed(e);
         }
 
@@ -411,10 +449,20 @@ namespace ForesTycoon
             base.OnMouseMove(e);
             if (!isLoaded) return;
 
+            imgui?.MouseMove(e.X, e.Y);
+
             int dx = e.X - lastMouseX;
             int dy = e.Y - lastMouseY;
             lastMouseX = e.X;
             lastMouseY = e.Y;
+
+            if (imgui != null && imgui.WantCaptureMouse)
+            {
+                terrain.ClearHover();
+                Invalidate();
+                return;
+            }
+
             UpdateHover(e);
 
             switch (e.Button)
@@ -442,6 +490,7 @@ namespace ForesTycoon
         protected override void OnMouseUp(MouseEventArgs e)
         {
             base.OnMouseUp(e);
+            if (isLoaded) imgui?.MouseButton(MapMouseButton(e.Button), false);
             toolbarPressed = false;
             if (!isLoaded || e.Button != MouseButtons.Left) return;
             if (activeTool != TerrainEditTool.Inspect) return;
@@ -488,6 +537,10 @@ namespace ForesTycoon
             base.OnMouseDown(e);
             if (!isLoaded) return;
             Focus();
+
+            imgui?.MouseButton(MapMouseButton(e.Button), true);
+            if (imgui != null && imgui.WantCaptureMouse) { Invalidate(); return; }
+
             if (TryHandleToolbarClick(e.Location)) return;
 
             UpdateHover(e);
@@ -501,6 +554,9 @@ namespace ForesTycoon
             base.OnMouseWheel(e);
             if (!isLoaded) return;
 
+            imgui?.MouseScroll(e.Delta / 120f);
+            if (imgui != null && imgui.WantCaptureMouse) { Invalidate(); return; }
+
             if (e.Delta > 0)
                 targetZoom = Math.Min(targetZoom * 1.25f, 10000f);
             else
@@ -513,6 +569,7 @@ namespace ForesTycoon
         {
             base.OnClick(e);
             if (!isLoaded) return;
+            if (imgui != null && imgui.WantCaptureMouse) return;
             if (suppressNextClick)
             {
                 suppressNextClick = false;
