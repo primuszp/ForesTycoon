@@ -448,20 +448,36 @@ namespace ForesTycoon
             }
         }
 
-        // ── Út-render konstansok ─────────────────────────────────────────────
-        private static readonly Color RoadAsphalt = Color.FromArgb( 40,  40,  46);
-        private static readonly Color RoadCurb    = Color.FromArgb(220, 220, 210);  // padka (világos beton)
-        private static readonly Color RoadCenter  = Color.FromArgb(216, 196,  84);  // sárga sávjelzés
-        private const float CurbFrac = 0.22f;     // padka szélessége a csempe-középpont felé
-        private const float LaneHalf = 0.22f;     // felezővonal félszélessége
+        // ── Erdei földút-render konstansok ───────────────────────────────────
+        private static readonly Color RoadDirt     = Color.FromArgb(150, 120,  82);  // letaposott földfelület
+        private static readonly Color RoadRut      = Color.FromArgb(104,  80,  52);  // keréknyom
+        private static readonly Color RoadShoulder = Color.FromArgb(168, 150, 108);  // homokos padka
+        private const float ShoulderFrac = 0.16f;  // padka szélessége a középpont felé
+        // Keréknyomok a csempe-középponttól (csempe-félszélesség = 2.5).
+        private const float RutInner = 0.42f;
+        private const float RutOuter = 0.88f;
 
         // Csempe-alapú úthálózat: a kapcsolatok a szomszédos út-csempékből adódnak.
         public Tile HoveredTile => hoveredTile;
         public int RoadCount => roads.Count;
 
-        public bool AddRoadTile(Tile t) => t != null && roads.Add(t.Id);
+        public bool AddRoadTile(Tile t) => IsRoadBuildable(t) && roads.Add(t.Id);
 
-        public void BuildRoadTilePath(Tile a, Tile b) => WalkTilePath(a, b, id => roads.Add(id));
+        // Csak vízmentes és legfeljebb egy-szintnyi lejtésű (rámpa) csempére építhető út.
+        public bool IsRoadBuildable(Tile t)
+        {
+            if (t == null) return false;
+            if (hydro.ShouldDrawStandingWater(t)) return false;
+
+            int lo = t.W.W, hi = t.W.W;
+            int s = t.S.W, e = t.E.W, n = t.N.W;
+            lo = Math.Min(lo, Math.Min(s, Math.Min(e, n)));
+            hi = Math.Max(hi, Math.Max(s, Math.Max(e, n)));
+            return hi - lo <= 1;
+        }
+
+        public void BuildRoadTilePath(Tile a, Tile b) =>
+            WalkTilePath(a, b, id => { if (IsRoadBuildable(tiles[id])) roads.Add(id); });
         public void RemoveRoadTilePath(Tile a, Tile b) => WalkTilePath(a, b, id => roads.Remove(id));
 
         // Húzás közbeni előnézet csempéi (remove = bontás, piros előnézet).
@@ -510,7 +526,7 @@ namespace ForesTycoon
                 // Úttest: a terep átlójára illesztett háromszögek → lejtőn rámpaként
                 // pontosan ráfekszik a felszínre.
                 GL.Begin(PrimitiveType.Triangles);
-                GL.Color4(RoadAsphalt);
+                GL.Color4(RoadDirt);
                 foreach (int id in roads.Tiles)
                     FillTileTris(tiles[id]);
                 GL.End();
@@ -528,22 +544,28 @@ namespace ForesTycoon
                 GL.Enable(EnableCap.Blend);
                 GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
 
-                Color fill = previewRemove ? Color.FromArgb(80, 235, 70, 70) : Color.FromArgb(70, 255, 255, 255);
-                Color outline = previewRemove ? Color.FromArgb(240, 248, 80, 80) : Color.FromArgb(235, 255, 255, 255);
+                // Csempénként: bontás → piros; építés → fehér (érvényes) / piros (vízen
+                // vagy túl meredeken nem építhető).
+                Color okFill = Color.FromArgb(70, 255, 255, 255), okLine = Color.FromArgb(235, 255, 255, 255);
+                Color badFill = Color.FromArgb(90, 235, 70, 70), badLine = Color.FromArgb(245, 248, 80, 80);
 
                 GL.Begin(PrimitiveType.Triangles);
-                GL.Color4(fill);
                 foreach (int id in previewTiles)
+                {
+                    bool bad = previewRemove || !IsRoadBuildable(tiles[id]);
+                    GL.Color4(bad ? badFill : okFill);
                     FillTileTris(tiles[id]);
+                }
                 GL.End();
 
                 GL.Enable(EnableCap.PolygonOffsetLine);
                 GL.PolygonOffset(-1.5f, -1.5f);
                 GL.LineWidth(2.5f);
-                GL.Color4(outline);
                 foreach (int id in previewTiles)
                 {
                     Tile t = tiles[id];
+                    bool bad = previewRemove || !IsRoadBuildable(t);
+                    GL.Color4(bad ? badLine : okLine);
                     GL.Begin(PrimitiveType.LineLoop);
                     GL.Vertex3(t.W.xPos, t.W.yPos, t.W.zPos);
                     GL.Vertex3(t.S.xPos, t.S.yPos, t.S.zPos);
@@ -578,7 +600,8 @@ namespace ForesTycoon
             }
         }
 
-        // Padka a nyitott éleken + sávjelzés a csatlakozó élek felé (T/+ kereszteződés).
+        // Erdei földút: földes padka a nyitott éleken; a csatlakozó élek felé mohás
+        // középsáv + két keréknyom (egyenesnél átmenő nyomok, kereszteződésnél T/+).
         private void RoadTileDetail(Tile t)
         {
             Vector3 W = Corner(t.W), S = Corner(t.S), E = Corner(t.E), N = Corner(t.N);
@@ -589,36 +612,44 @@ namespace ForesTycoon
             bool ws = IsRoadAt(u, v - 1), se = IsRoadAt(u + 1, v);
             bool en = IsRoadAt(u, v + 1), nw = IsRoadAt(u - 1, v);
 
-            if (!ws) Curb(W, S, C);
-            if (!se) Curb(S, E, C);
-            if (!en) Curb(E, N, C);
-            if (!nw) Curb(N, W, C);
+            if (!ws) Shoulder(W, S, C);
+            if (!se) Shoulder(S, E, C);
+            if (!en) Shoulder(E, N, C);
+            if (!nw) Shoulder(N, W, C);
 
-            if (ws) Lane(C, (W + S) * 0.5f);
-            if (se) Lane(C, (S + E) * 0.5f);
-            if (en) Lane(C, (E + N) * 0.5f);
-            if (nw) Lane(C, (N + W) * 0.5f);
+            if (ws) TrackMarks(C, (W + S) * 0.5f);
+            if (se) TrackMarks(C, (S + E) * 0.5f);
+            if (en) TrackMarks(C, (E + N) * 0.5f);
+            if (nw) TrackMarks(C, (N + W) * 0.5f);
         }
 
-        private void Curb(Vector3 p1, Vector3 p2, Vector3 center)
+        private void Shoulder(Vector3 p1, Vector3 p2, Vector3 center)
         {
-            Vector3 p1i = p1 + (center - p1) * CurbFrac;
-            Vector3 p2i = p2 + (center - p2) * CurbFrac;
-            GL.Color4(RoadCurb);
+            Vector3 p1i = p1 + (center - p1) * ShoulderFrac;
+            Vector3 p2i = p2 + (center - p2) * ShoulderFrac;
+            GL.Color4(RoadShoulder);
             GL.Vertex3(p1); GL.Vertex3(p2); GL.Vertex3(p2i); GL.Vertex3(p1i);
         }
 
-        private void Lane(Vector3 c, Vector3 m)
+        // A középponttól (c) az él középpontja (m) felé futó sáv egy perp-eltolás
+        // tartományban (o1..o2), a c→m irányra merőlegesen.
+        private void StripAlong(Vector3 c, Vector3 m, float o1, float o2, Color color)
         {
             float dx = m.X - c.X, dy = m.Y - c.Y;
             float len = (float)Math.Sqrt(dx * dx + dy * dy);
             if (len < 1e-4f) return;
-            float px = -dy / len * LaneHalf, py = dx / len * LaneHalf;
-            GL.Color4(RoadCenter);
-            GL.Vertex3(c.X + px, c.Y + py, c.Z);
-            GL.Vertex3(c.X - px, c.Y - py, c.Z);
-            GL.Vertex3(m.X - px, m.Y - py, m.Z);
-            GL.Vertex3(m.X + px, m.Y + py, m.Z);
+            float px = -dy / len, py = dx / len;
+            GL.Color4(color);
+            GL.Vertex3(c.X + px * o1, c.Y + py * o1, c.Z);
+            GL.Vertex3(c.X + px * o2, c.Y + py * o2, c.Z);
+            GL.Vertex3(m.X + px * o2, m.Y + py * o2, m.Z);
+            GL.Vertex3(m.X + px * o1, m.Y + py * o1, m.Z);
+        }
+
+        private void TrackMarks(Vector3 c, Vector3 m)
+        {
+            StripAlong(c, m, RutInner, RutOuter, RoadRut);    // jobb keréknyom
+            StripAlong(c, m, -RutOuter, -RutInner, RoadRut);  // bal keréknyom
         }
 
         private void DrawSphere(float radius, int rings, int sectors)
