@@ -507,13 +507,22 @@ namespace ForesTycoon
 
             if (roads.Count > 0)
             {
+                // Úttest: a terep átlójára illesztett háromszögek → lejtőn rámpaként
+                // pontosan ráfekszik a felszínre.
+                GL.Begin(PrimitiveType.Triangles);
+                GL.Color4(RoadAsphalt);
+                foreach (int id in roads.Tiles)
+                    FillTileTris(tiles[id]);
+                GL.End();
+
+                // Padka + sávjelzés.
                 GL.Begin(PrimitiveType.Quads);
                 foreach (int id in roads.Tiles)
-                    DrawRoadTile(tiles[id]);
+                    RoadTileDetail(tiles[id]);
                 GL.End();
             }
 
-            // ── Fehér előnézet csempék (kitöltés + körvonal).
+            // ── Előnézet csempék (kitöltés + körvonal); fehér=építés, piros=bontás.
             if (previewTiles.Count > 0)
             {
                 GL.Enable(EnableCap.Blend);
@@ -522,16 +531,10 @@ namespace ForesTycoon
                 Color fill = previewRemove ? Color.FromArgb(80, 235, 70, 70) : Color.FromArgb(70, 255, 255, 255);
                 Color outline = previewRemove ? Color.FromArgb(240, 248, 80, 80) : Color.FromArgb(235, 255, 255, 255);
 
-                GL.Begin(PrimitiveType.Quads);
+                GL.Begin(PrimitiveType.Triangles);
                 GL.Color4(fill);
                 foreach (int id in previewTiles)
-                {
-                    Tile t = tiles[id];
-                    GL.Vertex3(t.W.xPos, t.W.yPos, t.W.zPos);
-                    GL.Vertex3(t.S.xPos, t.S.yPos, t.S.zPos);
-                    GL.Vertex3(t.E.xPos, t.E.yPos, t.E.zPos);
-                    GL.Vertex3(t.N.xPos, t.N.yPos, t.N.zPos);
-                }
+                    FillTileTris(tiles[id]);
                 GL.End();
 
                 GL.Enable(EnableCap.PolygonOffsetLine);
@@ -556,23 +559,33 @@ namespace ForesTycoon
             GL.Disable(EnableCap.PolygonOffsetFill);
         }
 
-        // Egy út-csempe: úttest a csempe teljes felületén + padka a nyitott éleken
-        // (ahol nincs szomszédos út-csempe), így a kanyarok/elágazások összeérnek.
-        private void DrawRoadTile(Tile t)
-        {
-            Vector3 W = new Vector3(t.W.xPos, t.W.yPos, t.W.zPos);
-            Vector3 S = new Vector3(t.S.xPos, t.S.yPos, t.S.zPos);
-            Vector3 E = new Vector3(t.E.xPos, t.E.yPos, t.E.zPos);
-            Vector3 N = new Vector3(t.N.xPos, t.N.yPos, t.N.zPos);
-            Vector3 C = (W + S + E + N) * 0.25f;
+        private static Vector3 Corner(Node n) => new Vector3(n.xPos, n.yPos, n.zPos);
 
-            GL.Color4(RoadAsphalt);
-            GL.Vertex3(W); GL.Vertex3(S); GL.Vertex3(E); GL.Vertex3(N);
+        // Úttest 2 háromszöge a terep makeBuffer-jével AZONOS átló mentén (a laposabb
+        // átlót választva), így a road pontosan ráfekszik a (lejtős) terep-csempére.
+        private void FillTileTris(Tile t)
+        {
+            Vector3 W = Corner(t.W), S = Corner(t.S), E = Corner(t.E), N = Corner(t.N);
+            if (Math.Abs(W.Z - E.Z) <= Math.Abs(N.Z - S.Z))
+            {
+                GL.Vertex3(W); GL.Vertex3(S); GL.Vertex3(E);
+                GL.Vertex3(W); GL.Vertex3(E); GL.Vertex3(N);
+            }
+            else
+            {
+                GL.Vertex3(N); GL.Vertex3(W); GL.Vertex3(S);
+                GL.Vertex3(N); GL.Vertex3(S); GL.Vertex3(E);
+            }
+        }
+
+        // Padka a nyitott éleken + sávjelzés a csatlakozó élek felé (T/+ kereszteződés).
+        private void RoadTileDetail(Tile t)
+        {
+            Vector3 W = Corner(t.W), S = Corner(t.S), E = Corner(t.E), N = Corner(t.N);
+            Vector3 C = (W + S + E + N) * 0.25f;
 
             int tpc = nodeRows - 1;
             int u = t.Id / tpc, v = t.Id % tpc;
-
-            // Élek és a mögöttük lévő szomszéd csempe (lásd makeTiles sarok-hozzárendelés).
             bool ws = IsRoadAt(u, v - 1), se = IsRoadAt(u + 1, v);
             bool en = IsRoadAt(u, v + 1), nw = IsRoadAt(u - 1, v);
 
@@ -581,8 +594,6 @@ namespace ForesTycoon
             if (!en) Curb(E, N, C);
             if (!nw) Curb(N, W, C);
 
-            // Felezővonal: a középponttól a csatlakozó élek felé (egyenesnél átmenő
-            // vonal, kereszteződésnél T/+ jelzés).
             if (ws) Lane(C, (W + S) * 0.5f);
             if (se) Lane(C, (S + E) * 0.5f);
             if (en) Lane(C, (E + N) * 0.5f);
