@@ -1,5 +1,7 @@
 using System;
+using System.IO;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using ImGuiNET;
 using OpenTK.Graphics.OpenGL;
 using OpenTK.Mathematics;
@@ -21,6 +23,7 @@ namespace ForesTycoon
         private int shader;
         private int projLoc, texLoc;
         private int fontTexture;
+        private GCHandle glyphRangeHandle;
 
         private static readonly int VertSize = Unsafe.SizeOf<ImDrawVert>();
 
@@ -30,7 +33,7 @@ namespace ForesTycoon
             ImGui.SetCurrentContext(ctx);
 
             ImGuiIOPtr io = ImGui.GetIO();
-            io.Fonts.AddFontDefault();
+            LoadUIFont(io);
             io.BackendFlags |= ImGuiBackendFlags.RendererHasVtxOffset;
             io.ConfigFlags |= ImGuiConfigFlags.NavEnableKeyboard;
 
@@ -135,13 +138,46 @@ void main()
         }
 
         // ── Per-frame ────────────────────────────────────────────────────────
-        public void Update(int width, int height, float deltaSeconds)
+        private void LoadUIFont(ImGuiIOPtr io)
+        {
+            string fontPath = FindUIFont();
+            if (fontPath == null)
+            {
+                io.Fonts.AddFontDefault();
+                return;
+            }
+
+            // Latin Extended-A contains Hungarian double acute glyphs: ő/Ő and ű/Ű.
+            ushort[] ranges = { 0x0020, 0x00FF, 0x0100, 0x017F, 0 };
+            glyphRangeHandle = GCHandle.Alloc(ranges, GCHandleType.Pinned);
+            io.Fonts.AddFontFromFileTTF(fontPath, 16f, IntPtr.Zero, glyphRangeHandle.AddrOfPinnedObject());
+        }
+
+        private static string FindUIFont()
+        {
+            string fonts = Environment.GetFolderPath(Environment.SpecialFolder.Fonts);
+            string[] candidates =
+            {
+                Path.Combine(fonts, "segoeui.ttf"),
+                Path.Combine(fonts, "arial.ttf"),
+                Path.Combine(fonts, "tahoma.ttf")
+            };
+
+            foreach (string candidate in candidates)
+                if (File.Exists(candidate))
+                    return candidate;
+
+            return null;
+        }
+
+        // Per-frame ---------------------------------------------------------
+        public void Update(int width, int height, int framebufferWidth, int framebufferHeight, Vector2 framebufferScale, float deltaSeconds)
         {
             if (frameBegun) ImGui.Render();
 
             ImGuiIOPtr io = ImGui.GetIO();
             io.DisplaySize = new Vector2(width, height);
-            io.DisplayFramebufferScale = new Vector2(1f, 1f);
+            io.DisplayFramebufferScale = framebufferScale;
             io.DeltaTime = deltaSeconds > 0 ? deltaSeconds : 1f / 60f;
 
             ImGui.NewFrame();
@@ -175,9 +211,17 @@ void main()
             GL.Disable(EnableCap.DepthTest);
             GL.Enable(EnableCap.ScissorTest);
 
-            int width = (int)drawData.DisplaySize.X;
-            int height = (int)drawData.DisplaySize.Y;
-            Matrix4 mvp = Matrix4.CreateOrthographicOffCenter(0f, width, height, 0f, -1f, 1f);
+            int framebufferWidth = (int)(drawData.DisplaySize.X * drawData.FramebufferScale.X);
+            int framebufferHeight = (int)(drawData.DisplaySize.Y * drawData.FramebufferScale.Y);
+            if (framebufferWidth <= 0 || framebufferHeight <= 0) return;
+
+            GL.Viewport(0, 0, framebufferWidth, framebufferHeight);
+
+            float left = drawData.DisplayPos.X;
+            float right = drawData.DisplayPos.X + drawData.DisplaySize.X;
+            float top = drawData.DisplayPos.Y;
+            float bottom = drawData.DisplayPos.Y + drawData.DisplaySize.Y;
+            Matrix4 mvp = Matrix4.CreateOrthographicOffCenter(left, right, bottom, top, -1f, 1f);
 
             GL.UseProgram(shader);
             GL.UniformMatrix4(projLoc, false, ref mvp);
@@ -212,11 +256,24 @@ void main()
                 {
                     ImDrawCmdPtr cmd = cmdList.CmdBuffer[c];
                     System.Numerics.Vector4 clip = cmd.ClipRect;
+                    float clipX = (clip.X - drawData.DisplayPos.X) * drawData.FramebufferScale.X;
+                    float clipY = (clip.Y - drawData.DisplayPos.Y) * drawData.FramebufferScale.Y;
+                    float clipZ = (clip.Z - drawData.DisplayPos.X) * drawData.FramebufferScale.X;
+                    float clipW = (clip.W - drawData.DisplayPos.Y) * drawData.FramebufferScale.Y;
 
-                    GL.BindTexture(TextureTarget.Texture2D, (int)cmd.TextureId);
-                    GL.Scissor((int)clip.X, height - (int)clip.W, (int)(clip.Z - clip.X), (int)(clip.W - clip.Y));
-                    GL.DrawElementsBaseVertex(PrimitiveType.Triangles, (int)cmd.ElemCount,
-                        DrawElementsType.UnsignedShort, (IntPtr)(cmd.IdxOffset * sizeof(ushort)), (int)cmd.VtxOffset);
+                    if (clipX < framebufferWidth && clipY < framebufferHeight && clipZ >= 0.0f && clipW >= 0.0f)
+                    {
+                        int scissorX = Math.Max(0, (int)clipX);
+                        int scissorY = Math.Max(0, framebufferHeight - (int)clipW);
+                        int scissorW = Math.Min(framebufferWidth, (int)clipZ) - scissorX;
+                        int scissorH = Math.Min(framebufferHeight, framebufferHeight - (int)clipY) - scissorY;
+                        if (scissorW <= 0 || scissorH <= 0) continue;
+
+                        GL.BindTexture(TextureTarget.Texture2D, (int)cmd.TextureId);
+                        GL.Scissor(scissorX, scissorY, scissorW, scissorH);
+                        GL.DrawElementsBaseVertex(PrimitiveType.Triangles, (int)cmd.ElemCount,
+                            DrawElementsType.UnsignedShort, (IntPtr)(cmd.IdxOffset * sizeof(ushort)), (int)cmd.VtxOffset);
+                    }
                 }
             }
 
@@ -238,6 +295,7 @@ void main()
             GL.DeleteBuffer(ebo);
             GL.DeleteTexture(fontTexture);
             GL.DeleteProgram(shader);
+            if (glyphRangeHandle.IsAllocated) glyphRangeHandle.Free();
         }
     }
 }

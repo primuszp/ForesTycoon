@@ -70,6 +70,10 @@ namespace ForesTycoon
         private double lastTime;
         private System.Windows.Forms.Timer waterTimer;
 
+        private float DpiScale => DeviceDpi > 0 ? DeviceDpi / 96f : 1f;
+        private int FramebufferWidth => Math.Max(1, (int)Math.Round(ClientSize.Width * DpiScale));
+        private int FramebufferHeight => Math.Max(1, (int)Math.Round(ClientSize.Height * DpiScale));
+
         private static int MapMouseButton(MouseButtons b)
         {
             if (b == MouseButtons.Right) return 1;
@@ -140,11 +144,13 @@ namespace ForesTycoon
             GL.MatrixMode(MatrixMode.Projection);
             GL.LoadIdentity();
 
+            int fbWidth = FramebufferWidth;
+            int fbHeight = FramebufferHeight;
             float wc = (Width  - 1.0f) / zoom;
             float hc = (Height - 1.0f) / zoom;
             float pc = 0.5f / zoom;
 
-            GL.Viewport(0, 0, Width, Height);
+            GL.Viewport(0, 0, fbWidth, fbHeight);
             GL.Ortho(screenX - pc, screenX + wc + pc,
                      screenY - pc, screenY + hc + pc,
                      Z_NEAR, Z_FAR);
@@ -177,7 +183,8 @@ namespace ForesTycoon
             float delta = (float)(now - lastTime);
             lastTime = now;
 
-            imgui.Update(Width, Height, delta);
+            float scale = DpiScale;
+            imgui.Update(Width, Height, FramebufferWidth, FramebufferHeight, new NVec2(scale, scale), delta);
 
             DrawMainMenu();
             DrawToolbar();
@@ -311,9 +318,12 @@ namespace ForesTycoon
         {
             float[] depth = new float[1];
             ReadGLMatrices();
-            int fy = viewMatrix[3] - e.Y;
-            GL.ReadPixels(e.X, fy, 1, 1, PixelFormat.DepthComponent, PixelType.Float, depth);
-            Vector3 win = new Vector3(e.X, fy, depth[0]);
+            float scale = DpiScale;
+            int px = Math.Max(0, Math.Min(viewMatrix[2] - 1, (int)Math.Round(e.X * scale)));
+            int py = Math.Max(0, Math.Min(viewMatrix[3] - 1, (int)Math.Round(e.Y * scale)));
+            int fy = viewMatrix[3] - 1 - py;
+            GL.ReadPixels(px, fy, 1, 1, PixelFormat.DepthComponent, PixelType.Float, depth);
+            Vector3 win = new Vector3(px, fy, depth[0]);
             CustomUnProject(win, modelMatrix, projMatrix, viewMatrix, out worldPos);
         }
 
