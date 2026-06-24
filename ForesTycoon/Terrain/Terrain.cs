@@ -705,64 +705,43 @@ namespace ForesTycoon
             // illeszkedik (nincs hézag). Két szemközti ág egy teljes átmenő sávot ad,
             // így T-nél (3 él) és +-nál (4 él) is tömör, hézagmentes a csomópont; a
             // nyitott él fűként/padkaként marad → ez adja a T/+ formát.
-            // + kereszteződés: a négy belső sarok BEFELÉ (a középpont felé) homorúan
-            // lekerekítve, mint a kanyar belső íve; a karok külső éle egyenes marad.
-            if (n == 4)
-            {
-                RoadPlusRounded(W, S, E, N, width);
-                return;
-            }
-
             if ((edges & RoadEdge.WS) != 0) RoadArm(C, (W + S) * 0.5f, width);
             if ((edges & RoadEdge.SE) != 0) RoadArm(C, (S + E) * 0.5f, width);
             if ((edges & RoadEdge.EN) != 0) RoadArm(C, (E + N) * 0.5f, width);
             if ((edges & RoadEdge.NW) != 0) RoadArm(C, (N + W) * 0.5f, width);
-        }
 
-        // + kereszteződés egyetlen alakzatként: a plusz körvonala uv-térben, a négy
-        // belső sarkot homorú negyedívvel lekerekítve (a középpont felé), majd a
-        // középpontból legyezővel kitöltve (a plusz csillag-konvex a középpontra).
-        private void RoadPlusRounded(Vector3 W, Vector3 S, Vector3 E, Vector3 N, float width)
-        {
-            float side = DistXY(W, S);
-            float hw = (width * 0.5f) / side;
-            // A fűsarkot a CSEMPE-SAROK köré centrált negyedkörrel kerekítjük, sugara
-            // 0.5−hw. Mindkét réteg (padka + úttest) ugyanaz a középpont → koncentrikus,
-            // így a padka vonalai mindenhol párhuzamosak (és a sugár a max, csempe-szélig).
+            // Belső lekerekítés MINDEN olyan csempe-saroknál, ahol a két szomszédos él
+            // is út (T-nél 2, +-nál 4 sarok). A fűsarkot a CSEMPE-SAROK köré centrált
+            // negyedkör kerekíti (sugár 0.5−hw); mindkét réteg ugyanaz a középpont →
+            // koncentrikus ívek → a padka vonalai mindenhol párhuzamosak.
+            float jSide = DistXY(W, S);
+            float hw = (width * 0.5f) / jSide;
             float rf = 0.5f - hw;
-
-            List<(float u, float v)> pts = new List<(float u, float v)>(24);
-            pts.Add((1f, 0.5f - hw));                                  // E kar széle
-            AddArc(pts, 1f, 1f, rf, 270f, 180f);                       // EN sarok (E csempe-sarok)
-            pts.Add((0.5f - hw, 1f));                                  // N kar széle
-            AddArc(pts, 0f, 1f, rf, 360f, 270f);                       // NW sarok (N csempe-sarok)
-            pts.Add((0f, 0.5f - hw));                                  // W kar széle
-            AddArc(pts, 0f, 0f, rf, 90f, 0f);                          // WS sarok (W csempe-sarok)
-            pts.Add((0.5f - hw, 0f));                                  // S kar széle
-            AddArc(pts, 1f, 0f, rf, 180f, 90f);                        // SE sarok (S csempe-sarok)
-
-            Vector3 C = TileUV(W, S, E, N, 0.5f, 0.5f);
-            for (int i = 0; i < pts.Count; i++)
-            {
-                (float u, float v) p0 = pts[i];
-                (float u, float v) p1 = pts[(i + 1) % pts.Count];
-                GL.Vertex3(C);
-                GL.Vertex3(TileUV(W, S, E, N, p0.u, p0.v));
-                GL.Vertex3(TileUV(W, S, E, N, p1.u, p1.v));
-                GL.Vertex3(C);
-            }
+            if ((edges & RoadEdge.SE) != 0 && (edges & RoadEdge.EN) != 0)  // E sarok
+                RoadInnerFillet(W, S, E, N, 0.5f + hw, 0.5f + hw, 1f, 1f, rf, 270f, 180f);
+            if ((edges & RoadEdge.EN) != 0 && (edges & RoadEdge.NW) != 0)  // N sarok
+                RoadInnerFillet(W, S, E, N, 0.5f - hw, 0.5f + hw, 0f, 1f, rf, 360f, 270f);
+            if ((edges & RoadEdge.NW) != 0 && (edges & RoadEdge.WS) != 0)  // W sarok
+                RoadInnerFillet(W, S, E, N, 0.5f - hw, 0.5f - hw, 0f, 0f, rf, 90f, 0f);
+            if ((edges & RoadEdge.WS) != 0 && (edges & RoadEdge.SE) != 0)  // S sarok
+                RoadInnerFillet(W, S, E, N, 0.5f + hw, 0.5f - hw, 1f, 0f, rf, 180f, 90f);
         }
 
-        // Negyedív-pontok (qu,qv) közép körül, rf sugárral, degA→degB (csökkenő) k
-        // lépésben, mindkét végpontot beleértve.
-        private static void AddArc(List<(float u, float v)> pts, float qu, float qv, float rf, float degA, float degB)
+        // Belső sarok-kitöltés: a kar-négyzet sarok (apex) és a CSEMPE-SAROK (cu,cv)
+        // köré rf sugárral húzott negyedív közötti rész (négyzet − negyedkör), legyezővel
+        // az apexből. Quads-kontextusban fut → elfajuló quad (P,a,b,P). Additív a karokra.
+        private void RoadInnerFillet(Vector3 W, Vector3 S, Vector3 E, Vector3 N,
+            float apexU, float apexV, float cu, float cv, float rf, float degA, float degB)
         {
-            const int k = 3;
-            for (int i = 0; i <= k; i++)
+            Vector3 P = TileUV(W, S, E, N, apexU, apexV);
+            const int seg = 3;
+            for (int i = 0; i < seg; i++)
             {
-                float deg = degA + (degB - degA) * i / k;
-                float rad = (float)(deg * Math.PI / 180.0);
-                pts.Add((qu + rf * (float)Math.Cos(rad), qv + rf * (float)Math.Sin(rad)));
+                float t0 = (float)((degA + (degB - degA) * i / seg) * Math.PI / 180.0);
+                float t1 = (float)((degA + (degB - degA) * (i + 1) / seg) * Math.PI / 180.0);
+                Vector3 a = TileUV(W, S, E, N, cu + rf * (float)Math.Cos(t0), cv + rf * (float)Math.Sin(t0));
+                Vector3 b = TileUV(W, S, E, N, cu + rf * (float)Math.Cos(t1), cv + rf * (float)Math.Sin(t1));
+                GL.Vertex3(P); GL.Vertex3(a); GL.Vertex3(b); GL.Vertex3(P);
             }
         }
 
