@@ -459,10 +459,11 @@ namespace ForesTycoon
         public bool AddRoadTile(Tile t) => IsRoadBuildable(t, RoadEdge.WS | RoadEdge.EN) && roads.Add(t.Id, RoadEdge.WS | RoadEdge.EN);
 
 
-        // Vízmentes és PLANÁRIS (sík rámpa) csempére építhető út: a négy sarok egy
-        // (akár ferde) síkon van, így a burkolat laposan ráfekszik. A lejtés/magasság
-        // mértéke tetszőleges; csak a CSAVART (nyereg) csempét tiltjuk — a bármilyen
-        // edge-konfig (egyenes, kanyar, T, +) mehet lejtőn is.
+        // Vízmentes és nem-NYERGES csempére építhető út. Sík, rámpa és sarok-lejtő is
+        // járható (a csempe két háromszöge legfeljebb egy él mentén törik, a burkolat
+        // ráfekszik); a lejtés/magasság mértéke tetszőleges. Csak az igazi NYERGET
+        // (Pringle) tiltjuk: ahol az egyik átló MINDKÉT sarka a másik átló MINDKÉT
+        // sarka fölött van — ott a burkolat nem fektethető le elfogadhatóan.
         public bool IsRoadBuildable(Tile t) => IsRoadBuildable(t, RoadEdge.WS | RoadEdge.EN);
 
         private bool IsRoadBuildable(Tile t, RoadEdge edges)
@@ -470,9 +471,10 @@ namespace ForesTycoon
             if (t == null) return false;
             if (hydro.ShouldDrawStandingWater(t)) return false;
 
-            // Planáris, ha a szemközti sarkok magasság-összege egyenlő (a bilineáris
-            // felület csavar-tagja nulla): hW + hE == hS + hN.
-            return t.W.W + t.E.W == t.S.W + t.N.W;
+            int weMin = Math.Min(t.W.W, t.E.W), weMax = Math.Max(t.W.W, t.E.W);
+            int snMin = Math.Min(t.S.W, t.N.W), snMax = Math.Max(t.S.W, t.N.W);
+            if (weMin > snMax || snMin > weMax) return false;  // nyereg → nem építhető
+            return true;
         }
 
         public void BuildRoadTilePath(Tile a, Tile b)
