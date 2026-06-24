@@ -554,10 +554,9 @@ namespace ForesTycoon
                 return result;
             }
 
-            if (Math.Abs(du) >= Math.Abs(dv))
-                endV = startV;
-            else
-                endU = startU;
+            // L-alakú útvonal: előbb a domináns tengely mentén a törésig, majd a másik
+            // tengely mentén a célig. A töréscsempe így 2 szomszédos élt kap → ív-kanyar.
+            bool uFirst = Math.Abs(du) >= Math.Abs(dv);
 
             int u = startU, v = startV;
             RoadEdge previousEntry = RoadEdge.None;
@@ -565,8 +564,16 @@ namespace ForesTycoon
             {
                 int nextU = u;
                 int nextV = v;
-                if (u != endU) nextU += Math.Sign(endU - u);
-                else if (v != endV) nextV += Math.Sign(endV - v);
+                if (uFirst)
+                {
+                    if (u != endU) nextU += Math.Sign(endU - u);
+                    else if (v != endV) nextV += Math.Sign(endV - v);
+                }
+                else
+                {
+                    if (v != endV) nextV += Math.Sign(endV - v);
+                    else if (u != endU) nextU += Math.Sign(endU - u);
+                }
 
                 RoadEdge exit = nextU != u || nextV != v ? EdgeToNeighbor(u, v, nextU, nextV) : Opposite(previousEntry);
                 RoadEdge edges = previousEntry | exit;
