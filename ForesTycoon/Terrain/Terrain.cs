@@ -305,7 +305,16 @@ namespace ForesTycoon
 
         private int CountRiverCorners(Tile tile) => hydro.CountRiverCorners(tile);
 
-        private void RebuildHydrology() => hydro.Rebuild();
+        private void RebuildHydrology()
+        {
+            // A hidrológia node.zPos-t használ; mielőtt fut, MINDEN node zPos-át a friss
+            // magasságból állítjuk be, hogy se betöltéskor, se szerkesztés után ne a régi
+            // (stale) érték alapján higgyen vizet a magas terepre.
+            foreach (Node node in data.Nodes)
+                node.zPos = node.W * tileSizeM;
+
+            hydro.Rebuild();
+        }
 
         private bool HasDynamicWater(Tile tile) => hydro.HasDynamicWater(tile);
 
