@@ -726,17 +726,20 @@ namespace ForesTycoon
         {
             float side = DistXY(W, S);
             float hw = (width * 0.5f) / side;
-            float rf = hw * 0.5f;  // lekerekítés sugara (kis)
+            // A fűsarkot a CSEMPE-SAROK köré centrált negyedkörrel kerekítjük, sugara
+            // 0.5−hw. Mindkét réteg (padka + úttest) ugyanaz a középpont → koncentrikus,
+            // így a padka vonalai mindenhol párhuzamosak (és a sugár a max, csempe-szélig).
+            float rf = 0.5f - hw;
 
-            List<(float u, float v)> pts = new List<(float u, float v)>(20);
-            pts.Add((1f, 0.5f - hw)); pts.Add((1f, 0.5f + hw));               // E kar vége
-            AddArc(pts, 0.5f + hw + rf, 0.5f + hw + rf, rf, 270f, 180f);      // EN belső sarok
-            pts.Add((0.5f + hw, 1f)); pts.Add((0.5f - hw, 1f));               // N kar vége
-            AddArc(pts, 0.5f - hw - rf, 0.5f + hw + rf, rf, 360f, 270f);      // NW belső sarok
-            pts.Add((0f, 0.5f + hw)); pts.Add((0f, 0.5f - hw));               // W kar vége
-            AddArc(pts, 0.5f - hw - rf, 0.5f - hw - rf, rf, 90f, 0f);         // WS belső sarok
-            pts.Add((0.5f - hw, 0f)); pts.Add((0.5f + hw, 0f));               // S kar vége
-            AddArc(pts, 0.5f + hw + rf, 0.5f - hw - rf, rf, 180f, 90f);       // SE belső sarok
+            List<(float u, float v)> pts = new List<(float u, float v)>(24);
+            pts.Add((1f, 0.5f - hw));                                  // E kar széle
+            AddArc(pts, 1f, 1f, rf, 270f, 180f);                       // EN sarok (E csempe-sarok)
+            pts.Add((0.5f - hw, 1f));                                  // N kar széle
+            AddArc(pts, 0f, 1f, rf, 360f, 270f);                       // NW sarok (N csempe-sarok)
+            pts.Add((0f, 0.5f - hw));                                  // W kar széle
+            AddArc(pts, 0f, 0f, rf, 90f, 0f);                          // WS sarok (W csempe-sarok)
+            pts.Add((0.5f - hw, 0f));                                  // S kar széle
+            AddArc(pts, 1f, 0f, rf, 180f, 90f);                        // SE sarok (S csempe-sarok)
 
             Vector3 C = TileUV(W, S, E, N, 0.5f, 0.5f);
             for (int i = 0; i < pts.Count; i++)
