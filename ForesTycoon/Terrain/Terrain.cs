@@ -709,6 +709,37 @@ namespace ForesTycoon
             if ((edges & RoadEdge.SE) != 0) RoadArm(C, (S + E) * 0.5f, width);
             if ((edges & RoadEdge.EN) != 0) RoadArm(C, (E + N) * 0.5f, width);
             if ((edges & RoadEdge.NW) != 0) RoadArm(C, (N + W) * 0.5f, width);
+
+            // + kereszteződés: a négy belső sarok kis lekerekítése — minden fűsarok
+            // apexébe (a két sáv találkozásánál) egy negyedkör-cikk a sáv színével.
+            if (n == 4)
+            {
+                float side = DistXY(W, S);
+                float hw = (width * 0.5f) / side;
+                float r = hw * 0.55f;
+                RoadCornerFillet(W, S, E, N, 0.5f + hw, 0.5f + hw, 0f, r);    // E felé
+                RoadCornerFillet(W, S, E, N, 0.5f + hw, 0.5f - hw, 270f, r);  // S felé
+                RoadCornerFillet(W, S, E, N, 0.5f - hw, 0.5f - hw, 180f, r);  // W felé
+                RoadCornerFillet(W, S, E, N, 0.5f - hw, 0.5f + hw, 90f, r);   // N felé
+            }
+        }
+
+        // Negyedkör-cikk (legyező) az (cu,cv) uv-apexből, r sugárral, startDeg-tól
+        // +90°-ig, a fűsarok felé → lekerekíti a + kereszteződés belső sarkát.
+        // Quads-kontextusban fut, ezért elfajuló quadként (P,a,b,P) emittál.
+        private void RoadCornerFillet(Vector3 W, Vector3 S, Vector3 E, Vector3 N,
+            float cu, float cv, float startDeg, float r)
+        {
+            Vector3 P = TileUV(W, S, E, N, cu, cv);
+            const int seg = 3;
+            for (int i = 0; i < seg; i++)
+            {
+                float t0 = (float)((startDeg + 90f * i / seg) * Math.PI / 180.0);
+                float t1 = (float)((startDeg + 90f * (i + 1) / seg) * Math.PI / 180.0);
+                Vector3 a = TileUV(W, S, E, N, cu + r * (float)Math.Cos(t0), cv + r * (float)Math.Sin(t0));
+                Vector3 b = TileUV(W, S, E, N, cu + r * (float)Math.Cos(t1), cv + r * (float)Math.Sin(t1));
+                GL.Vertex3(P); GL.Vertex3(a); GL.Vertex3(b); GL.Vertex3(P);
+            }
         }
 
         private static float DistXY(Vector3 a, Vector3 b)
