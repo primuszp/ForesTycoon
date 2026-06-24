@@ -1369,21 +1369,19 @@ namespace ForesTycoon
 
             actualNode = center;
 
-            // Az út KÖRÜL szabadon alakítható a terep, de minden út-csempének ÉRVÉNYES,
-            // SÍK típusnak kell maradnia: a 4 sarok egy síkban (planáris) ÉS legfeljebb 1
-            // szintet fog át (lapos vagy egyszerű rámpa). Ha az edit bármelyik út-csempét
-            // ezen kívülre vinné (meredek, csavart, nyereg → nem típus), az egészet
-            // visszavonjuk — így a terep nem fajul el az út alatt.
+            // Az utat terepalakítás nem mozdíthatja: ha az edit (akár a lejtő-kaszkádon át)
+            // BÁRMELYIK út-csempe sarkát megváltoztatná, az egész szerkesztés érvénytelen
+            // és visszaáll. Így az út melletti node emelése sem fut le, ha az az út alatti
+            // sarkot is mozdítaná — az utat előbb le kell bontani a terep alakításához.
             if (snapshot != null)
             {
                 bool valid = true;
                 foreach (int id in roads.Tiles)
                 {
                     Tile rt = tiles[id];
-                    int lo = Math.Min(Math.Min(rt.W.W, rt.S.W), Math.Min(rt.E.W, rt.N.W));
-                    int hi = Math.Max(Math.Max(rt.W.W, rt.S.W), Math.Max(rt.E.W, rt.N.W));
-                    bool planar = rt.W.W + rt.E.W == rt.S.W + rt.N.W;
-                    if (!planar || hi - lo > 1) { valid = false; break; }
+                    if (rt.W.W != snapshot[rt.W.Id] || rt.S.W != snapshot[rt.S.Id]
+                        || rt.E.W != snapshot[rt.E.Id] || rt.N.W != snapshot[rt.N.Id])
+                    { valid = false; break; }
                 }
                 if (!valid)
                 {
