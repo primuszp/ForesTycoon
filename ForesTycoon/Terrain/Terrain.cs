@@ -699,13 +699,72 @@ namespace ForesTycoon
                 return;
             }
 
-            // Egyenes, kanyar vagy zsákutca: ágak a csatlakozó élek felé. Két ág a
-            // középpontban folytonosan találkozik (egyenesnél átmenő, kanyarnál L-törés)
-            // → teli, hézagmentes út, az egyenessel/csomóponttal azonos szélességgel.
+            // Kanyar (2 szomszédos él): negyedív a KÖZÖS sarok körül. Az ív az élek
+            // közepénél merőlegesen lép ki → érintőfolytonosan illeszkedik a szomszéd
+            // egyenes úthoz (mint az OpenTTD kerek kanyar-tile).
+            if (n == 2 && TryCornerArc(edges, out float startDeg))
+            {
+                float side = DistXY(W, S);
+                float hwuv = (width * 0.5f) / side;
+                RoadArcBand(W, S, E, N, startDeg, 0.5f - hwuv, 0.5f + hwuv);
+                return;
+            }
+
+            // Egyenes vagy zsákutca: ágak a csatlakozó élek felé. Két szemközti ág a
+            // középpontban átmegy → teli, hézagmentes út, azonos szélességgel.
             if ((edges & RoadEdge.WS) != 0) RoadArm(C, (W + S) * 0.5f, width);
             if ((edges & RoadEdge.SE) != 0) RoadArm(C, (S + E) * 0.5f, width);
             if ((edges & RoadEdge.EN) != 0) RoadArm(C, (E + N) * 0.5f, width);
             if ((edges & RoadEdge.NW) != 0) RoadArm(C, (N + W) * 0.5f, width);
+        }
+
+        private static float DistXY(Vector3 a, Vector3 b)
+        {
+            float dx = b.X - a.X, dy = b.Y - a.Y;
+            return (float)Math.Sqrt(dx * dx + dy * dy);
+        }
+
+        // Pont a csempén belül (u,v)∈[0,1]² bilineáris keverésével a 4 sarokból
+        // (W=(0,0), S=(1,0), E=(1,1), N=(0,1)). A z is keveredik → lejtőre fekvő ív.
+        private static Vector3 TileUV(Vector3 W, Vector3 S, Vector3 E, Vector3 N, float u, float v) =>
+            (1f - u) * (1f - v) * W + u * (1f - v) * S + u * v * E + (1f - u) * v * N;
+
+        // Szomszédos élpár → a közös sarok (ív-középpont) uv-pozíciója és az ív
+        // kezdőszöge (fokban). Minden ív +90°-ot söpör. Szemközti pár esetén false.
+        private static bool TryCornerArc(RoadEdge edges, out float startDeg)
+        {
+            switch (edges)
+            {
+                case RoadEdge.NW | RoadEdge.WS: startDeg = 0f; return true;    // sarok = W
+                case RoadEdge.WS | RoadEdge.SE: startDeg = 90f; return true;   // sarok = S
+                case RoadEdge.SE | RoadEdge.EN: startDeg = 180f; return true;  // sarok = E
+                case RoadEdge.EN | RoadEdge.NW: startDeg = 270f; return true;  // sarok = N
+                default: startDeg = 0f; return false;
+            }
+        }
+
+        // Negyedív-sáv (rInner..rOuter sugár, uv-egységben) a startDeg-tól +90°-ig.
+        // Az ív középpontja a startDeg által kódolt sarok; uv-pontok → TileUV.
+        private void RoadArcBand(Vector3 W, Vector3 S, Vector3 E, Vector3 N,
+            float startDeg, float rInner, float rOuter)
+        {
+            // Az ív-középpont (sarok) uv-koordinátája a kezdőszögből.
+            float cu = startDeg < 90f ? 0f : startDeg < 180f ? 1f : startDeg < 270f ? 1f : 0f;
+            float cv = startDeg < 90f ? 0f : startDeg < 180f ? 0f : startDeg < 270f ? 1f : 1f;
+
+            const int seg = 6;
+            for (int i = 0; i < seg; i++)
+            {
+                float t0 = (float)((startDeg + 90f * i / seg) * Math.PI / 180.0);
+                float t1 = (float)((startDeg + 90f * (i + 1) / seg) * Math.PI / 180.0);
+                float c0 = (float)Math.Cos(t0), s0 = (float)Math.Sin(t0);
+                float c1 = (float)Math.Cos(t1), s1 = (float)Math.Sin(t1);
+
+                GL.Vertex3(TileUV(W, S, E, N, cu + rInner * c0, cv + rInner * s0));
+                GL.Vertex3(TileUV(W, S, E, N, cu + rOuter * c0, cv + rOuter * s0));
+                GL.Vertex3(TileUV(W, S, E, N, cu + rOuter * c1, cv + rOuter * s1));
+                GL.Vertex3(TileUV(W, S, E, N, cu + rInner * c1, cv + rInner * s1));
+            }
         }
 
         private void RoadArm(Vector3 c, Vector3 m, float width)
@@ -746,6 +805,18 @@ namespace ForesTycoon
         {
             Vector3 W = Corner(t.W), S = Corner(t.S), E = Corner(t.E), N = Corner(t.N);
             Vector3 C = (W + S + E + N) * 0.25f;
+
+            // Kanyar: a két keréknyom is negyedív a közös sarok körül, a középvonal
+            // (0.5 uv-sugár) két oldalán RutInner..RutOuter eltolással.
+            if (CountEdges(edges) == 2 && TryCornerArc(edges, out float startDeg))
+            {
+                float side = DistXY(W, S);
+                float ri = RutInner / side, ro = RutOuter / side;
+                GL.Color4(RoadRut);
+                RoadArcBand(W, S, E, N, startDeg, 0.5f + ri, 0.5f + ro);  // külső keréknyom
+                RoadArcBand(W, S, E, N, startDeg, 0.5f - ro, 0.5f - ri);  // belső keréknyom
+                return;
+            }
 
             if ((edges & RoadEdge.WS) != 0) TrackMarks(C, (W + S) * 0.5f);
             if ((edges & RoadEdge.SE) != 0) TrackMarks(C, (S + E) * 0.5f);
