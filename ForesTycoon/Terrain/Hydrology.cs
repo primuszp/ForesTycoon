@@ -222,6 +222,10 @@ namespace ForesTycoon
 
         private bool HasWaterSurfaceCandidate(Tile tile)
         {
+            // Állóvíz csak a VÍZSZINT alatti mélyedésben gyűlhet meg. A vízszint fölötti
+            // (akár magas hegyi) zárt katlan száraz marad — nincs ott víz, csak terep.
+            if (tile.Low * TileSizeM >= SeaLevel) return false;
+
             if (CountRiverCorners(tile) >= 2) return false;
 
             bool hasHigherBank = false;
