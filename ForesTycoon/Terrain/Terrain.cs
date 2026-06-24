@@ -689,18 +689,6 @@ namespace ForesTycoon
 
             GL.Color4(color);
 
-            // Kereszteződés (3-4 él): a csempe felé húzott sarkokkal kitöltött csempe,
-            // így nincs ék-hézag az ágak között (TT-stílusú tömör csomópont).
-            if (n >= 3)
-            {
-                float inset = 1f - widthFactor;
-                GL.Vertex3(W + (C - W) * inset);
-                GL.Vertex3(S + (C - S) * inset);
-                GL.Vertex3(E + (C - E) * inset);
-                GL.Vertex3(N + (C - N) * inset);
-                return;
-            }
-
             // Kanyar (2 szomszédos él): negyedív a KÖZÖS sarok körül. Az ív az élek
             // közepénél merőlegesen lép ki → érintőfolytonosan illeszkedik a szomszéd
             // egyenes úthoz (mint az OpenTTD kerek kanyar-tile).
@@ -712,8 +700,11 @@ namespace ForesTycoon
                 return;
             }
 
-            // Egyenes vagy zsákutca: ágak a csatlakozó élek felé. Két szemközti ág a
-            // középpontban átmegy → teli, hézagmentes út, azonos szélességgel.
+            // Egyenes / zsákutca / T / +: ágak minden bekötött él felé, mindegyik a
+            // csempe-középponttól az él KÖZEPÉIG → a szomszéd út karjával pontosan
+            // illeszkedik (nincs hézag). Két szemközti ág egy teljes átmenő sávot ad,
+            // így T-nél (3 él) és +-nál (4 él) is tömör, hézagmentes a csomópont; a
+            // nyitott él fűként/padkaként marad → ez adja a T/+ formát.
             if ((edges & RoadEdge.WS) != 0) RoadArm(C, (W + S) * 0.5f, width);
             if ((edges & RoadEdge.SE) != 0) RoadArm(C, (S + E) * 0.5f, width);
             if ((edges & RoadEdge.EN) != 0) RoadArm(C, (E + N) * 0.5f, width);
