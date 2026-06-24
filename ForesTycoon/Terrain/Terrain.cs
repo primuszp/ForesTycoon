@@ -1335,6 +1335,16 @@ namespace ForesTycoon
             Node center = actualNode;
             int cu = center.U, cv = center.V;
 
+            // TT-stílus: a terep-edit csak akkor érvényes, ha az érintett út-csempék utána
+            // is planárisak maradnak (a burkolat mind a 4 sarokkal ráfekszik). Snapshot,
+            // hogy érvénytelen eredmény esetén vissza tudjuk állítani (az utat nem bontjuk).
+            int[] snapshot = null;
+            if (roads.Count > 0)
+            {
+                snapshot = new int[data.Nodes.Length];
+                for (int i = 0; i < snapshot.Length; i++) snapshot[i] = data.Nodes[i].W;
+            }
+
             suppressHydrologyRebuild = true;
             try
             {
@@ -1358,6 +1368,27 @@ namespace ForesTycoon
             }
 
             actualNode = center;
+
+            // Ha bármelyik út-csempe nem-planárissá vált, az egész editet visszavonjuk.
+            if (snapshot != null)
+            {
+                bool valid = true;
+                foreach (int id in roads.Tiles)
+                {
+                    Tile rt = tiles[id];
+                    if (rt.W.W + rt.E.W != rt.S.W + rt.N.W) { valid = false; break; }
+                }
+                if (!valid)
+                {
+                    for (int i = 0; i < snapshot.Length; i++)
+                    {
+                        data.Nodes[i].W = snapshot[i];
+                        data.Nodes[i].zPos = snapshot[i] * tileSizeM;
+                    }
+                    return;  // nincs változás → a hidrológiát sem kell újraszámolni
+                }
+            }
+
             RebuildHydrology();
         }
 
