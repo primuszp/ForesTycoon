@@ -1335,15 +1335,10 @@ namespace ForesTycoon
             Node center = actualNode;
             int cu = center.U, cv = center.V;
 
-            // TT-stílus: a terep-edit csak akkor érvényes, ha az érintett út-csempék utána
-            // is planárisak maradnak (a burkolat mind a 4 sarokkal ráfekszik). Snapshot,
-            // hogy érvénytelen eredmény esetén vissza tudjuk állítani (az utat nem bontjuk).
-            int[] snapshot = null;
-            if (roads.Count > 0)
-            {
-                snapshot = new int[data.Nodes.Length];
-                for (int i = 0; i < snapshot.Length; i++) snapshot[i] = data.Nodes[i].W;
-            }
+            // A terep mindig SZABÁLYOS marad: a szerkesztés előtt minden node magasságát
+            // elmentjük, hogy érvénytelen eredmény esetén az EGÉSZ editet visszavonhassuk.
+            int[] snapshot = new int[data.Nodes.Length];
+            for (int i = 0; i < snapshot.Length; i++) snapshot[i] = data.Nodes[i].W;
 
             suppressHydrologyRebuild = true;
             try
@@ -1369,32 +1364,49 @@ namespace ForesTycoon
 
             actualNode = center;
 
-            // Az utat terepalakítás nem mozdíthatja: ha az edit (akár a lejtő-kaszkádon át)
-            // BÁRMELYIK út-csempe sarkát megváltoztatná, az egész szerkesztés érvénytelen
-            // és visszaáll. Így az út melletti node emelése sem fut le, ha az az út alatti
-            // sarkot is mozdítaná — az utat előbb le kell bontani a terep alakításához.
-            if (snapshot != null)
+            // Érvényesség: az edit nem hozhat létre SZABÁLYTALAN terepet, és nem mozdíthatja
+            // az utat. Ha bármelyik feltétel sérül, az EGÉSZ szerkesztés visszaáll.
+            if (!IsEditValid(snapshot))
             {
-                bool valid = true;
-                foreach (int id in roads.Tiles)
+                for (int i = 0; i < snapshot.Length; i++)
                 {
-                    Tile rt = tiles[id];
-                    if (rt.W.W != snapshot[rt.W.Id] || rt.S.W != snapshot[rt.S.Id]
-                        || rt.E.W != snapshot[rt.E.Id] || rt.N.W != snapshot[rt.N.Id])
-                    { valid = false; break; }
+                    data.Nodes[i].W = snapshot[i];
+                    data.Nodes[i].zPos = snapshot[i] * tileSizeM;
                 }
-                if (!valid)
-                {
-                    for (int i = 0; i < snapshot.Length; i++)
-                    {
-                        data.Nodes[i].W = snapshot[i];
-                        data.Nodes[i].zPos = snapshot[i] * tileSizeM;
-                    }
-                    return;  // nincs változás → a hidrológiát sem kell újraszámolni
-                }
+                return;  // nincs változás → a hidrológiát sem kell újraszámolni
             }
 
             RebuildHydrology();
+        }
+
+        // A terep akkor SZABÁLYOS, ha egyetlen csempe sem fajul el: minden csempe
+        // legfeljebb 1 szintet fog át (sarok max-min <= 1) → lapos / rámpa / sarok-lejtő,
+        // nincs meredek (2+ szint) csempe. Csak az ÚJONNAN elfajuló csempét tiltjuk (a
+        // korábbról meglévőt nem), így a meglévő terep nem blokkolja a szerkesztést.
+        // Ezen felül az út-csempék sarkai nem mozdulhatnak (az utat a terep nem dönti meg).
+        private bool IsEditValid(int[] snapshot)
+        {
+            foreach (Tile t in data.Tiles)
+            {
+                int curHi = Math.Max(Math.Max(t.W.W, t.S.W), Math.Max(t.E.W, t.N.W));
+                int curLo = Math.Min(Math.Min(t.W.W, t.S.W), Math.Min(t.E.W, t.N.W));
+                if (curHi - curLo <= 1) continue;  // szabályos csempe
+
+                int sW = snapshot[t.W.Id], sS = snapshot[t.S.Id], sE = snapshot[t.E.Id], sN = snapshot[t.N.Id];
+                int snapHi = Math.Max(Math.Max(sW, sS), Math.Max(sE, sN));
+                int snapLo = Math.Min(Math.Min(sW, sS), Math.Min(sE, sN));
+                if (snapHi - snapLo <= 1) return false;  // ÚJONNAN fajult el → tiltott
+            }
+
+            foreach (int id in roads.Tiles)
+            {
+                Tile rt = tiles[id];
+                if (rt.W.W != snapshot[rt.W.Id] || rt.S.W != snapshot[rt.S.Id]
+                    || rt.E.W != snapshot[rt.E.Id] || rt.N.W != snapshot[rt.N.Id])
+                    return false;  // az út nem mozdulhat
+            }
+
+            return true;
         }
 
         /// <summary>GL-erőforrások felszabadítása (regeneráláskor a régi terep buffereihez).</summary>
