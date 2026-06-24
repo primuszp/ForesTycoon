@@ -1402,50 +1402,46 @@ namespace ForesTycoon
             edges.Dispose();
         }
 
+        // OpenTTD-stílusú terraform (terraform_cmd.cpp): egy sarkot delta-val mozdít, és
+        // rekurzívan a cél felé 1-gyel közelíti a szomszéd-sarkokat, amíg minden ÉL-
+        // szomszédos sarok eltérése ≤1 (a szemközti sarok 2-vel is → meredek, érvényes).
+        // A változásokat előbb egy pending-térképbe gyűjti; ha bármelyik a [0, MaxHeight]
+        // korláton kívülre esne, az EGÉSZ művelet elbukik és semmi nem változik (atomikus).
         private void ElevationManager(int delta)
         {
-            List<Node>  openList  = new List<Node>();
-            List<Node>  closedList = new List<Node>();
-            HashSet<Node> openSet   = new HashSet<Node>();
-            HashSet<Node> closedSet = new HashSet<Node>();
+            if (actualNode == null) return;
 
-            if (actualNode != null)
+            int maxHeight = settings.MaxHeight;
+            Dictionary<int, int> pending = new Dictionary<int, int>();
+            bool ok = true;
+
+            int HeightOf(Node nd) => pending.TryGetValue(nd.Id, out int v) ? v : nd.W;
+
+            void Set(Node nd, int h)
             {
-                openList.Add(actualNode);
-                openSet.Add(actualNode);
-
-                while (openList.Count > 0)
+                if (!ok) return;
+                if (h < 0 || h > maxHeight) { ok = false; return; }   // korláton kívül → bukás
+                if (HeightOf(nd) == h) return;
+                pending[nd.Id] = h;
+                foreach (Node nb in getNeighbours(nd))
                 {
-                    Node oNode = openList[0];
-                    openList.RemoveAt(0);
-                    openSet.Remove(oNode);
-
-                    closedList.Add(oNode);
-                    closedSet.Add(oNode);
-                    // A legalsó szint (W=0) alá nem süllyedhet a terep.
-                    oNode.W = Math.Max(0, oNode.W + delta);
-                    // A zPos-t azonnal szinkronban tartjuk a magassággal, hogy az utána
-                    // futó hidrológia (RebuildHydrology) a FRISS magassággal számoljon,
-                    // ne a régi (stale) zPos-szal — különben a megemelt csempét víznek hiszi.
-                    oNode.zPos = oNode.W * tileSizeM;
-
-                    foreach (Node nNode in getNeighbours(oNode))
-                    {
-                        if (closedSet.Contains(nNode) || openSet.Contains(nNode)) continue;
-
-                        bool enqueue = delta > 0
-                            ? oNode.W - nNode.W > +1
-                            : oNode.W - nNode.W < -1;
-
-                        if (enqueue)
-                        {
-                            openList.Add(nNode);
-                            openSet.Add(nNode);
-                        }
-                    }
+                    int diff = h - HeightOf(nb);
+                    if (Math.Abs(diff) > 1) Set(nb, h - Math.Sign(diff));  // szomszéd 1-gyel a cél felé
                 }
-                updateNodes(closedList);
             }
+
+            Set(actualNode, actualNode.W + delta);
+            if (!ok || pending.Count == 0) return;  // érvénytelen vagy nincs változás → atomikus elvetés
+
+            List<Node> changed = new List<Node>(pending.Count);
+            foreach (KeyValuePair<int, int> kv in pending)
+            {
+                Node nd = data.Nodes[kv.Key];
+                nd.W = kv.Value;
+                nd.zPos = nd.W * tileSizeM;   // zPos szinkron a hidrológiához
+                changed.Add(nd);
+            }
+            updateNodes(changed);
         }
 
         private void DrawTrees()
