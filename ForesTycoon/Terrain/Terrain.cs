@@ -571,10 +571,11 @@ namespace ForesTycoon
                     else if (u != endU) nextU += Math.Sign(endU - u);
                 }
 
-                RoadEdge exit = nextU != u || nextV != v ? EdgeToNeighbor(u, v, nextU, nextV) : Opposite(previousEntry);
+                // A csempe élei = ahonnan jöttünk | ahová tovább lépünk. A végpontokon
+                // nincs fantom-egyenes: 1 él = zsákutca-csonk. Így amikor egy másik húzás
+                // ráfut, a tényleges élek összegződnek (2 szomszédos = ív, 3 = T, 4 = +).
+                RoadEdge exit = nextU != u || nextV != v ? EdgeToNeighbor(u, v, nextU, nextV) : RoadEdge.None;
                 RoadEdge edges = previousEntry | exit;
-                if (CountEdges(edges) == 1 && roads.GetEdges(getTileByCoords(u, v).Id) == RoadEdge.None)
-                    edges |= Opposite(edges);
                 if (edges != RoadEdge.None)
                     result.Add(new RoadPlanStep(getTileByCoords(u, v).Id, edges));
 
@@ -642,7 +643,10 @@ namespace ForesTycoon
                 foreach (RoadPlanStep step in previewTiles)
                 {
                     bool bad = previewRemove || !IsRoadBuildable(tiles[step.TileId], step.Edges);
-                    RoadSurface(tiles[step.TileId], step.Edges, 0.92f, bad ? badFill : okFill);
+                    // Építésnél a meglévő gráf-élekkel összevont alakot mutatjuk → már
+                    // húzás közben látszik a kialakuló kanyar / T / + kereszteződés.
+                    RoadEdge shown = previewRemove ? step.Edges : step.Edges | roads.GetEdges(step.TileId);
+                    RoadSurface(tiles[step.TileId], shown, 0.92f, bad ? badFill : okFill);
                 }
                 GL.End();
 
