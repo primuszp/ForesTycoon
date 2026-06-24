@@ -459,7 +459,10 @@ namespace ForesTycoon
         public bool AddRoadTile(Tile t) => IsRoadBuildable(t, RoadEdge.WS | RoadEdge.EN) && roads.Add(t.Id, RoadEdge.WS | RoadEdge.EN);
 
 
-        // Csak vízmentes és legfeljebb egy-szintnyi lejtésű (rámpa) csempére építhető út.
+        // Vízmentes és PLANÁRIS (sík rámpa) csempére építhető út: a négy sarok egy
+        // (akár ferde) síkon van, így a burkolat laposan ráfekszik. A lejtés/magasság
+        // mértéke tetszőleges; csak a CSAVART (nyereg) csempét tiltjuk — a bármilyen
+        // edge-konfig (egyenes, kanyar, T, +) mehet lejtőn is.
         public bool IsRoadBuildable(Tile t) => IsRoadBuildable(t, RoadEdge.WS | RoadEdge.EN);
 
         private bool IsRoadBuildable(Tile t, RoadEdge edges)
@@ -467,32 +470,9 @@ namespace ForesTycoon
             if (t == null) return false;
             if (hydro.ShouldDrawStandingWater(t)) return false;
 
-            int lo = Math.Min(Math.Min(t.W.W, t.S.W), Math.Min(t.E.W, t.N.W));
-            int hi = Math.Max(Math.Max(t.W.W, t.S.W), Math.Max(t.E.W, t.N.W));
-            if (hi == lo) return true;
-            if (hi - lo > 1) return false;
-
-            return IsRoadCompatibleRamp(t, edges);
-        }
-
-        private bool IsRoadCompatibleRamp(Tile t, RoadEdge edges)
-        {
-            if (CountEdges(edges) != 2) return false;
-
-            bool straightRoad = edges == (RoadEdge.WS | RoadEdge.EN) || edges == (RoadEdge.SE | RoadEdge.NW);
-            if (!straightRoad) return false;
-
-            int lo = Math.Min(Math.Min(t.W.W, t.S.W), Math.Min(t.E.W, t.N.W));
-            int hi = Math.Max(Math.Max(t.W.W, t.S.W), Math.Max(t.E.W, t.N.W));
-            int lowCount = 0;
-            int highCount = 0;
-
-            if (t.W.W == lo) lowCount++; else if (t.W.W == hi) highCount++;
-            if (t.S.W == lo) lowCount++; else if (t.S.W == hi) highCount++;
-            if (t.E.W == lo) lowCount++; else if (t.E.W == hi) highCount++;
-            if (t.N.W == lo) lowCount++; else if (t.N.W == hi) highCount++;
-
-            return lowCount == 2 && highCount == 2;
+            // Planáris, ha a szemközti sarkok magasság-összege egyenlő (a bilineáris
+            // felület csavar-tagja nulla): hW + hE == hS + hN.
+            return t.W.W + t.E.W == t.S.W + t.N.W;
         }
 
         public void BuildRoadTilePath(Tile a, Tile b)
