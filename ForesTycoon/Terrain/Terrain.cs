@@ -1385,6 +1385,10 @@ namespace ForesTycoon
                     closedSet.Add(oNode);
                     // A legalsó szint (W=0) alá nem süllyedhet a terep.
                     oNode.W = Math.Max(0, oNode.W + delta);
+                    // A zPos-t azonnal szinkronban tartjuk a magassággal, hogy az utána
+                    // futó hidrológia (RebuildHydrology) a FRISS magassággal számoljon,
+                    // ne a régi (stale) zPos-szal — különben a megemelt csempét víznek hiszi.
+                    oNode.zPos = oNode.W * tileSizeM;
 
                     foreach (Node nNode in getNeighbours(oNode))
                     {
