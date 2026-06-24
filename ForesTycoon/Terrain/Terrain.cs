@@ -1369,14 +1369,17 @@ namespace ForesTycoon
 
             actualNode = center;
 
-            // Ha bármelyik út-csempe nem-planárissá vált, az egész editet visszavonjuk.
+            // Ha bármelyik út-csempe SARKA megváltozna, az egész editet visszavonjuk: az
+            // út terepalakításkor nem deformálódhat (TT-elv: út alatt előbb bontani kell).
             if (snapshot != null)
             {
                 bool valid = true;
                 foreach (int id in roads.Tiles)
                 {
                     Tile rt = tiles[id];
-                    if (rt.W.W + rt.E.W != rt.S.W + rt.N.W) { valid = false; break; }
+                    if (rt.W.W != snapshot[rt.W.Id] || rt.S.W != snapshot[rt.S.Id]
+                        || rt.E.W != snapshot[rt.E.Id] || rt.N.W != snapshot[rt.N.Id])
+                    { valid = false; break; }
                 }
                 if (!valid)
                 {
