@@ -447,14 +447,10 @@ namespace ForesTycoon
             }
         }
 
-        // ── Erdei földút-render konstansok ───────────────────────────────────
-        private static readonly Color RoadDirt     = Color.FromArgb(150, 120,  82);  // letaposott földfelület
-        private static readonly Color RoadRut      = Color.FromArgb(104,  80,  52);  // keréknyom
-        private static readonly Color RoadShoulder = Color.FromArgb(168, 150, 108);  // homokos padka
+        // ── Út-render konstansok (referencia tile-készlet: szürke aszfalt + krém padka) ─
+        private static readonly Color RoadSurfaceColor = Color.FromArgb(108, 110, 112);  // szürke úttest
+        private static readonly Color RoadShoulder     = Color.FromArgb(214, 210, 190);  // világos krém padka
         private const float ShoulderFrac = 0.16f;  // padka szélessége a középpont felé
-        // Keréknyomok a csempe-középponttól (csempe-félszélesség = 2.5).
-        private const float RutInner = 0.42f;
-        private const float RutOuter = 0.88f;
 
         // Csempe-alapú úthálózat: a kapcsolatok a szomszédos út-csempékből adódnak.
         public Tile HoveredTile => hoveredTile;
@@ -617,22 +613,17 @@ namespace ForesTycoon
             // Decal overlay a terep után, a közös overlay pass depth állapotával.
             if (roads.Count > 0)
             {
-                // Úttest: a terep átlójára illesztett háromszögek → lejtőn rámpaként
-                // pontosan ráfekszik a felszínre.
+                // 1. réteg: világos krém padka (széles sáv) a terep átlójára illesztve
+                // → lejtőn rámpaként pontosan ráfekszik a felszínre.
                 GL.Begin(PrimitiveType.Quads);
                 foreach (int id in roads.Tiles)
                     RoadSurface(tiles[id], roads.GetEdges(id), 0.92f, RoadShoulder);
                 GL.End();
 
-                // Padka + sávjelzés.
+                // 2. réteg: szürke úttest (keskenyebb sáv) a padka tetején.
                 GL.Begin(PrimitiveType.Quads);
                 foreach (int id in roads.Tiles)
-                    RoadSurface(tiles[id], roads.GetEdges(id), 0.62f, RoadDirt);
-                GL.End();
-
-                GL.Begin(PrimitiveType.Quads);
-                foreach (int id in roads.Tiles)
-                    RoadTileDetails(tiles[id], roads.GetEdges(id));
+                    RoadSurface(tiles[id], roads.GetEdges(id), 0.62f, RoadSurfaceColor);
                 GL.End();
             }
 
@@ -802,54 +793,6 @@ namespace ForesTycoon
                 GL.Vertex3(tile.N.xPos, tile.N.yPos, tile.N.zPos); GL.Vertex3(tile.W.xPos, tile.W.yPos, tile.W.zPos);
             }
             GL.End();
-        }
-
-        // Úttest 2 háromszöge a terep makeBuffer-jével AZONOS átló mentén (a laposabb
-        // átlót választva), így a road pontosan ráfekszik a (lejtős) terep-csempére.
-        // Erdei földút: földes padka a nyitott éleken; a csatlakozó élek felé mohás
-        // középsáv + két keréknyom (egyenesnél átmenő nyomok, kereszteződésnél T/+).
-        private void RoadTileDetails(Tile t, RoadEdge edges)
-        {
-            Vector3 W = Corner(t.W), S = Corner(t.S), E = Corner(t.E), N = Corner(t.N);
-            Vector3 C = (W + S + E + N) * 0.25f;
-
-            // Kanyar: a két keréknyom is negyedív a közös sarok körül, a középvonal
-            // (0.5 uv-sugár) két oldalán RutInner..RutOuter eltolással.
-            if (CountEdges(edges) == 2 && TryCornerArc(edges, out float startDeg))
-            {
-                float side = DistXY(W, S);
-                float ri = RutInner / side, ro = RutOuter / side;
-                GL.Color4(RoadRut);
-                RoadArcBand(W, S, E, N, startDeg, 0.5f + ri, 0.5f + ro);  // külső keréknyom
-                RoadArcBand(W, S, E, N, startDeg, 0.5f - ro, 0.5f - ri);  // belső keréknyom
-                return;
-            }
-
-            if ((edges & RoadEdge.WS) != 0) TrackMarks(C, (W + S) * 0.5f);
-            if ((edges & RoadEdge.SE) != 0) TrackMarks(C, (S + E) * 0.5f);
-            if ((edges & RoadEdge.EN) != 0) TrackMarks(C, (E + N) * 0.5f);
-            if ((edges & RoadEdge.NW) != 0) TrackMarks(C, (N + W) * 0.5f);
-        }
-
-        // A középponttól (c) az él középpontja (m) felé futó sáv egy perp-eltolás
-        // tartományban (o1..o2), a c→m irányra merőlegesen.
-        private void StripAlong(Vector3 c, Vector3 m, float o1, float o2, Color color)
-        {
-            float dx = m.X - c.X, dy = m.Y - c.Y;
-            float len = (float)Math.Sqrt(dx * dx + dy * dy);
-            if (len < 1e-4f) return;
-            float px = -dy / len, py = dx / len;
-            GL.Color4(color);
-            GL.Vertex3(c.X + px * o1, c.Y + py * o1, c.Z);
-            GL.Vertex3(c.X + px * o2, c.Y + py * o2, c.Z);
-            GL.Vertex3(m.X + px * o2, m.Y + py * o2, m.Z);
-            GL.Vertex3(m.X + px * o1, m.Y + py * o1, m.Z);
-        }
-
-        private void TrackMarks(Vector3 c, Vector3 m)
-        {
-            StripAlong(c, m, RutInner, RutOuter, RoadRut);    // jobb keréknyom
-            StripAlong(c, m, -RutOuter, -RutInner, RoadRut);  // bal keréknyom
         }
 
         private void DrawSphere(float radius, int rings, int sectors)
