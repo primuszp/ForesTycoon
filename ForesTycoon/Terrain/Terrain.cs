@@ -426,6 +426,10 @@ namespace ForesTycoon
             // később depth írás nélkül rajzolódnak, így nincs Z-fighting.
             foreach (Tile tile in tiles)
             {
+                // Az út-csempék terep-meshe helyett a platform/földmű renderelődik
+                // (DrawRoadFoundations) — különben bevágásnál a magasabb terep eltakarná az utat.
+                if (roads.Has(tile.Id)) continue;
+
                 VertexBuffer vbo = vbos[tile.Code + "_" + tile.Low];
 
                 GL.PushMatrix();
@@ -734,10 +738,10 @@ namespace ForesTycoon
         // (csak ha még nincs rögzítve, hogy a meglévő szomszéd-úttal folytonos maradjon).
         private void CaptureRoadSurface(Tile t, RoadPlacement placement)
         {
-            // Csak a PLATFORM (ív/csatlakozás lapos tetője) fagy be vezetőfelületnek; az
-            // egyenes út a NATURAL terepen ül és KÖVETI a terepet (terraformnál is), ezért
-            // azt NEM fagyasztjuk be → nincs lépcsős platform egyenes lejtős úton.
-            if (placement.Kind != RoadPlacementKind.FoundationSurface) return;
+            // MINDEN út-csempe befagy: az út szintje soha nem változik. A terep alatta/
+            // körülötte szabadon alakítható; a különbséget a földmű tölti ki (lejjebb →
+            // töltés, feljebb → bevágás).
+            if (!placement.IsValid) return;
             CaptureRoadSurfaceNode(t.W, placement.W);
             CaptureRoadSurfaceNode(t.S, placement.S);
             CaptureRoadSurfaceNode(t.E, placement.E);
@@ -950,7 +954,9 @@ namespace ForesTycoon
         private float FoundationEdgeFrac(int nu, int nv, Node a, Node b)
         {
             if (checkTile(nu, nv) && roads.Has(getTileByCoords(nu, nv).Id)) return 0f;
-            float gap = Math.Max(RoadSurfaceZ(a) - a.W * tileSizeM, RoadSurfaceZ(b) - b.W * tileSizeM);
+            // Abszolút eltérés → töltés (terep lejjebb) ÉS bevágás (terep feljebb) is.
+            float gap = Math.Max(Math.Abs(RoadSurfaceZ(a) - a.W * tileSizeM),
+                                 Math.Abs(RoadSurfaceZ(b) - b.W * tileSizeM));
             if (gap <= 0.001f) return 0f;
             float halfTile = 0.5f * Math.Min(tileSizeH, tileSizeV);
             return Math.Min(1f, gap / halfTile);
@@ -986,15 +992,11 @@ namespace ForesTycoon
                 int u = id / tpc, v = id % tpc;
                 RoadFootprintCorners(t, out Vector3 iW, out Vector3 iS, out Vector3 iE, out Vector3 iN);
 
-                // Platform TETŐ (fű): a behúzott sarkok lapos poligonja a felület-szinten —
-                // csak ott, ahol van rés (a felület a terep felett), így a tető tömör, nem
-                // lyukas; a rézsűk töltik ki az oldalakat. Megosztott élen a sarok nincs
-                // behúzva → a tető folytonos a szomszéd platformmal.
-                if (HasFoundationGap(t))
-                {
-                    GL.Color4(TerrainTopColor);
-                    GL.Vertex3(iW); GL.Vertex3(iS); GL.Vertex3(iE); GL.Vertex3(iN);
-                }
+                // Platform TETŐ (fű) a befagyasztott út-szinten: a road-csempe terep-VBO-ját
+                // kihagyjuk (lentebb), ezért a platformnak kell lefednie a csempét. A behúzott
+                // sarkok lapos poligonja a tető; a nyitott éleken a rézsűk töltik ki a többit.
+                GL.Color4(TerrainTopColor);
+                GL.Vertex3(iW); GL.Vertex3(iS); GL.Vertex3(iE); GL.Vertex3(iN);
 
                 FoundationFace(u, v - 1, t.W, t.S, iW, iS);   // WS oldal
                 FoundationFace(u + 1, v, t.S, t.E, iS, iE);   // SE oldal
