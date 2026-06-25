@@ -21,6 +21,7 @@ namespace ForesTycoon
         // út felülete itt marad; a kettő közti rést a foundation-fal tölti ki (OpenTTD-elv).
         private readonly Dictionary<int, int> roadSurfaceW = new Dictionary<int, int>();
         private static readonly Color RoadFoundationColor = Color.FromArgb(126, 104, 68);
+        private static readonly Color TerrainTopColor = Color.FromArgb(141, 184, 75);  // fű (terep tető)
         private static readonly Color RoadFoundationEdgeColor = Color.FromArgb(74, 54, 32);
         private readonly List<uint> indices = new List<uint>();
 
@@ -981,12 +982,32 @@ namespace ForesTycoon
                 Tile t = tiles[id];
                 int u = id / tpc, v = id % tpc;
                 RoadFootprintCorners(t, out Vector3 iW, out Vector3 iS, out Vector3 iE, out Vector3 iN);
+
+                // Platform TETŐ (fű): a behúzott sarkok lapos poligonja a felület-szinten —
+                // csak ott, ahol van rés (a felület a terep felett), így a tető tömör, nem
+                // lyukas; a rézsűk töltik ki az oldalakat. Megosztott élen a sarok nincs
+                // behúzva → a tető folytonos a szomszéd platformmal.
+                if (HasFoundationGap(t))
+                {
+                    GL.Color4(TerrainTopColor);
+                    GL.Vertex3(iW); GL.Vertex3(iS); GL.Vertex3(iE); GL.Vertex3(iN);
+                }
+
                 FoundationFace(u, v - 1, t.W, t.S, iW, iS);   // WS oldal
                 FoundationFace(u + 1, v, t.S, t.E, iS, iE);   // SE oldal
                 FoundationFace(u, v + 1, t.E, t.N, iE, iN);   // EN oldal
                 FoundationFace(u - 1, v, t.N, t.W, iN, iW);   // NW oldal
             }
             GL.End();
+        }
+
+        // Van-e rés a befagyasztott felület és a jelenlegi terep közt valamelyik sarkon.
+        private bool HasFoundationGap(Tile t)
+        {
+            return RoadSurfaceZ(t.W) - t.W.W * tileSizeM > 0.001f
+                || RoadSurfaceZ(t.S) - t.S.W * tileSizeM > 0.001f
+                || RoadSurfaceZ(t.E) - t.E.W * tileSizeM > 0.001f
+                || RoadSurfaceZ(t.N) - t.N.W * tileSizeM > 0.001f;
         }
 
         // Egy nyitott él rézsű-lapja: a csempe-éltől (terep-magasság) a behúzott
