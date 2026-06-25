@@ -15,6 +15,12 @@ namespace ForesTycoon
         private readonly Dictionary<string, VertexBuffer> vbos = new Dictionary<string, VertexBuffer>();
         private readonly VertexBuffer edges = new VertexBuffer(PrimitiveType.Lines);
         private readonly RoadNetwork roads = new RoadNetwork();
+
+        // Foundation-réteg: az út VEZETŐFELÜLETÉNEK befagyasztott magassága sarkonként
+        // (nodeId → W az építés pillanatában). A terep alatta szabadon alakítható, de az
+        // út felülete itt marad; a kettő közti rést a foundation-fal tölti ki (OpenTTD-elv).
+        private readonly Dictionary<int, int> roadSurfaceW = new Dictionary<int, int>();
+        private static readonly Color RoadFoundationColor = Color.FromArgb(150, 146, 134);
         private readonly List<uint> indices = new List<uint>();
 
         private readonly TerrainData data;
@@ -438,6 +444,7 @@ namespace ForesTycoon
             GL.DepthMask(false);
             DrawLandGrid();
 
+            DrawRoadFoundations();
             DrawRoads();
             DrawHoveredTile();
             GL.DepthMask(true);
@@ -462,39 +469,302 @@ namespace ForesTycoon
         private const float ShoulderFrac = 0.16f;  // padka szélessége a középpont felé
 
         // Csempe-alapú úthálózat: a kapcsolatok a szomszédos út-csempékből adódnak.
+        private enum TileSlopeKind
+        {
+            Flat,
+            OneCornerRaised,
+            TwoAdjacentRaised,
+            TwoOppositeRaised,
+            ThreeCornersRaised,
+            Steep
+        }
+
+        private enum RoadPlacementKind
+        {
+            Invalid,
+            NaturalSurface,
+            FoundationSurface
+        }
+
+        private readonly struct TileSlopeInfo
+        {
+            public readonly TileSlopeKind Kind;
+            public readonly int Min;
+            public readonly int Max;
+            public readonly bool WRaised;
+            public readonly bool SRaised;
+            public readonly bool ERaised;
+            public readonly bool NRaised;
+
+            public TileSlopeInfo(TileSlopeKind kind, int min, int max, bool wRaised, bool sRaised, bool eRaised, bool nRaised)
+            {
+                Kind = kind;
+                Min = min;
+                Max = max;
+                WRaised = wRaised;
+                SRaised = sRaised;
+                ERaised = eRaised;
+                NRaised = nRaised;
+            }
+        }
+
+        private readonly struct RoadPlacement
+        {
+            public readonly RoadPlacementKind Kind;
+            public readonly int W;
+            public readonly int S;
+            public readonly int E;
+            public readonly int N;
+
+            public RoadPlacement(RoadPlacementKind kind, int w, int s, int e, int n)
+            {
+                Kind = kind;
+                W = w;
+                S = s;
+                E = e;
+                N = n;
+            }
+
+            public bool IsValid => Kind != RoadPlacementKind.Invalid;
+        }
+
+        private static readonly RoadPlacement InvalidRoadPlacement =
+            new RoadPlacement(RoadPlacementKind.Invalid, 0, 0, 0, 0);
+
         public Tile HoveredTile => hoveredTile;
         public int RoadCount => roads.Count;
 
-        public bool AddRoadTile(Tile t) => IsRoadBuildable(t, RoadEdge.WS | RoadEdge.EN) && roads.Add(t.Id, RoadEdge.WS | RoadEdge.EN);
+        public bool AddRoadTile(Tile t)
+        {
+            RoadEdge edges = RoadEdge.WS | RoadEdge.EN;
+            RoadPlacement placement = AnalyzeRoadPlacement(t, edges);
+            if (!placement.IsValid) return false;
+
+            bool added = roads.Add(t.Id, edges);
+            if (added) CaptureRoadSurface(t, placement);
+            return added;
+        }
 
 
-        // Vízmentes és PLANÁRIS csempére építhető út: a négy sarok egy (akár ferde)
-        // síkon van, így a burkolat mind a négy sarkával laposan ráfekszik a terepre.
-        // A lejtés/magasság mértéke tetszőleges; csak akkor építhető, ha a szemközti
-        // sarkok magasság-összege egyenlő (a bilineáris felület csavar-tagja nulla):
-        // hW + hE == hS + hN. Minden nem-sík (csavart/sarok-lejtő/nyereg) csempe tiltott.
+        // OpenTTD-stílusú útépítés: az elemzés eldönti, hogy az út a természetes
+        // terepre ülhet-e, vagy flat foundation vezetőfelületet kell befagyasztani.
         public bool IsRoadBuildable(Tile t) => IsRoadBuildable(t, RoadEdge.WS | RoadEdge.EN);
 
         private bool IsRoadBuildable(Tile t, RoadEdge edges)
         {
-            if (t == null) return false;
-            if (hydro.ShouldDrawStandingWater(t)) return false;
+            return AnalyzeRoadPlacement(t, edges).IsValid;
+        }
 
-            return t.W.W + t.E.W == t.S.W + t.N.W;
+        private RoadPlacement AnalyzeRoadPlacement(Tile t, RoadEdge requestedEdges)
+        {
+            return AnalyzeRoadPlacement(t, requestedEdges, n => n.W);
+        }
+
+        private RoadPlacement AnalyzeRoadPlacement(Tile t, RoadEdge requestedEdges, Func<Node, int> heightOf)
+        {
+            if (t == null) return InvalidRoadPlacement;
+            if (hydro.ShouldDrawStandingWater(t)) return InvalidRoadPlacement;
+
+            RoadEdge mergedEdges = requestedEdges | roads.GetEdges(t.Id);
+            if (mergedEdges == RoadEdge.None) return InvalidRoadPlacement;
+
+            int w = heightOf(t.W);
+            int s = heightOf(t.S);
+            int e = heightOf(t.E);
+            int n = heightOf(t.N);
+            if (!RoadTerrainStaysAboveWater(w, s, e, n)) return InvalidRoadPlacement;
+
+            if (roads.Has(t.Id) && TryGetFullLockedRoadSurface(t, out int lw, out int ls, out int le, out int ln))
+                return ValidateLockedRoadPlacement(mergedEdges, w, s, e, n, lw, ls, le, ln);
+
+            TileSlopeInfo slope = ClassifyTileSlope(w, s, e, n);
+            if (slope.Kind == TileSlopeKind.Steep || slope.Kind == TileSlopeKind.TwoOppositeRaised)
+                return InvalidRoadPlacement;
+
+            bool planar = IsPlanarSurface(w, s, e, n);
+            bool naturalAllowed = planar && (slope.Kind == TileSlopeKind.Flat || IsSimpleRoadShape(mergedEdges));
+            if (naturalAllowed && RoadSurfaceLocksMatch(t, w, s, e, n))
+                return new RoadPlacement(RoadPlacementKind.NaturalSurface, w, s, e, n);
+
+            if (!TryResolveFlatFoundationLevel(t, slope.Max, w, s, e, n, out int level))
+                return InvalidRoadPlacement;
+
+            return new RoadPlacement(RoadPlacementKind.FoundationSurface, level, level, level, level);
+        }
+
+        private RoadPlacement ValidateLockedRoadPlacement(
+            RoadEdge edges,
+            int terrainW, int terrainS, int terrainE, int terrainN,
+            int surfaceW, int surfaceS, int surfaceE, int surfaceN)
+        {
+            if (surfaceW < terrainW || surfaceS < terrainS || surfaceE < terrainE || surfaceN < terrainN)
+                return InvalidRoadPlacement;
+            if (!IsPlanarSurface(surfaceW, surfaceS, surfaceE, surfaceN))
+                return InvalidRoadPlacement;
+            if (!IsFlatSurface(surfaceW, surfaceS, surfaceE, surfaceN) && !IsSimpleRoadShape(edges))
+                return InvalidRoadPlacement;
+
+            RoadPlacementKind kind =
+                surfaceW == terrainW && surfaceS == terrainS && surfaceE == terrainE && surfaceN == terrainN
+                    ? RoadPlacementKind.NaturalSurface
+                    : RoadPlacementKind.FoundationSurface;
+            return new RoadPlacement(kind, surfaceW, surfaceS, surfaceE, surfaceN);
+        }
+
+        private TileSlopeInfo ClassifyTileSlope(int w, int s, int e, int n)
+        {
+            int min = Math.Min(Math.Min(w, s), Math.Min(e, n));
+            int max = Math.Max(Math.Max(w, s), Math.Max(e, n));
+            if (max - min > 1)
+                return new TileSlopeInfo(TileSlopeKind.Steep, min, max, false, false, false, false);
+
+            bool wr = w > min;
+            bool sr = s > min;
+            bool er = e > min;
+            bool nr = n > min;
+            int raised = (wr ? 1 : 0) + (sr ? 1 : 0) + (er ? 1 : 0) + (nr ? 1 : 0);
+
+            TileSlopeKind kind;
+            if (raised == 0) kind = TileSlopeKind.Flat;
+            else if (raised == 1) kind = TileSlopeKind.OneCornerRaised;
+            else if (raised == 3) kind = TileSlopeKind.ThreeCornersRaised;
+            else if ((wr && er) || (sr && nr)) kind = TileSlopeKind.TwoOppositeRaised;
+            else kind = TileSlopeKind.TwoAdjacentRaised;
+
+            return new TileSlopeInfo(kind, min, max, wr, sr, er, nr);
+        }
+
+        private static bool IsPlanarSurface(int w, int s, int e, int n)
+        {
+            return w + e == s + n;
+        }
+
+        private static bool IsFlatSurface(int w, int s, int e, int n)
+        {
+            return w == s && s == e && e == n;
+        }
+
+        private bool RoadTerrainStaysAboveWater(int w, int s, int e, int n)
+        {
+            int min = Math.Min(Math.Min(w, s), Math.Min(e, n));
+            return min * tileSizeM >= SeaLevel;
+        }
+
+        private static bool IsSimpleRoadShape(RoadEdge edges)
+        {
+            int count = CountEdges(edges);
+            if (count <= 1) return true;
+            return edges == (RoadEdge.WS | RoadEdge.EN) || edges == (RoadEdge.SE | RoadEdge.NW);
+        }
+
+        private bool TryGetFullLockedRoadSurface(Tile t, out int w, out int s, out int e, out int n)
+        {
+            bool ok = roadSurfaceW.TryGetValue(t.W.Id, out w);
+            ok &= roadSurfaceW.TryGetValue(t.S.Id, out s);
+            ok &= roadSurfaceW.TryGetValue(t.E.Id, out e);
+            ok &= roadSurfaceW.TryGetValue(t.N.Id, out n);
+            return ok;
+        }
+
+        private bool RoadSurfaceLocksMatch(Tile t, int w, int s, int e, int n)
+        {
+            return RoadSurfaceLockMatches(t.W, w)
+                && RoadSurfaceLockMatches(t.S, s)
+                && RoadSurfaceLockMatches(t.E, e)
+                && RoadSurfaceLockMatches(t.N, n);
+        }
+
+        private bool RoadSurfaceLockMatches(Node node, int w)
+        {
+            return !roadSurfaceW.TryGetValue(node.Id, out int lockedW) || lockedW == w;
+        }
+
+        private bool TryResolveFlatFoundationLevel(Tile t, int minimumLevel, int terrainW, int terrainS, int terrainE, int terrainN, out int level)
+        {
+            level = minimumLevel;
+            bool hasLockedLevel = false;
+            int lockedLevel = 0;
+
+            bool AddLock(Node node, int terrain)
+            {
+                if (!roadSurfaceW.TryGetValue(node.Id, out int lockedW)) return true;
+                if (lockedW < terrain || lockedW < minimumLevel) return false;
+                if (!hasLockedLevel)
+                {
+                    lockedLevel = lockedW;
+                    hasLockedLevel = true;
+                    return true;
+                }
+                return lockedLevel == lockedW;
+            }
+
+            if (!AddLock(t.W, terrainW)) return false;
+            if (!AddLock(t.S, terrainS)) return false;
+            if (!AddLock(t.E, terrainE)) return false;
+            if (!AddLock(t.N, terrainN)) return false;
+
+            if (hasLockedLevel) level = lockedLevel;
+            return level >= terrainW && level >= terrainS && level >= terrainE && level >= terrainN;
         }
 
         public void BuildRoadTilePath(Tile a, Tile b)
         {
             foreach (RoadPlanStep step in BuildRoadPlan(a, b))
-                if (IsRoadBuildable(tiles[step.TileId], step.Edges))
+            {
+                Tile tile = tiles[step.TileId];
+                RoadPlacement placement = AnalyzeRoadPlacement(tile, step.Edges);
+                if (placement.IsValid)
+                {
                     roads.Add(step.TileId, step.Edges);
+                    CaptureRoadSurface(tile, placement);
+                }
+            }
         }
 
         public void RemoveRoadTilePath(Tile a, Tile b)
         {
             foreach (RoadPlanStep step in BuildRoadPlan(a, b))
-                roads.Remove(step.TileId, step.Edges);
+                if (roads.Remove(step.TileId, step.Edges))
+                    ReleaseRoadSurface(tiles[step.TileId]);
         }
+
+        // Az út-csempe 4 sarkának aktuális magasságát befagyasztjuk vezetőfelületnek
+        // (csak ha még nincs rögzítve, hogy a meglévő szomszéd-úttal folytonos maradjon).
+        private void CaptureRoadSurface(Tile t, RoadPlacement placement)
+        {
+            if (!placement.IsValid) return;
+            CaptureRoadSurfaceNode(t.W, placement.W);
+            CaptureRoadSurfaceNode(t.S, placement.S);
+            CaptureRoadSurfaceNode(t.E, placement.E);
+            CaptureRoadSurfaceNode(t.N, placement.N);
+        }
+
+        private void CaptureRoadSurfaceNode(Node n, int w)
+        {
+            if (!roadSurfaceW.ContainsKey(n.Id)) roadSurfaceW[n.Id] = w;
+        }
+
+        // Bontáskor a sarok felület-magasságát elengedjük, ha már egyetlen szomszédos
+        // csempe sem út (különben a maradék út folytonosságát megőrizzük).
+        private void ReleaseRoadSurface(Tile t)
+        {
+            foreach (Node n in new[] { t.W, t.S, t.E, t.N })
+            {
+                bool stillRoad = false;
+                foreach (Tile adj in getTilesByNode(n))
+                    if (roads.Has(adj.Id)) { stillRoad = true; break; }
+                if (!stillRoad) roadSurfaceW.Remove(n.Id);
+            }
+        }
+
+        // Az út vezetőfelületének z-je egy sarokban: a befagyasztott magasság, ha van,
+        // különben a jelenlegi terep (még szerkesztetlen út, vagy nem-út sarok).
+        private float RoadSurfaceZ(Node n) =>
+            (roadSurfaceW.TryGetValue(n.Id, out int w) ? w : n.W) * tileSizeM;
+
+        private Vector3 RoadCorner(Node n) => new Vector3(n.xPos, n.yPos, RoadSurfaceZ(n));
+
+        private Vector3 RoadCorner(Node n, int w) => new Vector3(n.xPos, n.yPos, w * tileSizeM);
 
         // Húzás közbeni előnézet csempéi (remove = bontás, piros előnézet).
         private readonly List<RoadPlanStep> previewTiles = new List<RoadPlanStep>();
@@ -625,16 +895,20 @@ namespace ForesTycoon
                 // Csempénként: bontás → piros; építés → fehér (érvényes) / piros (vízen
                 // vagy túl meredeken nem építhető).
                 Color okFill = Color.FromArgb(70, 255, 255, 255), okLine = Color.FromArgb(235, 255, 255, 255);
+                Color foundationFill = Color.FromArgb(85, 245, 225, 140), foundationLine = Color.FromArgb(245, 245, 225, 140);
                 Color badFill = Color.FromArgb(90, 235, 70, 70), badLine = Color.FromArgb(245, 248, 80, 80);
 
                 GL.Begin(PrimitiveType.Quads);
                 foreach (RoadPlanStep step in previewTiles)
                 {
-                    bool bad = previewRemove || !IsRoadBuildable(tiles[step.TileId], step.Edges);
+                    RoadPlacement placement = AnalyzeRoadPlacement(tiles[step.TileId], step.Edges);
+                    bool bad = previewRemove || !placement.IsValid;
+                    bool foundation = !bad && placement.Kind == RoadPlacementKind.FoundationSurface;
                     // Építésnél a meglévő gráf-élekkel összevont alakot mutatjuk → már
                     // húzás közben látszik a kialakuló kanyar / T / + kereszteződés.
                     RoadEdge shown = previewRemove ? step.Edges : step.Edges | roads.GetEdges(step.TileId);
-                    RoadSurface(tiles[step.TileId], shown, 0.92f, bad ? badFill : okFill);
+                    if (bad) RoadSurface(tiles[step.TileId], shown, 0.92f, badFill);
+                    else RoadSurface(tiles[step.TileId], shown, 0.92f, foundation ? foundationFill : okFill, placement);
                 }
                 GL.End();
 
@@ -642,8 +916,10 @@ namespace ForesTycoon
                 foreach (RoadPlanStep step in previewTiles)
                 {
                     Tile t = tiles[step.TileId];
-                    bool bad = previewRemove || !IsRoadBuildable(t, step.Edges);
-                    GL.Color4(bad ? badLine : okLine);
+                    RoadPlacement placement = AnalyzeRoadPlacement(t, step.Edges);
+                    bool bad = previewRemove || !placement.IsValid;
+                    bool foundation = !bad && placement.Kind == RoadPlacementKind.FoundationSurface;
+                    GL.Color4(bad ? badLine : (foundation ? foundationLine : okLine));
                     GL.Begin(PrimitiveType.LineLoop);
                     GL.Vertex3(t.W.xPos, t.W.yPos, t.W.zPos);
                     GL.Vertex3(t.S.xPos, t.S.yPos, t.S.zPos);
@@ -658,6 +934,165 @@ namespace ForesTycoon
 
         private static Vector3 Corner(Node n) => new Vector3(n.xPos, n.yPos, n.zPos);
 
+        // Foundation: az út befagyasztott vezetőfelülete és az alatta lévő (alakítható)
+        // terep közti rést kitöltő függőleges falak a csempe nyitott (nem-út) oldalain.
+        private void DrawRoadFoundations()
+        {
+            if (roads.Count == 0) return;
+            GL.Color4(RoadFoundationColor);
+            GL.Begin(PrimitiveType.Quads);
+            foreach (int id in roads.Tiles)
+            {
+                Tile t = tiles[id];
+                RoadFootprintFoundation(t, roads.GetEdges(id));
+            }
+            GL.End();
+        }
+
+        private void RoadFootprintFoundation(Tile t, RoadEdge edges)
+        {
+            Vector3 W = RoadCorner(t.W), S = RoadCorner(t.S), E = RoadCorner(t.E), N = RoadCorner(t.N);
+            Vector3 C = (W + S + E + N) * 0.25f;
+            float width = Math.Min(tileSizeH, tileSizeV) * 0.92f;
+            int n = CountEdges(edges);
+
+            if (n == 2 && TryCornerArc(edges, out float startDeg))
+            {
+                float side = DistXY(W, S);
+                float hwuv = (width * 0.5f) / side;
+                RoadArcFoundation(t, W, S, E, N, startDeg, 0.5f - hwuv, 0.5f + hwuv);
+                return;
+            }
+
+            if (edges == (RoadEdge.WS | RoadEdge.EN))
+            {
+                RoadStripFoundation(t, (W + S) * 0.5f, (E + N) * 0.5f, width);
+                return;
+            }
+
+            if (edges == (RoadEdge.SE | RoadEdge.NW))
+            {
+                RoadStripFoundation(t, (S + E) * 0.5f, (N + W) * 0.5f, width);
+                return;
+            }
+
+            if ((edges & RoadEdge.WS) != 0) RoadStripFoundation(t, C, (W + S) * 0.5f, width);
+            if ((edges & RoadEdge.SE) != 0) RoadStripFoundation(t, C, (S + E) * 0.5f, width);
+            if ((edges & RoadEdge.EN) != 0) RoadStripFoundation(t, C, (E + N) * 0.5f, width);
+            if ((edges & RoadEdge.NW) != 0) RoadStripFoundation(t, C, (N + W) * 0.5f, width);
+        }
+
+        private void RoadStripFoundation(Tile tile, Vector3 a, Vector3 b, float width)
+        {
+            float dx = b.X - a.X, dy = b.Y - a.Y;
+            float len = (float)Math.Sqrt(dx * dx + dy * dy);
+            if (len < 1e-4f) return;
+            float px = -dy / len * width * 0.5f;
+            float py = dx / len * width * 0.5f;
+
+            Vector3 p0 = new Vector3(a.X + px, a.Y + py, a.Z);
+            Vector3 p1 = new Vector3(a.X - px, a.Y - py, a.Z);
+            Vector3 p2 = new Vector3(b.X - px, b.Y - py, b.Z);
+            Vector3 p3 = new Vector3(b.X + px, b.Y + py, b.Z);
+
+            RoadFootprintSlopes(tile, new List<Vector3> { p0, p1, p2, p3 });
+        }
+
+        private void RoadArcFoundation(Tile tile, Vector3 W, Vector3 S, Vector3 E, Vector3 N,
+            float startDeg, float rInner, float rOuter)
+        {
+            float cu = startDeg < 90f ? 0f : startDeg < 180f ? 1f : startDeg < 270f ? 1f : 0f;
+            float cv = startDeg < 90f ? 0f : startDeg < 180f ? 0f : startDeg < 270f ? 1f : 1f;
+
+            const int seg = 6;
+            List<Vector3> loop = new List<Vector3>(seg * 2 + 2);
+
+            for (int i = 0; i <= seg; i++)
+            {
+                float t0 = (float)((startDeg + 90f * i / seg) * Math.PI / 180.0);
+                float c0 = (float)Math.Cos(t0);
+                float s0 = (float)Math.Sin(t0);
+                loop.Add(TileUV(W, S, E, N, cu + rOuter * c0, cv + rOuter * s0));
+            }
+
+            for (int i = seg; i >= 0; i--)
+            {
+                float t0 = (float)((startDeg + 90f * i / seg) * Math.PI / 180.0);
+                float c0 = (float)Math.Cos(t0);
+                float s0 = (float)Math.Sin(t0);
+                loop.Add(TileUV(W, S, E, N, cu + rInner * c0, cv + rInner * s0));
+            }
+
+            RoadFootprintSlopes(tile, loop);
+        }
+
+        private void RoadFootprintSlopes(Tile tile, List<Vector3> topLoop)
+        {
+            if (topLoop == null || topLoop.Count < 3) return;
+
+            Vector2 tileCenter = new Vector2(
+                (tile.W.xPos + tile.S.xPos + tile.E.xPos + tile.N.xPos) * 0.25f,
+                (tile.W.yPos + tile.S.yPos + tile.E.yPos + tile.N.yPos) * 0.25f);
+
+            Vector3[] groundLoop = new Vector3[topLoop.Count];
+            for (int i = 0; i < topLoop.Count; i++)
+                groundLoop[i] = TerrainEdgePoint(tile, topLoop[i], tileCenter);
+
+            for (int i = 0; i < topLoop.Count; i++)
+            {
+                int j = (i + 1) % topLoop.Count;
+                Vector3 aTop = topLoop[i];
+                Vector3 bTop = topLoop[j];
+                Vector3 aGround = groundLoop[i];
+                Vector3 bGround = groundLoop[j];
+                if (Math.Abs(aTop.Z - aGround.Z) < 0.001f && Math.Abs(bTop.Z - bGround.Z) < 0.001f) continue;
+
+                GL.Vertex3(aGround);
+                GL.Vertex3(bGround);
+                GL.Vertex3(bTop);
+                GL.Vertex3(aTop);
+            }
+        }
+
+        private Vector3 TerrainEdgePoint(Tile tile, Vector3 top, Vector2 tileCenter)
+        {
+            float cu = (tileCenter.X - tile.W.xPos) / tileSizeH;
+            float cv = (tileCenter.Y - tile.W.yPos) / tileSizeV;
+            float tu = (top.X - tile.W.xPos) / tileSizeH;
+            float tv = (top.Y - tile.W.yPos) / tileSizeV;
+            float du = tu - cu;
+            float dv = tv - cv;
+            float t = float.PositiveInfinity;
+
+            if (du > 1e-6f) t = Math.Min(t, (1f - cu) / du);
+            else if (du < -1e-6f) t = Math.Min(t, -cu / du);
+            if (dv > 1e-6f) t = Math.Min(t, (1f - cv) / dv);
+            else if (dv < -1e-6f) t = Math.Min(t, -cv / dv);
+
+            if (float.IsInfinity(t) || t < 0f) t = 1f;
+            float u = cu + du * t;
+            float v = cv + dv * t;
+            SnapTileEdge(ref u, ref v);
+            return TileUV(Corner(tile.W), Corner(tile.S), Corner(tile.E), Corner(tile.N), u, v);
+        }
+
+        private static void SnapTileEdge(ref float u, ref float v)
+        {
+            u = Math.Max(0f, Math.Min(1f, u));
+            v = Math.Max(0f, Math.Min(1f, v));
+
+            float dW = u;
+            float dS = v;
+            float dE = 1f - u;
+            float dN = 1f - v;
+            float min = Math.Min(Math.Min(dW, dS), Math.Min(dE, dN));
+
+            if (min == dW) u = 0f;
+            else if (min == dE) u = 1f;
+            else if (min == dS) v = 0f;
+            else v = 1f;
+        }
+
         private static int CountEdges(RoadEdge edges)
         {
             int count = 0;
@@ -670,7 +1105,23 @@ namespace ForesTycoon
 
         private void RoadSurface(Tile t, RoadEdge edges, float widthFactor, Color color)
         {
-            Vector3 W = Corner(t.W), S = Corner(t.S), E = Corner(t.E), N = Corner(t.N);
+            // A befagyasztott vezetőfelület magasságán renderelünk (foundation), nem a
+            // jelenlegi terepen → az út a helyén marad, ha alatta változik a terep.
+            Vector3 W = RoadCorner(t.W), S = RoadCorner(t.S), E = RoadCorner(t.E), N = RoadCorner(t.N);
+            RoadSurface(t, edges, widthFactor, color, W, S, E, N);
+        }
+
+        private void RoadSurface(Tile t, RoadEdge edges, float widthFactor, Color color, RoadPlacement placement)
+        {
+            Vector3 W = RoadCorner(t.W, placement.W);
+            Vector3 S = RoadCorner(t.S, placement.S);
+            Vector3 E = RoadCorner(t.E, placement.E);
+            Vector3 N = RoadCorner(t.N, placement.N);
+            RoadSurface(t, edges, widthFactor, color, W, S, E, N);
+        }
+
+        private void RoadSurface(Tile t, RoadEdge edges, float widthFactor, Color color, Vector3 W, Vector3 S, Vector3 E, Vector3 N)
+        {
             Vector3 C = (W + S + E + N) * 0.25f;
             float width = Math.Min(tileSizeH, tileSizeV) * widthFactor;
             int n = CountEdges(edges);
@@ -1335,17 +1786,10 @@ namespace ForesTycoon
             Node center = actualNode;
             int cu = center.U, cv = center.V;
 
-            // Az ElevationManager kaszkádja tartja a TT-invariánst (szomszédos sarkok max
-            // 1 eltérés) → a terep mindig érvényes (a meredek, range-2 csempe is az). Nincs
-            // utólagos terep-guard. Csak az utat védjük: ha az edit (akár a lejtő-kaszkádon
-            // át) bármelyik út-csempe sarkát mozdítaná, az egész editet visszavonjuk.
-            int[] snapshot = null;
-            if (roads.Count > 0)
-            {
-                snapshot = new int[data.Nodes.Length];
-                for (int i = 0; i < snapshot.Length; i++) snapshot[i] = data.Nodes[i].W;
-            }
-
+            // Az ElevationManager kaszkádja tartja a TT-invariánst (szomszédos sarkok max 1
+            // eltérés) → a terep mindig érvényes. Az út alatt is alakítható a terep: a
+            // befagyasztott vezetőfelület (roadSurfaceW) a helyén marad, a rést a foundation
+            // tölti ki — ezért itt NINCS út-freeze.
             suppressHydrologyRebuild = true;
             try
             {
@@ -1369,28 +1813,6 @@ namespace ForesTycoon
             }
 
             actualNode = center;
-
-            if (snapshot != null)
-            {
-                bool roadMoved = false;
-                foreach (int id in roads.Tiles)
-                {
-                    Tile rt = tiles[id];
-                    if (rt.W.W != snapshot[rt.W.Id] || rt.S.W != snapshot[rt.S.Id]
-                        || rt.E.W != snapshot[rt.E.Id] || rt.N.W != snapshot[rt.N.Id])
-                    { roadMoved = true; break; }
-                }
-                if (roadMoved)
-                {
-                    for (int i = 0; i < snapshot.Length; i++)
-                    {
-                        data.Nodes[i].W = snapshot[i];
-                        data.Nodes[i].zPos = snapshot[i] * tileSizeM;
-                    }
-                    return;  // az utat nem mozdítjuk → nincs változás
-                }
-            }
-
             RebuildHydrology();
         }
 
@@ -1432,6 +1854,7 @@ namespace ForesTycoon
 
             Set(actualNode, actualNode.W + delta);
             if (!ok || pending.Count == 0) return;  // érvénytelen vagy nincs változás → atomikus elvetés
+            if (!ValidateRoadsAgainstPendingTerrain(pending)) return;
 
             List<Node> changed = new List<Node>(pending.Count);
             foreach (KeyValuePair<int, int> kv in pending)
@@ -1442,6 +1865,41 @@ namespace ForesTycoon
                 changed.Add(nd);
             }
             updateNodes(changed);
+        }
+
+        private bool ValidateRoadsAgainstPendingTerrain(Dictionary<int, int> pending)
+        {
+            if (roads.Count == 0) return true;
+
+            int HeightOf(Node nd) => pending.TryGetValue(nd.Id, out int v) ? v : nd.W;
+            HashSet<int> affectedRoadTiles = new HashSet<int>();
+
+            foreach (int nodeId in pending.Keys)
+            {
+                Node node = data.Nodes[nodeId];
+                foreach (Tile tile in getTilesByNode(node))
+                    if (roads.Has(tile.Id)) affectedRoadTiles.Add(tile.Id);
+            }
+
+            foreach (int tileId in affectedRoadTiles)
+                if (!ValidateExistingRoadAgainstTerrain(tiles[tileId], HeightOf))
+                    return false;
+
+            return true;
+        }
+
+        private bool ValidateExistingRoadAgainstTerrain(Tile t, Func<Node, int> heightOf)
+        {
+            int w = heightOf(t.W);
+            int s = heightOf(t.S);
+            int e = heightOf(t.E);
+            int n = heightOf(t.N);
+            if (!RoadTerrainStaysAboveWater(w, s, e, n)) return false;
+
+            if (TryGetFullLockedRoadSurface(t, out int sw, out int ss, out int se, out int sn))
+                return ValidateLockedRoadPlacement(roads.GetEdges(t.Id), w, s, e, n, sw, ss, se, sn).IsValid;
+
+            return AnalyzeRoadPlacement(t, roads.GetEdges(t.Id), heightOf).IsValid;
         }
 
         private void DrawTrees()
