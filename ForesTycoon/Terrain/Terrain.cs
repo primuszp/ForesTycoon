@@ -13,6 +13,8 @@ namespace ForesTycoon
         private HashSet<int> riverNodeIds => hydro.RiverNodeIds;
         private HashSet<int> standingWaterTileIds => hydro.StandingWaterTileIds;
         private readonly Dictionary<string, VertexBuffer> vbos = new Dictionary<string, VertexBuffer>();
+        // Kanyar belső sarokcsempe: a normál átló-irány rossz élt ad, ezért flip-verzióban rendereljük.
+        private readonly HashSet<int> flippedDiagonalTiles = new HashSet<int>();
         private readonly VertexBuffer edges = new VertexBuffer(PrimitiveType.Lines);
         private readonly RoadNetwork roads = new RoadNetwork();
 
@@ -20,7 +22,7 @@ namespace ForesTycoon
         // (nodeId → W az építés pillanatában). A terep alatta szabadon alakítható, de az
         // út felülete itt marad; a kettő közti rést a foundation-fal tölti ki (OpenTTD-elv).
         private readonly Dictionary<int, int> roadSurfaceW = new Dictionary<int, int>();
-        private static readonly Color RoadFoundationColor = Color.FromArgb(126, 104, 68);
+        private static readonly Color RoadFoundationColor = Color.FromArgb(141, 184, 75);
         private static readonly Color TerrainTopColor = Color.FromArgb(141, 184, 75);  // fű (terep tető)
         private static readonly Color RoadFoundationEdgeColor = Color.FromArgb(74, 54, 32);
         private readonly List<uint> indices = new List<uint>();
@@ -112,9 +114,9 @@ namespace ForesTycoon
 
 
 
-        private void makeBuffer(string code, int low)
+        private void makeBuffer(string code, int low, bool flip = false)
         {
-            string key = code + "_" + low;
+            string key = code + "_" + low + (flip ? "_f" : "");
             if (vbos.ContainsKey(key)) return;
 
             // Sarokmagasságok a kód alapján (N=0, E=1, S=2, W=3)
@@ -136,7 +138,9 @@ namespace ForesTycoon
             List<Vertex> data = new List<Vertex>();
             VertexBuffer vbo  = new VertexBuffer(PrimitiveType.Triangles);
 
-            if (Math.Abs(wZ - eZ) <= Math.Abs(nZ - sZ))
+            bool useWE = Math.Abs(wZ - eZ) <= Math.Abs(nZ - sZ);
+            if (flip) useWE = !useWE;
+            if (useWE)
             {
                 // W–E átló: (W,S,E) + (W,E,N)
                 data.Add(new Vertex(wPos, cNor, color));
@@ -295,6 +299,8 @@ namespace ForesTycoon
                     tile.LowPos = tile.Low * tileSizeM;
                     if (!vbos.ContainsKey(code + "_" + tile.Low))
                         makeBuffer(code, tile.Low);
+                    if (flippedDiagonalTiles.Contains(tile.Id) && !vbos.ContainsKey(code + "_" + tile.Low + "_f"))
+                        makeBuffer(code, tile.Low, true);
                 }
             }
 
@@ -430,7 +436,8 @@ namespace ForesTycoon
                 // (DrawRoadFoundations) — különben bevágásnál a magasabb terep eltakarná az utat.
                 if (roads.Has(tile.Id)) continue;
 
-                VertexBuffer vbo = vbos[tile.Code + "_" + tile.Low];
+                bool tileFlip = flippedDiagonalTiles.Contains(tile.Id);
+                VertexBuffer vbo = vbos[tile.Code + "_" + tile.Low + (tileFlip ? "_f" : "")];
 
                 GL.PushMatrix();
                 {
@@ -605,6 +612,8 @@ namespace ForesTycoon
         {
             if (surfaceW < terrainW || surfaceS < terrainS || surfaceE < terrainE || surfaceN < terrainN)
                 return InvalidRoadPlacement;
+            if (surfaceW - terrainW > 1 || surfaceS - terrainS > 1 || surfaceE - terrainE > 1 || surfaceN - terrainN > 1)
+                return InvalidRoadPlacement;
             if (!IsPlanarSurface(surfaceW, surfaceS, surfaceE, surfaceN))
                 return InvalidRoadPlacement;
             if (!IsFlatSurface(surfaceW, surfaceS, surfaceE, surfaceN) && !IsSimpleRoadShape(edges))
@@ -710,7 +719,8 @@ namespace ForesTycoon
             if (!AddLock(t.N, terrainN)) return false;
 
             if (hasLockedLevel) level = lockedLevel;
-            return level >= terrainW && level >= terrainS && level >= terrainE && level >= terrainN;
+            return level >= terrainW && level >= terrainS && level >= terrainE && level >= terrainN
+                && level - terrainW <= 1 && level - terrainS <= 1 && level - terrainE <= 1 && level - terrainN <= 1;
         }
 
         public void BuildRoadTilePath(Tile a, Tile b)
@@ -725,13 +735,44 @@ namespace ForesTycoon
                     CaptureRoadSurface(tile, placement);
                 }
             }
+            RebuildFlippedDiagonalTiles();
         }
 
         public void RemoveRoadTilePath(Tile a, Tile b)
         {
             foreach (RoadPlanStep step in BuildRoadPlan(a, b))
+            {
                 if (roads.Remove(step.TileId, step.Edges))
                     ReleaseRoadSurface(tiles[step.TileId]);
+            }
+            RebuildFlippedDiagonalTiles();
+        }
+
+        // Teljes újraépítés minden road módosítás után: sorrendfüggetlen, univerzális.
+        // Minden road tile minden szomszédos él-párjánál beállítja a diagonális szomszéd flipjét.
+        private void RebuildFlippedDiagonalTiles()
+        {
+            flippedDiagonalTiles.Clear();
+            int tpc = nodeRows - 1;
+            foreach (int id in roads.Tiles)
+            {
+                RoadEdge e = roads.GetEdges(id);
+                int u = id / tpc, v = id % tpc;
+                if ((e & RoadEdge.NW) != 0 && (e & RoadEdge.WS) != 0) AddFlipTile(u - 1, v - 1);
+                if ((e & RoadEdge.WS) != 0 && (e & RoadEdge.SE) != 0) AddFlipTile(u + 1, v - 1);
+                if ((e & RoadEdge.SE) != 0 && (e & RoadEdge.EN) != 0) AddFlipTile(u + 1, v + 1);
+                if ((e & RoadEdge.EN) != 0 && (e & RoadEdge.NW) != 0) AddFlipTile(u - 1, v + 1);
+            }
+        }
+
+        private void AddFlipTile(int iu, int iv)
+        {
+            if (!checkTile(iu, iv)) return;
+            Tile inner = getTileByCoords(iu, iv);
+            if (roads.Has(inner.Id)) return;
+            flippedDiagonalTiles.Add(inner.Id);
+            string fkey = inner.Code + "_" + inner.Low + "_f";
+            if (!vbos.ContainsKey(fkey)) makeBuffer(inner.Code, inner.Low, true);
         }
 
         // Az út-csempe 4 sarkának aktuális magasságát befagyasztjuk vezetőfelületnek
@@ -962,23 +1003,13 @@ namespace ForesTycoon
             return Math.Min(1f, gap / halfTile);
         }
 
-        // Az út-lábnyom sarkai a platform tetején (felület-magasság), a nyitott
-        // földmű-éleken a középpont felé behúzva a rézsű felső éléig.
+        // Az út-lábnyom sarkai megegyeznek a csempe eredeti sarkaival (nincs behúzás, hézagmentes).
         private void RoadFootprintCorners(Tile t, out Vector3 W, out Vector3 S, out Vector3 E, out Vector3 N)
         {
-            int tpc = nodeRows - 1;
-            int u = t.Id / tpc, v = t.Id % tpc;
-            float fWS = FoundationEdgeFrac(u, v - 1, t.W, t.S);
-            float fSE = FoundationEdgeFrac(u + 1, v, t.S, t.E);
-            float fEN = FoundationEdgeFrac(u, v + 1, t.E, t.N);
-            float fNW = FoundationEdgeFrac(u - 1, v, t.N, t.W);
-
-            Vector3 sW = RoadCorner(t.W), sS = RoadCorner(t.S), sE = RoadCorner(t.E), sN = RoadCorner(t.N);
-            Vector3 c = (sW + sS + sE + sN) * 0.25f;
-            W = Vector3.Lerp(sW, c, Math.Max(fWS, fNW));
-            S = Vector3.Lerp(sS, c, Math.Max(fWS, fSE));
-            E = Vector3.Lerp(sE, c, Math.Max(fSE, fEN));
-            N = Vector3.Lerp(sN, c, Math.Max(fEN, fNW));
+            W = RoadCorner(t.W);
+            S = RoadCorner(t.S);
+            E = RoadCorner(t.E);
+            N = RoadCorner(t.N);
         }
 
         private void DrawRoadFoundations()
@@ -993,15 +1024,19 @@ namespace ForesTycoon
                 RoadFootprintCorners(t, out Vector3 iW, out Vector3 iS, out Vector3 iE, out Vector3 iN);
 
                 // Platform TETŐ (fű) a befagyasztott út-szinten: a road-csempe terep-VBO-ját
-                // kihagyjuk (lentebb), ezért a platformnak kell lefednie a csempét. A behúzott
-                // sarkok lapos poligonja a tető; a nyitott éleken a rézsűk töltik ki a többit.
+                // kihagyjuk (lentebb), ezért a platformnak kell lefednie a csempét.
                 GL.Color4(TerrainTopColor);
                 GL.Vertex3(iW); GL.Vertex3(iS); GL.Vertex3(iE); GL.Vertex3(iN);
 
-                FoundationFace(u, v - 1, t.W, t.S, iW, iS);   // WS oldal
-                FoundationFace(u + 1, v, t.S, t.E, iS, iE);   // SE oldal
-                FoundationFace(u, v + 1, t.E, t.N, iE, iN);   // EN oldal
-                FoundationFace(u - 1, v, t.N, t.W, iN, iW);   // NW oldal
+                Tile ntWS = checkTile(u, v - 1) ? getTileByCoords(u, v - 1) : null;
+                Tile ntSE = checkTile(u + 1, v) ? getTileByCoords(u + 1, v) : null;
+                Tile ntEN = checkTile(u, v + 1) ? getTileByCoords(u, v + 1) : null;
+                Tile ntNW = checkTile(u - 1, v) ? getTileByCoords(u - 1, v) : null;
+
+                if (ntWS != null) FoundationFace(u, v - 1, t.W, t.S, ntWS.W, ntWS.S);
+                if (ntSE != null) FoundationFace(u + 1, v, t.S, t.E, ntSE.S, ntSE.E);
+                if (ntEN != null) FoundationFace(u, v + 1, t.E, t.N, ntEN.E, ntEN.N);
+                if (ntNW != null) FoundationFace(u - 1, v, t.N, t.W, ntNW.N, ntNW.W);
             }
             GL.End();
         }
@@ -1015,25 +1050,36 @@ namespace ForesTycoon
                 || RoadSurfaceZ(t.N) - t.N.W * tileSizeM > 0.001f;
         }
 
-        // Egy nyitott él rézsű-lapja: a csempe-éltől (terep-magasság) a behúzott
-        // platform-felső élig (felület-magasság). Megosztott élen / rés nélkül kihagyva.
-        private void FoundationFace(int nu, int nv, Node a, Node b, Vector3 topA, Vector3 topB)
+        // Egy nyitott él rézsű-lapja a szomszédos terepcsempére vetítve (terep-stílusú rézsű a csatlakozáshoz).
+        private void FoundationFace(int nu, int nv, Node sharedA, Node sharedB, Node outerA, Node outerB)
         {
-            if (checkTile(nu, nv) && roads.Has(getTileByCoords(nu, nv).Id)) return;
-            float aT = a.W * tileSizeM, bT = b.W * tileSizeM;
-            if (Math.Abs(topA.Z - aT) <= 0.001f && Math.Abs(topB.Z - bT) <= 0.001f) return;
+            if (!checkTile(nu, nv)) return;
+            if (roads.Has(getTileByCoords(nu, nv).Id)) return;
 
-            Vector3 botA = new Vector3(a.xPos, a.yPos, aT);
-            Vector3 botB = new Vector3(b.xPos, b.yPos, bT);
+            float shAT = RoadSurfaceZ(sharedA);
+            float shBT = RoadSurfaceZ(sharedB);
+            float outAT = outerA.W * tileSizeM;
+            float outBT = outerB.W * tileSizeM;
+
+            if (Math.Abs(shAT - sharedA.W * tileSizeM) <= 0.001f && Math.Abs(shBT - sharedB.W * tileSizeM) <= 0.001f)
+                return;
+
+            Vector3 topA = new Vector3(sharedA.xPos, sharedA.yPos, shAT);
+            Vector3 topB = new Vector3(sharedB.xPos, sharedB.yPos, shBT);
+            Vector3 botB = new Vector3(outerB.xPos, outerB.yPos, outBT);
+            Vector3 botA = new Vector3(outerA.xPos, outerA.yPos, outAT);
+
             GL.Color4(FoundationFaceColor(botA, botB, topB));
             GL.Vertex3(botA); GL.Vertex3(botB); GL.Vertex3(topB); GL.Vertex3(topA);
         }
 
         private static Color FoundationFaceColor(Vector3 p0, Vector3 p1, Vector3 p2)
         {
-            Vector3 normal = Vector3.Normalize(Vector3.Cross(p1 - p0, p2 - p0));
+            Vector3 cross = Vector3.Cross(p1 - p0, p2 - p0);
+            Vector3 normal = cross.LengthSquared > 0.0001f ? Vector3.Normalize(cross) : Vector3.UnitZ;
             Vector3 light = Vector3.Normalize(new Vector3(0.4f, 0.6f, 1.5f));
             float shade = Math.Max(0.55f, Math.Min(1.0f, Math.Abs(Vector3.Dot(normal, light))));
+            if (float.IsNaN(shade)) shade = 1.0f;
             return Color.FromArgb(255, (int)(RoadFoundationColor.R * shade),
                 (int)(RoadFoundationColor.G * shade), (int)(RoadFoundationColor.B * shade));
         }
@@ -1818,6 +1864,21 @@ namespace ForesTycoon
             if (roads.Count == 0) return true;
 
             int HeightOf(Node nd) => pending.TryGetValue(nd.Id, out int v) ? v : nd.W;
+
+            // Út-csempe csomópontok (Node) magasságának módosítása tilos!
+            foreach (KeyValuePair<int, int> kv in pending)
+            {
+                Node node = data.Nodes[kv.Key];
+                if (kv.Value != node.W)
+                {
+                    foreach (Tile tile in getTilesByNode(node))
+                    {
+                        if (roads.Has(tile.Id))
+                            return false;
+                    }
+                }
+            }
+
             HashSet<int> affectedRoadTiles = new HashSet<int>();
 
             foreach (int nodeId in pending.Keys)
