@@ -20,8 +20,7 @@ namespace ForesTycoon
         // (nodeId → W az építés pillanatában). A terep alatta szabadon alakítható, de az
         // út felülete itt marad; a kettő közti rést a foundation-fal tölti ki (OpenTTD-elv).
         private readonly Dictionary<int, int> roadSurfaceW = new Dictionary<int, int>();
-        private static readonly Color RoadFoundationColor = Color.FromArgb(126, 104, 68);
-        private static readonly Color RoadFoundationEdgeColor = Color.FromArgb(74, 54, 32);
+        private static readonly Color RoadFoundationColor = Color.FromArgb(150, 146, 134);
         private readonly List<uint> indices = new List<uint>();
 
         private readonly TerrainData data;
@@ -438,7 +437,6 @@ namespace ForesTycoon
             DrawWater();
             DrawWaterWalls();
             DrawRivers();
-            DrawRoadFoundations();   // terep-stílusú 1:1 rézsűk az út platform-oldalain (depth-pass)
 
             // Terrain decal pass: drawn after terrain but before props.
             // Props rendered later with depth testing naturally occlude these overlays.
@@ -446,6 +444,7 @@ namespace ForesTycoon
             GL.DepthMask(false);
             DrawLandGrid();
 
+            DrawRoadFoundations();
             DrawRoads();
             DrawHoveredTile();
             GL.DepthMask(true);
@@ -935,81 +934,163 @@ namespace ForesTycoon
 
         private static Vector3 Corner(Node n) => new Vector3(n.xPos, n.yPos, n.zPos);
 
-        // ── Földmű (platform-rézsű): lokális, csempénként ───────────────────────
-        // Az út a befagyasztott vezetőfelületen ül. Ahol a szomszéd NEM út ÉS a terep a
-        // felület alá süllyedt, ott a csempe NYITOTT éle fél csempényi, legfeljebb 1:1
-        // rézsűvel csatlakozik a terephez (terep-stílusú lap). A megosztott (út-szomszéd)
-        // éleken nincs rézsű → folytonos platform; ezeken az út-lábnyom sem húzódik be.
-
-        // Egy él behúzási hányada [0..1]: a rés (felület−terep) / fél csempe, 1:1-ig.
-        // 0, ha az él megosztott (szomszéd is út) vagy nincs rés.
-        private float FoundationEdgeFrac(int nu, int nv, Node a, Node b)
-        {
-            if (checkTile(nu, nv) && roads.Has(getTileByCoords(nu, nv).Id)) return 0f;
-            float gap = Math.Max(RoadSurfaceZ(a) - a.W * tileSizeM, RoadSurfaceZ(b) - b.W * tileSizeM);
-            if (gap <= 0.001f) return 0f;
-            float halfTile = 0.5f * Math.Min(tileSizeH, tileSizeV);
-            return Math.Min(1f, gap / halfTile);
-        }
-
-        // Az út-lábnyom sarkai a platform tetején (felület-magasság), a nyitott
-        // földmű-éleken a középpont felé behúzva a rézsű felső éléig.
-        private void RoadFootprintCorners(Tile t, out Vector3 W, out Vector3 S, out Vector3 E, out Vector3 N)
-        {
-            int tpc = nodeRows - 1;
-            int u = t.Id / tpc, v = t.Id % tpc;
-            float fWS = FoundationEdgeFrac(u, v - 1, t.W, t.S);
-            float fSE = FoundationEdgeFrac(u + 1, v, t.S, t.E);
-            float fEN = FoundationEdgeFrac(u, v + 1, t.E, t.N);
-            float fNW = FoundationEdgeFrac(u - 1, v, t.N, t.W);
-
-            Vector3 sW = RoadCorner(t.W), sS = RoadCorner(t.S), sE = RoadCorner(t.E), sN = RoadCorner(t.N);
-            Vector3 c = (sW + sS + sE + sN) * 0.25f;
-            W = Vector3.Lerp(sW, c, Math.Max(fWS, fNW));
-            S = Vector3.Lerp(sS, c, Math.Max(fWS, fSE));
-            E = Vector3.Lerp(sE, c, Math.Max(fSE, fEN));
-            N = Vector3.Lerp(sN, c, Math.Max(fEN, fNW));
-        }
-
+        // Foundation: az út befagyasztott vezetőfelülete és az alatta lévő (alakítható)
+        // terep közti rést kitöltő függőleges falak a csempe nyitott (nem-út) oldalain.
         private void DrawRoadFoundations()
         {
             if (roads.Count == 0) return;
-            int tpc = nodeRows - 1;
+            GL.Color4(RoadFoundationColor);
             GL.Begin(PrimitiveType.Quads);
             foreach (int id in roads.Tiles)
             {
                 Tile t = tiles[id];
-                int u = id / tpc, v = id % tpc;
-                RoadFootprintCorners(t, out Vector3 iW, out Vector3 iS, out Vector3 iE, out Vector3 iN);
-                FoundationFace(u, v - 1, t.W, t.S, iW, iS);   // WS oldal
-                FoundationFace(u + 1, v, t.S, t.E, iS, iE);   // SE oldal
-                FoundationFace(u, v + 1, t.E, t.N, iE, iN);   // EN oldal
-                FoundationFace(u - 1, v, t.N, t.W, iN, iW);   // NW oldal
+                RoadFootprintFoundation(t, roads.GetEdges(id));
             }
             GL.End();
         }
 
-        // Egy nyitott él rézsű-lapja: a csempe-éltől (terep-magasság) a behúzott
-        // platform-felső élig (felület-magasság). Megosztott élen / rés nélkül kihagyva.
-        private void FoundationFace(int nu, int nv, Node a, Node b, Vector3 topA, Vector3 topB)
+        private void RoadFootprintFoundation(Tile t, RoadEdge edges)
         {
-            if (checkTile(nu, nv) && roads.Has(getTileByCoords(nu, nv).Id)) return;
-            float aT = a.W * tileSizeM, bT = b.W * tileSizeM;
-            if (Math.Abs(topA.Z - aT) <= 0.001f && Math.Abs(topB.Z - bT) <= 0.001f) return;
+            Vector3 W = RoadCorner(t.W), S = RoadCorner(t.S), E = RoadCorner(t.E), N = RoadCorner(t.N);
+            Vector3 C = (W + S + E + N) * 0.25f;
+            float width = Math.Min(tileSizeH, tileSizeV) * 0.92f;
+            int n = CountEdges(edges);
 
-            Vector3 botA = new Vector3(a.xPos, a.yPos, aT);
-            Vector3 botB = new Vector3(b.xPos, b.yPos, bT);
-            GL.Color4(FoundationFaceColor(botA, botB, topB));
-            GL.Vertex3(botA); GL.Vertex3(botB); GL.Vertex3(topB); GL.Vertex3(topA);
+            if (n == 2 && TryCornerArc(edges, out float startDeg))
+            {
+                float side = DistXY(W, S);
+                float hwuv = (width * 0.5f) / side;
+                RoadArcFoundation(t, W, S, E, N, startDeg, 0.5f - hwuv, 0.5f + hwuv);
+                return;
+            }
+
+            if (edges == (RoadEdge.WS | RoadEdge.EN))
+            {
+                RoadStripFoundation(t, (W + S) * 0.5f, (E + N) * 0.5f, width);
+                return;
+            }
+
+            if (edges == (RoadEdge.SE | RoadEdge.NW))
+            {
+                RoadStripFoundation(t, (S + E) * 0.5f, (N + W) * 0.5f, width);
+                return;
+            }
+
+            if ((edges & RoadEdge.WS) != 0) RoadStripFoundation(t, C, (W + S) * 0.5f, width);
+            if ((edges & RoadEdge.SE) != 0) RoadStripFoundation(t, C, (S + E) * 0.5f, width);
+            if ((edges & RoadEdge.EN) != 0) RoadStripFoundation(t, C, (E + N) * 0.5f, width);
+            if ((edges & RoadEdge.NW) != 0) RoadStripFoundation(t, C, (N + W) * 0.5f, width);
         }
 
-        private static Color FoundationFaceColor(Vector3 p0, Vector3 p1, Vector3 p2)
+        private void RoadStripFoundation(Tile tile, Vector3 a, Vector3 b, float width)
         {
-            Vector3 normal = Vector3.Normalize(Vector3.Cross(p1 - p0, p2 - p0));
-            Vector3 light = Vector3.Normalize(new Vector3(0.4f, 0.6f, 1.5f));
-            float shade = Math.Max(0.55f, Math.Min(1.0f, Math.Abs(Vector3.Dot(normal, light))));
-            return Color.FromArgb(255, (int)(RoadFoundationColor.R * shade),
-                (int)(RoadFoundationColor.G * shade), (int)(RoadFoundationColor.B * shade));
+            float dx = b.X - a.X, dy = b.Y - a.Y;
+            float len = (float)Math.Sqrt(dx * dx + dy * dy);
+            if (len < 1e-4f) return;
+            float px = -dy / len * width * 0.5f;
+            float py = dx / len * width * 0.5f;
+
+            Vector3 p0 = new Vector3(a.X + px, a.Y + py, a.Z);
+            Vector3 p1 = new Vector3(a.X - px, a.Y - py, a.Z);
+            Vector3 p2 = new Vector3(b.X - px, b.Y - py, b.Z);
+            Vector3 p3 = new Vector3(b.X + px, b.Y + py, b.Z);
+
+            RoadFootprintSlopes(tile, new List<Vector3> { p0, p1, p2, p3 });
+        }
+
+        private void RoadArcFoundation(Tile tile, Vector3 W, Vector3 S, Vector3 E, Vector3 N,
+            float startDeg, float rInner, float rOuter)
+        {
+            float cu = startDeg < 90f ? 0f : startDeg < 180f ? 1f : startDeg < 270f ? 1f : 0f;
+            float cv = startDeg < 90f ? 0f : startDeg < 180f ? 0f : startDeg < 270f ? 1f : 1f;
+
+            const int seg = 6;
+            List<Vector3> loop = new List<Vector3>(seg * 2 + 2);
+
+            for (int i = 0; i <= seg; i++)
+            {
+                float t0 = (float)((startDeg + 90f * i / seg) * Math.PI / 180.0);
+                float c0 = (float)Math.Cos(t0);
+                float s0 = (float)Math.Sin(t0);
+                loop.Add(TileUV(W, S, E, N, cu + rOuter * c0, cv + rOuter * s0));
+            }
+
+            for (int i = seg; i >= 0; i--)
+            {
+                float t0 = (float)((startDeg + 90f * i / seg) * Math.PI / 180.0);
+                float c0 = (float)Math.Cos(t0);
+                float s0 = (float)Math.Sin(t0);
+                loop.Add(TileUV(W, S, E, N, cu + rInner * c0, cv + rInner * s0));
+            }
+
+            RoadFootprintSlopes(tile, loop);
+        }
+
+        private void RoadFootprintSlopes(Tile tile, List<Vector3> topLoop)
+        {
+            if (topLoop == null || topLoop.Count < 3) return;
+
+            Vector2 tileCenter = new Vector2(
+                (tile.W.xPos + tile.S.xPos + tile.E.xPos + tile.N.xPos) * 0.25f,
+                (tile.W.yPos + tile.S.yPos + tile.E.yPos + tile.N.yPos) * 0.25f);
+
+            Vector3[] groundLoop = new Vector3[topLoop.Count];
+            for (int i = 0; i < topLoop.Count; i++)
+                groundLoop[i] = TerrainEdgePoint(tile, topLoop[i], tileCenter);
+
+            for (int i = 0; i < topLoop.Count; i++)
+            {
+                int j = (i + 1) % topLoop.Count;
+                Vector3 aTop = topLoop[i];
+                Vector3 bTop = topLoop[j];
+                Vector3 aGround = groundLoop[i];
+                Vector3 bGround = groundLoop[j];
+                if (Math.Abs(aTop.Z - aGround.Z) < 0.001f && Math.Abs(bTop.Z - bGround.Z) < 0.001f) continue;
+
+                GL.Vertex3(aGround);
+                GL.Vertex3(bGround);
+                GL.Vertex3(bTop);
+                GL.Vertex3(aTop);
+            }
+        }
+
+        private Vector3 TerrainEdgePoint(Tile tile, Vector3 top, Vector2 tileCenter)
+        {
+            float cu = (tileCenter.X - tile.W.xPos) / tileSizeH;
+            float cv = (tileCenter.Y - tile.W.yPos) / tileSizeV;
+            float tu = (top.X - tile.W.xPos) / tileSizeH;
+            float tv = (top.Y - tile.W.yPos) / tileSizeV;
+            float du = tu - cu;
+            float dv = tv - cv;
+            float t = float.PositiveInfinity;
+
+            if (du > 1e-6f) t = Math.Min(t, (1f - cu) / du);
+            else if (du < -1e-6f) t = Math.Min(t, -cu / du);
+            if (dv > 1e-6f) t = Math.Min(t, (1f - cv) / dv);
+            else if (dv < -1e-6f) t = Math.Min(t, -cv / dv);
+
+            if (float.IsInfinity(t) || t < 0f) t = 1f;
+            float u = cu + du * t;
+            float v = cv + dv * t;
+            SnapTileEdge(ref u, ref v);
+            return TileUV(Corner(tile.W), Corner(tile.S), Corner(tile.E), Corner(tile.N), u, v);
+        }
+
+        private static void SnapTileEdge(ref float u, ref float v)
+        {
+            u = Math.Max(0f, Math.Min(1f, u));
+            v = Math.Max(0f, Math.Min(1f, v));
+
+            float dW = u;
+            float dS = v;
+            float dE = 1f - u;
+            float dN = 1f - v;
+            float min = Math.Min(Math.Min(dW, dS), Math.Min(dE, dN));
+
+            if (min == dW) u = 0f;
+            else if (min == dE) u = 1f;
+            else if (min == dS) v = 0f;
+            else v = 1f;
         }
 
         private static int CountEdges(RoadEdge edges)
@@ -1025,9 +1106,8 @@ namespace ForesTycoon
         private void RoadSurface(Tile t, RoadEdge edges, float widthFactor, Color color)
         {
             // A befagyasztott vezetőfelület magasságán renderelünk (foundation), nem a
-            // jelenlegi terepen; a nyitott földmű-éleken a lábnyom a rézsű felső éléig
-            // húzódik be → az út a lapos platform-tetőn ül, túllógás/rés nélkül.
-            RoadFootprintCorners(t, out Vector3 W, out Vector3 S, out Vector3 E, out Vector3 N);
+            // jelenlegi terepen → az út a helyén marad, ha alatta változik a terep.
+            Vector3 W = RoadCorner(t.W), S = RoadCorner(t.S), E = RoadCorner(t.E), N = RoadCorner(t.N);
             RoadSurface(t, edges, widthFactor, color, W, S, E, N);
         }
 
