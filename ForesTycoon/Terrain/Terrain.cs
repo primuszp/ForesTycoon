@@ -734,7 +734,10 @@ namespace ForesTycoon
         // (csak ha még nincs rögzítve, hogy a meglévő szomszéd-úttal folytonos maradjon).
         private void CaptureRoadSurface(Tile t, RoadPlacement placement)
         {
-            if (!placement.IsValid) return;
+            // Csak a PLATFORM (ív/csatlakozás lapos tetője) fagy be vezetőfelületnek; az
+            // egyenes út a NATURAL terepen ül és KÖVETI a terepet (terraformnál is), ezért
+            // azt NEM fagyasztjuk be → nincs lépcsős platform egyenes lejtős úton.
+            if (placement.Kind != RoadPlacementKind.FoundationSurface) return;
             CaptureRoadSurfaceNode(t.W, placement.W);
             CaptureRoadSurfaceNode(t.S, placement.S);
             CaptureRoadSurfaceNode(t.E, placement.E);
