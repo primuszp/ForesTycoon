@@ -591,13 +591,24 @@ namespace ForesTycoon
                 return ValidateLockedRoadPlacement(mergedEdges, w, s, e, n, lw, ls, le, ln);
 
             TileSlopeInfo slope = ClassifyTileSlope(w, s, e, n);
-            if (slope.Kind == TileSlopeKind.Steep || slope.Kind == TileSlopeKind.TwoOppositeRaised)
+            if (slope.Kind == TileSlopeKind.Steep
+                || slope.Kind == TileSlopeKind.TwoOppositeRaised
+                || slope.Kind == TileSlopeKind.OneCornerRaised
+                || slope.Kind == TileSlopeKind.ThreeCornersRaised)
                 return InvalidRoadPlacement;
 
-            bool planar = IsPlanarSurface(w, s, e, n);
-            bool naturalAllowed = planar && (slope.Kind == TileSlopeKind.Flat || IsSimpleRoadShape(mergedEdges));
+            // TwoAdjacentRaised only valid when the ramp aligns with the road direction
+            if (slope.Kind == TileSlopeKind.TwoAdjacentRaised && !IsRampAligned(slope, mergedEdges))
+                return InvalidRoadPlacement;
+
+            bool naturalAllowed = slope.Kind == TileSlopeKind.Flat
+                || (slope.Kind == TileSlopeKind.TwoAdjacentRaised && IsSimpleRoadShape(mergedEdges));
             if (naturalAllowed && RoadSurfaceLocksMatch(t, w, s, e, n))
                 return new RoadPlacement(RoadPlacementKind.NaturalSurface, w, s, e, n);
+
+            // Foundation (platform) only on flat terrain
+            if (slope.Kind != TileSlopeKind.Flat)
+                return InvalidRoadPlacement;
 
             if (!TryResolveFlatFoundationLevel(t, slope.Max, w, s, e, n, out int level))
                 return InvalidRoadPlacement;
@@ -670,6 +681,20 @@ namespace ForesTycoon
             int count = CountEdges(edges);
             if (count <= 1) return true;
             return edges == (RoadEdge.WS | RoadEdge.EN) || edges == (RoadEdge.SE | RoadEdge.NW);
+        }
+
+        // Csak TwoAdjacentRaised esetén: a rámpa iránya egyezik-e az út irányával.
+        // WS+EN irány: W==S és E==N kell (WS él vízszintes, EN él vízszintes).
+        // SE+NW irány: S==E és N==W kell (SE él vízszintes, NW él vízszintes).
+        private static bool IsRampAligned(TileSlopeInfo slope, RoadEdge edges)
+        {
+            bool hasWsEn = (edges & (RoadEdge.WS | RoadEdge.EN)) != 0;
+            bool hasSeNw = (edges & (RoadEdge.SE | RoadEdge.NW)) != 0;
+            if (hasWsEn && !hasSeNw)
+                return slope.WRaised == slope.SRaised && slope.ERaised == slope.NRaised;
+            if (hasSeNw && !hasWsEn)
+                return slope.SRaised == slope.ERaised && slope.NRaised == slope.WRaised;
+            return false;
         }
 
         private bool TryGetFullLockedRoadSurface(Tile t, out int w, out int s, out int e, out int n)
