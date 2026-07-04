@@ -6,7 +6,7 @@ using OpenTK.Graphics.OpenGL;
 
 namespace ForesTycoon
 {
-    class Terrain
+    partial class Terrain
     {
         private readonly TerrainSettings settings;
         private Hydrology hydro;
@@ -15,16 +15,18 @@ namespace ForesTycoon
         private readonly Dictionary<string, VertexBuffer> vbos = new Dictionary<string, VertexBuffer>();
         // Kanyar belső sarokcsempe: a normál átló-irány rossz élt ad, ezért flip-verzióban rendereljük.
         private readonly HashSet<int> flippedDiagonalTiles = new HashSet<int>();
-        private readonly VertexBuffer edges = new VertexBuffer(PrimitiveType.Lines);
+        private readonly VertexBuffer edges = new VertexBuffer(PrimitiveType.Lines, BufferUsageHint.DynamicDraw);
         private readonly RoadNetwork roads = new RoadNetwork();
+        private readonly RenderPipeline renderPipeline = new RenderPipeline();
 
         // Foundation-réteg: az út VEZETŐFELÜLETÉNEK befagyasztott magassága sarkonként
         // (nodeId → W az építés pillanatában). A terep alatta szabadon alakítható, de az
         // út felülete itt marad; a kettő közti rést a foundation-fal tölti ki (OpenTTD-elv).
         private readonly Dictionary<int, int> roadSurfaceW = new Dictionary<int, int>();
-        private static readonly Color RoadFoundationColor = Color.FromArgb(141, 184, 75);
+        private static readonly Color RoadFoundationColor = Color.FromArgb(154, 120, 72);
+        private static readonly Color RoadFoundationSlopeColor = Color.FromArgb(126, 88, 48);
+        private static readonly Color RoadFoundationLineColor = Color.FromArgb(214, 176, 103);
         private static readonly Color TerrainTopColor = Color.FromArgb(141, 184, 75);  // fű (terep tető)
-        private static readonly Color RoadFoundationEdgeColor = Color.FromArgb(74, 54, 32);
         private readonly List<uint> indices = new List<uint>();
 
         private readonly TerrainData data;
@@ -68,10 +70,29 @@ namespace ForesTycoon
 
             makeTiles();
             makeQuads();
+            BuildRenderPipeline();
 
             GenerateTerrain();
-            
-            GL.LineWidth(2.0f);
+        }
+
+        private void BuildRenderPipeline()
+        {
+            renderPipeline.Add(RenderLayer.TerrainBase, "terrain-base", _ => DrawTerrainBase());
+            renderPipeline.Add(RenderLayer.TerrainSkirts, "terrain-skirts", _ => DrawSkirts());
+            renderPipeline.Add(RenderLayer.WaterSurface, "water-surface", context => DrawWater(context));
+            renderPipeline.Add(RenderLayer.WaterWalls, "water-walls", context => DrawWaterWalls(context));
+            renderPipeline.Add(RenderLayer.RiverFallback, "river-fallback", context => DrawRivers(context));
+            renderPipeline.Add(RenderLayer.Foundations, "road-foundations", _ => DrawRoadFoundations());
+            renderPipeline.Add(RenderLayer.DecalBegin, "decal-state-begin", _ => BeginTerrainDecals());
+            renderPipeline.Add(RenderLayer.Grid, "terrain-grid", _ => DrawTerrainDecals());
+            renderPipeline.Add(RenderLayer.Roads, "roads", _ => DrawRoads());
+            renderPipeline.Add(RenderLayer.HoverOverlay, "hover-overlay", _ => DrawHoveredTile());
+            renderPipeline.Add(RenderLayer.DecalEnd, "decal-state-end", _ => EndTerrainDecals());
+            renderPipeline.Add(RenderLayer.Props, "props", _ => DrawTrees());
+            renderPipeline.Add(RenderLayer.DebugOverlay, "debug-overlay", context =>
+            {
+                if (context.ShowNodeMarker) DrawNodeMarker();
+            });
         }
 
         private void GenerateTerrain()
@@ -283,6 +304,7 @@ namespace ForesTycoon
 
         private void updateNodes(List<Node> nodes)
         {
+            Tile[] nodeTiles = new Tile[4];
             foreach (Node node in nodes)
             {
                 node.zPos = node.W * tileSizeM;
@@ -292,9 +314,10 @@ namespace ForesTycoon
                 if (nodeWaterDepth != null)
                     nodeWaterDepth[node.Id] = Math.Max(0f, nodeWaterDepth[node.Id]);
 
-                List<Tile> tiles = getTilesByNode(node);
-                foreach (Tile tile in tiles)
+                int nodeTileCount = data.GetTilesByNode(node, nodeTiles);
+                for (int i = 0; i < nodeTileCount; i++)
                 {
+                    Tile tile = nodeTiles[i];
                     string code = tile.getCode();
                     tile.LowPos = tile.Low * tileSizeM;
                     if (!vbos.ContainsKey(code + "_" + tile.Low))
@@ -408,10 +431,6 @@ namespace ForesTycoon
             return polygon;
         }
 
-        private List<Node> getNeighbours(Node node) => data.GetNeighbours(node);
-
-        private List<Tile> getTilesByNode(Node node) => data.GetTilesByNode(node);
-
         private uint ColorToUInt(Color color)
         {
             return ((uint)color.A << 24) | ((uint)color.B << 16) | ((uint)color.G << 8) | (uint)color.R;
@@ -426,55 +445,14 @@ namespace ForesTycoon
             return ColorToUInt(Color.FromArgb(255, r, g, bl));
         }
 
-        public void Draw(bool showNodeMarker)
+        public void Draw(RenderContext context)
         {
-            // A kitöltött terep írja a depth buffert; a koplanáris overlay rétegek
-            // később depth írás nélkül rajzolódnak, így nincs Z-fighting.
-            foreach (Tile tile in tiles)
-            {
-                // Az út-csempék terep-meshe helyett a platform/földmű renderelődik
-                // (DrawRoadFoundations) — különben bevágásnál a magasabb terep eltakarná az utat.
-                if (roads.Has(tile.Id)) continue;
-
-                bool tileFlip = flippedDiagonalTiles.Contains(tile.Id);
-                VertexBuffer vbo = vbos[tile.Code + "_" + tile.Low + (tileFlip ? "_f" : "")];
-
-                GL.PushMatrix();
-                {
-                    GL.Translate(tile.W.xPos, tile.W.yPos, tile.LowPos);
-                    vbo.DrawArray();
-                }
-                GL.PopMatrix();
-            }
-            DrawSkirts();
-            DrawWater();
-            DrawWaterWalls();
-            DrawRivers();
-            DrawRoadFoundations();   // terep-stílusú 1:1 rézsűk az út platform-oldalain (depth-pass)
-
-            // Terrain decal pass: drawn after terrain but before props.
-            // Props rendered later with depth testing naturally occlude these overlays.
-            GL.Disable(EnableCap.DepthTest);
-            GL.DepthMask(false);
-            DrawLandGrid();
-
-            DrawRoads();
-            DrawHoveredTile();
-            GL.DepthMask(true);
-            GL.Enable(EnableCap.DepthTest);
-
-            DrawTrees();
-
-            if (showNodeMarker && onpos)
-            {
-                GL.PushMatrix();
-                {
-                    GL.Translate(actualNode.xPos, actualNode.yPos, actualNode.zPos);
-                    DrawSphere(0.55f, 16, 16);
-                }
-                GL.PopMatrix();
-            }
+            renderPipeline.Render(context);
         }
+
+
+
+
 
         // ── Út-render konstansok (referencia tile-készlet: szürke aszfalt + krém padka) ─
         private static readonly Color RoadSurfaceColor = Color.FromArgb(108, 110, 112);  // szürke úttest
@@ -491,6 +469,8 @@ namespace ForesTycoon
             ThreeCornersRaised,
             Steep
         }
+
+
 
         private enum RoadPlacementKind
         {
@@ -823,13 +803,25 @@ namespace ForesTycoon
         // csempe sem út (különben a maradék út folytonosságát megőrizzük).
         private void ReleaseRoadSurface(Tile t)
         {
-            foreach (Node n in new[] { t.W, t.S, t.E, t.N })
+            Tile[] nodeTiles = new Tile[4];
+            ReleaseRoadSurfaceNode(t.W, nodeTiles);
+            ReleaseRoadSurfaceNode(t.S, nodeTiles);
+            ReleaseRoadSurfaceNode(t.E, nodeTiles);
+            ReleaseRoadSurfaceNode(t.N, nodeTiles);
+        }
+
+        private void ReleaseRoadSurfaceNode(Node node, Tile[] nodeTiles)
+        {
+            bool stillRoad = false;
+            int nodeTileCount = data.GetTilesByNode(node, nodeTiles);
+            for (int i = 0; i < nodeTileCount; i++)
             {
-                bool stillRoad = false;
-                foreach (Tile adj in getTilesByNode(n))
-                    if (roads.Has(adj.Id)) { stillRoad = true; break; }
-                if (!stillRoad) roadSurfaceW.Remove(n.Id);
+                if (!roads.Has(nodeTiles[i].Id)) continue;
+                stillRoad = true;
+                break;
             }
+
+            if (!stillRoad) roadSurfaceW.Remove(node.Id);
         }
 
         // Az út vezetőfelületének z-je egy sarokban: a befagyasztott magasság, ha van,
@@ -940,72 +932,6 @@ namespace ForesTycoon
             return RoadEdge.None;
         }
 
-        private void DrawRoads()
-        {
-            if (roads.Count == 0 && previewTiles.Count == 0) return;
-
-            // Decal overlay a terep után, a közös overlay pass depth állapotával.
-            if (roads.Count > 0)
-            {
-                // 1. réteg: világos krém padka (széles sáv) a terep átlójára illesztve
-                // → lejtőn rámpaként pontosan ráfekszik a felszínre.
-                GL.Begin(PrimitiveType.Quads);
-                foreach (int id in roads.Tiles)
-                    RoadSurface(tiles[id], roads.GetEdges(id), 0.92f, RoadShoulder);
-                GL.End();
-
-                // 2. réteg: szürke úttest (keskenyebb sáv) a padka tetején.
-                GL.Begin(PrimitiveType.Quads);
-                foreach (int id in roads.Tiles)
-                    RoadSurface(tiles[id], roads.GetEdges(id), 0.62f, RoadSurfaceColor);
-                GL.End();
-            }
-
-            // ── Előnézet csempék (kitöltés + körvonal); fehér=építés, piros=bontás.
-            if (previewTiles.Count > 0)
-            {
-                GL.Enable(EnableCap.Blend);
-                GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
-
-                // Csempénként: bontás → piros; építés → fehér (érvényes) / piros (vízen
-                // vagy túl meredeken nem építhető).
-                Color okFill = Color.FromArgb(70, 255, 255, 255), okLine = Color.FromArgb(235, 255, 255, 255);
-                Color foundationFill = Color.FromArgb(85, 245, 225, 140), foundationLine = Color.FromArgb(245, 245, 225, 140);
-                Color badFill = Color.FromArgb(90, 235, 70, 70), badLine = Color.FromArgb(245, 248, 80, 80);
-
-                GL.Begin(PrimitiveType.Quads);
-                foreach (RoadPlanStep step in previewTiles)
-                {
-                    RoadPlacement placement = AnalyzeRoadPlacement(tiles[step.TileId], step.Edges);
-                    bool bad = previewRemove || !placement.IsValid;
-                    bool foundation = !bad && placement.Kind == RoadPlacementKind.FoundationSurface;
-                    // Építésnél a meglévő gráf-élekkel összevont alakot mutatjuk → már
-                    // húzás közben látszik a kialakuló kanyar / T / + kereszteződés.
-                    RoadEdge shown = previewRemove ? step.Edges : step.Edges | roads.GetEdges(step.TileId);
-                    if (bad) RoadSurface(tiles[step.TileId], shown, 0.92f, badFill);
-                    else RoadSurface(tiles[step.TileId], shown, 0.92f, foundation ? foundationFill : okFill, placement);
-                }
-                GL.End();
-
-                GL.LineWidth(2.5f);
-                foreach (RoadPlanStep step in previewTiles)
-                {
-                    Tile t = tiles[step.TileId];
-                    RoadPlacement placement = AnalyzeRoadPlacement(t, step.Edges);
-                    bool bad = previewRemove || !placement.IsValid;
-                    bool foundation = !bad && placement.Kind == RoadPlacementKind.FoundationSurface;
-                    GL.Color4(bad ? badLine : (foundation ? foundationLine : okLine));
-                    GL.Begin(PrimitiveType.LineLoop);
-                    GL.Vertex3(t.W.xPos, t.W.yPos, t.W.zPos);
-                    GL.Vertex3(t.S.xPos, t.S.yPos, t.S.zPos);
-                    GL.Vertex3(t.E.xPos, t.E.yPos, t.E.zPos);
-                    GL.Vertex3(t.N.xPos, t.N.yPos, t.N.zPos);
-                    GL.End();
-                }
-                GL.LineWidth(2f);
-                GL.Disable(EnableCap.Blend);
-            }
-        }
 
         private static Vector3 Corner(Node n) => new Vector3(n.xPos, n.yPos, n.zPos);
 
@@ -1017,16 +943,6 @@ namespace ForesTycoon
 
         // Egy él behúzási hányada [0..1]: a rés (felület−terep) / fél csempe, 1:1-ig.
         // 0, ha az él megosztott (szomszéd is út) vagy nincs rés.
-        private float FoundationEdgeFrac(int nu, int nv, Node a, Node b)
-        {
-            if (checkTile(nu, nv) && roads.Has(getTileByCoords(nu, nv).Id)) return 0f;
-            // Abszolút eltérés → töltés (terep lejjebb) ÉS bevágás (terep feljebb) is.
-            float gap = Math.Max(Math.Abs(RoadSurfaceZ(a) - a.W * tileSizeM),
-                                 Math.Abs(RoadSurfaceZ(b) - b.W * tileSizeM));
-            if (gap <= 0.001f) return 0f;
-            float halfTile = 0.5f * Math.Min(tileSizeH, tileSizeV);
-            return Math.Min(1f, gap / halfTile);
-        }
 
         // Az út-lábnyom sarkai megegyeznek a csempe eredeti sarkaival (nincs behúzás, hézagmentes).
         private void RoadFootprintCorners(Tile t, out Vector3 W, out Vector3 S, out Vector3 E, out Vector3 N)
@@ -1035,78 +951,6 @@ namespace ForesTycoon
             S = RoadCorner(t.S);
             E = RoadCorner(t.E);
             N = RoadCorner(t.N);
-        }
-
-        private void DrawRoadFoundations()
-        {
-            if (roads.Count == 0) return;
-            int tpc = nodeRows - 1;
-            GL.Begin(PrimitiveType.Quads);
-            foreach (int id in roads.Tiles)
-            {
-                Tile t = tiles[id];
-                int u = id / tpc, v = id % tpc;
-                RoadFootprintCorners(t, out Vector3 iW, out Vector3 iS, out Vector3 iE, out Vector3 iN);
-
-                // Platform TETŐ (fű) a befagyasztott út-szinten: a road-csempe terep-VBO-ját
-                // kihagyjuk (lentebb), ezért a platformnak kell lefednie a csempét.
-                GL.Color4(TerrainTopColor);
-                GL.Vertex3(iW); GL.Vertex3(iS); GL.Vertex3(iE); GL.Vertex3(iN);
-
-                Tile ntWS = checkTile(u, v - 1) ? getTileByCoords(u, v - 1) : null;
-                Tile ntSE = checkTile(u + 1, v) ? getTileByCoords(u + 1, v) : null;
-                Tile ntEN = checkTile(u, v + 1) ? getTileByCoords(u, v + 1) : null;
-                Tile ntNW = checkTile(u - 1, v) ? getTileByCoords(u - 1, v) : null;
-
-                if (ntWS != null) FoundationFace(u, v - 1, t.W, t.S, ntWS.W, ntWS.S);
-                if (ntSE != null) FoundationFace(u + 1, v, t.S, t.E, ntSE.S, ntSE.E);
-                if (ntEN != null) FoundationFace(u, v + 1, t.E, t.N, ntEN.E, ntEN.N);
-                if (ntNW != null) FoundationFace(u - 1, v, t.N, t.W, ntNW.N, ntNW.W);
-            }
-            GL.End();
-        }
-
-        // Van-e rés a befagyasztott felület és a jelenlegi terep közt valamelyik sarkon.
-        private bool HasFoundationGap(Tile t)
-        {
-            return RoadSurfaceZ(t.W) - t.W.W * tileSizeM > 0.001f
-                || RoadSurfaceZ(t.S) - t.S.W * tileSizeM > 0.001f
-                || RoadSurfaceZ(t.E) - t.E.W * tileSizeM > 0.001f
-                || RoadSurfaceZ(t.N) - t.N.W * tileSizeM > 0.001f;
-        }
-
-        // Egy nyitott él rézsű-lapja a szomszédos terepcsempére vetítve (terep-stílusú rézsű a csatlakozáshoz).
-        private void FoundationFace(int nu, int nv, Node sharedA, Node sharedB, Node outerA, Node outerB)
-        {
-            if (!checkTile(nu, nv)) return;
-            if (roads.Has(getTileByCoords(nu, nv).Id)) return;
-
-            float shAT = RoadSurfaceZ(sharedA);
-            float shBT = RoadSurfaceZ(sharedB);
-            float outAT = outerA.W * tileSizeM;
-            float outBT = outerB.W * tileSizeM;
-
-            if (Math.Abs(shAT - sharedA.W * tileSizeM) <= 0.001f && Math.Abs(shBT - sharedB.W * tileSizeM) <= 0.001f)
-                return;
-
-            Vector3 topA = new Vector3(sharedA.xPos, sharedA.yPos, shAT);
-            Vector3 topB = new Vector3(sharedB.xPos, sharedB.yPos, shBT);
-            Vector3 botB = new Vector3(outerB.xPos, outerB.yPos, outBT);
-            Vector3 botA = new Vector3(outerA.xPos, outerA.yPos, outAT);
-
-            GL.Color4(FoundationFaceColor(botA, botB, topB));
-            GL.Vertex3(botA); GL.Vertex3(botB); GL.Vertex3(topB); GL.Vertex3(topA);
-        }
-
-        private static Color FoundationFaceColor(Vector3 p0, Vector3 p1, Vector3 p2)
-        {
-            Vector3 cross = Vector3.Cross(p1 - p0, p2 - p0);
-            Vector3 normal = cross.LengthSquared > 0.0001f ? Vector3.Normalize(cross) : Vector3.UnitZ;
-            Vector3 light = Vector3.Normalize(new Vector3(0.4f, 0.6f, 1.5f));
-            float shade = Math.Max(0.55f, Math.Min(1.0f, Math.Abs(Vector3.Dot(normal, light))));
-            if (float.IsNaN(shade)) shade = 1.0f;
-            return Color.FromArgb(255, (int)(RoadFoundationColor.R * shade),
-                (int)(RoadFoundationColor.G * shade), (int)(RoadFoundationColor.B * shade));
         }
 
         private static int CountEdges(RoadEdge edges)
@@ -1119,204 +963,23 @@ namespace ForesTycoon
             return count;
         }
 
-        private void RoadSurface(Tile t, RoadEdge edges, float widthFactor, Color color)
+
+        public bool SearchPoint(double x, double y, double radius)
         {
-            // A befagyasztott vezetőfelület magasságán renderelünk (foundation), nem a
-            // jelenlegi terepen; a nyitott földmű-éleken a lábnyom a rézsű felső éléig
-            // húzódik be → az út a lapos platform-tetőn ül, túllógás/rés nélkül.
-            RoadFootprintCorners(t, out Vector3 W, out Vector3 S, out Vector3 E, out Vector3 N);
-            RoadSurface(t, edges, widthFactor, color, W, S, E, N);
-        }
+            int nodeU = (int)Math.Round((x + offsetX) / tileSizeH, 0);
+            int nodeV = (int)Math.Round((y + offsetY) / tileSizeV, 0);
 
-        private void RoadSurface(Tile t, RoadEdge edges, float widthFactor, Color color, RoadPlacement placement)
-        {
-            Vector3 W = RoadCorner(t.W, placement.W);
-            Vector3 S = RoadCorner(t.S, placement.S);
-            Vector3 E = RoadCorner(t.E, placement.E);
-            Vector3 N = RoadCorner(t.N, placement.N);
-            RoadSurface(t, edges, widthFactor, color, W, S, E, N);
-        }
-
-        private void RoadSurface(Tile t, RoadEdge edges, float widthFactor, Color color, Vector3 W, Vector3 S, Vector3 E, Vector3 N)
-        {
-            Vector3 C = (W + S + E + N) * 0.25f;
-            float width = Math.Min(tileSizeH, tileSizeV) * widthFactor;
-            int n = CountEdges(edges);
-
-            GL.Color4(color);
-
-            // Kanyar (2 szomszédos él): negyedív a KÖZÖS sarok körül. Az ív az élek
-            // közepénél merőlegesen lép ki → érintőfolytonosan illeszkedik a szomszéd
-            // egyenes úthoz (mint az OpenTTD kerek kanyar-tile).
-            if (n == 2 && TryCornerArc(edges, out float startDeg))
+            if (checkNode(nodeU, nodeV))
             {
-                float side = DistXY(W, S);
-                float hwuv = (width * 0.5f) / side;
-                RoadArcBand(W, S, E, N, startDeg, 0.5f - hwuv, 0.5f + hwuv);
-                return;
+                actualNode = getNodeByCoords(nodeU, nodeV);
+                onpos = true;
+                return true;
             }
 
-            // Egyenes / zsákutca / T / +: ágak minden bekötött él felé, mindegyik a
-            // csempe-középponttól az él KÖZEPÉIG → a szomszéd út karjával pontosan
-            // illeszkedik (nincs hézag). Két szemközti ág egy teljes átmenő sávot ad,
-            // így T-nél (3 él) és +-nál (4 él) is tömör, hézagmentes a csomópont; a
-            // nyitott él fűként/padkaként marad → ez adja a T/+ formát.
-            if ((edges & RoadEdge.WS) != 0) RoadArm(C, (W + S) * 0.5f, width);
-            if ((edges & RoadEdge.SE) != 0) RoadArm(C, (S + E) * 0.5f, width);
-            if ((edges & RoadEdge.EN) != 0) RoadArm(C, (E + N) * 0.5f, width);
-            if ((edges & RoadEdge.NW) != 0) RoadArm(C, (N + W) * 0.5f, width);
-
-            // Belső lekerekítés MINDEN olyan csempe-saroknál, ahol a két szomszédos él
-            // is út (T-nél 2, +-nál 4 sarok). A fűsarkot a CSEMPE-SAROK köré centrált
-            // negyedkör kerekíti (sugár 0.5−hw); mindkét réteg ugyanaz a középpont →
-            // koncentrikus ívek → a padka vonalai mindenhol párhuzamosak.
-            float jSide = DistXY(W, S);
-            float hw = (width * 0.5f) / jSide;
-            float rf = 0.5f - hw;
-            if ((edges & RoadEdge.SE) != 0 && (edges & RoadEdge.EN) != 0)  // E sarok
-                RoadInnerFillet(W, S, E, N, 0.5f + hw, 0.5f + hw, 1f, 1f, rf, 270f, 180f);
-            if ((edges & RoadEdge.EN) != 0 && (edges & RoadEdge.NW) != 0)  // N sarok
-                RoadInnerFillet(W, S, E, N, 0.5f - hw, 0.5f + hw, 0f, 1f, rf, 360f, 270f);
-            if ((edges & RoadEdge.NW) != 0 && (edges & RoadEdge.WS) != 0)  // W sarok
-                RoadInnerFillet(W, S, E, N, 0.5f - hw, 0.5f - hw, 0f, 0f, rf, 90f, 0f);
-            if ((edges & RoadEdge.WS) != 0 && (edges & RoadEdge.SE) != 0)  // S sarok
-                RoadInnerFillet(W, S, E, N, 0.5f + hw, 0.5f - hw, 1f, 0f, rf, 180f, 90f);
+            onpos = false;
+            return false;
         }
 
-        // Belső sarok-kitöltés: a kar-négyzet sarok (apex) és a CSEMPE-SAROK (cu,cv)
-        // köré rf sugárral húzott negyedív közötti rész (négyzet − negyedkör), legyezővel
-        // az apexből. Quads-kontextusban fut → elfajuló quad (P,a,b,P). Additív a karokra.
-        private void RoadInnerFillet(Vector3 W, Vector3 S, Vector3 E, Vector3 N,
-            float apexU, float apexV, float cu, float cv, float rf, float degA, float degB)
-        {
-            Vector3 P = TileUV(W, S, E, N, apexU, apexV);
-            const int seg = 3;
-            for (int i = 0; i < seg; i++)
-            {
-                float t0 = (float)((degA + (degB - degA) * i / seg) * Math.PI / 180.0);
-                float t1 = (float)((degA + (degB - degA) * (i + 1) / seg) * Math.PI / 180.0);
-                Vector3 a = TileUV(W, S, E, N, cu + rf * (float)Math.Cos(t0), cv + rf * (float)Math.Sin(t0));
-                Vector3 b = TileUV(W, S, E, N, cu + rf * (float)Math.Cos(t1), cv + rf * (float)Math.Sin(t1));
-                GL.Vertex3(P); GL.Vertex3(a); GL.Vertex3(b); GL.Vertex3(P);
-            }
-        }
-
-        private static float DistXY(Vector3 a, Vector3 b)
-        {
-            float dx = b.X - a.X, dy = b.Y - a.Y;
-            return (float)Math.Sqrt(dx * dx + dy * dy);
-        }
-
-        // Pont a csempén belül (u,v)∈[0,1]² bilineáris keverésével a 4 sarokból
-        // (W=(0,0), S=(1,0), E=(1,1), N=(0,1)). A z is keveredik → lejtőre fekvő ív.
-        private static Vector3 TileUV(Vector3 W, Vector3 S, Vector3 E, Vector3 N, float u, float v) =>
-            (1f - u) * (1f - v) * W + u * (1f - v) * S + u * v * E + (1f - u) * v * N;
-
-        // Szomszédos élpár → a közös sarok (ív-középpont) uv-pozíciója és az ív
-        // kezdőszöge (fokban). Minden ív +90°-ot söpör. Szemközti pár esetén false.
-        private static bool TryCornerArc(RoadEdge edges, out float startDeg)
-        {
-            switch (edges)
-            {
-                case RoadEdge.NW | RoadEdge.WS: startDeg = 0f; return true;    // sarok = W
-                case RoadEdge.WS | RoadEdge.SE: startDeg = 90f; return true;   // sarok = S
-                case RoadEdge.SE | RoadEdge.EN: startDeg = 180f; return true;  // sarok = E
-                case RoadEdge.EN | RoadEdge.NW: startDeg = 270f; return true;  // sarok = N
-                default: startDeg = 0f; return false;
-            }
-        }
-
-        // Negyedív-sáv (rInner..rOuter sugár, uv-egységben) a startDeg-tól +90°-ig.
-        // Az ív középpontja a startDeg által kódolt sarok; uv-pontok → TileUV.
-        private void RoadArcBand(Vector3 W, Vector3 S, Vector3 E, Vector3 N,
-            float startDeg, float rInner, float rOuter)
-        {
-            // Az ív-középpont (sarok) uv-koordinátája a kezdőszögből.
-            float cu = startDeg < 90f ? 0f : startDeg < 180f ? 1f : startDeg < 270f ? 1f : 0f;
-            float cv = startDeg < 90f ? 0f : startDeg < 180f ? 0f : startDeg < 270f ? 1f : 1f;
-
-            const int seg = 6;
-            for (int i = 0; i < seg; i++)
-            {
-                float t0 = (float)((startDeg + 90f * i / seg) * Math.PI / 180.0);
-                float t1 = (float)((startDeg + 90f * (i + 1) / seg) * Math.PI / 180.0);
-                float c0 = (float)Math.Cos(t0), s0 = (float)Math.Sin(t0);
-                float c1 = (float)Math.Cos(t1), s1 = (float)Math.Sin(t1);
-
-                GL.Vertex3(TileUV(W, S, E, N, cu + rInner * c0, cv + rInner * s0));
-                GL.Vertex3(TileUV(W, S, E, N, cu + rOuter * c0, cv + rOuter * s0));
-                GL.Vertex3(TileUV(W, S, E, N, cu + rOuter * c1, cv + rOuter * s1));
-                GL.Vertex3(TileUV(W, S, E, N, cu + rInner * c1, cv + rInner * s1));
-            }
-        }
-
-        private void RoadArm(Vector3 c, Vector3 m, float width)
-        {
-            float dx = m.X - c.X, dy = m.Y - c.Y;
-            float len = (float)Math.Sqrt(dx * dx + dy * dy);
-            if (len < 1e-4f) return;
-            float px = -dy / len * width * 0.5f;
-            float py = dx / len * width * 0.5f;
-
-            GL.Vertex3(c.X + px, c.Y + py, c.Z);
-            GL.Vertex3(c.X - px, c.Y - py, c.Z);
-            GL.Vertex3(m.X - px, m.Y - py, m.Z);
-            GL.Vertex3(m.X + px, m.Y + py, m.Z);
-        }
-
-        private void DrawLandGrid()
-        {
-            GL.Color4(Color.FromArgb(82, 115, 38));
-            GL.Begin(PrimitiveType.Lines);
-            foreach (Tile tile in tiles)
-            {
-                if (ShouldDrawStandingWater(tile)) continue;
-
-                GL.Vertex3(tile.W.xPos, tile.W.yPos, tile.W.zPos); GL.Vertex3(tile.S.xPos, tile.S.yPos, tile.S.zPos);
-                GL.Vertex3(tile.S.xPos, tile.S.yPos, tile.S.zPos); GL.Vertex3(tile.E.xPos, tile.E.yPos, tile.E.zPos);
-                GL.Vertex3(tile.E.xPos, tile.E.yPos, tile.E.zPos); GL.Vertex3(tile.N.xPos, tile.N.yPos, tile.N.zPos);
-                GL.Vertex3(tile.N.xPos, tile.N.yPos, tile.N.zPos); GL.Vertex3(tile.W.xPos, tile.W.yPos, tile.W.zPos);
-            }
-            GL.End();
-        }
-
-        private void DrawSphere(float radius, int rings, int sectors)
-        {
-            Vector3 lightDir = new Vector3(0.5f, -0.5f, 1.0f);
-            lightDir.Normalize();
-
-            GL.Begin(PrimitiveType.Quads);
-            for (int i = 0; i < rings; i++)
-            {
-                float theta1 = (float)(i     * Math.PI / rings) - (float)(Math.PI / 2);
-                float theta2 = (float)((i+1) * Math.PI / rings) - (float)(Math.PI / 2);
-                for (int j = 0; j < sectors; j++)
-                {
-                    float phi1 = (float)(j     * 2 * Math.PI / sectors);
-                    float phi2 = (float)((j+1) * 2 * Math.PI / sectors);
-                    Vector3 n1 = SphereNormal(theta1, phi1);
-                    Vector3 n2 = SphereNormal(theta1, phi2);
-                    Vector3 n3 = SphereNormal(theta2, phi2);
-                    Vector3 n4 = SphereNormal(theta2, phi1);
-                    GL.Color3(ShadedWhite(n1, lightDir)); GL.Vertex3(n1 * radius);
-                    GL.Color3(ShadedWhite(n2, lightDir)); GL.Vertex3(n2 * radius);
-                    GL.Color3(ShadedWhite(n3, lightDir)); GL.Vertex3(n3 * radius);
-                    GL.Color3(ShadedWhite(n4, lightDir)); GL.Vertex3(n4 * radius);
-                }
-            }
-            GL.End();
-        }
-
-        private Vector3 SphereNormal(float theta, float phi) => new Vector3(
-            (float)(Math.Cos(theta) * Math.Cos(phi)),
-            (float)(Math.Cos(theta) * Math.Sin(phi)),
-            (float)Math.Sin(theta));
-
-        private Color ShadedWhite(Vector3 normal, Vector3 light)
-        {
-            float i = Math.Max(0.65f, Math.Min(1.0f, Vector3.Dot(normal, light) * 0.85f + 0.25f));
-            return Color.FromArgb((int)(255 * i), (int)(255 * i), (int)(255 * i));
-        }
 
         public bool SearchTile(double x, double y)
         {
@@ -1331,455 +994,37 @@ namespace ForesTycoon
             return false;
         }
 
+        public bool TryGetSurfaceZ(double x, double y, out float z)
+        {
+            int u = (int)Math.Floor((x + offsetX) / tileSizeH);
+            int v = (int)Math.Floor((y + offsetY) / tileSizeV);
+            if (!checkTile(u, v))
+            {
+                z = 0.0f;
+                return false;
+            }
+
+            Tile tile = getTileByCoords(u, v);
+            double localX = ((x + offsetX) / tileSizeH) - u;
+            double localY = ((y + offsetY) / tileSizeV) - v;
+            float fx = (float)Math.Max(0.0, Math.Min(1.0, localX));
+            float fy = (float)Math.Max(0.0, Math.Min(1.0, localY));
+
+            float south = tile.W.zPos + (tile.S.zPos - tile.W.zPos) * fx;
+            float north = tile.N.zPos + (tile.E.zPos - tile.N.zPos) * fx;
+            z = south + (north - south) * fy;
+            return true;
+        }
+
         public void ClearHover()
         {
             hoveredTile = null;
             onpos = false;
         }
 
-        private void DrawRivers()
-        {
-            if (riverNodeIds.Count == 0) return;
 
-            // A vízfelszín a folyómeder legmélyebb sarka FELETT lebeg – ugyanaz az elv
-            // mint a tengerné: lapos átlátszó quad, alatta látszik a meder → mélység illúzió.
-            // A meder maga a vágott terep (tileSizeM=2, tehát W=1 → Z=2).
-            // Vízfelszín: mederalap + RiverWaterHeight
 
-            // Mély folyó (mind a 4 sarok river node) – sötétebb, több átlátszóság
-            Color riverDeep    = Color.FromArgb(195,  38, 118, 188);
-            // Sekély part (2-3 sarok river node) – világosabb cián
-            Color riverShallow = Color.FromArgb(130,  68, 155, 218);
-            // Rácsszín – halvány kék vonalak a vízfelszínen
-            Color riverGrid    = Color.FromArgb(160, 105, 185, 238);
 
-            float t = (float)(Environment.TickCount64 % 628318) * 0.001f;
-
-            GL.Enable(EnableCap.Blend);
-            GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
-            GL.Begin(PrimitiveType.Quads);
-            for (int u = 0; u < nodeCols - 1; u++)
-            {
-                for (int v = 0; v < nodeRows - 1; v++)
-                {
-                    Tile tile = getTileByCoords(u, v);
-                    if (HasDynamicWater(tile) || !CanRenderFallbackRiver(tile)) continue;
-
-                    int rc = CountRiverCorners(tile);
-
-                    float baseZ = tile.Low * tileSizeM + RiverWaterHeight;
-                    float cx = (tile.W.xPos + tile.E.xPos) * 0.5f;
-                    float cy = (tile.W.yPos + tile.N.yPos) * 0.5f;
-                    // Folyónál felére csökkentett amplitúdó – gyorsabb, kisebb hullám
-                    float wz = ApplyClampedWave(cx, cy, baseZ, RiverWaterHeight, t * 1.4f);
-
-                    GL.Color4(rc == 4 ? riverDeep : riverShallow);
-                    GL.Vertex3(tile.W.xPos, tile.W.yPos, wz);
-                    GL.Vertex3(tile.S.xPos, tile.S.yPos, wz);
-                    GL.Vertex3(tile.E.xPos, tile.E.yPos, wz);
-                    GL.Vertex3(tile.N.xPos, tile.N.yPos, wz);
-                }
-            }
-            GL.End();
-            // Rácsvonalak a mély folyó tile-okon – per-sarok hullám
-            GL.Begin(PrimitiveType.Lines);
-            for (int u = 0; u < nodeCols - 1; u++)
-            {
-                for (int v = 0; v < nodeRows - 1; v++)
-                {
-                    Tile tile = getTileByCoords(u, v);
-                    if (HasDynamicWater(tile) || !CanRenderFallbackRiver(tile)) continue;
-
-                    int rc = CountRiverCorners(tile);
-                    if (rc < 4) continue;
-
-                    float baseZ = tile.Low * tileSizeM + RiverWaterHeight;
-                    float ts = t * 1.4f;
-                    float zwN = ApplyClampedWave(tile.N.xPos, tile.N.yPos, baseZ, RiverWaterHeight, ts);
-                    float zwS = ApplyClampedWave(tile.S.xPos, tile.S.yPos, baseZ, RiverWaterHeight, ts);
-                    float zwE = ApplyClampedWave(tile.E.xPos, tile.E.yPos, baseZ, RiverWaterHeight, ts);
-                    float zwW = ApplyClampedWave(tile.W.xPos, tile.W.yPos, baseZ, RiverWaterHeight, ts);
-
-                    GL.Color4(riverGrid);
-                    GL.Vertex3(tile.W.xPos, tile.W.yPos, zwW); GL.Vertex3(tile.S.xPos, tile.S.yPos, zwS);
-                    GL.Vertex3(tile.S.xPos, tile.S.yPos, zwS); GL.Vertex3(tile.E.xPos, tile.E.yPos, zwE);
-                    GL.Vertex3(tile.E.xPos, tile.E.yPos, zwE); GL.Vertex3(tile.N.xPos, tile.N.yPos, zwN);
-                    GL.Vertex3(tile.N.xPos, tile.N.yPos, zwN); GL.Vertex3(tile.W.xPos, tile.W.yPos, zwW);
-                }
-            }
-            GL.End();
-            GL.LineWidth(2.0f);
-            GL.Disable(EnableCap.Blend);
-        }
-
-        private void DrawHoveredTile()
-        {
-            if (hoveredTile == null) return;
-            Tile t = hoveredTile;
-
-            GL.Enable(EnableCap.Blend);
-            GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
-            // Sárga félig átlátszó fill
-            GL.Begin(PrimitiveType.Triangles);
-            GL.Color4(Color.FromArgb(90, 255, 235, 60));
-            if (Math.Abs(t.W.zPos - t.E.zPos) <= Math.Abs(t.N.zPos - t.S.zPos))
-            {
-                GL.Vertex3(t.W.xPos, t.W.yPos, t.W.zPos);
-                GL.Vertex3(t.S.xPos, t.S.yPos, t.S.zPos);
-                GL.Vertex3(t.E.xPos, t.E.yPos, t.E.zPos);
-                GL.Vertex3(t.W.xPos, t.W.yPos, t.W.zPos);
-                GL.Vertex3(t.E.xPos, t.E.yPos, t.E.zPos);
-                GL.Vertex3(t.N.xPos, t.N.yPos, t.N.zPos);
-            }
-            else
-            {
-                GL.Vertex3(t.N.xPos, t.N.yPos, t.N.zPos);
-                GL.Vertex3(t.W.xPos, t.W.yPos, t.W.zPos);
-                GL.Vertex3(t.S.xPos, t.S.yPos, t.S.zPos);
-                GL.Vertex3(t.N.xPos, t.N.yPos, t.N.zPos);
-                GL.Vertex3(t.S.xPos, t.S.yPos, t.S.zPos);
-                GL.Vertex3(t.E.xPos, t.E.yPos, t.E.zPos);
-            }
-            GL.End();
-
-            // Éles sárga keret
-            GL.LineWidth(4.0f);
-            GL.Begin(PrimitiveType.LineLoop);
-            GL.Color4(Color.FromArgb(245, 255, 240, 80));
-            GL.Vertex3(t.W.xPos, t.W.yPos, t.W.zPos);
-            GL.Vertex3(t.S.xPos, t.S.yPos, t.S.zPos);
-            GL.Vertex3(t.E.xPos, t.E.yPos, t.E.zPos);
-            GL.Vertex3(t.N.xPos, t.N.yPos, t.N.zPos);
-            GL.End();
-            GL.LineWidth(2.0f);
-
-            GL.Disable(EnableCap.Blend);
-        }
-
-        private void DrawSkirts()
-        {
-            const float BASE_Z      = -16.0f;
-            const float RIM_H       =   1.5f;
-            Color colorFront  = Color.FromArgb(205, 163, 112);
-            Color colorSide   = Color.FromArgb(185, 148, 100);
-            Color colorBottom = Color.FromArgb(130, 100,  65);
-            Color colorRim    = Color.FromArgb( 68,  48,  25);
-
-            GL.Begin(PrimitiveType.Quads);
-
-            // ── South edge (v = 0) ────────────────────────────────────────────
-            for (int u = 0; u < nodeCols - 1; u++)
-            {
-                Node a = getNodeByCoords(u,     0);
-                Node b = getNodeByCoords(u + 1, 0);
-                float rimA = a.zPos - RIM_H;
-                float rimB = b.zPos - RIM_H;
-                // sötét peremcsík (felső sáv)
-                GL.Color3(colorRim);
-                GL.Vertex3(a.xPos, a.yPos, a.zPos); GL.Vertex3(b.xPos, b.yPos, b.zPos);
-                GL.Vertex3(b.xPos, b.yPos, rimB);   GL.Vertex3(a.xPos, a.yPos, rimA);
-                // világos oldallap (perem alatt → aljáig)
-                GL.Color3(colorFront);
-                GL.Vertex3(a.xPos, a.yPos, rimA);   GL.Vertex3(b.xPos, b.yPos, rimB);
-                GL.Vertex3(b.xPos, b.yPos, BASE_Z); GL.Vertex3(a.xPos, a.yPos, BASE_Z);
-            }
-
-            // ── North edge (v = nodeRows-1) ───────────────────────────────────
-            for (int u = 0; u < nodeCols - 1; u++)
-            {
-                Node a = getNodeByCoords(u,     nodeRows - 1);
-                Node b = getNodeByCoords(u + 1, nodeRows - 1);
-                float rimA = a.zPos - RIM_H;
-                float rimB = b.zPos - RIM_H;
-                GL.Color3(colorRim);
-                GL.Vertex3(b.xPos, b.yPos, b.zPos); GL.Vertex3(a.xPos, a.yPos, a.zPos);
-                GL.Vertex3(a.xPos, a.yPos, rimA);   GL.Vertex3(b.xPos, b.yPos, rimB);
-                GL.Color3(colorFront);
-                GL.Vertex3(b.xPos, b.yPos, rimB);   GL.Vertex3(a.xPos, a.yPos, rimA);
-                GL.Vertex3(a.xPos, a.yPos, BASE_Z); GL.Vertex3(b.xPos, b.yPos, BASE_Z);
-            }
-
-            // ── West edge (u = 0) ─────────────────────────────────────────────
-            for (int v = 0; v < nodeRows - 1; v++)
-            {
-                Node a = getNodeByCoords(0, v);
-                Node b = getNodeByCoords(0, v + 1);
-                float rimA = a.zPos - RIM_H;
-                float rimB = b.zPos - RIM_H;
-                GL.Color3(colorRim);
-                GL.Vertex3(a.xPos, a.yPos, a.zPos); GL.Vertex3(a.xPos, a.yPos, rimA);
-                GL.Vertex3(b.xPos, b.yPos, rimB);   GL.Vertex3(b.xPos, b.yPos, b.zPos);
-                GL.Color3(colorSide);
-                GL.Vertex3(a.xPos, a.yPos, rimA);   GL.Vertex3(a.xPos, a.yPos, BASE_Z);
-                GL.Vertex3(b.xPos, b.yPos, BASE_Z); GL.Vertex3(b.xPos, b.yPos, rimB);
-            }
-
-            // ── East edge (u = nodeCols-1) ────────────────────────────────────
-            for (int v = 0; v < nodeRows - 1; v++)
-            {
-                Node a = getNodeByCoords(nodeCols - 1, v);
-                Node b = getNodeByCoords(nodeCols - 1, v + 1);
-                float rimA = a.zPos - RIM_H;
-                float rimB = b.zPos - RIM_H;
-                GL.Color3(colorRim);
-                GL.Vertex3(b.xPos, b.yPos, b.zPos); GL.Vertex3(b.xPos, b.yPos, rimB);
-                GL.Vertex3(a.xPos, a.yPos, rimA);   GL.Vertex3(a.xPos, a.yPos, a.zPos);
-                GL.Color3(colorSide);
-                GL.Vertex3(b.xPos, b.yPos, rimB);   GL.Vertex3(b.xPos, b.yPos, BASE_Z);
-                GL.Vertex3(a.xPos, a.yPos, BASE_Z); GL.Vertex3(a.xPos, a.yPos, rimA);
-            }
-
-            // ── Aljlap ────────────────────────────────────────────────────────
-            GL.Color3(colorBottom);
-            Node sw = getNodeByCoords(0,            0);
-            Node se = getNodeByCoords(nodeCols - 1, 0);
-            Node ne = getNodeByCoords(nodeCols - 1, nodeRows - 1);
-            Node nw = getNodeByCoords(0,            nodeRows - 1);
-            GL.Vertex3(sw.xPos, sw.yPos, BASE_Z);
-            GL.Vertex3(se.xPos, se.yPos, BASE_Z);
-            GL.Vertex3(ne.xPos, ne.yPos, BASE_Z);
-            GL.Vertex3(nw.xPos, nw.yPos, BASE_Z);
-
-            GL.End();
-        }
-
-        // Valódi vízszint: a W=0 alapszint FELETT lebegő vízfelszín.
-        // tileSizeM=2, tehát W=1 → Z=2 és W=2 → Z=4. A vízszint Z=3.0f:
-        // ez a sárga part és a zöld terepszint közötti félmagasság, itt hullámzik a felszín.
-        private bool ShouldDrawStandingWater(Tile tile) => hydro.ShouldDrawStandingWater(tile);
-
-        private bool CanRenderFallbackRiver(Tile tile) => hydro.CanRenderFallbackRiver(tile);
-
-        // Két egymásra szuperponált hullám egy adott (x,y) pozícióra.
-        // Amplitúdó szándékosan kicsi: Transport Tycoon-szerű, finoman remegő felszín.
-        private const float WAVE_MAX = 0.36f;
-
-        private float WaveAt(float x, float y, float t)
-        {
-            const float A1 = 0.20f, F1x = 0.028f, F1y = 0.021f, S1 = 0.95f;
-            const float A2 = 0.11f, F2x = 0.052f, F2y = 0.044f, S2 = 1.75f;
-            const float A3 = 0.05f, F3x = 0.094f, F3y = 0.070f, S3 = 3.20f;
-            float swell  = A1 * (float)Math.Sin(t * S1 + x * F1x + y * F1y);
-            float cross  = A2 * (float)Math.Sin(t * S2 - x * F2x + y * F2y + 0.8f);
-            float ripple = A3 * (float)Math.Sin(t * S3 + x * F3x - y * F3y + 1.7f);
-            return swell + cross + ripple;
-        }
-
-        private float GetShoreWaveFactor(float localDepth)
-        {
-            float usableDepth = Math.Max(0f, localDepth - MinimumWaterDepth);
-            if (usableDepth <= 0f) return 0f;
-            float normalized = Math.Min(1f, usableDepth / 0.85f);
-            float rise = normalized * normalized * (3f - 2f * normalized);
-            float fade = 1f - Math.Min(1f, Math.Max(0f, (usableDepth - 0.55f) / 0.80f));
-            fade = fade * fade * (3f - 2f * fade);
-            return rise * fade;
-        }
-
-        private float GetWaveMotionBudget(float localDepth)
-        {
-            float usableDepth = Math.Max(0f, localDepth - MinimumWaterDepth);
-            if (usableDepth <= 0f) return 0f;
-            float ramp = Math.Min(1f, usableDepth / 0.90f);
-            ramp = ramp * ramp * (3f - 2f * ramp);
-            float shore = GetShoreWaveFactor(localDepth);
-            return Math.Min(usableDepth * (0.30f + shore * 0.18f),
-                            0.025f + ramp * 0.34f + shore * 0.06f);
-        }
-
-        private float ApplyClampedWave(float x, float y, float baseWaterZ, float localDepth, float t)
-        {
-            float wave = WaveAt(x, y, t);
-            float shore = GetShoreWaveFactor(localDepth);
-            if (shore > 0f)
-            {
-                wave += 0.09f * shore * (float)Math.Sin(t * 4.1f + x * 0.115f - y * 0.082f + 0.4f)
-                      + 0.05f * shore * (float)Math.Sin(t * 5.6f - x * 0.160f + y * 0.126f + 1.3f);
-            }
-            float budget = GetWaveMotionBudget(localDepth);
-            return baseWaterZ + Math.Max(-budget, Math.Min(budget, wave));
-        }
-
-        private void WaterVertex(Node node, float wz, float t, Color baseColor)
-        {
-            float wave = WaveAt(node.xPos, node.yPos, t);
-            float n = Math.Max(-1f, Math.Min(1f, wave / WAVE_MAX));
-            int shift = (int)(n * 20f);
-            GL.Color4(Color.FromArgb(baseColor.A,
-                Math.Max(0, Math.Min(255, baseColor.R + shift)),
-                Math.Max(0, Math.Min(255, baseColor.G + (int)(shift * 1.4f))),
-                Math.Max(0, Math.Min(255, baseColor.B + (int)(shift * 0.6f)))));
-            GL.Vertex3(node.xPos, node.yPos, wz);
-        }
-
-        // Per-node vízfelszín + hullám. Száraz node-nál SeaLevel-t ad vissza (terep alá esik,
-        // a mélységteszt elrejti) – így nincs szükség polygon-vágásra.
-        private float NodeWaterZ(Node node, float t)
-        {
-            float depth = nodeWaterDepth[node.Id];
-            if (depth < MinimumWaterDepth) return SeaLevel;
-            return ApplyClampedWave(node.xPos, node.yPos, node.zPos + depth, depth, t);
-        }
-
-        private float GetPolygonPointDepth(Tile tile, Vector3 point)
-        {
-            if (Math.Abs(point.X - tile.W.xPos) < 0.001f && Math.Abs(point.Y - tile.W.yPos) < 0.001f)
-                return Math.Max(MinimumWaterDepth, nodeWaterDepth[tile.W.Id]);
-            if (Math.Abs(point.X - tile.S.xPos) < 0.001f && Math.Abs(point.Y - tile.S.yPos) < 0.001f)
-                return Math.Max(MinimumWaterDepth, nodeWaterDepth[tile.S.Id]);
-            if (Math.Abs(point.X - tile.E.xPos) < 0.001f && Math.Abs(point.Y - tile.E.yPos) < 0.001f)
-                return Math.Max(MinimumWaterDepth, nodeWaterDepth[tile.E.Id]);
-            if (Math.Abs(point.X - tile.N.xPos) < 0.001f && Math.Abs(point.Y - tile.N.yPos) < 0.001f)
-                return Math.Max(MinimumWaterDepth, nodeWaterDepth[tile.N.Id]);
-
-            return MinimumWaterDepth;
-        }
-
-        private void DrawWater()
-        {
-            if (nodeWaterDepth == null) return;
-
-            Color waterDeep    = Color.FromArgb(200,  38, 110, 180);
-            Color waterShallow = Color.FromArgb(130,  70, 155, 215);
-            Color waterGrid    = Color.FromArgb(150, 110, 180, 235);
-
-            float t = (float)(Environment.TickCount64 % 628318) * 0.001f;
-
-            GL.Enable(EnableCap.Blend);
-            GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
-
-            // Smooth shading: per-vertex wave-based color gives shimmer effect
-            GL.ShadeModel(ShadingModel.Smooth);
-
-            GL.Begin(PrimitiveType.Quads);
-            for (int u = 0; u < nodeCols - 1; u++)
-            {
-                for (int v = 0; v < nodeRows - 1; v++)
-                {
-                    Tile tile = getTileByCoords(u, v);
-                    if (!HasDynamicWater(tile)) continue;
-
-                    float wzN = NodeWaterZ(tile.N, t);
-                    float wzS = NodeWaterZ(tile.S, t);
-                    float wzE = NodeWaterZ(tile.E, t);
-                    float wzW = NodeWaterZ(tile.W, t);
-
-                    int wetCount = 0;
-                    if (nodeWaterDepth[tile.N.Id] >= MinimumWaterDepth) wetCount++;
-                    if (nodeWaterDepth[tile.S.Id] >= MinimumWaterDepth) wetCount++;
-                    if (nodeWaterDepth[tile.E.Id] >= MinimumWaterDepth) wetCount++;
-                    if (nodeWaterDepth[tile.W.Id] >= MinimumWaterDepth) wetCount++;
-
-                    Color baseColor = wetCount >= 3 ? waterDeep : waterShallow;
-                    WaterVertex(tile.W, wzW, t, baseColor);
-                    WaterVertex(tile.S, wzS, t, baseColor);
-                    WaterVertex(tile.E, wzE, t, baseColor);
-                    WaterVertex(tile.N, wzN, t, baseColor);
-                }
-            }
-            GL.End();
-
-            GL.ShadeModel(ShadingModel.Flat);
-
-            // Rácsvonalak csak mélyvíz tile-okon (mind a 4 sarok nedves)
-            GL.Begin(PrimitiveType.Lines);
-            for (int u = 0; u < nodeCols - 1; u++)
-            {
-                for (int v = 0; v < nodeRows - 1; v++)
-                {
-                    Tile tile = getTileByCoords(u, v);
-                    if (nodeWaterDepth[tile.N.Id] < MinimumWaterDepth) continue;
-                    if (nodeWaterDepth[tile.S.Id] < MinimumWaterDepth) continue;
-                    if (nodeWaterDepth[tile.E.Id] < MinimumWaterDepth) continue;
-                    if (nodeWaterDepth[tile.W.Id] < MinimumWaterDepth) continue;
-
-                    float zwN = NodeWaterZ(tile.N, t);
-                    float zwS = NodeWaterZ(tile.S, t);
-                    float zwE = NodeWaterZ(tile.E, t);
-                    float zwW = NodeWaterZ(tile.W, t);
-
-                    GL.Color4(waterGrid);
-                    GL.Vertex3(tile.W.xPos, tile.W.yPos, zwW); GL.Vertex3(tile.S.xPos, tile.S.yPos, zwS);
-                    GL.Vertex3(tile.S.xPos, tile.S.yPos, zwS); GL.Vertex3(tile.E.xPos, tile.E.yPos, zwE);
-                    GL.Vertex3(tile.E.xPos, tile.E.yPos, zwE); GL.Vertex3(tile.N.xPos, tile.N.yPos, zwN);
-                    GL.Vertex3(tile.N.xPos, tile.N.yPos, zwN); GL.Vertex3(tile.W.xPos, tile.W.yPos, zwW);
-                }
-            }
-            GL.End();
-
-            GL.Disable(EnableCap.Blend);
-        }
-
-        private void DrawWaterWalls()
-        {
-            if (nodeWaterDepth == null) return;
-
-            float t = (float)(Environment.TickCount64 % 628318) * 0.001f;
-
-            GL.Enable(EnableCap.Blend);
-            GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
-            GL.ShadeModel(ShadingModel.Smooth);
-
-            GL.Begin(PrimitiveType.Quads);
-            for (int u = 0; u < nodeCols - 1; u++)
-            {
-                for (int v = 0; v < nodeRows - 1; v++)
-                {
-                    Tile tile = getTileByCoords(u, v);
-                    if (!HasDynamicWater(tile)) continue;
-
-                    // Edge W→S: szomszéd tile (u, v-1)
-                    TryDrawWaterWall(tile.W, tile.S, checkTile(u, v - 1) ? getTileByCoords(u, v - 1) : null, t);
-                    // Edge S→E: szomszéd tile (u+1, v)
-                    TryDrawWaterWall(tile.S, tile.E, checkTile(u + 1, v) ? getTileByCoords(u + 1, v) : null, t);
-                    // Edge E→N: szomszéd tile (u, v+1)
-                    TryDrawWaterWall(tile.E, tile.N, checkTile(u, v + 1) ? getTileByCoords(u, v + 1) : null, t);
-                    // Edge N→W: szomszéd tile (u-1, v)
-                    TryDrawWaterWall(tile.N, tile.W, checkTile(u - 1, v) ? getTileByCoords(u - 1, v) : null, t);
-                }
-            }
-            GL.End();
-
-            GL.ShadeModel(ShadingModel.Flat);
-            GL.Disable(EnableCap.Blend);
-        }
-
-        private void TryDrawWaterWall(Node a, Node b, Tile neighbor, float t)
-        {
-            if (neighbor != null && HasDynamicWater(neighbor)) return;
-
-            float dA = nodeWaterDepth[a.Id];
-            float dB = nodeWaterDepth[b.Id];
-            if (dA < MinimumWaterDepth && dB < MinimumWaterDepth) return;
-
-            float wzA = dA >= MinimumWaterDepth ? a.zPos + dA + WaveAt(a.xPos, a.yPos, t) : a.zPos;
-            float wzB = dB >= MinimumWaterDepth ? b.zPos + dB + WaveAt(b.xPos, b.yPos, t) : b.zPos;
-
-            if (wzA <= a.zPos + 0.02f && wzB <= b.zPos + 0.02f) return;
-
-            // Vízfelszínnél: félátlátszó kék; aljnál: sötét mélykék
-            GL.Color4(Color.FromArgb(155,  55, 130, 195)); GL.Vertex3(a.xPos, a.yPos, wzA);
-            GL.Color4(Color.FromArgb(155,  55, 130, 195)); GL.Vertex3(b.xPos, b.yPos, wzB);
-            GL.Color4(Color.FromArgb(225,   8,  35,  85)); GL.Vertex3(b.xPos, b.yPos, b.zPos);
-            GL.Color4(Color.FromArgb(225,   8,  35,  85)); GL.Vertex3(a.xPos, a.yPos, a.zPos);
-        }
-
-        public bool SearchPoint(double x, double y, double radius)
-        {
-            int nodeU = (int)Math.Round((x + offsetX) / tileSizeH, 0);
-            int nodeV = (int)Math.Round((y + offsetY) / tileSizeV, 0);
-
-            if (checkNode(nodeU, nodeV))
-            {
-                actualNode = getNodeByCoords(nodeU, nodeV);
-
-                onpos = true;
-                return (onpos);
-            }
-
-            onpos = false;
-            return (onpos);
-        }
 
         public void UpElevation()
         {
@@ -1855,18 +1100,24 @@ namespace ForesTycoon
             bool ok = true;
 
             int HeightOf(Node nd) => pending.TryGetValue(nd.Id, out int v) ? v : nd.W;
-
             void Set(Node nd, int h)
             {
                 if (!ok) return;
                 if (h < 0 || h > maxHeight) { ok = false; return; }   // korláton kívül → bukás
                 if (HeightOf(nd) == h) return;
                 pending[nd.Id] = h;
-                foreach (Node nb in getNeighbours(nd))
-                {
-                    int diff = h - HeightOf(nb);
-                    if (Math.Abs(diff) > 1) Set(nb, h - Math.Sign(diff));  // szomszéd 1-gyel a cél felé
-                }
+                TryRelaxNeighbor(nd.U, nd.V - 1, h);
+                TryRelaxNeighbor(nd.U + 1, nd.V, h);
+                TryRelaxNeighbor(nd.U, nd.V + 1, h);
+                TryRelaxNeighbor(nd.U - 1, nd.V, h);
+            }
+
+            void TryRelaxNeighbor(int u, int v, int h)
+            {
+                if (!checkNode(u, v)) return;
+                Node nb = getNodeByCoords(u, v);
+                int diff = h - HeightOf(nb);
+                if (Math.Abs(diff) > 1) Set(nb, h - Math.Sign(diff));
             }
 
             Set(actualNode, actualNode.W + delta);
@@ -1889,6 +1140,7 @@ namespace ForesTycoon
             if (roads.Count == 0) return true;
 
             int HeightOf(Node nd) => pending.TryGetValue(nd.Id, out int v) ? v : nd.W;
+            Tile[] nodeTiles = new Tile[4];
 
             // Út-csempe csomópontok (Node) magasságának módosítása tilos!
             foreach (KeyValuePair<int, int> kv in pending)
@@ -1896,8 +1148,10 @@ namespace ForesTycoon
                 Node node = data.Nodes[kv.Key];
                 if (kv.Value != node.W)
                 {
-                    foreach (Tile tile in getTilesByNode(node))
+                    int nodeTileCount = data.GetTilesByNode(node, nodeTiles);
+                    for (int i = 0; i < nodeTileCount; i++)
                     {
+                        Tile tile = nodeTiles[i];
                         if (roads.Has(tile.Id))
                             return false;
                     }
@@ -1909,8 +1163,12 @@ namespace ForesTycoon
             foreach (int nodeId in pending.Keys)
             {
                 Node node = data.Nodes[nodeId];
-                foreach (Tile tile in getTilesByNode(node))
+                int nodeTileCount = data.GetTilesByNode(node, nodeTiles);
+                for (int i = 0; i < nodeTileCount; i++)
+                {
+                    Tile tile = nodeTiles[i];
                     if (roads.Has(tile.Id)) affectedRoadTiles.Add(tile.Id);
+                }
             }
 
             foreach (int tileId in affectedRoadTiles)
@@ -1932,96 +1190,6 @@ namespace ForesTycoon
                 return ValidateLockedRoadPlacement(roads.GetEdges(t.Id), w, s, e, n, sw, ss, se, sn).IsValid;
 
             return AnalyzeRoadPlacement(t, roads.GetEdges(t.Id), heightOf).IsValid;
-        }
-
-        private void DrawTrees()
-        {
-            for (int u = 1; u < nodeCols - 1; u++)
-            {
-                for (int v = 1; v < nodeRows - 1; v++)
-                {
-                    Tile tile = getTileByCoords(u, v);
-                    float moisture = tileMoisture[tile.Id];
-
-                    // Víz, homok, folyó és legmagasabb csúcsokon nincs fa
-                    if (ShouldDrawStandingWater(tile)) continue;
-                    if (tile.Low <= 1) continue;
-                    if (tile.Low >= 5) continue;
-                    int tileRiverCorners = CountRiverCorners(tile);
-                    if (tileRiverCorners >= 2) continue;
-                    if (moisture < 0.35f || moisture > 0.95f) continue;
-
-                    // Determinisztikus ritka elhelyezés (~minden 5. tile-ra)
-                    int hash = unchecked(u * 374761393 ^ v * 1073741827);
-                    int density = moisture >= 0.7f ? 3 : 5;
-                    if ((hash & 0x7FFFFFFF) % density != 0) continue;
-
-                    float cx      = (tile.W.xPos + tile.S.xPos + tile.E.xPos + tile.N.xPos) * 0.25f;
-                    float cy      = (tile.W.yPos + tile.S.yPos + tile.E.yPos + tile.N.yPos) * 0.25f;
-                    float groundZ = tile.Low * tileSizeM;          // tile legmélyebb sarka
-                    float surfaceZ = Math.Max(Math.Max(tile.W.zPos, tile.S.zPos),
-                                             Math.Max(tile.E.zPos, tile.N.zPos));  // legmagasabb sarok
-
-                    DrawTree(cx, cy, groundZ, surfaceZ);
-                }
-            }
-        }
-
-        private void DrawTree(float x, float y, float groundZ, float surfaceZ)
-        {
-            // ── Törzs ──────────────────────────────────────────────────────────
-            float tr       = 0.32f;          // törzs félszélessége
-            float trunkBot = groundZ - 1.0f; // kicsit a látható talaj alá nyúl
-            float trunkTop = surfaceZ + 0.6f;
-
-            Color trunkL = Color.FromArgb(115, 72, 32);
-            Color trunkD = Color.FromArgb( 80, 50, 20);
-
-            GL.Begin(PrimitiveType.Quads);
-            // Északi oldal (napos)
-            GL.Color3(trunkL);
-            GL.Vertex3(x - tr, y + tr, trunkBot); GL.Vertex3(x + tr, y + tr, trunkBot);
-            GL.Vertex3(x + tr, y + tr, trunkTop); GL.Vertex3(x - tr, y + tr, trunkTop);
-            // Keleti oldal (árnyékos)
-            GL.Color3(trunkD);
-            GL.Vertex3(x + tr, y + tr, trunkBot); GL.Vertex3(x + tr, y - tr, trunkBot);
-            GL.Vertex3(x + tr, y - tr, trunkTop); GL.Vertex3(x + tr, y + tr, trunkTop);
-            // Déli oldal (napos)
-            GL.Color3(trunkL);
-            GL.Vertex3(x + tr, y - tr, trunkBot); GL.Vertex3(x - tr, y - tr, trunkBot);
-            GL.Vertex3(x - tr, y - tr, trunkTop); GL.Vertex3(x + tr, y - tr, trunkTop);
-            // Nyugati oldal (árnyékos)
-            GL.Color3(trunkD);
-            GL.Vertex3(x - tr, y - tr, trunkBot); GL.Vertex3(x - tr, y + tr, trunkBot);
-            GL.Vertex3(x - tr, y + tr, trunkTop); GL.Vertex3(x - tr, y - tr, trunkTop);
-            GL.End();
-
-            // ── Lombkorona: 3 rétegű alacsony-poly kúp ─────────────────────────
-            float baseRadius  = 1.8f;
-            float layerHeight = 2.4f;
-            Color light = Color.FromArgb(55, 128, 42);
-            Color dark  = Color.FromArgb(30,  85, 25);
-
-            for (int layer = 0; layer < 3; layer++)
-            {
-                float baseZ = trunkTop + layer * layerHeight * 0.65f;
-                float tipZ  = baseZ + layerHeight;
-                float rad   = baseRadius * (1.0f - layer * 0.22f);
-
-                float[] px = { x,       x + rad, x,       x - rad };
-                float[] py = { y + rad, y,       y - rad, y       };
-
-                GL.Begin(PrimitiveType.Triangles);
-                for (int i = 0; i < 4; i++)
-                {
-                    int j = (i + 1) % 4;
-                    GL.Color3(i == 0 || i == 3 ? light : dark);
-                    GL.Vertex3(px[i], py[i], baseZ);
-                    GL.Vertex3(px[j], py[j], baseZ);
-                    GL.Vertex3(x, y, tipZ);
-                }
-                GL.End();
-            }
         }
     }
 }

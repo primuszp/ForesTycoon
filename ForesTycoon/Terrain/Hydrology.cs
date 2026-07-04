@@ -45,6 +45,7 @@ namespace ForesTycoon
             bool[] visited = new bool[tiles.Length];
             Queue<Tile> open = new Queue<Tile>();
             List<Tile> basin = new List<Tile>();
+            Tile[] adjacentTiles = new Tile[4];
 
             for (int i = 0; i < tiles.Length; i++)
             {
@@ -61,8 +62,10 @@ namespace ForesTycoon
                     basin.Add(current);
                     if (data.IsBorderTile(current)) touchesBorder = true;
 
-                    foreach (Tile adjacent in data.GetAdjacentTiles(current))
+                    int adjacentCount = data.GetAdjacentTiles(current, adjacentTiles);
+                    for (int j = 0; j < adjacentCount; j++)
                     {
+                        Tile adjacent = adjacentTiles[j];
                         if (!waterCandidates[adjacent.Id] || visited[adjacent.Id]) continue;
                         visited[adjacent.Id] = true;
                         open.Enqueue(adjacent);
@@ -84,8 +87,10 @@ namespace ForesTycoon
                 int riverCorners = CountRiverCorners(tile);
                 if (riverCorners >= 2) moisture = Math.Max(moisture, 0.8f);
 
-                foreach (Tile adjacent in data.GetAdjacentTiles(tile))
+                int adjacentCount = data.GetAdjacentTiles(tile, adjacentTiles);
+                for (int j = 0; j < adjacentCount; j++)
                 {
+                    Tile adjacent = adjacentTiles[j];
                     if (ShouldDrawStandingWater(adjacent))
                         moisture = Math.Max(moisture, 0.6f);
                     else if (CountRiverCorners(adjacent) >= 2)
@@ -110,6 +115,8 @@ namespace ForesTycoon
                 spillLevel[i] = float.PositiveInfinity;
 
             PriorityQueue<Node, float> open = new PriorityQueue<Node, float>();
+            Node[] neighbors = new Node[4];
+            Tile[] sharedTiles = new Tile[2];
 
             void EnqueueIfLower(Node node, float level)
             {
@@ -144,11 +151,13 @@ namespace ForesTycoon
                 settled[node.Id] = true;
                 float currentLevel = spillLevel[node.Id];
 
-                foreach (Node neighbor in data.GetNeighbours(node))
+                int neighborCount = data.GetNeighbours(node, neighbors);
+                for (int i = 0; i < neighborCount; i++)
                 {
+                    Node neighbor = neighbors[i];
                     if (settled[neighbor.Id]) continue;
 
-                    float edgeLevel = GetEdgeBarrierLevel(node, neighbor);
+                    float edgeLevel = GetEdgeBarrierLevel(node, neighbor, sharedTiles);
                     float neighborLevel = Math.Max(currentLevel, Math.Max(edgeLevel, neighbor.zPos));
                     EnqueueIfLower(neighbor, neighborLevel);
                 }
@@ -186,10 +195,18 @@ namespace ForesTycoon
 
         public float GetEdgeBarrierLevel(Node a, Node b)
         {
+            Tile[] sharedTiles = new Tile[2];
+            return GetEdgeBarrierLevel(a, b, sharedTiles);
+        }
+
+        private float GetEdgeBarrierLevel(Node a, Node b, Tile[] sharedTiles)
+        {
             float edgeLevel = Math.Max(a.zPos, b.zPos) + 0.001f;
 
-            foreach (Tile tile in data.GetSharedTiles(a, b))
+            int sharedTileCount = data.GetSharedTiles(a, b, sharedTiles);
+            for (int i = 0; i < sharedTileCount; i++)
             {
+                Tile tile = sharedTiles[i];
                 if (!IsRiverWaterTile(tile)) continue;
                 edgeLevel = Math.Min(edgeLevel, tile.Low * TileSizeM + RiverWaterHeight + 0.001f);
             }
@@ -229,8 +246,11 @@ namespace ForesTycoon
             if (CountRiverCorners(tile) >= 2) return false;
 
             bool hasHigherBank = false;
-            foreach (Tile adjacent in data.GetAdjacentTiles(tile))
+            Tile[] adjacentTiles = new Tile[4];
+            int adjacentCount = data.GetAdjacentTiles(tile, adjacentTiles);
+            for (int i = 0; i < adjacentCount; i++)
             {
+                Tile adjacent = adjacentTiles[i];
                 if (adjacent.Low < tile.Low) return false;
                 if (adjacent.Low > tile.Low) hasHigherBank = true;
             }

@@ -3,7 +3,7 @@ using OpenTK.Graphics.OpenGL;
 
 namespace ForesTycoon
 {
-    sealed public class VertexBuffer : IDisposable
+    public sealed class VertexBuffer : IDisposable
     {
         private int vboId;
         private int eboId;
@@ -12,11 +12,14 @@ namespace ForesTycoon
         private Vertex[] vertices;
 
         private PrimitiveType mode = PrimitiveType.Triangles;
+        private readonly BufferUsageHint usageHint;
 
         public int VboId
         {
             get
             {
+                ThrowIfDisposed();
+
                 // Create an id on first use.
                 if (vboId == 0)
                 {
@@ -31,6 +34,8 @@ namespace ForesTycoon
         {
             get
             {
+                ThrowIfDisposed();
+
                 // Create an id on first use.
                 if (eboId == 0)
                 {
@@ -41,24 +46,23 @@ namespace ForesTycoon
             }
         }
 
-        public VertexBuffer(PrimitiveType mode)
+        public VertexBuffer(PrimitiveType mode, BufferUsageHint usageHint = BufferUsageHint.StaticDraw)
         {
             this.mode = mode;
+            this.usageHint = usageHint;
         }
 
         public void SetData(Vertex[] data)
         {
+            ThrowIfDisposed();
             int size;
 
-            if (data == null)
-            {
-                throw new ArgumentNullException("The data is null!");
-            }
+            if (data == null) throw new ArgumentNullException(nameof(data));
             else
             {
                 this.vertices = data;
                 GL.BindBuffer(BufferTarget.ArrayBuffer, VboId);
-                GL.BufferData(BufferTarget.ArrayBuffer, new IntPtr(data.Length * Vertex.Stride), data, BufferUsageHint.StaticDraw);
+                GL.BufferData(BufferTarget.ArrayBuffer, new IntPtr(data.Length * Vertex.Stride), data, usageHint);
                 GL.GetBufferParameter(BufferTarget.ArrayBuffer, BufferParameterName.BufferSize, out size);
                 if (vertices.Length * Vertex.Stride != size)
                     throw new ApplicationException("Vertex data not uploaded correctly");
@@ -67,12 +71,10 @@ namespace ForesTycoon
 
         public void SetElements(uint[] data)
         {
+            ThrowIfDisposed();
             int size;
 
-            if (data == null)
-            {
-                throw new ArgumentNullException("The element data is null!");
-            }
+            if (data == null) throw new ArgumentNullException(nameof(data));
             else
             {
                 this.indices = data;
@@ -86,6 +88,9 @@ namespace ForesTycoon
 
         public void DrawArray()
         {
+            ThrowIfDisposed();
+            if (vertices == null || vertices.Length == 0) return;
+
             GL.EnableClientState(ArrayCap.VertexArray);
             GL.EnableClientState(ArrayCap.NormalArray);
             GL.EnableClientState(ArrayCap.ColorArray);
@@ -106,6 +111,9 @@ namespace ForesTycoon
 
         public void DrawElements()
         {
+            ThrowIfDisposed();
+            if (vertices == null || vertices.Length == 0 || indices == null || indices.Length == 0) return;
+
             GL.EnableClientState(ArrayCap.VertexArray);
             GL.EnableClientState(ArrayCap.NormalArray);
             GL.EnableClientState(ArrayCap.ColorArray);
@@ -132,6 +140,11 @@ namespace ForesTycoon
             disposed = true;
             if (vboId != 0) { GL.DeleteBuffers(1, ref vboId); vboId = 0; }
             if (eboId != 0) { GL.DeleteBuffers(1, ref eboId); eboId = 0; }
+        }
+
+        private void ThrowIfDisposed()
+        {
+            if (disposed) throw new ObjectDisposedException(nameof(VertexBuffer));
         }
     }
 }

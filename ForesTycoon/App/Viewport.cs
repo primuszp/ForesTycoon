@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Drawing;
 using System.Windows.Forms;
 using OpenTK.Mathematics;
@@ -47,6 +48,10 @@ namespace ForesTycoon
         // ── OpenGL mátrixok (koordináta-visszaszámításhoz) ───────────────────
         private double[] projMatrix  = new double[16];
         private double[] modelMatrix = new double[16];
+        private readonly double[] pickProjMatrix = new double[16];
+        private readonly double[] pickModelMatrix = new double[16];
+        private readonly int[] pickViewMatrix = new int[4];
+        private bool pickMatricesReady;
         private int[]    viewMatrix  = new int[4];
         private Vector3  worldPos    = new Vector3();
 
@@ -68,7 +73,11 @@ namespace ForesTycoon
         private ImGuiController imgui;
         private readonly System.Diagnostics.Stopwatch clock = System.Diagnostics.Stopwatch.StartNew();
         private double lastTime;
-        private System.Windows.Forms.Timer waterTimer;
+        private const int FrameTimerIntervalMs = 33;
+        private System.Windows.Forms.Timer frameTimer;
+        private readonly Stopwatch renderClock = new Stopwatch();
+        private double lastRenderTimeSeconds;
+        private ulong frameIndex;
 
         private float DpiScale => DeviceDpi > 0 ? DeviceDpi / 96f : 1f;
         private int FramebufferWidth => Math.Max(1, (int)Math.Round(ClientSize.Width * DpiScale));
@@ -111,22 +120,23 @@ namespace ForesTycoon
                 MakeCurrent();
                 Context.SwapInterval = 0;   // vsync ki (OpenTK 3 VSync=false megfelelője)
 
-            // OpenGL alapbeállítások
-            GL.Enable(EnableCap.DepthTest);
-            GL.Disable(EnableCap.Lighting);         // Flat, pixel-art stílus
-            GL.Disable(EnableCap.CullFace);         // Mindkét oldal látszódjon (skirt)
-            GL.ShadeModel(ShadingModel.Flat);
-            GL.LineWidth(2.0f);
+                // OpenGL alapbeállítások
+                GL.Enable(EnableCap.DepthTest);
+                GL.Disable(EnableCap.Lighting);         // Flat, pixel-art stílus
+                GL.Disable(EnableCap.CullFace);         // Mindkét oldal látszódjon (skirt)
+                GL.ShadeModel(ShadingModel.Flat);
+                GL.LineWidth(2.0f);
 
                 terrain = new Terrain();
                 imgui = new ImGuiController();
                 isLoaded = true;
+                renderClock.Start();
                 SetupViewport();
                 Focus();
 
-                waterTimer = new System.Windows.Forms.Timer { Interval = 120 };
-                waterTimer.Tick += (s, e) => { if (isLoaded) Invalidate(); };
-                waterTimer.Start();
+                frameTimer = new System.Windows.Forms.Timer { Interval = FrameTimerIntervalMs };
+                frameTimer.Tick += (s, e) => RequestFrame();
+                frameTimer.Start();
             }
             catch (Exception ex)
             {
@@ -167,12 +177,29 @@ namespace ForesTycoon
 
             GL.Rotate(rotx, 1f, 0f, 0f);
             GL.Rotate(roty, 0f, 0f, 1f);
+            CapturePickMatrices();
 
-            terrain.Draw(activeTool == TerrainEditTool.Raise || activeTool == TerrainEditTool.Lower);
+            double now = renderClock.Elapsed.TotalSeconds;
+            float deltaTime = (float)Math.Max(0.0, now - lastRenderTimeSeconds);
+            lastRenderTimeSeconds = now;
+            frameIndex++;
+
+            RenderContext renderContext = new RenderContext(
+                now,
+                deltaTime,
+                frameIndex,
+                activeTool == TerrainEditTool.Raise || activeTool == TerrainEditTool.Lower);
+
+            terrain.Draw(renderContext);
 
             DrawImGui();
 
             SwapBuffers();
+        }
+
+        private void RequestFrame()
+        {
+            if (isLoaded && !DesignMode) Invalidate();
         }
 
         private void DrawImGui()
@@ -284,7 +311,7 @@ namespace ForesTycoon
             roadDragStartTile = null;   // úthálózat drag megszakítása eszközváltáskor
             roadDragging = false;
             terrain?.ClearRoadPreview();
-            Invalidate();
+            RequestFrame();
         }
 
         private static string ToolName(TerrainEditTool tool) => tool switch
@@ -303,7 +330,7 @@ namespace ForesTycoon
             roty = targetRotY = -45f;
             targetZoom = 10f;
             screenX = screenY = 0;
-            Invalidate();
+            RequestFrame();
         }
 
         // ── OpenGL mátrixok kiolvasása (egér → világ koordináta) ────────────
@@ -314,17 +341,45 @@ namespace ForesTycoon
             GL.GetInteger(GetPName.Viewport,         viewMatrix);
         }
 
-        private void UpdateWorldPosition(MouseEventArgs e)
+        private void CapturePickMatrices()
         {
-            float[] depth = new float[1];
             ReadGLMatrices();
+            Array.Copy(projMatrix, pickProjMatrix, projMatrix.Length);
+            Array.Copy(modelMatrix, pickModelMatrix, modelMatrix.Length);
+            Array.Copy(viewMatrix, pickViewMatrix, viewMatrix.Length);
+            pickMatricesReady = pickViewMatrix[2] > 0 && pickViewMatrix[3] > 0;
+        }
+
+        private bool UpdateWorldPosition(MouseEventArgs e)
+        {
+            if (!pickMatricesReady) return false;
+
             float scale = DpiScale;
-            int px = Math.Max(0, Math.Min(viewMatrix[2] - 1, (int)Math.Round(e.X * scale)));
-            int py = Math.Max(0, Math.Min(viewMatrix[3] - 1, (int)Math.Round(e.Y * scale)));
-            int fy = viewMatrix[3] - 1 - py;
-            GL.ReadPixels(px, fy, 1, 1, PixelFormat.DepthComponent, PixelType.Float, depth);
-            Vector3 win = new Vector3(px, fy, depth[0]);
-            CustomUnProject(win, modelMatrix, projMatrix, viewMatrix, out worldPos);
+            int px = Math.Max(0, Math.Min(pickViewMatrix[2] - 1, (int)Math.Round(e.X * scale)));
+            int py = Math.Max(0, Math.Min(pickViewMatrix[3] - 1, (int)Math.Round(e.Y * scale)));
+            int fy = pickViewMatrix[3] - 1 - py;
+
+            if (!CustomUnProject(new Vector3(px, fy, 0.0f), pickModelMatrix, pickProjMatrix, pickViewMatrix, out Vector3 rayNear)) return false;
+            if (!CustomUnProject(new Vector3(px, fy, 1.0f), pickModelMatrix, pickProjMatrix, pickViewMatrix, out Vector3 rayFar)) return false;
+
+            Vector3 ray = rayFar - rayNear;
+            if (Math.Abs(ray.Z) < 0.0001f) return false;
+
+            float targetZ = 0.0f;
+            for (int i = 0; i < 4; i++)
+            {
+                float t = (targetZ - rayNear.Z) / ray.Z;
+                worldPos = rayNear + ray * t;
+                if (terrain == null || !terrain.TryGetSurfaceZ(worldPos.X, worldPos.Y, out float surfaceZ))
+                    break;
+
+                if (Math.Abs(surfaceZ - targetZ) < 0.01f)
+                    break;
+
+                targetZ = surfaceZ;
+            }
+
+            return true;
         }
 
         private void UpdateHover(MouseEventArgs e)
@@ -332,7 +387,13 @@ namespace ForesTycoon
             int screenPxY = Height - e.Y;
             mouseX = screenX + e.X       / zoom;
             mouseY = screenY + screenPxY / zoom;
-            UpdateWorldPosition(e);
+            if (!UpdateWorldPosition(e))
+            {
+                nodeHovered = false;
+                terrain.ClearHover();
+                return;
+            }
+
             nodeHovered = terrain.SearchPoint(worldPos.X, worldPos.Y, 5);
             terrain.SearchTile(worldPos.X, worldPos.Y);
         }
@@ -355,10 +416,10 @@ namespace ForesTycoon
             terrain.Dispose();
             int seed = new Random().Next();
             terrain = new Terrain(TerrainSettings.Default.WithSeed(seed));
-            Invalidate();
+            RequestFrame();
         }
 
-        private void CustomUnProject(Vector3 win, double[] model, double[] proj, int[] view, out Vector3 obj)
+        private bool CustomUnProject(Vector3 win, double[] model, double[] proj, int[] view, out Vector3 obj)
         {
             Matrix4d modelM = new Matrix4d(
                 model[0], model[1], model[2], model[3],
@@ -372,7 +433,14 @@ namespace ForesTycoon
                 proj[8], proj[9], proj[10], proj[11],
                 proj[12], proj[13], proj[14], proj[15]);
 
-            Matrix4d viewProjInv = Matrix4d.Invert(modelM * projM);
+            Matrix4d viewProj = modelM * projM;
+            if (Math.Abs(viewProj.Determinant) < 1e-12)
+            {
+                obj = Vector3.Zero;
+                return false;
+            }
+
+            Matrix4d viewProjInv = Matrix4d.Invert(viewProj);
 
             Vector4d pos = new Vector4d(
                 (win.X - view[0]) / view[2] * 2.0 - 1.0,
@@ -388,10 +456,11 @@ namespace ForesTycoon
             if (w == 0.0)
             {
                 obj = Vector3.Zero;
-                return;
+                return false;
             }
 
             obj = new Vector3((float)(x / w), (float)(y / w), (float)(z / w));
+            return true;
         }
 
         // ── WinForms override-ok ─────────────────────────────────────────────
@@ -409,14 +478,14 @@ namespace ForesTycoon
                 // Zoom a kurzor körül tartva
                 screenX = mouseX - (mouseX - screenX) * (prevZoom / zoom);
                 screenY = mouseY - (mouseY - screenY) * (prevZoom / zoom);
-                Invalidate();   // következő frame
+                RequestFrame();   // következő frame
             }
 
             float rotDiff = targetRotY - roty;
             if (Math.Abs(rotDiff) > 0.01f)
             {
                 roty += rotDiff * 0.12f;
-                Invalidate();
+                RequestFrame();
             }
             else
             {
@@ -429,8 +498,8 @@ namespace ForesTycoon
 
         protected override void OnHandleDestroyed(EventArgs e)
         {
-            waterTimer?.Stop();
-            waterTimer?.Dispose();
+            frameTimer?.Stop();
+            frameTimer?.Dispose();
             imgui?.Dispose();
             base.OnHandleDestroyed(e);
         }
@@ -440,7 +509,7 @@ namespace ForesTycoon
             base.OnResize(e);
             if (!isLoaded) return;
             SetupViewport();
-            Invalidate();
+            RequestFrame();
         }
 
         protected override void OnMouseMove(MouseEventArgs e)
@@ -458,7 +527,7 @@ namespace ForesTycoon
             if (imgui != null && imgui.WantCaptureMouse)
             {
                 terrain.ClearHover();
-                Invalidate();
+                RequestFrame();
                 return;
             }
 
@@ -486,7 +555,7 @@ namespace ForesTycoon
                     break;
             }
 
-            Invalidate();
+            RequestFrame();
         }
 
         protected override void OnMouseUp(MouseEventArgs e)
@@ -505,14 +574,14 @@ namespace ForesTycoon
                 terrain.ClearRoadPreview();
                 roadDragging = false;
                 roadDragStartTile = null;
-                Invalidate();
+                RequestFrame();
                 return;
             }
 
             if (activeTool != TerrainEditTool.Inspect) return;
             // Snap a legközelebbi 90°-ra
             targetRotY = SnapRotation(roty);
-            Invalidate();
+            RequestFrame();
         }
 
         protected override bool IsInputKey(Keys keyData)
@@ -529,22 +598,22 @@ namespace ForesTycoon
 
             // Bal/Jobb: kamera forgatás 90°-os lépésekkel
             if (e.KeyCode == Keys.Left)
-                { targetRotY = SnapRotation(targetRotY) - 90f; Invalidate(); }
+                { targetRotY = SnapRotation(targetRotY) - 90f; RequestFrame(); }
             if (e.KeyCode == Keys.Right)
-                { targetRotY = SnapRotation(targetRotY) + 90f; Invalidate(); }
+                { targetRotY = SnapRotation(targetRotY) + 90f; RequestFrame(); }
 
             // Fel/Le: dőlésszög váltás (30° → 45° → 60°)
             if (e.KeyCode == Keys.Up)
             {
                 tiltIndex = Math.Max(0, tiltIndex - 1);
                 rotx = TILT_ANGLES[tiltIndex];
-                Invalidate();
+                RequestFrame();
             }
             if (e.KeyCode == Keys.Down)
             {
                 tiltIndex = Math.Min(TILT_ANGLES.Length - 1, tiltIndex + 1);
                 rotx = TILT_ANGLES[tiltIndex];
-                Invalidate();
+                RequestFrame();
             }
         }
 
@@ -555,7 +624,7 @@ namespace ForesTycoon
             Focus();
 
             imgui?.MouseButton(MapMouseButton(e.Button), true);
-            if (imgui != null && imgui.WantCaptureMouse) { Invalidate(); return; }
+            if (imgui != null && imgui.WantCaptureMouse) { RequestFrame(); return; }
 
             UpdateHover(e);
             activeButton = e.Button;
@@ -576,14 +645,14 @@ namespace ForesTycoon
             if (!isLoaded) return;
 
             imgui?.MouseScroll(e.Delta / 120f);
-            if (imgui != null && imgui.WantCaptureMouse) { Invalidate(); return; }
+            if (imgui != null && imgui.WantCaptureMouse) { RequestFrame(); return; }
 
             if (e.Delta > 0)
                 targetZoom = Math.Min(targetZoom * 1.25f, 10000f);
             else
                 targetZoom = Math.Max(targetZoom / 1.25f, 0.005f);
 
-            Invalidate();
+            RequestFrame();
         }
 
         protected override void OnClick(EventArgs e)
@@ -596,11 +665,11 @@ namespace ForesTycoon
             if (activeTool != TerrainEditTool.Inspect && !IsRoadTool(activeTool))
             {
                 ApplyActiveTerrainTool();
-                Refresh();
+                RequestFrame();
                 return;
             }
 
-            Refresh();
+            RequestFrame();
         }
 
     }
