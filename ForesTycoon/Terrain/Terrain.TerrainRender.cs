@@ -30,8 +30,10 @@ namespace ForesTycoon
 
         private void BeginTerrainDecals()
         {
-            GL.Disable(EnableCap.DepthTest);
-            GL.DepthMask(false);
+            terrainDecalState?.Dispose();
+            terrainDecalState = new RenderStateScope()
+                .Disable(EnableCap.DepthTest)
+                .DepthWrite(false);
         }
 
         private void DrawTerrainDecals()
@@ -41,25 +43,26 @@ namespace ForesTycoon
 
         private void EndTerrainDecals()
         {
-            GL.DepthMask(true);
-            GL.Enable(EnableCap.DepthTest);
+            terrainDecalState?.Dispose();
+            terrainDecalState = null;
         }
 
         private void DrawLandGrid()
         {
             GL.Color4(Color.FromArgb(82, 115, 38));
-            GL.Begin(PrimitiveType.Lines);
-            foreach (Tile tile in tiles)
+            ImmediateRenderer.Draw(PrimitiveType.Lines, () =>
             {
-                if (ShouldDrawStandingWater(tile)) continue;
-                if (GetTileRenderMaterial(tile) == TileRenderMaterial.Foundation) continue;
+                foreach (Tile tile in tiles)
+                {
+                    if (ShouldDrawStandingWater(tile)) continue;
+                    if (GetTileRenderMaterial(tile) == TileRenderMaterial.Foundation) continue;
 
-                GL.Vertex3(tile.W.xPos, tile.W.yPos, tile.W.zPos); GL.Vertex3(tile.S.xPos, tile.S.yPos, tile.S.zPos);
-                GL.Vertex3(tile.S.xPos, tile.S.yPos, tile.S.zPos); GL.Vertex3(tile.E.xPos, tile.E.yPos, tile.E.zPos);
-                GL.Vertex3(tile.E.xPos, tile.E.yPos, tile.E.zPos); GL.Vertex3(tile.N.xPos, tile.N.yPos, tile.N.zPos);
-                GL.Vertex3(tile.N.xPos, tile.N.yPos, tile.N.zPos); GL.Vertex3(tile.W.xPos, tile.W.yPos, tile.W.zPos);
-            }
-            GL.End();
+                    GL.Vertex3(tile.W.xPos, tile.W.yPos, tile.W.zPos); GL.Vertex3(tile.S.xPos, tile.S.yPos, tile.S.zPos);
+                    GL.Vertex3(tile.S.xPos, tile.S.yPos, tile.S.zPos); GL.Vertex3(tile.E.xPos, tile.E.yPos, tile.E.zPos);
+                    GL.Vertex3(tile.E.xPos, tile.E.yPos, tile.E.zPos); GL.Vertex3(tile.N.xPos, tile.N.yPos, tile.N.zPos);
+                    GL.Vertex3(tile.N.xPos, tile.N.yPos, tile.N.zPos); GL.Vertex3(tile.W.xPos, tile.W.yPos, tile.W.zPos);
+                }
+            });
         }
 
         private void DrawSkirts()
@@ -71,7 +74,8 @@ namespace ForesTycoon
             Color colorBottom = Color.FromArgb(130, 100,  65);
             Color colorRim    = Color.FromArgb( 68,  48,  25);
 
-            GL.Begin(PrimitiveType.Quads);
+            ImmediateRenderer.Draw(PrimitiveType.Quads, () =>
+            {
 
             // ── South edge (v = 0) ────────────────────────────────────────────
             for (int u = 0; u < nodeCols - 1; u++)
@@ -146,8 +150,9 @@ namespace ForesTycoon
             GL.Vertex3(ne.xPos, ne.yPos, BASE_Z);
             GL.Vertex3(nw.xPos, nw.yPos, BASE_Z);
 
-            GL.End();
+            });
         }
 
     }
 }
+

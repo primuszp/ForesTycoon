@@ -11,69 +11,63 @@ namespace ForesTycoon
         {
             if (roads.Count == 0 && previewTiles.Count == 0) return;
 
-            // Decal overlay a terep után, a közös overlay pass depth állapotával.
             if (roads.Count > 0)
             {
-                // 1. réteg: világos krém padka (széles sáv) a terep átlójára illesztve
-                // → lejtőn rámpaként pontosan ráfekszik a felszínre.
-                GL.Begin(PrimitiveType.Quads);
-                foreach (int id in roads.Tiles)
-                    RoadSurface(tiles[id], roads.GetEdges(id), 0.92f, RoadShoulder);
-                GL.End();
+                ImmediateRenderer.Draw(PrimitiveType.Quads, () =>
+                {
+                    foreach (int id in roads.Tiles)
+                        RoadSurface(tiles[id], roads.GetEdges(id), 0.92f, RoadShoulder);
+                });
 
-                // 2. réteg: szürke úttest (keskenyebb sáv) a padka tetején.
-                GL.Begin(PrimitiveType.Quads);
-                foreach (int id in roads.Tiles)
-                    RoadSurface(tiles[id], roads.GetEdges(id), 0.62f, RoadSurfaceColor);
-                GL.End();
+                ImmediateRenderer.Draw(PrimitiveType.Quads, () =>
+                {
+                    foreach (int id in roads.Tiles)
+                        RoadSurface(tiles[id], roads.GetEdges(id), 0.62f, RoadSurfaceColor);
+                });
             }
 
-            // ── Előnézet csempék (kitöltés + körvonal); fehér=építés, piros=bontás.
             if (previewTiles.Count > 0)
             {
-                GL.Enable(EnableCap.Blend);
-                GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
-
-                // Csempénként: bontás → piros; építés → fehér (érvényes) / piros (vízen
-                // vagy túl meredeken nem építhető).
                 Color okFill = Color.FromArgb(70, 255, 255, 255), okLine = Color.FromArgb(235, 255, 255, 255);
                 Color foundationFill = Color.FromArgb(85, 245, 225, 140), foundationLine = Color.FromArgb(245, 245, 225, 140);
                 Color badFill = Color.FromArgb(90, 235, 70, 70), badLine = Color.FromArgb(245, 248, 80, 80);
 
-                GL.Begin(PrimitiveType.Quads);
-                foreach (RoadPlanStep step in previewTiles)
+                using (new RenderStateScope().AlphaBlend())
                 {
-                    RoadPlacement placement = AnalyzeRoadPlacement(tiles[step.TileId], step.Edges);
-                    bool bad = previewRemove || !placement.IsValid;
-                    bool foundation = !bad && placement.Kind == RoadPlacementKind.FoundationSurface;
-                    // Építésnél a meglévő gráf-élekkel összevont alakot mutatjuk → már
-                    // húzás közben látszik a kialakuló kanyar / T / + kereszteződés.
-                    RoadEdge shown = previewRemove ? step.Edges : step.Edges | roads.GetEdges(step.TileId);
-                    if (bad) RoadSurface(tiles[step.TileId], shown, 0.92f, badFill);
-                    else RoadSurface(tiles[step.TileId], shown, 0.92f, foundation ? foundationFill : okFill, placement);
-                }
-                GL.End();
+                    ImmediateRenderer.Draw(PrimitiveType.Quads, () =>
+                    {
+                        foreach (RoadPlanStep step in previewTiles)
+                        {
+                            RoadPlacement placement = AnalyzeRoadPlacement(tiles[step.TileId], step.Edges);
+                            bool bad = previewRemove || !placement.IsValid;
+                            bool foundation = !bad && placement.Kind == RoadPlacementKind.FoundationSurface;
+                            RoadEdge shown = previewRemove ? step.Edges : step.Edges | roads.GetEdges(step.TileId);
+                            if (bad) RoadSurface(tiles[step.TileId], shown, 0.92f, badFill);
+                            else RoadSurface(tiles[step.TileId], shown, 0.92f, foundation ? foundationFill : okFill, placement);
+                        }
+                    });
 
-                GL.LineWidth(2.5f);
-                foreach (RoadPlanStep step in previewTiles)
-                {
-                    Tile t = tiles[step.TileId];
-                    RoadPlacement placement = AnalyzeRoadPlacement(t, step.Edges);
-                    bool bad = previewRemove || !placement.IsValid;
-                    bool foundation = !bad && placement.Kind == RoadPlacementKind.FoundationSurface;
-                    GL.Color4(bad ? badLine : (foundation ? foundationLine : okLine));
-                    GL.Begin(PrimitiveType.LineLoop);
-                    GL.Vertex3(t.W.xPos, t.W.yPos, t.W.zPos);
-                    GL.Vertex3(t.S.xPos, t.S.yPos, t.S.zPos);
-                    GL.Vertex3(t.E.xPos, t.E.yPos, t.E.zPos);
-                    GL.Vertex3(t.N.xPos, t.N.yPos, t.N.zPos);
-                    GL.End();
+                    using (new RenderStateScope().LineWidth(2.5f))
+                    {
+                        foreach (RoadPlanStep step in previewTiles)
+                        {
+                            Tile t = tiles[step.TileId];
+                            RoadPlacement placement = AnalyzeRoadPlacement(t, step.Edges);
+                            bool bad = previewRemove || !placement.IsValid;
+                            bool foundation = !bad && placement.Kind == RoadPlacementKind.FoundationSurface;
+                            GL.Color4(bad ? badLine : (foundation ? foundationLine : okLine));
+                            ImmediateRenderer.Draw(PrimitiveType.LineLoop, () =>
+                            {
+                                GL.Vertex3(t.W.xPos, t.W.yPos, t.W.zPos);
+                                GL.Vertex3(t.S.xPos, t.S.yPos, t.S.zPos);
+                                GL.Vertex3(t.E.xPos, t.E.yPos, t.E.zPos);
+                                GL.Vertex3(t.N.xPos, t.N.yPos, t.N.zPos);
+                            });
+                        }
+                    }
                 }
-                GL.LineWidth(2f);
-                GL.Disable(EnableCap.Blend);
             }
         }
-
         private void RoadSurface(Tile t, RoadEdge edges, float widthFactor, Color color)
         {
             // A befagyasztott vezetőfelület magasságán renderelünk (foundation), nem a
@@ -215,3 +209,4 @@ namespace ForesTycoon
 
     }
 }
+

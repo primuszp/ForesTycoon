@@ -46,23 +46,24 @@ namespace ForesTycoon
             Color trunkLight = Color.FromArgb(115, 72, 32);
             Color trunkDark = Color.FromArgb(80, 50, 20);
 
-            GL.Begin(PrimitiveType.Quads);
-            GL.Color3(trunkLight);
-            GL.Vertex3(x - trunkRadius, y + trunkRadius, trunkBot); GL.Vertex3(x + trunkRadius, y + trunkRadius, trunkBot);
-            GL.Vertex3(x + trunkRadius, y + trunkRadius, trunkTop); GL.Vertex3(x - trunkRadius, y + trunkRadius, trunkTop);
+            ImmediateRenderer.Draw(PrimitiveType.Quads, () =>
+            {
+                GL.Color3(trunkLight);
+                GL.Vertex3(x - trunkRadius, y + trunkRadius, trunkBot); GL.Vertex3(x + trunkRadius, y + trunkRadius, trunkBot);
+                GL.Vertex3(x + trunkRadius, y + trunkRadius, trunkTop); GL.Vertex3(x - trunkRadius, y + trunkRadius, trunkTop);
 
-            GL.Color3(trunkDark);
-            GL.Vertex3(x + trunkRadius, y + trunkRadius, trunkBot); GL.Vertex3(x + trunkRadius, y - trunkRadius, trunkBot);
-            GL.Vertex3(x + trunkRadius, y - trunkRadius, trunkTop); GL.Vertex3(x + trunkRadius, y + trunkRadius, trunkTop);
+                GL.Color3(trunkDark);
+                GL.Vertex3(x + trunkRadius, y + trunkRadius, trunkBot); GL.Vertex3(x + trunkRadius, y - trunkRadius, trunkBot);
+                GL.Vertex3(x + trunkRadius, y - trunkRadius, trunkTop); GL.Vertex3(x + trunkRadius, y + trunkRadius, trunkTop);
 
-            GL.Color3(trunkLight);
-            GL.Vertex3(x + trunkRadius, y - trunkRadius, trunkBot); GL.Vertex3(x - trunkRadius, y - trunkRadius, trunkBot);
-            GL.Vertex3(x - trunkRadius, y - trunkRadius, trunkTop); GL.Vertex3(x + trunkRadius, y - trunkRadius, trunkTop);
+                GL.Color3(trunkLight);
+                GL.Vertex3(x + trunkRadius, y - trunkRadius, trunkBot); GL.Vertex3(x - trunkRadius, y - trunkRadius, trunkBot);
+                GL.Vertex3(x - trunkRadius, y - trunkRadius, trunkTop); GL.Vertex3(x + trunkRadius, y - trunkRadius, trunkTop);
 
-            GL.Color3(trunkDark);
-            GL.Vertex3(x - trunkRadius, y - trunkRadius, trunkBot); GL.Vertex3(x - trunkRadius, y + trunkRadius, trunkBot);
-            GL.Vertex3(x - trunkRadius, y + trunkRadius, trunkTop); GL.Vertex3(x - trunkRadius, y - trunkRadius, trunkTop);
-            GL.End();
+                GL.Color3(trunkDark);
+                GL.Vertex3(x - trunkRadius, y - trunkRadius, trunkBot); GL.Vertex3(x - trunkRadius, y + trunkRadius, trunkBot);
+                GL.Vertex3(x - trunkRadius, y + trunkRadius, trunkTop); GL.Vertex3(x - trunkRadius, y - trunkRadius, trunkTop);
+            });
 
             float baseRadius = 1.8f;
             float layerHeight = 2.4f;
@@ -78,16 +79,17 @@ namespace ForesTycoon
                 float[] px = { x, x + radius, x, x - radius };
                 float[] py = { y + radius, y, y - radius, y };
 
-                GL.Begin(PrimitiveType.Triangles);
-                for (int i = 0; i < 4; i++)
+                ImmediateRenderer.Draw(PrimitiveType.Triangles, () =>
                 {
-                    int j = (i + 1) % 4;
-                    GL.Color3(i == 0 || i == 3 ? light : dark);
-                    GL.Vertex3(px[i], py[i], baseZ);
-                    GL.Vertex3(px[j], py[j], baseZ);
-                    GL.Vertex3(x, y, tipZ);
-                }
-                GL.End();
+                    for (int i = 0; i < 4; i++)
+                    {
+                        int j = (i + 1) % 4;
+                        GL.Color3(i == 0 || i == 3 ? light : dark);
+                        GL.Vertex3(px[i], py[i], baseZ);
+                        GL.Vertex3(px[j], py[j], baseZ);
+                        GL.Vertex3(x, y, tipZ);
+                    }
+                });
             }
         }
     }

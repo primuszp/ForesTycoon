@@ -36,40 +36,41 @@ namespace ForesTycoon
             if (roads.Count == 0) return;
             int tpc = nodeRows - 1;
 
-            GL.Enable(EnableCap.PolygonOffsetFill);
-            GL.PolygonOffset(-1.0f, -1.0f);
-            GL.Begin(PrimitiveType.Quads);
-            foreach (int id in roads.Tiles)
+            using (new RenderStateScope().PolygonOffset(-1.0f, -1.0f))
             {
-                Tile t = tiles[id];
-                int u = id / tpc, v = id % tpc;
-                RoadFootprintCorners(t, out Vector3 iW, out Vector3 iS, out Vector3 iE, out Vector3 iN);
+                ImmediateRenderer.Draw(PrimitiveType.Quads, () =>
+                {
+                    foreach (int id in roads.Tiles)
+                    {
+                        Tile t = tiles[id];
+                        int u = id / tpc, v = id % tpc;
+                        RoadFootprintCorners(t, out Vector3 iW, out Vector3 iS, out Vector3 iE, out Vector3 iN);
 
-                GL.Color4(RoadFoundationColor);
-                GL.Vertex3(iW); GL.Vertex3(iS); GL.Vertex3(iE); GL.Vertex3(iN);
+                        GL.Color4(RoadFoundationColor);
+                        GL.Vertex3(iW); GL.Vertex3(iS); GL.Vertex3(iE); GL.Vertex3(iN);
 
-                DrawFoundationFacesForRoadTile(u, v, t);
+                        DrawFoundationFacesForRoadTile(u, v, t);
+                    }
+                });
             }
-            GL.End();
-            GL.Disable(EnableCap.PolygonOffsetFill);
 
-            GL.DepthMask(false);
-            GL.LineWidth(2.5f);
-            GL.Color4(RoadFoundationLineColor);
-            foreach (int id in roads.Tiles)
+            using (new RenderStateScope().DepthWrite(false).LineWidth(2.5f))
             {
-                Tile t = tiles[id];
-                int u = id / tpc, v = id % tpc;
-                RoadFootprintCorners(t, out Vector3 iW, out Vector3 iS, out Vector3 iE, out Vector3 iN);
+                GL.Color4(RoadFoundationLineColor);
+                foreach (int id in roads.Tiles)
+                {
+                    Tile t = tiles[id];
+                    int u = id / tpc, v = id % tpc;
+                    RoadFootprintCorners(t, out Vector3 iW, out Vector3 iS, out Vector3 iE, out Vector3 iN);
 
-                GL.Begin(PrimitiveType.LineLoop);
-                GL.Vertex3(iW); GL.Vertex3(iS); GL.Vertex3(iE); GL.Vertex3(iN);
-                GL.End();
+                    ImmediateRenderer.Draw(PrimitiveType.LineLoop, () =>
+                    {
+                        GL.Vertex3(iW); GL.Vertex3(iS); GL.Vertex3(iE); GL.Vertex3(iN);
+                    });
 
-                DrawFoundationFaceEdgesForRoadTile(u, v, t);
+                    DrawFoundationFaceEdgesForRoadTile(u, v, t);
+                }
             }
-            GL.LineWidth(2.0f);
-            GL.DepthMask(true);
         }
 
         private void DrawFoundationFacesForRoadTile(int u, int v, Tile roadTile)
@@ -141,9 +142,10 @@ namespace ForesTycoon
 
         private static void DrawFoundationFaceEdges(FoundationFaceData face)
         {
-            GL.Begin(PrimitiveType.LineLoop);
-            GL.Vertex3(face.BottomA); GL.Vertex3(face.BottomB); GL.Vertex3(face.TopB); GL.Vertex3(face.TopA);
-            GL.End();
+            ImmediateRenderer.Draw(PrimitiveType.LineLoop, () =>
+            {
+                GL.Vertex3(face.BottomA); GL.Vertex3(face.BottomB); GL.Vertex3(face.TopB); GL.Vertex3(face.TopA);
+            });
         }
 
         private bool TryGetFoundationFace(int nu, int nv, Node sharedA, Node sharedB, Node outerA, Node outerB,

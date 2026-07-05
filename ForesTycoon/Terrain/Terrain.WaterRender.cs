@@ -11,77 +11,66 @@ namespace ForesTycoon
         {
             if (riverNodeIds.Count == 0) return;
 
-            // A vízfelszín a folyómeder legmélyebb sarka FELETT lebeg – ugyanaz az elv
-            // mint a tengerné: lapos átlátszó quad, alatta látszik a meder → mélység illúzió.
-            // A meder maga a vágott terep (tileSizeM=2, tehát W=1 → Z=2).
-            // Vízfelszín: mederalap + RiverWaterHeight
-
-            // Mély folyó (mind a 4 sarok river node) – sötétebb, több átlátszóság
-            Color riverDeep    = Color.FromArgb(195,  38, 118, 188);
-            // Sekély part (2-3 sarok river node) – világosabb cián
-            Color riverShallow = Color.FromArgb(130,  68, 155, 218);
-            // Rácsszín – halvány kék vonalak a vízfelszínen
-            Color riverGrid    = Color.FromArgb(160, 105, 185, 238);
-
+            Color riverDeep = Color.FromArgb(195, 38, 118, 188);
+            Color riverShallow = Color.FromArgb(130, 68, 155, 218);
+            Color riverGrid = Color.FromArgb(160, 105, 185, 238);
             float t = (float)(context.TotalTimeSeconds % 628.318);
 
-            GL.Enable(EnableCap.Blend);
-            GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
-            GL.Begin(PrimitiveType.Quads);
-            for (int u = 0; u < nodeCols - 1; u++)
+            using (new RenderStateScope().AlphaBlend())
             {
-                for (int v = 0; v < nodeRows - 1; v++)
+                ImmediateRenderer.Draw(PrimitiveType.Quads, () =>
                 {
-                    Tile tile = getTileByCoords(u, v);
-                    if (HasDynamicWater(tile) || !CanRenderFallbackRiver(tile)) continue;
+                    for (int u = 0; u < nodeCols - 1; u++)
+                    {
+                        for (int v = 0; v < nodeRows - 1; v++)
+                        {
+                            Tile tile = getTileByCoords(u, v);
+                            if (HasDynamicWater(tile) || !CanRenderFallbackRiver(tile)) continue;
 
-                    int rc = CountRiverCorners(tile);
+                            int rc = CountRiverCorners(tile);
+                            float baseZ = tile.Low * tileSizeM + RiverWaterHeight;
+                            float cx = (tile.W.xPos + tile.E.xPos) * 0.5f;
+                            float cy = (tile.W.yPos + tile.N.yPos) * 0.5f;
+                            float wz = ApplyClampedWave(cx, cy, baseZ, RiverWaterHeight, t * 1.4f);
 
-                    float baseZ = tile.Low * tileSizeM + RiverWaterHeight;
-                    float cx = (tile.W.xPos + tile.E.xPos) * 0.5f;
-                    float cy = (tile.W.yPos + tile.N.yPos) * 0.5f;
-                    // Folyónál felére csökkentett amplitúdó – gyorsabb, kisebb hullám
-                    float wz = ApplyClampedWave(cx, cy, baseZ, RiverWaterHeight, t * 1.4f);
+                            GL.Color4(rc == 4 ? riverDeep : riverShallow);
+                            GL.Vertex3(tile.W.xPos, tile.W.yPos, wz);
+                            GL.Vertex3(tile.S.xPos, tile.S.yPos, wz);
+                            GL.Vertex3(tile.E.xPos, tile.E.yPos, wz);
+                            GL.Vertex3(tile.N.xPos, tile.N.yPos, wz);
+                        }
+                    }
+                });
 
-                    GL.Color4(rc == 4 ? riverDeep : riverShallow);
-                    GL.Vertex3(tile.W.xPos, tile.W.yPos, wz);
-                    GL.Vertex3(tile.S.xPos, tile.S.yPos, wz);
-                    GL.Vertex3(tile.E.xPos, tile.E.yPos, wz);
-                    GL.Vertex3(tile.N.xPos, tile.N.yPos, wz);
-                }
-            }
-            GL.End();
-            // Rácsvonalak a mély folyó tile-okon – per-sarok hullám
-            GL.Begin(PrimitiveType.Lines);
-            for (int u = 0; u < nodeCols - 1; u++)
-            {
-                for (int v = 0; v < nodeRows - 1; v++)
+                ImmediateRenderer.Draw(PrimitiveType.Lines, () =>
                 {
-                    Tile tile = getTileByCoords(u, v);
-                    if (HasDynamicWater(tile) || !CanRenderFallbackRiver(tile)) continue;
+                    for (int u = 0; u < nodeCols - 1; u++)
+                    {
+                        for (int v = 0; v < nodeRows - 1; v++)
+                        {
+                            Tile tile = getTileByCoords(u, v);
+                            if (HasDynamicWater(tile) || !CanRenderFallbackRiver(tile)) continue;
 
-                    int rc = CountRiverCorners(tile);
-                    if (rc < 4) continue;
+                            int rc = CountRiverCorners(tile);
+                            if (rc < 4) continue;
 
-                    float baseZ = tile.Low * tileSizeM + RiverWaterHeight;
-                    float ts = t * 1.4f;
-                    float zwN = ApplyClampedWave(tile.N.xPos, tile.N.yPos, baseZ, RiverWaterHeight, ts);
-                    float zwS = ApplyClampedWave(tile.S.xPos, tile.S.yPos, baseZ, RiverWaterHeight, ts);
-                    float zwE = ApplyClampedWave(tile.E.xPos, tile.E.yPos, baseZ, RiverWaterHeight, ts);
-                    float zwW = ApplyClampedWave(tile.W.xPos, tile.W.yPos, baseZ, RiverWaterHeight, ts);
+                            float baseZ = tile.Low * tileSizeM + RiverWaterHeight;
+                            float ts = t * 1.4f;
+                            float zwN = ApplyClampedWave(tile.N.xPos, tile.N.yPos, baseZ, RiverWaterHeight, ts);
+                            float zwS = ApplyClampedWave(tile.S.xPos, tile.S.yPos, baseZ, RiverWaterHeight, ts);
+                            float zwE = ApplyClampedWave(tile.E.xPos, tile.E.yPos, baseZ, RiverWaterHeight, ts);
+                            float zwW = ApplyClampedWave(tile.W.xPos, tile.W.yPos, baseZ, RiverWaterHeight, ts);
 
-                    GL.Color4(riverGrid);
-                    GL.Vertex3(tile.W.xPos, tile.W.yPos, zwW); GL.Vertex3(tile.S.xPos, tile.S.yPos, zwS);
-                    GL.Vertex3(tile.S.xPos, tile.S.yPos, zwS); GL.Vertex3(tile.E.xPos, tile.E.yPos, zwE);
-                    GL.Vertex3(tile.E.xPos, tile.E.yPos, zwE); GL.Vertex3(tile.N.xPos, tile.N.yPos, zwN);
-                    GL.Vertex3(tile.N.xPos, tile.N.yPos, zwN); GL.Vertex3(tile.W.xPos, tile.W.yPos, zwW);
-                }
+                            GL.Color4(riverGrid);
+                            GL.Vertex3(tile.W.xPos, tile.W.yPos, zwW); GL.Vertex3(tile.S.xPos, tile.S.yPos, zwS);
+                            GL.Vertex3(tile.S.xPos, tile.S.yPos, zwS); GL.Vertex3(tile.E.xPos, tile.E.yPos, zwE);
+                            GL.Vertex3(tile.E.xPos, tile.E.yPos, zwE); GL.Vertex3(tile.N.xPos, tile.N.yPos, zwN);
+                            GL.Vertex3(tile.N.xPos, tile.N.yPos, zwN); GL.Vertex3(tile.W.xPos, tile.W.yPos, zwW);
+                        }
+                    }
+                });
             }
-            GL.End();
-            GL.LineWidth(2.0f);
-            GL.Disable(EnableCap.Blend);
         }
-
         private bool ShouldDrawStandingWater(Tile tile) => hydro.ShouldDrawStandingWater(tile);
 
         private bool CanRenderFallbackRiver(Tile tile) => hydro.CanRenderFallbackRiver(tile);
@@ -173,111 +162,98 @@ namespace ForesTycoon
         {
             if (nodeWaterDepth == null) return;
 
-            Color waterDeep    = Color.FromArgb(200,  38, 110, 180);
-            Color waterShallow = Color.FromArgb(130,  70, 155, 215);
-            Color waterGrid    = Color.FromArgb(150, 110, 180, 235);
-
+            Color waterDeep = Color.FromArgb(200, 38, 110, 180);
+            Color waterShallow = Color.FromArgb(130, 70, 155, 215);
+            Color waterGrid = Color.FromArgb(150, 110, 180, 235);
             float t = (float)(context.TotalTimeSeconds % 628.318);
 
-            GL.Enable(EnableCap.Blend);
-            GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
-
-            // Smooth shading: per-vertex wave-based color gives shimmer effect
-            GL.ShadeModel(ShadingModel.Smooth);
-
-            GL.Begin(PrimitiveType.Quads);
-            for (int u = 0; u < nodeCols - 1; u++)
+            using (new RenderStateScope().AlphaBlend().ShadeModel(ShadingModel.Smooth))
             {
-                for (int v = 0; v < nodeRows - 1; v++)
+                ImmediateRenderer.Draw(PrimitiveType.Quads, () =>
                 {
-                    Tile tile = getTileByCoords(u, v);
-                    if (!HasDynamicWater(tile)) continue;
+                    for (int u = 0; u < nodeCols - 1; u++)
+                    {
+                        for (int v = 0; v < nodeRows - 1; v++)
+                        {
+                            Tile tile = getTileByCoords(u, v);
+                            if (!HasDynamicWater(tile)) continue;
 
-                    float wzN = NodeWaterZ(tile.N, t);
-                    float wzS = NodeWaterZ(tile.S, t);
-                    float wzE = NodeWaterZ(tile.E, t);
-                    float wzW = NodeWaterZ(tile.W, t);
+                            float wzN = NodeWaterZ(tile.N, t);
+                            float wzS = NodeWaterZ(tile.S, t);
+                            float wzE = NodeWaterZ(tile.E, t);
+                            float wzW = NodeWaterZ(tile.W, t);
 
-                    int wetCount = 0;
-                    if (nodeWaterDepth[tile.N.Id] >= MinimumWaterDepth) wetCount++;
-                    if (nodeWaterDepth[tile.S.Id] >= MinimumWaterDepth) wetCount++;
-                    if (nodeWaterDepth[tile.E.Id] >= MinimumWaterDepth) wetCount++;
-                    if (nodeWaterDepth[tile.W.Id] >= MinimumWaterDepth) wetCount++;
+                            int wetCount = 0;
+                            if (nodeWaterDepth[tile.N.Id] >= MinimumWaterDepth) wetCount++;
+                            if (nodeWaterDepth[tile.S.Id] >= MinimumWaterDepth) wetCount++;
+                            if (nodeWaterDepth[tile.E.Id] >= MinimumWaterDepth) wetCount++;
+                            if (nodeWaterDepth[tile.W.Id] >= MinimumWaterDepth) wetCount++;
 
-                    Color baseColor = wetCount >= 3 ? waterDeep : waterShallow;
-                    WaterVertex(tile.W, wzW, t, baseColor);
-                    WaterVertex(tile.S, wzS, t, baseColor);
-                    WaterVertex(tile.E, wzE, t, baseColor);
-                    WaterVertex(tile.N, wzN, t, baseColor);
-                }
+                            Color baseColor = wetCount >= 3 ? waterDeep : waterShallow;
+                            WaterVertex(tile.W, wzW, t, baseColor);
+                            WaterVertex(tile.S, wzS, t, baseColor);
+                            WaterVertex(tile.E, wzE, t, baseColor);
+                            WaterVertex(tile.N, wzN, t, baseColor);
+                        }
+                    }
+                });
             }
-            GL.End();
 
-            GL.ShadeModel(ShadingModel.Flat);
-
-            // Rácsvonalak csak mélyvíz tile-okon (mind a 4 sarok nedves)
-            GL.Begin(PrimitiveType.Lines);
-            for (int u = 0; u < nodeCols - 1; u++)
+            using (new RenderStateScope().AlphaBlend())
             {
-                for (int v = 0; v < nodeRows - 1; v++)
+                ImmediateRenderer.Draw(PrimitiveType.Lines, () =>
                 {
-                    Tile tile = getTileByCoords(u, v);
-                    if (nodeWaterDepth[tile.N.Id] < MinimumWaterDepth) continue;
-                    if (nodeWaterDepth[tile.S.Id] < MinimumWaterDepth) continue;
-                    if (nodeWaterDepth[tile.E.Id] < MinimumWaterDepth) continue;
-                    if (nodeWaterDepth[tile.W.Id] < MinimumWaterDepth) continue;
+                    for (int u = 0; u < nodeCols - 1; u++)
+                    {
+                        for (int v = 0; v < nodeRows - 1; v++)
+                        {
+                            Tile tile = getTileByCoords(u, v);
+                            if (nodeWaterDepth[tile.N.Id] < MinimumWaterDepth) continue;
+                            if (nodeWaterDepth[tile.S.Id] < MinimumWaterDepth) continue;
+                            if (nodeWaterDepth[tile.E.Id] < MinimumWaterDepth) continue;
+                            if (nodeWaterDepth[tile.W.Id] < MinimumWaterDepth) continue;
 
-                    float zwN = NodeWaterZ(tile.N, t);
-                    float zwS = NodeWaterZ(tile.S, t);
-                    float zwE = NodeWaterZ(tile.E, t);
-                    float zwW = NodeWaterZ(tile.W, t);
+                            float zwN = NodeWaterZ(tile.N, t);
+                            float zwS = NodeWaterZ(tile.S, t);
+                            float zwE = NodeWaterZ(tile.E, t);
+                            float zwW = NodeWaterZ(tile.W, t);
 
-                    GL.Color4(waterGrid);
-                    GL.Vertex3(tile.W.xPos, tile.W.yPos, zwW); GL.Vertex3(tile.S.xPos, tile.S.yPos, zwS);
-                    GL.Vertex3(tile.S.xPos, tile.S.yPos, zwS); GL.Vertex3(tile.E.xPos, tile.E.yPos, zwE);
-                    GL.Vertex3(tile.E.xPos, tile.E.yPos, zwE); GL.Vertex3(tile.N.xPos, tile.N.yPos, zwN);
-                    GL.Vertex3(tile.N.xPos, tile.N.yPos, zwN); GL.Vertex3(tile.W.xPos, tile.W.yPos, zwW);
-                }
+                            GL.Color4(waterGrid);
+                            GL.Vertex3(tile.W.xPos, tile.W.yPos, zwW); GL.Vertex3(tile.S.xPos, tile.S.yPos, zwS);
+                            GL.Vertex3(tile.S.xPos, tile.S.yPos, zwS); GL.Vertex3(tile.E.xPos, tile.E.yPos, zwE);
+                            GL.Vertex3(tile.E.xPos, tile.E.yPos, zwE); GL.Vertex3(tile.N.xPos, tile.N.yPos, zwN);
+                            GL.Vertex3(tile.N.xPos, tile.N.yPos, zwN); GL.Vertex3(tile.W.xPos, tile.W.yPos, zwW);
+                        }
+                    }
+                });
             }
-            GL.End();
-
-            GL.Disable(EnableCap.Blend);
         }
-
         private void DrawWaterWalls(RenderContext context)
         {
             if (nodeWaterDepth == null) return;
 
             float t = (float)(context.TotalTimeSeconds % 628.318);
 
-            GL.Enable(EnableCap.Blend);
-            GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
-            GL.ShadeModel(ShadingModel.Smooth);
-
-            GL.Begin(PrimitiveType.Quads);
-            for (int u = 0; u < nodeCols - 1; u++)
+            using (new RenderStateScope().AlphaBlend().ShadeModel(ShadingModel.Smooth))
             {
-                for (int v = 0; v < nodeRows - 1; v++)
+                ImmediateRenderer.Draw(PrimitiveType.Quads, () =>
                 {
-                    Tile tile = getTileByCoords(u, v);
-                    if (!HasDynamicWater(tile)) continue;
+                    for (int u = 0; u < nodeCols - 1; u++)
+                    {
+                        for (int v = 0; v < nodeRows - 1; v++)
+                        {
+                            Tile tile = getTileByCoords(u, v);
+                            if (!HasDynamicWater(tile)) continue;
 
-                    // Edge W→S: szomszéd tile (u, v-1)
-                    TryDrawWaterWall(tile.W, tile.S, checkTile(u, v - 1) ? getTileByCoords(u, v - 1) : null, t);
-                    // Edge S→E: szomszéd tile (u+1, v)
-                    TryDrawWaterWall(tile.S, tile.E, checkTile(u + 1, v) ? getTileByCoords(u + 1, v) : null, t);
-                    // Edge E→N: szomszéd tile (u, v+1)
-                    TryDrawWaterWall(tile.E, tile.N, checkTile(u, v + 1) ? getTileByCoords(u, v + 1) : null, t);
-                    // Edge N→W: szomszéd tile (u-1, v)
-                    TryDrawWaterWall(tile.N, tile.W, checkTile(u - 1, v) ? getTileByCoords(u - 1, v) : null, t);
-                }
+                            TryDrawWaterWall(tile.W, tile.S, checkTile(u, v - 1) ? getTileByCoords(u, v - 1) : null, t);
+                            TryDrawWaterWall(tile.S, tile.E, checkTile(u + 1, v) ? getTileByCoords(u + 1, v) : null, t);
+                            TryDrawWaterWall(tile.E, tile.N, checkTile(u, v + 1) ? getTileByCoords(u, v + 1) : null, t);
+                            TryDrawWaterWall(tile.N, tile.W, checkTile(u - 1, v) ? getTileByCoords(u - 1, v) : null, t);
+                        }
+                    }
+                });
             }
-            GL.End();
-
-            GL.ShadeModel(ShadingModel.Flat);
-            GL.Disable(EnableCap.Blend);
         }
-
         private void TryDrawWaterWall(Node a, Node b, Tile neighbor, float t)
         {
             if (neighbor != null && HasDynamicWater(neighbor)) return;
@@ -300,3 +276,6 @@ namespace ForesTycoon
 
     }
 }
+
+
+

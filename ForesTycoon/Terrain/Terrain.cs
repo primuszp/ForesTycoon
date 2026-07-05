@@ -18,6 +18,7 @@ namespace ForesTycoon
         private readonly VertexBuffer edges = new VertexBuffer(PrimitiveType.Lines, BufferUsageHint.DynamicDraw);
         private readonly RoadNetwork roads = new RoadNetwork();
         private readonly RenderPipeline renderPipeline = new RenderPipeline();
+        private RenderStateScope terrainDecalState;
 
         // Foundation-réteg: az út VEZETŐFELÜLETÉNEK befagyasztott magassága sarkonként
         // (nodeId → W az építés pillanatában). A terep alatta szabadon alakítható, de az
@@ -94,7 +95,7 @@ namespace ForesTycoon
             renderPipeline.Add(RenderLayer.Props, "props", _ => DrawTrees());
             renderPipeline.Add(RenderLayer.DebugOverlay, "debug-overlay", context =>
             {
-                if (context.ShowNodeMarker) DrawNodeMarker();
+                if (context.ShowNodeMarker) DrawNodeMarker(context.NodeMarkerRadius);
             });
         }
 
@@ -1100,6 +1101,8 @@ namespace ForesTycoon
         /// <summary>GL-erőforrások felszabadítása (regeneráláskor a régi terep buffereihez).</summary>
         public void Dispose()
         {
+            terrainDecalState?.Dispose();
+            terrainDecalState = null;
             foreach (VertexBuffer vbo in vbos.Values) vbo.Dispose();
             vbos.Clear();
             edges.Dispose();

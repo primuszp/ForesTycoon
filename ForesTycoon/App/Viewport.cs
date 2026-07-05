@@ -285,13 +285,16 @@ namespace ForesTycoon
             bool isTerrainEditTool = activeTool == TerrainEditTool.Raise || activeTool == TerrainEditTool.Lower;
             bool isRotating = activeTool == TerrainEditTool.Inspect && activeButton == MouseButtons.Left;
             bool showTileHighlight = !isTerrainEditTool && !isRotating;
+            float markerPixelRadius = Math.Max(4.0f, Math.Min(zoom * 0.55f, 9.0f));
+            float nodeMarkerRadius = markerPixelRadius / Math.Max(zoom, 0.001f);
 
             RenderContext renderContext = new RenderContext(
                 now,
                 deltaTime,
                 frameIndex,
                 isTerrainEditTool,
-                showTileHighlight);
+                showTileHighlight,
+                nodeMarkerRadius);
 
             terrain.Draw(renderContext);
 
