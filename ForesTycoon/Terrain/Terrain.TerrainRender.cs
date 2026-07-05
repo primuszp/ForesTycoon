@@ -1,5 +1,6 @@
 using System.Drawing;
 using OpenTK.Graphics.OpenGL;
+using OpenTK.Mathematics;
 
 namespace ForesTycoon
 {
@@ -14,7 +15,7 @@ namespace ForesTycoon
                 // Az út-csempék terep-meshe helyett a platform/földmű renderelődik
                 // (DrawRoadFoundations) — különben bevágásnál a magasabb terep eltakarná az utat.
                 if (roads.Has(tile.Id)) continue;
-                if (GetTileRenderMaterial(tile) == TileRenderMaterial.Foundation) continue;
+                if (GetTileRenderMaterial(tile) != TileRenderMaterial.Grass) continue;
 
                 bool tileFlip = flippedDiagonalTiles.Contains(tile.Id);
                 VertexBuffer vbo = vbos[tile.Code + "_" + tile.Low + (tileFlip ? "_f" : "")];
@@ -49,20 +50,71 @@ namespace ForesTycoon
 
         private void DrawLandGrid()
         {
-            GL.Color4(Color.FromArgb(82, 115, 38));
+            Color terrainLine = Color.FromArgb(82, 115, 38);
             ImmediateRenderer.Draw(PrimitiveType.Lines, () =>
             {
                 foreach (Tile tile in tiles)
                 {
                     if (ShouldDrawStandingWater(tile)) continue;
-                    if (GetTileRenderMaterial(tile) == TileRenderMaterial.Foundation) continue;
+                    DrawTerrainGridBase(tile, terrainLine);
+                }
 
-                    GL.Vertex3(tile.W.xPos, tile.W.yPos, tile.W.zPos); GL.Vertex3(tile.S.xPos, tile.S.yPos, tile.S.zPos);
-                    GL.Vertex3(tile.S.xPos, tile.S.yPos, tile.S.zPos); GL.Vertex3(tile.E.xPos, tile.E.yPos, tile.E.zPos);
-                    GL.Vertex3(tile.E.xPos, tile.E.yPos, tile.E.zPos); GL.Vertex3(tile.N.xPos, tile.N.yPos, tile.N.zPos);
-                    GL.Vertex3(tile.N.xPos, tile.N.yPos, tile.N.zPos); GL.Vertex3(tile.W.xPos, tile.W.yPos, tile.W.zPos);
+                foreach (Tile tile in tiles)
+                {
+                    if (ShouldDrawStandingWater(tile)) continue;
+                    DrawFoundationGridOverlay(tile);
                 }
             });
+        }
+
+        private void DrawTerrainGridBase(Tile tile, Color terrainLine)
+        {
+            FoundationTileInfo info = GetFoundationTileInfo(tile);
+
+            if (info.Material == TileRenderMaterial.Grass)
+            {
+                GL.Color4(terrainLine);
+                DrawTileOutline(tile);
+                return;
+            }
+
+            if (info.SplitGrid)
+            {
+                MixedTrianglePoints(tile, info.Edge, false, out Vector3 ga, out Vector3 gb, out Vector3 gc);
+                GL.Color4(terrainLine);
+                DrawTriangleEdges(ga, gb, gc);
+            }
+        }
+
+        private void DrawFoundationGridOverlay(Tile tile)
+        {
+            FoundationTileInfo info = GetFoundationTileInfo(tile);
+            if (info.Material == TileRenderMaterial.Grass) return;
+
+            GL.Color4(RoadFoundationLineColor);
+            if (!info.SplitGrid)
+            {
+                DrawTileOutline(tile);
+                return;
+            }
+
+            MixedTrianglePoints(tile, info.Edge, true, out Vector3 ba, out Vector3 bb, out Vector3 bc);
+            DrawTriangleEdges(ba, bb, bc);
+        }
+
+        private static void DrawTileOutline(Tile tile)
+        {
+            GL.Vertex3(tile.W.xPos, tile.W.yPos, tile.W.zPos); GL.Vertex3(tile.S.xPos, tile.S.yPos, tile.S.zPos);
+            GL.Vertex3(tile.S.xPos, tile.S.yPos, tile.S.zPos); GL.Vertex3(tile.E.xPos, tile.E.yPos, tile.E.zPos);
+            GL.Vertex3(tile.E.xPos, tile.E.yPos, tile.E.zPos); GL.Vertex3(tile.N.xPos, tile.N.yPos, tile.N.zPos);
+            GL.Vertex3(tile.N.xPos, tile.N.yPos, tile.N.zPos); GL.Vertex3(tile.W.xPos, tile.W.yPos, tile.W.zPos);
+        }
+
+        private static void DrawTriangleEdges(Vector3 a, Vector3 b, Vector3 c)
+        {
+            GL.Vertex3(a); GL.Vertex3(b);
+            GL.Vertex3(b); GL.Vertex3(c);
+            GL.Vertex3(c); GL.Vertex3(a);
         }
 
         private void DrawSkirts()

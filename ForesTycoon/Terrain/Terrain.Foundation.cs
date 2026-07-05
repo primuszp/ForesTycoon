@@ -10,7 +10,22 @@ namespace ForesTycoon
         private enum TileRenderMaterial
         {
             Grass,
-            Foundation
+            Foundation,
+            MixedFoundation
+        }
+
+        private readonly struct FoundationTileInfo
+        {
+            public FoundationTileInfo(TileRenderMaterial material, RoadEdge edge, bool splitGrid)
+            {
+                Material = material;
+                Edge = edge;
+                SplitGrid = splitGrid;
+            }
+
+            public TileRenderMaterial Material { get; }
+            public RoadEdge Edge { get; }
+            public bool SplitGrid { get; }
         }
 
         private readonly struct FoundationFaceData
@@ -52,9 +67,11 @@ namespace ForesTycoon
                         DrawFoundationFacesForRoadTile(u, v, t);
                     }
                 });
+
+                DrawMixedFoundationTileSurfaces();
             }
 
-            using (new RenderStateScope().DepthWrite(false).LineWidth(2.5f))
+            using (new RenderStateScope().DepthWrite(false))
             {
                 GL.Color4(RoadFoundationLineColor);
                 foreach (int id in roads.Tiles)
@@ -67,10 +84,84 @@ namespace ForesTycoon
                     {
                         GL.Vertex3(iW); GL.Vertex3(iS); GL.Vertex3(iE); GL.Vertex3(iN);
                     });
-
-                    DrawFoundationFaceEdgesForRoadTile(u, v, t);
                 }
             }
+        }
+
+        private void DrawMixedFoundationTileSurfaces()
+        {
+            ImmediateRenderer.Draw(PrimitiveType.Triangles, () =>
+            {
+                foreach (Tile tile in tiles)
+                {
+                    FoundationTileInfo info = GetFoundationTileInfo(tile);
+                    if (info.Material != TileRenderMaterial.MixedFoundation) continue;
+
+                    DrawMixedFoundationTile(tile, info.Edge);
+                }
+            });
+        }
+
+        private void DrawMixedFoundationTile(Tile tile, RoadEdge edge)
+        {
+            DrawMixedTriangle(tile, edge, true, RoadFoundationSlopeColor);
+            DrawMixedTriangle(tile, edge, false, TerrainTopColor);
+        }
+
+        private static void DrawMixedTriangle(Tile tile, RoadEdge edge, bool roadSide, Color baseColor)
+        {
+            MixedTrianglePoints(tile, edge, roadSide, out Vector3 a, out Vector3 b, out Vector3 c);
+            GL.Color4(ShadedTileColor(baseColor, a, b, c));
+            GL.Vertex3(a);
+            GL.Vertex3(b);
+            GL.Vertex3(c);
+        }
+
+        private static void MixedTrianglePoints(Tile tile, RoadEdge edge, bool roadSide, out Vector3 a, out Vector3 b, out Vector3 c)
+        {
+            if (roadSide)
+            {
+                switch (edge)
+                {
+                    case RoadEdge.WS:
+                        a = Corner(tile.W); b = Corner(tile.S); c = Corner(tile.E); return;
+                    case RoadEdge.SE:
+                        a = Corner(tile.S); b = Corner(tile.E); c = Corner(tile.N); return;
+                    case RoadEdge.EN:
+                        a = Corner(tile.E); b = Corner(tile.N); c = Corner(tile.W); return;
+                    case RoadEdge.NW:
+                        a = Corner(tile.N); b = Corner(tile.W); c = Corner(tile.S); return;
+                }
+            }
+            else
+            {
+                switch (edge)
+                {
+                    case RoadEdge.WS:
+                        a = Corner(tile.W); b = Corner(tile.E); c = Corner(tile.N); return;
+                    case RoadEdge.SE:
+                        a = Corner(tile.S); b = Corner(tile.N); c = Corner(tile.W); return;
+                    case RoadEdge.EN:
+                        a = Corner(tile.E); b = Corner(tile.W); c = Corner(tile.S); return;
+                    case RoadEdge.NW:
+                        a = Corner(tile.N); b = Corner(tile.S); c = Corner(tile.E); return;
+                }
+            }
+
+            a = b = c = Corner(tile.W);
+        }
+
+        private static Color ShadedTileColor(Color baseColor, Vector3 a, Vector3 b, Vector3 c)
+        {
+            Vector3 cross = Vector3.Cross(b - a, c - a);
+            Vector3 normal = cross.LengthSquared > 0.0001f ? Vector3.Normalize(cross) : Vector3.UnitZ;
+            Vector3 light = Vector3.Normalize(new Vector3(0.4f, 0.6f, 1.5f));
+            float shade = Math.Max(0.55f, Math.Min(1.0f, Math.Abs(Vector3.Dot(normal, light))));
+            if (float.IsNaN(shade)) shade = 1.0f;
+            return Color.FromArgb(baseColor.A,
+                (int)(baseColor.R * shade),
+                (int)(baseColor.G * shade),
+                (int)(baseColor.B * shade));
         }
 
         private void DrawFoundationFacesForRoadTile(int u, int v, Tile roadTile)
@@ -96,29 +187,6 @@ namespace ForesTycoon
             }
         }
 
-        private void DrawFoundationFaceEdgesForRoadTile(int u, int v, Tile roadTile)
-        {
-            if (TryGetFoundationFaceForRoadEdge(u, v - 1, roadTile.W, roadTile.S, RoadEdge.WS, out FoundationFaceData ws))
-            {
-                DrawFoundationFaceEdges(ws);
-            }
-
-            if (TryGetFoundationFaceForRoadEdge(u + 1, v, roadTile.S, roadTile.E, RoadEdge.SE, out FoundationFaceData se))
-            {
-                DrawFoundationFaceEdges(se);
-            }
-
-            if (TryGetFoundationFaceForRoadEdge(u, v + 1, roadTile.E, roadTile.N, RoadEdge.EN, out FoundationFaceData en))
-            {
-                DrawFoundationFaceEdges(en);
-            }
-
-            if (TryGetFoundationFaceForRoadEdge(u - 1, v, roadTile.N, roadTile.W, RoadEdge.NW, out FoundationFaceData nw))
-            {
-                DrawFoundationFaceEdges(nw);
-            }
-        }
-
         private bool TryGetFoundationFaceForRoadEdge(int adjacentU, int adjacentV, Node sharedA, Node sharedB, RoadEdge edge, out FoundationFaceData face)
         {
             face = default;
@@ -138,14 +206,6 @@ namespace ForesTycoon
         {
             GL.Color4(FoundationFaceColor(face.BottomA, face.BottomB, face.TopB));
             GL.Vertex3(face.BottomA); GL.Vertex3(face.BottomB); GL.Vertex3(face.TopB); GL.Vertex3(face.TopA);
-        }
-
-        private static void DrawFoundationFaceEdges(FoundationFaceData face)
-        {
-            ImmediateRenderer.Draw(PrimitiveType.LineLoop, () =>
-            {
-                GL.Vertex3(face.BottomA); GL.Vertex3(face.BottomB); GL.Vertex3(face.TopB); GL.Vertex3(face.TopA);
-            });
         }
 
         private bool TryGetFoundationFace(int nu, int nv, Node sharedA, Node sharedB, Node outerA, Node outerB,
@@ -186,36 +246,101 @@ namespace ForesTycoon
 
         private TileRenderMaterial GetTileRenderMaterial(Tile tile)
         {
-            if (roads.Has(tile.Id)) return TileRenderMaterial.Foundation;
+            return GetFoundationTileInfo(tile).Material;
+        }
+
+        private FoundationTileInfo GetFoundationTileInfo(Tile tile)
+        {
+            if (roads.Has(tile.Id)) return new FoundationTileInfo(TileRenderMaterial.Foundation, RoadEdge.None, false);
 
             int tpc = nodeRows - 1;
             int u = tile.Id / tpc;
             int v = tile.Id % tpc;
 
-            bool foundation = HasFoundationFaceFromAdjacentRoads(u, v, tile);
+            RoadEdge edges = GetFoundationEdgesFromAdjacentRoads(u, v, tile);
+            int edgeCount = CountEdges(edges);
 
-            return foundation ? TileRenderMaterial.Foundation : TileRenderMaterial.Grass;
+            if (edgeCount == 0)
+            {
+                RoadEdge cornerEdge = IsCoplanarTile(tile) ? RoadEdge.None : GetFoundationCornerEdge(u, v);
+                if (cornerEdge != RoadEdge.None)
+                    return new FoundationTileInfo(TileRenderMaterial.MixedFoundation, cornerEdge, true);
+
+                return new FoundationTileInfo(TileRenderMaterial.Grass, RoadEdge.None, false);
+            }
+
+            if (edgeCount == 1)
+            {
+                if (IsCoplanarTile(tile)) return new FoundationTileInfo(TileRenderMaterial.Foundation, edges, false);
+                return new FoundationTileInfo(TileRenderMaterial.MixedFoundation, edges, true);
+            }
+            return new FoundationTileInfo(TileRenderMaterial.Foundation, edges, false);
         }
 
-        private bool HasFoundationFaceFromAdjacentRoads(int u, int v, Tile tile)
+        private RoadEdge GetFoundationCornerEdge(int u, int v)
         {
+            bool ws = HasFoundationAcrossEdge(u, v, RoadEdge.WS);
+            bool se = HasFoundationAcrossEdge(u, v, RoadEdge.SE);
+            bool en = HasFoundationAcrossEdge(u, v, RoadEdge.EN);
+            bool nw = HasFoundationAcrossEdge(u, v, RoadEdge.NW);
+
+            if (nw && en) return RoadEdge.WS;
+            if (en && se) return RoadEdge.NW;
+            if (se && ws) return RoadEdge.EN;
+            if (ws && nw) return RoadEdge.SE;
+            return RoadEdge.None;
+        }
+
+        private static bool IsCoplanarTile(Tile tile)
+        {
+            Vector3 w = Corner(tile.W);
+            Vector3 s = Corner(tile.S);
+            Vector3 e = Corner(tile.E);
+            Vector3 n = Corner(tile.N);
+            Vector3 normal = Vector3.Cross(s - w, e - w);
+            if (normal.LengthSquared <= 0.0001f) return true;
+            float distance = Math.Abs(Vector3.Dot(Vector3.Normalize(normal), n - w));
+            return distance <= 0.01f;
+        }
+
+        private bool HasFoundationAcrossEdge(int u, int v, RoadEdge edge)
+        {
+            (int nu, int nv) = edge switch
+            {
+                RoadEdge.WS => (u, v + 1),
+                RoadEdge.SE => (u - 1, v),
+                RoadEdge.EN => (u, v - 1),
+                RoadEdge.NW => (u + 1, v),
+                _ => (int.MinValue, int.MinValue)
+            };
+
+            if (!checkTile(nu, nv)) return false;
+            Tile neighbor = getTileByCoords(nu, nv);
+            if (roads.Has(neighbor.Id)) return true;
+            return GetFoundationEdgesFromAdjacentRoads(nu, nv, neighbor) != RoadEdge.None;
+        }
+
+        private RoadEdge GetFoundationEdgesFromAdjacentRoads(int u, int v, Tile tile)
+        {
+            RoadEdge edges = RoadEdge.None;
+
             if (TryGetRoadTile(u, v + 1, out Tile roadNorth)
                 && TryGetFoundationFace(u, v, roadNorth.W, roadNorth.S, tile.W, tile.S, out _))
-                return true;
+                edges |= RoadEdge.WS;
 
             if (TryGetRoadTile(u - 1, v, out Tile roadWest)
                 && TryGetFoundationFace(u, v, roadWest.S, roadWest.E, tile.S, tile.E, out _))
-                return true;
+                edges |= RoadEdge.SE;
 
             if (TryGetRoadTile(u, v - 1, out Tile roadSouth)
                 && TryGetFoundationFace(u, v, roadSouth.E, roadSouth.N, tile.E, tile.N, out _))
-                return true;
+                edges |= RoadEdge.EN;
 
             if (TryGetRoadTile(u + 1, v, out Tile roadEast)
                 && TryGetFoundationFace(u, v, roadEast.N, roadEast.W, tile.N, tile.W, out _))
-                return true;
+                edges |= RoadEdge.NW;
 
-            return false;
+            return edges;
         }
 
         private bool TryGetRoadTile(int u, int v, out Tile roadTile)

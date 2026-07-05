@@ -26,7 +26,7 @@ namespace ForesTycoon
         private readonly Dictionary<int, int> roadSurfaceW = new Dictionary<int, int>();
         private static readonly Color RoadFoundationColor = Color.FromArgb(154, 120, 72);
         private static readonly Color RoadFoundationSlopeColor = Color.FromArgb(126, 88, 48);
-        private static readonly Color RoadFoundationLineColor = Color.FromArgb(214, 176, 103);
+        private static readonly Color RoadFoundationLineColor = Color.FromArgb(74, 43, 20);
         private static readonly Color TerrainTopColor = Color.FromArgb(141, 184, 75);  // fű (terep tető)
         private readonly List<uint> indices = new List<uint>();
 
