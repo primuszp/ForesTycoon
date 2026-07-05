@@ -262,33 +262,17 @@ namespace ForesTycoon
 
             if (edgeCount == 0)
             {
-                RoadEdge cornerEdge = IsCoplanarTile(tile) ? RoadEdge.None : GetFoundationCornerEdge(u, v);
-                if (cornerEdge != RoadEdge.None)
-                    return new FoundationTileInfo(TileRenderMaterial.MixedFoundation, cornerEdge, true);
-
                 return new FoundationTileInfo(TileRenderMaterial.Grass, RoadEdge.None, false);
             }
 
+            if (IsCoplanarTile(tile))
+                return new FoundationTileInfo(TileRenderMaterial.Grass, RoadEdge.None, false);
+
             if (edgeCount == 1)
             {
-                if (IsCoplanarTile(tile)) return new FoundationTileInfo(TileRenderMaterial.Foundation, edges, false);
                 return new FoundationTileInfo(TileRenderMaterial.MixedFoundation, edges, true);
             }
             return new FoundationTileInfo(TileRenderMaterial.Foundation, edges, false);
-        }
-
-        private RoadEdge GetFoundationCornerEdge(int u, int v)
-        {
-            bool ws = HasFoundationAcrossEdge(u, v, RoadEdge.WS);
-            bool se = HasFoundationAcrossEdge(u, v, RoadEdge.SE);
-            bool en = HasFoundationAcrossEdge(u, v, RoadEdge.EN);
-            bool nw = HasFoundationAcrossEdge(u, v, RoadEdge.NW);
-
-            if (nw && en) return RoadEdge.WS;
-            if (en && se) return RoadEdge.NW;
-            if (se && ws) return RoadEdge.EN;
-            if (ws && nw) return RoadEdge.SE;
-            return RoadEdge.None;
         }
 
         private static bool IsCoplanarTile(Tile tile)
@@ -301,23 +285,6 @@ namespace ForesTycoon
             if (normal.LengthSquared <= 0.0001f) return true;
             float distance = Math.Abs(Vector3.Dot(Vector3.Normalize(normal), n - w));
             return distance <= 0.01f;
-        }
-
-        private bool HasFoundationAcrossEdge(int u, int v, RoadEdge edge)
-        {
-            (int nu, int nv) = edge switch
-            {
-                RoadEdge.WS => (u, v + 1),
-                RoadEdge.SE => (u - 1, v),
-                RoadEdge.EN => (u, v - 1),
-                RoadEdge.NW => (u + 1, v),
-                _ => (int.MinValue, int.MinValue)
-            };
-
-            if (!checkTile(nu, nv)) return false;
-            Tile neighbor = getTileByCoords(nu, nv);
-            if (roads.Has(neighbor.Id)) return true;
-            return GetFoundationEdgesFromAdjacentRoads(nu, nv, neighbor) != RoadEdge.None;
         }
 
         private RoadEdge GetFoundationEdgesFromAdjacentRoads(int u, int v, Tile tile)

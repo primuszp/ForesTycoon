@@ -56,50 +56,44 @@ namespace ForesTycoon
                 foreach (Tile tile in tiles)
                 {
                     if (ShouldDrawStandingWater(tile)) continue;
-                    DrawTerrainGridBase(tile, terrainLine);
-                }
-
-                foreach (Tile tile in tiles)
-                {
-                    if (ShouldDrawStandingWater(tile)) continue;
-                    DrawFoundationGridOverlay(tile);
+                    DrawTileGrid(tile, terrainLine);
                 }
             });
         }
 
-        private void DrawTerrainGridBase(Tile tile, Color terrainLine)
+        private void DrawTileGrid(Tile tile, Color terrainLine)
         {
             FoundationTileInfo info = GetFoundationTileInfo(tile);
 
-            if (info.Material == TileRenderMaterial.Grass)
+            switch (info.Material)
             {
-                GL.Color4(terrainLine);
-                DrawTileOutline(tile);
-                return;
+                case TileRenderMaterial.Grass:
+                    GL.Color4(terrainLine);
+                    DrawTileOutline(tile);
+                    return;
+
+                case TileRenderMaterial.Foundation:
+                    GL.Color4(RoadFoundationLineColor);
+                    DrawTileOutline(tile);
+                    return;
+
+                case TileRenderMaterial.MixedFoundation:
+                    if (!info.SplitGrid)
+                    {
+                        GL.Color4(RoadFoundationLineColor);
+                        DrawTileOutline(tile);
+                        return;
+                    }
+
+                    MixedTrianglePoints(tile, info.Edge, false, out Vector3 ga, out Vector3 gb, out Vector3 gc);
+                    GL.Color4(terrainLine);
+                    DrawTriangleEdges(ga, gb, gc);
+
+                    MixedTrianglePoints(tile, info.Edge, true, out Vector3 ba, out Vector3 bb, out Vector3 bc);
+                    GL.Color4(RoadFoundationLineColor);
+                    DrawTriangleEdges(ba, bb, bc);
+                    return;
             }
-
-            if (info.SplitGrid)
-            {
-                MixedTrianglePoints(tile, info.Edge, false, out Vector3 ga, out Vector3 gb, out Vector3 gc);
-                GL.Color4(terrainLine);
-                DrawTriangleEdges(ga, gb, gc);
-            }
-        }
-
-        private void DrawFoundationGridOverlay(Tile tile)
-        {
-            FoundationTileInfo info = GetFoundationTileInfo(tile);
-            if (info.Material == TileRenderMaterial.Grass) return;
-
-            GL.Color4(RoadFoundationLineColor);
-            if (!info.SplitGrid)
-            {
-                DrawTileOutline(tile);
-                return;
-            }
-
-            MixedTrianglePoints(tile, info.Edge, true, out Vector3 ba, out Vector3 bb, out Vector3 bc);
-            DrawTriangleEdges(ba, bb, bc);
         }
 
         private static void DrawTileOutline(Tile tile)
