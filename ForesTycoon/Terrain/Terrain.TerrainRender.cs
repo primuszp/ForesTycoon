@@ -63,52 +63,42 @@ namespace ForesTycoon
 
         private void DrawTileGrid(Tile tile, Color terrainLine)
         {
-            FoundationTileInfo info = GetFoundationTileInfo(tile);
+            TileSurfaceVisual visual = GetTileSurfaceVisual(tile);
 
-            switch (info.Material)
+            switch (visual.SurfaceMaterial)
             {
                 case TileRenderMaterial.Grass:
-                    GL.Color4(terrainLine);
-                    DrawTileOutline(tile);
+                    DrawTileEdgesByMaterial(tile, visual, terrainLine);
                     return;
 
                 case TileRenderMaterial.Foundation:
-                    GL.Color4(RoadFoundationLineColor);
-                    DrawTileOutline(tile);
+                    DrawTileEdgesByMaterial(tile, visual, terrainLine);
                     return;
 
                 case TileRenderMaterial.MixedFoundation:
-                    if (!info.SplitGrid)
-                    {
-                        GL.Color4(RoadFoundationLineColor);
-                        DrawTileOutline(tile);
-                        return;
-                    }
-
-                    MixedTrianglePoints(tile, info.Edge, false, out Vector3 ga, out Vector3 gb, out Vector3 gc);
-                    GL.Color4(terrainLine);
-                    DrawTriangleEdges(ga, gb, gc);
-
-                    MixedTrianglePoints(tile, info.Edge, true, out Vector3 ba, out Vector3 bb, out Vector3 bc);
-                    GL.Color4(RoadFoundationLineColor);
-                    DrawTriangleEdges(ba, bb, bc);
+                    DrawTileEdgesByMaterial(tile, visual, terrainLine);
                     return;
             }
         }
 
-        private static void DrawTileOutline(Tile tile)
+        private static Color EdgeLineColor(TileRenderMaterial material, Color terrainLine)
         {
-            GL.Vertex3(tile.W.xPos, tile.W.yPos, tile.W.zPos); GL.Vertex3(tile.S.xPos, tile.S.yPos, tile.S.zPos);
-            GL.Vertex3(tile.S.xPos, tile.S.yPos, tile.S.zPos); GL.Vertex3(tile.E.xPos, tile.E.yPos, tile.E.zPos);
-            GL.Vertex3(tile.E.xPos, tile.E.yPos, tile.E.zPos); GL.Vertex3(tile.N.xPos, tile.N.yPos, tile.N.zPos);
-            GL.Vertex3(tile.N.xPos, tile.N.yPos, tile.N.zPos); GL.Vertex3(tile.W.xPos, tile.W.yPos, tile.W.zPos);
+            return material == TileRenderMaterial.Foundation ? RoadFoundationLineColor : terrainLine;
         }
 
-        private static void DrawTriangleEdges(Vector3 a, Vector3 b, Vector3 c)
+        private static void DrawTileEdgesByMaterial(Tile tile, TileSurfaceVisual visual, Color terrainLine)
         {
-            GL.Vertex3(a); GL.Vertex3(b);
-            GL.Vertex3(b); GL.Vertex3(c);
-            GL.Vertex3(c); GL.Vertex3(a);
+            GL.Color4(EdgeLineColor(visual.EdgeWS, terrainLine));
+            GL.Vertex3(tile.W.xPos, tile.W.yPos, tile.W.zPos); GL.Vertex3(tile.S.xPos, tile.S.yPos, tile.S.zPos);
+
+            GL.Color4(EdgeLineColor(visual.EdgeSE, terrainLine));
+            GL.Vertex3(tile.S.xPos, tile.S.yPos, tile.S.zPos); GL.Vertex3(tile.E.xPos, tile.E.yPos, tile.E.zPos);
+
+            GL.Color4(EdgeLineColor(visual.EdgeEN, terrainLine));
+            GL.Vertex3(tile.E.xPos, tile.E.yPos, tile.E.zPos); GL.Vertex3(tile.N.xPos, tile.N.yPos, tile.N.zPos);
+
+            GL.Color4(EdgeLineColor(visual.EdgeNW, terrainLine));
+            GL.Vertex3(tile.N.xPos, tile.N.yPos, tile.N.zPos); GL.Vertex3(tile.W.xPos, tile.W.yPos, tile.W.zPos);
         }
 
         private void DrawSkirts()
@@ -201,4 +191,3 @@ namespace ForesTycoon
 
     }
 }
-

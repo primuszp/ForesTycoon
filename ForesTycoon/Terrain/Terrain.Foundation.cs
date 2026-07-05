@@ -14,18 +14,46 @@ namespace ForesTycoon
             MixedFoundation
         }
 
-        private readonly struct FoundationTileInfo
+        private enum TileDiagonalSplit
         {
-            public FoundationTileInfo(TileRenderMaterial material, RoadEdge edge, bool splitGrid)
+            None,
+            WE,
+            NS
+        }
+
+        private readonly struct TileSurfaceVisual
+        {
+            public TileSurfaceVisual(
+                TileRenderMaterial surfaceMaterial,
+                TileRenderMaterial roadTriangleMaterial,
+                TileRenderMaterial terrainTriangleMaterial,
+                RoadEdge splitEdge,
+                TileDiagonalSplit split,
+                TileRenderMaterial edgeWS,
+                TileRenderMaterial edgeSE,
+                TileRenderMaterial edgeEN,
+                TileRenderMaterial edgeNW)
             {
-                Material = material;
-                Edge = edge;
-                SplitGrid = splitGrid;
+                SurfaceMaterial = surfaceMaterial;
+                RoadTriangleMaterial = roadTriangleMaterial;
+                TerrainTriangleMaterial = terrainTriangleMaterial;
+                SplitEdge = splitEdge;
+                Split = split;
+                EdgeWS = edgeWS;
+                EdgeSE = edgeSE;
+                EdgeEN = edgeEN;
+                EdgeNW = edgeNW;
             }
 
-            public TileRenderMaterial Material { get; }
-            public RoadEdge Edge { get; }
-            public bool SplitGrid { get; }
+            public TileRenderMaterial SurfaceMaterial { get; }
+            public TileRenderMaterial RoadTriangleMaterial { get; }
+            public TileRenderMaterial TerrainTriangleMaterial { get; }
+            public RoadEdge SplitEdge { get; }
+            public TileDiagonalSplit Split { get; }
+            public TileRenderMaterial EdgeWS { get; }
+            public TileRenderMaterial EdgeSE { get; }
+            public TileRenderMaterial EdgeEN { get; }
+            public TileRenderMaterial EdgeNW { get; }
         }
 
         private readonly struct FoundationFaceData
@@ -90,22 +118,56 @@ namespace ForesTycoon
 
         private void DrawMixedFoundationTileSurfaces()
         {
+            // Non-road tiles adjacent to 2+ road edges (e.g. outer road corners) are full Foundation.
+            // DrawTerrainBase skips them, so we must draw their surface here.
             ImmediateRenderer.Draw(PrimitiveType.Triangles, () =>
             {
                 foreach (Tile tile in tiles)
                 {
-                    FoundationTileInfo info = GetFoundationTileInfo(tile);
-                    if (info.Material != TileRenderMaterial.MixedFoundation) continue;
+                    if (roads.Has(tile.Id)) continue;
+                    TileSurfaceVisual visual = GetTileSurfaceVisual(tile);
+                    if (visual.SurfaceMaterial == TileRenderMaterial.Foundation)
+                        DrawFullFoundationTile(tile);
+                }
+            });
 
-                    DrawMixedFoundationTile(tile, info.Edge);
+            ImmediateRenderer.Draw(PrimitiveType.Triangles, () =>
+            {
+                foreach (Tile tile in tiles)
+                {
+                    TileSurfaceVisual visual = GetTileSurfaceVisual(tile);
+                    if (visual.SurfaceMaterial != TileRenderMaterial.MixedFoundation) continue;
+                    if (visual.Split == TileDiagonalSplit.None) continue;
+
+                    DrawMixedFoundationTile(tile, visual);
                 }
             });
         }
 
-        private void DrawMixedFoundationTile(Tile tile, RoadEdge edge)
+        private static void DrawFullFoundationTile(Tile tile)
         {
-            DrawMixedTriangle(tile, edge, true, RoadFoundationSlopeColor);
-            DrawMixedTriangle(tile, edge, false, TerrainTopColor);
+            Vector3 w = Corner(tile.W);
+            Vector3 s = Corner(tile.S);
+            Vector3 e = Corner(tile.E);
+            Vector3 n = Corner(tile.N);
+            GL.Color4(ShadedTileColor(RoadFoundationSlopeColor, w, s, e));
+            GL.Vertex3(w); GL.Vertex3(s); GL.Vertex3(e);
+            GL.Color4(ShadedTileColor(RoadFoundationSlopeColor, w, e, n));
+            GL.Vertex3(w); GL.Vertex3(e); GL.Vertex3(n);
+        }
+
+        private void DrawMixedFoundationTile(Tile tile, TileSurfaceVisual visual)
+        {
+            // roadSide=false is the triangle that shares its two vertices with the
+            // adjacent road tile (e.g. N+E for WS edge) → paint it as foundation (brown).
+            // roadSide=true is the opposite triangle that sits flat on the terrain → green.
+            DrawMixedTriangle(tile, visual.SplitEdge, false, SurfaceColor(visual.RoadTriangleMaterial));
+            DrawMixedTriangle(tile, visual.SplitEdge, true, SurfaceColor(visual.TerrainTriangleMaterial));
+        }
+
+        private static Color SurfaceColor(TileRenderMaterial material)
+        {
+            return material == TileRenderMaterial.Foundation ? RoadFoundationSlopeColor : TerrainTopColor;
         }
 
         private static void DrawMixedTriangle(Tile tile, RoadEdge edge, bool roadSide, Color baseColor)
@@ -246,33 +308,153 @@ namespace ForesTycoon
 
         private TileRenderMaterial GetTileRenderMaterial(Tile tile)
         {
-            return GetFoundationTileInfo(tile).Material;
+            return GetTileSurfaceVisual(tile).SurfaceMaterial;
         }
 
-        private FoundationTileInfo GetFoundationTileInfo(Tile tile)
+        private TileSurfaceVisual GetTileSurfaceVisual(Tile tile)
         {
-            if (roads.Has(tile.Id)) return new FoundationTileInfo(TileRenderMaterial.Foundation, RoadEdge.None, false);
-
             int tpc = nodeRows - 1;
             int u = tile.Id / tpc;
             int v = tile.Id % tpc;
+
+            if (roads.Has(tile.Id))
+            {
+                // Road tile: each border is brown only when an embankment face actually
+                // exists toward that neighbour (height difference > 0).  On flat terrain
+                // the edge is grass-coloured so both sides of the shared line agree.
+                return new TileSurfaceVisual(
+                    TileRenderMaterial.Foundation,
+                    TileRenderMaterial.Foundation,
+                    TileRenderMaterial.Foundation,
+                    RoadEdge.None,
+                    TileDiagonalSplit.None,
+                    TryGetFoundationFaceForRoadEdge(u, v - 1, tile.W, tile.S, RoadEdge.WS, out _) ? TileRenderMaterial.Foundation : TileRenderMaterial.Grass,
+                    TryGetFoundationFaceForRoadEdge(u + 1, v, tile.S, tile.E, RoadEdge.SE, out _) ? TileRenderMaterial.Foundation : TileRenderMaterial.Grass,
+                    TryGetFoundationFaceForRoadEdge(u, v + 1, tile.E, tile.N, RoadEdge.EN, out _) ? TileRenderMaterial.Foundation : TileRenderMaterial.Grass,
+                    TryGetFoundationFaceForRoadEdge(u - 1, v, tile.N, tile.W, RoadEdge.NW, out _) ? TileRenderMaterial.Foundation : TileRenderMaterial.Grass);
+            }
 
             RoadEdge edges = GetFoundationEdgesFromAdjacentRoads(u, v, tile);
             int edgeCount = CountEdges(edges);
 
             if (edgeCount == 0)
             {
-                return new FoundationTileInfo(TileRenderMaterial.Grass, RoadEdge.None, false);
+                return GrassSurfaceVisual(u, v, tile);
             }
 
             if (IsCoplanarTile(tile))
-                return new FoundationTileInfo(TileRenderMaterial.Grass, RoadEdge.None, false);
+                return GrassSurfaceVisual(u, v, tile);
 
             if (edgeCount == 1)
             {
-                return new FoundationTileInfo(TileRenderMaterial.MixedFoundation, edges, true);
+                // Road-facing edge is always brown.
+                // Other three edges: brown only if the neighbour on that side also
+                // warrants a brown border (Foundation or road with height diff).
+                return new TileSurfaceVisual(
+                    TileRenderMaterial.MixedFoundation,
+                    TileRenderMaterial.Foundation,
+                    TileRenderMaterial.Grass,
+                    edges,
+                    SplitForEdge(edges),
+                    edges.HasFlag(RoadEdge.WS) ? TileRenderMaterial.Foundation : NeighborEdgeMaterial(u, v, tile, u, v + 1, RoadEdge.EN),
+                    edges.HasFlag(RoadEdge.SE) ? TileRenderMaterial.Foundation : NeighborEdgeMaterial(u, v, tile, u - 1, v, RoadEdge.NW),
+                    edges.HasFlag(RoadEdge.EN) ? TileRenderMaterial.Foundation : NeighborEdgeMaterial(u, v, tile, u, v - 1, RoadEdge.WS),
+                    edges.HasFlag(RoadEdge.NW) ? TileRenderMaterial.Foundation : NeighborEdgeMaterial(u, v, tile, u + 1, v, RoadEdge.SE));
             }
-            return new FoundationTileInfo(TileRenderMaterial.Foundation, edges, false);
+
+            return UniformSurfaceVisual(TileRenderMaterial.Foundation);
+        }
+
+        // Grass surface visual that colours each shared edge brown only when the
+        // neighbour's edge that faces us is actually a Foundation edge.
+        // For road tiles and full-Foundation neighbours all edges are brown.
+        // For MixedFoundation neighbours only the road-facing edge is brown.
+        private TileSurfaceVisual GrassSurfaceVisual(int u, int v, Tile tile)
+        {
+            // Neighbour directions and which edge of the neighbour faces back at us:
+            //   EdgeWS → neighbour at (u, v+1),  neighbour's EN edge faces us
+            //   EdgeSE → neighbour at (u-1, v),  neighbour's NW edge faces us
+            //   EdgeEN → neighbour at (u, v-1),  neighbour's WS edge faces us
+            //   EdgeNW → neighbour at (u+1, v),  neighbour's SE edge faces us
+            return new TileSurfaceVisual(
+                TileRenderMaterial.Grass,
+                TileRenderMaterial.Grass,
+                TileRenderMaterial.Grass,
+                RoadEdge.None,
+                TileDiagonalSplit.None,
+                NeighborEdgeMaterial(u, v, tile, u, v + 1, RoadEdge.EN),
+                NeighborEdgeMaterial(u, v, tile, u - 1, v, RoadEdge.NW),
+                NeighborEdgeMaterial(u, v, tile, u, v - 1, RoadEdge.WS),
+                NeighborEdgeMaterial(u, v, tile, u + 1, v, RoadEdge.SE));
+        }
+
+        // Returns Foundation if the neighbour edge facing this tile is a foundation edge.
+        // For road neighbours an actual height difference (embankment face) must exist.
+        // neighborFacingEdge: which RoadEdge of the neighbour tile points toward us.
+        private TileRenderMaterial NeighborEdgeMaterial(int u, int v, Tile currentTile, int neighborU, int neighborV, RoadEdge neighborFacingEdge)
+        {
+            if (!checkTile(neighborU, neighborV)) return TileRenderMaterial.Grass;
+            Tile neighbor = getTileByCoords(neighborU, neighborV);
+            if (roads.Has(neighbor.Id))
+            {
+                // Brown only when an embankment face actually exists (height diff).
+                return HasFoundationFaceTowardRoad(u, v, currentTile, neighbor, neighborFacingEdge)
+                    ? TileRenderMaterial.Foundation
+                    : TileRenderMaterial.Grass;
+            }
+
+            int tpc = nodeRows - 1;
+            int nu = neighbor.Id / tpc;
+            int nv = neighbor.Id % tpc;
+            RoadEdge neighborEdges = GetFoundationEdgesFromAdjacentRoads(nu, nv, neighbor);
+            int neighborEdgeCount = CountEdges(neighborEdges);
+            if (neighborEdgeCount == 0) return TileRenderMaterial.Grass;
+            if (IsCoplanarTile(neighbor)) return TileRenderMaterial.Grass;
+            // Full Foundation neighbour (2+ road edges): all its edges are brown.
+            if (neighborEdgeCount > 1) return TileRenderMaterial.Foundation;
+            // Mixed neighbour: only the road-facing edge is brown.
+            return neighborEdges.HasFlag(neighborFacingEdge) ? TileRenderMaterial.Foundation : TileRenderMaterial.Grass;
+        }
+
+        // Checks whether an embankment face (height difference) exists between this tile
+        // and an adjacent road tile.  neighborFacingEdge is the road's edge facing us.
+        // Node pairs mirror GetFoundationEdgesFromAdjacentRoads / DrawFoundationFacesForRoadTile.
+        private bool HasFoundationFaceTowardRoad(int u, int v, Tile tile, Tile road, RoadEdge neighborFacingEdge)
+        {
+            return neighborFacingEdge switch
+            {
+                RoadEdge.EN => TryGetFoundationFace(u, v, road.W, road.S, tile.W, tile.S, out _),
+                RoadEdge.NW => TryGetFoundationFace(u, v, road.S, road.E, tile.S, tile.E, out _),
+                RoadEdge.WS => TryGetFoundationFace(u, v, road.E, road.N, tile.E, tile.N, out _),
+                RoadEdge.SE => TryGetFoundationFace(u, v, road.N, road.W, tile.N, tile.W, out _),
+                _           => false,
+            };
+        }
+
+        private static TileSurfaceVisual UniformSurfaceVisual(TileRenderMaterial material)
+        {
+            return new TileSurfaceVisual(
+                material,
+                material,
+                material,
+                RoadEdge.None,
+                TileDiagonalSplit.None,
+                material,
+                material,
+                material,
+                material);
+        }
+
+        private static TileDiagonalSplit SplitForEdge(RoadEdge edge)
+        {
+            return edge switch
+            {
+                RoadEdge.WS => TileDiagonalSplit.WE,
+                RoadEdge.SE => TileDiagonalSplit.NS,
+                RoadEdge.EN => TileDiagonalSplit.WE,
+                RoadEdge.NW => TileDiagonalSplit.NS,
+                _ => TileDiagonalSplit.None
+            };
         }
 
         private static bool IsCoplanarTile(Tile tile)
