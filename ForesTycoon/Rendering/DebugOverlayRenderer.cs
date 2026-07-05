@@ -16,7 +16,10 @@ namespace ForesTycoon
             GL.PushMatrix();
             {
                 GL.Translate(node.xPos, node.yPos, node.zPos);
-                using (new RenderStateScope().ShadeModel(ShadingModel.Smooth))
+                using (new RenderStateScope()
+                    .Disable(EnableCap.DepthTest)
+                    .DepthWrite(false)
+                    .ShadeModel(ShadingModel.Smooth))
                 {
                     DrawSphere(markerRadius, 24, 32);
                 }

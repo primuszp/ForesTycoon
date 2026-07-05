@@ -7,6 +7,9 @@ namespace ForesTycoon
 {
     partial class Terrain
     {
+        private const float RoadShoulderWidthFactor = 1.0f;
+        private const float RoadSurfaceWidthFactor = 0.62f;
+
         private void DrawRoads()
         {
             if (roads.Count == 0 && previewTiles.Count == 0) return;
@@ -16,13 +19,13 @@ namespace ForesTycoon
                 ImmediateRenderer.Draw(PrimitiveType.Quads, () =>
                 {
                     foreach (int id in roads.Tiles)
-                        RoadSurface(tiles[id], roads.GetEdges(id), 0.92f, RoadShoulder);
+                        RoadSurface(tiles[id], roads.GetEdges(id), RoadShoulderWidthFactor, RoadShoulder);
                 });
 
                 ImmediateRenderer.Draw(PrimitiveType.Quads, () =>
                 {
                     foreach (int id in roads.Tiles)
-                        RoadSurface(tiles[id], roads.GetEdges(id), 0.62f, RoadSurfaceColor);
+                        RoadSurface(tiles[id], roads.GetEdges(id), RoadSurfaceWidthFactor, RoadSurfaceColor);
                 });
             }
 
@@ -42,8 +45,8 @@ namespace ForesTycoon
                             bool bad = previewRemove || !placement.IsValid;
                             bool foundation = !bad && placement.Kind == RoadPlacementKind.FoundationSurface;
                             RoadEdge shown = previewRemove ? step.Edges : step.Edges | roads.GetEdges(step.TileId);
-                            if (bad) RoadSurface(tiles[step.TileId], shown, 0.92f, badFill);
-                            else RoadSurface(tiles[step.TileId], shown, 0.92f, foundation ? foundationFill : okFill, placement);
+                            if (bad) RoadSurface(tiles[step.TileId], shown, RoadShoulderWidthFactor, badFill);
+                            else RoadSurface(tiles[step.TileId], shown, RoadShoulderWidthFactor, foundation ? foundationFill : okFill, placement);
                         }
                     });
 
