@@ -40,6 +40,11 @@ namespace ForesTycoon
 
         private int lastMouseX = 0;
         private int lastMouseY = 0;
+        private bool rotationPivotActive;
+        private bool rotationPivotKeepsScreenPoint;
+        private Vector3 rotationPivotWorld;
+        private int rotationPivotScreenX;
+        private int rotationPivotScreenY;
 
         // Pan kezdőpont (jobb gomb lenyomásakor rögzítve)
         private double panStartX = 0;
@@ -93,6 +98,99 @@ namespace ForesTycoon
         private static float SnapRotation(float angle)
         {
             return (float)(Math.Round((angle - 45.0) / 90.0) * 90.0 + 45.0);
+        }
+
+        private static Vector3 WorldToView(Vector3 point, float tiltDegrees, float yawDegrees)
+        {
+            double rz = yawDegrees * Math.PI / 180.0;
+            double rx = tiltDegrees * Math.PI / 180.0;
+            double cosZ = Math.Cos(rz), sinZ = Math.Sin(rz);
+            double cosX = Math.Cos(rx), sinX = Math.Sin(rx);
+
+            double x1 = cosZ * point.X - sinZ * point.Y;
+            double y1 = sinZ * point.X + cosZ * point.Y;
+            double z1 = point.Z;
+
+            return new Vector3(
+                (float)x1,
+                (float)(cosX * y1 - sinX * z1),
+                (float)(sinX * y1 + cosX * z1));
+        }
+
+        private bool IsFullTerrainVisible()
+        {
+            if (terrain == null) return true;
+
+            terrain.GetWorldBounds(out Vector3 min, out Vector3 max);
+            Vector3[] corners =
+            {
+                new Vector3(min.X, min.Y, min.Z),
+                new Vector3(min.X, min.Y, max.Z),
+                new Vector3(min.X, max.Y, min.Z),
+                new Vector3(min.X, max.Y, max.Z),
+                new Vector3(max.X, min.Y, min.Z),
+                new Vector3(max.X, min.Y, max.Z),
+                new Vector3(max.X, max.Y, min.Z),
+                new Vector3(max.X, max.Y, max.Z)
+            };
+
+            float minX = float.MaxValue, minY = float.MaxValue;
+            float maxX = float.MinValue, maxY = float.MinValue;
+            for (int i = 0; i < corners.Length; i++)
+            {
+                Vector3 view = WorldToView(corners[i], rotx, roty);
+                minX = Math.Min(minX, view.X);
+                minY = Math.Min(minY, view.Y);
+                maxX = Math.Max(maxX, view.X);
+                maxY = Math.Max(maxY, view.Y);
+            }
+
+            double visibleMinX = screenX;
+            double visibleMinY = screenY;
+            double visibleMaxX = screenX + Width / zoom;
+            double visibleMaxY = screenY + Height / zoom;
+            const double margin = 2.0;
+
+            return minX >= visibleMinX - margin
+                && maxX <= visibleMaxX + margin
+                && minY >= visibleMinY - margin
+                && maxY <= visibleMaxY + margin;
+        }
+
+        private void BeginRotationPivot(int screenPixelX, int screenPixelY, Vector3 pivotWorld)
+        {
+            rotationPivotActive = true;
+            rotationPivotKeepsScreenPoint = !IsFullTerrainVisible();
+            rotationPivotWorld = pivotWorld;
+            rotationPivotScreenX = screenPixelX;
+            rotationPivotScreenY = screenPixelY;
+        }
+
+        private void SetRotationTargetAroundPivot(float newYaw, int screenPixelX, int screenPixelY, Vector3 pivotWorld)
+        {
+            if (!rotationPivotActive)
+                BeginRotationPivot(screenPixelX, screenPixelY, pivotWorld);
+
+            targetRotY = newYaw;
+        }
+
+        private void ApplyRotationPivotCompensation()
+        {
+            if (!rotationPivotActive || !rotationPivotKeepsScreenPoint) return;
+
+            Vector3 pivotView = WorldToView(rotationPivotWorld, rotx, roty);
+            screenX = pivotView.X - rotationPivotScreenX / zoom;
+            screenY = pivotView.Y - (Height - rotationPivotScreenY) / zoom;
+        }
+
+        private void EndRotationPivotIfSettled()
+        {
+            if (activeButton == MouseButtons.Left) return;
+            if (Math.Abs(targetRotY - roty) <= 0.01f)
+            {
+                rotationPivotActive = false;
+                rotationPivotKeepsScreenPoint = false;
+            }
         }
 
         // ── Háttérszín (referenciakép alapján) ──────────────────────────────
@@ -184,11 +282,16 @@ namespace ForesTycoon
             lastRenderTimeSeconds = now;
             frameIndex++;
 
+            bool isTerrainEditTool = activeTool == TerrainEditTool.Raise || activeTool == TerrainEditTool.Lower;
+            bool isRotating = activeTool == TerrainEditTool.Inspect && activeButton == MouseButtons.Left;
+            bool showTileHighlight = !isTerrainEditTool && !isRotating;
+
             RenderContext renderContext = new RenderContext(
                 now,
                 deltaTime,
                 frameIndex,
-                activeTool == TerrainEditTool.Raise || activeTool == TerrainEditTool.Lower);
+                isTerrainEditTool,
+                showTileHighlight);
 
             terrain.Draw(renderContext);
 
@@ -485,11 +588,14 @@ namespace ForesTycoon
             if (Math.Abs(rotDiff) > 0.01f)
             {
                 roty += rotDiff * 0.12f;
+                ApplyRotationPivotCompensation();
                 RequestFrame();
             }
             else
             {
                 roty = targetRotY;
+                ApplyRotationPivotCompensation();
+                EndRotationPivotIfSettled();
             }
 
             SetupViewport();
@@ -544,8 +650,7 @@ namespace ForesTycoon
                 case MouseButtons.Left:
                     if (activeTool == TerrainEditTool.Inspect)
                     {
-                        roty += 0.5f * dx;
-                        targetRotY = roty;
+                        SetRotationTargetAroundPivot(targetRotY + 0.5f * dx, e.X, e.Y, worldPos);
                     }
                     break;
 
@@ -562,6 +667,7 @@ namespace ForesTycoon
         {
             base.OnMouseUp(e);
             if (isLoaded) imgui?.MouseButton(MapMouseButton(e.Button), false);
+            if (activeButton == e.Button) activeButton = MouseButtons.None;
             if (!isLoaded || e.Button != MouseButtons.Left) return;
 
             if (IsRoadTool(activeTool))
@@ -580,7 +686,7 @@ namespace ForesTycoon
 
             if (activeTool != TerrainEditTool.Inspect) return;
             // Snap a legközelebbi 90°-ra
-            targetRotY = SnapRotation(roty);
+            SetRotationTargetAroundPivot(SnapRotation(targetRotY), e.X, e.Y, worldPos);
             RequestFrame();
         }
 
@@ -598,9 +704,9 @@ namespace ForesTycoon
 
             // Bal/Jobb: kamera forgatás 90°-os lépésekkel
             if (e.KeyCode == Keys.Left)
-                { targetRotY = SnapRotation(targetRotY) - 90f; RequestFrame(); }
+                { SetRotationTargetAroundPivot(SnapRotation(targetRotY) - 90f, lastMouseX, lastMouseY, worldPos); RequestFrame(); }
             if (e.KeyCode == Keys.Right)
-                { targetRotY = SnapRotation(targetRotY) + 90f; RequestFrame(); }
+                { SetRotationTargetAroundPivot(SnapRotation(targetRotY) + 90f, lastMouseX, lastMouseY, worldPos); RequestFrame(); }
 
             // Fel/Le: dőlésszög váltás (30° → 45° → 60°)
             if (e.KeyCode == Keys.Up)
@@ -630,6 +736,9 @@ namespace ForesTycoon
             activeButton = e.Button;
             panStartX = mouseX;
             panStartY = mouseY;
+
+            if (activeTool == TerrainEditTool.Inspect && e.Button == MouseButtons.Left)
+                BeginRotationPivot(e.X, e.Y, worldPos);
 
             if (IsRoadTool(activeTool) && e.Button == MouseButtons.Left)
             {
@@ -674,3 +783,5 @@ namespace ForesTycoon
 
     }
 }
+
+

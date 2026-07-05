@@ -86,7 +86,10 @@ namespace ForesTycoon
             renderPipeline.Add(RenderLayer.DecalBegin, "decal-state-begin", _ => BeginTerrainDecals());
             renderPipeline.Add(RenderLayer.Grid, "terrain-grid", _ => DrawTerrainDecals());
             renderPipeline.Add(RenderLayer.Roads, "roads", _ => DrawRoads());
-            renderPipeline.Add(RenderLayer.HoverOverlay, "hover-overlay", _ => DrawHoveredTile());
+            renderPipeline.Add(RenderLayer.HoverOverlay, "hover-overlay", context =>
+            {
+                if (context.ShowTileHighlight) DrawHoveredTile();
+            });
             renderPipeline.Add(RenderLayer.DecalEnd, "decal-state-end", _ => EndTerrainDecals());
             renderPipeline.Add(RenderLayer.Props, "props", _ => DrawTrees());
             renderPipeline.Add(RenderLayer.DebugOverlay, "debug-overlay", context =>
@@ -1014,6 +1017,22 @@ namespace ForesTycoon
             float north = tile.N.zPos + (tile.E.zPos - tile.N.zPos) * fx;
             z = south + (north - south) * fy;
             return true;
+        }
+
+        public void GetWorldBounds(out Vector3 min, out Vector3 max)
+        {
+            min = new Vector3(float.MaxValue, float.MaxValue, float.MaxValue);
+            max = new Vector3(float.MinValue, float.MinValue, float.MinValue);
+
+            foreach (Node node in nodes)
+            {
+                min.X = Math.Min(min.X, node.xPos);
+                min.Y = Math.Min(min.Y, node.yPos);
+                min.Z = Math.Min(min.Z, node.zPos);
+                max.X = Math.Max(max.X, node.xPos);
+                max.Y = Math.Max(max.Y, node.yPos);
+                max.Z = Math.Max(max.Z, node.zPos);
+            }
         }
 
         public void ClearHover()
