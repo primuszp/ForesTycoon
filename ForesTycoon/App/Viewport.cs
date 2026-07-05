@@ -493,15 +493,24 @@ namespace ForesTycoon
             int screenPxY = Height - e.Y;
             mouseX = screenX + e.X       / zoom;
             mouseY = screenY + screenPxY / zoom;
-            if (!UpdateWorldPosition(e))
+
+            if (!pickMatricesReady)
             {
                 nodeHovered = false;
                 terrain.ClearHover();
                 return;
             }
 
-            nodeHovered = terrain.SearchPoint(worldPos.X, worldPos.Y, 5);
-            terrain.SearchTile(worldPos.X, worldPos.Y);
+            float scale = DpiScale;
+            int px = Math.Max(0, Math.Min(pickViewMatrix[2] - 1, (int)Math.Round(e.X * scale)));
+            int py = Math.Max(0, Math.Min(pickViewMatrix[3] - 1, (int)Math.Round(e.Y * scale)));
+            int fy = pickViewMatrix[3] - 1 - py;
+            nodeHovered = terrain.SearchScreenPoint(px, fy, 14.0 * scale, pickModelMatrix, pickProjMatrix, pickViewMatrix);
+
+            if (UpdateWorldPosition(e))
+                terrain.SearchTile(worldPos.X, worldPos.Y);
+            else
+                terrain.ClearTileHover();
         }
 
         private void ApplyActiveTerrainTool()
