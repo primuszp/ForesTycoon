@@ -12,6 +12,7 @@
         private int low = 0; 
 
         private string code = "0000";
+        private TileShapeInfo shape;
 
         public Node N
         {
@@ -76,6 +77,11 @@
             get { return code; }
         }
 
+        public TileShapeInfo Shape
+        {
+            get { return shape; }
+        }
+
         public int Low
         {
             get { return low; }
@@ -94,18 +100,9 @@
 
         public string getCode()
         {
-            low = this.n.W;
-
-            if (this.e.W < this.low) low = this.e.W;
-            if (this.s.W < this.low) low = this.s.W;
-            if (this.w.W < this.low) low = this.w.W;
-
-            int ni = this.n.W - low;
-            int ei = this.e.W - low;
-            int si = this.s.W - low;
-            int wi = this.w.W - low;
-
-            this.code = ni.ToString() + ei.ToString() + si.ToString() + wi.ToString();
+            shape = TileShapeInfo.FromCorners(this.w.W, this.s.W, this.e.W, this.n.W);
+            low = shape.Min;
+            code = shape.RelativeCodeNESW;
 
             return (code);
         }

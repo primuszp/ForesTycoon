@@ -73,10 +73,12 @@ namespace ForesTycoon
 
                 case TileRenderMaterial.Foundation:
                     DrawTileEdgesByMaterial(tile, visual, terrainLine);
+                    if (!roads.Has(tile.Id)) DrawTileDiagonal(tile);
                     return;
 
                 case TileRenderMaterial.MixedFoundation:
                     DrawTileEdgesByMaterial(tile, visual, terrainLine);
+                    DrawTileDiagonal(tile);
                     return;
             }
         }
@@ -99,6 +101,21 @@ namespace ForesTycoon
 
             GL.Color4(EdgeLineColor(visual.EdgeNW, terrainLine));
             GL.Vertex3(tile.N.xPos, tile.N.yPos, tile.N.zPos); GL.Vertex3(tile.W.xPos, tile.W.yPos, tile.W.zPos);
+        }
+
+        private void DrawTileDiagonal(Tile tile)
+        {
+            GL.Color4(RoadFoundationLineColor);
+            if (UseTileDiagonalWE(tile))
+            {
+                GL.Vertex3(tile.W.xPos, tile.W.yPos, tile.W.zPos);
+                GL.Vertex3(tile.E.xPos, tile.E.yPos, tile.E.zPos);
+            }
+            else
+            {
+                GL.Vertex3(tile.N.xPos, tile.N.yPos, tile.N.zPos);
+                GL.Vertex3(tile.S.xPos, tile.S.yPos, tile.S.zPos);
+            }
         }
 
         private void DrawSkirts()

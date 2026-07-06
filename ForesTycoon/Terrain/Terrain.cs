@@ -464,45 +464,11 @@ namespace ForesTycoon
         private const float ShoulderFrac = 0.16f;  // padka szélessége a középpont felé
 
         // Csempe-alapú úthálózat: a kapcsolatok a szomszédos út-csempékből adódnak.
-        private enum TileSlopeKind
-        {
-            Flat,
-            OneCornerRaised,
-            TwoAdjacentRaised,
-            TwoOppositeRaised,
-            ThreeCornersRaised,
-            Steep
-        }
-
-
-
         private enum RoadPlacementKind
         {
             Invalid,
             NaturalSurface,
             FoundationSurface
-        }
-
-        private readonly struct TileSlopeInfo
-        {
-            public readonly TileSlopeKind Kind;
-            public readonly int Min;
-            public readonly int Max;
-            public readonly bool WRaised;
-            public readonly bool SRaised;
-            public readonly bool ERaised;
-            public readonly bool NRaised;
-
-            public TileSlopeInfo(TileSlopeKind kind, int min, int max, bool wRaised, bool sRaised, bool eRaised, bool nRaised)
-            {
-                Kind = kind;
-                Min = min;
-                Max = max;
-                WRaised = wRaised;
-                SRaised = sRaised;
-                ERaised = eRaised;
-                NRaised = nRaised;
-            }
         }
 
         private readonly struct RoadPlacement
@@ -574,27 +540,27 @@ namespace ForesTycoon
             if (roads.Has(t.Id) && TryGetFullLockedRoadSurface(t, out int lw, out int ls, out int le, out int ln))
                 return ValidateLockedRoadPlacement(mergedEdges, w, s, e, n, lw, ls, le, ln);
 
-            TileSlopeInfo slope = ClassifyTileSlope(w, s, e, n);
-            if (slope.Kind == TileSlopeKind.Steep
-                || slope.Kind == TileSlopeKind.TwoOppositeRaised
-                || slope.Kind == TileSlopeKind.OneCornerRaised
-                || slope.Kind == TileSlopeKind.ThreeCornersRaised)
+            TileShapeInfo shape = TileShapeInfo.FromCorners(w, s, e, n);
+            if (shape.Kind == TileShapeKind.Steep
+                || shape.Kind == TileShapeKind.Saddle
+                || shape.Kind == TileShapeKind.OneHigh
+                || shape.Kind == TileShapeKind.ThreeHigh)
                 return InvalidRoadPlacement;
 
-            // TwoAdjacentRaised only valid when the ramp aligns with the road direction
-            if (slope.Kind == TileSlopeKind.TwoAdjacentRaised && !IsRampAligned(slope, mergedEdges))
+            // Ramp only valid when it aligns with the road direction.
+            if (shape.Kind == TileShapeKind.Ramp && !IsRampAligned(shape, mergedEdges))
                 return InvalidRoadPlacement;
 
-            bool naturalAllowed = slope.Kind == TileSlopeKind.Flat
-                || (slope.Kind == TileSlopeKind.TwoAdjacentRaised && IsSimpleRoadShape(mergedEdges));
+            bool naturalAllowed = shape.Kind == TileShapeKind.Flat
+                || (shape.Kind == TileShapeKind.Ramp && IsSimpleRoadShape(mergedEdges));
             if (naturalAllowed && RoadSurfaceLocksMatch(t, w, s, e, n))
                 return new RoadPlacement(RoadPlacementKind.NaturalSurface, w, s, e, n);
 
             // Foundation (platform) only on flat terrain
-            if (slope.Kind != TileSlopeKind.Flat)
+            if (shape.Kind != TileShapeKind.Flat)
                 return InvalidRoadPlacement;
 
-            if (!TryResolveFlatFoundationLevel(t, slope.Max, w, s, e, n, out int level))
+            if (!TryResolveFlatFoundationLevel(t, shape.Max, w, s, e, n, out int level))
                 return InvalidRoadPlacement;
 
             return new RoadPlacement(RoadPlacementKind.FoundationSurface, level, level, level, level);
@@ -609,9 +575,10 @@ namespace ForesTycoon
                 return InvalidRoadPlacement;
             if (surfaceW - terrainW > 1 || surfaceS - terrainS > 1 || surfaceE - terrainE > 1 || surfaceN - terrainN > 1)
                 return InvalidRoadPlacement;
-            if (!IsPlanarSurface(surfaceW, surfaceS, surfaceE, surfaceN))
+            TileShapeInfo surfaceShape = TileShapeInfo.FromCorners(surfaceW, surfaceS, surfaceE, surfaceN);
+            if (!surfaceShape.IsPlanar)
                 return InvalidRoadPlacement;
-            if (!IsFlatSurface(surfaceW, surfaceS, surfaceE, surfaceN) && !IsSimpleRoadShape(edges))
+            if (!surfaceShape.IsFlat && !IsSimpleRoadShape(edges))
                 return InvalidRoadPlacement;
 
             RoadPlacementKind kind =
@@ -619,39 +586,6 @@ namespace ForesTycoon
                     ? RoadPlacementKind.NaturalSurface
                     : RoadPlacementKind.FoundationSurface;
             return new RoadPlacement(kind, surfaceW, surfaceS, surfaceE, surfaceN);
-        }
-
-        private TileSlopeInfo ClassifyTileSlope(int w, int s, int e, int n)
-        {
-            int min = Math.Min(Math.Min(w, s), Math.Min(e, n));
-            int max = Math.Max(Math.Max(w, s), Math.Max(e, n));
-            if (max - min > 1)
-                return new TileSlopeInfo(TileSlopeKind.Steep, min, max, false, false, false, false);
-
-            bool wr = w > min;
-            bool sr = s > min;
-            bool er = e > min;
-            bool nr = n > min;
-            int raised = (wr ? 1 : 0) + (sr ? 1 : 0) + (er ? 1 : 0) + (nr ? 1 : 0);
-
-            TileSlopeKind kind;
-            if (raised == 0) kind = TileSlopeKind.Flat;
-            else if (raised == 1) kind = TileSlopeKind.OneCornerRaised;
-            else if (raised == 3) kind = TileSlopeKind.ThreeCornersRaised;
-            else if ((wr && er) || (sr && nr)) kind = TileSlopeKind.TwoOppositeRaised;
-            else kind = TileSlopeKind.TwoAdjacentRaised;
-
-            return new TileSlopeInfo(kind, min, max, wr, sr, er, nr);
-        }
-
-        private static bool IsPlanarSurface(int w, int s, int e, int n)
-        {
-            return w + e == s + n;
-        }
-
-        private static bool IsFlatSurface(int w, int s, int e, int n)
-        {
-            return w == s && s == e && e == n;
         }
 
         private bool RoadTerrainStaysAboveWater(int w, int s, int e, int n)
@@ -667,17 +601,17 @@ namespace ForesTycoon
             return edges == (RoadEdge.WS | RoadEdge.EN) || edges == (RoadEdge.SE | RoadEdge.NW);
         }
 
-        // Csak TwoAdjacentRaised esetén: a rámpa iránya egyezik-e az út irányával.
+        // Csak Ramp esetén: a rámpa iránya egyezik-e az út irányával.
         // WS+EN irány: W==S és E==N kell (WS él vízszintes, EN él vízszintes).
         // SE+NW irány: S==E és N==W kell (SE él vízszintes, NW él vízszintes).
-        private static bool IsRampAligned(TileSlopeInfo slope, RoadEdge edges)
+        private static bool IsRampAligned(TileShapeInfo shape, RoadEdge edges)
         {
             bool hasWsEn = (edges & (RoadEdge.WS | RoadEdge.EN)) != 0;
             bool hasSeNw = (edges & (RoadEdge.SE | RoadEdge.NW)) != 0;
             if (hasWsEn && !hasSeNw)
-                return slope.WRaised == slope.SRaised && slope.ERaised == slope.NRaised;
+                return shape.WRaised == shape.SRaised && shape.ERaised == shape.NRaised;
             if (hasSeNw && !hasWsEn)
-                return slope.SRaised == slope.ERaised && slope.NRaised == slope.WRaised;
+                return shape.SRaised == shape.ERaised && shape.NRaised == shape.WRaised;
             return false;
         }
 
