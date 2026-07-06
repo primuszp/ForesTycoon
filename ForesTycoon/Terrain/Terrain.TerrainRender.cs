@@ -10,12 +10,25 @@ namespace ForesTycoon
         {
             // A kitöltött terep írja a depth buffert; a koplanáris overlay rétegek
             // később depth írás nélkül rajzolódnak, így nincs Z-fighting.
+            ImmediateRenderer.Draw(PrimitiveType.Quads, () =>
+            {
+                foreach (Tile tile in tiles)
+                {
+                    if (roads.Has(tile.Id)) continue;
+                    if (GetTileRenderMaterial(tile) != TileRenderMaterial.Grass) continue;
+                    if (!tile.Shape.IsPlanar) continue;
+
+                    DrawTerrainTileQuad(tile);
+                }
+            });
+
             foreach (Tile tile in tiles)
             {
                 // Az út-csempék terep-meshe helyett a platform/földmű renderelődik
                 // (DrawRoadFoundations) — különben bevágásnál a magasabb terep eltakarná az utat.
                 if (roads.Has(tile.Id)) continue;
                 if (GetTileRenderMaterial(tile) != TileRenderMaterial.Grass) continue;
+                if (tile.Shape.IsPlanar) continue;
 
                 bool tileFlip = flippedDiagonalTiles.Contains(tile.Id);
                 VertexBuffer vbo = vbos[tile.Code + "_" + tile.Low + (tileFlip ? "_f" : "")];
@@ -27,6 +40,22 @@ namespace ForesTycoon
                 }
                 GL.PopMatrix();
             }
+
+            DrawFoundationTerrainSurfaces();
+        }
+
+        private void DrawTerrainTileQuad(Tile tile)
+        {
+            Vector3 w = new Vector3(tile.W.xPos, tile.W.yPos, tile.W.zPos);
+            Vector3 s = new Vector3(tile.S.xPos, tile.S.yPos, tile.S.zPos);
+            Vector3 e = new Vector3(tile.E.xPos, tile.E.yPos, tile.E.zPos);
+            Vector3 n = new Vector3(tile.N.xPos, tile.N.yPos, tile.N.zPos);
+
+            GL.Color4(ShadedTileColor(TerrainSurfaceColor(tile.Code, tile.Low), w, s, e));
+            GL.Vertex3(w);
+            GL.Vertex3(s);
+            GL.Vertex3(e);
+            GL.Vertex3(n);
         }
 
         private void BeginTerrainDecals()
@@ -73,12 +102,13 @@ namespace ForesTycoon
 
                 case TileRenderMaterial.Foundation:
                     DrawTileEdgesByMaterial(tile, visual, terrainLine);
-                    if (!roads.Has(tile.Id)) DrawTileDiagonal(tile);
+                    if (visual.DrawFoundationDiagonal)
+                        DrawTileDiagonal(tile, visual);
                     return;
 
                 case TileRenderMaterial.MixedFoundation:
                     DrawTileEdgesByMaterial(tile, visual, terrainLine);
-                    DrawTileDiagonal(tile);
+                    DrawTileDiagonal(tile, visual);
                     return;
             }
         }
@@ -103,10 +133,10 @@ namespace ForesTycoon
             GL.Vertex3(tile.N.xPos, tile.N.yPos, tile.N.zPos); GL.Vertex3(tile.W.xPos, tile.W.yPos, tile.W.zPos);
         }
 
-        private void DrawTileDiagonal(Tile tile)
+        private void DrawTileDiagonal(Tile tile, TileSurfaceVisual visual)
         {
             GL.Color4(RoadFoundationLineColor);
-            if (UseTileDiagonalWE(tile))
+            if (UseTileDiagonalWE(tile, visual))
             {
                 GL.Vertex3(tile.W.xPos, tile.W.yPos, tile.W.zPos);
                 GL.Vertex3(tile.E.xPos, tile.E.yPos, tile.E.zPos);

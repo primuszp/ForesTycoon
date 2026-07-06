@@ -14,13 +14,6 @@ namespace ForesTycoon
             MixedFoundation
         }
 
-        private enum TileDiagonalSplit
-        {
-            None,
-            WE,
-            NS
-        }
-
         private enum TileCorner
         {
             W,
@@ -29,24 +22,31 @@ namespace ForesTycoon
             N
         }
 
+        private enum TileDiagonalDirection
+        {
+            Natural,
+            WE,
+            NS
+        }
+
         private readonly struct TileSurfaceVisual
         {
             public TileSurfaceVisual(
                 TileRenderMaterial surfaceMaterial,
-                TileRenderMaterial roadTriangleMaterial,
-                TileRenderMaterial terrainTriangleMaterial,
-                RoadEdge splitEdge,
-                TileDiagonalSplit split,
+                TileRenderMaterial firstTriangleMaterial,
+                TileRenderMaterial secondTriangleMaterial,
+                TileDiagonalDirection splitDirection,
+                bool drawFoundationDiagonal,
                 TileRenderMaterial edgeWS,
                 TileRenderMaterial edgeSE,
                 TileRenderMaterial edgeEN,
                 TileRenderMaterial edgeNW)
             {
                 SurfaceMaterial = surfaceMaterial;
-                RoadTriangleMaterial = roadTriangleMaterial;
-                TerrainTriangleMaterial = terrainTriangleMaterial;
-                SplitEdge = splitEdge;
-                Split = split;
+                FirstTriangleMaterial = firstTriangleMaterial;
+                SecondTriangleMaterial = secondTriangleMaterial;
+                SplitDirection = splitDirection;
+                DrawFoundationDiagonal = drawFoundationDiagonal;
                 EdgeWS = edgeWS;
                 EdgeSE = edgeSE;
                 EdgeEN = edgeEN;
@@ -54,10 +54,10 @@ namespace ForesTycoon
             }
 
             public TileRenderMaterial SurfaceMaterial { get; }
-            public TileRenderMaterial RoadTriangleMaterial { get; }
-            public TileRenderMaterial TerrainTriangleMaterial { get; }
-            public RoadEdge SplitEdge { get; }
-            public TileDiagonalSplit Split { get; }
+            public TileRenderMaterial FirstTriangleMaterial { get; }
+            public TileRenderMaterial SecondTriangleMaterial { get; }
+            public TileDiagonalDirection SplitDirection { get; }
+            public bool DrawFoundationDiagonal { get; }
             public TileRenderMaterial EdgeWS { get; }
             public TileRenderMaterial EdgeSE { get; }
             public TileRenderMaterial EdgeEN { get; }
@@ -103,8 +103,6 @@ namespace ForesTycoon
                         DrawFoundationFacesForRoadTile(u, v, t);
                     }
                 });
-
-                DrawMixedFoundationTileSurfaces();
             }
 
             using (new RenderStateScope().DepthWrite(false))
@@ -124,72 +122,68 @@ namespace ForesTycoon
             }
         }
 
-        private void DrawMixedFoundationTileSurfaces()
+        private void DrawFoundationTerrainSurfaces()
         {
-            // Non-road tiles adjacent to 2+ road edges (e.g. outer road corners) are full Foundation.
-            // DrawTerrainBase skips them, so we must draw their surface here.
+            ImmediateRenderer.Draw(PrimitiveType.Quads, () =>
+            {
+                foreach (Tile tile in tiles)
+                {
+                    if (roads.Has(tile.Id)) continue;
+                    TileSurfaceVisual visual = GetTileSurfaceVisual(tile);
+                    if (visual.SurfaceMaterial != TileRenderMaterial.Foundation) continue;
+
+                    if (tile.Shape.IsPlanar)
+                        DrawFoundationTileQuad(tile, visual);
+                }
+            });
+
             ImmediateRenderer.Draw(PrimitiveType.Triangles, () =>
             {
                 foreach (Tile tile in tiles)
                 {
                     if (roads.Has(tile.Id)) continue;
                     TileSurfaceVisual visual = GetTileSurfaceVisual(tile);
-                    if (visual.SurfaceMaterial == TileRenderMaterial.Foundation)
-                        DrawFullFoundationTile(tile);
-                }
-            });
+                    if (visual.SurfaceMaterial == TileRenderMaterial.Grass) continue;
+                    if (visual.SurfaceMaterial == TileRenderMaterial.Foundation && tile.Shape.IsPlanar) continue;
 
-            ImmediateRenderer.Draw(PrimitiveType.Triangles, () =>
-            {
-                foreach (Tile tile in tiles)
-                {
-                    TileSurfaceVisual visual = GetTileSurfaceVisual(tile);
-                    if (visual.SurfaceMaterial != TileRenderMaterial.MixedFoundation) continue;
-                    if (visual.Split == TileDiagonalSplit.None) continue;
-
-                    DrawMixedFoundationTile(tile, visual);
+                    DrawMixedFoundationTileSurface(tile, visual);
                 }
             });
         }
 
-        private void DrawFullFoundationTile(Tile tile)
+        private static void DrawFoundationTileQuad(Tile tile, TileSurfaceVisual visual)
         {
-            if (UseTileDiagonalWE(tile))
+            Color baseColor = SurfaceColor(tile, visual.FirstTriangleMaterial);
+            Vector3 w = Corner(tile, TileCorner.W);
+            Vector3 s = Corner(tile, TileCorner.S);
+            Vector3 e = Corner(tile, TileCorner.E);
+            Vector3 n = Corner(tile, TileCorner.N);
+            GL.Color4(ShadedTileColor(baseColor, w, s, e));
+            GL.Vertex3(w);
+            GL.Vertex3(s);
+            GL.Vertex3(e);
+            GL.Vertex3(n);
+        }
+
+        private void DrawMixedFoundationTileSurface(Tile tile, TileSurfaceVisual visual)
+        {
+            if (UseTileDiagonalWE(tile, visual))
             {
-                DrawSurfaceTriangle(tile, TileCorner.W, TileCorner.S, TileCorner.E, RoadFoundationSlopeColor);
-                DrawSurfaceTriangle(tile, TileCorner.W, TileCorner.E, TileCorner.N, RoadFoundationSlopeColor);
+                DrawSurfaceTriangle(tile, TileCorner.W, TileCorner.S, TileCorner.E, SurfaceColor(tile, visual.FirstTriangleMaterial));
+                DrawSurfaceTriangle(tile, TileCorner.W, TileCorner.E, TileCorner.N, SurfaceColor(tile, visual.SecondTriangleMaterial));
             }
             else
             {
-                DrawSurfaceTriangle(tile, TileCorner.N, TileCorner.W, TileCorner.S, RoadFoundationSlopeColor);
-                DrawSurfaceTriangle(tile, TileCorner.N, TileCorner.S, TileCorner.E, RoadFoundationSlopeColor);
+                DrawSurfaceTriangle(tile, TileCorner.N, TileCorner.W, TileCorner.S, SurfaceColor(tile, visual.FirstTriangleMaterial));
+                DrawSurfaceTriangle(tile, TileCorner.N, TileCorner.S, TileCorner.E, SurfaceColor(tile, visual.SecondTriangleMaterial));
             }
         }
 
-        private void DrawMixedFoundationTile(Tile tile, TileSurfaceVisual visual)
+        private static Color SurfaceColor(Tile tile, TileRenderMaterial material)
         {
-            if (UseTileDiagonalWE(tile))
-            {
-                DrawMixedSurfaceTriangle(tile, visual, TileCorner.W, TileCorner.S, TileCorner.E);
-                DrawMixedSurfaceTriangle(tile, visual, TileCorner.W, TileCorner.E, TileCorner.N);
-            }
-            else
-            {
-                DrawMixedSurfaceTriangle(tile, visual, TileCorner.N, TileCorner.W, TileCorner.S);
-                DrawMixedSurfaceTriangle(tile, visual, TileCorner.N, TileCorner.S, TileCorner.E);
-            }
-        }
-
-        private static Color SurfaceColor(TileRenderMaterial material)
-        {
-            return material == TileRenderMaterial.Foundation ? RoadFoundationSlopeColor : TerrainTopColor;
-        }
-
-        private void DrawMixedSurfaceTriangle(Tile tile, TileSurfaceVisual visual, TileCorner a, TileCorner b, TileCorner c)
-        {
-            bool terrainSide = TriangleContainsEdge(a, b, c, visual.SplitEdge);
-            Color baseColor = SurfaceColor(terrainSide ? visual.TerrainTriangleMaterial : visual.RoadTriangleMaterial);
-            DrawSurfaceTriangle(tile, a, b, c, baseColor);
+            return material == TileRenderMaterial.Foundation
+                ? RoadFoundationSlopeColor
+                : TerrainSurfaceColor(tile.Code, tile.Low);
         }
 
         private static void DrawSurfaceTriangle(Tile tile, TileCorner a, TileCorner b, TileCorner c, Color baseColor)
@@ -207,6 +201,13 @@ namespace ForesTycoon
         {
             bool useWE = Math.Abs(tile.W.zPos - tile.E.zPos) <= Math.Abs(tile.N.zPos - tile.S.zPos);
             return flippedDiagonalTiles.Contains(tile.Id) ? !useWE : useWE;
+        }
+
+        private bool UseTileDiagonalWE(Tile tile, TileSurfaceVisual visual)
+        {
+            if (visual.SplitDirection == TileDiagonalDirection.WE) return true;
+            if (visual.SplitDirection == TileDiagonalDirection.NS) return false;
+            return UseTileDiagonalWE(tile);
         }
 
         private static Vector3 Corner(Tile tile, TileCorner corner)
@@ -227,9 +228,9 @@ namespace ForesTycoon
             return TriangleContainsCorner(a, b, c, x) && TriangleContainsCorner(a, b, c, y);
         }
 
-        private bool MixedTileEdgeHasFoundation(Tile tile, TileSurfaceVisual visual, RoadEdge edge)
+        private bool TileEdgeHasFoundation(Tile tile, TileSurfaceVisual visual, RoadEdge edge)
         {
-            if (UseTileDiagonalWE(tile))
+            if (UseTileDiagonalWE(tile, visual))
             {
                 return TriangleEdgeHasFoundation(visual, TileCorner.W, TileCorner.S, TileCorner.E, edge)
                     || TriangleEdgeHasFoundation(visual, TileCorner.W, TileCorner.E, TileCorner.N, edge);
@@ -243,9 +244,16 @@ namespace ForesTycoon
         {
             if (!TriangleContainsEdge(a, b, c, edge)) return false;
 
-            bool terrainSide = TriangleContainsEdge(a, b, c, visual.SplitEdge);
-            TileRenderMaterial material = terrainSide ? visual.TerrainTriangleMaterial : visual.RoadTriangleMaterial;
+            TileRenderMaterial material = FirstTriangleCornersMatch(a, b, c)
+                ? visual.FirstTriangleMaterial
+                : visual.SecondTriangleMaterial;
             return material == TileRenderMaterial.Foundation;
+        }
+
+        private static bool FirstTriangleCornersMatch(TileCorner a, TileCorner b, TileCorner c)
+        {
+            return (a == TileCorner.W && b == TileCorner.S && c == TileCorner.E)
+                || (a == TileCorner.N && b == TileCorner.W && c == TileCorner.S);
         }
 
         private static bool TriangleContainsCorner(TileCorner a, TileCorner b, TileCorner c, TileCorner corner)
@@ -380,23 +388,28 @@ namespace ForesTycoon
                     TileRenderMaterial.Foundation,
                     TileRenderMaterial.Foundation,
                     TileRenderMaterial.Foundation,
-                    RoadEdge.None,
-                    TileDiagonalSplit.None,
+                    TileDiagonalDirection.Natural,
+                    false,
                     TryGetFoundationFaceForRoadEdge(u, v - 1, tile.W, tile.S, RoadEdge.WS, out _) ? TileRenderMaterial.Foundation : TileRenderMaterial.Grass,
                     TryGetFoundationFaceForRoadEdge(u + 1, v, tile.S, tile.E, RoadEdge.SE, out _) ? TileRenderMaterial.Foundation : TileRenderMaterial.Grass,
                     TryGetFoundationFaceForRoadEdge(u, v + 1, tile.E, tile.N, RoadEdge.EN, out _) ? TileRenderMaterial.Foundation : TileRenderMaterial.Grass,
                     TryGetFoundationFaceForRoadEdge(u - 1, v, tile.N, tile.W, RoadEdge.NW, out _) ? TileRenderMaterial.Foundation : TileRenderMaterial.Grass);
             }
 
-            RoadEdge edges = GetFoundationEdgesFromAdjacentRoads(u, v, tile);
-            int edgeCount = CountEdges(edges);
-
-            if (edgeCount == 0)
-            {
+            TileSurfaceVisual visual = GetTileFoundationSurfaceMask(tile, u, v);
+            if (visual.SurfaceMaterial == TileRenderMaterial.Grass)
                 return GrassSurfaceVisual(u, v, tile);
-            }
 
-            return UniformSurfaceVisual(TileRenderMaterial.Foundation);
+            return new TileSurfaceVisual(
+                visual.SurfaceMaterial,
+                visual.FirstTriangleMaterial,
+                visual.SecondTriangleMaterial,
+                visual.SplitDirection,
+                visual.DrawFoundationDiagonal,
+                TileEdgeHasFoundation(tile, visual, RoadEdge.WS) ? TileRenderMaterial.Foundation : NeighborEdgeMaterial(u, v, tile, u, v - 1, RoadEdge.EN),
+                TileEdgeHasFoundation(tile, visual, RoadEdge.SE) ? TileRenderMaterial.Foundation : NeighborEdgeMaterial(u, v, tile, u + 1, v, RoadEdge.NW),
+                TileEdgeHasFoundation(tile, visual, RoadEdge.EN) ? TileRenderMaterial.Foundation : NeighborEdgeMaterial(u, v, tile, u, v + 1, RoadEdge.WS),
+                TileEdgeHasFoundation(tile, visual, RoadEdge.NW) ? TileRenderMaterial.Foundation : NeighborEdgeMaterial(u, v, tile, u - 1, v, RoadEdge.SE));
         }
 
         private TileSurfaceVisual GrassSurfaceVisual(int u, int v, Tile tile)
@@ -405,8 +418,8 @@ namespace ForesTycoon
                 TileRenderMaterial.Grass,
                 TileRenderMaterial.Grass,
                 TileRenderMaterial.Grass,
-                RoadEdge.None,
-                TileDiagonalSplit.None,
+                TileDiagonalDirection.Natural,
+                false,
                 NeighborEdgeMaterial(u, v, tile, u, v - 1, RoadEdge.EN),
                 NeighborEdgeMaterial(u, v, tile, u + 1, v, RoadEdge.NW),
                 NeighborEdgeMaterial(u, v, tile, u, v + 1, RoadEdge.WS),
@@ -430,15 +443,14 @@ namespace ForesTycoon
             int tpc = nodeRows - 1;
             int nu = neighbor.Id / tpc;
             int nv = neighbor.Id % tpc;
-            RoadEdge neighborEdges = GetFoundationEdgesFromAdjacentRoads(nu, nv, neighbor);
-            int neighborEdgeCount = CountEdges(neighborEdges);
-            if (neighborEdgeCount == 0) return TileRenderMaterial.Grass;
-            return TileRenderMaterial.Foundation;
+            TileSurfaceVisual neighborVisual = GetTileFoundationSurfaceMask(neighbor, nu, nv);
+            return TileEdgeHasFoundation(neighbor, neighborVisual, neighborFacingEdge)
+                ? TileRenderMaterial.Foundation
+                : TileRenderMaterial.Grass;
         }
 
         // Checks whether an embankment face (height difference) exists between this tile
-        // and an adjacent road tile.  neighborFacingEdge is the road's edge facing us.
-        // Node pairs mirror GetFoundationEdgesFromAdjacentRoads / DrawFoundationFacesForRoadTile.
+        // and an adjacent road tile. neighborFacingEdge is the road's edge facing us.
         private bool HasFoundationFaceTowardRoad(int u, int v, Tile tile, Tile road, RoadEdge neighborFacingEdge)
         {
             return neighborFacingEdge switch
@@ -451,65 +463,154 @@ namespace ForesTycoon
             };
         }
 
-        private static TileSurfaceVisual UniformSurfaceVisual(TileRenderMaterial material)
+        private static TileRenderMaterial SurfaceMaterial(TileRenderMaterial first, TileRenderMaterial second)
         {
-            return new TileSurfaceVisual(
-                material,
-                material,
-                material,
-                RoadEdge.None,
-                TileDiagonalSplit.None,
-                material,
-                material,
-                material,
-                material);
+            if (first == TileRenderMaterial.Foundation && second == TileRenderMaterial.Foundation)
+                return TileRenderMaterial.Foundation;
+            if (first == TileRenderMaterial.Grass && second == TileRenderMaterial.Grass)
+                return TileRenderMaterial.Grass;
+            return TileRenderMaterial.MixedFoundation;
         }
 
-        private static TileDiagonalSplit SplitForEdge(RoadEdge edge)
+        private TileSurfaceVisual GetTileFoundationSurfaceMask(Tile tile, int u, int v)
         {
-            return edge switch
+            RoadEdge foundationEdges = GetRoadFacingFoundationEdgesFromAdjacentRoads(u, v, tile);
+            TileRenderMaterial first = TileRenderMaterial.Grass;
+            TileRenderMaterial second = TileRenderMaterial.Grass;
+            TileDiagonalDirection splitDirection = TileDiagonalDirection.Natural;
+            if (foundationEdges != RoadEdge.None)
             {
-                RoadEdge.WS => TileDiagonalSplit.WE,
-                RoadEdge.SE => TileDiagonalSplit.NS,
-                RoadEdge.EN => TileDiagonalSplit.WE,
-                RoadEdge.NW => TileDiagonalSplit.NS,
-                _ => TileDiagonalSplit.None
-            };
+                first = TileRenderMaterial.Foundation;
+                second = TileRenderMaterial.Foundation;
+            }
+            else
+            {
+                ApplyDiagonalRoadCornerMask(u, v, tile, ref first, ref second, ref splitDirection);
+            }
+
+            return new TileSurfaceVisual(
+                SurfaceMaterial(first, second),
+                first,
+                second,
+                splitDirection,
+                false,
+                TileRenderMaterial.Grass,
+                TileRenderMaterial.Grass,
+                TileRenderMaterial.Grass,
+                TileRenderMaterial.Grass);
         }
 
-        private static bool IsCoplanarTile(Tile tile)
-        {
-            Vector3 w = Corner(tile.W);
-            Vector3 s = Corner(tile.S);
-            Vector3 e = Corner(tile.E);
-            Vector3 n = Corner(tile.N);
-            Vector3 normal = Vector3.Cross(s - w, e - w);
-            if (normal.LengthSquared <= 0.0001f) return true;
-            float distance = Math.Abs(Vector3.Dot(Vector3.Normalize(normal), n - w));
-            return distance <= 0.01f;
-        }
-
-        private RoadEdge GetFoundationEdgesFromAdjacentRoads(int u, int v, Tile tile)
+        private RoadEdge GetRoadFacingFoundationEdgesFromAdjacentRoads(int u, int v, Tile tile)
         {
             RoadEdge edges = RoadEdge.None;
 
-            if (TryGetRoadTile(u, v + 1, out Tile roadNorth)
-                && TryGetFoundationFace(u, v, roadNorth.W, roadNorth.S, tile.W, tile.S, out _))
-                edges |= RoadEdge.WS;
-
-            if (TryGetRoadTile(u - 1, v, out Tile roadWest)
-                && TryGetFoundationFace(u, v, roadWest.S, roadWest.E, tile.S, tile.E, out _))
-                edges |= RoadEdge.SE;
-
             if (TryGetRoadTile(u, v - 1, out Tile roadSouth)
                 && TryGetFoundationFace(u, v, roadSouth.E, roadSouth.N, tile.E, tile.N, out _))
-                edges |= RoadEdge.EN;
+                edges |= RoadEdge.WS;
 
             if (TryGetRoadTile(u + 1, v, out Tile roadEast)
                 && TryGetFoundationFace(u, v, roadEast.N, roadEast.W, tile.N, tile.W, out _))
+                edges |= RoadEdge.SE;
+
+            if (TryGetRoadTile(u, v + 1, out Tile roadNorth)
+                && TryGetFoundationFace(u, v, roadNorth.W, roadNorth.S, tile.W, tile.S, out _))
+                edges |= RoadEdge.EN;
+
+            if (TryGetRoadTile(u - 1, v, out Tile roadWest)
+                && TryGetFoundationFace(u, v, roadWest.S, roadWest.E, tile.S, tile.E, out _))
                 edges |= RoadEdge.NW;
 
             return edges;
+        }
+
+        private void ApplyDiagonalRoadCornerMask(int u, int v, Tile tile,
+            ref TileRenderMaterial first, ref TileRenderMaterial second, ref TileDiagonalDirection splitDirection)
+        {
+            if (IsRoadTileWithFoundationEdges(u - 1, v - 1, RoadEdge.SE | RoadEdge.EN)
+                && HasFoundationConnectorForCorner(u, v, TileCorner.W))
+                ApplyFoundationToTriangleContainingCorner(tile, TileCorner.W, ref first, ref second, ref splitDirection);
+            if (IsRoadTileWithFoundationEdges(u + 1, v - 1, RoadEdge.NW | RoadEdge.EN)
+                && HasFoundationConnectorForCorner(u, v, TileCorner.S))
+                ApplyFoundationToTriangleContainingCorner(tile, TileCorner.S, ref first, ref second, ref splitDirection);
+            if (IsRoadTileWithFoundationEdges(u + 1, v + 1, RoadEdge.NW | RoadEdge.WS)
+                && HasFoundationConnectorForCorner(u, v, TileCorner.E))
+                ApplyFoundationToTriangleContainingCorner(tile, TileCorner.E, ref first, ref second, ref splitDirection);
+            if (IsRoadTileWithFoundationEdges(u - 1, v + 1, RoadEdge.SE | RoadEdge.WS)
+                && HasFoundationConnectorForCorner(u, v, TileCorner.N))
+                ApplyFoundationToTriangleContainingCorner(tile, TileCorner.N, ref first, ref second, ref splitDirection);
+        }
+
+        private bool HasFoundationConnectorForCorner(int u, int v, TileCorner corner)
+        {
+            switch (corner)
+            {
+                case TileCorner.W:
+                    return HasDirectFoundationAtTile(u - 1, v) || HasDirectFoundationAtTile(u, v - 1);
+                case TileCorner.S:
+                    return HasDirectFoundationAtTile(u + 1, v) || HasDirectFoundationAtTile(u, v - 1);
+                case TileCorner.E:
+                    return HasDirectFoundationAtTile(u + 1, v) || HasDirectFoundationAtTile(u, v + 1);
+                case TileCorner.N:
+                    return HasDirectFoundationAtTile(u - 1, v) || HasDirectFoundationAtTile(u, v + 1);
+                default:
+                    return false;
+            }
+        }
+
+        private bool HasDirectFoundationAtTile(int u, int v)
+        {
+            if (!checkTile(u, v)) return false;
+            Tile tile = getTileByCoords(u, v);
+            if (roads.Has(tile.Id)) return false;
+            return GetRoadFacingFoundationEdgesFromAdjacentRoads(u, v, tile) != RoadEdge.None;
+        }
+
+        private bool IsRoadTileWithFoundationEdges(int u, int v, RoadEdge roadEdges)
+        {
+            if (!TryGetRoadTile(u, v, out Tile roadTile)) return false;
+
+            int tpc = nodeRows - 1;
+            int roadU = roadTile.Id / tpc;
+            int roadV = roadTile.Id % tpc;
+            bool hasFirst = (roadEdges & RoadEdge.WS) != 0
+                && TryGetFoundationFaceForRoadEdge(roadU, roadV - 1, roadTile.W, roadTile.S, RoadEdge.WS, out _);
+            bool hasSecond = (roadEdges & RoadEdge.SE) != 0
+                && TryGetFoundationFaceForRoadEdge(roadU + 1, roadV, roadTile.S, roadTile.E, RoadEdge.SE, out _);
+            bool hasThird = (roadEdges & RoadEdge.EN) != 0
+                && TryGetFoundationFaceForRoadEdge(roadU, roadV + 1, roadTile.E, roadTile.N, RoadEdge.EN, out _);
+            bool hasFourth = (roadEdges & RoadEdge.NW) != 0
+                && TryGetFoundationFaceForRoadEdge(roadU - 1, roadV, roadTile.N, roadTile.W, RoadEdge.NW, out _);
+            return hasFirst || hasSecond || hasThird || hasFourth;
+        }
+
+        private void ApplyFoundationToTriangleContainingCorner(Tile tile, TileCorner corner,
+            ref TileRenderMaterial first, ref TileRenderMaterial second, ref TileDiagonalDirection splitDirection)
+        {
+            TileDiagonalDirection desiredSplit = SplitToIsolateCorner(corner);
+            if (splitDirection == TileDiagonalDirection.Natural)
+                splitDirection = desiredSplit;
+
+            bool useWE = splitDirection == TileDiagonalDirection.WE;
+            if (useWE)
+            {
+                if (TriangleContainsCorner(TileCorner.W, TileCorner.S, TileCorner.E, corner))
+                    first = TileRenderMaterial.Foundation;
+                if (TriangleContainsCorner(TileCorner.W, TileCorner.E, TileCorner.N, corner))
+                    second = TileRenderMaterial.Foundation;
+                return;
+            }
+
+            if (TriangleContainsCorner(TileCorner.N, TileCorner.W, TileCorner.S, corner))
+                first = TileRenderMaterial.Foundation;
+            if (TriangleContainsCorner(TileCorner.N, TileCorner.S, TileCorner.E, corner))
+                second = TileRenderMaterial.Foundation;
+        }
+
+        private static TileDiagonalDirection SplitToIsolateCorner(TileCorner corner)
+        {
+            return corner == TileCorner.W || corner == TileCorner.E
+                ? TileDiagonalDirection.NS
+                : TileDiagonalDirection.WE;
         }
 
         private bool TryGetRoadTile(int u, int v, out Tile roadTile)

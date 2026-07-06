@@ -194,49 +194,7 @@ namespace ForesTycoon
 
         private void fillColor(string code, int low, ref List<Vertex> data)
         {
-            int sumH = 0;
-            for (int i = 0; i < code.Length; i++) sumH += (int)char.GetNumericValue(code[i]);
-            // t: relative slope steepness within the tile (0=flat, 1=max slope)
-            float t = Math.Min(sumH / 8.0f, 1.0f);
-
-            // Biome base colors by absolute elevation (low = tile's minimum corner W)
-            Color baseLow, baseHigh;
-            if (low <= 1)
-            {
-                // Homok / part
-                baseLow  = Color.FromArgb(200, 178, 108);
-                baseHigh = Color.FromArgb(222, 202, 138);
-            }
-            else if (low == 2)
-            {
-                // Friss fű – élénk zöld
-                baseLow  = Color.FromArgb( 95, 148, 42);
-                baseHigh = Color.FromArgb(145, 195, 68);
-            }
-            else if (low == 3)
-            {
-                // Magasabb fű – sárgásabb zöld
-                baseLow  = Color.FromArgb(118, 158, 45);
-                baseHigh = Color.FromArgb(168, 205, 72);
-            }
-            else if (low == 4)
-            {
-                // Száraz fű / legelő – sárgás-barna
-                baseLow  = Color.FromArgb(155, 155, 55);
-                baseHigh = Color.FromArgb(192, 185, 80);
-            }
-            else if (low == 5)
-            {
-                // Magas legelő / bokros – olajzöld-barna átmenet
-                baseLow  = Color.FromArgb(138, 138, 72);
-                baseHigh = Color.FromArgb(170, 162, 90);
-            }
-            else
-            {
-                // Legmagasabb csúcs – szikla/hó
-                baseLow  = Color.FromArgb(175, 165, 148);
-                baseHigh = Color.FromArgb(230, 228, 222);
-            }
+            Color surfaceColor = TerrainSurfaceColor(code, low);
 
             // Light direction: slightly from above-front in world space
             Vector3 light = Vector3.Normalize(new Vector3(0.4f, 0.6f, 1.5f));
@@ -251,14 +209,62 @@ namespace ForesTycoon
                 Vector3 normal = Vector3.Normalize(Vector3.Cross(p1 - p0, p2 - p0));
                 float shade = Math.Max(0.55f, Math.Min(1.0f, Vector3.Dot(normal, light)));
 
-                int r = (int)((baseLow.R + (baseHigh.R - baseLow.R) * t) * shade);
-                int g = (int)((baseLow.G + (baseHigh.G - baseLow.G) * t) * shade);
-                int b = (int)((baseLow.B + (baseHigh.B - baseLow.B) * t) * shade);
+                int r = (int)(surfaceColor.R * shade);
+                int g = (int)(surfaceColor.G * shade);
+                int b = (int)(surfaceColor.B * shade);
                 uint color = ColorToUInt(Color.FromArgb(255, r, g, b));
 
                 int end = Math.Min(start + stride, data.Count);
                 for (int i = start; i < end; i++)
                     data[i] = setColor(data[i], color);
+            }
+        }
+
+        private static Color TerrainSurfaceColor(string code, int low)
+        {
+            int sumH = 0;
+            for (int i = 0; i < code.Length; i++) sumH += (int)char.GetNumericValue(code[i]);
+            float t = Math.Min(sumH / 8.0f, 1.0f);
+
+            GetTerrainColorRange(low, out Color baseLow, out Color baseHigh);
+            int r = (int)(baseLow.R + (baseHigh.R - baseLow.R) * t);
+            int g = (int)(baseLow.G + (baseHigh.G - baseLow.G) * t);
+            int b = (int)(baseLow.B + (baseHigh.B - baseLow.B) * t);
+            return Color.FromArgb(255, r, g, b);
+        }
+
+        private static void GetTerrainColorRange(int low, out Color baseLow, out Color baseHigh)
+        {
+            // Biome base colors by absolute elevation (low = tile's minimum corner W)
+            if (low <= 1)
+            {
+                baseLow  = Color.FromArgb(200, 178, 108);
+                baseHigh = Color.FromArgb(222, 202, 138);
+            }
+            else if (low == 2)
+            {
+                baseLow  = Color.FromArgb( 95, 148, 42);
+                baseHigh = Color.FromArgb(145, 195, 68);
+            }
+            else if (low == 3)
+            {
+                baseLow  = Color.FromArgb(118, 158, 45);
+                baseHigh = Color.FromArgb(168, 205, 72);
+            }
+            else if (low == 4)
+            {
+                baseLow  = Color.FromArgb(155, 155, 55);
+                baseHigh = Color.FromArgb(192, 185, 80);
+            }
+            else if (low == 5)
+            {
+                baseLow  = Color.FromArgb(138, 138, 72);
+                baseHigh = Color.FromArgb(170, 162, 90);
+            }
+            else
+            {
+                baseLow  = Color.FromArgb(175, 165, 148);
+                baseHigh = Color.FromArgb(230, 228, 222);
             }
         }
 
