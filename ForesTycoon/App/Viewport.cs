@@ -62,6 +62,7 @@ namespace ForesTycoon
 
         // ── Játékállapot ─────────────────────────────────────────────────────
         private MouseButtons activeButton = MouseButtons.None;
+        private bool mouseDownCapturedByImGui;
         private bool         nodeHovered  = false;
         private Terrain      terrain      = null;
         private TerrainEditTool activeTool = TerrainEditTool.Inspect;
@@ -191,6 +192,12 @@ namespace ForesTycoon
                 rotationPivotActive = false;
                 rotationPivotKeepsScreenPoint = false;
             }
+        }
+
+        private void ClearRotationPivot()
+        {
+            rotationPivotActive = false;
+            rotationPivotKeepsScreenPoint = false;
         }
 
         // ── Háttérszín (referenciakép alapján) ──────────────────────────────
@@ -682,6 +689,13 @@ namespace ForesTycoon
             if (activeButton == e.Button) activeButton = MouseButtons.None;
             if (!isLoaded || e.Button != MouseButtons.Left) return;
 
+            if (mouseDownCapturedByImGui)
+            {
+                mouseDownCapturedByImGui = false;
+                RequestFrame();
+                return;
+            }
+
             if (IsRoadTool(activeTool))
             {
                 if (roadDragging && roadDragStartTile != null)
@@ -696,7 +710,13 @@ namespace ForesTycoon
                 return;
             }
 
-            if (activeTool != TerrainEditTool.Inspect) return;
+            if (activeTool != TerrainEditTool.Inspect)
+            {
+                ApplyActiveTerrainTool();
+                RequestFrame();
+                return;
+            }
+
             // Snap a legközelebbi 90°-ra
             SetRotationTargetAroundPivot(SnapRotation(targetRotY), e.X, e.Y, worldPos);
             RequestFrame();
@@ -742,10 +762,14 @@ namespace ForesTycoon
             Focus();
 
             imgui?.MouseButton(MapMouseButton(e.Button), true);
-            if (imgui != null && imgui.WantCaptureMouse) { RequestFrame(); return; }
+            mouseDownCapturedByImGui = imgui != null && imgui.WantCaptureMouse;
+            if (mouseDownCapturedByImGui) { RequestFrame(); return; }
 
             UpdateHover(e);
             activeButton = e.Button;
+            if (e.Button == MouseButtons.Right)
+                ClearRotationPivot();
+
             panStartX = mouseX;
             panStartY = mouseY;
 
@@ -781,14 +805,6 @@ namespace ForesTycoon
             base.OnClick(e);
             if (!isLoaded) return;
             if (imgui != null && imgui.WantCaptureMouse) return;
-
-            // Az út-eszközöket a drag-build (OnMouseDown/Up) kezeli, nem a klikk.
-            if (activeTool != TerrainEditTool.Inspect && !IsRoadTool(activeTool))
-            {
-                ApplyActiveTerrainTool();
-                RequestFrame();
-                return;
-            }
 
             RequestFrame();
         }

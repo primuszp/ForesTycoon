@@ -488,6 +488,13 @@ namespace ForesTycoon
                 ApplyDiagonalRoadCornerMask(u, v, tile, ref first, ref second, ref splitDirection);
             }
 
+            if (first != second && tile.Shape.IsPlanar)
+            {
+                first = TileRenderMaterial.Grass;
+                second = TileRenderMaterial.Grass;
+                splitDirection = TileDiagonalDirection.Natural;
+            }
+
             return new TileSurfaceVisual(
                 SurfaceMaterial(first, second),
                 first,
