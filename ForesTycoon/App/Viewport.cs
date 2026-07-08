@@ -75,6 +75,7 @@ namespace ForesTycoon
             t == TerrainEditTool.Road || t == TerrainEditTool.RoadRemove;
 
         private bool         isLoaded     = false;
+        private bool glResourcesDisposed;
         private ImGuiController imgui;
         private const int FrameTimerIntervalMs = 33;
         private System.Windows.Forms.Timer frameTimer;
@@ -625,17 +626,47 @@ namespace ForesTycoon
             frameTimer?.Dispose();
             frameTimer = null;
 
-            if (isLoaded)
+            base.OnHandleDestroyed(e);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+                DisposeGlResources();
+
+            base.Dispose(disposing);
+        }
+
+        private void DisposeGlResources()
+        {
+            if (glResourcesDisposed) return;
+            glResourcesDisposed = true;
+
+            frameTimer?.Stop();
+            frameTimer?.Dispose();
+            frameTimer = null;
+
+            if (!isLoaded) return;
+
+            try
             {
-                MakeCurrent();
+                if (IsHandleCreated)
+                    MakeCurrent();
+
                 imgui?.Dispose();
-                imgui = null;
                 terrain?.Dispose();
+            }
+            catch
+            {
+                // The WinForms handle may already be invalid during shutdown; do not
+                // turn cleanup into an application crash.
+            }
+            finally
+            {
+                imgui = null;
                 terrain = null;
                 isLoaded = false;
             }
-
-            base.OnHandleDestroyed(e);
         }
 
         protected override void OnResize(EventArgs e)
