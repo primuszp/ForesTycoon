@@ -202,90 +202,82 @@ void main()
         {
             if (drawData.CmdListsCount == 0) return;
 
-            // ── GL állapot mentése a terep-renderhez ─────────────────────────
-            GL.Enable(EnableCap.Blend);
-            GL.BlendEquation(BlendEquationMode.FuncAdd);
-            GL.BlendFuncSeparate(BlendingFactorSrc.SrcAlpha, BlendingFactorDest.OneMinusSrcAlpha,
-                                 BlendingFactorSrc.One, BlendingFactorDest.OneMinusSrcAlpha);
-            GL.Disable(EnableCap.CullFace);
-            GL.Disable(EnableCap.DepthTest);
-            GL.Enable(EnableCap.ScissorTest);
-
-            int framebufferWidth = (int)(drawData.DisplaySize.X * drawData.FramebufferScale.X);
-            int framebufferHeight = (int)(drawData.DisplaySize.Y * drawData.FramebufferScale.Y);
-            if (framebufferWidth <= 0 || framebufferHeight <= 0) return;
-
-            GL.Viewport(0, 0, framebufferWidth, framebufferHeight);
-
-            float left = drawData.DisplayPos.X;
-            float right = drawData.DisplayPos.X + drawData.DisplaySize.X;
-            float top = drawData.DisplayPos.Y;
-            float bottom = drawData.DisplayPos.Y + drawData.DisplaySize.Y;
-            Matrix4 mvp = Matrix4.CreateOrthographicOffCenter(left, right, bottom, top, -1f, 1f);
-
-            GL.UseProgram(shader);
-            GL.UniformMatrix4(projLoc, false, ref mvp);
-            GL.Uniform1(texLoc, 0);
-            GL.ActiveTexture(TextureUnit.Texture0);
-            GL.BindVertexArray(vao);
-
-            for (int n = 0; n < drawData.CmdListsCount; n++)
+            using (new ImGuiRenderStateScope())
             {
-                ImDrawListPtr cmdList = drawData.CmdLists[n];
+                GL.Enable(EnableCap.Blend);
+                GL.BlendEquation(BlendEquationMode.FuncAdd);
+                GL.BlendFuncSeparate(BlendingFactorSrc.SrcAlpha, BlendingFactorDest.OneMinusSrcAlpha,
+                                     BlendingFactorSrc.One, BlendingFactorDest.OneMinusSrcAlpha);
+                GL.Disable(EnableCap.CullFace);
+                GL.Disable(EnableCap.DepthTest);
+                GL.Enable(EnableCap.ScissorTest);
 
-                int vtxBytes = cmdList.VtxBuffer.Size * VertSize;
-                int idxBytes = cmdList.IdxBuffer.Size * sizeof(ushort);
+                int framebufferWidth = (int)(drawData.DisplaySize.X * drawData.FramebufferScale.X);
+                int framebufferHeight = (int)(drawData.DisplaySize.Y * drawData.FramebufferScale.Y);
+                if (framebufferWidth <= 0 || framebufferHeight <= 0) return;
 
-                GL.BindBuffer(BufferTarget.ArrayBuffer, vbo);
-                if (vtxBytes > vboSize)
+                GL.Viewport(0, 0, framebufferWidth, framebufferHeight);
+
+                float left = drawData.DisplayPos.X;
+                float right = drawData.DisplayPos.X + drawData.DisplaySize.X;
+                float top = drawData.DisplayPos.Y;
+                float bottom = drawData.DisplayPos.Y + drawData.DisplaySize.Y;
+                Matrix4 mvp = Matrix4.CreateOrthographicOffCenter(left, right, bottom, top, -1f, 1f);
+
+                GL.UseProgram(shader);
+                GL.UniformMatrix4(projLoc, false, ref mvp);
+                GL.Uniform1(texLoc, 0);
+                GL.ActiveTexture(TextureUnit.Texture0);
+                GL.BindVertexArray(vao);
+
+                for (int n = 0; n < drawData.CmdListsCount; n++)
                 {
-                    vboSize = Math.Max(vboSize * 2, vtxBytes);
-                    GL.BufferData(BufferTarget.ArrayBuffer, vboSize, IntPtr.Zero, BufferUsageHint.DynamicDraw);
-                }
-                GL.BufferSubData(BufferTarget.ArrayBuffer, IntPtr.Zero, vtxBytes, cmdList.VtxBuffer.Data);
+                    ImDrawListPtr cmdList = drawData.CmdLists[n];
 
-                GL.BindBuffer(BufferTarget.ElementArrayBuffer, ebo);
-                if (idxBytes > eboSize)
-                {
-                    eboSize = Math.Max(eboSize * 2, idxBytes);
-                    GL.BufferData(BufferTarget.ElementArrayBuffer, eboSize, IntPtr.Zero, BufferUsageHint.DynamicDraw);
-                }
-                GL.BufferSubData(BufferTarget.ElementArrayBuffer, IntPtr.Zero, idxBytes, cmdList.IdxBuffer.Data);
+                    int vtxBytes = cmdList.VtxBuffer.Size * VertSize;
+                    int idxBytes = cmdList.IdxBuffer.Size * sizeof(ushort);
 
-                for (int c = 0; c < cmdList.CmdBuffer.Size; c++)
-                {
-                    ImDrawCmdPtr cmd = cmdList.CmdBuffer[c];
-                    System.Numerics.Vector4 clip = cmd.ClipRect;
-                    float clipX = (clip.X - drawData.DisplayPos.X) * drawData.FramebufferScale.X;
-                    float clipY = (clip.Y - drawData.DisplayPos.Y) * drawData.FramebufferScale.Y;
-                    float clipZ = (clip.Z - drawData.DisplayPos.X) * drawData.FramebufferScale.X;
-                    float clipW = (clip.W - drawData.DisplayPos.Y) * drawData.FramebufferScale.Y;
-
-                    if (clipX < framebufferWidth && clipY < framebufferHeight && clipZ >= 0.0f && clipW >= 0.0f)
+                    GL.BindBuffer(BufferTarget.ArrayBuffer, vbo);
+                    if (vtxBytes > vboSize)
                     {
-                        int scissorX = Math.Max(0, (int)clipX);
-                        int scissorY = Math.Max(0, framebufferHeight - (int)clipW);
-                        int scissorW = Math.Min(framebufferWidth, (int)clipZ) - scissorX;
-                        int scissorH = Math.Min(framebufferHeight, framebufferHeight - (int)clipY) - scissorY;
-                        if (scissorW <= 0 || scissorH <= 0) continue;
+                        vboSize = Math.Max(vboSize * 2, vtxBytes);
+                        GL.BufferData(BufferTarget.ArrayBuffer, vboSize, IntPtr.Zero, BufferUsageHint.DynamicDraw);
+                    }
+                    GL.BufferSubData(BufferTarget.ArrayBuffer, IntPtr.Zero, vtxBytes, cmdList.VtxBuffer.Data);
 
-                        GL.BindTexture(TextureTarget.Texture2D, (int)cmd.TextureId);
-                        GL.Scissor(scissorX, scissorY, scissorW, scissorH);
-                        GL.DrawElementsBaseVertex(PrimitiveType.Triangles, (int)cmd.ElemCount,
-                            DrawElementsType.UnsignedShort, (IntPtr)(cmd.IdxOffset * sizeof(ushort)), (int)cmd.VtxOffset);
+                    GL.BindBuffer(BufferTarget.ElementArrayBuffer, ebo);
+                    if (idxBytes > eboSize)
+                    {
+                        eboSize = Math.Max(eboSize * 2, idxBytes);
+                        GL.BufferData(BufferTarget.ElementArrayBuffer, eboSize, IntPtr.Zero, BufferUsageHint.DynamicDraw);
+                    }
+                    GL.BufferSubData(BufferTarget.ElementArrayBuffer, IntPtr.Zero, idxBytes, cmdList.IdxBuffer.Data);
+
+                    for (int c = 0; c < cmdList.CmdBuffer.Size; c++)
+                    {
+                        ImDrawCmdPtr cmd = cmdList.CmdBuffer[c];
+                        System.Numerics.Vector4 clip = cmd.ClipRect;
+                        float clipX = (clip.X - drawData.DisplayPos.X) * drawData.FramebufferScale.X;
+                        float clipY = (clip.Y - drawData.DisplayPos.Y) * drawData.FramebufferScale.Y;
+                        float clipZ = (clip.Z - drawData.DisplayPos.X) * drawData.FramebufferScale.X;
+                        float clipW = (clip.W - drawData.DisplayPos.Y) * drawData.FramebufferScale.Y;
+
+                        if (clipX < framebufferWidth && clipY < framebufferHeight && clipZ >= 0.0f && clipW >= 0.0f)
+                        {
+                            int scissorX = Math.Max(0, (int)clipX);
+                            int scissorY = Math.Max(0, framebufferHeight - (int)clipW);
+                            int scissorW = Math.Min(framebufferWidth, (int)clipZ) - scissorX;
+                            int scissorH = Math.Min(framebufferHeight, framebufferHeight - (int)clipY) - scissorY;
+                            if (scissorW <= 0 || scissorH <= 0) continue;
+
+                            GL.BindTexture(TextureTarget.Texture2D, (int)cmd.TextureId);
+                            GL.Scissor(scissorX, scissorY, scissorW, scissorH);
+                            GL.DrawElementsBaseVertex(PrimitiveType.Triangles, (int)cmd.ElemCount,
+                                DrawElementsType.UnsignedShort, (IntPtr)(cmd.IdxOffset * sizeof(ushort)), (int)cmd.VtxOffset);
+                        }
                     }
                 }
             }
-
-            GL.BindVertexArray(0);
-            GL.UseProgram(0);
-            GL.BindTexture(TextureTarget.Texture2D, 0);
-            GL.Disable(EnableCap.ScissorTest);
-            GL.Disable(EnableCap.Blend);
-
-            // Állapot visszaállítása a terep immediate-mode renderjéhez: a depth-test
-            // nélkül a barna skirt/aljlapok ráfestődnének a terepre (a jelenet "elcsúszik").
-            GL.Enable(EnableCap.DepthTest);
         }
 
         public void Dispose()
@@ -296,6 +288,85 @@ void main()
             GL.DeleteTexture(fontTexture);
             GL.DeleteProgram(shader);
             if (glyphRangeHandle.IsAllocated) glyphRangeHandle.Free();
+        }
+
+        private sealed class ImGuiRenderStateScope : IDisposable
+        {
+            private readonly bool depthTest;
+            private readonly bool blend;
+            private readonly bool cullFace;
+            private readonly bool scissorTest;
+            private readonly int currentProgram;
+            private readonly int vertexArray;
+            private readonly int arrayBuffer;
+            private readonly int elementArrayBuffer;
+            private readonly int textureBinding2D;
+            private readonly int activeTexture;
+            private readonly int blendEquationRgb;
+            private readonly int blendEquationAlpha;
+            private readonly int blendSrcRgb;
+            private readonly int blendDstRgb;
+            private readonly int blendSrcAlpha;
+            private readonly int blendDstAlpha;
+            private readonly int[] viewport = new int[4];
+            private readonly int[] scissorBox = new int[4];
+            private bool disposed;
+
+            public ImGuiRenderStateScope()
+            {
+                depthTest = GL.IsEnabled(EnableCap.DepthTest);
+                blend = GL.IsEnabled(EnableCap.Blend);
+                cullFace = GL.IsEnabled(EnableCap.CullFace);
+                scissorTest = GL.IsEnabled(EnableCap.ScissorTest);
+                GL.GetInteger(GetPName.CurrentProgram, out currentProgram);
+                GL.GetInteger(GetPName.VertexArrayBinding, out vertexArray);
+                GL.GetInteger(GetPName.ArrayBufferBinding, out arrayBuffer);
+                GL.GetInteger(GetPName.ElementArrayBufferBinding, out elementArrayBuffer);
+                GL.GetInteger(GetPName.ActiveTexture, out activeTexture);
+                GL.ActiveTexture(TextureUnit.Texture0);
+                GL.GetInteger(GetPName.TextureBinding2D, out textureBinding2D);
+                GL.ActiveTexture((TextureUnit)activeTexture);
+                GL.GetInteger(GetPName.BlendEquationRgb, out blendEquationRgb);
+                GL.GetInteger(GetPName.BlendEquationAlpha, out blendEquationAlpha);
+                GL.GetInteger(GetPName.BlendSrcRgb, out blendSrcRgb);
+                GL.GetInteger(GetPName.BlendDstRgb, out blendDstRgb);
+                GL.GetInteger(GetPName.BlendSrcAlpha, out blendSrcAlpha);
+                GL.GetInteger(GetPName.BlendDstAlpha, out blendDstAlpha);
+                GL.GetInteger(GetPName.Viewport, viewport);
+                GL.GetInteger(GetPName.ScissorBox, scissorBox);
+            }
+
+            public void Dispose()
+            {
+                if (disposed) return;
+                disposed = true;
+
+                Restore(EnableCap.DepthTest, depthTest);
+                Restore(EnableCap.Blend, blend);
+                Restore(EnableCap.CullFace, cullFace);
+                Restore(EnableCap.ScissorTest, scissorTest);
+                GL.UseProgram(currentProgram);
+                GL.BindVertexArray(vertexArray);
+                GL.BindBuffer(BufferTarget.ArrayBuffer, arrayBuffer);
+                GL.BindBuffer(BufferTarget.ElementArrayBuffer, elementArrayBuffer);
+                GL.ActiveTexture(TextureUnit.Texture0);
+                GL.BindTexture(TextureTarget.Texture2D, textureBinding2D);
+                GL.ActiveTexture((TextureUnit)activeTexture);
+                GL.BlendEquationSeparate((BlendEquationMode)blendEquationRgb, (BlendEquationMode)blendEquationAlpha);
+                GL.BlendFuncSeparate(
+                    (BlendingFactorSrc)blendSrcRgb,
+                    (BlendingFactorDest)blendDstRgb,
+                    (BlendingFactorSrc)blendSrcAlpha,
+                    (BlendingFactorDest)blendDstAlpha);
+                GL.Viewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+                GL.Scissor(scissorBox[0], scissorBox[1], scissorBox[2], scissorBox[3]);
+            }
+
+            private static void Restore(EnableCap cap, bool enabled)
+            {
+                if (enabled) GL.Enable(cap);
+                else GL.Disable(cap);
+            }
         }
     }
 }

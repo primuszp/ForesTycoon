@@ -56,6 +56,11 @@ namespace ForesTycoon
             if (heightScale <= 0) throw new ArgumentOutOfRangeException(nameof(heightScale));
             if (minimumWaterDepth <= 0f) throw new ArgumentOutOfRangeException(nameof(minimumWaterDepth));
             if (riverWaterHeight <= 0f) throw new ArgumentOutOfRangeException(nameof(riverWaterHeight));
+            if (nodeColumns != nodeRows)
+                throw new ArgumentException("Terrain generation currently requires a square node grid.");
+            if (!IsPowerOfTwoPlusOne(nodeColumns))
+                throw new ArgumentException("Terrain generation currently requires a 2^n + 1 node count.");
+            if (maxHeight <= 0) throw new ArgumentOutOfRangeException(nameof(maxHeight));
 
             NodeColumns = nodeColumns;
             NodeRows = nodeRows;
@@ -67,6 +72,12 @@ namespace ForesTycoon
             SeaLevel = seaLevel;
             Seed = seed;
             MaxHeight = maxHeight;
+        }
+
+        private static bool IsPowerOfTwoPlusOne(int value)
+        {
+            int size = value - 1;
+            return size > 0 && (size & (size - 1)) == 0;
         }
     }
 }

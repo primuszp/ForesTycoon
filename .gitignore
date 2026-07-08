@@ -9,6 +9,7 @@
 # Build outputs
 **/bin/
 **/obj/
+artifacts/
 
 # Logs
 *.log

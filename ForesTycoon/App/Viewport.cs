@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using System.Drawing;
 using System.Windows.Forms;
 using OpenTK.Mathematics;
@@ -77,12 +76,9 @@ namespace ForesTycoon
 
         private bool         isLoaded     = false;
         private ImGuiController imgui;
-        private readonly System.Diagnostics.Stopwatch clock = System.Diagnostics.Stopwatch.StartNew();
-        private double lastTime;
         private const int FrameTimerIntervalMs = 33;
         private System.Windows.Forms.Timer frameTimer;
-        private readonly Stopwatch renderClock = new Stopwatch();
-        private double lastRenderTimeSeconds;
+        private readonly FrameClock frameClock = new FrameClock();
         private ulong frameIndex;
 
         private float DpiScale => DeviceDpi > 0 ? DeviceDpi / 96f : 1f;
@@ -99,6 +95,13 @@ namespace ForesTycoon
         private static float SnapRotation(float angle)
         {
             return (float)(Math.Round((angle - 45.0) / 90.0) * 90.0 + 45.0);
+        }
+
+        private static float SmoothStepFactor(float factorAtTimerRate, float deltaTimeSeconds)
+        {
+            const float referenceFrameSeconds = FrameTimerIntervalMs / 1000f;
+            if (deltaTimeSeconds <= 0f) return factorAtTimerRate;
+            return 1f - (float)Math.Pow(1f - factorAtTimerRate, deltaTimeSeconds / referenceFrameSeconds);
         }
 
         private static Vector3 WorldToView(Vector3 point, float tiltDegrees, float yawDegrees)
@@ -235,7 +238,7 @@ namespace ForesTycoon
                 terrain = new Terrain();
                 imgui = new ImGuiController();
                 isLoaded = true;
-                renderClock.Start();
+                frameClock.Reset();
                 SetupViewport();
                 Focus();
 
@@ -284,9 +287,6 @@ namespace ForesTycoon
             GL.Rotate(roty, 0f, 0f, 1f);
             CapturePickMatrices();
 
-            double now = renderClock.Elapsed.TotalSeconds;
-            float deltaTime = (float)Math.Max(0.0, now - lastRenderTimeSeconds);
-            lastRenderTimeSeconds = now;
             frameIndex++;
 
             bool isTerrainEditTool = activeTool == TerrainEditTool.Raise || activeTool == TerrainEditTool.Lower;
@@ -296,8 +296,8 @@ namespace ForesTycoon
             float nodeMarkerRadius = markerPixelRadius / Math.Max(zoom, 0.001f);
 
             RenderContext renderContext = new RenderContext(
-                now,
-                deltaTime,
+                frameClock.TotalTimeSeconds,
+                frameClock.DeltaTimeSeconds,
                 frameIndex,
                 isTerrainEditTool,
                 showTileHighlight,
@@ -319,12 +319,8 @@ namespace ForesTycoon
         {
             if (imgui == null) return;
 
-            double now = clock.Elapsed.TotalSeconds;
-            float delta = (float)(now - lastTime);
-            lastTime = now;
-
             float scale = DpiScale;
-            imgui.Update(Width, Height, FramebufferWidth, FramebufferHeight, new NVec2(scale, scale), delta);
+            imgui.Update(Width, Height, FramebufferWidth, FramebufferHeight, new NVec2(scale, scale), frameClock.DeltaTimeSeconds);
 
             DrawMainMenu();
             DrawToolbar();
@@ -591,12 +587,14 @@ namespace ForesTycoon
             base.OnPaint(e);
             if (!isLoaded || DesignMode) return;
 
+            frameClock.Tick();
+
             // Smooth zoom: exponenciális közelítés a célértékhez
             float diff = targetZoom - zoom;
             if (Math.Abs(diff) > 0.01f)
             {
                 float prevZoom = zoom;
-                zoom += diff * 0.18f;
+                zoom += diff * SmoothStepFactor(0.18f, frameClock.DeltaTimeSeconds);
                 // Zoom a kurzor körül tartva
                 screenX = mouseX - (mouseX - screenX) * (prevZoom / zoom);
                 screenY = mouseY - (mouseY - screenY) * (prevZoom / zoom);
@@ -606,7 +604,7 @@ namespace ForesTycoon
             float rotDiff = targetRotY - roty;
             if (Math.Abs(rotDiff) > 0.01f)
             {
-                roty += rotDiff * 0.12f;
+                roty += rotDiff * SmoothStepFactor(0.12f, frameClock.DeltaTimeSeconds);
                 ApplyRotationPivotCompensation();
                 RequestFrame();
             }
@@ -625,7 +623,18 @@ namespace ForesTycoon
         {
             frameTimer?.Stop();
             frameTimer?.Dispose();
-            imgui?.Dispose();
+            frameTimer = null;
+
+            if (isLoaded)
+            {
+                MakeCurrent();
+                imgui?.Dispose();
+                imgui = null;
+                terrain?.Dispose();
+                terrain = null;
+                isLoaded = false;
+            }
+
             base.OnHandleDestroyed(e);
         }
 
