@@ -4,7 +4,8 @@ namespace ForesTycoon
     {
         public RenderContext(double totalTimeSeconds, float deltaTimeSeconds, ulong frameIndex,
             double simulationTimeSeconds, ulong simulationTick, float interpolationAlpha,
-            bool showNodeMarker, bool showTileHighlight, float nodeMarkerRadius)
+            bool showNodeMarker, bool showTileHighlight, float nodeMarkerRadius,
+            float cameraTilt, float cameraYaw, double viewMinX, double viewMinY, double viewMaxX, double viewMaxY)
         {
             TotalTimeSeconds = totalTimeSeconds;
             DeltaTimeSeconds = deltaTimeSeconds;
@@ -15,6 +16,12 @@ namespace ForesTycoon
             ShowNodeMarker = showNodeMarker;
             ShowTileHighlight = showTileHighlight;
             NodeMarkerRadius = nodeMarkerRadius;
+            CameraTilt = cameraTilt;
+            CameraYaw = cameraYaw;
+            ViewMinX = viewMinX;
+            ViewMinY = viewMinY;
+            ViewMaxX = viewMaxX;
+            ViewMaxY = viewMaxY;
         }
 
         public double TotalTimeSeconds { get; }
@@ -26,5 +33,11 @@ namespace ForesTycoon
         public bool ShowNodeMarker { get; }
         public bool ShowTileHighlight { get; }
         public float NodeMarkerRadius { get; }
+        public float CameraTilt { get; }
+        public float CameraYaw { get; }
+        public double ViewMinX { get; }
+        public double ViewMinY { get; }
+        public double ViewMaxX { get; }
+        public double ViewMaxY { get; }
     }
 }

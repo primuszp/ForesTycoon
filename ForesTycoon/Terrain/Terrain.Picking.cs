@@ -1,10 +1,108 @@
 using System;
+using System.Collections.Generic;
 using OpenTK.Mathematics;
 
 namespace ForesTycoon
 {
     partial class Terrain
     {
+        public bool TryRaycast(Vector3 rayNear, Vector3 rayFar, out Vector3 hit)
+        {
+            Vector3 direction = rayFar - rayNear;
+            float bestT = float.MaxValue;
+            Tile bestTile = null;
+            hit = Vector3.Zero;
+
+            foreach (TerrainChunk chunk in chunkIndex.Chunks)
+            {
+                if (!SegmentIntersectsBox(rayNear, direction, chunk.Min, chunk.Max)) continue;
+                for (int i = 0; i < chunk.TileIds.Length; i++)
+                {
+                    Tile tile = tiles[chunk.TileIds[i]];
+                    GetPickingCorners(tile, out Vector3 w, out Vector3 s, out Vector3 e, out Vector3 n);
+                    bool useWE = Math.Abs(w.Z - e.Z) <= Math.Abs(n.Z - s.Z);
+                    if (flippedDiagonalTiles.Contains(tile.Id)) useWE = !useWE;
+
+                    if (useWE)
+                    {
+                        TestTriangle(tile, w, s, e);
+                        TestTriangle(tile, w, e, n);
+                    }
+                    else
+                    {
+                        TestTriangle(tile, n, w, s);
+                        TestTriangle(tile, n, s, e);
+                    }
+                }
+            }
+
+            hoveredTile = bestTile;
+            if (bestTile == null) return false;
+            hit = rayNear + direction * bestT;
+            return true;
+
+            void TestTriangle(Tile tile, Vector3 a, Vector3 b, Vector3 c)
+            {
+                if (RayTriangle(rayNear, direction, a, b, c, out float t) && t < bestT)
+                {
+                    bestT = t;
+                    bestTile = tile;
+                }
+            }
+        }
+
+        private static bool SegmentIntersectsBox(Vector3 origin, Vector3 direction, Vector3 min, Vector3 max)
+        {
+            float enter = 0f, exit = 1f;
+            return Axis(origin.X, direction.X, min.X, max.X, ref enter, ref exit)
+                && Axis(origin.Y, direction.Y, min.Y, max.Y, ref enter, ref exit)
+                && Axis(origin.Z, direction.Z, min.Z, max.Z, ref enter, ref exit);
+
+            static bool Axis(float start, float delta, float lower, float upper, ref float enter, ref float exit)
+            {
+                if (Math.Abs(delta) < 1e-7f) return start >= lower && start <= upper;
+                float a = (lower - start) / delta, b = (upper - start) / delta;
+                if (a > b) (a, b) = (b, a);
+                enter = Math.Max(enter, a);
+                exit = Math.Min(exit, b);
+                return enter <= exit;
+            }
+        }
+
+        private void GetPickingCorners(Tile tile, out Vector3 w, out Vector3 s, out Vector3 e, out Vector3 n)
+        {
+            if (roads.Has(tile.Id))
+            {
+                w = RoadCorner(tile.W); s = RoadCorner(tile.S);
+                e = RoadCorner(tile.E); n = RoadCorner(tile.N);
+                return;
+            }
+            w = new Vector3(tile.W.xPos, tile.W.yPos, tile.W.zPos);
+            s = new Vector3(tile.S.xPos, tile.S.yPos, tile.S.zPos);
+            e = new Vector3(tile.E.xPos, tile.E.yPos, tile.E.zPos);
+            n = new Vector3(tile.N.xPos, tile.N.yPos, tile.N.zPos);
+        }
+
+        private static bool RayTriangle(Vector3 origin, Vector3 direction,
+            Vector3 a, Vector3 b, Vector3 c, out float t)
+        {
+            const float epsilon = 1e-7f;
+            Vector3 edge1 = b - a, edge2 = c - a;
+            Vector3 p = Vector3.Cross(direction, edge2);
+            float determinant = Vector3.Dot(edge1, p);
+            if (Math.Abs(determinant) < epsilon) { t = 0f; return false; }
+
+            float inverse = 1f / determinant;
+            Vector3 offset = origin - a;
+            float u = Vector3.Dot(offset, p) * inverse;
+            if (u < -epsilon || u > 1f + epsilon) { t = 0f; return false; }
+            Vector3 q = Vector3.Cross(offset, edge1);
+            float v = Vector3.Dot(direction, q) * inverse;
+            if (v < -epsilon || u + v > 1f + epsilon) { t = 0f; return false; }
+            t = Vector3.Dot(edge2, q) * inverse;
+            return t >= 0f && t <= 1f;
+        }
+
         public bool SearchScreenPoint(double screenX, double screenY, double radiusPixels, double[] model, double[] proj, int[] view)
         {
             if (view == null || view.Length < 4 || view[2] <= 0 || view[3] <= 0)
@@ -30,7 +128,10 @@ namespace ForesTycoon
             double bestDistanceSq = radiusPixels * radiusPixels;
             Node bestNode = null;
 
-            foreach (Node node in nodes)
+            IEnumerable<Node> candidates = hoveredTile != null && !data.IsBorderTile(hoveredTile)
+                ? new[] { hoveredTile.W, hoveredTile.S, hoveredTile.E, hoveredTile.N }
+                : EnumerateBoundaryNodes();
+            foreach (Node node in candidates)
             {
                 Vector4d world = new Vector4d(node.xPos, node.yPos, node.zPos, 1.0);
                 double clipX = world.X * viewProj.Row0.X + world.Y * viewProj.Row1.X + world.Z * viewProj.Row2.X + world.W * viewProj.Row3.X;
@@ -53,6 +154,20 @@ namespace ForesTycoon
             actualNode = bestNode;
             onpos = bestNode != null;
             return onpos;
+        }
+
+        private IEnumerable<Node> EnumerateBoundaryNodes()
+        {
+            for (int u = 0; u < nodeCols; u++)
+            {
+                yield return getNodeByCoords(u, 0);
+                yield return getNodeByCoords(u, nodeRows - 1);
+            }
+            for (int v = 1; v < nodeRows - 1; v++)
+            {
+                yield return getNodeByCoords(0, v);
+                yield return getNodeByCoords(nodeCols - 1, v);
+            }
         }
 
         public bool SearchTile(double x, double y)
@@ -86,7 +201,9 @@ namespace ForesTycoon
 
         private bool TryGetTileCoordinates(double x, double y, out int u, out int v, out double localX, out double localY)
         {
-            const double epsilon = 1e-6;
+            // Unprojection on sloped edge tiles can land a small fraction of a tile
+            // beyond the mathematical boundary. Treat that as the edge tile itself.
+            const double epsilon = 0.02;
             double gridX = (x + offsetX) / tileSizeH;
             double gridY = (y + offsetY) / tileSizeV;
             double maxX = nodeCols - 1;

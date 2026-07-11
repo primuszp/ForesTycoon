@@ -20,11 +20,8 @@ namespace ForesTycoon
             {
                 ImmediateRenderer.Draw(PrimitiveType.Quads, () =>
                 {
-                    for (int u = 0; u < nodeCols - 1; u++)
+                    foreach (Tile tile in visibleTiles)
                     {
-                        for (int v = 0; v < nodeRows - 1; v++)
-                        {
-                            Tile tile = getTileByCoords(u, v);
                             if (HasDynamicWater(tile) || !CanRenderFallbackRiver(tile)) continue;
 
                             int rc = CountRiverCorners(tile);
@@ -38,17 +35,13 @@ namespace ForesTycoon
                             GL.Vertex3(tile.S.xPos, tile.S.yPos, wz);
                             GL.Vertex3(tile.E.xPos, tile.E.yPos, wz);
                             GL.Vertex3(tile.N.xPos, tile.N.yPos, wz);
-                        }
                     }
                 });
 
                 ImmediateRenderer.Draw(PrimitiveType.Lines, () =>
                 {
-                    for (int u = 0; u < nodeCols - 1; u++)
+                    foreach (Tile tile in visibleTiles)
                     {
-                        for (int v = 0; v < nodeRows - 1; v++)
-                        {
-                            Tile tile = getTileByCoords(u, v);
                             if (HasDynamicWater(tile) || !CanRenderFallbackRiver(tile)) continue;
 
                             int rc = CountRiverCorners(tile);
@@ -66,7 +59,6 @@ namespace ForesTycoon
                             GL.Vertex3(tile.S.xPos, tile.S.yPos, zwS); GL.Vertex3(tile.E.xPos, tile.E.yPos, zwE);
                             GL.Vertex3(tile.E.xPos, tile.E.yPos, zwE); GL.Vertex3(tile.N.xPos, tile.N.yPos, zwN);
                             GL.Vertex3(tile.N.xPos, tile.N.yPos, zwN); GL.Vertex3(tile.W.xPos, tile.W.yPos, zwW);
-                        }
                     }
                 });
             }
@@ -171,11 +163,8 @@ namespace ForesTycoon
             {
                 ImmediateRenderer.Draw(PrimitiveType.Quads, () =>
                 {
-                    for (int u = 0; u < nodeCols - 1; u++)
+                    foreach (Tile tile in visibleTiles)
                     {
-                        for (int v = 0; v < nodeRows - 1; v++)
-                        {
-                            Tile tile = getTileByCoords(u, v);
                             if (!HasDynamicWater(tile)) continue;
 
                             float wzN = NodeWaterZ(tile.N, t);
@@ -194,7 +183,6 @@ namespace ForesTycoon
                             WaterVertex(tile.S, wzS, t, baseColor);
                             WaterVertex(tile.E, wzE, t, baseColor);
                             WaterVertex(tile.N, wzN, t, baseColor);
-                        }
                     }
                 });
             }
@@ -203,11 +191,8 @@ namespace ForesTycoon
             {
                 ImmediateRenderer.Draw(PrimitiveType.Lines, () =>
                 {
-                    for (int u = 0; u < nodeCols - 1; u++)
+                    foreach (Tile tile in visibleTiles)
                     {
-                        for (int v = 0; v < nodeRows - 1; v++)
-                        {
-                            Tile tile = getTileByCoords(u, v);
                             if (nodeWaterDepth[tile.N.Id] < MinimumWaterDepth) continue;
                             if (nodeWaterDepth[tile.S.Id] < MinimumWaterDepth) continue;
                             if (nodeWaterDepth[tile.E.Id] < MinimumWaterDepth) continue;
@@ -223,7 +208,6 @@ namespace ForesTycoon
                             GL.Vertex3(tile.S.xPos, tile.S.yPos, zwS); GL.Vertex3(tile.E.xPos, tile.E.yPos, zwE);
                             GL.Vertex3(tile.E.xPos, tile.E.yPos, zwE); GL.Vertex3(tile.N.xPos, tile.N.yPos, zwN);
                             GL.Vertex3(tile.N.xPos, tile.N.yPos, zwN); GL.Vertex3(tile.W.xPos, tile.W.yPos, zwW);
-                        }
                     }
                 });
             }
@@ -238,18 +222,16 @@ namespace ForesTycoon
             {
                 ImmediateRenderer.Draw(PrimitiveType.Quads, () =>
                 {
-                    for (int u = 0; u < nodeCols - 1; u++)
+                    foreach (Tile tile in visibleTiles)
                     {
-                        for (int v = 0; v < nodeRows - 1; v++)
-                        {
-                            Tile tile = getTileByCoords(u, v);
+                            int u = tile.Id / (nodeRows - 1);
+                            int v = tile.Id % (nodeRows - 1);
                             if (!HasDynamicWater(tile)) continue;
 
                             TryDrawWaterWall(tile.W, tile.S, checkTile(u, v - 1) ? getTileByCoords(u, v - 1) : null, t);
                             TryDrawWaterWall(tile.S, tile.E, checkTile(u + 1, v) ? getTileByCoords(u + 1, v) : null, t);
                             TryDrawWaterWall(tile.E, tile.N, checkTile(u, v + 1) ? getTileByCoords(u, v + 1) : null, t);
                             TryDrawWaterWall(tile.N, tile.W, checkTile(u - 1, v) ? getTileByCoords(u - 1, v) : null, t);
-                        }
                     }
                 });
             }

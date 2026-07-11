@@ -196,6 +196,7 @@ namespace ForesTycoon
                 for (int i = 0; i < nodeTileCount; i++)
                 {
                     Tile tile = nodeTiles[i];
+                    chunkIndex.MarkTileDirty(tile.Id, ChunkDirtyFlags.All);
                     string code = tile.getCode();
                     tile.LowPos = tile.Low * tileSizeM;
                     if (!vbos.ContainsKey(code + "_" + tile.Low))

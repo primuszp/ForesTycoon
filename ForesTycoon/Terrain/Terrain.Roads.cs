@@ -224,6 +224,7 @@ namespace ForesTycoon
                 {
                     roads.Add(step.TileId, step.Edges);
                     CaptureRoadSurface(tile, placement);
+                    chunkIndex.MarkTileAndNeighboursDirty(step.TileId, ChunkDirtyFlags.Roads | ChunkDirtyFlags.Foundations);
                 }
             }
             RebuildFlippedDiagonalTiles();
@@ -240,7 +241,10 @@ namespace ForesTycoon
             foreach (RoadPlanStep step in BuildRoadPlan(a, b))
             {
                 if (roads.Remove(step.TileId, step.Edges))
+                {
                     ReleaseRoadSurface(tiles[step.TileId]);
+                    chunkIndex.MarkTileAndNeighboursDirty(step.TileId, ChunkDirtyFlags.Roads | ChunkDirtyFlags.Foundations);
+                }
             }
             RebuildFlippedDiagonalTiles();
         }

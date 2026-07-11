@@ -18,6 +18,10 @@ namespace ForesTycoon
         private readonly VertexBuffer edges = new VertexBuffer(PrimitiveType.Lines, BufferUsageHint.DynamicDraw);
         private readonly RoadNetwork roads = new RoadNetwork();
         private readonly RenderPipeline renderPipeline = new RenderPipeline();
+        private readonly TerrainChunkIndex chunkIndex;
+        private readonly List<Tile> visibleTiles = new List<Tile>();
+        private readonly HashSet<int> visibleTileIds = new HashSet<int>();
+        private int visibleChunkCount;
         private RenderStateScope terrainDecalState;
 
         // Foundation-réteg: az út VEZETŐFELÜLETÉNEK befagyasztott magassága sarkonként
@@ -68,6 +72,7 @@ namespace ForesTycoon
             this.settings = settings ?? throw new ArgumentNullException(nameof(settings));
             data = new TerrainData(settings);
             hydro = new Hydrology(data, settings);
+            chunkIndex = new TerrainChunkIndex(data);
 
             makeTiles();
             makeQuads();
@@ -164,7 +169,62 @@ namespace ForesTycoon
 
         public void Draw(RenderContext context)
         {
+            UpdateVisibleTiles(context);
             renderPipeline.Render(context);
+        }
+
+        public int VisibleChunkCount => visibleChunkCount;
+        public int TotalChunkCount => chunkIndex.Chunks.Count;
+
+        private bool IsTileVisible(int tileId) => visibleTileIds.Contains(tileId);
+
+        private void UpdateVisibleTiles(RenderContext context)
+        {
+            visibleTiles.Clear();
+            visibleTileIds.Clear();
+            visibleChunkCount = 0;
+            const double margin = 12.0;
+            foreach (TerrainChunk chunk in chunkIndex.Chunks)
+            {
+                GetChunkViewBounds(chunk, context.CameraTilt, context.CameraYaw,
+                    out float minX, out float minY, out float maxX, out float maxY);
+                if (maxX < context.ViewMinX - margin || minX > context.ViewMaxX + margin
+                    || maxY < context.ViewMinY - margin || minY > context.ViewMaxY + margin) continue;
+
+                visibleChunkCount++;
+
+                for (int i = 0; i < chunk.TileIds.Length; i++)
+                {
+                    int tileId = chunk.TileIds[i];
+                    visibleTiles.Add(tiles[tileId]);
+                    visibleTileIds.Add(tileId);
+                }
+            }
+        }
+
+        private static void GetChunkViewBounds(TerrainChunk chunk, float tilt, float yaw,
+            out float minX, out float minY, out float maxX, out float maxY)
+        {
+            minX = minY = float.MaxValue;
+            maxX = maxY = float.MinValue;
+            for (int x = 0; x < 2; x++) for (int y = 0; y < 2; y++) for (int z = 0; z < 2; z++)
+            {
+                Vector3 p = new Vector3(x == 0 ? chunk.Min.X : chunk.Max.X,
+                    y == 0 ? chunk.Min.Y : chunk.Max.Y, z == 0 ? chunk.Min.Z : chunk.Max.Z);
+                Vector3 view = WorldToView(p, tilt, yaw);
+                minX = Math.Min(minX, view.X); minY = Math.Min(minY, view.Y);
+                maxX = Math.Max(maxX, view.X); maxY = Math.Max(maxY, view.Y);
+            }
+        }
+
+        private static Vector3 WorldToView(Vector3 point, float tiltDegrees, float yawDegrees)
+        {
+            double rz = yawDegrees * Math.PI / 180.0, rx = tiltDegrees * Math.PI / 180.0;
+            double x = Math.Cos(rz) * point.X - Math.Sin(rz) * point.Y;
+            double y = Math.Sin(rz) * point.X + Math.Cos(rz) * point.Y;
+            return new Vector3((float)x,
+                (float)(Math.Cos(rx) * y - Math.Sin(rx) * point.Z),
+                (float)(Math.Sin(rx) * y + Math.Cos(rx) * point.Z));
         }
 
 

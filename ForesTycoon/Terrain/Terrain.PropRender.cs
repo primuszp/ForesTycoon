@@ -8,11 +8,11 @@ namespace ForesTycoon
     {
         private void DrawTrees()
         {
-            for (int u = 1; u < nodeCols - 1; u++)
+            foreach (Tile tile in visibleTiles)
             {
-                for (int v = 1; v < nodeRows - 1; v++)
-                {
-                    Tile tile = getTileByCoords(u, v);
+                    int u = tile.Id / (nodeRows - 1);
+                    int v = tile.Id % (nodeRows - 1);
+                    if (u == 0 || v == 0 || u >= nodeCols - 2 || v >= nodeRows - 2) continue;
                     float moisture = tileMoisture[tile.Id];
 
                     if (ShouldDrawStandingWater(tile)) continue;
@@ -33,7 +33,6 @@ namespace ForesTycoon
                                              Math.Max(tile.E.zPos, tile.N.zPos));
 
                     DrawTree(cx, cy, groundZ, surfaceZ);
-                }
             }
         }
 

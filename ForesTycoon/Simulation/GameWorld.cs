@@ -24,6 +24,8 @@ namespace ForesTycoon
         public int RoadCount => terrain.RoadCount;
         public int RoadPreviewCount => terrain.RoadPreviewCount;
         public int VehicleCount => vehicles.Count;
+        public int VisibleChunkCount => terrain.VisibleChunkCount;
+        public int TotalChunkCount => terrain.TotalChunkCount;
 
         public void Update(double fixedDeltaSeconds)
         {
@@ -60,6 +62,8 @@ namespace ForesTycoon
         }
         public void GetWorldBounds(out Vector3 min, out Vector3 max) => terrain.GetWorldBounds(out min, out max);
         public bool TryGetSurfaceZ(double x, double y, out float z) => terrain.TryGetSurfaceZ(x, y, out z);
+        public bool TryRaycastTerrain(Vector3 rayNear, Vector3 rayFar, out Vector3 hit) =>
+            terrain.TryRaycast(rayNear, rayFar, out hit);
         public bool SearchScreenPoint(double x, double y, double radius, double[] model, double[] projection, int[] viewport) =>
             terrain.SearchScreenPoint(x, y, radius, model, projection, viewport);
         public bool SearchTile(double x, double y) => terrain.SearchTile(x, y);

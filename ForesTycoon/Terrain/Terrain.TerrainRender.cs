@@ -12,7 +12,7 @@ namespace ForesTycoon
             // később depth írás nélkül rajzolódnak, így nincs Z-fighting.
             ImmediateRenderer.Draw(PrimitiveType.Quads, () =>
             {
-                foreach (Tile tile in tiles)
+                foreach (Tile tile in visibleTiles)
                 {
                     if (roads.Has(tile.Id)) continue;
                     if (GetTileRenderMaterial(tile) != TileRenderMaterial.Grass) continue;
@@ -22,7 +22,7 @@ namespace ForesTycoon
                 }
             });
 
-            foreach (Tile tile in tiles)
+            foreach (Tile tile in visibleTiles)
             {
                 // Az út-csempék terep-meshe helyett a platform/földmű renderelődik
                 // (DrawRoadFoundations) — különben bevágásnál a magasabb terep eltakarná az utat.
@@ -82,7 +82,7 @@ namespace ForesTycoon
             Color terrainLine = Color.FromArgb(82, 115, 38);
             ImmediateRenderer.Draw(PrimitiveType.Lines, () =>
             {
-                foreach (Tile tile in tiles)
+                foreach (Tile tile in visibleTiles)
                 {
                     if (ShouldDrawStandingWater(tile)) continue;
                     DrawTileGrid(tile, terrainLine);

@@ -32,6 +32,10 @@ namespace ForesTycoon
             NodeColumns, NodeRows, TileWidth, TileHeight, HeightScale,
             MinimumWaterDepth, RiverWaterHeight, SeaLevel, seed, MaxHeight);
 
+        public TerrainSettings WithNodeSize(int nodeSize, int seed) => new TerrainSettings(
+            nodeSize, nodeSize, TileWidth, TileHeight, HeightScale,
+            MinimumWaterDepth, RiverWaterHeight, SeaLevel, seed, MaxHeight);
+
         public int TileColumns => NodeColumns - 1;
         public int TileRows => NodeRows - 1;
         public int OffsetX => TileWidth * NodeColumns / 2;

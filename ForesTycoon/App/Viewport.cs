@@ -81,7 +81,9 @@ namespace ForesTycoon
         private readonly FrameClock frameClock = new FrameClock();
         private readonly FixedStepClock simulationClock = new FixedStepClock(30.0);
         private ulong frameIndex;
+        private int currentMapTiles = 64;
         private bool frameInProgress;
+        private bool idleLoopAttached;
 
         [StructLayout(LayoutKind.Sequential)]
         private struct NativeMessage
@@ -265,6 +267,7 @@ namespace ForesTycoon
                 // GameWindow.Run()-hoz hasonlóan az update és render folyamatosan,
                 // az üzenetsor üres idejében fut. A WinForms Timer ehhez túl pontatlan.
                 Application.Idle += OnApplicationIdle;
+                idleLoopAttached = true;
             }
             catch (Exception ex)
             {
@@ -324,7 +327,13 @@ namespace ForesTycoon
                 simulationClock.InterpolationAlpha,
                 isTerrainEditTool,
                 showTileHighlight,
-                nodeMarkerRadius);
+                nodeMarkerRadius,
+                rotx,
+                roty,
+                screenX,
+                screenY,
+                screenX + Width / zoom,
+                screenY + Height / zoom);
 
             world.Draw(renderContext);
 
@@ -335,7 +344,9 @@ namespace ForesTycoon
 
         private void RequestFrame()
         {
-            if (isLoaded && !DesignMode) Invalidate();
+            // The idle loop already renders continuously. Posting WM_PAINT for every
+            // mouse event serializes input behind expensive terrain frames on large maps.
+            if (isLoaded && !DesignMode && !idleLoopAttached) Invalidate();
         }
 
         private void OnApplicationIdle(object sender, EventArgs e)
@@ -357,6 +368,7 @@ namespace ForesTycoon
             {
                 MakeCurrent();
                 frameClock.Tick();
+                RefreshPointerHover();
                 UpdateFrame();
                 world.ExecutePendingCommands();
                 simulationClock.Advance(frameClock.DeltaTimeSeconds, world.Update);
@@ -367,6 +379,18 @@ namespace ForesTycoon
             {
                 frameInProgress = false;
             }
+        }
+
+        private void RefreshPointerHover()
+        {
+            if (world == null || mouseDownCapturedByImGui || (imgui != null && imgui.WantCaptureMouse)) return;
+
+            Point client = PointToClient(Cursor.Position);
+            if (client.X < 0 || client.Y < 0 || client.X >= ClientSize.Width || client.Y >= ClientSize.Height) return;
+
+            UpdateHover(new MouseEventArgs(activeButton, 0, client.X, client.Y, 0));
+            if (roadDragging)
+                world.SetRoadPreview(roadDragStartTile, world.HoveredTile, roadDragRemove);
         }
 
         private void UpdateFrame()
@@ -417,6 +441,14 @@ namespace ForesTycoon
             if (ImGui.BeginMenu("Fájl"))
             {
                 if (ImGui.MenuItem("Új terep (seed)")) RegenerateTerrain();
+                if (ImGui.BeginMenu("Térképméret"))
+                {
+                    MapSizeMenuItem(64);
+                    MapSizeMenuItem(128);
+                    MapSizeMenuItem(256);
+                    MapSizeMenuItem(512, experimental: true);
+                    ImGui.EndMenu();
+                }
                 ImGui.Separator();
                 if (ImGui.MenuItem("Kilépés"))
                     BeginInvoke((MethodInvoker)(() => FindForm()?.Close()));
@@ -491,6 +523,7 @@ namespace ForesTycoon
             ImGui.Text($"{ImGui.GetIO().Framerate:F0} FPS");
             ImGui.Text($"Tick: {simulationClock.Tick}  {(simulationClock.IsPaused ? "Szünet" : $"{simulationClock.Speed:0}x")}");
             ImGui.Text($"Járművek: {world.VehicleCount}");
+            ImGui.Text($"Chunk: {world.VisibleChunkCount}/{world.TotalChunkCount}");
 
             ImGui.End();
         }
@@ -565,24 +598,7 @@ namespace ForesTycoon
             if (!CustomUnProject(new Vector3(px, fy, 0.0f), pickModelMatrix, pickProjMatrix, pickViewMatrix, out Vector3 rayNear)) return false;
             if (!CustomUnProject(new Vector3(px, fy, 1.0f), pickModelMatrix, pickProjMatrix, pickViewMatrix, out Vector3 rayFar)) return false;
 
-            Vector3 ray = rayFar - rayNear;
-            if (Math.Abs(ray.Z) < 0.0001f) return false;
-
-            float targetZ = 0.0f;
-            for (int i = 0; i < 4; i++)
-            {
-                float t = (targetZ - rayNear.Z) / ray.Z;
-                worldPos = rayNear + ray * t;
-                if (world == null || !world.TryGetSurfaceZ(worldPos.X, worldPos.Y, out float surfaceZ))
-                    break;
-
-                if (Math.Abs(surfaceZ - targetZ) < 0.01f)
-                    break;
-
-                targetZ = surfaceZ;
-            }
-
-            return true;
+            return world != null && world.TryRaycastTerrain(rayNear, rayFar, out worldPos);
         }
 
         private void UpdateHover(MouseEventArgs e)
@@ -602,12 +618,10 @@ namespace ForesTycoon
             int px = Math.Max(0, Math.Min(pickViewMatrix[2] - 1, (int)Math.Round(e.X * scale)));
             int py = Math.Max(0, Math.Min(pickViewMatrix[3] - 1, (int)Math.Round(e.Y * scale)));
             int fy = pickViewMatrix[3] - 1 - py;
-            nodeHovered = world.SearchScreenPoint(px, fy, 14.0 * scale, pickModelMatrix, pickProjMatrix, pickViewMatrix);
-
-            if (UpdateWorldPosition(e))
-                world.SearchTile(worldPos.X, worldPos.Y);
-            else
+            if (!UpdateWorldPosition(e))
                 world.ClearTileHover();
+
+            nodeHovered = world.SearchScreenPoint(px, fy, 14.0 * scale, pickModelMatrix, pickProjMatrix, pickViewMatrix);
         }
 
         private void ApplyActiveTerrainTool()
@@ -621,12 +635,13 @@ namespace ForesTycoon
                 world.QueueElevationEdit(world.SelectedNodeId, -1, radius, brushStrength);
         }
 
-        private void RegenerateTerrain()
+        private void RegenerateTerrain(int? tileCount = null)
         {
             if (!isLoaded) return;
             // A GL-kontextus a render alatt aktuális, így a buffer-csere itt biztonságos.
             int seed = new Random().Next();
-            world.Regenerate(TerrainSettings.Default.WithSeed(seed));
+            if (tileCount.HasValue) currentMapTiles = tileCount.Value;
+            world.Regenerate(TerrainSettings.Default.WithNodeSize(currentMapTiles + 1, seed));
             simulationClock.Reset();
             RequestFrame();
         }
@@ -691,9 +706,17 @@ namespace ForesTycoon
             }
         }
 
+        private void MapSizeMenuItem(int tileCount, bool experimental = false)
+        {
+            string label = experimental ? $"{tileCount} x {tileCount} (stresszteszt)" : $"{tileCount} x {tileCount}";
+            if (ImGui.MenuItem(label, "", currentMapTiles == tileCount))
+                RegenerateTerrain(tileCount);
+        }
+
         protected override void OnHandleDestroyed(EventArgs e)
         {
             Application.Idle -= OnApplicationIdle;
+            idleLoopAttached = false;
 
             base.OnHandleDestroyed(e);
         }
@@ -712,6 +735,7 @@ namespace ForesTycoon
             glResourcesDisposed = true;
 
             Application.Idle -= OnApplicationIdle;
+            idleLoopAttached = false;
 
             if (!isLoaded) return;
 

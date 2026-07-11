@@ -93,6 +93,7 @@ namespace ForesTycoon
                 {
                     foreach (int id in roads.Tiles)
                     {
+                        if (!IsTileVisible(id)) continue;
                         Tile t = tiles[id];
                         int u = id / tpc, v = id % tpc;
                         RoadFootprintCorners(t, out Vector3 iW, out Vector3 iS, out Vector3 iE, out Vector3 iN);
@@ -110,6 +111,7 @@ namespace ForesTycoon
                 GL.Color4(RoadFoundationLineColor);
                 foreach (int id in roads.Tiles)
                 {
+                    if (!IsTileVisible(id)) continue;
                     Tile t = tiles[id];
                     int u = id / tpc, v = id % tpc;
                     RoadFootprintCorners(t, out Vector3 iW, out Vector3 iS, out Vector3 iE, out Vector3 iN);
@@ -126,7 +128,7 @@ namespace ForesTycoon
         {
             ImmediateRenderer.Draw(PrimitiveType.Quads, () =>
             {
-                foreach (Tile tile in tiles)
+                foreach (Tile tile in visibleTiles)
                 {
                     if (roads.Has(tile.Id)) continue;
                     TileSurfaceVisual visual = GetTileSurfaceVisual(tile);
@@ -139,7 +141,7 @@ namespace ForesTycoon
 
             ImmediateRenderer.Draw(PrimitiveType.Triangles, () =>
             {
-                foreach (Tile tile in tiles)
+                foreach (Tile tile in visibleTiles)
                 {
                     if (roads.Has(tile.Id)) continue;
                     TileSurfaceVisual visual = GetTileSurfaceVisual(tile);
