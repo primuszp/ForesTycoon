@@ -45,6 +45,22 @@ namespace ForesTycoon
 
         public Tile HoveredTile => hoveredTile;
         public int RoadCount => roads.Count;
+        public bool IsRoadTile(int tileId) => IsValidTileId(tileId) && roads.Has(tileId);
+
+        public int[] FindDemoRoadRoute() => RoadPathfinder.FindDemoRoute(roads, nodeRows - 1);
+
+        public bool TryGetRoadTileCenter(int tileId, out Vector3 center)
+        {
+            if (!IsValidTileId(tileId) || !roads.Has(tileId))
+            {
+                center = Vector3.Zero;
+                return false;
+            }
+
+            Tile tile = tiles[tileId];
+            center = (RoadCorner(tile.W) + RoadCorner(tile.S) + RoadCorner(tile.E) + RoadCorner(tile.N)) * 0.25f;
+            return true;
+        }
 
         public bool AddRoadTile(Tile t)
         {
@@ -119,21 +135,17 @@ namespace ForesTycoon
             int terrainW, int terrainS, int terrainE, int terrainN,
             int surfaceW, int surfaceS, int surfaceE, int surfaceN)
         {
-            if (surfaceW < terrainW || surfaceS < terrainS || surfaceE < terrainE || surfaceN < terrainN)
-                return InvalidRoadPlacement;
-            if (surfaceW - terrainW > 1 || surfaceS - terrainS > 1 || surfaceE - terrainE > 1 || surfaceN - terrainN > 1)
-                return InvalidRoadPlacement;
-            TileShapeInfo surfaceShape = TileShapeInfo.FromCorners(surfaceW, surfaceS, surfaceE, surfaceN);
-            if (!surfaceShape.IsPlanar)
-                return InvalidRoadPlacement;
-            if (!surfaceShape.IsFlat && !IsSimpleRoadShape(edges))
-                return InvalidRoadPlacement;
-
-            RoadPlacementKind kind =
-                surfaceW == terrainW && surfaceS == terrainS && surfaceE == terrainE && surfaceN == terrainN
-                    ? RoadPlacementKind.NaturalSurface
-                    : RoadPlacementKind.FoundationSurface;
-            return new RoadPlacement(kind, surfaceW, surfaceS, surfaceE, surfaceN);
+            LockedRoadSurfaceResult result = RoadPlacementRules.ValidateLockedSurface(edges,
+                terrainW, terrainS, terrainE, terrainN, surfaceW, surfaceS, surfaceE, surfaceN);
+            RoadPlacementKind kind = result switch
+            {
+                LockedRoadSurfaceResult.NaturalSurface => RoadPlacementKind.NaturalSurface,
+                LockedRoadSurfaceResult.FoundationSurface => RoadPlacementKind.FoundationSurface,
+                _ => RoadPlacementKind.Invalid
+            };
+            return kind == RoadPlacementKind.Invalid
+                ? InvalidRoadPlacement
+                : new RoadPlacement(kind, surfaceW, surfaceS, surfaceE, surfaceN);
         }
 
         private bool RoadTerrainStaysAboveWater(int w, int s, int e, int n)
@@ -143,25 +155,13 @@ namespace ForesTycoon
         }
 
         private static bool IsSimpleRoadShape(RoadEdge edges)
-        {
-            int count = CountEdges(edges);
-            if (count <= 1) return true;
-            return edges == (RoadEdge.WS | RoadEdge.EN) || edges == (RoadEdge.SE | RoadEdge.NW);
-        }
+            => RoadPlacementRules.IsSimple(edges);
 
         // Csak Ramp esetén: a rámpa iránya egyezik-e az út irányával.
         // WS+EN irány: W==S és E==N kell (WS él vízszintes, EN él vízszintes).
         // SE+NW irány: S==E és N==W kell (SE él vízszintes, NW él vízszintes).
         private static bool IsRampAligned(TileShapeInfo shape, RoadEdge edges)
-        {
-            bool hasWsEn = (edges & (RoadEdge.WS | RoadEdge.EN)) != 0;
-            bool hasSeNw = (edges & (RoadEdge.SE | RoadEdge.NW)) != 0;
-            if (hasWsEn && !hasSeNw)
-                return shape.WRaised == shape.SRaised && shape.ERaised == shape.NRaised;
-            if (hasSeNw && !hasWsEn)
-                return shape.SRaised == shape.ERaised && shape.NRaised == shape.WRaised;
-            return false;
-        }
+            => RoadPlacementRules.IsRampAligned(shape, edges);
 
         private bool TryGetFullLockedRoadSurface(Tile t, out int w, out int s, out int e, out int n)
         {
@@ -229,6 +229,12 @@ namespace ForesTycoon
             RebuildFlippedDiagonalTiles();
         }
 
+        public void BuildRoadTilePath(int startTileId, int endTileId)
+        {
+            if (!IsValidTileId(startTileId) || !IsValidTileId(endTileId)) return;
+            BuildRoadTilePath(tiles[startTileId], tiles[endTileId]);
+        }
+
         public void RemoveRoadTilePath(Tile a, Tile b)
         {
             foreach (RoadPlanStep step in BuildRoadPlan(a, b))
@@ -238,6 +244,14 @@ namespace ForesTycoon
             }
             RebuildFlippedDiagonalTiles();
         }
+
+        public void RemoveRoadTilePath(int startTileId, int endTileId)
+        {
+            if (!IsValidTileId(startTileId) || !IsValidTileId(endTileId)) return;
+            RemoveRoadTilePath(tiles[startTileId], tiles[endTileId]);
+        }
+
+        private bool IsValidTileId(int tileId) => tileId >= 0 && tileId < tiles.Length;
 
         // Teljes újraépítés minden road módosítás után: sorrendfüggetlen, univerzális.
         // Minden road tile minden szomszédos él-párjánál beállítja a diagonális szomszéd flipjét.

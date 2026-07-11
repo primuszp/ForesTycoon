@@ -57,6 +57,15 @@ namespace ForesTycoon
             RebuildHydrology();
         }
 
+        public int SelectedNodeId => actualNode?.Id ?? -1;
+
+        public void EditElevationAtNode(int nodeId, int delta, int radius, int strength)
+        {
+            if (nodeId < 0 || nodeId >= nodes.Length) return;
+            actualNode = nodes[nodeId];
+            EditElevation(delta, radius, strength);
+        }
+
         // OpenTTD-stílusú terraform (terraform_cmd.cpp): egy sarkot delta-val mozdít, és
         // rekurzívan a cél felé 1-gyel közelíti a szomszéd-sarkokat, amíg minden ÉL-
         // szomszédos sarok eltérése ≤1 (a szemközti sarok 2-vel is → meredek, érvényes).
@@ -66,33 +75,8 @@ namespace ForesTycoon
         {
             if (actualNode == null) return;
 
-            int maxHeight = settings.MaxHeight;
-            Dictionary<int, int> pending = new Dictionary<int, int>();
-            bool ok = true;
-
-            int HeightOf(Node nd) => pending.TryGetValue(nd.Id, out int v) ? v : nd.W;
-            void Set(Node nd, int h)
-            {
-                if (!ok) return;
-                if (h < 0 || h > maxHeight) { ok = false; return; }   // korláton kívül → bukás
-                if (HeightOf(nd) == h) return;
-                pending[nd.Id] = h;
-                TryRelaxNeighbor(nd.U, nd.V - 1, h);
-                TryRelaxNeighbor(nd.U + 1, nd.V, h);
-                TryRelaxNeighbor(nd.U, nd.V + 1, h);
-                TryRelaxNeighbor(nd.U - 1, nd.V, h);
-            }
-
-            void TryRelaxNeighbor(int u, int v, int h)
-            {
-                if (!checkNode(u, v)) return;
-                Node nb = getNodeByCoords(u, v);
-                int diff = h - HeightOf(nb);
-                if (Math.Abs(diff) > 1) Set(nb, h - Math.Sign(diff));
-            }
-
-            Set(actualNode, actualNode.W + delta);
-            if (!ok || pending.Count == 0) return;  // érvénytelen vagy nincs változás → atomikus elvetés
+            if (!TerrainElevationPlanner.TryCreate(data, actualNode.Id, delta, settings.MaxHeight,
+                out Dictionary<int, int> pending)) return;
             if (!ValidateRoadsAgainstPendingTerrain(pending)) return;
 
             List<Node> changed = new List<Node>(pending.Count);

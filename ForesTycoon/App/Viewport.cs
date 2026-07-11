@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using OpenTK.Mathematics;
 using OpenTK.Graphics.OpenGL;
@@ -63,7 +64,7 @@ namespace ForesTycoon
         private MouseButtons activeButton = MouseButtons.None;
         private bool mouseDownCapturedByImGui;
         private bool         nodeHovered  = false;
-        private Terrain      terrain      = null;
+        private GameWorld    world        = null;
         private TerrainEditTool activeTool = TerrainEditTool.Inspect;
         private int brushSize = 1;       // 1 = egy node, nagyobb = korong sugár
         private int brushStrength = 1;   // szintlépések száma kattintásonként
@@ -77,10 +78,27 @@ namespace ForesTycoon
         private bool         isLoaded     = false;
         private bool glResourcesDisposed;
         private ImGuiController imgui;
-        private const int FrameTimerIntervalMs = 33;
-        private System.Windows.Forms.Timer frameTimer;
         private readonly FrameClock frameClock = new FrameClock();
+        private readonly FixedStepClock simulationClock = new FixedStepClock(30.0);
         private ulong frameIndex;
+        private bool frameInProgress;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct NativeMessage
+        {
+            public IntPtr Handle;
+            public uint Message;
+            public UIntPtr WParam;
+            public IntPtr LParam;
+            public uint Time;
+            public Point Point;
+        }
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool PeekMessage(out NativeMessage message, IntPtr window, uint min, uint max, uint remove);
+
+        private static bool IsApplicationIdle => !PeekMessage(out _, IntPtr.Zero, 0, 0, 0);
 
         private float DpiScale => DeviceDpi > 0 ? DeviceDpi / 96f : 1f;
         private int FramebufferWidth => Math.Max(1, (int)Math.Round(ClientSize.Width * DpiScale));
@@ -98,11 +116,11 @@ namespace ForesTycoon
             return (float)(Math.Round((angle - 45.0) / 90.0) * 90.0 + 45.0);
         }
 
-        private static float SmoothStepFactor(float factorAtTimerRate, float deltaTimeSeconds)
+        private static float SmoothStepFactor(float factorAt30Fps, float deltaTimeSeconds)
         {
-            const float referenceFrameSeconds = FrameTimerIntervalMs / 1000f;
-            if (deltaTimeSeconds <= 0f) return factorAtTimerRate;
-            return 1f - (float)Math.Pow(1f - factorAtTimerRate, deltaTimeSeconds / referenceFrameSeconds);
+            const float referenceFrameSeconds = 1f / 30f;
+            if (deltaTimeSeconds <= 0f) return 0f;
+            return 1f - (float)Math.Pow(1f - factorAt30Fps, deltaTimeSeconds / referenceFrameSeconds);
         }
 
         private static Vector3 WorldToView(Vector3 point, float tiltDegrees, float yawDegrees)
@@ -124,9 +142,9 @@ namespace ForesTycoon
 
         private bool IsFullTerrainVisible()
         {
-            if (terrain == null) return true;
+            if (world == null) return true;
 
-            terrain.GetWorldBounds(out Vector3 min, out Vector3 max);
+            world.GetWorldBounds(out Vector3 min, out Vector3 max);
             Vector3[] corners =
             {
                 new Vector3(min.X, min.Y, min.Z),
@@ -236,16 +254,17 @@ namespace ForesTycoon
                 GL.ShadeModel(ShadingModel.Flat);
                 GL.LineWidth(2.0f);
 
-                terrain = new Terrain();
+                world = new GameWorld(TerrainSettings.Default);
                 imgui = new ImGuiController();
                 isLoaded = true;
                 frameClock.Reset();
+                simulationClock.Reset();
                 SetupViewport();
                 Focus();
 
-                frameTimer = new System.Windows.Forms.Timer { Interval = FrameTimerIntervalMs };
-                frameTimer.Tick += (s, e) => RequestFrame();
-                frameTimer.Start();
+                // GameWindow.Run()-hoz hasonlóan az update és render folyamatosan,
+                // az üzenetsor üres idejében fut. A WinForms Timer ehhez túl pontatlan.
+                Application.Idle += OnApplicationIdle;
             }
             catch (Exception ex)
             {
@@ -300,11 +319,14 @@ namespace ForesTycoon
                 frameClock.TotalTimeSeconds,
                 frameClock.DeltaTimeSeconds,
                 frameIndex,
+                simulationClock.SimulationTimeSeconds,
+                simulationClock.Tick,
+                simulationClock.InterpolationAlpha,
                 isTerrainEditTool,
                 showTileHighlight,
                 nodeMarkerRadius);
 
-            terrain.Draw(renderContext);
+            world.Draw(renderContext);
 
             DrawImGui();
 
@@ -314,6 +336,63 @@ namespace ForesTycoon
         private void RequestFrame()
         {
             if (isLoaded && !DesignMode) Invalidate();
+        }
+
+        private void OnApplicationIdle(object sender, EventArgs e)
+        {
+            if (!Visible || ClientSize.Width <= 0 || ClientSize.Height <= 0)
+                return;
+
+            while (isLoaded && IsHandleCreated && IsApplicationIdle)
+                RunFrame();
+        }
+
+        private void RunFrame()
+        {
+            if (frameInProgress || !isLoaded || DesignMode || ClientSize.Width <= 0 || ClientSize.Height <= 0)
+                return;
+
+            frameInProgress = true;
+            try
+            {
+                MakeCurrent();
+                frameClock.Tick();
+                UpdateFrame();
+                world.ExecutePendingCommands();
+                simulationClock.Advance(frameClock.DeltaTimeSeconds, world.Update);
+                SetupViewport();
+                Render();
+            }
+            finally
+            {
+                frameInProgress = false;
+            }
+        }
+
+        private void UpdateFrame()
+        {
+            // Smooth zoom: exponenciális közelítés a célértékhez.
+            float diff = targetZoom - zoom;
+            if (Math.Abs(diff) > 0.01f)
+            {
+                float prevZoom = zoom;
+                zoom += diff * SmoothStepFactor(0.18f, frameClock.DeltaTimeSeconds);
+                screenX = mouseX - (mouseX - screenX) * (prevZoom / zoom);
+                screenY = mouseY - (mouseY - screenY) * (prevZoom / zoom);
+            }
+
+            float rotDiff = targetRotY - roty;
+            if (Math.Abs(rotDiff) > 0.01f)
+            {
+                roty += rotDiff * SmoothStepFactor(0.12f, frameClock.DeltaTimeSeconds);
+                ApplyRotationPivotCompensation();
+            }
+            else
+            {
+                roty = targetRotY;
+                ApplyRotationPivotCompensation();
+                EndRotationPivotIfSettled();
+            }
         }
 
         private void DrawImGui()
@@ -346,6 +425,18 @@ namespace ForesTycoon
             if (ImGui.BeginMenu("Nézet"))
             {
                 if (ImGui.MenuItem("Kamera alaphelyzet")) ResetCamera();
+                ImGui.EndMenu();
+            }
+            if (ImGui.BeginMenu("Játék"))
+            {
+                if (ImGui.MenuItem("Szünet", "Space", simulationClock.IsPaused))
+                    simulationClock.IsPaused = !simulationClock.IsPaused;
+                ImGui.Separator();
+                SimulationSpeedMenuItem("1x", 1.0);
+                SimulationSpeedMenuItem("2x", 2.0);
+                SimulationSpeedMenuItem("4x", 4.0);
+                ImGui.Separator();
+                if (ImGui.MenuItem("Tesztjármű indítása")) world.QueueSpawnVehicle();
                 ImGui.EndMenu();
             }
             if (ImGui.BeginMenu("Eszközök"))
@@ -393,11 +484,13 @@ namespace ForesTycoon
             ImGui.Text($"Eszköz: {ToolName(activeTool)}");
             if (IsRoadTool(activeTool))
             {
-                ImGui.Text($"Út-csempék: {terrain.RoadCount}");
+                ImGui.Text($"Út-csempék: {world.RoadCount}");
                 if (roadDragging)
-                    ImGui.Text($"Hossz: {terrain.RoadPreviewCount}");
+                    ImGui.Text($"Hossz: {world.RoadPreviewCount}");
             }
             ImGui.Text($"{ImGui.GetIO().Framerate:F0} FPS");
+            ImGui.Text($"Tick: {simulationClock.Tick}  {(simulationClock.IsPaused ? "Szünet" : $"{simulationClock.Speed:0}x")}");
+            ImGui.Text($"Járművek: {world.VehicleCount}");
 
             ImGui.End();
         }
@@ -420,7 +513,7 @@ namespace ForesTycoon
             activeTool = tool;
             roadDragStartTile = null;   // úthálózat drag megszakítása eszközváltáskor
             roadDragging = false;
-            terrain?.ClearRoadPreview();
+            world?.ClearRoadPreview();
             RequestFrame();
         }
 
@@ -480,7 +573,7 @@ namespace ForesTycoon
             {
                 float t = (targetZ - rayNear.Z) / ray.Z;
                 worldPos = rayNear + ray * t;
-                if (terrain == null || !terrain.TryGetSurfaceZ(worldPos.X, worldPos.Y, out float surfaceZ))
+                if (world == null || !world.TryGetSurfaceZ(worldPos.X, worldPos.Y, out float surfaceZ))
                     break;
 
                 if (Math.Abs(surfaceZ - targetZ) < 0.01f)
@@ -501,7 +594,7 @@ namespace ForesTycoon
             if (!pickMatricesReady)
             {
                 nodeHovered = false;
-                terrain.ClearHover();
+                world.ClearHover();
                 return;
             }
 
@@ -509,12 +602,12 @@ namespace ForesTycoon
             int px = Math.Max(0, Math.Min(pickViewMatrix[2] - 1, (int)Math.Round(e.X * scale)));
             int py = Math.Max(0, Math.Min(pickViewMatrix[3] - 1, (int)Math.Round(e.Y * scale)));
             int fy = pickViewMatrix[3] - 1 - py;
-            nodeHovered = terrain.SearchScreenPoint(px, fy, 14.0 * scale, pickModelMatrix, pickProjMatrix, pickViewMatrix);
+            nodeHovered = world.SearchScreenPoint(px, fy, 14.0 * scale, pickModelMatrix, pickProjMatrix, pickViewMatrix);
 
             if (UpdateWorldPosition(e))
-                terrain.SearchTile(worldPos.X, worldPos.Y);
+                world.SearchTile(worldPos.X, worldPos.Y);
             else
-                terrain.ClearTileHover();
+                world.ClearTileHover();
         }
 
         private void ApplyActiveTerrainTool()
@@ -523,18 +616,18 @@ namespace ForesTycoon
 
             int radius = brushSize - 1;
             if (activeTool == TerrainEditTool.Raise)
-                terrain.EditElevation(+1, radius, brushStrength);
+                world.QueueElevationEdit(world.SelectedNodeId, +1, radius, brushStrength);
             else if (activeTool == TerrainEditTool.Lower)
-                terrain.EditElevation(-1, radius, brushStrength);
+                world.QueueElevationEdit(world.SelectedNodeId, -1, radius, brushStrength);
         }
 
         private void RegenerateTerrain()
         {
             if (!isLoaded) return;
             // A GL-kontextus a render alatt aktuális, így a buffer-csere itt biztonságos.
-            terrain.Dispose();
             int seed = new Random().Next();
-            terrain = new Terrain(TerrainSettings.Default.WithSeed(seed));
+            world.Regenerate(TerrainSettings.Default.WithSeed(seed));
+            simulationClock.Reset();
             RequestFrame();
         }
 
@@ -586,45 +679,21 @@ namespace ForesTycoon
         protected override void OnPaint(System.Windows.Forms.PaintEventArgs e)
         {
             base.OnPaint(e);
-            if (!isLoaded || DesignMode) return;
+            RunFrame();
+        }
 
-            frameClock.Tick();
-
-            // Smooth zoom: exponenciális közelítés a célértékhez
-            float diff = targetZoom - zoom;
-            if (Math.Abs(diff) > 0.01f)
+        private void SimulationSpeedMenuItem(string label, double speed)
+        {
+            if (ImGui.MenuItem(label, "", !simulationClock.IsPaused && simulationClock.Speed == speed))
             {
-                float prevZoom = zoom;
-                zoom += diff * SmoothStepFactor(0.18f, frameClock.DeltaTimeSeconds);
-                // Zoom a kurzor körül tartva
-                screenX = mouseX - (mouseX - screenX) * (prevZoom / zoom);
-                screenY = mouseY - (mouseY - screenY) * (prevZoom / zoom);
-                RequestFrame();   // következő frame
+                simulationClock.Speed = speed;
+                simulationClock.IsPaused = false;
             }
-
-            float rotDiff = targetRotY - roty;
-            if (Math.Abs(rotDiff) > 0.01f)
-            {
-                roty += rotDiff * SmoothStepFactor(0.12f, frameClock.DeltaTimeSeconds);
-                ApplyRotationPivotCompensation();
-                RequestFrame();
-            }
-            else
-            {
-                roty = targetRotY;
-                ApplyRotationPivotCompensation();
-                EndRotationPivotIfSettled();
-            }
-
-            SetupViewport();
-            Render();
         }
 
         protected override void OnHandleDestroyed(EventArgs e)
         {
-            frameTimer?.Stop();
-            frameTimer?.Dispose();
-            frameTimer = null;
+            Application.Idle -= OnApplicationIdle;
 
             base.OnHandleDestroyed(e);
         }
@@ -642,9 +711,7 @@ namespace ForesTycoon
             if (glResourcesDisposed) return;
             glResourcesDisposed = true;
 
-            frameTimer?.Stop();
-            frameTimer?.Dispose();
-            frameTimer = null;
+            Application.Idle -= OnApplicationIdle;
 
             if (!isLoaded) return;
 
@@ -654,7 +721,7 @@ namespace ForesTycoon
                     MakeCurrent();
 
                 imgui?.Dispose();
-                terrain?.Dispose();
+                world?.Dispose();
             }
             catch
             {
@@ -664,7 +731,7 @@ namespace ForesTycoon
             finally
             {
                 imgui = null;
-                terrain = null;
+                world = null;
                 isLoaded = false;
             }
         }
@@ -691,7 +758,7 @@ namespace ForesTycoon
 
             if (imgui != null && imgui.WantCaptureMouse)
             {
-                terrain.ClearHover();
+                world.ClearHover();
                 RequestFrame();
                 return;
             }
@@ -699,7 +766,7 @@ namespace ForesTycoon
             UpdateHover(e);
 
             if (roadDragging)
-                terrain.SetRoadPreview(roadDragStartTile, terrain.HoveredTile, roadDragRemove);
+                world.SetRoadPreview(roadDragStartTile, world.HoveredTile, roadDragRemove);
 
             switch (e.Button)
             {
@@ -740,10 +807,11 @@ namespace ForesTycoon
             {
                 if (roadDragging && roadDragStartTile != null)
                 {
-                    if (roadDragRemove) terrain.RemoveRoadTilePath(roadDragStartTile, terrain.HoveredTile);
-                    else terrain.BuildRoadTilePath(roadDragStartTile, terrain.HoveredTile);
+                    int endTileId = world.HoveredTileId;
+                    if (endTileId >= 0)
+                        world.QueueRoadPath(roadDragStartTile.Id, endTileId, roadDragRemove);
                 }
-                terrain.ClearRoadPreview();
+                world.ClearRoadPreview();
                 roadDragging = false;
                 roadDragStartTile = null;
                 RequestFrame();
@@ -773,6 +841,13 @@ namespace ForesTycoon
         {
             base.OnKeyDown(e);
             if (!isLoaded) return;
+
+            if (e.KeyCode == Keys.Space)
+            {
+                simulationClock.IsPaused = !simulationClock.IsPaused;
+                RequestFrame();
+                return;
+            }
 
             // Bal/Jobb: kamera forgatás 90°-os lépésekkel
             if (e.KeyCode == Keys.Left)
@@ -818,7 +893,7 @@ namespace ForesTycoon
 
             if (IsRoadTool(activeTool) && e.Button == MouseButtons.Left)
             {
-                roadDragStartTile = terrain.HoveredTile;
+                roadDragStartTile = world.HoveredTile;
                 roadDragRemove = activeTool == TerrainEditTool.RoadRemove;
                 roadDragging = roadDragStartTile != null;
             }

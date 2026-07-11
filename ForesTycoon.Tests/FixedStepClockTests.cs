@@ -1,0 +1,50 @@
+namespace ForesTycoon.Tests;
+
+public class FixedStepClockTests
+{
+    [Fact]
+    public void Advance_ProducesSameTicksForDifferentRenderFrameSizes()
+    {
+        FixedStepClock a = new FixedStepClock(20);
+        FixedStepClock b = new FixedStepClock(20);
+
+        for (int i = 0; i < 10; i++) a.Advance(0.01, _ => { });
+        b.Advance(0.1, _ => { });
+
+        Assert.Equal(b.Tick, a.Tick);
+        Assert.Equal((ulong)2, a.Tick);
+    }
+
+    [Fact]
+    public void Advance_CapsCatchUpWork()
+    {
+        FixedStepClock clock = new FixedStepClock(30, maxTicksPerFrame: 4);
+
+        int ticks = clock.Advance(10.0, _ => { });
+
+        Assert.Equal(4, ticks);
+        Assert.Equal((ulong)4, clock.Tick);
+    }
+
+    [Fact]
+    public void Pause_DoesNotAccumulateBacklog()
+    {
+        FixedStepClock clock = new FixedStepClock(20) { IsPaused = true };
+        clock.Advance(1.0, _ => { });
+        clock.IsPaused = false;
+
+        Assert.Equal(0, clock.Advance(0.01, _ => { }));
+        Assert.Equal((ulong)0, clock.Tick);
+    }
+
+    [Fact]
+    public void InterpolationAlpha_RepresentsRemainderBetweenTicks()
+    {
+        FixedStepClock clock = new FixedStepClock(10);
+
+        clock.Advance(0.15, _ => { });
+
+        Assert.Equal((ulong)1, clock.Tick);
+        Assert.Equal(0.5f, clock.InterpolationAlpha, 3);
+    }
+}
