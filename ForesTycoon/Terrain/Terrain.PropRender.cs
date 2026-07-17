@@ -8,35 +8,43 @@ namespace ForesTycoon
     {
         internal void DrawTrees()
         {
-            foreach (Tile tile in visibleTiles)
+            ImmediateRenderer.Draw(PrimitiveType.Quads, () =>
             {
-                    int u = tile.Id / (nodeRows - 1);
-                    int v = tile.Id % (nodeRows - 1);
-                    if (u == 0 || v == 0 || u >= nodeCols - 2 || v >= nodeRows - 2) continue;
-                    float moisture = tileMoisture[tile.Id];
+                foreach (Tile tile in visibleTiles)
+                    if (TryGetTree(tile, out float x, out float y, out float groundZ, out float surfaceZ))
+                        DrawTreeTrunk(x, y, groundZ, surfaceZ);
+            });
 
-                    if (ShouldDrawStandingWater(tile)) continue;
-                    if (tile.Low <= 1) continue;
-                    if (tile.Low >= 5) continue;
-                    int tileRiverCorners = CountRiverCorners(tile);
-                    if (tileRiverCorners >= 2) continue;
-                    if (moisture < 0.35f || moisture > 0.95f) continue;
-
-                    int hash = unchecked(u * 374761393 ^ v * 1073741827);
-                    int density = moisture >= 0.7f ? 3 : 5;
-                    if ((hash & 0x7FFFFFFF) % density != 0) continue;
-
-                    float cx = (tile.W.xPos + tile.S.xPos + tile.E.xPos + tile.N.xPos) * 0.25f;
-                    float cy = (tile.W.yPos + tile.S.yPos + tile.E.yPos + tile.N.yPos) * 0.25f;
-                    float groundZ = tile.Low * tileSizeM;
-                    float surfaceZ = Math.Max(Math.Max(tile.W.zPos, tile.S.zPos),
-                                             Math.Max(tile.E.zPos, tile.N.zPos));
-
-                    DrawTree(cx, cy, groundZ, surfaceZ);
-            }
+            ImmediateRenderer.Draw(PrimitiveType.Triangles, () =>
+            {
+                foreach (Tile tile in visibleTiles)
+                    if (TryGetTree(tile, out float x, out float y, out _, out float surfaceZ))
+                        DrawTreeFoliage(x, y, surfaceZ);
+            });
         }
 
-        private static void DrawTree(float x, float y, float groundZ, float surfaceZ)
+        private bool TryGetTree(Tile tile, out float x, out float y, out float groundZ, out float surfaceZ)
+        {
+            int u = tile.Id / (nodeRows - 1), v = tile.Id % (nodeRows - 1);
+            x = y = groundZ = surfaceZ = 0f;
+            if (u == 0 || v == 0 || u >= nodeCols - 2 || v >= nodeRows - 2) return false;
+            float moisture = tileMoisture[tile.Id];
+            if (ShouldDrawStandingWater(tile) || tile.Low <= 1 || tile.Low >= 5 || CountRiverCorners(tile) >= 2)
+                return false;
+            if (moisture < 0.35f || moisture > 0.95f) return false;
+
+            int hash = unchecked(u * 374761393 ^ v * 1073741827);
+            int density = moisture >= 0.7f ? 3 : 5;
+            if ((hash & 0x7FFFFFFF) % density != 0) return false;
+
+            x = (tile.W.xPos + tile.S.xPos + tile.E.xPos + tile.N.xPos) * 0.25f;
+            y = (tile.W.yPos + tile.S.yPos + tile.E.yPos + tile.N.yPos) * 0.25f;
+            groundZ = tile.Low * tileSizeM;
+            surfaceZ = Math.Max(Math.Max(tile.W.zPos, tile.S.zPos), Math.Max(tile.E.zPos, tile.N.zPos));
+            return true;
+        }
+
+        private static void DrawTreeTrunk(float x, float y, float groundZ, float surfaceZ)
         {
             float trunkRadius = 0.32f;
             float trunkBot = groundZ - 1.0f;
@@ -45,25 +53,26 @@ namespace ForesTycoon
             Color trunkLight = Color.FromArgb(115, 72, 32);
             Color trunkDark = Color.FromArgb(80, 50, 20);
 
-            ImmediateRenderer.Draw(PrimitiveType.Quads, () =>
-            {
-                GL.Color3(trunkLight);
-                GL.Vertex3(x - trunkRadius, y + trunkRadius, trunkBot); GL.Vertex3(x + trunkRadius, y + trunkRadius, trunkBot);
-                GL.Vertex3(x + trunkRadius, y + trunkRadius, trunkTop); GL.Vertex3(x - trunkRadius, y + trunkRadius, trunkTop);
+            GL.Color3(trunkLight);
+            GL.Vertex3(x - trunkRadius, y + trunkRadius, trunkBot); GL.Vertex3(x + trunkRadius, y + trunkRadius, trunkBot);
+            GL.Vertex3(x + trunkRadius, y + trunkRadius, trunkTop); GL.Vertex3(x - trunkRadius, y + trunkRadius, trunkTop);
 
-                GL.Color3(trunkDark);
-                GL.Vertex3(x + trunkRadius, y + trunkRadius, trunkBot); GL.Vertex3(x + trunkRadius, y - trunkRadius, trunkBot);
-                GL.Vertex3(x + trunkRadius, y - trunkRadius, trunkTop); GL.Vertex3(x + trunkRadius, y + trunkRadius, trunkTop);
+            GL.Color3(trunkDark);
+            GL.Vertex3(x + trunkRadius, y + trunkRadius, trunkBot); GL.Vertex3(x + trunkRadius, y - trunkRadius, trunkBot);
+            GL.Vertex3(x + trunkRadius, y - trunkRadius, trunkTop); GL.Vertex3(x + trunkRadius, y + trunkRadius, trunkTop);
 
-                GL.Color3(trunkLight);
-                GL.Vertex3(x + trunkRadius, y - trunkRadius, trunkBot); GL.Vertex3(x - trunkRadius, y - trunkRadius, trunkBot);
-                GL.Vertex3(x - trunkRadius, y - trunkRadius, trunkTop); GL.Vertex3(x + trunkRadius, y - trunkRadius, trunkTop);
+            GL.Color3(trunkLight);
+            GL.Vertex3(x + trunkRadius, y - trunkRadius, trunkBot); GL.Vertex3(x - trunkRadius, y - trunkRadius, trunkBot);
+            GL.Vertex3(x - trunkRadius, y - trunkRadius, trunkTop); GL.Vertex3(x + trunkRadius, y - trunkRadius, trunkTop);
 
-                GL.Color3(trunkDark);
-                GL.Vertex3(x - trunkRadius, y - trunkRadius, trunkBot); GL.Vertex3(x - trunkRadius, y + trunkRadius, trunkBot);
-                GL.Vertex3(x - trunkRadius, y + trunkRadius, trunkTop); GL.Vertex3(x - trunkRadius, y - trunkRadius, trunkTop);
-            });
+            GL.Color3(trunkDark);
+            GL.Vertex3(x - trunkRadius, y - trunkRadius, trunkBot); GL.Vertex3(x - trunkRadius, y + trunkRadius, trunkBot);
+            GL.Vertex3(x - trunkRadius, y + trunkRadius, trunkTop); GL.Vertex3(x - trunkRadius, y - trunkRadius, trunkTop);
+        }
 
+        private static void DrawTreeFoliage(float x, float y, float surfaceZ)
+        {
+            float trunkTop = surfaceZ + 0.6f;
             float baseRadius = 1.8f;
             float layerHeight = 2.4f;
             Color light = Color.FromArgb(55, 128, 42);
@@ -78,17 +87,14 @@ namespace ForesTycoon
                 float[] px = { x, x + radius, x, x - radius };
                 float[] py = { y + radius, y, y - radius, y };
 
-                ImmediateRenderer.Draw(PrimitiveType.Triangles, () =>
+                for (int i = 0; i < 4; i++)
                 {
-                    for (int i = 0; i < 4; i++)
-                    {
-                        int j = (i + 1) % 4;
-                        GL.Color3(i == 0 || i == 3 ? light : dark);
-                        GL.Vertex3(px[i], py[i], baseZ);
-                        GL.Vertex3(px[j], py[j], baseZ);
-                        GL.Vertex3(x, y, tipZ);
-                    }
-                });
+                    int j = (i + 1) % 4;
+                    GL.Color3(i == 0 || i == 3 ? light : dark);
+                    GL.Vertex3(px[i], py[i], baseZ);
+                    GL.Vertex3(px[j], py[j], baseZ);
+                    GL.Vertex3(x, y, tipZ);
+                }
             }
         }
     }

@@ -91,11 +91,10 @@ namespace ForesTycoon
             {
                 ImmediateRenderer.Draw(PrimitiveType.Quads, () =>
                 {
-                    foreach (int id in roads.Tiles)
+                    foreach (Tile t in visibleTiles)
                     {
-                        if (!IsTileVisible(id)) continue;
-                        Tile t = tiles[id];
-                        int u = id / tpc, v = id % tpc;
+                        if (!roads.Has(t.Id)) continue;
+                        int u = t.Id / tpc, v = t.Id % tpc;
                         RoadFootprintCorners(t, out Vector3 iW, out Vector3 iS, out Vector3 iE, out Vector3 iN);
 
                         GL.Color4(RoadFoundationColor);
@@ -109,18 +108,16 @@ namespace ForesTycoon
             using (new RenderStateScope().DepthWrite(false))
             {
                 GL.Color4(RoadFoundationLineColor);
-                foreach (int id in roads.Tiles)
+                ImmediateRenderer.Draw(PrimitiveType.Lines, () =>
                 {
-                    if (!IsTileVisible(id)) continue;
-                    Tile t = tiles[id];
-                    int u = id / tpc, v = id % tpc;
-                    RoadFootprintCorners(t, out Vector3 iW, out Vector3 iS, out Vector3 iE, out Vector3 iN);
-
-                    ImmediateRenderer.Draw(PrimitiveType.LineLoop, () =>
+                    foreach (Tile tile in visibleTiles)
                     {
+                        if (!roads.Has(tile.Id)) continue;
+                        RoadFootprintCorners(tile, out Vector3 iW, out Vector3 iS, out Vector3 iE, out Vector3 iN);
                         GL.Vertex3(iW); GL.Vertex3(iS); GL.Vertex3(iE); GL.Vertex3(iN);
-                    });
-                }
+                        GL.Vertex3(iN); GL.Vertex3(iW);
+                    }
+                });
             }
         }
 

@@ -18,19 +18,19 @@ namespace ForesTycoon
             {
                 ImmediateRenderer.Draw(PrimitiveType.Quads, () =>
                 {
-                    foreach (int id in roads.Tiles)
+                    foreach (Tile tile in visibleTiles)
                     {
-                        if (!IsTileVisible(id)) continue;
-                        RoadSurface(tiles[id], roads.GetEdges(id), RoadShoulderWidthFactor, RoadShoulder);
+                        if (!roads.Has(tile.Id)) continue;
+                        RoadSurface(tile, roads.GetEdges(tile.Id), RoadShoulderWidthFactor, RoadShoulder);
                     }
                 });
 
                 ImmediateRenderer.Draw(PrimitiveType.Quads, () =>
                 {
-                    foreach (int id in roads.Tiles)
+                    foreach (Tile tile in visibleTiles)
                     {
-                        if (!IsTileVisible(id)) continue;
-                        RoadSurface(tiles[id], roads.GetEdges(id), RoadSurfaceWidthFactor, RoadSurfaceColor);
+                        if (!roads.Has(tile.Id)) continue;
+                        RoadSurface(tile, roads.GetEdges(tile.Id), RoadSurfaceWidthFactor, RoadSurfaceColor);
                     }
                 });
             }

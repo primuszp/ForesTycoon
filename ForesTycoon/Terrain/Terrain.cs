@@ -19,7 +19,6 @@ namespace ForesTycoon
         private readonly RoadNetwork roads = new RoadNetwork();
         private readonly TerrainChunkIndex chunkIndex;
         private readonly List<Tile> visibleTiles = new List<Tile>();
-        private readonly HashSet<int> visibleTileIds = new HashSet<int>();
         private int visibleChunkCount;
 
         // Foundation-réteg: az út VEZETŐFELÜLETÉNEK befagyasztott magassága sarkonként
@@ -158,12 +157,9 @@ namespace ForesTycoon
             return true;
         }
 
-        private bool IsTileVisible(int tileId) => visibleTileIds.Contains(tileId);
-
         internal void UpdateVisibleTiles(RenderContext context)
         {
             visibleTiles.Clear();
-            visibleTileIds.Clear();
             visibleChunkCount = 0;
             const double margin = 12.0;
             foreach (TerrainChunk chunk in chunkIndex.Chunks)
@@ -179,7 +175,6 @@ namespace ForesTycoon
                 {
                     int tileId = chunk.TileIds[i];
                     visibleTiles.Add(tiles[tileId]);
-                    visibleTileIds.Add(tileId);
                 }
             }
         }
