@@ -6,7 +6,7 @@ namespace ForesTycoon
 {
     partial class Terrain
     {
-        private void DrawTrees()
+        internal void DrawTrees()
         {
             foreach (Tile tile in visibleTiles)
             {

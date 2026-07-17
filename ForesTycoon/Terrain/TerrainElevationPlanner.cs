@@ -13,36 +13,43 @@ namespace ForesTycoon
             changes = pending;
             if (startNodeId < 0 || startNodeId >= data.Nodes.Length || delta == 0) return false;
 
-            bool valid = true;
-            int HeightOf(Node node) => pending.TryGetValue(node.Id, out int value) ? value : node.W;
+            Queue<(Node node, int height)> plannedHeights = new Queue<(Node node, int height)>();
+            plannedHeights.Enqueue((data.Nodes[startNodeId], data.Nodes[startNodeId].W + delta));
 
-            void Set(Node node, int height)
+            while (plannedHeights.Count > 0)
             {
-                if (!valid) return;
-                if (height < 0 || height > maxHeight) { valid = false; return; }
-                if (HeightOf(node) == height) return;
+                (Node node, int height) = plannedHeights.Dequeue();
+                if (height < 0 || height > maxHeight)
+                {
+                    pending.Clear();
+                    return false;
+                }
+
+                int currentHeight = pending.TryGetValue(node.Id, out int value) ? value : node.W;
+                if (currentHeight == height) continue;
+
                 pending[node.Id] = height;
-                Relax(node.U, node.V - 1, height);
-                Relax(node.U + 1, node.V, height);
-                Relax(node.U, node.V + 1, height);
-                Relax(node.U - 1, node.V, height);
+                EnqueueRelaxedNeighbour(node.U, node.V - 1, height);
+                EnqueueRelaxedNeighbour(node.U + 1, node.V, height);
+                EnqueueRelaxedNeighbour(node.U, node.V + 1, height);
+                EnqueueRelaxedNeighbour(node.U - 1, node.V, height);
             }
 
-            void Relax(int u, int v, int height)
-            {
-                if (!data.CheckNode(u, v)) return;
-                Node neighbour = data.GetNode(u, v);
-                int difference = height - HeightOf(neighbour);
-                if (Math.Abs(difference) > 1)
-                    Set(neighbour, height - Math.Sign(difference));
-            }
-
-            Node start = data.Nodes[startNodeId];
-            Set(start, start.W + delta);
-            if (valid && pending.Count > 0) return true;
+            if (pending.Count > 0) return true;
 
             pending.Clear();
             return false;
+
+            void EnqueueRelaxedNeighbour(int u, int v, int height)
+            {
+                if (!data.CheckNode(u, v)) return;
+
+                Node neighbour = data.GetNode(u, v);
+                int neighbourHeight = pending.TryGetValue(neighbour.Id, out int value) ? value : neighbour.W;
+                int difference = height - neighbourHeight;
+                if (Math.Abs(difference) > 1)
+                    plannedHeights.Enqueue((neighbour, height - Math.Sign(difference)));
+            }
         }
     }
 }

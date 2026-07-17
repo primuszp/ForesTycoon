@@ -17,12 +17,10 @@ namespace ForesTycoon
         private readonly HashSet<int> flippedDiagonalTiles = new HashSet<int>();
         private readonly VertexBuffer edges = new VertexBuffer(PrimitiveType.Lines, BufferUsageHint.DynamicDraw);
         private readonly RoadNetwork roads = new RoadNetwork();
-        private readonly RenderPipeline renderPipeline = new RenderPipeline();
         private readonly TerrainChunkIndex chunkIndex;
         private readonly List<Tile> visibleTiles = new List<Tile>();
         private readonly HashSet<int> visibleTileIds = new HashSet<int>();
         private int visibleChunkCount;
-        private RenderStateScope terrainDecalState;
 
         // Foundation-réteg: az út VEZETŐFELÜLETÉNEK befagyasztott magassága sarkonként
         // (nodeId → W az építés pillanatában). A terep alatta szabadon alakítható, de az
@@ -76,32 +74,7 @@ namespace ForesTycoon
 
             makeTiles();
             makeQuads();
-            BuildRenderPipeline();
-
             GenerateTerrain();
-        }
-
-        private void BuildRenderPipeline()
-        {
-            renderPipeline.Add(RenderLayer.TerrainBase, "terrain-base", _ => DrawTerrainBase());
-            renderPipeline.Add(RenderLayer.TerrainSkirts, "terrain-skirts", _ => DrawSkirts());
-            renderPipeline.Add(RenderLayer.WaterSurface, "water-surface", context => DrawWater(context));
-            renderPipeline.Add(RenderLayer.WaterWalls, "water-walls", context => DrawWaterWalls(context));
-            renderPipeline.Add(RenderLayer.RiverFallback, "river-fallback", context => DrawRivers(context));
-            renderPipeline.Add(RenderLayer.Foundations, "road-foundations", _ => DrawRoadFoundations());
-            renderPipeline.Add(RenderLayer.DecalBegin, "decal-state-begin", _ => BeginTerrainDecals());
-            renderPipeline.Add(RenderLayer.Grid, "terrain-grid", _ => DrawTerrainDecals());
-            renderPipeline.Add(RenderLayer.Roads, "roads", _ => DrawRoads());
-            renderPipeline.Add(RenderLayer.HoverOverlay, "hover-overlay", context =>
-            {
-                if (context.ShowTileHighlight) DrawHoveredTile();
-            });
-            renderPipeline.Add(RenderLayer.DecalEnd, "decal-state-end", _ => EndTerrainDecals());
-            renderPipeline.Add(RenderLayer.Props, "props", _ => DrawTrees());
-            renderPipeline.Add(RenderLayer.DebugOverlay, "debug-overlay", context =>
-            {
-                if (context.ShowNodeMarker) DrawNodeMarker(context.NodeMarkerRadius);
-            });
         }
 
         private void GenerateTerrain()
@@ -167,18 +140,27 @@ namespace ForesTycoon
 
         private bool HasDynamicWater(Tile tile) => hydro.HasDynamicWater(tile);
 
-        public void Draw(RenderContext context)
-        {
-            UpdateVisibleTiles(context);
-            renderPipeline.Render(context);
-        }
-
         public int VisibleChunkCount => visibleChunkCount;
         public int TotalChunkCount => chunkIndex.Chunks.Count;
+        public int TileWidth => data.TileSizeH;
+        public int TileHeight => data.TileSizeV;
+
+        public bool TryGetNodePosition(int nodeId, out Vector3 position)
+        {
+            if (nodeId < 0 || nodeId >= nodes.Length)
+            {
+                position = Vector3.Zero;
+                return false;
+            }
+
+            Node node = nodes[nodeId];
+            position = new Vector3(node.xPos, node.yPos, node.zPos);
+            return true;
+        }
 
         private bool IsTileVisible(int tileId) => visibleTileIds.Contains(tileId);
 
-        private void UpdateVisibleTiles(RenderContext context)
+        internal void UpdateVisibleTiles(RenderContext context)
         {
             visibleTiles.Clear();
             visibleTileIds.Clear();
@@ -235,8 +217,6 @@ namespace ForesTycoon
         /// <summary>GL-erőforrások felszabadítása (regeneráláskor a régi terep buffereihez).</summary>
         public void Dispose()
         {
-            terrainDecalState?.Dispose();
-            terrainDecalState = null;
             foreach (VertexBuffer vbo in vbos.Values) vbo.Dispose();
             vbos.Clear();
             edges.Dispose();

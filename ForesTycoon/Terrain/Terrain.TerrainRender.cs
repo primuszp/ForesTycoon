@@ -6,7 +6,7 @@ namespace ForesTycoon
 {
     partial class Terrain
     {
-        private void DrawTerrainBase()
+        internal void DrawTerrainBase()
         {
             // A kitöltött terep írja a depth buffert; a koplanáris overlay rétegek
             // később depth írás nélkül rajzolódnak, így nincs Z-fighting.
@@ -58,24 +58,11 @@ namespace ForesTycoon
             GL.Vertex3(n);
         }
 
-        private void BeginTerrainDecals()
-        {
-            terrainDecalState?.Dispose();
-            terrainDecalState = new RenderStateScope()
-                .Disable(EnableCap.DepthTest)
-                .DepthWrite(false);
-        }
-
-        private void DrawTerrainDecals()
+        internal void DrawTerrainDecals()
         {
             DrawLandGrid();
         }
 
-        private void EndTerrainDecals()
-        {
-            terrainDecalState?.Dispose();
-            terrainDecalState = null;
-        }
 
         private void DrawLandGrid()
         {
@@ -148,7 +135,7 @@ namespace ForesTycoon
             }
         }
 
-        private void DrawSkirts()
+        internal void DrawSkirts()
         {
             const float BASE_Z      = -16.0f;
             const float RIM_H       =   1.5f;

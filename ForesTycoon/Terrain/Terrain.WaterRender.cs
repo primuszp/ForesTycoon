@@ -7,7 +7,7 @@ namespace ForesTycoon
 {
     partial class Terrain
     {
-        private void DrawRivers(RenderContext context)
+        internal void DrawRivers(RenderContext context)
         {
             if (riverNodeIds.Count == 0) return;
 
@@ -150,7 +150,7 @@ namespace ForesTycoon
             return MinimumWaterDepth;
         }
 
-        private void DrawWater(RenderContext context)
+        internal void DrawWater(RenderContext context)
         {
             if (nodeWaterDepth == null) return;
 
@@ -212,7 +212,7 @@ namespace ForesTycoon
                 });
             }
         }
-        private void DrawWaterWalls(RenderContext context)
+        internal void DrawWaterWalls(RenderContext context)
         {
             if (nodeWaterDepth == null) return;
 

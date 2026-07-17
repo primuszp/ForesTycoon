@@ -22,7 +22,7 @@ namespace ForesTycoon
         /// </summary>
         public void EditElevation(int delta, int radius, int strength)
         {
-            if (actualNode == null) return;
+            if (actualNode == null || delta == 0 || radius < 0 || strength <= 0) return;
 
             Node center = actualNode;
             int cu = center.U, cv = center.V;

@@ -10,7 +10,7 @@ namespace ForesTycoon
         private const float RoadShoulderWidthFactor = 1.0f;
         private const float RoadSurfaceWidthFactor = 0.62f;
 
-        private void DrawRoads()
+        internal void DrawRoads()
         {
             if (roads.Count == 0 && previewTiles.Count == 0) return;
 

@@ -10,12 +10,15 @@ namespace ForesTycoon
     sealed class GameWorld : IDisposable, IWorldCommandTarget
     {
         private Terrain terrain;
+        private TerrainRenderer terrainRenderer;
         private readonly WorldCommandQueue commands = new WorldCommandQueue();
         private readonly VehicleSystem vehicles = new VehicleSystem();
+        private readonly WorldEffectSystem effects = new WorldEffectSystem();
 
         public GameWorld(TerrainSettings settings)
         {
             terrain = new Terrain(settings ?? throw new ArgumentNullException(nameof(settings)));
+            terrainRenderer = new TerrainRenderer(terrain, vehicles, effects);
         }
 
         public Tile HoveredTile => terrain.HoveredTile;
@@ -26,10 +29,13 @@ namespace ForesTycoon
         public int VehicleCount => vehicles.Count;
         public int VisibleChunkCount => terrain.VisibleChunkCount;
         public int TotalChunkCount => terrain.TotalChunkCount;
+        public int TileWidth => terrain.TileWidth;
+        public int TileHeight => terrain.TileHeight;
 
         public void Update(double fixedDeltaSeconds)
         {
             vehicles.Update(fixedDeltaSeconds);
+            effects.Update(fixedDeltaSeconds);
         }
 
         public int ExecutePendingCommands() => commands.ExecutePending(this);
@@ -39,26 +45,36 @@ namespace ForesTycoon
             commands.Enqueue(new RoadPathCommand(startTileId, endTileId, remove));
         public void QueueSpawnVehicle() => commands.Enqueue(new SpawnVehicleCommand());
 
-        void IWorldCommandTarget.ExecuteElevationEdit(int nodeId, int delta, int radius, int strength) =>
+        void IWorldCommandTarget.ExecuteElevationEdit(int nodeId, int delta, int radius, int strength)
+        {
             terrain.EditElevationAtNode(nodeId, delta, radius, strength);
+            if (terrain.TryGetNodePosition(nodeId, out Vector3 position))
+                effects.Spawn(WorldEffectKind.TerrainChanged, position);
+        }
 
         void IWorldCommandTarget.ExecuteRoadPath(int startTileId, int endTileId, bool remove)
         {
             if (remove) terrain.RemoveRoadTilePath(startTileId, endTileId);
             else terrain.BuildRoadTilePath(startTileId, endTileId);
             if (remove) vehicles.RemoveInvalidRoutes(terrain.IsRoadTile);
+            if (terrain.TryGetRoadTileCenter(endTileId, out Vector3 position))
+                effects.Spawn(WorldEffectKind.RoadChanged, position);
         }
 
         void IWorldCommandTarget.ExecuteSpawnVehicle()
         {
             int[] route = terrain.FindDemoRoadRoute();
-            if (route.Length >= 2) vehicles.Spawn(route);
+            if (route.Length >= 2)
+            {
+                vehicles.Spawn(route);
+                if (terrain.TryGetRoadTileCenter(route[0], out Vector3 position))
+                    effects.Spawn(WorldEffectKind.VehicleSpawned, position);
+            }
         }
 
         public void Draw(RenderContext context)
         {
-            terrain.Draw(context);
-            VehicleRenderer.Draw(vehicles, terrain, context.InterpolationAlpha);
+            terrainRenderer.Draw(context);
         }
         public void GetWorldBounds(out Vector3 min, out Vector3 max) => terrain.GetWorldBounds(out min, out max);
         public bool TryGetSurfaceZ(double x, double y, out float z) => terrain.TryGetSurfaceZ(x, y, out z);
@@ -76,10 +92,17 @@ namespace ForesTycoon
         {
             commands.Clear();
             vehicles.Clear();
+            effects.Clear();
+            terrainRenderer.Dispose();
             terrain.Dispose();
             terrain = new Terrain(settings ?? throw new ArgumentNullException(nameof(settings)));
+            terrainRenderer = new TerrainRenderer(terrain, vehicles, effects);
         }
 
-        public void Dispose() => terrain?.Dispose();
+        public void Dispose()
+        {
+            terrainRenderer?.Dispose();
+            terrain?.Dispose();
+        }
     }
 }

@@ -2,12 +2,12 @@ namespace ForesTycoon
 {
     partial class Terrain
     {
-        private void DrawNodeMarker(float radius)
+        internal void DrawNodeMarker(float radius)
         {
             if (onpos) DebugOverlayRenderer.DrawNodeMarker(actualNode, radius);
         }
 
-        private void DrawHoveredTile()
+        internal void DrawHoveredTile()
         {
             DebugOverlayRenderer.DrawHoveredTile(hoveredTile);
         }

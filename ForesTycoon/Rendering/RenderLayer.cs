@@ -14,6 +14,9 @@ namespace ForesTycoon
         HoverOverlay = 420,
         DecalEnd = 430,
         Props = 500,
+        Vehicles = 600,
+        Effects = 700,
+        Interface = 800,
         DebugOverlay = 900
     }
 }

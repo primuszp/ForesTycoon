@@ -82,7 +82,7 @@ namespace ForesTycoon
             public Vector3 BottomA { get; }
         }
 
-        private void DrawRoadFoundations()
+        internal void DrawRoadFoundations()
         {
             if (roads.Count == 0) return;
             int tpc = nodeRows - 1;

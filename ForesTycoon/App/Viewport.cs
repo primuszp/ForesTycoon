@@ -82,6 +82,7 @@ namespace ForesTycoon
         private readonly FixedStepClock simulationClock = new FixedStepClock(30.0);
         private ulong frameIndex;
         private int currentMapTiles = 64;
+        private const int MaximumVisibleTiles = 64;
         private bool frameInProgress;
         private bool idleLoopAttached;
 
@@ -395,6 +396,7 @@ namespace ForesTycoon
 
         private void UpdateFrame()
         {
+            ClampZoomToTerrainWindow();
             // Smooth zoom: exponenciális közelítés a célértékhez.
             float diff = targetZoom - zoom;
             if (Math.Abs(diff) > 0.01f)
@@ -417,6 +419,17 @@ namespace ForesTycoon
                 ApplyRotationPivotCompensation();
                 EndRotationPivotIfSettled();
             }
+        }
+
+        private void ClampZoomToTerrainWindow()
+        {
+            if (world == null) return;
+
+            float minimumZoom = MapViewConstraints.MinimumZoomForTileWindow(
+                Math.Max(1, Width), Math.Max(1, Height),
+                world.TileWidth, world.TileHeight, MaximumVisibleTiles);
+            targetZoom = Math.Max(targetZoom, minimumZoom);
+            zoom = Math.Max(zoom, minimumZoom);
         }
 
         private void DrawImGui()
