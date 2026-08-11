@@ -7,18 +7,21 @@ namespace ForesTycoon
 {
     static class EffectRenderer
     {
-        public static void Draw(WorldEffectSystem effects)
+        public static void Draw(WorldEffectSystem effects, float interpolationAlpha)
         {
             if (effects.Count == 0) return;
 
             using (new RenderStateScope().AlphaBlend().DepthWrite(false))
             {
-                foreach (WorldEffect effect in effects.Active)
-                    DrawPulse(effect);
+                DynamicPrimitiveBatch.Draw(PrimitiveType.Lines, () =>
+                {
+                    foreach (WorldEffect effect in effects.Active)
+                        DrawPulse(effect, interpolationAlpha);
+                });
             }
         }
 
-        private static void DrawPulse(WorldEffect effect)
+        private static void DrawPulse(WorldEffect effect, float interpolationAlpha)
         {
             Color color = effect.Kind switch
             {
@@ -27,20 +30,21 @@ namespace ForesTycoon
                 WorldEffectKind.VehicleSpawned => Color.FromArgb(210, 130, 205, 255),
                 _ => Color.White
             };
-            float radius = 0.5f + effect.Progress * 2.2f;
-            float z = effect.Position.Z + 0.08f + effect.Progress * 0.25f;
+            float progress = effect.Timeline.SampleProgress(interpolationAlpha);
+            float radius = 0.5f + progress * 2.2f;
+            float z = effect.Position.Z + 0.08f + progress * 0.25f;
 
-            GL.Color4(Color.FromArgb((int)(color.A * (1f - effect.Progress)), color));
-            ImmediateRenderer.Draw(PrimitiveType.LineLoop, () =>
+            DynamicPrimitiveBatch.Color4(Color.FromArgb((int)(color.A * (1f - progress)), color));
+            const int segments = 20;
+            for (int i = 0; i < segments; i++)
             {
-                const int segments = 20;
-                for (int i = 0; i < segments; i++)
-                {
-                    float angle = i * MathF.Tau / segments;
-                    GL.Vertex3(effect.Position.X + MathF.Cos(angle) * radius,
-                        effect.Position.Y + MathF.Sin(angle) * radius, z);
-                }
-            });
+                float angleA = i * MathF.Tau / segments;
+                float angleB = (i + 1) * MathF.Tau / segments;
+                DynamicPrimitiveBatch.Vertex3(effect.Position.X + MathF.Cos(angleA) * radius,
+                    effect.Position.Y + MathF.Sin(angleA) * radius, z);
+                DynamicPrimitiveBatch.Vertex3(effect.Position.X + MathF.Cos(angleB) * radius,
+                    effect.Position.Y + MathF.Sin(angleB) * radius, z);
+            }
         }
     }
 }

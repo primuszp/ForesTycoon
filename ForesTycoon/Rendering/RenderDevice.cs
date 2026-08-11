@@ -1,0 +1,118 @@
+using System;
+using System.Collections.Generic;
+using OpenTK.Graphics.OpenGL;
+using OpenTK.Mathematics;
+
+namespace ForesTycoon
+{
+    /// <summary>Shared core-profile geometry shader and explicit camera/model state.</summary>
+    static class RenderDevice
+    {
+        private static readonly Stack<Matrix4> modelStack = new Stack<Matrix4>();
+        private static int shader;
+        private static int viewProjectionLocation;
+        private static int modelLocation;
+        private static bool initialized;
+
+        public static Matrix4 ViewProjection { get; private set; } = Matrix4.Identity;
+        public static Matrix4 Model { get; private set; } = Matrix4.Identity;
+
+        public static void Initialize()
+        {
+            if (initialized) return;
+            const string vertexSource = @"#version 330 core
+layout(location = 0) in vec3 in_position;
+layout(location = 1) in vec4 in_color;
+uniform mat4 view_projection;
+uniform mat4 model;
+out vec4 vertex_color;
+void main()
+{
+    gl_Position = view_projection * model * vec4(in_position, 1.0);
+    vertex_color = in_color;
+}";
+            const string fragmentSource = @"#version 330 core
+in vec4 vertex_color;
+out vec4 output_color;
+void main()
+{
+    output_color = vertex_color;
+}";
+
+            int vertex = Compile(ShaderType.VertexShader, vertexSource);
+            int fragment = Compile(ShaderType.FragmentShader, fragmentSource);
+            shader = GL.CreateProgram();
+            GL.AttachShader(shader, vertex);
+            GL.AttachShader(shader, fragment);
+            GL.LinkProgram(shader);
+            GL.GetProgram(shader, GetProgramParameterName.LinkStatus, out int linked);
+            string log = GL.GetProgramInfoLog(shader);
+            GL.DeleteShader(vertex);
+            GL.DeleteShader(fragment);
+            if (linked == 0) throw new InvalidOperationException("Geometry shader link failed: " + log);
+
+            viewProjectionLocation = GL.GetUniformLocation(shader, "view_projection");
+            modelLocation = GL.GetUniformLocation(shader, "model");
+            initialized = true;
+        }
+
+        public static void SetCamera(Matrix4 viewProjection)
+        {
+            EnsureInitialized();
+            ViewProjection = viewProjection;
+            Model = Matrix4.Identity;
+            modelStack.Clear();
+        }
+
+        public static void UseGeometryShader()
+        {
+            EnsureInitialized();
+            GL.UseProgram(shader);
+            Matrix4 viewProjection = ViewProjection;
+            Matrix4 model = Model;
+            GL.UniformMatrix4(viewProjectionLocation, false, ref viewProjection);
+            GL.UniformMatrix4(modelLocation, false, ref model);
+        }
+
+        public static void PushModel() => modelStack.Push(Model);
+
+        public static void PopModel()
+        {
+            if (modelStack.Count == 0) throw new InvalidOperationException("Render model stack underflow.");
+            Model = modelStack.Pop();
+        }
+
+        public static void Translate(float x, float y, float z) =>
+            Model = Matrix4.CreateTranslation(x, y, z) * Model;
+
+        public static void Dispose()
+        {
+            if (!initialized) return;
+            DynamicPrimitiveBatch.DisposeDeviceResources();
+            GL.DeleteProgram(shader);
+            shader = 0;
+            initialized = false;
+            modelStack.Clear();
+        }
+
+        private static int Compile(ShaderType type, string source)
+        {
+            int handle = GL.CreateShader(type);
+            GL.ShaderSource(handle, source);
+            GL.CompileShader(handle);
+            GL.GetShader(handle, ShaderParameter.CompileStatus, out int compiled);
+            if (compiled == 0)
+            {
+                string log = GL.GetShaderInfoLog(handle);
+                GL.DeleteShader(handle);
+                throw new InvalidOperationException($"Geometry {type} compilation failed: {log}");
+            }
+            return handle;
+        }
+
+        private static void EnsureInitialized()
+        {
+            if (!initialized) throw new InvalidOperationException("RenderDevice.Initialize must be called with a current GL context.");
+        }
+    }
+}

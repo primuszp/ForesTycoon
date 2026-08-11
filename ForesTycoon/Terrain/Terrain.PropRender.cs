@@ -8,14 +8,14 @@ namespace ForesTycoon
     {
         internal void DrawTrees()
         {
-            ImmediateRenderer.Draw(PrimitiveType.Quads, () =>
+            DynamicPrimitiveBatch.Draw(PrimitiveType.Quads, () =>
             {
                 foreach (Tile tile in visibleTiles)
                     if (TryGetTree(tile, out float x, out float y, out float groundZ, out float surfaceZ))
                         DrawTreeTrunk(x, y, groundZ, surfaceZ);
             });
 
-            ImmediateRenderer.Draw(PrimitiveType.Triangles, () =>
+            DynamicPrimitiveBatch.Draw(PrimitiveType.Triangles, () =>
             {
                 foreach (Tile tile in visibleTiles)
                     if (TryGetTree(tile, out float x, out float y, out _, out float surfaceZ))
@@ -53,21 +53,21 @@ namespace ForesTycoon
             Color trunkLight = Color.FromArgb(115, 72, 32);
             Color trunkDark = Color.FromArgb(80, 50, 20);
 
-            GL.Color3(trunkLight);
-            GL.Vertex3(x - trunkRadius, y + trunkRadius, trunkBot); GL.Vertex3(x + trunkRadius, y + trunkRadius, trunkBot);
-            GL.Vertex3(x + trunkRadius, y + trunkRadius, trunkTop); GL.Vertex3(x - trunkRadius, y + trunkRadius, trunkTop);
+            DynamicPrimitiveBatch.Color3(trunkLight);
+            DynamicPrimitiveBatch.Vertex3(x - trunkRadius, y + trunkRadius, trunkBot); DynamicPrimitiveBatch.Vertex3(x + trunkRadius, y + trunkRadius, trunkBot);
+            DynamicPrimitiveBatch.Vertex3(x + trunkRadius, y + trunkRadius, trunkTop); DynamicPrimitiveBatch.Vertex3(x - trunkRadius, y + trunkRadius, trunkTop);
 
-            GL.Color3(trunkDark);
-            GL.Vertex3(x + trunkRadius, y + trunkRadius, trunkBot); GL.Vertex3(x + trunkRadius, y - trunkRadius, trunkBot);
-            GL.Vertex3(x + trunkRadius, y - trunkRadius, trunkTop); GL.Vertex3(x + trunkRadius, y + trunkRadius, trunkTop);
+            DynamicPrimitiveBatch.Color3(trunkDark);
+            DynamicPrimitiveBatch.Vertex3(x + trunkRadius, y + trunkRadius, trunkBot); DynamicPrimitiveBatch.Vertex3(x + trunkRadius, y - trunkRadius, trunkBot);
+            DynamicPrimitiveBatch.Vertex3(x + trunkRadius, y - trunkRadius, trunkTop); DynamicPrimitiveBatch.Vertex3(x + trunkRadius, y + trunkRadius, trunkTop);
 
-            GL.Color3(trunkLight);
-            GL.Vertex3(x + trunkRadius, y - trunkRadius, trunkBot); GL.Vertex3(x - trunkRadius, y - trunkRadius, trunkBot);
-            GL.Vertex3(x - trunkRadius, y - trunkRadius, trunkTop); GL.Vertex3(x + trunkRadius, y - trunkRadius, trunkTop);
+            DynamicPrimitiveBatch.Color3(trunkLight);
+            DynamicPrimitiveBatch.Vertex3(x + trunkRadius, y - trunkRadius, trunkBot); DynamicPrimitiveBatch.Vertex3(x - trunkRadius, y - trunkRadius, trunkBot);
+            DynamicPrimitiveBatch.Vertex3(x - trunkRadius, y - trunkRadius, trunkTop); DynamicPrimitiveBatch.Vertex3(x + trunkRadius, y - trunkRadius, trunkTop);
 
-            GL.Color3(trunkDark);
-            GL.Vertex3(x - trunkRadius, y - trunkRadius, trunkBot); GL.Vertex3(x - trunkRadius, y + trunkRadius, trunkBot);
-            GL.Vertex3(x - trunkRadius, y + trunkRadius, trunkTop); GL.Vertex3(x - trunkRadius, y - trunkRadius, trunkTop);
+            DynamicPrimitiveBatch.Color3(trunkDark);
+            DynamicPrimitiveBatch.Vertex3(x - trunkRadius, y - trunkRadius, trunkBot); DynamicPrimitiveBatch.Vertex3(x - trunkRadius, y + trunkRadius, trunkBot);
+            DynamicPrimitiveBatch.Vertex3(x - trunkRadius, y + trunkRadius, trunkTop); DynamicPrimitiveBatch.Vertex3(x - trunkRadius, y - trunkRadius, trunkTop);
         }
 
         private static void DrawTreeFoliage(float x, float y, float surfaceZ)
@@ -90,10 +90,10 @@ namespace ForesTycoon
                 for (int i = 0; i < 4; i++)
                 {
                     int j = (i + 1) % 4;
-                    GL.Color3(i == 0 || i == 3 ? light : dark);
-                    GL.Vertex3(px[i], py[i], baseZ);
-                    GL.Vertex3(px[j], py[j], baseZ);
-                    GL.Vertex3(x, y, tipZ);
+                    DynamicPrimitiveBatch.Color3(i == 0 || i == 3 ? light : dark);
+                    DynamicPrimitiveBatch.Vertex3(px[i], py[i], baseZ);
+                    DynamicPrimitiveBatch.Vertex3(px[j], py[j], baseZ);
+                    DynamicPrimitiveBatch.Vertex3(x, y, tipZ);
                 }
             }
         }

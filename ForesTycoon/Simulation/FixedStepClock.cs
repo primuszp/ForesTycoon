@@ -48,10 +48,10 @@ namespace ForesTycoon
             return executed;
         }
 
-        public void Reset()
+        public void Reset(ulong tick = 0)
         {
             accumulatorSeconds = 0.0;
-            Tick = 0;
+            Tick = tick;
         }
     }
 }

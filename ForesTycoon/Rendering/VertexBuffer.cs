@@ -7,6 +7,7 @@ namespace ForesTycoon
     {
         private int vboId;
         private int eboId;
+        private int vaoId;
         private bool disposed;
         private uint[] indices;
         private Vertex[] vertices;
@@ -46,6 +47,16 @@ namespace ForesTycoon
             }
         }
 
+        private int VaoId
+        {
+            get
+            {
+                ThrowIfDisposed();
+                if (vaoId == 0) vaoId = GL.GenVertexArray();
+                return vaoId;
+            }
+        }
+
         public VertexBuffer(PrimitiveType mode, BufferUsageHint usageHint = BufferUsageHint.StaticDraw)
         {
             this.mode = mode;
@@ -61,11 +72,17 @@ namespace ForesTycoon
             else
             {
                 this.vertices = data;
+                GL.BindVertexArray(VaoId);
                 GL.BindBuffer(BufferTarget.ArrayBuffer, VboId);
                 GL.BufferData(BufferTarget.ArrayBuffer, new IntPtr(data.Length * Vertex.Stride), data, usageHint);
+                GL.EnableVertexAttribArray(0);
+                GL.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, Vertex.Stride, 0);
+                GL.EnableVertexAttribArray(1);
+                GL.VertexAttribPointer(1, 4, VertexAttribPointerType.UnsignedByte, true, Vertex.Stride, 6 * sizeof(float));
                 GL.GetBufferParameter(BufferTarget.ArrayBuffer, BufferParameterName.BufferSize, out size);
                 if (vertices.Length * Vertex.Stride != size)
                     throw new ApplicationException("Vertex data not uploaded correctly");
+                GL.BindVertexArray(0);
             }
         }
 
@@ -78,11 +95,13 @@ namespace ForesTycoon
             else
             {
                 this.indices = data;
+                GL.BindVertexArray(VaoId);
                 GL.BindBuffer(BufferTarget.ElementArrayBuffer, EboId);
                 GL.BufferData(BufferTarget.ElementArrayBuffer, new IntPtr(indices.Length * sizeof(uint)), indices, BufferUsageHint.StaticDraw);
                 GL.GetBufferParameter(BufferTarget.ElementArrayBuffer, BufferParameterName.BufferSize, out size);
                 if (indices.Length * sizeof(uint) != size)
                     throw new ApplicationException("Element data not uploaded correctly");
+                GL.BindVertexArray(0);
             }
         }
 
@@ -91,22 +110,11 @@ namespace ForesTycoon
             ThrowIfDisposed();
             if (vertices == null || vertices.Length == 0) return;
 
-            GL.EnableClientState(ArrayCap.VertexArray);
-            GL.EnableClientState(ArrayCap.NormalArray);
-            GL.EnableClientState(ArrayCap.ColorArray);
-
-            GL.BindBuffer(BufferTarget.ArrayBuffer, VboId);
-            {
-                GL.VertexPointer(3, VertexPointerType.Float, Vertex.Stride, new IntPtr(0));
-                GL.NormalPointer(NormalPointerType.Float, Vertex.Stride, new IntPtr(3 * sizeof(float)));
-                GL.ColorPointer(4, ColorPointerType.UnsignedByte, Vertex.Stride, new IntPtr(6 * sizeof(float)));
-                GL.DrawArrays(mode, 0, vertices.Length);
-            }
-            GL.BindBuffer(BufferTarget.ArrayBuffer, 0);
-
-            GL.DisableClientState(ArrayCap.VertexArray);
-            GL.DisableClientState(ArrayCap.NormalArray);
-            GL.DisableClientState(ArrayCap.ColorArray);
+            RenderDevice.UseGeometryShader();
+            GL.BindVertexArray(VaoId);
+            GL.DrawArrays(mode, 0, vertices.Length);
+            RenderMetrics.RecordDraw(vertices.Length);
+            GL.BindVertexArray(0);
         }
 
         public void DrawElements()
@@ -114,24 +122,11 @@ namespace ForesTycoon
             ThrowIfDisposed();
             if (vertices == null || vertices.Length == 0 || indices == null || indices.Length == 0) return;
 
-            GL.EnableClientState(ArrayCap.VertexArray);
-            GL.EnableClientState(ArrayCap.NormalArray);
-            GL.EnableClientState(ArrayCap.ColorArray);
-
-            GL.BindBuffer(BufferTarget.ArrayBuffer, VboId);
-            GL.BindBuffer(BufferTarget.ElementArrayBuffer, EboId);
-            {
-                GL.VertexPointer(3, VertexPointerType.Float, Vertex.Stride, new IntPtr(0));
-                GL.NormalPointer(NormalPointerType.Float, Vertex.Stride, new IntPtr(3 * sizeof(float)));
-                GL.ColorPointer(4, ColorPointerType.UnsignedByte, Vertex.Stride, new IntPtr(6 * sizeof(float)));
-                GL.DrawElements(mode, indices.Length, DrawElementsType.UnsignedInt, IntPtr.Zero);
-            }
-            GL.BindBuffer(BufferTarget.ArrayBuffer, 0);
-            GL.BindBuffer(BufferTarget.ElementArrayBuffer, 0);
-
-            GL.DisableClientState(ArrayCap.VertexArray);
-            GL.DisableClientState(ArrayCap.NormalArray);
-            GL.DisableClientState(ArrayCap.ColorArray);
+            RenderDevice.UseGeometryShader();
+            GL.BindVertexArray(VaoId);
+            GL.DrawElements(mode, indices.Length, DrawElementsType.UnsignedInt, IntPtr.Zero);
+            RenderMetrics.RecordDraw(indices.Length);
+            GL.BindVertexArray(0);
         }
 
         public void Dispose()
@@ -140,6 +135,7 @@ namespace ForesTycoon
             disposed = true;
             if (vboId != 0) { GL.DeleteBuffers(1, ref vboId); vboId = 0; }
             if (eboId != 0) { GL.DeleteBuffers(1, ref eboId); eboId = 0; }
+            if (vaoId != 0) { GL.DeleteVertexArray(vaoId); vaoId = 0; }
         }
 
         private void ThrowIfDisposed()

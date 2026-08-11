@@ -1,25 +1,18 @@
-using System.Runtime.Versioning;
 using System;
-using System.Windows.Forms;
-
-[assembly: SupportedOSPlatform("windows6.1")]
 
 namespace ForesTycoon
 {
     static class Program
     {
-        [System.STAThread]
-        static void Main()
+        static void Main(string[] args)
         {
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-            Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
-            Application.ThreadException += (_, args) =>
-                MessageBox.Show(args.Exception.ToString(), "Unhandled UI exception", MessageBoxButtons.OK, MessageBoxIcon.Error);
             AppDomain.CurrentDomain.UnhandledException += (_, args) =>
-                MessageBox.Show(args.ExceptionObject?.ToString() ?? "Unknown fatal error", "Unhandled fatal exception", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                Console.Error.WriteLine(args.ExceptionObject?.ToString() ?? "Unknown fatal error");
 
-            Application.Run(new MainForm());
+            bool smokeTest = Array.Exists(args, argument =>
+                string.Equals(argument, "--smoke-test", StringComparison.OrdinalIgnoreCase));
+            using Viewport game = new Viewport(smokeTest ? 120UL : null);
+            game.Run();
         }
     }
 }

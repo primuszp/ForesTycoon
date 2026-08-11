@@ -10,9 +10,7 @@ using Vector2 = System.Numerics.Vector2;
 namespace ForesTycoon
 {
     /// <summary>
-    /// Minimális Dear ImGui (ImGui.NET) renderer + egér-input híd OpenTK 4-hez,
-    /// WinForms GLControl alá. A terep immediate-mode renderje mellett fut: a
-    /// compatibility kontextus a modern shader/VAO hívásokat is támogatja.
+    /// Dear ImGui renderer and input bridge for the cross-platform OpenGL core host.
     /// </summary>
     sealed class ImGuiController : IDisposable
     {
@@ -274,6 +272,7 @@ void main()
                             GL.Scissor(scissorX, scissorY, scissorW, scissorH);
                             GL.DrawElementsBaseVertex(PrimitiveType.Triangles, (int)cmd.ElemCount,
                                 DrawElementsType.UnsignedShort, (IntPtr)(cmd.IdxOffset * sizeof(ushort)), (int)cmd.VtxOffset);
+                            RenderMetrics.RecordDraw((int)cmd.ElemCount);
                         }
                     }
                 }

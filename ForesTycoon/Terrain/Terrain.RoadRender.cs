@@ -16,7 +16,7 @@ namespace ForesTycoon
 
             if (roads.Count > 0)
             {
-                ImmediateRenderer.Draw(PrimitiveType.Quads, () =>
+                DynamicPrimitiveBatch.Draw(PrimitiveType.Quads, () =>
                 {
                     foreach (Tile tile in visibleTiles)
                     {
@@ -25,7 +25,7 @@ namespace ForesTycoon
                     }
                 });
 
-                ImmediateRenderer.Draw(PrimitiveType.Quads, () =>
+                DynamicPrimitiveBatch.Draw(PrimitiveType.Quads, () =>
                 {
                     foreach (Tile tile in visibleTiles)
                     {
@@ -43,7 +43,7 @@ namespace ForesTycoon
 
                 using (new RenderStateScope().AlphaBlend())
                 {
-                    ImmediateRenderer.Draw(PrimitiveType.Quads, () =>
+                    DynamicPrimitiveBatch.Draw(PrimitiveType.Quads, () =>
                     {
                         foreach (RoadPlanStep step in previewTiles)
                         {
@@ -64,13 +64,13 @@ namespace ForesTycoon
                             RoadPlacement placement = AnalyzeRoadPlacement(t, step.Edges);
                             bool bad = previewRemove || !placement.IsValid;
                             bool foundation = !bad && placement.Kind == RoadPlacementKind.FoundationSurface;
-                            GL.Color4(bad ? badLine : (foundation ? foundationLine : okLine));
-                            ImmediateRenderer.Draw(PrimitiveType.LineLoop, () =>
+                            DynamicPrimitiveBatch.Color4(bad ? badLine : (foundation ? foundationLine : okLine));
+                            DynamicPrimitiveBatch.Draw(PrimitiveType.LineLoop, () =>
                             {
-                                GL.Vertex3(t.W.xPos, t.W.yPos, t.W.zPos);
-                                GL.Vertex3(t.S.xPos, t.S.yPos, t.S.zPos);
-                                GL.Vertex3(t.E.xPos, t.E.yPos, t.E.zPos);
-                                GL.Vertex3(t.N.xPos, t.N.yPos, t.N.zPos);
+                                DynamicPrimitiveBatch.Vertex3(t.W.xPos, t.W.yPos, t.W.zPos);
+                                DynamicPrimitiveBatch.Vertex3(t.S.xPos, t.S.yPos, t.S.zPos);
+                                DynamicPrimitiveBatch.Vertex3(t.E.xPos, t.E.yPos, t.E.zPos);
+                                DynamicPrimitiveBatch.Vertex3(t.N.xPos, t.N.yPos, t.N.zPos);
                             });
                         }
                     }
@@ -101,7 +101,7 @@ namespace ForesTycoon
             float width = Math.Min(tileSizeH, tileSizeV) * widthFactor;
             int n = CountEdges(edges);
 
-            GL.Color4(color);
+            DynamicPrimitiveBatch.Color4(color);
 
             // Kanyar (2 szomszédos él): negyedív a KÖZÖS sarok körül. Az ív az élek
             // közepénél merőlegesen lép ki → érintőfolytonosan illeszkedik a szomszéd
@@ -152,7 +152,7 @@ namespace ForesTycoon
                 float t1 = (float)((degA + (degB - degA) * (i + 1) / seg) * Math.PI / 180.0);
                 Vector3 a = TileUV(W, S, E, N, cu + rf * (float)Math.Cos(t0), cv + rf * (float)Math.Sin(t0));
                 Vector3 b = TileUV(W, S, E, N, cu + rf * (float)Math.Cos(t1), cv + rf * (float)Math.Sin(t1));
-                GL.Vertex3(P); GL.Vertex3(a); GL.Vertex3(b); GL.Vertex3(P);
+                DynamicPrimitiveBatch.Vertex3(P); DynamicPrimitiveBatch.Vertex3(a); DynamicPrimitiveBatch.Vertex3(b); DynamicPrimitiveBatch.Vertex3(P);
             }
         }
 
@@ -195,10 +195,10 @@ namespace ForesTycoon
                 float c0 = (float)Math.Cos(t0), s0 = (float)Math.Sin(t0);
                 float c1 = (float)Math.Cos(t1), s1 = (float)Math.Sin(t1);
 
-                GL.Vertex3(TileUV(W, S, E, N, cu + rInner * c0, cv + rInner * s0));
-                GL.Vertex3(TileUV(W, S, E, N, cu + rOuter * c0, cv + rOuter * s0));
-                GL.Vertex3(TileUV(W, S, E, N, cu + rOuter * c1, cv + rOuter * s1));
-                GL.Vertex3(TileUV(W, S, E, N, cu + rInner * c1, cv + rInner * s1));
+                DynamicPrimitiveBatch.Vertex3(TileUV(W, S, E, N, cu + rInner * c0, cv + rInner * s0));
+                DynamicPrimitiveBatch.Vertex3(TileUV(W, S, E, N, cu + rOuter * c0, cv + rOuter * s0));
+                DynamicPrimitiveBatch.Vertex3(TileUV(W, S, E, N, cu + rOuter * c1, cv + rOuter * s1));
+                DynamicPrimitiveBatch.Vertex3(TileUV(W, S, E, N, cu + rInner * c1, cv + rInner * s1));
             }
         }
 
@@ -210,10 +210,10 @@ namespace ForesTycoon
             float px = -dy / len * width * 0.5f;
             float py = dx / len * width * 0.5f;
 
-            GL.Vertex3(c.X + px, c.Y + py, c.Z);
-            GL.Vertex3(c.X - px, c.Y - py, c.Z);
-            GL.Vertex3(m.X - px, m.Y - py, m.Z);
-            GL.Vertex3(m.X + px, m.Y + py, m.Z);
+            DynamicPrimitiveBatch.Vertex3(c.X + px, c.Y + py, c.Z);
+            DynamicPrimitiveBatch.Vertex3(c.X - px, c.Y - py, c.Z);
+            DynamicPrimitiveBatch.Vertex3(m.X - px, m.Y - py, m.Z);
+            DynamicPrimitiveBatch.Vertex3(m.X + px, m.Y + py, m.Z);
         }
 
     }

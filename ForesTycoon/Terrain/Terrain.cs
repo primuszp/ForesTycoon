@@ -143,6 +143,7 @@ namespace ForesTycoon
         public int TotalChunkCount => chunkIndex.Chunks.Count;
         public int TileWidth => data.TileSizeH;
         public int TileHeight => data.TileSizeV;
+        internal TerrainSettings Settings => settings;
 
         public bool TryGetNodePosition(int nodeId, out Vector3 position)
         {

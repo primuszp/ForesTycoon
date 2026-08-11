@@ -131,10 +131,7 @@ namespace ForesTycoon
         public bool CheckTile(int u, int v) =>
             u >= 0 && u < NodeCols - 1 && v >= 0 && v < NodeRows - 1;
 
-        public List<Node> GetNeighbours(Node node)
-        {
-            return new List<Node>(nodeNeighbours[node.Id]);
-        }
+        public ReadOnlySpan<Node> GetNeighbours(Node node) => nodeNeighbours[node.Id];
 
         public int GetNeighbours(Node node, Span<Node> buffer)
         {
@@ -143,10 +140,7 @@ namespace ForesTycoon
             return cached.Length;
         }
 
-        public List<Tile> GetTilesByNode(Node node)
-        {
-            return new List<Tile>(nodeTiles[node.Id]);
-        }
+        public ReadOnlySpan<Tile> GetTilesByNode(Node node) => nodeTiles[node.Id];
 
         public int GetTilesByNode(Node node, Span<Tile> buffer)
         {
@@ -155,10 +149,7 @@ namespace ForesTycoon
             return cached.Length;
         }
 
-        public IEnumerable<Tile> GetAdjacentTiles(Tile tile)
-        {
-            return adjacentTiles[tile.Id];
-        }
+        public ReadOnlySpan<Tile> GetAdjacentTiles(Tile tile) => adjacentTiles[tile.Id];
 
         public int GetAdjacentTiles(Tile tile, Span<Tile> buffer)
         {
@@ -178,19 +169,6 @@ namespace ForesTycoon
         public static bool TileContainsNode(Tile tile, Node node) =>
             tile.W.Id == node.Id || tile.S.Id == node.Id ||
             tile.E.Id == node.Id || tile.N.Id == node.Id;
-
-        public List<Tile> GetSharedTiles(Node a, Node b)
-        {
-            List<Tile> shared = new List<Tile>(2);
-            Tile[] cached = nodeTiles[a.Id];
-            for (int i = 0; i < cached.Length; i++)
-            {
-                Tile tile = cached[i];
-                if (TileContainsNode(tile, b))
-                    shared.Add(tile);
-            }
-            return shared;
-        }
 
         public int GetSharedTiles(Node a, Node b, Span<Tile> buffer)
         {

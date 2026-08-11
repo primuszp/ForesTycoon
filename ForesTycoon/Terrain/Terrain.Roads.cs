@@ -62,6 +62,13 @@ namespace ForesTycoon
             return true;
         }
 
+        public void SetRoadPreview(int startTileId, int endTileId, bool remove)
+        {
+            Tile from = startTileId >= 0 && startTileId < tiles.Length ? tiles[startTileId] : null;
+            Tile to = endTileId >= 0 && endTileId < tiles.Length ? tiles[endTileId] : null;
+            SetRoadPreview(from, to, remove);
+        }
+
         public bool AddRoadTile(Tile t)
         {
             RoadEdge edges = RoadEdge.WS | RoadEdge.EN;

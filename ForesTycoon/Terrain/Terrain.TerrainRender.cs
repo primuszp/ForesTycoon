@@ -10,7 +10,7 @@ namespace ForesTycoon
         {
             // A kitöltött terep írja a depth buffert; a koplanáris overlay rétegek
             // később depth írás nélkül rajzolódnak, így nincs Z-fighting.
-            ImmediateRenderer.Draw(PrimitiveType.Quads, () =>
+            DynamicPrimitiveBatch.Draw(PrimitiveType.Quads, () =>
             {
                 foreach (Tile tile in visibleTiles)
                 {
@@ -33,12 +33,12 @@ namespace ForesTycoon
                 bool tileFlip = flippedDiagonalTiles.Contains(tile.Id);
                 VertexBuffer vbo = vbos[tile.Code + "_" + tile.Low + (tileFlip ? "_f" : "")];
 
-                GL.PushMatrix();
+                RenderDevice.PushModel();
                 {
-                    GL.Translate(tile.W.xPos, tile.W.yPos, tile.LowPos);
+                    RenderDevice.Translate(tile.W.xPos, tile.W.yPos, tile.LowPos);
                     vbo.DrawArray();
                 }
-                GL.PopMatrix();
+                RenderDevice.PopModel();
             }
 
             DrawFoundationTerrainSurfaces();
@@ -51,11 +51,11 @@ namespace ForesTycoon
             Vector3 e = new Vector3(tile.E.xPos, tile.E.yPos, tile.E.zPos);
             Vector3 n = new Vector3(tile.N.xPos, tile.N.yPos, tile.N.zPos);
 
-            GL.Color4(ShadedTileColor(TerrainSurfaceColor(tile.Code, tile.Low), w, s, e));
-            GL.Vertex3(w);
-            GL.Vertex3(s);
-            GL.Vertex3(e);
-            GL.Vertex3(n);
+            DynamicPrimitiveBatch.Color4(ShadedTileColor(TerrainSurfaceColor(tile.Code, tile.Low), w, s, e));
+            DynamicPrimitiveBatch.Vertex3(w);
+            DynamicPrimitiveBatch.Vertex3(s);
+            DynamicPrimitiveBatch.Vertex3(e);
+            DynamicPrimitiveBatch.Vertex3(n);
         }
 
         internal void DrawTerrainDecals()
@@ -67,7 +67,7 @@ namespace ForesTycoon
         private void DrawLandGrid()
         {
             Color terrainLine = Color.FromArgb(82, 115, 38);
-            ImmediateRenderer.Draw(PrimitiveType.Lines, () =>
+            DynamicPrimitiveBatch.Draw(PrimitiveType.Lines, () =>
             {
                 foreach (Tile tile in visibleTiles)
                 {
@@ -107,31 +107,31 @@ namespace ForesTycoon
 
         private static void DrawTileEdgesByMaterial(Tile tile, TileSurfaceVisual visual, Color terrainLine)
         {
-            GL.Color4(EdgeLineColor(visual.EdgeWS, terrainLine));
-            GL.Vertex3(tile.W.xPos, tile.W.yPos, tile.W.zPos); GL.Vertex3(tile.S.xPos, tile.S.yPos, tile.S.zPos);
+            DynamicPrimitiveBatch.Color4(EdgeLineColor(visual.EdgeWS, terrainLine));
+            DynamicPrimitiveBatch.Vertex3(tile.W.xPos, tile.W.yPos, tile.W.zPos); DynamicPrimitiveBatch.Vertex3(tile.S.xPos, tile.S.yPos, tile.S.zPos);
 
-            GL.Color4(EdgeLineColor(visual.EdgeSE, terrainLine));
-            GL.Vertex3(tile.S.xPos, tile.S.yPos, tile.S.zPos); GL.Vertex3(tile.E.xPos, tile.E.yPos, tile.E.zPos);
+            DynamicPrimitiveBatch.Color4(EdgeLineColor(visual.EdgeSE, terrainLine));
+            DynamicPrimitiveBatch.Vertex3(tile.S.xPos, tile.S.yPos, tile.S.zPos); DynamicPrimitiveBatch.Vertex3(tile.E.xPos, tile.E.yPos, tile.E.zPos);
 
-            GL.Color4(EdgeLineColor(visual.EdgeEN, terrainLine));
-            GL.Vertex3(tile.E.xPos, tile.E.yPos, tile.E.zPos); GL.Vertex3(tile.N.xPos, tile.N.yPos, tile.N.zPos);
+            DynamicPrimitiveBatch.Color4(EdgeLineColor(visual.EdgeEN, terrainLine));
+            DynamicPrimitiveBatch.Vertex3(tile.E.xPos, tile.E.yPos, tile.E.zPos); DynamicPrimitiveBatch.Vertex3(tile.N.xPos, tile.N.yPos, tile.N.zPos);
 
-            GL.Color4(EdgeLineColor(visual.EdgeNW, terrainLine));
-            GL.Vertex3(tile.N.xPos, tile.N.yPos, tile.N.zPos); GL.Vertex3(tile.W.xPos, tile.W.yPos, tile.W.zPos);
+            DynamicPrimitiveBatch.Color4(EdgeLineColor(visual.EdgeNW, terrainLine));
+            DynamicPrimitiveBatch.Vertex3(tile.N.xPos, tile.N.yPos, tile.N.zPos); DynamicPrimitiveBatch.Vertex3(tile.W.xPos, tile.W.yPos, tile.W.zPos);
         }
 
         private void DrawTileDiagonal(Tile tile, TileSurfaceVisual visual)
         {
-            GL.Color4(RoadFoundationLineColor);
+            DynamicPrimitiveBatch.Color4(RoadFoundationLineColor);
             if (UseTileDiagonalWE(tile, visual))
             {
-                GL.Vertex3(tile.W.xPos, tile.W.yPos, tile.W.zPos);
-                GL.Vertex3(tile.E.xPos, tile.E.yPos, tile.E.zPos);
+                DynamicPrimitiveBatch.Vertex3(tile.W.xPos, tile.W.yPos, tile.W.zPos);
+                DynamicPrimitiveBatch.Vertex3(tile.E.xPos, tile.E.yPos, tile.E.zPos);
             }
             else
             {
-                GL.Vertex3(tile.N.xPos, tile.N.yPos, tile.N.zPos);
-                GL.Vertex3(tile.S.xPos, tile.S.yPos, tile.S.zPos);
+                DynamicPrimitiveBatch.Vertex3(tile.N.xPos, tile.N.yPos, tile.N.zPos);
+                DynamicPrimitiveBatch.Vertex3(tile.S.xPos, tile.S.yPos, tile.S.zPos);
             }
         }
 
@@ -144,7 +144,7 @@ namespace ForesTycoon
             Color colorBottom = Color.FromArgb(130, 100,  65);
             Color colorRim    = Color.FromArgb( 68,  48,  25);
 
-            ImmediateRenderer.Draw(PrimitiveType.Quads, () =>
+            DynamicPrimitiveBatch.Draw(PrimitiveType.Quads, () =>
             {
 
             // ── South edge (v = 0) ────────────────────────────────────────────
@@ -155,13 +155,13 @@ namespace ForesTycoon
                 float rimA = a.zPos - RIM_H;
                 float rimB = b.zPos - RIM_H;
                 // sötét peremcsík (felső sáv)
-                GL.Color3(colorRim);
-                GL.Vertex3(a.xPos, a.yPos, a.zPos); GL.Vertex3(b.xPos, b.yPos, b.zPos);
-                GL.Vertex3(b.xPos, b.yPos, rimB);   GL.Vertex3(a.xPos, a.yPos, rimA);
+                DynamicPrimitiveBatch.Color3(colorRim);
+                DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, a.zPos); DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, b.zPos);
+                DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, rimB);   DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, rimA);
                 // világos oldallap (perem alatt → aljáig)
-                GL.Color3(colorFront);
-                GL.Vertex3(a.xPos, a.yPos, rimA);   GL.Vertex3(b.xPos, b.yPos, rimB);
-                GL.Vertex3(b.xPos, b.yPos, BASE_Z); GL.Vertex3(a.xPos, a.yPos, BASE_Z);
+                DynamicPrimitiveBatch.Color3(colorFront);
+                DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, rimA);   DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, rimB);
+                DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, BASE_Z); DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, BASE_Z);
             }
 
             // ── North edge (v = nodeRows-1) ───────────────────────────────────
@@ -171,12 +171,12 @@ namespace ForesTycoon
                 Node b = getNodeByCoords(u + 1, nodeRows - 1);
                 float rimA = a.zPos - RIM_H;
                 float rimB = b.zPos - RIM_H;
-                GL.Color3(colorRim);
-                GL.Vertex3(b.xPos, b.yPos, b.zPos); GL.Vertex3(a.xPos, a.yPos, a.zPos);
-                GL.Vertex3(a.xPos, a.yPos, rimA);   GL.Vertex3(b.xPos, b.yPos, rimB);
-                GL.Color3(colorFront);
-                GL.Vertex3(b.xPos, b.yPos, rimB);   GL.Vertex3(a.xPos, a.yPos, rimA);
-                GL.Vertex3(a.xPos, a.yPos, BASE_Z); GL.Vertex3(b.xPos, b.yPos, BASE_Z);
+                DynamicPrimitiveBatch.Color3(colorRim);
+                DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, b.zPos); DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, a.zPos);
+                DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, rimA);   DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, rimB);
+                DynamicPrimitiveBatch.Color3(colorFront);
+                DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, rimB);   DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, rimA);
+                DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, BASE_Z); DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, BASE_Z);
             }
 
             // ── West edge (u = 0) ─────────────────────────────────────────────
@@ -186,12 +186,12 @@ namespace ForesTycoon
                 Node b = getNodeByCoords(0, v + 1);
                 float rimA = a.zPos - RIM_H;
                 float rimB = b.zPos - RIM_H;
-                GL.Color3(colorRim);
-                GL.Vertex3(a.xPos, a.yPos, a.zPos); GL.Vertex3(a.xPos, a.yPos, rimA);
-                GL.Vertex3(b.xPos, b.yPos, rimB);   GL.Vertex3(b.xPos, b.yPos, b.zPos);
-                GL.Color3(colorSide);
-                GL.Vertex3(a.xPos, a.yPos, rimA);   GL.Vertex3(a.xPos, a.yPos, BASE_Z);
-                GL.Vertex3(b.xPos, b.yPos, BASE_Z); GL.Vertex3(b.xPos, b.yPos, rimB);
+                DynamicPrimitiveBatch.Color3(colorRim);
+                DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, a.zPos); DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, rimA);
+                DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, rimB);   DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, b.zPos);
+                DynamicPrimitiveBatch.Color3(colorSide);
+                DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, rimA);   DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, BASE_Z);
+                DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, BASE_Z); DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, rimB);
             }
 
             // ── East edge (u = nodeCols-1) ────────────────────────────────────
@@ -201,24 +201,24 @@ namespace ForesTycoon
                 Node b = getNodeByCoords(nodeCols - 1, v + 1);
                 float rimA = a.zPos - RIM_H;
                 float rimB = b.zPos - RIM_H;
-                GL.Color3(colorRim);
-                GL.Vertex3(b.xPos, b.yPos, b.zPos); GL.Vertex3(b.xPos, b.yPos, rimB);
-                GL.Vertex3(a.xPos, a.yPos, rimA);   GL.Vertex3(a.xPos, a.yPos, a.zPos);
-                GL.Color3(colorSide);
-                GL.Vertex3(b.xPos, b.yPos, rimB);   GL.Vertex3(b.xPos, b.yPos, BASE_Z);
-                GL.Vertex3(a.xPos, a.yPos, BASE_Z); GL.Vertex3(a.xPos, a.yPos, rimA);
+                DynamicPrimitiveBatch.Color3(colorRim);
+                DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, b.zPos); DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, rimB);
+                DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, rimA);   DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, a.zPos);
+                DynamicPrimitiveBatch.Color3(colorSide);
+                DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, rimB);   DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, BASE_Z);
+                DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, BASE_Z); DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, rimA);
             }
 
             // ── Aljlap ────────────────────────────────────────────────────────
-            GL.Color3(colorBottom);
+            DynamicPrimitiveBatch.Color3(colorBottom);
             Node sw = getNodeByCoords(0,            0);
             Node se = getNodeByCoords(nodeCols - 1, 0);
             Node ne = getNodeByCoords(nodeCols - 1, nodeRows - 1);
             Node nw = getNodeByCoords(0,            nodeRows - 1);
-            GL.Vertex3(sw.xPos, sw.yPos, BASE_Z);
-            GL.Vertex3(se.xPos, se.yPos, BASE_Z);
-            GL.Vertex3(ne.xPos, ne.yPos, BASE_Z);
-            GL.Vertex3(nw.xPos, nw.yPos, BASE_Z);
+            DynamicPrimitiveBatch.Vertex3(sw.xPos, sw.yPos, BASE_Z);
+            DynamicPrimitiveBatch.Vertex3(se.xPos, se.yPos, BASE_Z);
+            DynamicPrimitiveBatch.Vertex3(ne.xPos, ne.yPos, BASE_Z);
+            DynamicPrimitiveBatch.Vertex3(nw.xPos, nw.yPos, BASE_Z);
 
             });
         }

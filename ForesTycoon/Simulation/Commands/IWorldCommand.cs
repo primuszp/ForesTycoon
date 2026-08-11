@@ -3,6 +3,7 @@ namespace ForesTycoon
     interface IWorldCommand
     {
         void Execute(IWorldCommandTarget world);
+        WorldCommandRecord ToRecord(ulong tick);
     }
 
     interface IWorldCommandTarget

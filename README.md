@@ -38,41 +38,64 @@ The project is still in prototype stage. Right now the emphasis is on terrain te
 
 - C#
 - .NET 8
-- Windows Forms
-- OpenTK 3.3.3
+- OpenTK 4 cross-platform `GameWindow`
+- OpenGL 3.3 core-profile renderer with GLSL, VAO/VBO batching and shader-based ImGui
+- ImGui.NET
 
 ## Run
 
 Requirements:
 
-- Windows
-- .NET 8 SDK
+- macOS, Windows or Linux with OpenGL 3.3 core support
+- .NET 8 or newer SDK
 
 From the repository root:
 
-```powershell
-dotnet run --project .\ForesTycoon\ForesTycoon.csproj
+```sh
+dotnet run --project ForesTycoon/ForesTycoon.csproj
 ```
 
 You can also open `ForesTycoon.sln` in Visual Studio.
 
+The test suite is cross-platform:
+
+```sh
+dotnet test ForesTycoon.sln
+```
+
+To validate native window creation and rendering in CI or on a new machine:
+
+```sh
+dotnet run --project ForesTycoon/ForesTycoon.csproj -- --smoke-test
+```
+
+The smoke test renders 120 frames and exits automatically.
+
 ## Controls
 
-- Left mouse: rotate camera
-- Right mouse: pan view
+- Left-drag in inspect mode: rotate camera
+- Right-drag: pan view
 - Mouse wheel: zoom
 - Left / Right arrow: rotate toward fixed isometric directions
 - Up / Down arrow: change tilt angle
-- Left click on a node: raise terrain
-- Right click on a node: lower terrain
+- Left click with the raise/lower tool: edit terrain
+- Left-drag with the road tools: build or remove a path
+- Cmd/Ctrl+S: quicksave
+- Cmd/Ctrl+L: quickload
+
+Quicksaves are stored under the operating system's local application-data directory in `ForesTycoon/quicksave.json`.
 
 ## Project Structure
 
-- [ForesTycoon/Terrain.cs](ForesTycoon/Terrain.cs): terrain generation, water, trees, terrain rendering logic
-- [ForesTycoon/Viewport.cs](ForesTycoon/Viewport.cs): OpenGL viewport, camera, input
-- [ForesTycoon/Tile.cs](ForesTycoon/Tile.cs): tile representation
-- [ForesTycoon/Node.cs](ForesTycoon/Node.cs): node representation
-- [ForesTycoon/VertexBuffer.cs](ForesTycoon/VertexBuffer.cs): lightweight OpenGL buffer handling
+- [ForesTycoon/App](ForesTycoon/App): window, OpenGL context, frame loop, camera and platform input
+- [ForesTycoon/Interaction](ForesTycoon/Interaction): testable user-intent and editing gesture handling
+- [ForesTycoon/Simulation](ForesTycoon/Simulation): fixed-step world, commands, vehicles and effects
+- [ForesTycoon/Animation](ForesTycoon/Animation): interpolated animation timelines and playback modes
+- [ForesTycoon/Terrain](ForesTycoon/Terrain): terrain data, generation, hydrology, roads and chunk updates
+- [ForesTycoon/Rendering](ForesTycoon/Rendering): ordered render pipeline and GPU helpers
+- [ForesTycoon/Diagnostics](ForesTycoon/Diagnostics): frame, simulation, allocation and draw-call metrics
+- [ForesTycoon/Camera](ForesTycoon/Camera): platform-independent isometric camera state
+- [Engine architecture](docs/engine-architecture.md): responsibility boundaries, performance policy and roadmap
 
 ## Current Direction
 

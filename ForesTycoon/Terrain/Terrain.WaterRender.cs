@@ -18,7 +18,7 @@ namespace ForesTycoon
 
             using (new RenderStateScope().AlphaBlend())
             {
-                ImmediateRenderer.Draw(PrimitiveType.Quads, () =>
+                DynamicPrimitiveBatch.Draw(PrimitiveType.Quads, () =>
                 {
                     foreach (Tile tile in visibleTiles)
                     {
@@ -30,15 +30,15 @@ namespace ForesTycoon
                             float cy = (tile.W.yPos + tile.N.yPos) * 0.5f;
                             float wz = ApplyClampedWave(cx, cy, baseZ, RiverWaterHeight, t * 1.4f);
 
-                            GL.Color4(rc == 4 ? riverDeep : riverShallow);
-                            GL.Vertex3(tile.W.xPos, tile.W.yPos, wz);
-                            GL.Vertex3(tile.S.xPos, tile.S.yPos, wz);
-                            GL.Vertex3(tile.E.xPos, tile.E.yPos, wz);
-                            GL.Vertex3(tile.N.xPos, tile.N.yPos, wz);
+                            DynamicPrimitiveBatch.Color4(rc == 4 ? riverDeep : riverShallow);
+                            DynamicPrimitiveBatch.Vertex3(tile.W.xPos, tile.W.yPos, wz);
+                            DynamicPrimitiveBatch.Vertex3(tile.S.xPos, tile.S.yPos, wz);
+                            DynamicPrimitiveBatch.Vertex3(tile.E.xPos, tile.E.yPos, wz);
+                            DynamicPrimitiveBatch.Vertex3(tile.N.xPos, tile.N.yPos, wz);
                     }
                 });
 
-                ImmediateRenderer.Draw(PrimitiveType.Lines, () =>
+                DynamicPrimitiveBatch.Draw(PrimitiveType.Lines, () =>
                 {
                     foreach (Tile tile in visibleTiles)
                     {
@@ -54,11 +54,11 @@ namespace ForesTycoon
                             float zwE = ApplyClampedWave(tile.E.xPos, tile.E.yPos, baseZ, RiverWaterHeight, ts);
                             float zwW = ApplyClampedWave(tile.W.xPos, tile.W.yPos, baseZ, RiverWaterHeight, ts);
 
-                            GL.Color4(riverGrid);
-                            GL.Vertex3(tile.W.xPos, tile.W.yPos, zwW); GL.Vertex3(tile.S.xPos, tile.S.yPos, zwS);
-                            GL.Vertex3(tile.S.xPos, tile.S.yPos, zwS); GL.Vertex3(tile.E.xPos, tile.E.yPos, zwE);
-                            GL.Vertex3(tile.E.xPos, tile.E.yPos, zwE); GL.Vertex3(tile.N.xPos, tile.N.yPos, zwN);
-                            GL.Vertex3(tile.N.xPos, tile.N.yPos, zwN); GL.Vertex3(tile.W.xPos, tile.W.yPos, zwW);
+                            DynamicPrimitiveBatch.Color4(riverGrid);
+                            DynamicPrimitiveBatch.Vertex3(tile.W.xPos, tile.W.yPos, zwW); DynamicPrimitiveBatch.Vertex3(tile.S.xPos, tile.S.yPos, zwS);
+                            DynamicPrimitiveBatch.Vertex3(tile.S.xPos, tile.S.yPos, zwS); DynamicPrimitiveBatch.Vertex3(tile.E.xPos, tile.E.yPos, zwE);
+                            DynamicPrimitiveBatch.Vertex3(tile.E.xPos, tile.E.yPos, zwE); DynamicPrimitiveBatch.Vertex3(tile.N.xPos, tile.N.yPos, zwN);
+                            DynamicPrimitiveBatch.Vertex3(tile.N.xPos, tile.N.yPos, zwN); DynamicPrimitiveBatch.Vertex3(tile.W.xPos, tile.W.yPos, zwW);
                     }
                 });
             }
@@ -122,11 +122,11 @@ namespace ForesTycoon
             float wave = WaveAt(node.xPos, node.yPos, t);
             float n = Math.Max(-1f, Math.Min(1f, wave / WAVE_MAX));
             int shift = (int)(n * 20f);
-            GL.Color4(Color.FromArgb(baseColor.A,
+            DynamicPrimitiveBatch.Color4(Color.FromArgb(baseColor.A,
                 Math.Max(0, Math.Min(255, baseColor.R + shift)),
                 Math.Max(0, Math.Min(255, baseColor.G + (int)(shift * 1.4f))),
                 Math.Max(0, Math.Min(255, baseColor.B + (int)(shift * 0.6f)))));
-            GL.Vertex3(node.xPos, node.yPos, wz);
+            DynamicPrimitiveBatch.Vertex3(node.xPos, node.yPos, wz);
         }
 
         private float NodeWaterZ(Node node, float t)
@@ -159,9 +159,9 @@ namespace ForesTycoon
             Color waterGrid = Color.FromArgb(150, 110, 180, 235);
             float t = (float)(context.TotalTimeSeconds % 628.318);
 
-            using (new RenderStateScope().AlphaBlend().ShadeModel(ShadingModel.Smooth))
+            using (new RenderStateScope().AlphaBlend())
             {
-                ImmediateRenderer.Draw(PrimitiveType.Quads, () =>
+                DynamicPrimitiveBatch.Draw(PrimitiveType.Quads, () =>
                 {
                     foreach (Tile tile in visibleTiles)
                     {
@@ -189,7 +189,7 @@ namespace ForesTycoon
 
             using (new RenderStateScope().AlphaBlend())
             {
-                ImmediateRenderer.Draw(PrimitiveType.Lines, () =>
+                DynamicPrimitiveBatch.Draw(PrimitiveType.Lines, () =>
                 {
                     foreach (Tile tile in visibleTiles)
                     {
@@ -203,11 +203,11 @@ namespace ForesTycoon
                             float zwE = NodeWaterZ(tile.E, t);
                             float zwW = NodeWaterZ(tile.W, t);
 
-                            GL.Color4(waterGrid);
-                            GL.Vertex3(tile.W.xPos, tile.W.yPos, zwW); GL.Vertex3(tile.S.xPos, tile.S.yPos, zwS);
-                            GL.Vertex3(tile.S.xPos, tile.S.yPos, zwS); GL.Vertex3(tile.E.xPos, tile.E.yPos, zwE);
-                            GL.Vertex3(tile.E.xPos, tile.E.yPos, zwE); GL.Vertex3(tile.N.xPos, tile.N.yPos, zwN);
-                            GL.Vertex3(tile.N.xPos, tile.N.yPos, zwN); GL.Vertex3(tile.W.xPos, tile.W.yPos, zwW);
+                            DynamicPrimitiveBatch.Color4(waterGrid);
+                            DynamicPrimitiveBatch.Vertex3(tile.W.xPos, tile.W.yPos, zwW); DynamicPrimitiveBatch.Vertex3(tile.S.xPos, tile.S.yPos, zwS);
+                            DynamicPrimitiveBatch.Vertex3(tile.S.xPos, tile.S.yPos, zwS); DynamicPrimitiveBatch.Vertex3(tile.E.xPos, tile.E.yPos, zwE);
+                            DynamicPrimitiveBatch.Vertex3(tile.E.xPos, tile.E.yPos, zwE); DynamicPrimitiveBatch.Vertex3(tile.N.xPos, tile.N.yPos, zwN);
+                            DynamicPrimitiveBatch.Vertex3(tile.N.xPos, tile.N.yPos, zwN); DynamicPrimitiveBatch.Vertex3(tile.W.xPos, tile.W.yPos, zwW);
                     }
                 });
             }
@@ -218,9 +218,9 @@ namespace ForesTycoon
 
             float t = (float)(context.TotalTimeSeconds % 628.318);
 
-            using (new RenderStateScope().AlphaBlend().ShadeModel(ShadingModel.Smooth))
+            using (new RenderStateScope().AlphaBlend())
             {
-                ImmediateRenderer.Draw(PrimitiveType.Quads, () =>
+                DynamicPrimitiveBatch.Draw(PrimitiveType.Quads, () =>
                 {
                     foreach (Tile tile in visibleTiles)
                     {
@@ -250,10 +250,10 @@ namespace ForesTycoon
             if (wzA <= a.zPos + 0.02f && wzB <= b.zPos + 0.02f) return;
 
             // Vízfelszínnél: félátlátszó kék; aljnál: sötét mélykék
-            GL.Color4(Color.FromArgb(155,  55, 130, 195)); GL.Vertex3(a.xPos, a.yPos, wzA);
-            GL.Color4(Color.FromArgb(155,  55, 130, 195)); GL.Vertex3(b.xPos, b.yPos, wzB);
-            GL.Color4(Color.FromArgb(225,   8,  35,  85)); GL.Vertex3(b.xPos, b.yPos, b.zPos);
-            GL.Color4(Color.FromArgb(225,   8,  35,  85)); GL.Vertex3(a.xPos, a.yPos, a.zPos);
+            DynamicPrimitiveBatch.Color4(Color.FromArgb(155,  55, 130, 195)); DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, wzA);
+            DynamicPrimitiveBatch.Color4(Color.FromArgb(155,  55, 130, 195)); DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, wzB);
+            DynamicPrimitiveBatch.Color4(Color.FromArgb(225,   8,  35,  85)); DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, b.zPos);
+            DynamicPrimitiveBatch.Color4(Color.FromArgb(225,   8,  35,  85)); DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, a.zPos);
         }
 
     }

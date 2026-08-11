@@ -16,6 +16,8 @@ namespace ForesTycoon
         }
 
         public void Execute(IWorldCommandTarget world) => world.ExecuteElevationEdit(nodeId, delta, radius, strength);
+        public WorldCommandRecord ToRecord(ulong tick) =>
+            new WorldCommandRecord(tick, WorldCommandKind.EditElevation, nodeId, delta, radius, strength, false);
     }
 
     sealed class RoadPathCommand : IWorldCommand
@@ -32,10 +34,14 @@ namespace ForesTycoon
         }
 
         public void Execute(IWorldCommandTarget world) => world.ExecuteRoadPath(startTileId, endTileId, remove);
+        public WorldCommandRecord ToRecord(ulong tick) =>
+            new WorldCommandRecord(tick, WorldCommandKind.RoadPath, startTileId, endTileId, 0, 0, remove);
     }
 
     sealed class SpawnVehicleCommand : IWorldCommand
     {
         public void Execute(IWorldCommandTarget world) => world.ExecuteSpawnVehicle();
+        public WorldCommandRecord ToRecord(ulong tick) =>
+            new WorldCommandRecord(tick, WorldCommandKind.SpawnVehicle, 0, 0, 0, 0, false);
     }
 }

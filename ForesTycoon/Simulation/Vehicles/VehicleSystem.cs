@@ -3,7 +3,7 @@ using System;
 
 namespace ForesTycoon
 {
-    sealed class VehicleSystem
+    sealed class VehicleSystem : IWorldSystem
     {
         private readonly List<Vehicle> vehicles = new List<Vehicle>();
         private int nextId = 1;

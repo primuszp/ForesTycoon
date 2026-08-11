@@ -89,7 +89,7 @@ namespace ForesTycoon
 
             using (new RenderStateScope().PolygonOffset(-1.0f, -1.0f))
             {
-                ImmediateRenderer.Draw(PrimitiveType.Quads, () =>
+                DynamicPrimitiveBatch.Draw(PrimitiveType.Quads, () =>
                 {
                     foreach (Tile t in visibleTiles)
                     {
@@ -97,8 +97,8 @@ namespace ForesTycoon
                         int u = t.Id / tpc, v = t.Id % tpc;
                         RoadFootprintCorners(t, out Vector3 iW, out Vector3 iS, out Vector3 iE, out Vector3 iN);
 
-                        GL.Color4(RoadFoundationColor);
-                        GL.Vertex3(iW); GL.Vertex3(iS); GL.Vertex3(iE); GL.Vertex3(iN);
+                        DynamicPrimitiveBatch.Color4(RoadFoundationColor);
+                        DynamicPrimitiveBatch.Vertex3(iW); DynamicPrimitiveBatch.Vertex3(iS); DynamicPrimitiveBatch.Vertex3(iE); DynamicPrimitiveBatch.Vertex3(iN);
 
                         DrawFoundationFacesForRoadTile(u, v, t);
                     }
@@ -107,15 +107,15 @@ namespace ForesTycoon
 
             using (new RenderStateScope().DepthWrite(false))
             {
-                GL.Color4(RoadFoundationLineColor);
-                ImmediateRenderer.Draw(PrimitiveType.Lines, () =>
+                DynamicPrimitiveBatch.Color4(RoadFoundationLineColor);
+                DynamicPrimitiveBatch.Draw(PrimitiveType.Lines, () =>
                 {
                     foreach (Tile tile in visibleTiles)
                     {
                         if (!roads.Has(tile.Id)) continue;
                         RoadFootprintCorners(tile, out Vector3 iW, out Vector3 iS, out Vector3 iE, out Vector3 iN);
-                        GL.Vertex3(iW); GL.Vertex3(iS); GL.Vertex3(iE); GL.Vertex3(iN);
-                        GL.Vertex3(iN); GL.Vertex3(iW);
+                        DynamicPrimitiveBatch.Vertex3(iW); DynamicPrimitiveBatch.Vertex3(iS); DynamicPrimitiveBatch.Vertex3(iE); DynamicPrimitiveBatch.Vertex3(iN);
+                        DynamicPrimitiveBatch.Vertex3(iN); DynamicPrimitiveBatch.Vertex3(iW);
                     }
                 });
             }
@@ -123,7 +123,7 @@ namespace ForesTycoon
 
         private void DrawFoundationTerrainSurfaces()
         {
-            ImmediateRenderer.Draw(PrimitiveType.Quads, () =>
+            DynamicPrimitiveBatch.Draw(PrimitiveType.Quads, () =>
             {
                 foreach (Tile tile in visibleTiles)
                 {
@@ -136,7 +136,7 @@ namespace ForesTycoon
                 }
             });
 
-            ImmediateRenderer.Draw(PrimitiveType.Triangles, () =>
+            DynamicPrimitiveBatch.Draw(PrimitiveType.Triangles, () =>
             {
                 foreach (Tile tile in visibleTiles)
                 {
@@ -157,11 +157,11 @@ namespace ForesTycoon
             Vector3 s = Corner(tile, TileCorner.S);
             Vector3 e = Corner(tile, TileCorner.E);
             Vector3 n = Corner(tile, TileCorner.N);
-            GL.Color4(ShadedTileColor(baseColor, w, s, e));
-            GL.Vertex3(w);
-            GL.Vertex3(s);
-            GL.Vertex3(e);
-            GL.Vertex3(n);
+            DynamicPrimitiveBatch.Color4(ShadedTileColor(baseColor, w, s, e));
+            DynamicPrimitiveBatch.Vertex3(w);
+            DynamicPrimitiveBatch.Vertex3(s);
+            DynamicPrimitiveBatch.Vertex3(e);
+            DynamicPrimitiveBatch.Vertex3(n);
         }
 
         private void DrawMixedFoundationTileSurface(Tile tile, TileSurfaceVisual visual)
@@ -190,10 +190,10 @@ namespace ForesTycoon
             Vector3 pa = Corner(tile, a);
             Vector3 pb = Corner(tile, b);
             Vector3 pc = Corner(tile, c);
-            GL.Color4(ShadedTileColor(baseColor, pa, pb, pc));
-            GL.Vertex3(pa);
-            GL.Vertex3(pb);
-            GL.Vertex3(pc);
+            DynamicPrimitiveBatch.Color4(ShadedTileColor(baseColor, pa, pb, pc));
+            DynamicPrimitiveBatch.Vertex3(pa);
+            DynamicPrimitiveBatch.Vertex3(pb);
+            DynamicPrimitiveBatch.Vertex3(pc);
         }
 
         private bool UseTileDiagonalWE(Tile tile)
@@ -330,8 +330,8 @@ namespace ForesTycoon
 
         private void DrawFoundationFace(FoundationFaceData face)
         {
-            GL.Color4(FoundationFaceColor(face.BottomA, face.BottomB, face.TopB));
-            GL.Vertex3(face.BottomA); GL.Vertex3(face.BottomB); GL.Vertex3(face.TopB); GL.Vertex3(face.TopA);
+            DynamicPrimitiveBatch.Color4(FoundationFaceColor(face.BottomA, face.BottomB, face.TopB));
+            DynamicPrimitiveBatch.Vertex3(face.BottomA); DynamicPrimitiveBatch.Vertex3(face.BottomB); DynamicPrimitiveBatch.Vertex3(face.TopB); DynamicPrimitiveBatch.Vertex3(face.TopA);
         }
 
         private bool TryGetFoundationFace(int nu, int nv, Node sharedA, Node sharedB, Node outerA, Node outerB,

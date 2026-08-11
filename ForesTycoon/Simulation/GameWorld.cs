@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
 using OpenTK.Mathematics;
 
 namespace ForesTycoon
@@ -7,16 +9,22 @@ namespace ForesTycoon
     /// Owns game-state lifetime and is the boundary used by input, simulation and rendering.
     /// Viewport code must not own or replace individual world systems directly.
     /// </summary>
-    sealed class GameWorld : IDisposable, IWorldCommandTarget
+    sealed class GameWorld : IDisposable, IWorldCommandTarget, IWorldInteractionTarget
     {
         private Terrain terrain;
         private TerrainRenderer terrainRenderer;
         private readonly WorldCommandQueue commands = new WorldCommandQueue();
-        private readonly VehicleSystem vehicles = new VehicleSystem();
-        private readonly WorldEffectSystem effects = new WorldEffectSystem();
+        private readonly WorldSystemCollection systems = new WorldSystemCollection();
+        private readonly BackgroundJobScheduler backgroundJobs = new BackgroundJobScheduler();
+        private readonly List<WorldCommandRecord> commandJournal = new List<WorldCommandRecord>();
+        private readonly VehicleSystem vehicles;
+        private readonly WorldEffectSystem effects;
+        private ulong worldTick;
 
         public GameWorld(TerrainSettings settings)
         {
+            vehicles = systems.Add(new VehicleSystem());
+            effects = systems.Add(new WorldEffectSystem());
             terrain = new Terrain(settings ?? throw new ArgumentNullException(nameof(settings)));
             terrainRenderer = new TerrainRenderer(terrain, vehicles, effects);
         }
@@ -31,19 +39,31 @@ namespace ForesTycoon
         public int TotalChunkCount => terrain.TotalChunkCount;
         public int TileWidth => terrain.TileWidth;
         public int TileHeight => terrain.TileHeight;
+        public int MapTileColumns => terrain.Settings.TileColumns;
+        public ulong SimulationTick => worldTick;
 
         public void Update(double fixedDeltaSeconds)
         {
-            vehicles.Update(fixedDeltaSeconds);
-            effects.Update(fixedDeltaSeconds);
+            systems.Update(fixedDeltaSeconds);
+            worldTick++;
         }
 
-        public int ExecutePendingCommands() => commands.ExecutePending(this);
+        public int ExecutePendingCommands()
+        {
+            backgroundJobs.PublishCompleted();
+            return commands.ExecutePending(this);
+        }
         public void QueueElevationEdit(int nodeId, int delta, int radius, int strength) =>
-            commands.Enqueue(new EditElevationCommand(nodeId, delta, radius, strength));
+            Enqueue(new EditElevationCommand(nodeId, delta, radius, strength));
         public void QueueRoadPath(int startTileId, int endTileId, bool remove) =>
-            commands.Enqueue(new RoadPathCommand(startTileId, endTileId, remove));
-        public void QueueSpawnVehicle() => commands.Enqueue(new SpawnVehicleCommand());
+            Enqueue(new RoadPathCommand(startTileId, endTileId, remove));
+        public void QueueSpawnVehicle() => Enqueue(new SpawnVehicleCommand());
+
+        private void Enqueue(IWorldCommand command)
+        {
+            commandJournal.Add(command.ToRecord(worldTick));
+            commands.Enqueue(command);
+        }
 
         void IWorldCommandTarget.ExecuteElevationEdit(int nodeId, int delta, int radius, int strength)
         {
@@ -85,14 +105,63 @@ namespace ForesTycoon
         public bool SearchTile(double x, double y) => terrain.SearchTile(x, y);
         public void ClearHover() => terrain.ClearHover();
         public void ClearTileHover() => terrain.ClearTileHover();
-        public void SetRoadPreview(Tile from, Tile to, bool remove) => terrain.SetRoadPreview(from, to, remove);
+        public void SetRoadPreview(int startTileId, int endTileId, bool remove) =>
+            terrain.SetRoadPreview(startTileId, endTileId, remove);
         public void ClearRoadPreview() => terrain.ClearRoadPreview();
 
         public void Regenerate(TerrainSettings settings)
         {
             commands.Clear();
-            vehicles.Clear();
-            effects.Clear();
+            commandJournal.Clear();
+            systems.Clear();
+            worldTick = 0;
+            ReplaceTerrain(settings);
+        }
+
+        public void Save(Stream destination, double tickRate = 30.0)
+        {
+            WorldSaveSerializer.Write(destination, new WorldSaveData
+            {
+                TickRate = tickRate,
+                Tick = worldTick,
+                Terrain = TerrainSettingsData.From(terrain.Settings),
+                Commands = new List<WorldCommandRecord>(commandJournal)
+            });
+        }
+
+        public void Load(Stream source)
+        {
+            WorldSaveData save = WorldSaveSerializer.Read(source);
+            commands.Clear();
+            commandJournal.Clear();
+            systems.Clear();
+            worldTick = 0;
+            ReplaceTerrain(save.Terrain.ToSettings());
+
+            int commandIndex = 0;
+            ulong previousTick = 0;
+            for (int i = 0; i < save.Commands.Count; i++)
+            {
+                WorldCommandRecord record = save.Commands[i];
+                if (record.Tick > save.Tick || (i > 0 && record.Tick < previousTick))
+                    throw new InvalidDataException("Save commands are not in deterministic tick order.");
+                previousTick = record.Tick;
+            }
+
+            double fixedDelta = 1.0 / save.TickRate;
+            for (ulong tick = 0; tick <= save.Tick; tick++)
+            {
+                while (commandIndex < save.Commands.Count && save.Commands[commandIndex].Tick == tick)
+                    commands.Enqueue(WorldCommandFactory.Create(save.Commands[commandIndex++]));
+                commands.ExecutePending(this);
+                if (tick < save.Tick) Update(fixedDelta);
+            }
+
+            commandJournal.AddRange(save.Commands);
+        }
+
+        private void ReplaceTerrain(TerrainSettings settings)
+        {
             terrainRenderer.Dispose();
             terrain.Dispose();
             terrain = new Terrain(settings ?? throw new ArgumentNullException(nameof(settings)));
@@ -101,6 +170,7 @@ namespace ForesTycoon
 
         public void Dispose()
         {
+            backgroundJobs.Dispose();
             terrainRenderer?.Dispose();
             terrain?.Dispose();
         }

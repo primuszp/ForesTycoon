@@ -10,7 +10,6 @@ namespace ForesTycoon
         private readonly bool polygonOffsetFill;
         private readonly bool depthMask;
         private readonly float lineWidth;
-        private readonly int shadeModel;
         private bool disposed;
 
         public RenderStateScope()
@@ -20,7 +19,6 @@ namespace ForesTycoon
             polygonOffsetFill = GL.IsEnabled(EnableCap.PolygonOffsetFill);
             GL.GetBoolean(GetPName.DepthWritemask, out depthMask);
             GL.GetFloat(GetPName.LineWidth, out lineWidth);
-            GL.GetInteger(GetPName.ShadeModel, out shadeModel);
         }
 
         public RenderStateScope Enable(EnableCap cap)
@@ -50,13 +48,9 @@ namespace ForesTycoon
 
         public RenderStateScope LineWidth(float width)
         {
-            GL.LineWidth(width);
-            return this;
-        }
-
-        public RenderStateScope ShadeModel(ShadingModel model)
-        {
-            GL.ShadeModel(model);
+            // Apple core profiles commonly expose only 1px hardware lines.
+            // Wide outlines must be represented as geometry, not driver state.
+            GL.LineWidth(1.0f);
             return this;
         }
 
@@ -77,7 +71,6 @@ namespace ForesTycoon
             Restore(EnableCap.PolygonOffsetFill, polygonOffsetFill);
             GL.DepthMask(depthMask);
             GL.LineWidth(lineWidth);
-            GL.ShadeModel((ShadingModel)shadeModel);
             GL.PolygonOffset(0.0f, 0.0f);
         }
 

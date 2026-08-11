@@ -47,7 +47,8 @@ namespace ForesTycoon
             pipeline.Add(RenderLayer.Props, "props", _ => terrain.DrawTrees());
             pipeline.Add(RenderLayer.Vehicles, "vehicles", context =>
                 VehicleRenderer.Draw(vehicles, terrain, context.InterpolationAlpha));
-            pipeline.Add(RenderLayer.Effects, "world-effects", _ => EffectRenderer.Draw(effects));
+            pipeline.Add(RenderLayer.Effects, "world-effects", context =>
+                EffectRenderer.Draw(effects, context.InterpolationAlpha));
             pipeline.Add(RenderLayer.DebugOverlay, "debug-overlay", context =>
             {
                 if (context.ShowNodeMarker) terrain.DrawNodeMarker(context.NodeMarkerRadius);

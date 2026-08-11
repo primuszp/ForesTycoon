@@ -4,7 +4,7 @@ using OpenTK.Mathematics;
 
 namespace ForesTycoon
 {
-    sealed class WorldEffectSystem
+    sealed class WorldEffectSystem : IWorldSystem
     {
         private readonly List<WorldEffect> active = new List<WorldEffect>();
 
