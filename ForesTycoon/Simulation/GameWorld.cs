@@ -19,14 +19,16 @@ namespace ForesTycoon
         private readonly List<WorldCommandRecord> commandJournal = new List<WorldCommandRecord>();
         private readonly VehicleSystem vehicles;
         private readonly WorldEffectSystem effects;
+        private readonly ForestSystem forest;
         private ulong worldTick;
 
         public GameWorld(TerrainSettings settings)
         {
+            terrain = new Terrain(settings ?? throw new ArgumentNullException(nameof(settings)));
+            forest = systems.Add(new ForestSystem(terrain));
             vehicles = systems.Add(new VehicleSystem());
             effects = systems.Add(new WorldEffectSystem());
-            terrain = new Terrain(settings ?? throw new ArgumentNullException(nameof(settings)));
-            terrainRenderer = new TerrainRenderer(terrain, vehicles, effects);
+            terrainRenderer = new TerrainRenderer(terrain, vehicles, effects, forest);
         }
 
         public Tile HoveredTile => terrain.HoveredTile;
@@ -35,6 +37,7 @@ namespace ForesTycoon
         public int RoadCount => terrain.RoadCount;
         public int RoadPreviewCount => terrain.RoadPreviewCount;
         public int VehicleCount => vehicles.Count;
+        public ForestStatistics ForestStatistics => forest.Statistics;
         public int VisibleChunkCount => terrain.VisibleChunkCount;
         public int TotalChunkCount => terrain.TotalChunkCount;
         public int TileWidth => terrain.TileWidth;
@@ -68,6 +71,7 @@ namespace ForesTycoon
         void IWorldCommandTarget.ExecuteElevationEdit(int nodeId, int delta, int radius, int strength)
         {
             terrain.EditElevationAtNode(nodeId, delta, radius, strength);
+            forest.RefreshHabitat();
             if (terrain.TryGetNodePosition(nodeId, out Vector3 position))
                 effects.Spawn(WorldEffectKind.TerrainChanged, position);
         }
@@ -76,6 +80,7 @@ namespace ForesTycoon
         {
             if (remove) terrain.RemoveRoadTilePath(startTileId, endTileId);
             else terrain.BuildRoadTilePath(startTileId, endTileId);
+            forest.RefreshHabitat();
             if (remove) vehicles.RemoveInvalidRoutes(terrain.IsRoadTile);
             if (terrain.TryGetRoadTileCenter(endTileId, out Vector3 position))
                 effects.Spawn(WorldEffectKind.RoadChanged, position);
@@ -165,7 +170,8 @@ namespace ForesTycoon
             terrainRenderer.Dispose();
             terrain.Dispose();
             terrain = new Terrain(settings ?? throw new ArgumentNullException(nameof(settings)));
-            terrainRenderer = new TerrainRenderer(terrain, vehicles, effects);
+            forest.Reset(terrain);
+            terrainRenderer = new TerrainRenderer(terrain, vehicles, effects, forest);
         }
 
         public void Dispose()

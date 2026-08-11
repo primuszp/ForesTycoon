@@ -11,14 +11,16 @@ namespace ForesTycoon
         private readonly Terrain terrain;
         private readonly VehicleSystem vehicles;
         private readonly WorldEffectSystem effects;
+        private readonly ForestSystem forest;
         private readonly RenderPipeline pipeline = new RenderPipeline();
         private RenderStateScope decalState;
 
-        public TerrainRenderer(Terrain terrain, VehicleSystem vehicles, WorldEffectSystem effects)
+        public TerrainRenderer(Terrain terrain, VehicleSystem vehicles, WorldEffectSystem effects, ForestSystem forest)
         {
             this.terrain = terrain ?? throw new ArgumentNullException(nameof(terrain));
             this.vehicles = vehicles ?? throw new ArgumentNullException(nameof(vehicles));
             this.effects = effects ?? throw new ArgumentNullException(nameof(effects));
+            this.forest = forest ?? throw new ArgumentNullException(nameof(forest));
             RegisterPasses();
         }
 
@@ -44,7 +46,7 @@ namespace ForesTycoon
                 if (context.ShowTileHighlight) terrain.DrawHoveredTile();
             });
             pipeline.Add(RenderLayer.DecalEnd, "decal-state-end", _ => EndDecals());
-            pipeline.Add(RenderLayer.Props, "props", _ => terrain.DrawTrees());
+            pipeline.Add(RenderLayer.Props, "props", _ => terrain.DrawTrees(forest));
             pipeline.Add(RenderLayer.Vehicles, "vehicles", context =>
                 VehicleRenderer.Draw(vehicles, terrain, context.InterpolationAlpha));
             pipeline.Add(RenderLayer.Effects, "world-effects", context =>

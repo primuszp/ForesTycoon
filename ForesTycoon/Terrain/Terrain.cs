@@ -6,7 +6,7 @@ using OpenTK.Graphics.OpenGL;
 
 namespace ForesTycoon
 {
-    partial class Terrain
+    partial class Terrain : IForestHabitat
     {
         private readonly TerrainSettings settings;
         private Hydrology hydro;
@@ -144,6 +144,34 @@ namespace ForesTycoon
         public int TileWidth => data.TileSizeH;
         public int TileHeight => data.TileSizeV;
         internal TerrainSettings Settings => settings;
+
+        int IForestHabitat.TileCount => tiles.Length;
+        int IForestHabitat.Seed => settings.Seed;
+
+        bool IForestHabitat.CanSupportForest(int tileId)
+        {
+            if (!IsValidTileId(tileId) || roads.Has(tileId)) return false;
+            Tile tile = tiles[tileId];
+            if (data.IsBorderTile(tile) || ShouldDrawStandingWater(tile)
+                || tile.Low <= 1 || tile.Low >= 5 || CountRiverCorners(tile) >= 2)
+                return false;
+            float moisture = tileMoisture[tileId];
+            return moisture >= 0.35f && moisture <= 0.95f;
+        }
+
+        float IForestHabitat.GetMoisture(int tileId) => tileMoisture[tileId];
+
+        float IForestHabitat.GetNormalizedElevation(int tileId) =>
+            Math.Clamp(tiles[tileId].Low / (float)Math.Max(1, settings.MaxHeight), 0f, 1f);
+
+        int IForestHabitat.GetAdjacentTileIds(int tileId, Span<int> destination)
+        {
+            if (!IsValidTileId(tileId)) return 0;
+            ReadOnlySpan<Tile> adjacent = data.GetAdjacentTiles(tiles[tileId]);
+            int count = Math.Min(adjacent.Length, destination.Length);
+            for (int i = 0; i < count; i++) destination[i] = adjacent[i].Id;
+            return count;
+        }
 
         public bool TryGetNodePosition(int nodeId, out Vector3 position)
         {

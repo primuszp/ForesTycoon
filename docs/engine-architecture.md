@@ -20,13 +20,23 @@ This separation keeps input responsive, makes commands replayable, and lets simu
 | `App` | OS window, GL context, raw input and UI composition | forestry/economy rules |
 | `Camera` | isometric camera state, easing, zoom and tilt | OS input types, simulation mutation |
 | `Interaction` | tool state and conversion of gestures to commands | WinForms/OpenTK event types, rendering |
-| `Simulation` | game time, world lifetime, commands, ordered systems | GL calls, UI widgets |
+| `Simulation` | game time, world lifetime, commands, ordered systems and forest state | GL calls, UI widgets |
 | `Animation` | allocation-free time sampling and playback modes | entity-specific visuals |
 | `Terrain` / `Roads` | authoritative map topology and construction rules | window lifecycle |
 | `Rendering` | render passes, GPU resources, visual interpolation | authoritative simulation mutation |
 | `Diagnostics` | frame/tick/GC/draw-call measurements | gameplay decisions |
 
-Future systems such as forest growth, harvesting, depots, industries and economy should implement `IWorldSystem` and be registered by `GameWorld`. Player actions should enter through immutable `IWorldCommand` implementations.
+`ForestSystem` is the first gameplay simulation system: it owns per-tile species, age, biomass and health, while `Terrain` only provides habitat data through `IForestHabitat`. Future harvesting, depots, industries and economy should follow the same boundary and implement `IWorldSystem`. Player actions should enter through immutable `IWorldCommand` implementations.
+
+## Forestry simulation
+
+- Forest state is stored in contiguous arrays indexed by tile ID; no entities or temporary collections are allocated per tick.
+- Growth runs in deterministic monthly steps. One simulated year currently lasts 30 real-time simulation seconds.
+- Pine, spruce and birch have distinct maturity ages, biomass limits, growth rates and moisture preferences.
+- Terrain moisture, elevation, standing water, rivers and roads determine habitat availability.
+- Mature, healthy neighbouring stands can seed empty suitable tiles naturally.
+- The renderer reads immutable stand snapshots and scales/colours trees without owning forest rules.
+- Save replay reconstructs the same forest because initialization and monthly random decisions are seed/tick based.
 
 ## Performance policy
 
@@ -49,4 +59,4 @@ The current foundation has deterministic ticking, command batching, chunk cullin
 4. Replay currently rebuilds from tick zero. Add periodic validated checkpoints for long-running worlds.
 5. Split ImGui panel composition out of `Viewport` as the tool count grows.
 
-Recommended delivery order: immutable hydrology jobs, forestry simulation, economy/cargo graph, dirty-chunk GPU caches, then replay checkpoints.
+Recommended delivery order: forestry commands (plant/harvest), immutable hydrology jobs, economy/cargo graph, dirty-chunk GPU caches, then replay checkpoints.

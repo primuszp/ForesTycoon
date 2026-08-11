@@ -16,6 +16,7 @@ A jelenlegi allapot fokusza:
 - alloviz, folyok es partvonal-logika
 - interaktiv terepszerkesztes
 - kamera- es nezetrendszer finomitasa
+- determinisztikus erdoszimulacio harom fafajjal, novekedessel es termeszetes ujulassal
 
 A projekt meg prototipus fazisban van. A hangsuly most a terepmotoron, a vizmegjelenitesen, a kameraelmenyen es a szerkesztesi workflow-n van.
 
@@ -31,6 +32,7 @@ The current prototype focuses on:
 - standing water, rivers, and shoreline logic
 - interactive terrain editing
 - camera and view-control polish
+- deterministic forest simulation with three species, growth, health and natural regeneration
 
 The project is still in prototype stage. Right now the emphasis is on terrain technology, water rendering, camera behavior, and the core editing loop.
 
@@ -89,7 +91,7 @@ Quicksaves are stored under the operating system's local application-data direct
 
 - [ForesTycoon/App](ForesTycoon/App): window, OpenGL context, frame loop, camera and platform input
 - [ForesTycoon/Interaction](ForesTycoon/Interaction): testable user-intent and editing gesture handling
-- [ForesTycoon/Simulation](ForesTycoon/Simulation): fixed-step world, commands, vehicles and effects
+- [ForesTycoon/Simulation](ForesTycoon/Simulation): fixed-step world, forestry, commands, vehicles and effects
 - [ForesTycoon/Animation](ForesTycoon/Animation): interpolated animation timelines and playback modes
 - [ForesTycoon/Terrain](ForesTycoon/Terrain): terrain data, generation, hydrology, roads and chunk updates
 - [ForesTycoon/Rendering](ForesTycoon/Rendering): ordered render pipeline and GPU helpers
@@ -104,5 +106,5 @@ Planned next steps include:
 - faster partial terrain and hydrology updates
 - improved river bed and water surface rendering
 - biome and terrain-type layers
-- forest growth and forestry gameplay systems
+- planting, harvesting and forestry management tools on top of the forest simulation
 - later transport, roads, and industrial chains

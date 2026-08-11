@@ -516,6 +516,9 @@ namespace ForesTycoon
             ImGui.Text($"{ImGui.GetIO().Framerate:F0} FPS");
             ImGui.Text($"Tick: {simulationClock.Tick}  {(simulationClock.IsPaused ? "Szünet" : $"{simulationClock.Speed:0}x")}");
             ImGui.Text($"Járművek: {world.VehicleCount}");
+            ForestStatistics forest = world.ForestStatistics;
+            ImGui.Text($"Erdő: {forest.StandCount} állomány, {forest.MatureStandCount} érett");
+            ImGui.Text($"Biomassza: {forest.TotalBiomass:F1}  Egészség: {forest.AverageHealth:P0}");
             ImGui.Text($"Chunk: {world.VisibleChunkCount}/{world.TotalChunkCount}");
             ImGui.Text($"Frame: {performance.FrameMilliseconds:F1} ms  Sim: {performance.SimulationMilliseconds:F2} ms");
             ImGui.Text($"Render: {performance.RenderMilliseconds:F1} ms  Draw: {performance.DrawCalls}");

@@ -6,36 +6,28 @@ namespace ForesTycoon
 {
     partial class Terrain
     {
-        internal void DrawTrees()
+        internal void DrawTrees(ForestSystem forest)
         {
             DynamicPrimitiveBatch.Draw(PrimitiveType.Quads, () =>
             {
                 foreach (Tile tile in visibleTiles)
-                    if (TryGetTree(tile, out float x, out float y, out float groundZ, out float surfaceZ))
-                        DrawTreeTrunk(x, y, groundZ, surfaceZ);
+                    if (TryGetTree(forest, tile, out ForestStand stand, out float x, out float y, out float groundZ, out float surfaceZ))
+                        DrawTreeTrunk(x, y, groundZ, surfaceZ, stand);
             });
 
             DynamicPrimitiveBatch.Draw(PrimitiveType.Triangles, () =>
             {
                 foreach (Tile tile in visibleTiles)
-                    if (TryGetTree(tile, out float x, out float y, out _, out float surfaceZ))
-                        DrawTreeFoliage(x, y, surfaceZ);
+                    if (TryGetTree(forest, tile, out ForestStand stand, out float x, out float y, out _, out float surfaceZ))
+                        DrawTreeFoliage(x, y, surfaceZ, stand);
             });
         }
 
-        private bool TryGetTree(Tile tile, out float x, out float y, out float groundZ, out float surfaceZ)
+        private bool TryGetTree(ForestSystem forest, Tile tile, out ForestStand stand,
+            out float x, out float y, out float groundZ, out float surfaceZ)
         {
-            int u = tile.Id / (nodeRows - 1), v = tile.Id % (nodeRows - 1);
             x = y = groundZ = surfaceZ = 0f;
-            if (u == 0 || v == 0 || u >= nodeCols - 2 || v >= nodeRows - 2) return false;
-            float moisture = tileMoisture[tile.Id];
-            if (ShouldDrawStandingWater(tile) || tile.Low <= 1 || tile.Low >= 5 || CountRiverCorners(tile) >= 2)
-                return false;
-            if (moisture < 0.35f || moisture > 0.95f) return false;
-
-            int hash = unchecked(u * 374761393 ^ v * 1073741827);
-            int density = moisture >= 0.7f ? 3 : 5;
-            if ((hash & 0x7FFFFFFF) % density != 0) return false;
+            if (!forest.TryGetStand(tile.Id, out stand)) return false;
 
             x = (tile.W.xPos + tile.S.xPos + tile.E.xPos + tile.N.xPos) * 0.25f;
             y = (tile.W.yPos + tile.S.yPos + tile.E.yPos + tile.N.yPos) * 0.25f;
@@ -44,11 +36,12 @@ namespace ForesTycoon
             return true;
         }
 
-        private static void DrawTreeTrunk(float x, float y, float groundZ, float surfaceZ)
+        private static void DrawTreeTrunk(float x, float y, float groundZ, float surfaceZ, ForestStand stand)
         {
-            float trunkRadius = 0.32f;
+            float scale = 0.28f + stand.Maturity * 0.72f;
+            float trunkRadius = 0.32f * scale;
             float trunkBot = groundZ - 1.0f;
-            float trunkTop = surfaceZ + 0.6f;
+            float trunkTop = surfaceZ + 0.6f * scale;
 
             Color trunkLight = Color.FromArgb(115, 72, 32);
             Color trunkDark = Color.FromArgb(80, 50, 20);
@@ -70,13 +63,18 @@ namespace ForesTycoon
             DynamicPrimitiveBatch.Vertex3(x - trunkRadius, y + trunkRadius, trunkTop); DynamicPrimitiveBatch.Vertex3(x - trunkRadius, y - trunkRadius, trunkTop);
         }
 
-        private static void DrawTreeFoliage(float x, float y, float surfaceZ)
+        private static void DrawTreeFoliage(float x, float y, float surfaceZ, ForestStand stand)
         {
-            float trunkTop = surfaceZ + 0.6f;
-            float baseRadius = 1.8f;
-            float layerHeight = 2.4f;
-            Color light = Color.FromArgb(55, 128, 42);
-            Color dark = Color.FromArgb(30, 85, 25);
+            float scale = 0.28f + stand.Maturity * 0.72f;
+            float trunkTop = surfaceZ + 0.6f * scale;
+            float baseRadius = 1.8f * scale;
+            float layerHeight = 2.4f * scale;
+            (Color light, Color dark) = stand.Species switch
+            {
+                ForestSpecies.Spruce => (Color.FromArgb(42, 112, 63), Color.FromArgb(22, 70, 42)),
+                ForestSpecies.Birch => (Color.FromArgb(91, 151, 57), Color.FromArgb(48, 103, 35)),
+                _ => (Color.FromArgb(55, 128, 42), Color.FromArgb(30, 85, 25))
+            };
 
             for (int layer = 0; layer < 3; layer++)
             {
@@ -84,18 +82,20 @@ namespace ForesTycoon
                 float tipZ = baseZ + layerHeight;
                 float radius = baseRadius * (1.0f - layer * 0.22f);
 
-                float[] px = { x, x + radius, x, x - radius };
-                float[] py = { y + radius, y, y - radius, y };
-
-                for (int i = 0; i < 4; i++)
-                {
-                    int j = (i + 1) % 4;
-                    DynamicPrimitiveBatch.Color3(i == 0 || i == 3 ? light : dark);
-                    DynamicPrimitiveBatch.Vertex3(px[i], py[i], baseZ);
-                    DynamicPrimitiveBatch.Vertex3(px[j], py[j], baseZ);
-                    DynamicPrimitiveBatch.Vertex3(x, y, tipZ);
-                }
+                DrawFoliageFace(light, x, y + radius, x + radius, y, baseZ, tipZ, x, y);
+                DrawFoliageFace(dark, x + radius, y, x, y - radius, baseZ, tipZ, x, y);
+                DrawFoliageFace(dark, x, y - radius, x - radius, y, baseZ, tipZ, x, y);
+                DrawFoliageFace(light, x - radius, y, x, y + radius, baseZ, tipZ, x, y);
             }
+        }
+
+        private static void DrawFoliageFace(Color color, float ax, float ay, float bx, float by,
+            float baseZ, float tipZ, float centerX, float centerY)
+        {
+            DynamicPrimitiveBatch.Color3(color);
+            DynamicPrimitiveBatch.Vertex3(ax, ay, baseZ);
+            DynamicPrimitiveBatch.Vertex3(bx, by, baseZ);
+            DynamicPrimitiveBatch.Vertex3(centerX, centerY, tipZ);
         }
     }
 }
