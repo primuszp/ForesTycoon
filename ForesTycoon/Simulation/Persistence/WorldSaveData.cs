@@ -7,7 +7,9 @@ namespace ForesTycoon
     {
         EditElevation,
         RoadPath,
-        SpawnVehicle
+        SpawnVehicle,
+        PlantForest,
+        HarvestForest
     }
 
     readonly record struct WorldCommandRecord(

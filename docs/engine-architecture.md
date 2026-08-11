@@ -37,6 +37,8 @@ This separation keeps input responsive, makes commands replayable, and lets simu
 - Mature, healthy neighbouring stands can seed empty suitable tiles naturally.
 - The renderer reads immutable stand snapshots and scales/colours trees without owning forest rules.
 - Save replay reconstructs the same forest because initialization and monthly random decisions are seed/tick based.
+- Planting and harvesting enter through replayable world commands. Harvesting converts stand biomass into `TimberCargoSystem` inventory without coupling forestry to vehicles.
+- Trucks load timber at the first route endpoint, unload it at the other endpoint and visually expose their fill level. Removing a broken route returns onboard cargo to the stockpile, preserving resources.
 
 ## Performance policy
 
@@ -59,4 +61,4 @@ The current foundation has deterministic ticking, command batching, chunk cullin
 4. Replay currently rebuilds from tick zero. Add periodic validated checkpoints for long-running worlds.
 5. Split ImGui panel composition out of `Viewport` as the tool count grows.
 
-Recommended delivery order: forestry commands (plant/harvest), immutable hydrology jobs, economy/cargo graph, dirty-chunk GPU caches, then replay checkpoints.
+Recommended delivery order: placeable depots and route assignment, immutable hydrology jobs, economy/cargo graph, dirty-chunk GPU caches, then replay checkpoints.

@@ -58,11 +58,35 @@ public class ForestSystemTests
         Assert.Equal(default, forest.Statistics);
     }
 
+    [Fact]
+    public void PlantThenHarvest_ProducesTimberAndClearsTile()
+    {
+        TestHabitat habitat = new TestHabitat(96, seed: 31);
+        ForestSystem forest = new ForestSystem(habitat);
+        int tileId = FindFirstEmptyTile(forest, habitat.TileCount);
+
+        Assert.True(forest.TryPlant(tileId, ForestSpecies.Spruce));
+        Assert.False(forest.TryPlant(tileId, ForestSpecies.Pine));
+        Assert.True(forest.TryHarvest(tileId, out ForestHarvest harvest));
+
+        Assert.Equal(ForestSpecies.Spruce, harvest.Species);
+        Assert.True(harvest.TimberVolume > 0f);
+        Assert.False(forest.TryGetStand(tileId, out _));
+        Assert.False(forest.TryHarvest(tileId, out _));
+    }
+
     private static int FindFirstStand(ForestSystem forest, int tileCount)
     {
         for (int tileId = 0; tileId < tileCount; tileId++)
             if (forest.TryGetStand(tileId, out _)) return tileId;
         throw new InvalidOperationException("The deterministic test habitat generated no forest stands.");
+    }
+
+    private static int FindFirstEmptyTile(ForestSystem forest, int tileCount)
+    {
+        for (int tileId = 0; tileId < tileCount; tileId++)
+            if (!forest.TryGetStand(tileId, out _)) return tileId;
+        throw new InvalidOperationException("The deterministic test habitat generated no empty tile.");
     }
 
     private sealed class TestHabitat : IForestHabitat

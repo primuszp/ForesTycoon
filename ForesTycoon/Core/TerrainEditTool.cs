@@ -6,6 +6,8 @@ namespace ForesTycoon
         Raise,
         Lower,
         Road,
-        RoadRemove
+        RoadRemove,
+        PlantForest,
+        HarvestForest
     }
 }

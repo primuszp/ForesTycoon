@@ -28,6 +28,8 @@ namespace ForesTycoon
                 WorldEffectKind.TerrainChanged => Color.FromArgb(210, 214, 176, 78),
                 WorldEffectKind.RoadChanged => Color.FromArgb(210, 235, 225, 170),
                 WorldEffectKind.VehicleSpawned => Color.FromArgb(210, 130, 205, 255),
+                WorldEffectKind.TreePlanted => Color.FromArgb(210, 105, 210, 95),
+                WorldEffectKind.ForestHarvested => Color.FromArgb(210, 210, 145, 72),
                 _ => Color.White
             };
             float progress = effect.Timeline.SampleProgress(interpolationAlpha);

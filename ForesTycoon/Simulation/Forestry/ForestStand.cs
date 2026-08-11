@@ -25,4 +25,9 @@ namespace ForesTycoon
         int MatureStandCount,
         float TotalBiomass,
         float AverageHealth);
+
+    readonly record struct ForestHarvest(
+        ForestSpecies Species,
+        float AgeYears,
+        float TimberVolume);
 }

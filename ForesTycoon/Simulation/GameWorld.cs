@@ -20,13 +20,15 @@ namespace ForesTycoon
         private readonly VehicleSystem vehicles;
         private readonly WorldEffectSystem effects;
         private readonly ForestSystem forest;
+        private readonly TimberCargoSystem timberCargo;
         private ulong worldTick;
 
         public GameWorld(TerrainSettings settings)
         {
             terrain = new Terrain(settings ?? throw new ArgumentNullException(nameof(settings)));
             forest = systems.Add(new ForestSystem(terrain));
-            vehicles = systems.Add(new VehicleSystem());
+            timberCargo = systems.Add(new TimberCargoSystem());
+            vehicles = systems.Add(new VehicleSystem(timberCargo));
             effects = systems.Add(new WorldEffectSystem());
             terrainRenderer = new TerrainRenderer(terrain, vehicles, effects, forest);
         }
@@ -38,6 +40,9 @@ namespace ForesTycoon
         public int RoadPreviewCount => terrain.RoadPreviewCount;
         public int VehicleCount => vehicles.Count;
         public ForestStatistics ForestStatistics => forest.Statistics;
+        public float TimberStockpile => timberCargo.Available;
+        public float DeliveredTimber => timberCargo.Delivered;
+        public bool TryGetForestStand(int tileId, out ForestStand stand) => forest.TryGetStand(tileId, out stand);
         public int VisibleChunkCount => terrain.VisibleChunkCount;
         public int TotalChunkCount => terrain.TotalChunkCount;
         public int TileWidth => terrain.TileWidth;
@@ -61,6 +66,9 @@ namespace ForesTycoon
         public void QueueRoadPath(int startTileId, int endTileId, bool remove) =>
             Enqueue(new RoadPathCommand(startTileId, endTileId, remove));
         public void QueueSpawnVehicle() => Enqueue(new SpawnVehicleCommand());
+        public void QueuePlantForest(int tileId, ForestSpecies species) =>
+            Enqueue(new PlantForestCommand(tileId, species));
+        public void QueueHarvestForest(int tileId) => Enqueue(new HarvestForestCommand(tileId));
 
         private void Enqueue(IWorldCommand command)
         {
@@ -95,6 +103,21 @@ namespace ForesTycoon
                 if (terrain.TryGetRoadTileCenter(route[0], out Vector3 position))
                     effects.Spawn(WorldEffectKind.VehicleSpawned, position);
             }
+        }
+
+        void IWorldCommandTarget.ExecutePlantForest(int tileId, ForestSpecies species)
+        {
+            if (!forest.TryPlant(tileId, species)) return;
+            if (terrain.TryGetTileCenter(tileId, out Vector3 position))
+                effects.Spawn(WorldEffectKind.TreePlanted, position);
+        }
+
+        void IWorldCommandTarget.ExecuteHarvestForest(int tileId)
+        {
+            if (!forest.TryHarvest(tileId, out ForestHarvest harvest)) return;
+            timberCargo.AddHarvested(harvest.TimberVolume);
+            if (terrain.TryGetTileCenter(tileId, out Vector3 position))
+                effects.Spawn(WorldEffectKind.ForestHarvested, position);
         }
 
         public void Draw(RenderContext context)

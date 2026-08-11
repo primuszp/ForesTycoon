@@ -32,6 +32,7 @@ namespace ForesTycoon
         }
         public bool IsRoadDragging => roadDragStartTileId >= 0;
         public bool IsRoadRemoval { get; private set; }
+        public ForestSpecies PlantingSpecies { get; set; } = ForestSpecies.Pine;
 
         public static bool IsRoadTool(TerrainEditTool tool) =>
             tool == TerrainEditTool.Road || tool == TerrainEditTool.RoadRemove;
@@ -74,6 +75,18 @@ namespace ForesTycoon
                     int delta = ActiveTool == TerrainEditTool.Raise ? 1 : -1;
                     world.QueueElevationEdit(world.SelectedNodeId, delta,
                         BrushSize - 1, BrushStrength);
+                }
+                return true;
+            }
+
+            if (ActiveTool == TerrainEditTool.PlantForest || ActiveTool == TerrainEditTool.HarvestForest)
+            {
+                if (world.HoveredTileId >= 0)
+                {
+                    if (ActiveTool == TerrainEditTool.PlantForest)
+                        world.QueuePlantForest(world.HoveredTileId, PlantingSpecies);
+                    else
+                        world.QueueHarvestForest(world.HoveredTileId);
                 }
                 return true;
             }

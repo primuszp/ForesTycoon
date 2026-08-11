@@ -50,6 +50,24 @@ public class WorldInteractionControllerTests
         Assert.Equal("clear", world.Events[^1]);
     }
 
+    [Theory]
+    [InlineData((int)TerrainEditTool.PlantForest, "plant:23:Spruce")]
+    [InlineData((int)TerrainEditTool.HarvestForest, "harvest:23")]
+    public void ForestryTool_QueuesTileCommandOnClick(int toolValue, string expected)
+    {
+        RecordingWorld world = new RecordingWorld { HoveredTileId = 23 };
+        WorldInteractionController controller = new WorldInteractionController(world)
+        {
+            PlantingSpecies = ForestSpecies.Spruce
+        };
+        controller.SelectTool((TerrainEditTool)toolValue);
+
+        bool consumed = controller.EndPrimaryGesture(hasHoveredNode: false);
+
+        Assert.True(consumed);
+        Assert.Equal(expected, world.Events[^1]);
+    }
+
     private sealed class RecordingWorld : IWorldInteractionTarget
     {
         public int HoveredTileId { get; set; } = -1;
@@ -60,6 +78,9 @@ public class WorldInteractionControllerTests
             Events.Add($"elevation:{nodeId}:{delta}:{radius}:{strength}");
         public void QueueRoadPath(int startTileId, int endTileId, bool remove) =>
             Events.Add($"road:{startTileId}:{endTileId}:{remove}");
+        public void QueuePlantForest(int tileId, ForestSpecies species) =>
+            Events.Add($"plant:{tileId}:{species}");
+        public void QueueHarvestForest(int tileId) => Events.Add($"harvest:{tileId}");
         public void SetRoadPreview(int startTileId, int endTileId, bool remove) =>
             Events.Add($"preview:{startTileId}:{endTileId}:{remove}");
         public void ClearRoadPreview() => Events.Add("clear");

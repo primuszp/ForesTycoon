@@ -469,6 +469,16 @@ namespace ForesTycoon
                 ToolMenuItem("Süllyesztés", TerrainEditTool.Lower);
                 ToolMenuItem("Út építés", TerrainEditTool.Road);
                 ToolMenuItem("Út bontás", TerrainEditTool.RoadRemove);
+                ImGui.Separator();
+                ToolMenuItem("Erdő ültetés", TerrainEditTool.PlantForest);
+                ToolMenuItem("Fakitermelés", TerrainEditTool.HarvestForest);
+                if (ImGui.BeginMenu("Ültetett fafaj"))
+                {
+                    SpeciesMenuItem("Fenyő", ForestSpecies.Pine);
+                    SpeciesMenuItem("Lucfenyő", ForestSpecies.Spruce);
+                    SpeciesMenuItem("Nyír", ForestSpecies.Birch);
+                    ImGui.EndMenu();
+                }
                 ImGui.EndMenu();
             }
 
@@ -487,21 +497,33 @@ namespace ForesTycoon
             ToolButton("Emel", TerrainEditTool.Raise); ImGui.SameLine();
             ToolButton("Süly.", TerrainEditTool.Lower); ImGui.SameLine();
             ToolButton("Út", TerrainEditTool.Road); ImGui.SameLine();
-            ToolButton("Bontás", TerrainEditTool.RoadRemove);
+            ToolButton("Bontás", TerrainEditTool.RoadRemove); ImGui.SameLine();
+            ToolButton("Ültet", TerrainEditTool.PlantForest); ImGui.SameLine();
+            ToolButton("Kivág", TerrainEditTool.HarvestForest);
 
-            ImGui.PushItemWidth(150);
-            int brushSize = interaction.BrushSize;
-            int brushStrength = interaction.BrushStrength;
-            if (ImGui.SliderInt("Méret", ref brushSize, 1, 5)) interaction.BrushSize = brushSize;
-            if (ImGui.SliderInt("Erő", ref brushStrength, 1, 5)) interaction.BrushStrength = brushStrength;
-            ImGui.PopItemWidth();
+            if (interaction.ActiveTool == TerrainEditTool.PlantForest)
+            {
+                SpeciesButton("Fenyő", ForestSpecies.Pine); ImGui.SameLine();
+                SpeciesButton("Luc", ForestSpecies.Spruce); ImGui.SameLine();
+                SpeciesButton("Nyír", ForestSpecies.Birch);
+            }
+
+            if (interaction.ActiveTool == TerrainEditTool.Raise || interaction.ActiveTool == TerrainEditTool.Lower)
+            {
+                ImGui.PushItemWidth(150);
+                int brushSize = interaction.BrushSize;
+                int brushStrength = interaction.BrushStrength;
+                if (ImGui.SliderInt("Méret", ref brushSize, 1, 5)) interaction.BrushSize = brushSize;
+                if (ImGui.SliderInt("Erő", ref brushStrength, 1, 5)) interaction.BrushStrength = brushStrength;
+                ImGui.PopItemWidth();
+            }
 
             ImGui.End();
         }
 
         private void DrawStatusPanel()
         {
-            ImGui.SetNextWindowPos(new NVec2(8, Math.Max(80, Height - 64)), ImGuiCond.Always);
+            ImGui.SetNextWindowPos(new NVec2(8, Math.Max(80, Height - 220)), ImGuiCond.Always);
             ImGui.Begin("##status",
                 ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoResize |
                 ImGuiWindowFlags.NoMove | ImGuiWindowFlags.AlwaysAutoResize);
@@ -519,6 +541,10 @@ namespace ForesTycoon
             ForestStatistics forest = world.ForestStatistics;
             ImGui.Text($"Erdő: {forest.StandCount} állomány, {forest.MatureStandCount} érett");
             ImGui.Text($"Biomassza: {forest.TotalBiomass:F1}  Egészség: {forest.AverageHealth:P0}");
+            ImGui.Text($"Kitermelt faanyag: {world.TimberStockpile:F1} t");
+            ImGui.Text($"Leszállított faanyag: {world.DeliveredTimber:F1} t");
+            if (world.TryGetForestStand(world.HoveredTileId, out ForestStand stand))
+                ImGui.Text($"Csempe: {ForestSpeciesName(stand.Species)}, {stand.AgeYears:F1} év, {stand.Health:P0}");
             ImGui.Text($"Chunk: {world.VisibleChunkCount}/{world.TotalChunkCount}");
             ImGui.Text($"Frame: {performance.FrameMilliseconds:F1} ms  Sim: {performance.SimulationMilliseconds:F2} ms");
             ImGui.Text($"Render: {performance.RenderMilliseconds:F1} ms  Draw: {performance.DrawCalls}");
@@ -541,19 +567,43 @@ namespace ForesTycoon
             if (ImGui.MenuItem(label, "", interaction.ActiveTool == tool)) SelectTool(tool);
         }
 
+        private void SpeciesButton(string label, ForestSpecies species)
+        {
+            bool active = interaction.PlantingSpecies == species;
+            if (active) ImGui.PushStyleColor(ImGuiCol.Button, new NVec4(0.30f, 0.52f, 0.25f, 1f));
+            if (ImGui.Button(label)) interaction.PlantingSpecies = species;
+            if (active) ImGui.PopStyleColor();
+        }
+
+        private void SpeciesMenuItem(string label, ForestSpecies species)
+        {
+            if (ImGui.MenuItem(label, "", interaction.PlantingSpecies == species))
+                interaction.PlantingSpecies = species;
+        }
+
         private void SelectTool(TerrainEditTool tool)
         {
             interaction.SelectTool(tool);
             RequestFrame();
         }
 
-        private static string ToolName(TerrainEditTool tool) => tool switch
+        private string ToolName(TerrainEditTool tool) => tool switch
         {
             TerrainEditTool.Raise => "Emelés",
             TerrainEditTool.Lower => "Süllyesztés",
             TerrainEditTool.Road => "Út építés",
             TerrainEditTool.RoadRemove => "Út bontás",
+            TerrainEditTool.PlantForest => $"Ültetés ({ForestSpeciesName(interaction.PlantingSpecies)})",
+            TerrainEditTool.HarvestForest => "Fakitermelés",
             _ => "Vizsgálat"
+        };
+
+        private static string ForestSpeciesName(ForestSpecies species) => species switch
+        {
+            ForestSpecies.Pine => "fenyő",
+            ForestSpecies.Spruce => "lucfenyő",
+            ForestSpecies.Birch => "nyír",
+            _ => "nincs"
         };
 
         private void ResetCamera()

@@ -35,16 +35,22 @@ namespace ForesTycoon
                     float pitch = MathF.Atan2(direction.Z, horizontalLength);
                     Vector3 position = Vector3.Lerp(from, to, amount);
                     position.Z += 0.12f;
-                    DrawTruck(new VehicleTransform(position, yaw, pitch));
+                    DrawTruck(new VehicleTransform(position, yaw, pitch), vehicle.CargoFill);
                 }
             });
         }
 
-        private static void DrawTruck(VehicleTransform transform)
+        private static void DrawTruck(VehicleTransform transform, float cargoFill)
         {
             // Local +X is the front of the truck.
             DrawBox(transform, new Vector3(0f, 0f, 0.22f), new Vector3(2.9f, 0.82f, 0.22f), ChassisColor, ChassisColor);
-            DrawBox(transform, new Vector3(-0.62f, 0f, 0.86f), new Vector3(1.55f, 1.18f, 1.35f), CargoColor, CargoSideColor);
+            DrawBox(transform, new Vector3(-0.62f, 0f, 0.38f), new Vector3(1.65f, 1.18f, 0.28f), CargoSideColor, ChassisColor);
+            if (cargoFill > 0.001f)
+            {
+                float cargoHeight = 0.25f + 0.85f * Math.Clamp(cargoFill, 0f, 1f);
+                DrawBox(transform, new Vector3(-0.62f, 0f, 0.52f + cargoHeight * 0.5f),
+                    new Vector3(1.50f, 1.08f, cargoHeight), CargoColor, CargoSideColor);
+            }
             DrawBox(transform, new Vector3(0.87f, 0f, 0.69f), new Vector3(0.92f, 1.12f, 1.02f), CabColor, CabSideColor);
             DrawBox(transform, new Vector3(1.35f, 0f, 0.73f), new Vector3(0.06f, 0.86f, 0.38f), WindowColor, WindowColor);
             DrawBox(transform, new Vector3(1.49f, 0f, 0.27f), new Vector3(0.14f, 1.18f, 0.20f), BumperColor, BumperColor);

@@ -82,6 +82,8 @@ The smoke test renders 120 frames and exits automatically.
 - Up / Down arrow: change tilt angle
 - Left click with the raise/lower tool: edit terrain
 - Left-drag with the road tools: build or remove a path
+- Left click with the planting tool: plant the selected pine, spruce or birch species
+- Left click with the harvesting tool: cut a stand and add its biomass to the timber stockpile
 - Cmd/Ctrl+S: quicksave
 - Cmd/Ctrl+L: quickload
 
@@ -106,5 +108,5 @@ Planned next steps include:
 - faster partial terrain and hydrology updates
 - improved river bed and water surface rendering
 - biome and terrain-type layers
-- planting, harvesting and forestry management tools on top of the forest simulation
+- placeable timber depots, route assignment and delivery contracts
 - later transport, roads, and industrial chains

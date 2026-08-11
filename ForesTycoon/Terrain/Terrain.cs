@@ -186,6 +186,22 @@ namespace ForesTycoon
             return true;
         }
 
+        public bool TryGetTileCenter(int tileId, out Vector3 position)
+        {
+            if (!IsValidTileId(tileId))
+            {
+                position = Vector3.Zero;
+                return false;
+            }
+
+            Tile tile = tiles[tileId];
+            position = new Vector3(
+                (tile.W.xPos + tile.S.xPos + tile.E.xPos + tile.N.xPos) * 0.25f,
+                (tile.W.yPos + tile.S.yPos + tile.E.yPos + tile.N.yPos) * 0.25f,
+                Math.Max(Math.Max(tile.W.zPos, tile.S.zPos), Math.Max(tile.E.zPos, tile.N.zPos)));
+            return true;
+        }
+
         internal void UpdateVisibleTiles(RenderContext context)
         {
             visibleTiles.Clear();

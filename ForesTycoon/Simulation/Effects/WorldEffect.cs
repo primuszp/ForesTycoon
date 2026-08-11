@@ -7,7 +7,9 @@ namespace ForesTycoon
     {
         TerrainChanged,
         RoadChanged,
-        VehicleSpawned
+        VehicleSpawned,
+        TreePlanted,
+        ForestHarvested
     }
 
     readonly struct WorldEffect

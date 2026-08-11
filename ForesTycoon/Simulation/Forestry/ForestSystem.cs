@@ -43,6 +43,41 @@ namespace ForesTycoon
             return true;
         }
 
+        public bool TryPlant(int tileId, ForestSpecies species)
+        {
+            if (!Enum.IsDefined(species) || species == ForestSpecies.None)
+                throw new ArgumentOutOfRangeException(nameof(species));
+            if ((uint)tileId >= (uint)stands.Length || !stands[tileId].IsEmpty
+                || !habitat.CanSupportForest(tileId))
+                return false;
+
+            ForestSpeciesProfile profile = ForestSpeciesProfile.For(species);
+            float suitability = Suitability(species, habitat.GetMoisture(tileId));
+            stands[tileId] = new ForestStand(
+                species,
+                YearsPerStep,
+                profile.MaximumBiomass * 0.015f,
+                0.50f + suitability * 0.40f);
+            RecalculateStatistics();
+            return true;
+        }
+
+        public bool TryHarvest(int tileId, out ForestHarvest harvest)
+        {
+            if ((uint)tileId >= (uint)stands.Length || stands[tileId].IsEmpty)
+            {
+                harvest = default;
+                return false;
+            }
+
+            ForestStand stand = stands[tileId];
+            // One biomass unit represents one hundred tonnes of recoverable roundwood.
+            harvest = new ForestHarvest(stand.Species, stand.AgeYears, stand.Biomass * 100f);
+            stands[tileId] = default;
+            RecalculateStatistics();
+            return true;
+        }
+
         /// <summary>Applies infrequent terrain/road changes without adding a full-map scan to every tick.</summary>
         public void RefreshHabitat()
         {

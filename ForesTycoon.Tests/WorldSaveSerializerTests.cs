@@ -13,7 +13,9 @@ public class WorldSaveSerializerTests
             Commands = new List<WorldCommandRecord>
             {
                 new WorldCommandRecord(2, WorldCommandKind.EditElevation, 7, 1, 2, 3, false),
-                new WorldCommandRecord(8, WorldCommandKind.RoadPath, 10, 14, 0, 0, false)
+                new WorldCommandRecord(8, WorldCommandKind.RoadPath, 10, 14, 0, 0, false),
+                new WorldCommandRecord(10, WorldCommandKind.PlantForest, 18, (int)ForestSpecies.Spruce, 0, 0, false),
+                new WorldCommandRecord(11, WorldCommandKind.HarvestForest, 19, 0, 0, 0, false)
             }
         };
         using MemoryStream stream = new MemoryStream();
