@@ -474,9 +474,11 @@ namespace ForesTycoon
                 ToolMenuItem("Fakitermelés", TerrainEditTool.HarvestForest);
                 if (ImGui.BeginMenu("Ültetett fafaj"))
                 {
-                    SpeciesMenuItem("Fenyő", ForestSpecies.Pine);
+                    SpeciesMenuItem("Erdeifenyő", ForestSpecies.Pine);
                     SpeciesMenuItem("Lucfenyő", ForestSpecies.Spruce);
                     SpeciesMenuItem("Nyír", ForestSpecies.Birch);
+                    SpeciesMenuItem("Tölgy", ForestSpecies.Oak);
+                    SpeciesMenuItem("Bükk", ForestSpecies.Beech);
                     ImGui.EndMenu();
                 }
                 ImGui.EndMenu();
@@ -505,7 +507,9 @@ namespace ForesTycoon
             {
                 SpeciesButton("Fenyő", ForestSpecies.Pine); ImGui.SameLine();
                 SpeciesButton("Luc", ForestSpecies.Spruce); ImGui.SameLine();
-                SpeciesButton("Nyír", ForestSpecies.Birch);
+                SpeciesButton("Nyír", ForestSpecies.Birch); ImGui.SameLine();
+                SpeciesButton("Tölgy", ForestSpecies.Oak); ImGui.SameLine();
+                SpeciesButton("Bükk", ForestSpecies.Beech);
             }
 
             if (interaction.ActiveTool == TerrainEditTool.Raise || interaction.ActiveTool == TerrainEditTool.Lower)
@@ -605,9 +609,11 @@ namespace ForesTycoon
 
         private static string ForestSpeciesName(ForestSpecies species) => species switch
         {
-            ForestSpecies.Pine => "fenyő",
+            ForestSpecies.Pine => "erdeifenyő",
             ForestSpecies.Spruce => "lucfenyő",
             ForestSpecies.Birch => "nyír",
+            ForestSpecies.Oak => "tölgy",
+            ForestSpecies.Beech => "bükk",
             _ => "nincs"
         };
 

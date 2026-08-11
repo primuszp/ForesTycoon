@@ -11,14 +11,23 @@ namespace ForesTycoon
         internal const double DefaultSecondsPerYear = 30.0;
         private const int MonthsPerYear = 12;
         private const float YearsPerStep = 1f / MonthsPerYear;
+        private const int MaximumNeighbours = 4;
 
         private IForestHabitat habitat;
         private ForestStand[] stands = Array.Empty<ForestStand>();
         private ForestStand[] nextStands = Array.Empty<ForestStand>();
+        // Empty tiles that border a seeding stand. Rebuilt every month so that the
+        // regeneration pass never has to probe the whole map through the habitat interface.
+        private bool[] seedCandidate = Array.Empty<bool>();
+        private int[] seedCandidateTiles = Array.Empty<int>();
+        private int seedCandidateCount;
         private readonly double secondsPerYear;
         private double accumulatedSeconds;
         private ulong month;
-        private ForestStatistics statistics;
+        private int standCount;
+        private int matureCount;
+        private float totalBiomass;
+        private float totalHealth;
 
         public ForestSystem(IForestHabitat habitat, double secondsPerYear = DefaultSecondsPerYear)
         {
@@ -28,8 +37,10 @@ namespace ForesTycoon
             Reset(habitat);
         }
 
-        public int Count => statistics.StandCount;
-        public ForestStatistics Statistics => statistics;
+        public int Count => standCount;
+
+        public ForestStatistics Statistics => new ForestStatistics(
+            standCount, matureCount, totalBiomass, standCount == 0 ? 0f : totalHealth / standCount);
 
         public bool TryGetStand(int tileId, out ForestStand stand)
         {
@@ -43,6 +54,19 @@ namespace ForesTycoon
             return true;
         }
 
+        /// <summary>
+        /// Canopy pressure from the four neighbouring tiles, 0 (open field) to 1 (closed canopy).
+        /// Drives both suppressed growth and self-thinning mortality.
+        /// </summary>
+        public float GetCrowding(int tileId)
+        {
+            if ((uint)tileId >= (uint)stands.Length) return 0f;
+
+            Span<int> neighbours = stackalloc int[MaximumNeighbours];
+            int neighbourCount = habitat.GetAdjacentTileIds(tileId, neighbours);
+            return Crowding(neighbours, neighbourCount);
+        }
+
         public ForestryActionResult Plant(int tileId, ForestSpecies species)
         {
             if (!Enum.IsDefined(species) || species == ForestSpecies.None)
@@ -52,13 +76,14 @@ namespace ForesTycoon
             if (!habitat.CanSupportForest(tileId)) return ForestryActionResult.UnsuitableTerrain;
 
             ForestSpeciesProfile profile = ForestSpeciesProfile.For(species);
-            float suitability = Suitability(species, habitat.GetMoisture(tileId));
-            stands[tileId] = new ForestStand(
+            float suitability = Suitability(species, tileId);
+            ForestStand planted = new ForestStand(
                 species,
                 YearsPerStep,
                 profile.MaximumBiomass * 0.015f,
                 0.50f + suitability * 0.40f);
-            RecalculateStatistics();
+            stands[tileId] = planted;
+            AddToStatistics(planted);
             return ForestryActionResult.Planted;
         }
 
@@ -76,24 +101,32 @@ namespace ForesTycoon
             }
 
             ForestStand stand = stands[tileId];
-            // One biomass unit represents one hundred tonnes of recoverable roundwood.
-            harvest = new ForestHarvest(stand.Species, stand.AgeYears, stand.Biomass * 100f);
+            harvest = new ForestHarvest(stand.Species, stand.AgeYears, TimberYield(stand));
             stands[tileId] = default;
-            RecalculateStatistics();
+            RemoveFromStatistics(stand);
             return ForestryActionResult.Harvested;
+        }
+
+        /// <summary>
+        /// Recoverable roundwood in tonnes. One biomass unit is one hundred tonnes of stem wood,
+        /// scaled by how valuable and dense the species' timber is.
+        /// </summary>
+        public static float TimberYield(ForestStand stand)
+        {
+            if (stand.IsEmpty) return 0f;
+            return stand.Biomass * 100f * ForestSpeciesProfile.For(stand.Species).WoodDensity;
         }
 
         /// <summary>Applies infrequent terrain/road changes without adding a full-map scan to every tick.</summary>
         public void RefreshHabitat()
         {
-            bool changed = false;
             for (int tileId = 0; tileId < stands.Length; tileId++)
             {
-                if (stands[tileId].IsEmpty || habitat.CanSupportForest(tileId)) continue;
+                ForestStand stand = stands[tileId];
+                if (stand.IsEmpty || habitat.CanSupportForest(tileId)) continue;
                 stands[tileId] = default;
-                changed = true;
+                RemoveFromStatistics(stand);
             }
-            if (changed) RecalculateStatistics();
         }
 
         public void Reset(IForestHabitat newHabitat)
@@ -103,13 +136,17 @@ namespace ForesTycoon
             {
                 stands = new ForestStand[habitat.TileCount];
                 nextStands = new ForestStand[habitat.TileCount];
+                seedCandidate = new bool[habitat.TileCount];
+                seedCandidateTiles = new int[habitat.TileCount];
             }
             else
             {
                 Array.Clear(stands);
                 Array.Clear(nextStands);
+                Array.Clear(seedCandidate);
             }
 
+            seedCandidateCount = 0;
             accumulatedSeconds = 0.0;
             month = 0;
             GenerateInitialForest();
@@ -134,9 +171,11 @@ namespace ForesTycoon
         {
             Array.Clear(stands);
             Array.Clear(nextStands);
+            Array.Clear(seedCandidate);
+            seedCandidateCount = 0;
             accumulatedSeconds = 0.0;
             month = 0;
-            statistics = default;
+            ClearStatistics();
         }
 
         private void GenerateInitialForest()
@@ -157,7 +196,7 @@ namespace ForesTycoon
                 ForestSpecies species = SelectSpecies(moisture, elevation, random);
                 ForestSpeciesProfile profile = ForestSpeciesProfile.For(species);
                 float age = 4f + UnitFloat(Hash(habitat.Seed, tileId, 1)) * profile.MatureAgeYears * 2.2f;
-                float health = Math.Clamp(0.72f + Suitability(species, moisture) * 0.28f, 0f, 1f);
+                float health = Math.Clamp(0.72f + Fitness(species, moisture, elevation) * 0.28f, 0f, 1f);
                 float biomass = InitialBiomass(profile, age, health);
                 stands[tileId] = new ForestStand(species, age, biomass, health);
             }
@@ -166,34 +205,82 @@ namespace ForesTycoon
         private void StepMonth()
         {
             month++;
+            Array.Clear(nextStands);
+            ClearSeedCandidates();
+            ClearStatistics();
+
+            // Pass one: grow the existing stands and record which empty tiles they can seed.
             for (int tileId = 0; tileId < stands.Length; tileId++)
             {
                 ForestStand stand = stands[tileId];
-                nextStands[tileId] = stand.IsEmpty
-                    ? TryRegenerate(tileId)
-                    : GrowOrDie(tileId, stand);
+                if (stand.IsEmpty) continue;
+
+                ForestStand grown = GrowOrDie(tileId, stand);
+                nextStands[tileId] = grown;
+                if (!grown.IsEmpty) AddToStatistics(grown);
+                if (IsSeedSource(stand)) MarkSeedCandidates(tileId);
+            }
+
+            // Pass two: only tiles that actually border a seeding stand can regenerate,
+            // so an empty map costs no habitat queries at all.
+            for (int i = 0; i < seedCandidateCount; i++)
+            {
+                int tileId = seedCandidateTiles[i];
+                if (!stands[tileId].IsEmpty) continue;
+
+                ForestStand seedling = TryRegenerate(tileId);
+                if (seedling.IsEmpty) continue;
+                nextStands[tileId] = seedling;
+                AddToStatistics(seedling);
             }
 
             (stands, nextStands) = (nextStands, stands);
-            RecalculateStatistics();
         }
+
+        private void ClearSeedCandidates()
+        {
+            for (int i = 0; i < seedCandidateCount; i++) seedCandidate[seedCandidateTiles[i]] = false;
+            seedCandidateCount = 0;
+        }
+
+        private void MarkSeedCandidates(int tileId)
+        {
+            Span<int> neighbours = stackalloc int[MaximumNeighbours];
+            int neighbourCount = habitat.GetAdjacentTileIds(tileId, neighbours);
+            for (int i = 0; i < neighbourCount; i++)
+            {
+                int neighbourId = neighbours[i];
+                if (seedCandidate[neighbourId] || !stands[neighbourId].IsEmpty) continue;
+                seedCandidate[neighbourId] = true;
+                seedCandidateTiles[seedCandidateCount++] = neighbourId;
+            }
+        }
+
+        private static bool IsSeedSource(ForestStand stand) =>
+            !stand.IsEmpty && stand.Maturity >= 1f && stand.Health >= 0.45f;
 
         private ForestStand GrowOrDie(int tileId, ForestStand stand)
         {
             if (!habitat.CanSupportForest(tileId)) return default;
 
             ForestSpeciesProfile profile = ForestSpeciesProfile.For(stand.Species);
-            float suitability = Suitability(stand.Species, habitat.GetMoisture(tileId));
-            float targetHealth = 0.25f + suitability * 0.75f;
-            float health = MoveTowards(stand.Health, targetHealth, 0.035f);
+            float suitability = Suitability(stand.Species, tileId);
+            float crowding = GetCrowding(tileId);
+            // Light-demanding species stall under a closed canopy; shade bearers barely notice.
+            float shadePressure = crowding * (1f - profile.ShadeTolerance);
+            float lightFactor = Math.Clamp(1f - shadePressure, 0.05f, 1f);
+
+            float targetHealth = (0.25f + suitability * 0.75f) * (0.55f + lightFactor * 0.45f);
+            float health = MoveTowards(stand.Health, Math.Clamp(targetHealth, 0f, 1f), 0.035f);
             float age = stand.AgeYears + YearsPerStep;
             float remainingCapacity = Math.Max(0f, 1f - stand.Biomass / profile.MaximumBiomass);
             float growth = profile.MaximumBiomass * profile.AnnualGrowthRate
-                * remainingCapacity * health * YearsPerStep;
+                * remainingCapacity * health * lightFactor * YearsPerStep;
             float biomass = Math.Clamp(stand.Biomass + growth, 0f, profile.MaximumBiomass);
 
             float agePressure = Math.Max(0f, (age - profile.MaximumAgeYears) / (profile.MaximumAgeYears * 0.25f));
-            float mortalityChance = (1f - health) * 0.004f + agePressure * 0.012f;
+            // Suppressed trees die out of the stand: this is what makes thinning worth doing.
+            float mortalityChance = (1f - health) * 0.004f + agePressure * 0.012f + shadePressure * 0.006f;
             if (UnitFloat(Hash(habitat.Seed, tileId, month)) < mortalityChance)
                 return default;
 
@@ -204,60 +291,133 @@ namespace ForesTycoon
         {
             if (!habitat.CanSupportForest(tileId)) return default;
 
-            Span<int> neighbours = stackalloc int[4];
+            Span<int> neighbours = stackalloc int[MaximumNeighbours];
             int neighbourCount = habitat.GetAdjacentTileIds(tileId, neighbours);
+            float crowding = Crowding(neighbours, neighbourCount);
+
+            // The best-adapted seed source wins the gap rather than whichever neighbour
+            // happens to sit at the lowest tile index.
             ForestSpecies seedSpecies = ForestSpecies.None;
+            float bestScore = 0f;
             int matureNeighbours = 0;
             for (int i = 0; i < neighbourCount; i++)
             {
                 ForestStand neighbour = stands[neighbours[i]];
-                if (neighbour.IsEmpty || neighbour.Maturity < 1f || neighbour.Health < 0.45f) continue;
+                if (!IsSeedSource(neighbour)) continue;
                 matureNeighbours++;
-                if (seedSpecies == ForestSpecies.None) seedSpecies = neighbour.Species;
+
+                ForestSpeciesProfile candidate = ForestSpeciesProfile.For(neighbour.Species);
+                float shadeFit = 1f - crowding * (1f - candidate.ShadeTolerance);
+                float score = Suitability(neighbour.Species, tileId) * neighbour.Health * Math.Max(0f, shadeFit);
+                if (score <= bestScore) continue;
+                bestScore = score;
+                seedSpecies = neighbour.Species;
             }
 
-            if (matureNeighbours == 0) return default;
+            if (matureNeighbours == 0 || seedSpecies == ForestSpecies.None) return default;
             float annualChance = Math.Min(0.30f, matureNeighbours * 0.055f);
             float monthlyChance = annualChance / MonthsPerYear;
             if (UnitFloat(Hash(habitat.Seed, tileId, month)) >= monthlyChance) return default;
 
-            float suitability = Suitability(seedSpecies, habitat.GetMoisture(tileId));
+            float suitability = Suitability(seedSpecies, tileId);
             if (suitability < 0.18f) return default;
             ForestSpeciesProfile profile = ForestSpeciesProfile.For(seedSpecies);
             return new ForestStand(seedSpecies, YearsPerStep, profile.MaximumBiomass * 0.015f, 0.55f + suitability * 0.35f);
         }
 
+        private float Crowding(ReadOnlySpan<int> neighbours, int neighbourCount)
+        {
+            if (neighbourCount == 0) return 0f;
+
+            float neighbourBiomass = 0f;
+            for (int i = 0; i < neighbourCount; i++) neighbourBiomass += stands[neighbours[i]].Biomass;
+            return Math.Clamp(
+                neighbourBiomass / (neighbourCount * ForestSpeciesProfile.ReferenceCanopyBiomass), 0f, 1f);
+        }
+
+        private void ClearStatistics()
+        {
+            standCount = 0;
+            matureCount = 0;
+            totalBiomass = 0f;
+            totalHealth = 0f;
+        }
+
+        private void AddToStatistics(ForestStand stand)
+        {
+            standCount++;
+            if (stand.Maturity >= 1f) matureCount++;
+            totalBiomass += stand.Biomass;
+            totalHealth += stand.Health;
+        }
+
+        private void RemoveFromStatistics(ForestStand stand)
+        {
+            standCount--;
+            if (stand.Maturity >= 1f) matureCount--;
+            totalBiomass = Math.Max(0f, totalBiomass - stand.Biomass);
+            totalHealth = Math.Max(0f, totalHealth - stand.Health);
+        }
+
         private void RecalculateStatistics()
         {
-            int count = 0;
-            int mature = 0;
-            float biomass = 0f;
-            float health = 0f;
+            ClearStatistics();
             for (int i = 0; i < stands.Length; i++)
             {
                 ForestStand stand = stands[i];
                 if (stand.IsEmpty) continue;
-                count++;
-                if (stand.Maturity >= 1f) mature++;
-                biomass += stand.Biomass;
-                health += stand.Health;
+                AddToStatistics(stand);
             }
-            statistics = new ForestStatistics(count, mature, biomass, count == 0 ? 0f : health / count);
         }
 
         private static ForestSpecies SelectSpecies(float moisture, float elevation, uint random)
         {
+            // Montane and wet ground: spruce belt, with beech mixed in and birch on the edges.
             if (elevation > 0.68f || moisture > 0.78f)
-                return (random & 3u) == 0u ? ForestSpecies.Birch : ForestSpecies.Spruce;
+                return (random % 5u) switch
+                {
+                    0u => ForestSpecies.Birch,
+                    1u => ForestSpecies.Beech,
+                    _ => ForestSpecies.Spruce
+                };
+
+            // Dry lowland: pine and oak country.
             if (moisture < 0.52f)
-                return (random & 3u) == 0u ? ForestSpecies.Birch : ForestSpecies.Pine;
-            return (random & 1u) == 0u ? ForestSpecies.Pine : ForestSpecies.Birch;
+                return (random % 5u) switch
+                {
+                    0u => ForestSpecies.Birch,
+                    1u or 2u => ForestSpecies.Oak,
+                    _ => ForestSpecies.Pine
+                };
+
+            // Fresh mid-slope soils: the classic mixed broadleaf stand.
+            return (random % 4u) switch
+            {
+                0u => ForestSpecies.Pine,
+                1u => ForestSpecies.Birch,
+                2u => ForestSpecies.Oak,
+                _ => ForestSpecies.Beech
+            };
         }
 
-        private static float Suitability(ForestSpecies species, float moisture)
+        private float Suitability(ForestSpecies species, int tileId) =>
+            Fitness(species, habitat.GetMoisture(tileId), habitat.GetNormalizedElevation(tileId));
+
+        /// <summary>
+        /// How well a species matches the site. Moisture and elevation are combined
+        /// multiplicatively so that a stand on the right slope but the wrong soil still suffers.
+        /// </summary>
+        internal static float Fitness(ForestSpecies species, float moisture, float elevation)
         {
             ForestSpeciesProfile profile = ForestSpeciesProfile.For(species);
-            return Math.Clamp(1f - Math.Abs(moisture - profile.PreferredMoisture) / profile.MoistureTolerance, 0f, 1f);
+            if (profile.MoistureTolerance <= 0f || profile.ElevationTolerance <= 0f) return 0f;
+
+            float moistureFit = Math.Clamp(
+                1f - Math.Abs(moisture - profile.PreferredMoisture) / profile.MoistureTolerance, 0f, 1f);
+            float elevationFit = Math.Clamp(
+                1f - Math.Abs(elevation - profile.PreferredElevation) / profile.ElevationTolerance, 0f, 1f);
+            // Elevation is the weaker of the two signals; soil moisture decides most sites.
+            return moistureFit * (0.45f + elevationFit * 0.55f);
         }
 
         private static float InitialBiomass(ForestSpeciesProfile profile, float age, float health)
