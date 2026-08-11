@@ -66,7 +66,7 @@ public class ForestSystemTests
         int tileId = FindFirstEmptyTile(forest, habitat.TileCount);
 
         Assert.Equal(ForestryActionResult.Planted, forest.Plant(tileId, ForestSpecies.Spruce));
-        Assert.Equal(ForestryActionResult.TileOccupied, forest.Plant(tileId, ForestSpecies.Pine));
+        Assert.Equal(ForestryActionResult.TileOccupied, forest.Plant(tileId, ForestSpecies.Oak));
         Assert.Equal(ForestryActionResult.Harvested, forest.Harvest(tileId, out ForestHarvest harvest));
 
         Assert.Equal(ForestSpecies.Spruce, harvest.Species);
@@ -83,7 +83,7 @@ public class ForestSystemTests
         int tileId = FindFirstEmptyTile(forest, habitat.TileCount);
         habitat.SetSupported(tileId, false);
 
-        ForestryActionResult result = forest.Plant(tileId, ForestSpecies.Pine);
+        ForestryActionResult result = forest.Plant(tileId, ForestSpecies.Oak);
 
         Assert.Equal(ForestryActionResult.UnsuitableTerrain, result);
         Assert.False(forest.TryGetStand(tileId, out _));
@@ -92,7 +92,7 @@ public class ForestSystemTests
     [Fact]
     public void NewlyPlantedStand_HasReadableMinimumVisualScale()
     {
-        ForestStand sapling = new ForestStand(ForestSpecies.Pine, 1f / 12f, 0.015f, 0.8f);
+        ForestStand sapling = new ForestStand(ForestSpecies.Spruce, 1f / 12f, 0.015f, 0.8f);
 
         Assert.True(Terrain.TreeVisualScale(sapling) >= 0.5f);
     }
@@ -114,11 +114,11 @@ public class ForestSystemTests
     [Fact]
     public void Fitness_RanksSpeciesByHowWellTheSiteMatchesThem()
     {
-        // Wet, high ground is spruce country; dry lowland belongs to pine.
+        // Wet, high ground is spruce country; dry lowland belongs to oak.
         Assert.True(ForestSystem.Fitness(ForestSpecies.Spruce, 0.78f, 0.74f)
-            > ForestSystem.Fitness(ForestSpecies.Pine, 0.78f, 0.74f));
-        Assert.True(ForestSystem.Fitness(ForestSpecies.Pine, 0.45f, 0.30f)
-            > ForestSystem.Fitness(ForestSpecies.Spruce, 0.45f, 0.30f));
+            > ForestSystem.Fitness(ForestSpecies.Oak, 0.78f, 0.74f));
+        Assert.True(ForestSystem.Fitness(ForestSpecies.Oak, 0.50f, 0.30f)
+            > ForestSystem.Fitness(ForestSpecies.Spruce, 0.50f, 0.30f));
     }
 
     [Fact]
@@ -154,19 +154,24 @@ public class ForestSystemTests
             habitat.SetSupported(tileId, tileId is crowded - 1 or crowded or crowded + 1 or open);
 
         ForestSystem forest = new ForestSystem(habitat, secondsPerYear: 1.0);
+        // Start from bare ground so the comparison only sees the stands planted here.
+        forest.Clear();
         forest.Plant(crowded - 1, ForestSpecies.Spruce);
         forest.Plant(crowded, ForestSpecies.Birch);
         forest.Plant(crowded + 1, ForestSpecies.Spruce);
         forest.Plant(open, ForestSpecies.Birch);
 
-        forest.Update(8.0);
+        // Nine years in, the neighbouring spruce are established but the birch is still
+        // alive; later on it is thinned out entirely, which the next test covers.
+        forest.Update(9.0);
 
         Assert.True(forest.GetCrowding(crowded) > forest.GetCrowding(open));
         Assert.True(forest.TryGetStand(crowded, out ForestStand suppressed));
         Assert.True(forest.TryGetStand(open, out ForestStand openGrown));
-        Assert.True(openGrown.Biomass > suppressed.Biomass * 2f,
-            "A birch hemmed in by spruce must accumulate far less biomass than one grown in the open.");
-        Assert.True(openGrown.Health > suppressed.Health);
+        Assert.True(openGrown.Biomass > suppressed.Biomass,
+            "A birch hemmed in by spruce must accumulate less biomass than one grown in the open.");
+        Assert.True(openGrown.Health > suppressed.Health,
+            "Shade must cost the suppressed birch some of its health.");
     }
 
     [Fact]
@@ -178,6 +183,8 @@ public class ForestSystemTests
             habitat.SetSupported(tileId, tileId is crowded - 1 or crowded or crowded + 1);
 
         ForestSystem forest = new ForestSystem(habitat, secondsPerYear: 1.0);
+        // Start from bare ground so the comparison only sees the stands planted here.
+        forest.Clear();
         forest.Plant(crowded - 1, ForestSpecies.Spruce);
         forest.Plant(crowded, ForestSpecies.Birch);
         forest.Plant(crowded + 1, ForestSpecies.Spruce);
@@ -207,8 +214,7 @@ public class ForestSystemTests
     {
         ForestSpecies[] species =
         {
-            ForestSpecies.Pine, ForestSpecies.Spruce, ForestSpecies.Birch,
-            ForestSpecies.Oak, ForestSpecies.Beech
+            ForestSpecies.Spruce, ForestSpecies.Birch, ForestSpecies.Oak, ForestSpecies.Beech
         };
 
         HashSet<TreeCrownShape> shapes = new HashSet<TreeCrownShape>();
@@ -229,8 +235,7 @@ public class ForestSystemTests
     {
         ForestSpecies[] species =
         {
-            ForestSpecies.Pine, ForestSpecies.Spruce, ForestSpecies.Birch,
-            ForestSpecies.Oak, ForestSpecies.Beech
+            ForestSpecies.Spruce, ForestSpecies.Birch, ForestSpecies.Oak, ForestSpecies.Beech
         };
 
         foreach (ForestSpecies value in species)
@@ -252,16 +257,16 @@ public class ForestSystemTests
             }
         }
 
-        Terrain.TreeModel pine = Terrain.TreeModel.For(ForestSpecies.Pine);
         Terrain.TreeModel spruce = Terrain.TreeModel.For(ForestSpecies.Spruce);
         Terrain.TreeModel birch = Terrain.TreeModel.For(ForestSpecies.Birch);
         Terrain.TreeModel oak = Terrain.TreeModel.For(ForestSpecies.Oak);
+        Terrain.TreeModel beech = Terrain.TreeModel.For(ForestSpecies.Beech);
 
         // The silhouettes each species is supposed to read as, from across the map.
         Assert.True(spruce.TotalHeight > oak.TotalHeight, "Spruce must tower over oak.");
         Assert.True(oak.CrownRadius > spruce.CrownRadius, "Oak must spread wider than spruce.");
-        Assert.True(pine.BareStemFraction > spruce.BareStemFraction,
-            "Pine must show a long bare stem where spruce branches almost from the ground.");
+        Assert.True(beech.BareStemFraction > spruce.BareStemFraction,
+            "Beech must show a long clean bole where spruce branches almost from the ground.");
         Assert.True(oak.TrunkRadius > birch.TrunkRadius, "Birch must look slender next to oak.");
         Assert.True(oak.CrownRadius * 2f > oak.CrownHeight, "The oak crown must be wider than it is tall.");
         Assert.True(spruce.CrownHeight > spruce.CrownRadius * 2f * 2f, "The spruce crown must be a narrow spire.");

@@ -32,7 +32,7 @@ This separation keeps input responsive, makes commands replayable, and lets simu
 
 - Forest state is stored in contiguous arrays indexed by tile ID; no entities or temporary collections are allocated per tick.
 - Growth runs in deterministic monthly steps. One simulated year currently lasts 30 real-time simulation seconds.
-- Pine, spruce and birch have distinct maturity ages, biomass limits, growth rates and moisture preferences.
+- Spruce, birch, oak and beech have distinct maturity ages, biomass limits, growth rates, site preferences, shade tolerance and timber value.
 - Terrain moisture, elevation, standing water, rivers and roads determine habitat availability.
 - Mature, healthy neighbouring stands can seed empty suitable tiles naturally.
 - The renderer reads immutable stand snapshots and scales/colours trees without owning forest rules.

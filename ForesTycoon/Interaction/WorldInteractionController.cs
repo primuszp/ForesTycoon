@@ -32,7 +32,7 @@ namespace ForesTycoon
         }
         public bool IsRoadDragging => roadDragStartTileId >= 0;
         public bool IsRoadRemoval { get; private set; }
-        public ForestSpecies PlantingSpecies { get; set; } = ForestSpecies.Pine;
+        public ForestSpecies PlantingSpecies { get; set; } = ForestSpecies.Spruce;
 
         public static bool IsRoadTool(TerrainEditTool tool) =>
             tool == TerrainEditTool.Road || tool == TerrainEditTool.RoadRemove;

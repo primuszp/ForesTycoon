@@ -3,7 +3,6 @@ namespace ForesTycoon
     enum ForestSpecies : byte
     {
         None = 0,
-        Pine = 1,
         Spruce = 2,
         Birch = 3,
         Oak = 4,
@@ -15,8 +14,6 @@ namespace ForesTycoon
     {
         /// <summary>Narrow, many-layered spire (spruce).</summary>
         Spire,
-        /// <summary>Bare trunk with a short, wide umbrella of needles near the top (pine).</summary>
-        Umbrella,
         /// <summary>Small, light, roughly spherical broadleaf crown (birch).</summary>
         Rounded,
         /// <summary>Wide, flattened, heavy broadleaf crown (oak).</summary>
@@ -45,8 +42,6 @@ namespace ForesTycoon
 
         public static ForestSpeciesProfile For(ForestSpecies species) => species switch
         {
-            ForestSpecies.Pine => new ForestSpeciesProfile(
-                160f, 24f, 1.00f, 0.075f, 0.52f, 0.34f, 0.40f, 0.45f, 0.25f, 1.00f, TreeCrownShape.Umbrella),
             ForestSpecies.Spruce => new ForestSpeciesProfile(
                 190f, 30f, 1.15f, 0.065f, 0.76f, 0.25f, 0.72f, 0.38f, 0.70f, 0.92f, TreeCrownShape.Spire),
             ForestSpecies.Birch => new ForestSpeciesProfile(

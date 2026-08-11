@@ -381,21 +381,15 @@ namespace ForesTycoon
                     _ => ForestSpecies.Spruce
                 };
 
-            // Dry lowland: pine and oak country.
+            // Dry lowland: oak country, with birch taking the poorest ground.
             if (moisture < 0.52f)
-                return (random % 5u) switch
-                {
-                    0u => ForestSpecies.Birch,
-                    1u or 2u => ForestSpecies.Oak,
-                    _ => ForestSpecies.Pine
-                };
+                return (random % 4u) == 0u ? ForestSpecies.Birch : ForestSpecies.Oak;
 
             // Fresh mid-slope soils: the classic mixed broadleaf stand.
             return (random % 4u) switch
             {
-                0u => ForestSpecies.Pine,
-                1u => ForestSpecies.Birch,
-                2u => ForestSpecies.Oak,
+                0u => ForestSpecies.Birch,
+                1u => ForestSpecies.Oak,
                 _ => ForestSpecies.Beech
             };
         }
