@@ -22,6 +22,7 @@ namespace ForesTycoon
         private readonly ForestSystem forest;
         private readonly TimberCargoSystem timberCargo;
         private ulong worldTick;
+        private ForestryActionResult lastForestryAction;
 
         public GameWorld(TerrainSettings settings)
         {
@@ -42,6 +43,7 @@ namespace ForesTycoon
         public ForestStatistics ForestStatistics => forest.Statistics;
         public float TimberStockpile => timberCargo.Available;
         public float DeliveredTimber => timberCargo.Delivered;
+        public ForestryActionResult LastForestryAction => lastForestryAction;
         public bool TryGetForestStand(int tileId, out ForestStand stand) => forest.TryGetStand(tileId, out stand);
         public int VisibleChunkCount => terrain.VisibleChunkCount;
         public int TotalChunkCount => terrain.TotalChunkCount;
@@ -107,14 +109,22 @@ namespace ForesTycoon
 
         void IWorldCommandTarget.ExecutePlantForest(int tileId, ForestSpecies species)
         {
-            if (!forest.TryPlant(tileId, species)) return;
+            lastForestryAction = forest.Plant(tileId, species);
             if (terrain.TryGetTileCenter(tileId, out Vector3 position))
-                effects.Spawn(WorldEffectKind.TreePlanted, position);
+                effects.Spawn(lastForestryAction == ForestryActionResult.Planted
+                    ? WorldEffectKind.TreePlanted
+                    : WorldEffectKind.ForestryRejected, position);
         }
 
         void IWorldCommandTarget.ExecuteHarvestForest(int tileId)
         {
-            if (!forest.TryHarvest(tileId, out ForestHarvest harvest)) return;
+            lastForestryAction = forest.Harvest(tileId, out ForestHarvest harvest);
+            if (lastForestryAction != ForestryActionResult.Harvested)
+            {
+                if (terrain.TryGetTileCenter(tileId, out Vector3 rejectedPosition))
+                    effects.Spawn(WorldEffectKind.ForestryRejected, rejectedPosition);
+                return;
+            }
             timberCargo.AddHarvested(harvest.TimberVolume);
             if (terrain.TryGetTileCenter(tileId, out Vector3 position))
                 effects.Spawn(WorldEffectKind.ForestHarvested, position);
@@ -143,6 +153,7 @@ namespace ForesTycoon
             commandJournal.Clear();
             systems.Clear();
             worldTick = 0;
+            lastForestryAction = ForestryActionResult.None;
             ReplaceTerrain(settings);
         }
 
@@ -164,6 +175,7 @@ namespace ForesTycoon
             commandJournal.Clear();
             systems.Clear();
             worldTick = 0;
+            lastForestryAction = ForestryActionResult.None;
             ReplaceTerrain(save.Terrain.ToSettings());
 
             int commandIndex = 0;

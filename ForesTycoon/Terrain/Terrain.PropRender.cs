@@ -38,7 +38,7 @@ namespace ForesTycoon
 
         private static void DrawTreeTrunk(float x, float y, float groundZ, float surfaceZ, ForestStand stand)
         {
-            float scale = 0.28f + stand.Maturity * 0.72f;
+            float scale = TreeVisualScale(stand);
             float trunkRadius = 0.32f * scale;
             float trunkBot = groundZ - 1.0f;
             float trunkTop = surfaceZ + 0.6f * scale;
@@ -65,7 +65,7 @@ namespace ForesTycoon
 
         private static void DrawTreeFoliage(float x, float y, float surfaceZ, ForestStand stand)
         {
-            float scale = 0.28f + stand.Maturity * 0.72f;
+            float scale = TreeVisualScale(stand);
             float trunkTop = surfaceZ + 0.6f * scale;
             float baseRadius = 1.8f * scale;
             float layerHeight = 2.4f * scale;
@@ -97,5 +97,8 @@ namespace ForesTycoon
             DynamicPrimitiveBatch.Vertex3(bx, by, baseZ);
             DynamicPrimitiveBatch.Vertex3(centerX, centerY, tipZ);
         }
+
+        // Newly planted stands must remain readable at normal isometric zoom.
+        internal static float TreeVisualScale(ForestStand stand) => 0.52f + stand.Maturity * 0.48f;
     }
 }

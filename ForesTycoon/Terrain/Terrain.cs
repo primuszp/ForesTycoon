@@ -152,11 +152,9 @@ namespace ForesTycoon
         {
             if (!IsValidTileId(tileId) || roads.Has(tileId)) return false;
             Tile tile = tiles[tileId];
-            if (data.IsBorderTile(tile) || ShouldDrawStandingWater(tile)
-                || tile.Low <= 1 || tile.Low >= 5 || CountRiverCorners(tile) >= 2)
-                return false;
-            float moisture = tileMoisture[tileId];
-            return moisture >= 0.35f && moisture <= 0.95f;
+            return !data.IsBorderTile(tile)
+                && !ShouldDrawStandingWater(tile)
+                && CountRiverCorners(tile) < 2;
         }
 
         float IForestHabitat.GetMoisture(int tileId) => tileMoisture[tileId];

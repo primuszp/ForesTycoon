@@ -30,4 +30,15 @@ namespace ForesTycoon
         ForestSpecies Species,
         float AgeYears,
         float TimberVolume);
+
+    enum ForestryActionResult : byte
+    {
+        None,
+        Planted,
+        Harvested,
+        InvalidTile,
+        TileOccupied,
+        UnsuitableTerrain,
+        NoForest
+    }
 }

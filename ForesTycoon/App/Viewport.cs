@@ -545,6 +545,11 @@ namespace ForesTycoon
             ImGui.Text($"Leszállított faanyag: {world.DeliveredTimber:F1} t");
             if (world.TryGetForestStand(world.HoveredTileId, out ForestStand stand))
                 ImGui.Text($"Csempe: {ForestSpeciesName(stand.Species)}, {stand.AgeYears:F1} év, {stand.Health:P0}");
+            if (world.LastForestryAction != ForestryActionResult.None)
+                ImGui.TextColored(ForestryActionSucceeded(world.LastForestryAction)
+                        ? new NVec4(0.55f, 0.90f, 0.45f, 1f)
+                        : new NVec4(1.00f, 0.42f, 0.35f, 1f),
+                    ForestryActionText(world.LastForestryAction));
             ImGui.Text($"Chunk: {world.VisibleChunkCount}/{world.TotalChunkCount}");
             ImGui.Text($"Frame: {performance.FrameMilliseconds:F1} ms  Sim: {performance.SimulationMilliseconds:F2} ms");
             ImGui.Text($"Render: {performance.RenderMilliseconds:F1} ms  Draw: {performance.DrawCalls}");
@@ -604,6 +609,19 @@ namespace ForesTycoon
             ForestSpecies.Spruce => "lucfenyő",
             ForestSpecies.Birch => "nyír",
             _ => "nincs"
+        };
+
+        private static bool ForestryActionSucceeded(ForestryActionResult result) =>
+            result == ForestryActionResult.Planted || result == ForestryActionResult.Harvested;
+
+        private static string ForestryActionText(ForestryActionResult result) => result switch
+        {
+            ForestryActionResult.Planted => "Ültetés sikeres – a facsemete már látható.",
+            ForestryActionResult.Harvested => "Fakitermelés sikeres.",
+            ForestryActionResult.TileOccupied => "Ültetés sikertelen: a csempe már foglalt.",
+            ForestryActionResult.UnsuitableTerrain => "Ültetés sikertelen: víz, út vagy térképszél.",
+            ForestryActionResult.NoForest => "Nincs kitermelhető fa ezen a csempén.",
+            _ => "Érvénytelen erdészeti művelet."
         };
 
         private void ResetCamera()

@@ -30,6 +30,7 @@ namespace ForesTycoon
                 WorldEffectKind.VehicleSpawned => Color.FromArgb(210, 130, 205, 255),
                 WorldEffectKind.TreePlanted => Color.FromArgb(210, 105, 210, 95),
                 WorldEffectKind.ForestHarvested => Color.FromArgb(210, 210, 145, 72),
+                WorldEffectKind.ForestryRejected => Color.FromArgb(230, 235, 72, 72),
                 _ => Color.White
             };
             float progress = effect.Timeline.SampleProgress(interpolationAlpha);

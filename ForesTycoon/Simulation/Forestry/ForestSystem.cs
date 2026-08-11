@@ -43,13 +43,13 @@ namespace ForesTycoon
             return true;
         }
 
-        public bool TryPlant(int tileId, ForestSpecies species)
+        public ForestryActionResult Plant(int tileId, ForestSpecies species)
         {
             if (!Enum.IsDefined(species) || species == ForestSpecies.None)
                 throw new ArgumentOutOfRangeException(nameof(species));
-            if ((uint)tileId >= (uint)stands.Length || !stands[tileId].IsEmpty
-                || !habitat.CanSupportForest(tileId))
-                return false;
+            if ((uint)tileId >= (uint)stands.Length) return ForestryActionResult.InvalidTile;
+            if (!stands[tileId].IsEmpty) return ForestryActionResult.TileOccupied;
+            if (!habitat.CanSupportForest(tileId)) return ForestryActionResult.UnsuitableTerrain;
 
             ForestSpeciesProfile profile = ForestSpeciesProfile.For(species);
             float suitability = Suitability(species, habitat.GetMoisture(tileId));
@@ -59,15 +59,20 @@ namespace ForesTycoon
                 profile.MaximumBiomass * 0.015f,
                 0.50f + suitability * 0.40f);
             RecalculateStatistics();
-            return true;
+            return ForestryActionResult.Planted;
         }
 
-        public bool TryHarvest(int tileId, out ForestHarvest harvest)
+        public ForestryActionResult Harvest(int tileId, out ForestHarvest harvest)
         {
-            if ((uint)tileId >= (uint)stands.Length || stands[tileId].IsEmpty)
+            if ((uint)tileId >= (uint)stands.Length)
             {
                 harvest = default;
-                return false;
+                return ForestryActionResult.InvalidTile;
+            }
+            if (stands[tileId].IsEmpty)
+            {
+                harvest = default;
+                return ForestryActionResult.NoForest;
             }
 
             ForestStand stand = stands[tileId];
@@ -75,7 +80,7 @@ namespace ForesTycoon
             harvest = new ForestHarvest(stand.Species, stand.AgeYears, stand.Biomass * 100f);
             stands[tileId] = default;
             RecalculateStatistics();
-            return true;
+            return ForestryActionResult.Harvested;
         }
 
         /// <summary>Applies infrequent terrain/road changes without adding a full-map scan to every tick.</summary>
@@ -141,11 +146,15 @@ namespace ForesTycoon
                 if (!habitat.CanSupportForest(tileId)) continue;
 
                 float moisture = habitat.GetMoisture(tileId);
+                float elevation = habitat.GetNormalizedElevation(tileId);
+                // Natural distribution stays selective; manual planting may use harsher land.
+                if (moisture < 0.35f || moisture > 0.95f || elevation <= 0.17f || elevation >= 0.83f)
+                    continue;
                 uint random = Hash(habitat.Seed, tileId, 0);
                 int density = moisture >= 0.70f ? 3 : 5;
                 if (random % (uint)density != 0) continue;
 
-                ForestSpecies species = SelectSpecies(moisture, habitat.GetNormalizedElevation(tileId), random);
+                ForestSpecies species = SelectSpecies(moisture, elevation, random);
                 ForestSpeciesProfile profile = ForestSpeciesProfile.For(species);
                 float age = 4f + UnitFloat(Hash(habitat.Seed, tileId, 1)) * profile.MatureAgeYears * 2.2f;
                 float health = Math.Clamp(0.72f + Suitability(species, moisture) * 0.28f, 0f, 1f);

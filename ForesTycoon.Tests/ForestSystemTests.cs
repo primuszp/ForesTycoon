@@ -65,14 +65,36 @@ public class ForestSystemTests
         ForestSystem forest = new ForestSystem(habitat);
         int tileId = FindFirstEmptyTile(forest, habitat.TileCount);
 
-        Assert.True(forest.TryPlant(tileId, ForestSpecies.Spruce));
-        Assert.False(forest.TryPlant(tileId, ForestSpecies.Pine));
-        Assert.True(forest.TryHarvest(tileId, out ForestHarvest harvest));
+        Assert.Equal(ForestryActionResult.Planted, forest.Plant(tileId, ForestSpecies.Spruce));
+        Assert.Equal(ForestryActionResult.TileOccupied, forest.Plant(tileId, ForestSpecies.Pine));
+        Assert.Equal(ForestryActionResult.Harvested, forest.Harvest(tileId, out ForestHarvest harvest));
 
         Assert.Equal(ForestSpecies.Spruce, harvest.Species);
         Assert.True(harvest.TimberVolume > 0f);
         Assert.False(forest.TryGetStand(tileId, out _));
-        Assert.False(forest.TryHarvest(tileId, out _));
+        Assert.Equal(ForestryActionResult.NoForest, forest.Harvest(tileId, out _));
+    }
+
+    [Fact]
+    public void Plant_ReportsUnsuitableTerrainInsteadOfFailingSilently()
+    {
+        TestHabitat habitat = new TestHabitat(96, seed: 22);
+        ForestSystem forest = new ForestSystem(habitat);
+        int tileId = FindFirstEmptyTile(forest, habitat.TileCount);
+        habitat.SetSupported(tileId, false);
+
+        ForestryActionResult result = forest.Plant(tileId, ForestSpecies.Pine);
+
+        Assert.Equal(ForestryActionResult.UnsuitableTerrain, result);
+        Assert.False(forest.TryGetStand(tileId, out _));
+    }
+
+    [Fact]
+    public void NewlyPlantedStand_HasReadableMinimumVisualScale()
+    {
+        ForestStand sapling = new ForestStand(ForestSpecies.Pine, 1f / 12f, 0.015f, 0.8f);
+
+        Assert.True(Terrain.TreeVisualScale(sapling) >= 0.5f);
     }
 
     private static int FindFirstStand(ForestSystem forest, int tileCount)
