@@ -90,11 +90,53 @@ public class ForestSystemTests
     }
 
     [Fact]
-    public void NewlyPlantedStand_HasReadableMinimumVisualScale()
+    public void VisualScale_KeepsSaplingsReadableButClearlySmallerThanMatureStands()
     {
         ForestStand sapling = new ForestStand(ForestSpecies.Spruce, 1f / 12f, 0.015f, 0.8f);
+        ForestStand mature = new ForestStand(ForestSpecies.Spruce, 60f, 1.1f, 0.9f);
 
-        Assert.True(Terrain.TreeVisualScale(sapling) >= 0.5f);
+        float saplingScale = Terrain.TreeVisualScale(sapling);
+
+        Assert.True(saplingScale >= 0.25f);
+        Assert.True(saplingScale <= Terrain.TreeVisualScale(mature) * 0.5f);
+    }
+
+    [Fact]
+    public void InitialForest_MixesSpeciesInsteadOfCollapsingToOne()
+    {
+        // Regression: species used to be drawn from the same hash the stocking filter had
+        // already tested, so only tiles with random % density == 0 survived and every
+        // mixture fell to its first branch — the map generated a single species.
+        MixedSiteHabitat habitat = new MixedSiteHabitat(4000);
+        ForestSystem forest = new ForestSystem(habitat);
+
+        HashSet<ForestSpecies> species = new HashSet<ForestSpecies>();
+        for (int tileId = 0; tileId < habitat.TileCount; tileId++)
+            if (forest.TryGetStand(tileId, out ForestStand stand))
+                species.Add(stand.Species);
+
+        Assert.Contains(ForestSpecies.Spruce, species);
+        Assert.True(species.Count >= 3, $"Expected a mixed forest, got: {string.Join(", ", species)}.");
+    }
+
+    /// <summary>Lowland map with fresh-to-dry soils: the site the game actually starts on.</summary>
+    private sealed class MixedSiteHabitat : IForestHabitat
+    {
+        public MixedSiteHabitat(int tileCount) => TileCount = tileCount;
+
+        public int TileCount { get; }
+        public int Seed => 42;
+        public bool CanSupportForest(int tileId) => true;
+        public float GetMoisture(int tileId) => 0.38f + tileId % 7 * 0.05f;
+        public float GetNormalizedElevation(int tileId) => 0.18f + tileId % 5 * 0.06f;
+
+        public int GetAdjacentTileIds(int tileId, Span<int> destination)
+        {
+            int count = 0;
+            if (tileId > 0) destination[count++] = tileId - 1;
+            if (tileId + 1 < TileCount) destination[count++] = tileId + 1;
+            return count;
+        }
     }
 
     [Fact]

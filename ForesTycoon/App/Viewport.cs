@@ -547,6 +547,12 @@ namespace ForesTycoon
             ImGui.Text($"Leszállított faanyag: {world.DeliveredTimber:F1} t");
             if (world.TryGetForestStand(world.HoveredTileId, out ForestStand stand))
                 ImGui.Text($"Csempe: {ForestSpeciesName(stand.Species)}, {stand.AgeYears:F1} év, {stand.Health:P0}");
+            if (WorldInteractionController.IsForestryTool(interaction.ActiveTool) && interaction.IsForestryDragging)
+                ImGui.Text($"Terület: {world.ForestryPreviewCount} csempe");
+            ForestryAreaSummary area = world.LastForestryArea;
+            if (!area.IsEmpty)
+                ImGui.Text($"Terület művelet: {area.Applied}/{area.TileCount} csempe"
+                    + (area.TimberVolume > 0f ? $", {area.TimberVolume:F1} t" : string.Empty));
             if (world.LastForestryAction != ForestryActionResult.None)
                 ImGui.TextColored(ForestryActionSucceeded(world.LastForestryAction)
                         ? new NVec4(0.55f, 0.90f, 0.45f, 1f)

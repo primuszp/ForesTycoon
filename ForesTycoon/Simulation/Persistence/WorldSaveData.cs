@@ -9,7 +9,9 @@ namespace ForesTycoon
         RoadPath,
         SpawnVehicle,
         PlantForest,
-        HarvestForest
+        HarvestForest,
+        PlantForestArea,
+        HarvestForestArea
     }
 
     readonly record struct WorldCommandRecord(

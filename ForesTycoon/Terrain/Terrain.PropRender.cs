@@ -17,38 +17,48 @@ namespace ForesTycoon
         private static readonly Vector3 TreeLight = Vector3.Normalize(new Vector3(0.45f, 0.65f, 1.05f));
         private const float TreeAmbient = 0.42f;
 
-        /// <summary>Resolved placement and dimensions of one drawn tree.</summary>
+        /// <summary>Resolved placement and dimensions of one drawn stem.</summary>
         private readonly struct TreeInstance
         {
             public readonly ForestStand Stand;
-            public readonly int TileId;
+            // Per-stem seed; stems in one tile must not share their branch and lobe layout.
+            public readonly int Seed;
             public readonly float X;
             public readonly float Y;
             public readonly float BaseZ;
             public readonly float Scale;
             // Deterministic yaw so neighbouring crowns do not all face the same way.
             public readonly float Yaw;
-            // Per-tree colour drift, so a closed stand does not look like one flat green blob.
+            // Per-stem colour drift, so a closed stand does not look like one flat green blob.
             public readonly float Tint;
+            // Crowded stems are drawn up towards the light: narrower and taller than an
+            // open-grown tree of the same species. Both are multipliers on the model crown.
+            public readonly float CrownWidth;
+            public readonly float CrownRise;
+            // Detail is decided once, from the stem's real size, not from its scale alone.
+            public readonly byte Detail;
 
-            public TreeInstance(ForestStand stand, int tileId, float x, float y, float baseZ,
-                float scale, float yaw, float tint)
+            public TreeInstance(ForestStand stand, int seed, float x, float y, float baseZ,
+                float scale, float yaw, float tint, float crownWidth, float crownRise, byte detail)
             {
                 Stand = stand;
-                TileId = tileId;
+                Seed = seed;
                 X = x;
                 Y = y;
                 BaseZ = baseZ;
                 Scale = scale;
                 Yaw = yaw;
                 Tint = tint;
+                CrownWidth = crownWidth;
+                CrownRise = crownRise;
+                Detail = detail;
             }
 
-            /// <summary>Saplings are tiny on screen and do not deserve a full-detail lathe.</summary>
-            public int Sides => Scale >= 0.72f ? 8 : 5;
+            /// <summary>Stems that cover few pixels do not deserve a full-detail lathe.</summary>
+            public int Sides => Detail >= 2 ? 8 : Detail == 1 ? 6 : 5;
 
-            /// <summary>Limbs and side lobes only pay for themselves once a tree is big enough to see.</summary>
-            public bool IsFullDetail => Scale >= 0.80f;
+            /// <summary>Limbs and side lobes only pay for themselves on the larger stems.</summary>
+            public bool IsFullDetail => Detail >= 2;
 
             public float TrunkTop(in TreeModel model) => BaseZ + model.TrunkHeight * Scale;
         }
@@ -65,6 +75,9 @@ namespace ForesTycoon
             int BranchCount,
             // Secondary crown lobes; a single blob never reads as a broadleaf canopy.
             int LobeCount,
+            // Stems a fully stocked, mature tile of this species carries. A wide oak crown
+            // closes the canopy with far fewer stems than a narrow spruce spire.
+            int MatureStems,
             float[] CrownOutline,
             Color TrunkColor,
             Color CrownColor)
@@ -78,26 +91,26 @@ namespace ForesTycoon
             {
                 // Narrow tiered spire branching almost from the ground; no bare bole to show.
                 ForestSpecies.Spruce => new TreeModel(
-                    0.7f, 0.28f, 1.65f, 8.4f, 0.02f, 0, 0, SpruceOutline,
-                    Color.FromArgb(74, 54, 38), Color.FromArgb(32, 82, 58)),
+                    0.7f, 0.28f, 1.65f, 8.4f, 0.02f, 0, 0, 14, SpruceOutline,
+                    Color.FromArgb(74, 54, 38), Color.FromArgb(30, 72, 62)),
 
                 // Slender white stem, light airy crown carried on a few fine limbs.
                 ForestSpecies.Birch => new TreeModel(
-                    2.8f, 0.20f, 1.70f, 4.1f, 0.10f, 3, 2, BirchOutline,
-                    Color.FromArgb(208, 208, 196), Color.FromArgb(162, 200, 92)),
+                    2.8f, 0.20f, 1.70f, 4.1f, 0.28f, 3, 2, 12, BirchOutline,
+                    Color.FromArgb(208, 208, 196), Color.FromArgb(174, 206, 88)),
 
                 // Short heavy bole forking into thick limbs under a broad spreading dome.
                 ForestSpecies.Oak => new TreeModel(
-                    2.6f, 0.52f, 3.10f, 3.3f, 0.08f, 5, 3, OakOutline,
-                    Color.FromArgb(110, 84, 54), Color.FromArgb(60, 104, 42)),
+                    2.6f, 0.52f, 2.55f, 4.0f, 0.26f, 5, 3, 4, OakOutline,
+                    Color.FromArgb(110, 84, 54), Color.FromArgb(72, 96, 38)),
 
                 // Tall smooth grey column under a high egg-shaped crown.
                 ForestSpecies.Beech => new TreeModel(
-                    3.2f, 0.38f, 2.20f, 4.8f, 0.10f, 4, 2, BeechOutline,
-                    Color.FromArgb(146, 134, 116), Color.FromArgb(118, 158, 66)),
+                    3.2f, 0.38f, 2.20f, 4.8f, 0.24f, 4, 2, 7, BeechOutline,
+                    Color.FromArgb(146, 134, 116), Color.FromArgb(124, 152, 58)),
 
                 _ => new TreeModel(
-                    2.0f, 0.30f, 1.60f, 3.6f, 0.25f, 3, 2, BirchOutline,
+                    2.0f, 0.30f, 1.60f, 3.6f, 0.25f, 3, 2, 9, BirchOutline,
                     Color.FromArgb(115, 72, 32), Color.FromArgb(70, 128, 52))
             };
         }
@@ -133,53 +146,176 @@ namespace ForesTycoon
             0.00f, 0.00f, 0.08f, 0.44f, 0.24f, 0.74f, 0.50f, 0.94f, 0.74f, 1.00f, 0.92f, 0.62f, 1.00f, 0.00f
         };
 
+        /// <summary>
+        /// Global size multiplier for drawn stems. Trees are read against the width of a road,
+        /// and at the geometric size the lattice alone produces they came out too small next
+        /// to one; the reference look wants a mature crown to be a sizeable share of a tile.
+        /// </summary>
+        private const float StemSizeBoost = 1.45f;
+
+        /// <summary>Upper bound on the stems one tile can carry; sizes the stack buffer.</summary>
+        private const int MaximumStemsPerTile = 16;
+
         internal void DrawTrees(ForestSystem forest)
         {
             DynamicPrimitiveBatch.Draw(PrimitiveType.Quads, () =>
             {
+                Span<TreeInstance> stems = stackalloc TreeInstance[MaximumStemsPerTile];
                 foreach (Tile tile in visibleTiles)
-                    if (TryGetTree(forest, tile, out TreeInstance tree))
-                        DrawTreeWood(tree);
+                {
+                    int count = BuildStems(forest, tile, stems);
+                    for (int stem = 0; stem < count; stem++)
+                        DrawTreeWood(stems[stem]);
+                }
             });
 
             DynamicPrimitiveBatch.Draw(PrimitiveType.Triangles, () =>
             {
+                Span<TreeInstance> stems = stackalloc TreeInstance[MaximumStemsPerTile];
                 foreach (Tile tile in visibleTiles)
-                    if (TryGetTree(forest, tile, out TreeInstance tree))
-                        DrawTreeCrown(tree);
+                {
+                    int count = BuildStems(forest, tile, stems);
+                    for (int stem = 0; stem < count; stem++)
+                        DrawTreeCrown(stems[stem]);
+                    if (count > 0) DrawUndergrowth(tile, stems[0], count);
+                }
             });
         }
 
-        private bool TryGetTree(ForestSystem forest, Tile tile, out TreeInstance tree)
+        /// <summary>
+        /// Expands one tile's stand into the stems that are actually drawn. The tile is split
+        /// into a fixed lattice and every cell is given a deterministic rank; a cell carries a
+        /// stem while its rank falls under the tile's stocking. Because the ranks never change,
+        /// a growing stand keeps the stems it already has and fills in new ones between them
+        /// instead of reshuffling the whole tile every month.
+        /// </summary>
+        private int BuildStems(ForestSystem forest, Tile tile, Span<TreeInstance> stems)
         {
-            tree = default;
-            if (!forest.TryGetStand(tile.Id, out ForestStand stand)) return false;
+            if (!forest.TryGetStand(tile.Id, out ForestStand stand)) return 0;
 
-            float centerX = (tile.W.xPos + tile.S.xPos + tile.E.xPos + tile.N.xPos) * 0.25f;
-            float centerY = (tile.W.yPos + tile.S.yPos + tile.E.yPos + tile.N.yPos) * 0.25f;
-            // Sit the trunk on the tile centre rather than its highest corner, otherwise
-            // trees on a slope float above the ground they are supposed to grow out of.
-            float centerZ = (tile.W.zPos + tile.S.zPos + tile.E.zPos + tile.N.zPos) * 0.25f;
+            TreeModel model = TreeModel.For(stand.Species);
+            // A young stand is a handful of saplings; a stocked mature one closes the canopy.
+            float stocking = Math.Clamp(stand.Biomass / MathF.Max(
+                ForestSpeciesProfile.For(stand.Species).MaximumBiomass, 0.0001f), 0f, 1f);
+            // Tiles with open neighbours carry a thinner stand, which is what gives a block of
+            // forest a ragged edge instead of a wall of trees ending at a tile boundary.
+            float crowding = forest.GetCrowding(tile.Id);
+            float edge = 0.72f + 0.28f * crowding;
 
-            // Independent draws: reusing shifted slices of one hash would leave the later
-            // values with almost no entropy, which flattens the variation to nothing.
-            float jitterX = (UnitFloat(TreeHash(tile.Id, 0)) - 0.5f) * 0.45f * tileSizeM;
-            float jitterY = (UnitFloat(TreeHash(tile.Id, 1)) - 0.5f) * 0.45f * tileSizeM;
-            float sizeVariation = 0.86f + UnitFloat(TreeHash(tile.Id, 2)) * 0.28f;
-            float yaw = UnitFloat(TreeHash(tile.Id, 3)) * MathF.Tau;
-            float tint = UnitFloat(TreeHash(tile.Id, 4)) - 0.5f;
+            float target = (1f + (model.MatureStems - 1f) * stand.Maturity)
+                * (0.40f + 0.60f * stocking) * edge;
+            int capacity = Math.Min(model.MatureStems, MaximumStemsPerTile);
+            float fill = Math.Clamp(target / capacity, 0f, 1f);
 
-            tree = new TreeInstance(
-                stand,
-                tile.Id,
-                centerX + jitterX,
-                centerY + jitterY,
-                centerZ,
-                TreeVisualScale(stand) * sizeVariation,
-                yaw,
-                tint);
-            return true;
+            int lattice = (int)MathF.Ceiling(MathF.Sqrt(capacity));
+            // Stems share the tile, so each one has to shrink or the canopy turns into a
+            // handful of overlapping giants. This is deliberately a function of the species'
+            // full stocking rather than of the current stem count: sizing off the live count
+            // would make a lone sapling as large as a mature tree. The exponent is tuned so
+            // that a fully stocked tile's crowns overlap into a closed canopy.
+            float density = MathF.Pow(1f / capacity, 0.28f);
+            float standScale = TreeVisualScale(stand) * density * StemSizeBoost;
+
+            // Crowded stems are drawn up: narrower crown, carried higher on the stem.
+            float crownWidth = 1.12f - 0.32f * crowding;
+            float crownRise = 0.92f + 0.24f * crowding;
+
+            int count = 0;
+            int limit = Math.Min(capacity, stems.Length);
+            // A planted tile must always show something, even before its stocking lets the
+            // first lattice cell through; the lowest-ranked cell is the fallback stem.
+            int firstCell = 0;
+            float firstRank = float.MaxValue;
+
+            for (int cell = 0; cell < lattice * lattice; cell++)
+            {
+                float rank = UnitFloat(TreeHash(tile.Id, (uint)cell * 977u + 101u));
+                if (rank < firstRank)
+                {
+                    firstRank = rank;
+                    firstCell = cell;
+                }
+
+                if (rank >= fill || count >= limit) continue;
+                stems[count++] = MakeStem(tile, stand, model, cell, lattice, rank, fill,
+                    standScale, crownWidth, crownRise);
+            }
+
+            if (count == 0)
+                stems[count++] = MakeStem(tile, stand, model, firstCell, lattice, 0f, 1f,
+                    standScale, crownWidth, crownRise);
+
+            return count;
         }
+
+        /// <summary>
+        /// Low shrubs scattered between the stems. Without them a stand is a set of trees
+        /// standing on open lawn; the reference look needs the forest floor to be occupied.
+        /// Only stands dense enough to read as forest, and close enough to see, get them.
+        /// </summary>
+        private static void DrawUndergrowth(Tile tile, in TreeInstance reference, int stemCount)
+        {
+            if (reference.Detail < 2 || stemCount < 3) return;
+
+            TreeModel model = TreeModel.For(reference.Stand.Species);
+            Color shrub = Shade(Weather(model.CrownColor, reference.Stand.Health), 0.72f);
+            int shrubCount = Math.Min(4, stemCount / 3);
+
+            for (int shrub_ = 0; shrub_ < shrubCount; shrub_++)
+            {
+                uint seed = TreeHash(tile.Id, (uint)shrub_ * 613u + 331u);
+                float u = 0.15f + UnitFloat(seed) * 0.70f;
+                float v = 0.15f + UnitFloat(seed >> 5) * 0.70f;
+                float radius = reference.Scale * (0.42f + UnitFloat(seed >> 11) * 0.26f);
+
+                SurfacePoint(tile, u, v, out float x, out float y, out float z);
+                DrawCrownLobe(reference, Shade(shrub, 0.92f + UnitFloat(seed >> 17) * 0.18f),
+                    x, y, z, radius, radius * 1.15f, LobeOutline, 5);
+            }
+        }
+
+        /// <summary>Places one stem inside its lattice cell and resolves its drawn size.</summary>
+        private static TreeInstance MakeStem(Tile tile, in ForestStand stand, in TreeModel model,
+            int cell, int lattice, float rank, float fill,
+            float standScale, float crownWidth, float crownRise)
+        {
+            uint seed = TreeHash(tile.Id, (uint)cell * 131u + 7u);
+            // Cell centre plus a jitter that stays inside the cell, so stems spread evenly
+            // over the tile without the lattice ever becoming visible.
+            float u = (cell % lattice + 0.5f + (UnitFloat(seed) - 0.5f) * 0.8f) / lattice;
+            float v = (cell / lattice + 0.5f + (UnitFloat(seed >> 3) - 0.5f) * 0.8f) / lattice;
+
+            // The stems that appeared first are the oldest, and stand above the rest.
+            float tier = rank < fill * 0.22f ? 1.18f : rank > fill * 0.72f ? 0.66f : 1f;
+            float sizeVariation = 0.88f + UnitFloat(seed >> 7) * 0.24f;
+            float scale = standScale * tier * sizeVariation;
+
+            SurfacePoint(tile, u, v, out float x, out float y, out float z);
+            return new TreeInstance(
+                stand, unchecked(tile.Id * 61 + cell), x, y, z, scale,
+                UnitFloat(seed >> 11) * MathF.Tau,
+                UnitFloat(seed >> 17) - 0.5f,
+                crownWidth, crownRise,
+                DetailLevel(model.CrownRadius * scale * crownWidth));
+        }
+
+        /// <summary>Bilinear point on a tile's surface, so stems follow the slope they grow on.</summary>
+        private static void SurfacePoint(Tile tile, float u, float v,
+            out float x, out float y, out float z)
+        {
+            float wW = (1f - u) * (1f - v);
+            float wS = u * (1f - v);
+            float wE = u * v;
+            float wN = (1f - u) * v;
+
+            x = tile.W.xPos * wW + tile.S.xPos * wS + tile.E.xPos * wE + tile.N.xPos * wN;
+            y = tile.W.yPos * wW + tile.S.yPos * wS + tile.E.yPos * wE + tile.N.yPos * wN;
+            z = tile.W.zPos * wW + tile.S.zPos * wS + tile.E.zPos * wE + tile.N.zPos * wN;
+        }
+
+        /// <summary>Detail band from the stem's crown radius in world units, not from its scale.</summary>
+        private static byte DetailLevel(float crownRadius) =>
+            crownRadius >= 0.85f ? (byte)2 : crownRadius >= 0.45f ? (byte)1 : (byte)0;
 
         // ── Wood ────────────────────────────────────────────────────────────
 
@@ -210,15 +346,15 @@ namespace ForesTycoon
         private static void DrawBranches(in TreeInstance tree, in TreeModel model, Color wood,
             float boleTopZ, float boleTopRadius)
         {
-            float crownHeight = model.CrownHeight * tree.Scale;
+            float crownHeight = model.CrownHeight * tree.Scale * tree.CrownRise;
             float crownBase = boleTopZ - crownHeight * model.CrownDrop;
-            float crownRadius = model.CrownRadius * tree.Scale;
+            float crownRadius = model.CrownRadius * tree.Scale * tree.CrownWidth;
             // Fork below the crown so the limbs are visible before they disappear into foliage.
             float forkZ = crownBase - (crownBase - tree.BaseZ) * 0.55f;
 
             for (int branch = 0; branch < model.BranchCount; branch++)
             {
-                int seed = tree.TileId * 31 + branch;
+                int seed = tree.Seed * 31 + branch;
                 float angle = tree.Yaw + MathF.Tau * branch / model.BranchCount
                     + (UnitFloat(TreeHash(seed, 11u)) - 0.5f) * 0.7f;
                 // Tips stop just inside the canopy edge, so limbs show through the crown
@@ -274,8 +410,8 @@ namespace ForesTycoon
         {
             TreeModel model = TreeModel.For(tree.Stand.Species);
             Color crown = Weather(Tinted(model.CrownColor, tree.Tint), tree.Stand.Health);
-            float height = model.CrownHeight * tree.Scale;
-            float radius = model.CrownRadius * tree.Scale;
+            float height = model.CrownHeight * tree.Scale * tree.CrownRise;
+            float radius = model.CrownRadius * tree.Scale * tree.CrownWidth;
             float crownBase = tree.TrunkTop(model) - height * model.CrownDrop;
 
             DrawCrownLobe(tree, crown, tree.X, tree.Y, crownBase, radius, height,
@@ -286,7 +422,7 @@ namespace ForesTycoon
             // Smaller lobes pushed out around the main mass break the single-blob silhouette.
             for (int lobe = 0; lobe < model.LobeCount; lobe++)
             {
-                int seed = tree.TileId * 17 + lobe;
+                int seed = tree.Seed * 17 + lobe;
                 float angle = tree.Yaw + MathF.Tau * lobe / model.LobeCount
                     + (UnitFloat(TreeHash(seed, 21u)) - 0.5f) * 0.8f;
                 float offset = radius * (0.40f + UnitFloat(TreeHash(seed, 22u)) * 0.20f);
@@ -413,7 +549,8 @@ namespace ForesTycoon
             return value ^ (value >> 16);
         }
 
-        // Newly planted stands must remain readable at normal isometric zoom.
-        internal static float TreeVisualScale(ForestStand stand) => 0.52f + stand.Maturity * 0.48f;
+        // Growth has to be visible: a fresh planting is a small stem, a mature stand is full
+        // size. The floor keeps a newly planted sapling readable at normal isometric zoom.
+        internal static float TreeVisualScale(ForestStand stand) => 0.28f + stand.Maturity * 0.72f;
     }
 }

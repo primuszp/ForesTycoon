@@ -193,7 +193,11 @@ namespace ForesTycoon
                 int density = moisture >= 0.70f ? 3 : 5;
                 if (random % (uint)density != 0) continue;
 
-                ForestSpecies species = SelectSpecies(moisture, elevation, random);
+                // Species must be drawn from an independent hash. Reusing the value the
+                // density filter just tested keeps only tiles where random % density == 0,
+                // which collapsed every mixture below to its first branch — the whole map
+                // came out as a single species.
+                ForestSpecies species = SelectSpecies(moisture, elevation, Hash(habitat.Seed, tileId, 2));
                 ForestSpeciesProfile profile = ForestSpeciesProfile.For(species);
                 float age = 4f + UnitFloat(Hash(habitat.Seed, tileId, 1)) * profile.MatureAgeYears * 2.2f;
                 float health = Math.Clamp(0.72f + Fitness(species, moisture, elevation) * 0.28f, 0f, 1f);
@@ -381,15 +385,23 @@ namespace ForesTycoon
                     _ => ForestSpecies.Spruce
                 };
 
-            // Dry lowland: oak country, with birch taking the poorest ground.
+            // Dry lowland: oak country, with birch on the poorest ground and a minority of
+            // spruce, which survives here but never thrives — Fitness keeps it small and sickly.
             if (moisture < 0.52f)
-                return (random % 4u) == 0u ? ForestSpecies.Birch : ForestSpecies.Oak;
+                return (random % 5u) switch
+                {
+                    0u => ForestSpecies.Birch,
+                    1u => ForestSpecies.Spruce,
+                    _ => ForestSpecies.Oak
+                };
 
-            // Fresh mid-slope soils: the classic mixed broadleaf stand.
-            return (random % 4u) switch
+            // Fresh mid-slope soils: mixed forest. Beech leads, but a share of spruce keeps
+            // conifers present outside the montane belt, the way managed mixed stands are.
+            return (random % 5u) switch
             {
                 0u => ForestSpecies.Birch,
                 1u => ForestSpecies.Oak,
+                2u => ForestSpecies.Spruce,
                 _ => ForestSpecies.Beech
             };
         }

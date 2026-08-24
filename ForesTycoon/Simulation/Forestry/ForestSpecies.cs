@@ -43,7 +43,9 @@ namespace ForesTycoon
         public static ForestSpeciesProfile For(ForestSpecies species) => species switch
         {
             ForestSpecies.Spruce => new ForestSpeciesProfile(
-                190f, 30f, 1.15f, 0.065f, 0.76f, 0.25f, 0.72f, 0.38f, 0.70f, 0.92f, TreeCrownShape.Spire),
+                // Widened site range: with the old narrow optimum spruce died out of every
+                // lowland map within a decade, so conifers were effectively unplantable there.
+                190f, 30f, 1.15f, 0.065f, 0.70f, 0.34f, 0.60f, 0.45f, 0.70f, 0.92f, TreeCrownShape.Spire),
             ForestSpecies.Birch => new ForestSpeciesProfile(
                 90f, 15f, 0.72f, 0.105f, 0.64f, 0.30f, 0.45f, 0.50f, 0.10f, 1.12f, TreeCrownShape.Rounded),
             ForestSpecies.Oak => new ForestSpeciesProfile(

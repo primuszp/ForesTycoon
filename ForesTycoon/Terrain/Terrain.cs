@@ -200,6 +200,44 @@ namespace ForesTycoon
             return true;
         }
 
+        /// <summary>
+        /// Fills <paramref name="destination"/> with the tile ids of the axis-aligned rectangle
+        /// spanned by two corner tiles, and returns how many were written. The rectangle is
+        /// clamped to <see cref="MaximumAreaSide"/> per side, so a stray drag across the whole
+        /// map cannot turn into a single command that edits tens of thousands of tiles.
+        /// </summary>
+        public int GetTileRectangle(int startTileId, int endTileId, Span<int> destination)
+        {
+            if (!IsValidTileId(startTileId) || !IsValidTileId(endTileId)) return 0;
+
+            int tilesPerColumn = settings.TileRows;
+            int startU = startTileId / tilesPerColumn;
+            int startV = startTileId % tilesPerColumn;
+            int endU = endTileId / tilesPerColumn;
+            int endV = endTileId % tilesPerColumn;
+
+            int minU = Math.Min(startU, endU);
+            int minV = Math.Min(startV, endV);
+            int maxU = Math.Min(Math.Max(startU, endU), minU + MaximumAreaSide - 1);
+            int maxV = Math.Min(Math.Max(startV, endV), minV + MaximumAreaSide - 1);
+
+            int count = 0;
+            for (int u = minU; u <= maxU; u++)
+                for (int v = minV; v <= maxV; v++)
+                {
+                    if (count >= destination.Length) return count;
+                    destination[count++] = u * tilesPerColumn + v;
+                }
+
+            return count;
+        }
+
+        /// <summary>Tiles a single area gesture may cover along one axis.</summary>
+        public const int MaximumAreaSide = 24;
+
+        /// <summary>Upper bound on the tiles one area command touches.</summary>
+        public const int MaximumAreaTiles = MaximumAreaSide * MaximumAreaSide;
+
         internal void UpdateVisibleTiles(RenderContext context)
         {
             visibleTiles.Clear();

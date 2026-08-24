@@ -31,6 +31,16 @@ namespace ForesTycoon
         float AgeYears,
         float TimberVolume);
 
+    /// <summary>Outcome of one area planting or felling gesture.</summary>
+    readonly record struct ForestryAreaSummary(
+        int TileCount,
+        int Applied,
+        float TimberVolume)
+    {
+        public int Skipped => TileCount - Applied;
+        public bool IsEmpty => TileCount == 0;
+    }
+
     enum ForestryActionResult : byte
     {
         None,
