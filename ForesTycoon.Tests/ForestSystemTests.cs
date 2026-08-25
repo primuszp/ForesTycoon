@@ -312,9 +312,10 @@ public class ForestSystemTests
         Assert.True(oak.TrunkRadius > birch.TrunkRadius, "Birch must look slender next to oak.");
         Assert.True(oak.CrownRadius * 2f > oak.CrownHeight, "The oak crown must be wider than it is tall.");
         Assert.True(spruce.CrownHeight > spruce.CrownRadius * 2f * 2f, "The spruce crown must be a narrow spire.");
-        // A tiered conifer outline widens and narrows repeatedly; a broadleaf crown swells
-        // once and then closes again, which is what gives it a single smooth dome.
-        Assert.True(RadiusReversals(spruce.CrownOutline) > 1, "The spruce outline must be tiered.");
+        // Conifer tiering now comes from the whorl build in the renderer rather than from a
+        // wavy outline; what the model has to carry is the silhouette family that selects it.
+        Assert.Equal(TreeCrownShape.Spire, spruce.Shape);
+        // A broadleaf crown swells once and then closes again: one smooth dome.
         foreach (ForestSpecies broadleaf in new[] { ForestSpecies.Birch, ForestSpecies.Oak, ForestSpecies.Beech })
             Assert.Equal(1, RadiusReversals(Terrain.TreeModel.For(broadleaf).CrownOutline));
     }

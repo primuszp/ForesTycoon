@@ -78,6 +78,8 @@ namespace ForesTycoon
             // Stems a fully stocked, mature tile of this species carries. A wide oak crown
             // closes the canopy with far fewer stems than a narrow spruce spire.
             int MatureStems,
+            // Whorled conifers are built tier by tier; broadleaves are one swept outline.
+            TreeCrownShape Shape,
             float[] CrownOutline,
             Color TrunkColor,
             Color CrownColor)
@@ -89,28 +91,28 @@ namespace ForesTycoon
 
             public static TreeModel For(ForestSpecies species) => species switch
             {
-                // Narrow tiered spire branching almost from the ground; no bare bole to show.
+                // Narrow whorled spire branching almost from the ground; barely any bare bole.
                 ForestSpecies.Spruce => new TreeModel(
-                    0.7f, 0.28f, 1.65f, 8.4f, 0.02f, 0, 0, 14, SpruceOutline,
+                    0.55f, 0.26f, 1.77f, 8.8f, 0.02f, 0, 0, 14, TreeCrownShape.Spire, SpruceOutline,
                     Color.FromArgb(74, 54, 38), Color.FromArgb(30, 72, 62)),
 
                 // Slender white stem, light airy crown carried on a few fine limbs.
                 ForestSpecies.Birch => new TreeModel(
-                    2.8f, 0.20f, 1.70f, 4.1f, 0.28f, 3, 2, 12, BirchOutline,
+                    2.6f, 0.18f, 1.96f, 3.9f, 0.05f, 3, 2, 12, TreeCrownShape.Rounded, BirchOutline,
                     Color.FromArgb(208, 208, 196), Color.FromArgb(174, 206, 88)),
 
                 // Short heavy bole forking into thick limbs under a broad spreading dome.
                 ForestSpecies.Oak => new TreeModel(
-                    2.6f, 0.52f, 2.55f, 4.0f, 0.26f, 5, 3, 4, OakOutline,
+                    1.45f, 0.46f, 2.53f, 3.40f, 0.07f, 5, 3, 4, TreeCrownShape.Broad, OakOutline,
                     Color.FromArgb(110, 84, 54), Color.FromArgb(72, 96, 38)),
 
                 // Tall smooth grey column under a high egg-shaped crown.
                 ForestSpecies.Beech => new TreeModel(
-                    3.2f, 0.38f, 2.20f, 4.8f, 0.24f, 4, 2, 7, BeechOutline,
+                    2.10f, 0.32f, 1.95f, 4.50f, 0.06f, 4, 2, 7, TreeCrownShape.Ovoid, BeechOutline,
                     Color.FromArgb(146, 134, 116), Color.FromArgb(124, 152, 58)),
 
                 _ => new TreeModel(
-                    2.0f, 0.30f, 1.60f, 3.6f, 0.25f, 3, 2, 9, BirchOutline,
+                    2.0f, 0.30f, 1.70f, 3.6f, 0.10f, 3, 2, 9, TreeCrownShape.Rounded, BirchOutline,
                     Color.FromArgb(115, 72, 32), Color.FromArgb(70, 128, 52))
             };
         }
@@ -118,11 +120,14 @@ namespace ForesTycoon
         // Crown outlines as (heightFraction, radiusFraction) pairs, bottom to top. Each is
         // swept around the crown axis; the leading and trailing zero radii close the shape,
         // and the short segment before the tip rounds the cap off instead of leaving a spike.
+        // Only used for the suppressed conifers that are too small to earn the whorl build.
         private static readonly float[] SpruceOutline =
         {
-            0.00f, 0.62f, 0.16f, 1.00f, 0.34f, 0.66f, 0.52f, 0.86f,
-            0.70f, 0.48f, 0.86f, 0.52f, 1.00f, 0.00f
+            0.00f, 0.92f, 0.30f, 0.72f, 0.62f, 0.46f, 1.00f, 0.00f
         };
+
+        /// <summary>One whorl: a rim at the bottom sweeping up to the axis.</summary>
+        private static readonly float[] WhorlOutline = { 0.00f, 1.00f, 1.00f, 0.00f };
 
         // Side lobes are half-hidden inside the main crown, so they get a cheap three-band
         // blob rather than a second full sweep of the species outline.
@@ -131,19 +136,25 @@ namespace ForesTycoon
             0.00f, 0.00f, 0.18f, 0.72f, 0.55f, 1.00f, 1.00f, 0.00f
         };
 
+        // Airy, near-spherical crown, widest just above the middle.
         private static readonly float[] BirchOutline =
         {
-            0.00f, 0.00f, 0.08f, 0.50f, 0.24f, 0.82f, 0.50f, 1.00f, 0.78f, 0.86f, 0.93f, 0.54f, 1.00f, 0.00f
+            0.00f, 0.00f, 0.04f, 0.58f, 0.16f, 0.82f, 0.36f, 0.96f,
+            0.56f, 1.00f, 0.78f, 0.88f, 0.93f, 0.56f, 1.00f, 0.00f
         };
 
+        // Flattened spreading dome: widest low down, and cut off well before it becomes a ball.
         private static readonly float[] OakOutline =
         {
-            0.00f, 0.00f, 0.07f, 0.66f, 0.22f, 0.93f, 0.46f, 1.00f, 0.74f, 0.88f, 0.92f, 0.58f, 1.00f, 0.00f
+            0.00f, 0.00f, 0.03f, 0.62f, 0.14f, 0.86f, 0.34f, 0.98f,
+            0.55f, 1.00f, 0.76f, 0.90f, 0.92f, 0.60f, 1.00f, 0.00f
         };
 
+        // Egg standing on its narrow end: the classic beech crown.
         private static readonly float[] BeechOutline =
         {
-            0.00f, 0.00f, 0.08f, 0.44f, 0.24f, 0.74f, 0.50f, 0.94f, 0.74f, 1.00f, 0.92f, 0.62f, 1.00f, 0.00f
+            0.00f, 0.00f, 0.06f, 0.46f, 0.20f, 0.72f, 0.44f, 0.90f,
+            0.66f, 1.00f, 0.86f, 0.82f, 0.95f, 0.52f, 1.00f, 0.00f
         };
 
         /// <summary>
@@ -414,6 +425,12 @@ namespace ForesTycoon
             float radius = model.CrownRadius * tree.Scale * tree.CrownWidth;
             float crownBase = tree.TrunkTop(model) - height * model.CrownDrop;
 
+            if (model.Shape == TreeCrownShape.Spire && tree.Detail >= 1)
+            {
+                DrawWhorledCrown(tree, crown, crownBase, radius, height);
+                return;
+            }
+
             DrawCrownLobe(tree, crown, tree.X, tree.Y, crownBase, radius, height,
                 model.CrownOutline, tree.Sides);
 
@@ -438,10 +455,42 @@ namespace ForesTycoon
             }
         }
 
+        /// <summary>
+        /// Conifer crown built whorl by whorl. A single swept outline gives a smooth carrot;
+        /// what makes a spruce read as a conifer is the stack of branch tiers, each a shallow
+        /// cone whose rim overhangs the tier below it.
+        /// </summary>
+        private static void DrawWhorledCrown(in TreeInstance tree, Color crown,
+            float crownBase, float radius, float height)
+        {
+            int whorls = tree.Detail >= 2 ? 6 : 4;
+            // Tiers overlap, so no gap opens between one rim and the cone above it.
+            float spacing = height / whorls;
+            float whorlHeight = spacing * 1.5f;
+
+            for (int whorl = 0; whorl < whorls; whorl++)
+            {
+                float t = whorl / (float)whorls;
+                // Radius tapers towards the leader; the exponent keeps the lowest tiers wide
+                // and the top ones tight, which is the profile a spruce actually has.
+                float whorlRadius = radius * MathF.Pow(1f - t, 0.85f);
+                float baseZ = crownBase + spacing * whorl;
+
+                uint seed = TreeHash(tree.Seed, (uint)whorl * 53u + 3u);
+                // Each tier is turned a little, so the silhouette is never a stack of clones.
+                float twist = (UnitFloat(seed) - 0.5f) * 0.9f;
+                // Lower tiers sit in the shade of the ones above them.
+                Color tier = Shade(crown, 0.84f + 0.20f * t);
+
+                DrawCrownLobe(tree, tier, tree.X, tree.Y, baseZ, whorlRadius, whorlHeight,
+                    WhorlOutline, tree.Sides, twist);
+            }
+        }
+
         /// <summary>Sweeps one crown outline around a vertical axis.</summary>
         private static void DrawCrownLobe(in TreeInstance tree, Color color,
             float centerX, float centerY, float baseZ, float radius, float height,
-            float[] outline, int sides)
+            float[] outline, int sides, float yawOffset = 0f)
         {
             for (int point = 0; point + 3 < outline.Length; point += 2)
             {
@@ -455,8 +504,8 @@ namespace ForesTycoon
 
                 for (int side = 0; side < sides; side++)
                 {
-                    float a0 = tree.Yaw + MathF.Tau * side / sides;
-                    float a1 = tree.Yaw + MathF.Tau * (side + 1) / sides;
+                    float a0 = tree.Yaw + yawOffset + MathF.Tau * side / sides;
+                    float a1 = tree.Yaw + yawOffset + MathF.Tau * (side + 1) / sides;
                     DynamicPrimitiveBatch.Color3(Shade(color, BandShade(a0, a1, z1 - z0, r1 - r0) * gradient));
 
                     if (r0 <= 0.0001f)
