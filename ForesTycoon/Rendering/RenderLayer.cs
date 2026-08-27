@@ -12,6 +12,7 @@ namespace ForesTycoon
         Grid = 400,
         Roads = 410,
         HoverOverlay = 420,
+        ForestryPreview = 425,
         DecalEnd = 430,
         Props = 500,
         Vehicles = 600,

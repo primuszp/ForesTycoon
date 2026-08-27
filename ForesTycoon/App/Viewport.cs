@@ -474,9 +474,10 @@ namespace ForesTycoon
                 ToolMenuItem("Fakitermelés", TerrainEditTool.HarvestForest);
                 if (ImGui.BeginMenu("Ültetett fafaj"))
                 {
-                    SpeciesMenuItem("Fenyő", ForestSpecies.Pine);
                     SpeciesMenuItem("Lucfenyő", ForestSpecies.Spruce);
                     SpeciesMenuItem("Nyír", ForestSpecies.Birch);
+                    SpeciesMenuItem("Tölgy", ForestSpecies.Oak);
+                    SpeciesMenuItem("Bükk", ForestSpecies.Beech);
                     ImGui.EndMenu();
                 }
                 ImGui.EndMenu();
@@ -503,9 +504,10 @@ namespace ForesTycoon
 
             if (interaction.ActiveTool == TerrainEditTool.PlantForest)
             {
-                SpeciesButton("Fenyő", ForestSpecies.Pine); ImGui.SameLine();
                 SpeciesButton("Luc", ForestSpecies.Spruce); ImGui.SameLine();
-                SpeciesButton("Nyír", ForestSpecies.Birch);
+                SpeciesButton("Nyír", ForestSpecies.Birch); ImGui.SameLine();
+                SpeciesButton("Tölgy", ForestSpecies.Oak); ImGui.SameLine();
+                SpeciesButton("Bükk", ForestSpecies.Beech);
             }
 
             if (interaction.ActiveTool == TerrainEditTool.Raise || interaction.ActiveTool == TerrainEditTool.Lower)
@@ -545,6 +547,12 @@ namespace ForesTycoon
             ImGui.Text($"Leszállított faanyag: {world.DeliveredTimber:F1} t");
             if (world.TryGetForestStand(world.HoveredTileId, out ForestStand stand))
                 ImGui.Text($"Csempe: {ForestSpeciesName(stand.Species)}, {stand.AgeYears:F1} év, {stand.Health:P0}");
+            if (WorldInteractionController.IsForestryTool(interaction.ActiveTool) && interaction.IsForestryDragging)
+                ImGui.Text($"Terület: {world.ForestryPreviewCount} csempe");
+            ForestryAreaSummary area = world.LastForestryArea;
+            if (!area.IsEmpty)
+                ImGui.Text($"Terület művelet: {area.Applied}/{area.TileCount} csempe"
+                    + (area.TimberVolume > 0f ? $", {area.TimberVolume:F1} t" : string.Empty));
             if (world.LastForestryAction != ForestryActionResult.None)
                 ImGui.TextColored(ForestryActionSucceeded(world.LastForestryAction)
                         ? new NVec4(0.55f, 0.90f, 0.45f, 1f)
@@ -605,9 +613,10 @@ namespace ForesTycoon
 
         private static string ForestSpeciesName(ForestSpecies species) => species switch
         {
-            ForestSpecies.Pine => "fenyő",
             ForestSpecies.Spruce => "lucfenyő",
             ForestSpecies.Birch => "nyír",
+            ForestSpecies.Oak => "tölgy",
+            ForestSpecies.Beech => "bükk",
             _ => "nincs"
         };
 

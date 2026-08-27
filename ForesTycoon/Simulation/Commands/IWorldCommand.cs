@@ -13,5 +13,7 @@ namespace ForesTycoon
         void ExecuteSpawnVehicle();
         void ExecutePlantForest(int tileId, ForestSpecies species);
         void ExecuteHarvestForest(int tileId);
+        void ExecutePlantForestArea(int startTileId, int endTileId, ForestSpecies species);
+        void ExecuteHarvestForestArea(int startTileId, int endTileId);
     }
 }

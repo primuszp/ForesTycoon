@@ -11,6 +11,9 @@ namespace ForesTycoon
             WorldCommandKind.SpawnVehicle => new SpawnVehicleCommand(),
             WorldCommandKind.PlantForest => new PlantForestCommand(record.A, (ForestSpecies)record.B),
             WorldCommandKind.HarvestForest => new HarvestForestCommand(record.A),
+            WorldCommandKind.PlantForestArea =>
+                new PlantForestAreaCommand(record.A, record.B, (ForestSpecies)record.C),
+            WorldCommandKind.HarvestForestArea => new HarvestForestAreaCommand(record.A, record.B),
             _ => throw new InvalidOperationException($"Unknown world command kind: {record.Kind}.")
         };
     }

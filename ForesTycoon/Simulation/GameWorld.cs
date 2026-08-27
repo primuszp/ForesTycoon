@@ -23,6 +23,7 @@ namespace ForesTycoon
         private readonly TimberCargoSystem timberCargo;
         private ulong worldTick;
         private ForestryActionResult lastForestryAction;
+        private ForestryAreaSummary lastForestryArea;
 
         public GameWorld(TerrainSettings settings)
         {
@@ -44,6 +45,7 @@ namespace ForesTycoon
         public float TimberStockpile => timberCargo.Available;
         public float DeliveredTimber => timberCargo.Delivered;
         public ForestryActionResult LastForestryAction => lastForestryAction;
+        public ForestryAreaSummary LastForestryArea => lastForestryArea;
         public bool TryGetForestStand(int tileId, out ForestStand stand) => forest.TryGetStand(tileId, out stand);
         public int VisibleChunkCount => terrain.VisibleChunkCount;
         public int TotalChunkCount => terrain.TotalChunkCount;
@@ -71,6 +73,15 @@ namespace ForesTycoon
         public void QueuePlantForest(int tileId, ForestSpecies species) =>
             Enqueue(new PlantForestCommand(tileId, species));
         public void QueueHarvestForest(int tileId) => Enqueue(new HarvestForestCommand(tileId));
+        public void QueuePlantForestArea(int startTileId, int endTileId, ForestSpecies species) =>
+            Enqueue(new PlantForestAreaCommand(startTileId, endTileId, species));
+        public void QueueHarvestForestArea(int startTileId, int endTileId) =>
+            Enqueue(new HarvestForestAreaCommand(startTileId, endTileId));
+
+        public void SetForestryPreview(int startTileId, int endTileId, bool removal) =>
+            terrain.SetForestryPreview(startTileId, endTileId, removal);
+        public void ClearForestryPreview() => terrain.ClearForestryPreview();
+        public int ForestryPreviewCount => terrain.ForestryPreviewCount;
 
         private void Enqueue(IWorldCommand command)
         {
@@ -128,6 +139,56 @@ namespace ForesTycoon
             timberCargo.AddHarvested(harvest.TimberVolume);
             if (terrain.TryGetTileCenter(tileId, out Vector3 position))
                 effects.Spawn(WorldEffectKind.ForestHarvested, position);
+        }
+
+        void IWorldCommandTarget.ExecutePlantForestArea(int startTileId, int endTileId, ForestSpecies species)
+        {
+            Span<int> tileIds = stackalloc int[Terrain.MaximumAreaTiles];
+            int count = terrain.GetTileRectangle(startTileId, endTileId, tileIds);
+
+            int planted = 0;
+            for (int i = 0; i < count; i++)
+            {
+                lastForestryAction = forest.Plant(tileIds[i], species);
+                if (lastForestryAction == ForestryActionResult.Planted) planted++;
+            }
+
+            lastForestryArea = new ForestryAreaSummary(count, planted, 0f);
+            SpawnAreaEffect(startTileId, endTileId,
+                planted > 0 ? WorldEffectKind.TreePlanted : WorldEffectKind.ForestryRejected);
+        }
+
+        void IWorldCommandTarget.ExecuteHarvestForestArea(int startTileId, int endTileId)
+        {
+            Span<int> tileIds = stackalloc int[Terrain.MaximumAreaTiles];
+            int count = terrain.GetTileRectangle(startTileId, endTileId, tileIds);
+
+            int felled = 0;
+            float volume = 0f;
+            for (int i = 0; i < count; i++)
+            {
+                lastForestryAction = forest.Harvest(tileIds[i], out ForestHarvest harvest);
+                if (lastForestryAction != ForestryActionResult.Harvested) continue;
+                felled++;
+                volume += harvest.TimberVolume;
+                timberCargo.AddHarvested(harvest.TimberVolume);
+            }
+
+            lastForestryArea = new ForestryAreaSummary(count, felled, volume);
+            SpawnAreaEffect(startTileId, endTileId,
+                felled > 0 ? WorldEffectKind.ForestHarvested : WorldEffectKind.ForestryRejected);
+        }
+
+        /// <summary>
+        /// One effect per area gesture. Spawning per tile would bury the effect system under a
+        /// single drag and tell the player nothing a marker at the corners does not.
+        /// </summary>
+        private void SpawnAreaEffect(int startTileId, int endTileId, WorldEffectKind kind)
+        {
+            if (terrain.TryGetTileCenter(startTileId, out Vector3 start))
+                effects.Spawn(kind, start);
+            if (endTileId != startTileId && terrain.TryGetTileCenter(endTileId, out Vector3 end))
+                effects.Spawn(kind, end);
         }
 
         public void Draw(RenderContext context)

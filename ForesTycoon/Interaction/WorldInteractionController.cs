@@ -10,6 +10,7 @@ namespace ForesTycoon
     {
         private readonly IWorldInteractionTarget world;
         private int roadDragStartTileId = -1;
+        private int forestryDragStartTileId = -1;
         private int brushSize = 1;
         private int brushStrength = 1;
 
@@ -31,11 +32,15 @@ namespace ForesTycoon
             set => brushStrength = value > 0 ? value : throw new ArgumentOutOfRangeException(nameof(value));
         }
         public bool IsRoadDragging => roadDragStartTileId >= 0;
+        public bool IsForestryDragging => forestryDragStartTileId >= 0;
         public bool IsRoadRemoval { get; private set; }
-        public ForestSpecies PlantingSpecies { get; set; } = ForestSpecies.Pine;
+        public ForestSpecies PlantingSpecies { get; set; } = ForestSpecies.Spruce;
 
         public static bool IsRoadTool(TerrainEditTool tool) =>
             tool == TerrainEditTool.Road || tool == TerrainEditTool.RoadRemove;
+
+        public static bool IsForestryTool(TerrainEditTool tool) =>
+            tool == TerrainEditTool.PlantForest || tool == TerrainEditTool.HarvestForest;
 
         public void SelectTool(TerrainEditTool tool)
         {
@@ -45,13 +50,30 @@ namespace ForesTycoon
 
         public void BeginPrimaryGesture()
         {
-            if (!IsRoadTool(ActiveTool) || world.HoveredTileId < 0) return;
+            if (world.HoveredTileId < 0) return;
+
+            if (IsForestryTool(ActiveTool))
+            {
+                forestryDragStartTileId = world.HoveredTileId;
+                world.SetForestryPreview(forestryDragStartTileId, forestryDragStartTileId,
+                    ActiveTool == TerrainEditTool.HarvestForest);
+                return;
+            }
+
+            if (!IsRoadTool(ActiveTool)) return;
             roadDragStartTileId = world.HoveredTileId;
             IsRoadRemoval = ActiveTool == TerrainEditTool.RoadRemove;
         }
 
         public void UpdateGesture()
         {
+            if (IsForestryDragging && world.HoveredTileId >= 0)
+            {
+                world.SetForestryPreview(forestryDragStartTileId, world.HoveredTileId,
+                    ActiveTool == TerrainEditTool.HarvestForest);
+                return;
+            }
+
             if (!IsRoadDragging) return;
             world.SetRoadPreview(roadDragStartTileId, world.HoveredTileId, IsRoadRemoval);
         }
@@ -79,15 +101,28 @@ namespace ForesTycoon
                 return true;
             }
 
-            if (ActiveTool == TerrainEditTool.PlantForest || ActiveTool == TerrainEditTool.HarvestForest)
+            if (IsForestryTool(ActiveTool))
             {
-                if (world.HoveredTileId >= 0)
+                // The drag start is the anchor; a click that never moved is simply a
+                // one-tile rectangle, so both gestures go through the same path.
+                int startTileId = IsForestryDragging ? forestryDragStartTileId : world.HoveredTileId;
+                int endTileId = world.HoveredTileId;
+
+                if (startTileId >= 0 && endTileId >= 0)
                 {
                     if (ActiveTool == TerrainEditTool.PlantForest)
-                        world.QueuePlantForest(world.HoveredTileId, PlantingSpecies);
+                    {
+                        if (startTileId == endTileId) world.QueuePlantForest(endTileId, PlantingSpecies);
+                        else world.QueuePlantForestArea(startTileId, endTileId, PlantingSpecies);
+                    }
                     else
-                        world.QueueHarvestForest(world.HoveredTileId);
+                    {
+                        if (startTileId == endTileId) world.QueueHarvestForest(endTileId);
+                        else world.QueueHarvestForestArea(startTileId, endTileId);
+                    }
                 }
+
+                CancelGesture();
                 return true;
             }
 
@@ -97,7 +132,9 @@ namespace ForesTycoon
         public void CancelGesture()
         {
             world.ClearRoadPreview();
+            world.ClearForestryPreview();
             roadDragStartTileId = -1;
+            forestryDragStartTileId = -1;
             IsRoadRemoval = false;
         }
     }

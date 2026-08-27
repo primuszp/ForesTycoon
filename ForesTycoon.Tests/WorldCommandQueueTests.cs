@@ -37,5 +37,11 @@ public class WorldCommandQueueTests
         public void ExecutePlantForest(int tileId, ForestSpecies species) =>
             Events.Add($"plant:{tileId}:{species}");
         public void ExecuteHarvestForest(int tileId) => Events.Add($"harvest:{tileId}");
+
+        public void ExecutePlantForestArea(int startTileId, int endTileId, ForestSpecies species) =>
+            Events.Add($"plant-area:{startTileId}:{endTileId}:{species}");
+
+        public void ExecuteHarvestForestArea(int startTileId, int endTileId) =>
+            Events.Add($"harvest-area:{startTileId}:{endTileId}");
     }
 }

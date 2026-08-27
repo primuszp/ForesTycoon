@@ -16,7 +16,10 @@ A jelenlegi allapot fokusza:
 - alloviz, folyok es partvonal-logika
 - interaktiv terepszerkesztes
 - kamera- es nezetrendszer finomitasa
-- determinisztikus erdoszimulacio harom fafajjal, novekedessel es termeszetes ujulassal
+- determinisztikus erdoszimulacio negy fafajjal (luc, nyir, tolgy, bukk)
+- fafajonkent egyedi novekedes, termohely-igeny, arnyektures es faanyag-ertek
+- lombkorona-versenges es onritkulas, termeszetes ujulas a magot ado allomanyok korul
+- fafajonkent kulon 3D famodell (sziluett, torzs es korona szin)
 
 A projekt meg prototipus fazisban van. A hangsuly most a terepmotoron, a vizmegjelenitesen, a kameraelmenyen es a szerkesztesi workflow-n van.
 
@@ -32,7 +35,10 @@ The current prototype focuses on:
 - standing water, rivers, and shoreline logic
 - interactive terrain editing
 - camera and view-control polish
-- deterministic forest simulation with three species, growth, health and natural regeneration
+- deterministic forest simulation with four species (spruce, birch, oak, beech)
+- per-species growth, site requirements, shade tolerance and timber value
+- canopy competition and self-thinning, with regeneration around seeding stands
+- a distinct low-poly 3D model per species
 
 The project is still in prototype stage. Right now the emphasis is on terrain technology, water rendering, camera behavior, and the core editing loop.
 
@@ -82,7 +88,7 @@ The smoke test renders 120 frames and exits automatically.
 - Up / Down arrow: change tilt angle
 - Left click with the raise/lower tool: edit terrain
 - Left-drag with the road tools: build or remove a path
-- Left click with the planting tool: plant the selected pine, spruce or birch species
+- Left click with the planting tool: plant the selected species (spruce, birch, oak or beech)
 - Left click with the harvesting tool: cut a stand and add its biomass to the timber stockpile
 - Cmd/Ctrl+S: quicksave
 - Cmd/Ctrl+L: quickload

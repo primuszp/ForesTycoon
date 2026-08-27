@@ -45,6 +45,7 @@ namespace ForesTycoon
             {
                 if (context.ShowTileHighlight) terrain.DrawHoveredTile();
             });
+            pipeline.Add(RenderLayer.ForestryPreview, "forestry-preview", _ => terrain.DrawForestryPreview());
             pipeline.Add(RenderLayer.DecalEnd, "decal-state-end", _ => EndDecals());
             pipeline.Add(RenderLayer.Props, "props", _ => terrain.DrawTrees(forest));
             pipeline.Add(RenderLayer.Vehicles, "vehicles", context =>

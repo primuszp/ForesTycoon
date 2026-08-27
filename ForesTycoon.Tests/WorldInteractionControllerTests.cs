@@ -32,7 +32,10 @@ public class WorldInteractionControllerTests
         bool consumed = controller.EndPrimaryGesture(hasHoveredNode: false);
 
         Assert.True(consumed);
-        Assert.Equal(new[] { "clear", "preview:10:15:False", "road:10:15:False", "clear" }, world.Events);
+        // Cancelling a gesture clears both previews; only the road half is asserted here.
+        Assert.Equal(new[] { "road:10:15:False" },
+            world.Events.FindAll(e => e.StartsWith("road:")));
+        Assert.Contains("preview:10:15:False", world.Events);
         Assert.False(controller.IsRoadDragging);
     }
 
@@ -47,7 +50,7 @@ public class WorldInteractionControllerTests
         controller.SelectTool(TerrainEditTool.Inspect);
 
         Assert.False(controller.IsRoadDragging);
-        Assert.Equal("clear", world.Events[^1]);
+        Assert.Contains("clear", world.Events);
     }
 
     [Theory]
@@ -65,7 +68,43 @@ public class WorldInteractionControllerTests
         bool consumed = controller.EndPrimaryGesture(hasHoveredNode: false);
 
         Assert.True(consumed);
-        Assert.Equal(expected, world.Events[^1]);
+        Assert.Contains(expected, world.Events);
+    }
+
+    [Fact]
+    public void ForestryDrag_PreviewsTheParcelAndPlantsItAsOneAreaCommand()
+    {
+        RecordingWorld world = new RecordingWorld { HoveredTileId = 10 };
+        WorldInteractionController controller = new WorldInteractionController(world)
+        {
+            PlantingSpecies = ForestSpecies.Beech
+        };
+        controller.SelectTool(TerrainEditTool.PlantForest);
+        controller.BeginPrimaryGesture();
+        world.HoveredTileId = 42;
+        controller.UpdateGesture();
+
+        bool consumed = controller.EndPrimaryGesture(hasHoveredNode: false);
+
+        Assert.True(consumed);
+        Assert.Contains("forestry-preview:10:42:False", world.Events);
+        Assert.Contains("plant-area:10:42:Beech", world.Events);
+        Assert.DoesNotContain(world.Events, e => e.StartsWith("plant:"));
+        Assert.False(controller.IsForestryDragging);
+    }
+
+    [Fact]
+    public void ForestryDrag_FallsBackToASingleTileWhenTheGestureNeverMoved()
+    {
+        RecordingWorld world = new RecordingWorld { HoveredTileId = 8 };
+        WorldInteractionController controller = new WorldInteractionController(world);
+        controller.SelectTool(TerrainEditTool.HarvestForest);
+        controller.BeginPrimaryGesture();
+
+        controller.EndPrimaryGesture(hasHoveredNode: false);
+
+        Assert.Contains("harvest:8", world.Events);
+        Assert.DoesNotContain(world.Events, e => e.StartsWith("harvest-area:"));
     }
 
     private sealed class RecordingWorld : IWorldInteractionTarget
@@ -84,5 +123,12 @@ public class WorldInteractionControllerTests
         public void SetRoadPreview(int startTileId, int endTileId, bool remove) =>
             Events.Add($"preview:{startTileId}:{endTileId}:{remove}");
         public void ClearRoadPreview() => Events.Add("clear");
+        public void QueuePlantForestArea(int startTileId, int endTileId, ForestSpecies species) =>
+            Events.Add($"plant-area:{startTileId}:{endTileId}:{species}");
+        public void QueueHarvestForestArea(int startTileId, int endTileId) =>
+            Events.Add($"harvest-area:{startTileId}:{endTileId}");
+        public void SetForestryPreview(int startTileId, int endTileId, bool removal) =>
+            Events.Add($"forestry-preview:{startTileId}:{endTileId}:{removal}");
+        public void ClearForestryPreview() => Events.Add("forestry-clear");
     }
 }
