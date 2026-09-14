@@ -4,16 +4,25 @@ namespace ForesTycoon
 {
     sealed class Vehicle
     {
-        public Vehicle(int id, int[] route, double speedTilesPerSecond, float cargoCapacity = 25f)
+        public Vehicle(int id, int[] route, double speedTilesPerSecond, float cargoCapacity = 25f,
+            VehicleRoadRoute roadRoute = null, bool roadPhysics = true)
         {
             if (route == null || route.Length < 2) throw new ArgumentException("A vehicle route needs at least two tiles.", nameof(route));
-            if (speedTilesPerSecond <= 0.0) throw new ArgumentOutOfRangeException(nameof(speedTilesPerSecond));
+            if (!double.IsFinite(speedTilesPerSecond) || speedTilesPerSecond <= 0.0) throw new ArgumentOutOfRangeException(nameof(speedTilesPerSecond));
             if (!float.IsFinite(cargoCapacity) || cargoCapacity <= 0f) throw new ArgumentOutOfRangeException(nameof(cargoCapacity));
+            if (roadRoute != null && roadRoute.Last != route.Length - 1) throw new ArgumentException("Road geometry does not match the route.", nameof(roadRoute));
             Id = id;
-            Route = route;
+            Route = (int[])route.Clone();
             SpeedTilesPerSecond = speedTilesPerSecond;
             CargoCapacity = cargoCapacity;
+            RoadRoute = roadRoute;
+            useRoadPhysics = roadPhysics && roadRoute != null;
+            CurrentSpeed = useRoadPhysics ? 0 : speedTilesPerSecond;
         }
+
+        private readonly bool useRoadPhysics;
+        public VehicleRoadRoute RoadRoute { get; }
+        public double CurrentSpeed { get; private set; }
 
         public int Id { get; }
         public int[] Route { get; }
@@ -40,8 +49,36 @@ namespace ForesTycoon
 
         public void Update(double deltaSeconds)
         {
+            if (!double.IsFinite(deltaSeconds) || deltaSeconds < 0) throw new ArgumentOutOfRangeException(nameof(deltaSeconds));
             PreviousRoutePosition = RoutePosition;
-            RoutePosition += SpeedTilesPerSecond * deltaSeconds;
+            if (!useRoadPhysics)
+            {
+                RoutePosition += SpeedTilesPerSecond * deltaSeconds;
+                return;
+            }
+            // Bounded integration steps keep acceleration stable at different tick rates.
+            while (deltaSeconds > 0)
+            {
+                double dt = Math.Min(deltaSeconds, 1.0 / 30);
+                deltaSeconds -= dt;
+                double last = Route.Length - 1;
+                double boundary = (Math.Floor(RoutePosition / last) + 1) * last;
+                double remaining = boundary - RoutePosition;
+                const double braking = 2.4;
+                double target = Math.Min(RoadRoute.TargetSpeed(RoutePosition, SpeedTilesPerSecond, CargoFill),
+                    Math.Sqrt(2 * braking * remaining));
+                double acceleration = target < CurrentSpeed ? braking : 0.8 / (1 + CargoFill * 0.65);
+                double before = CurrentSpeed;
+                CurrentSpeed += Math.Clamp(target - CurrentSpeed, -acceleration * dt, acceleration * dt);
+                double travel = (before + CurrentSpeed) * 0.5 * dt;
+                if (travel >= remaining || remaining < 0.001)
+                {
+                    RoutePosition = boundary;
+                    CurrentSpeed = 0;
+                    break; // Loading/unloading occurs at this boundary before restarting.
+                }
+                RoutePosition += travel;
+            }
         }
 
         public double InterpolatedRoutePosition(float alpha) =>

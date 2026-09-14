@@ -19,7 +19,9 @@ namespace ForesTycoon
         private readonly RoadNetwork roads = new RoadNetwork();
         private readonly TerrainChunkIndex chunkIndex;
         private readonly List<Tile> visibleTiles = new List<Tile>();
+        private readonly List<TerrainChunk> visibleChunks = new List<TerrainChunk>();
         private int visibleChunkCount;
+        private ulong forestTerrainVersion = 1;
 
         // Foundation-réteg: az út VEZETŐFELÜLETÉNEK befagyasztott magassága sarkonként
         // (nodeId → W az építés pillanatában). A terep alatta szabadon alakítható, de az
@@ -64,7 +66,7 @@ namespace ForesTycoon
         {
         }
 
-        public Terrain(TerrainSettings settings)
+        public Terrain(TerrainSettings settings, Func<int, int, int> initialHeight = null)
         {
             this.settings = settings ?? throw new ArgumentNullException(nameof(settings));
             data = new TerrainData(settings);
@@ -73,7 +75,13 @@ namespace ForesTycoon
 
             makeTiles();
             makeQuads();
-            GenerateTerrain();
+            if (initialHeight == null) GenerateTerrain();
+            else
+            {
+                foreach (Node node in nodes)
+                    node.W = Math.Clamp(initialHeight(node.U, node.V), 0, settings.MaxHeight);
+                updateNodes(new List<Node>(nodes));
+            }
         }
 
         private void GenerateTerrain()
@@ -135,6 +143,7 @@ namespace ForesTycoon
                 node.zPos = node.W * tileSizeM;
 
             hydro.Rebuild();
+            InvalidateSurfaceVisuals();
         }
 
         private bool HasDynamicWater(Tile tile) => hydro.HasDynamicWater(tile);
@@ -241,6 +250,7 @@ namespace ForesTycoon
         internal void UpdateVisibleTiles(RenderContext context)
         {
             visibleTiles.Clear();
+            visibleChunks.Clear();
             visibleChunkCount = 0;
             const double margin = 12.0;
             foreach (TerrainChunk chunk in chunkIndex.Chunks)
@@ -251,6 +261,7 @@ namespace ForesTycoon
                     || maxY < context.ViewMinY - margin || minY > context.ViewMaxY + margin) continue;
 
                 visibleChunkCount++;
+                visibleChunks.Add(chunk);
 
                 for (int i = 0; i < chunk.TileIds.Length; i++)
                 {
@@ -296,6 +307,8 @@ namespace ForesTycoon
             foreach (VertexBuffer vbo in vbos.Values) vbo.Dispose();
             vbos.Clear();
             edges.Dispose();
+            DisposeForestGeometry();
+            DisposeStaticTerrain();
         }
     }
 }

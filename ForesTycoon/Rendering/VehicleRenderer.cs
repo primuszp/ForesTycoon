@@ -24,6 +24,15 @@ namespace ForesTycoon
             {
                 foreach (Vehicle vehicle in vehicles.Vehicles)
                 {
+                    double routePosition = vehicle.InterpolatedRoutePosition(interpolationAlpha);
+                    if (vehicle.RoadRoute != null)
+                    {
+                        vehicle.RoadRoute.GetPose(routePosition, out Vector3 center, out Vector3 forward,
+                            out Vector3 left, out Vector3 up);
+                        DrawTruck(new VehicleTransform(center, forward, left, up), vehicle.CargoFill,
+                            (float)(routePosition * vehicle.RoadRoute.TileLength / 0.23));
+                        continue;
+                    }
                     vehicle.GetSegment(vehicle.InterpolatedRoutePosition(interpolationAlpha),
                         out int fromTile, out int toTile, out float amount);
                     if (!terrain.TryGetRoadTileCenter(fromTile, out Vector3 from)
@@ -34,36 +43,86 @@ namespace ForesTycoon
                     float horizontalLength = MathF.Sqrt(direction.X * direction.X + direction.Y * direction.Y);
                     float pitch = MathF.Atan2(direction.Z, horizontalLength);
                     Vector3 position = Vector3.Lerp(from, to, amount);
-                    position.Z += 0.12f;
+                    position.Z += 0.025f;
                     DrawTruck(new VehicleTransform(position, yaw, pitch), vehicle.CargoFill);
                 }
             });
         }
 
-        private static void DrawTruck(VehicleTransform transform, float cargoFill)
+        private static void DrawTruck(VehicleTransform transform, float cargoFill, float wheelAngle = 0)
         {
             // Local +X is the front of the truck.
             DrawBox(transform, new Vector3(0f, 0f, 0.22f), new Vector3(2.9f, 0.82f, 0.22f), ChassisColor, ChassisColor);
-            DrawBox(transform, new Vector3(-0.62f, 0f, 0.38f), new Vector3(1.65f, 1.18f, 0.28f), CargoSideColor, ChassisColor);
-            if (cargoFill > 0.001f)
+            DrawBox(transform, new Vector3(-0.62f, 0f, 0.40f), new Vector3(1.85f, 1.18f, 0.12f), ChassisColor, ChassisColor);
+            // Steel bolsters and stakes hold longitudinal logs; an empty return shows the rack.
+            for (int rack = 0; rack < 3; rack++)
             {
-                float cargoHeight = 0.25f + 0.85f * Math.Clamp(cargoFill, 0f, 1f);
-                DrawBox(transform, new Vector3(-0.62f, 0f, 0.52f + cargoHeight * 0.5f),
-                    new Vector3(1.50f, 1.08f, cargoHeight), CargoColor, CargoSideColor);
+                float x = -1.38f + rack * 0.70f;
+                DrawBox(transform, new Vector3(x, 0, 0.48f), new Vector3(0.10f, 1.28f, 0.10f), BumperColor, ChassisColor);
+                for (int side = -1; side <= 1; side += 2)
+                    DrawBox(transform, new Vector3(x, side * 0.61f, 0.91f), new Vector3(0.07f, 0.07f, 0.92f), BumperColor, ChassisColor);
             }
+            int logs = cargoFill <= 0 ? 0 : (int)MathF.Ceiling(Math.Clamp(cargoFill, 0, 1) * 9);
+            int log = 0;
+            for (int row = 0; row < 3; row++)
+                for (int column = 0; column < 4 - row && log < logs; column++, log++)
+                {
+                    float y = (column - (3 - row) * 0.5f) * 0.285f;
+                    Cylinder(transform, new Vector3(-0.64f, y, 0.665f + row * 0.245f),
+                        1.86f + (log % 3) * 0.035f, 0.14f, false, 0,
+                        Color.FromArgb(91 + log % 3 * 9, 66 + log % 3 * 6, 38), CargoColor);
+                }
+            DrawBox(transform, new Vector3(0.38f, 0, 0.94f), new Vector3(0.08f, 1.2f, 1.05f), CabSideColor, ChassisColor);
             DrawBox(transform, new Vector3(0.87f, 0f, 0.69f), new Vector3(0.92f, 1.12f, 1.02f), CabColor, CabSideColor);
             DrawBox(transform, new Vector3(1.35f, 0f, 0.73f), new Vector3(0.06f, 0.86f, 0.38f), WindowColor, WindowColor);
             DrawBox(transform, new Vector3(1.49f, 0f, 0.27f), new Vector3(0.14f, 1.18f, 0.20f), BumperColor, BumperColor);
-
-            // Four block-style wheels, intentionally matching the low-poly/isometric look.
-            DrawWheel(transform, -0.93f, -0.61f);
-            DrawWheel(transform, -0.93f, 0.61f);
-            DrawWheel(transform, 0.91f, -0.61f);
-            DrawWheel(transform, 0.91f, 0.61f);
+            for (int side = -1; side <= 1; side += 2)
+            {
+                DrawBox(transform, new Vector3(0.93f, side * 0.565f, 0.91f), new Vector3(0.54f, 0.02f, 0.39f), WindowColor, WindowColor);
+                DrawBox(transform, new Vector3(1.37f, side * 0.40f, 0.40f), new Vector3(0.05f, 0.22f, 0.12f), Color.LightGoldenrodYellow, Color.LightGoldenrodYellow);
+                DrawBox(transform, new Vector3(-1.56f, side * 0.46f, 0.40f), new Vector3(0.04f, 0.15f, 0.10f), CabColor, CabColor);
+                DrawWheel(transform, -1.14f, side * 0.62f, wheelAngle);
+                DrawWheel(transform, -0.61f, side * 0.62f, wheelAngle);
+                DrawWheel(transform, 0.91f, side * 0.62f, wheelAngle);
+            }
         }
 
-        private static void DrawWheel(VehicleTransform transform, float x, float y) =>
-            DrawBox(transform, new Vector3(x, y, 0.20f), new Vector3(0.43f, 0.20f, 0.40f), TireColor, TireColor);
+        private static void DrawWheel(VehicleTransform transform, float x, float y, float angle)
+        {
+            Cylinder(transform, new Vector3(x, y, 0.23f), 0.22f, 0.23f, true, angle, TireColor, TireColor);
+            Cylinder(transform, new Vector3(x, y, 0.23f), 0.235f, 0.11f, true, angle, BumperColor, BumperColor);
+        }
+
+        private static void Cylinder(VehicleTransform transform, Vector3 center, float length, float radius,
+            bool wheel, float angle, Color bark, Color end)
+        {
+            const int sides = 10;
+            for (int i = 0; i < sides; i++)
+            {
+                float a = angle + i * (MathF.Tau / sides), b = angle + (i + 1) * (MathF.Tau / sides);
+                Vector3 ra = wheel ? new Vector3(MathF.Cos(a), 0, MathF.Sin(a)) : new Vector3(0, MathF.Cos(a), MathF.Sin(a));
+                Vector3 rb = wheel ? new Vector3(MathF.Cos(b), 0, MathF.Sin(b)) : new Vector3(0, MathF.Cos(b), MathF.Sin(b));
+                Vector3 axis = (wheel ? -Vector3.UnitY : Vector3.UnitX) * (length * 0.5f);
+                Vector3 p = center - axis, q = center + axis;
+                float shade = 0.72f + 0.28f * Math.Max(0, ra.Z);
+                DynamicPrimitiveBatch.Color3(Color.FromArgb((int)(bark.R * shade), (int)(bark.G * shade), (int)(bark.B * shade)));
+                EmitQuad(transform, p + ra * radius, p + rb * radius, q + rb * radius, q + ra * radius);
+                DynamicPrimitiveBatch.Color3(end);
+                EmitQuad(transform, p, p + rb * radius, p + ra * radius, p);
+                EmitQuad(transform, q, q + ra * radius, q + rb * radius, q);
+                if (!wheel)
+                {
+                    // Small darker heartwood disks on the exposed cut ends.
+                    DynamicPrimitiveBatch.Color3(CargoSideColor);
+                    Vector3 offset = axis.Normalized() * 0.002f;
+                    EmitQuad(transform, p - offset, p - offset + rb * radius * 0.53f, p - offset + ra * radius * 0.53f, p - offset);
+                    EmitQuad(transform, q + offset, q + offset + ra * radius * 0.53f, q + offset + rb * radius * 0.53f, q + offset);
+                }
+            }
+        }
+
+        private static void EmitQuad(VehicleTransform t, Vector3 a, Vector3 b, Vector3 c, Vector3 d) =>
+            Quad(t, a.X, a.Y, a.Z, b.X, b.Y, b.Z, c.X, c.Y, c.Z, d.X, d.Y, d.Z);
 
         private static void DrawBox(VehicleTransform transform, Vector3 center, Vector3 size, Color topColor, Color sideColor)
         {
@@ -92,25 +151,27 @@ namespace ForesTycoon
         private readonly struct VehicleTransform
         {
             private readonly Vector3 position;
-            private readonly float cosYaw, sinYaw, cosPitch, sinPitch;
+            private readonly Vector3 forward, left, up;
+
+            public VehicleTransform(Vector3 position, Vector3 forward, Vector3 left, Vector3 up)
+            {
+                this.position = position;
+                this.forward = forward;
+                this.left = left;
+                this.up = up;
+            }
 
             public VehicleTransform(Vector3 position, float yawRadians, float pitchRadians)
             {
                 this.position = position;
-                cosYaw = MathF.Cos(yawRadians);
-                sinYaw = MathF.Sin(yawRadians);
-                cosPitch = MathF.Cos(-pitchRadians);
-                sinPitch = MathF.Sin(-pitchRadians);
+                forward = new Vector3(MathF.Cos(yawRadians) * MathF.Cos(pitchRadians), MathF.Sin(yawRadians) * MathF.Cos(pitchRadians), MathF.Sin(pitchRadians));
+                left = new Vector3(-MathF.Sin(yawRadians), MathF.Cos(yawRadians), 0);
+                up = Vector3.Cross(forward, left);
             }
 
             public Vector3 Apply(float x, float y, float z)
             {
-                float pitchedX = cosPitch * x + sinPitch * z;
-                float pitchedZ = -sinPitch * x + cosPitch * z;
-                return new Vector3(
-                    position.X + cosYaw * pitchedX - sinYaw * y,
-                    position.Y + sinYaw * pitchedX + cosYaw * y,
-                    position.Z + pitchedZ);
+                return position + forward * x + left * y + up * z;
             }
         }
     }

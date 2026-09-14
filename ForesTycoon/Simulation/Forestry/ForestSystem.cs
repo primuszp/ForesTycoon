@@ -39,6 +39,26 @@ namespace ForesTycoon
 
         public int Count => standCount;
 
+        // Explicit initial snapshots for isolated visual fixtures; ordinary worlds still use
+        // the version-compatible seed generator and replay path.
+        internal ForestSystem(IForestHabitat habitat, ReadOnlySpan<ForestStand> initialStands) : this(habitat)
+        {
+            if (initialStands.Length != stands.Length) throw new ArgumentException("Incorrect stand count.", nameof(initialStands));
+            for (int i = 0; i < initialStands.Length; i++)
+            {
+                ForestStand stand = initialStands[i];
+                if (!Enum.IsDefined(stand.Species) || !float.IsFinite(stand.AgeYears) || stand.AgeYears < 0
+                    || !float.IsFinite(stand.Biomass) || stand.Biomass < 0 || !float.IsFinite(stand.Health)
+                    || stand.Health < 0 || stand.Health > 1)
+                    throw new ArgumentException("Invalid initial stand.", nameof(initialStands));
+                stands[i] = stand.IsEmpty || !habitat.CanSupportForest(i) ? default : stand;
+            }
+            RecalculateStatistics();
+            Revision++; EditRevision++;
+        }
+        public ulong Revision { get; private set; }
+        public ulong EditRevision { get; private set; }
+
         public ForestStatistics Statistics => new ForestStatistics(
             standCount, matureCount, totalBiomass, standCount == 0 ? 0f : totalHealth / standCount);
 
@@ -83,6 +103,7 @@ namespace ForesTycoon
                 profile.MaximumBiomass * 0.015f,
                 0.50f + suitability * 0.40f);
             stands[tileId] = planted;
+            Revision++; EditRevision++;
             AddToStatistics(planted);
             return ForestryActionResult.Planted;
         }
@@ -103,6 +124,7 @@ namespace ForesTycoon
             ForestStand stand = stands[tileId];
             harvest = new ForestHarvest(stand.Species, stand.AgeYears, TimberYield(stand));
             stands[tileId] = default;
+            Revision++; EditRevision++;
             RemoveFromStatistics(stand);
             return ForestryActionResult.Harvested;
         }
@@ -125,6 +147,7 @@ namespace ForesTycoon
                 ForestStand stand = stands[tileId];
                 if (stand.IsEmpty || habitat.CanSupportForest(tileId)) continue;
                 stands[tileId] = default;
+                Revision++; EditRevision++;
                 RemoveFromStatistics(stand);
             }
         }
@@ -151,6 +174,7 @@ namespace ForesTycoon
             month = 0;
             GenerateInitialForest();
             RecalculateStatistics();
+            Revision++; EditRevision++;
         }
 
         public void Update(double fixedDeltaSeconds)
@@ -176,6 +200,7 @@ namespace ForesTycoon
             accumulatedSeconds = 0.0;
             month = 0;
             ClearStatistics();
+            Revision++; EditRevision++;
         }
 
         private void GenerateInitialForest()
@@ -239,6 +264,7 @@ namespace ForesTycoon
             }
 
             (stands, nextStands) = (nextStands, stands);
+            Revision++;
         }
 
         private void ClearSeedCandidates()

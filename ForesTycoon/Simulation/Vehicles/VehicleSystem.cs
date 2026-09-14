@@ -8,10 +8,13 @@ namespace ForesTycoon
         private readonly List<Vehicle> vehicles = new List<Vehicle>();
         private readonly TimberCargoSystem timberCargo;
         private int nextId = 1;
+        private readonly Func<int[], VehicleRoadRoute> roadRouteFactory;
+        public bool UseRoadPhysics { get; set; } = true;
 
-        public VehicleSystem(TimberCargoSystem timberCargo = null)
+        public VehicleSystem(TimberCargoSystem timberCargo = null, Func<int[], VehicleRoadRoute> roadRouteFactory = null)
         {
             this.timberCargo = timberCargo ?? new TimberCargoSystem();
+            this.roadRouteFactory = roadRouteFactory;
         }
 
         public IReadOnlyList<Vehicle> Vehicles => vehicles;
@@ -19,7 +22,8 @@ namespace ForesTycoon
 
         public Vehicle Spawn(int[] route, double speedTilesPerSecond = 1.5)
         {
-            Vehicle vehicle = new Vehicle(nextId++, route, speedTilesPerSecond);
+            Vehicle vehicle = new Vehicle(nextId++, route, speedTilesPerSecond,
+                roadRoute: roadRouteFactory?.Invoke(route), roadPhysics: UseRoadPhysics);
             vehicle.Load(timberCargo.Load(vehicle.CargoCapacity));
             vehicles.Add(vehicle);
             return vehicle;

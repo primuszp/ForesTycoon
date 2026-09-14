@@ -15,7 +15,9 @@ namespace ForesTycoon
         private readonly CancellationTokenSource shutdown = new CancellationTokenSource();
         private readonly ConcurrentQueue<Action> completed = new ConcurrentQueue<Action>();
         private int pendingCount;
+        private readonly object gate = new object();
         private bool disposed;
+        private bool cancellationCompleted;
 
         public BackgroundJobScheduler(int maximumConcurrency = 0)
         {
@@ -31,33 +33,45 @@ namespace ForesTycoon
         {
             if (work == null) throw new ArgumentNullException(nameof(work));
             if (publish == null) throw new ArgumentNullException(nameof(publish));
-            ObjectDisposedException.ThrowIf(disposed, this);
-
-            Interlocked.Increment(ref pendingCount);
+            CancellationToken token;
+            lock (gate)
+            {
+                ObjectDisposedException.ThrowIf(disposed, this);
+                token = shutdown.Token;
+                Interlocked.Increment(ref pendingCount);
+            }
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    await concurrency.WaitAsync(shutdown.Token).ConfigureAwait(false);
+                    await concurrency.WaitAsync(token).ConfigureAwait(false);
                     try
                     {
-                        T result = work(shutdown.Token);
-                        if (!shutdown.IsCancellationRequested)
-                            completed.Enqueue(() => publish(result));
+                        token.ThrowIfCancellationRequested();
+                        T result = work(token);
+                        lock (gate)
+                            if (!disposed) completed.Enqueue(() => publish(result));
                     }
                     finally
                     {
                         concurrency.Release();
                     }
                 }
-                catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
                 {
+                }
+                catch (Exception error)
+                {
+                    lock (gate)
+                        if (!disposed) completed.Enqueue(() => throw new InvalidOperationException("Background job failed.", error));
                 }
                 finally
                 {
-                    Interlocked.Decrement(ref pendingCount);
+                    lock (gate)
+                        if (Interlocked.Decrement(ref pendingCount) == 0 && cancellationCompleted)
+                            DisposeResources();
                 }
-            }, shutdown.Token);
+            });
         }
 
         public int PublishCompleted(int maximumResults = 8)
@@ -74,10 +88,29 @@ namespace ForesTycoon
 
         public void Dispose()
         {
-            if (disposed) return;
-            disposed = true;
-            shutdown.Cancel();
-            while (completed.TryDequeue(out _)) { }
+            lock (gate)
+            {
+                if (disposed) return;
+                disposed = true;
+                while (completed.TryDequeue(out _)) { }
+            }
+            try
+            {
+                shutdown.Cancel();
+            }
+            finally
+            {
+                lock (gate)
+                {
+                    cancellationCompleted = true;
+                    // Workers still need the semaphore to release their slots.
+                    if (pendingCount == 0) DisposeResources();
+                }
+            }
+        }
+
+        private void DisposeResources()
+        {
             shutdown.Dispose();
             concurrency.Dispose();
         }

@@ -182,6 +182,8 @@ namespace ForesTycoon
 
         private void updateNodes(List<Node> nodes)
         {
+            InvalidateSurfaceVisuals();
+            forestTerrainVersion++;
             Tile[] nodeTiles = new Tile[4];
             foreach (Node node in nodes)
             {
@@ -197,6 +199,8 @@ namespace ForesTycoon
                 {
                     Tile tile = nodeTiles[i];
                     chunkIndex.MarkTileDirty(tile.Id, ChunkDirtyFlags.All);
+                    // Crown contact shadows can cross into the neighbouring tile.
+                    chunkIndex.MarkTileAndNeighboursDirty(tile.Id, ChunkDirtyFlags.Props);
                     string code = tile.getCode();
                     tile.LowPos = tile.Low * tileSizeM;
                     if (!vbos.ContainsKey(code + "_" + tile.Low))

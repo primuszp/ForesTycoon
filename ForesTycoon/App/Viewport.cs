@@ -225,6 +225,7 @@ namespace ForesTycoon
                 WindowState = WindowState.Normal,
                 API = ContextAPI.OpenGL,
                 APIVersion = new Version(3, 3),
+                NumberOfSamples = 4,
                 Profile = ContextProfile.Core,
                 Flags = ContextFlags.ForwardCompatible
             })
@@ -313,7 +314,8 @@ namespace ForesTycoon
                 screenX,
                 screenY,
                 screenX + Width / zoom,
-                screenY + Height / zoom);
+                screenY + Height / zoom,
+                zoom * FramebufferWidth / Math.Max(1, Width));
 
             world.Draw(renderContext);
 
@@ -559,6 +561,7 @@ namespace ForesTycoon
                         : new NVec4(1.00f, 0.42f, 0.35f, 1f),
                     ForestryActionText(world.LastForestryAction));
             ImGui.Text($"Chunk: {world.VisibleChunkCount}/{world.TotalChunkCount}");
+            ImGui.Text($"Forest rebuild/frame: {world.ForestChunkRebuilds}");
             ImGui.Text($"Frame: {performance.FrameMilliseconds:F1} ms  Sim: {performance.SimulationMilliseconds:F2} ms");
             ImGui.Text($"Render: {performance.RenderMilliseconds:F1} ms  Draw: {performance.DrawCalls}");
             ImGui.Text($"GC/frame: {performance.AllocatedBytes / 1024.0:F1} KiB");
@@ -802,7 +805,11 @@ namespace ForesTycoon
                 OpenTK.Graphics.OpenGL.ErrorCode error = GL.GetError();
                 if (error != OpenTK.Graphics.OpenGL.ErrorCode.NoError)
                     throw new InvalidOperationException($"OpenGL core smoke test failed with {error} at frame {frameIndex}.");
-                if (frameIndex >= smokeTestFrameLimit.Value) Close();
+                if (frameIndex >= smokeTestFrameLimit.Value)
+                {
+                    Console.WriteLine($"Game smoke: smoothed full frame={performance.FrameMilliseconds:F2}ms, render={performance.RenderMilliseconds:F2}ms, simulation={performance.SimulationMilliseconds:F2}ms");
+                    Close();
+                }
             }
         }
 

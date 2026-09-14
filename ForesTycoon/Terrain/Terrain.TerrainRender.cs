@@ -8,39 +8,7 @@ namespace ForesTycoon
     {
         internal void DrawTerrainBase()
         {
-            // A kitöltött terep írja a depth buffert; a koplanáris overlay rétegek
-            // később depth írás nélkül rajzolódnak, így nincs Z-fighting.
-            DynamicPrimitiveBatch.Draw(PrimitiveType.Quads, () =>
-            {
-                foreach (Tile tile in visibleTiles)
-                {
-                    if (roads.Has(tile.Id)) continue;
-                    if (GetTileRenderMaterial(tile) != TileRenderMaterial.Grass) continue;
-                    if (!tile.Shape.IsPlanar) continue;
-
-                    DrawTerrainTileQuad(tile);
-                }
-            });
-
-            foreach (Tile tile in visibleTiles)
-            {
-                // Az út-csempék terep-meshe helyett a platform/földmű renderelődik
-                // (DrawRoadFoundations) — különben bevágásnál a magasabb terep eltakarná az utat.
-                if (roads.Has(tile.Id)) continue;
-                if (GetTileRenderMaterial(tile) != TileRenderMaterial.Grass) continue;
-                if (tile.Shape.IsPlanar) continue;
-
-                bool tileFlip = flippedDiagonalTiles.Contains(tile.Id);
-                VertexBuffer vbo = vbos[tile.Code + "_" + tile.Low + (tileFlip ? "_f" : "")];
-
-                RenderDevice.PushModel();
-                {
-                    RenderDevice.Translate(tile.W.xPos, tile.W.yPos, tile.LowPos);
-                    vbo.DrawArray();
-                }
-                RenderDevice.PopModel();
-            }
-
+            DrawCachedTerrain();
             DrawFoundationTerrainSurfaces();
         }
 
@@ -66,15 +34,7 @@ namespace ForesTycoon
 
         private void DrawLandGrid()
         {
-            Color terrainLine = Color.FromArgb(82, 115, 38);
-            DynamicPrimitiveBatch.Draw(PrimitiveType.Lines, () =>
-            {
-                foreach (Tile tile in visibleTiles)
-                {
-                    if (ShouldDrawStandingWater(tile)) continue;
-                    DrawTileGrid(tile, terrainLine);
-                }
-            });
+            DrawCachedGrid();
         }
 
         private void DrawTileGrid(Tile tile, Color terrainLine)

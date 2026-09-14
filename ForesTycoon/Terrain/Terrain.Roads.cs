@@ -49,6 +49,22 @@ namespace ForesTycoon
 
         public int[] FindDemoRoadRoute() => RoadPathfinder.FindDemoRoute(roads, nodeRows - 1);
 
+        internal VehicleRoadRoute CreateVehicleRoadRoute(int[] route)
+        {
+            var centers = new Vector3[route.Length];
+            var gradients = new Vector2[route.Length];
+            for (int i = 0; i < route.Length; i++)
+            {
+                if (!TryGetRoadTileCenter(route[i], out centers[i]))
+                    throw new ArgumentException("Vehicle route contains a missing road tile.", nameof(route));
+                Tile tile = tiles[route[i]];
+                Vector3 w = RoadCorner(tile.W), s = RoadCorner(tile.S), n = RoadCorner(tile.N);
+                Vector3 normal = Vector3.Cross(s - w, n - w);
+                gradients[i] = new Vector2(-normal.X / normal.Z, -normal.Y / normal.Z);
+            }
+            return new VehicleRoadRoute(centers, gradients);
+        }
+
         public bool TryGetRoadTileCenter(int tileId, out Vector3 center)
         {
             if (!IsValidTileId(tileId) || !roads.Has(tileId))
@@ -76,7 +92,7 @@ namespace ForesTycoon
             if (!placement.IsValid) return false;
 
             bool added = roads.Add(t.Id, edges);
-            if (added) CaptureRoadSurface(t, placement);
+            if (added) { CaptureRoadSurface(t, placement); InvalidateSurfaceVisuals(); }
             return added;
         }
 
@@ -231,6 +247,7 @@ namespace ForesTycoon
                 {
                     roads.Add(step.TileId, step.Edges);
                     CaptureRoadSurface(tile, placement);
+                    InvalidateSurfaceVisuals();
                     chunkIndex.MarkTileAndNeighboursDirty(step.TileId, ChunkDirtyFlags.Roads | ChunkDirtyFlags.Foundations);
                 }
             }
@@ -250,6 +267,7 @@ namespace ForesTycoon
                 if (roads.Remove(step.TileId, step.Edges))
                 {
                     ReleaseRoadSurface(tiles[step.TileId]);
+                    InvalidateSurfaceVisuals();
                     chunkIndex.MarkTileAndNeighboursDirty(step.TileId, ChunkDirtyFlags.Roads | ChunkDirtyFlags.Foundations);
                 }
             }

@@ -62,3 +62,59 @@ The current foundation has deterministic ticking, command batching, chunk cullin
 5. Split ImGui panel composition out of `Viewport` as the tool count grows.
 
 Recommended delivery order: placeable depots and route assignment, immutable hydrology jobs, economy/cargo graph, dirty-chunk GPU caches, then replay checkpoints.
+
+## Forest GPU cache and LOD (2026-09-13)
+
+Forest wood and crowns now live in persistent triangle VBOs per visible terrain chunk. Stable frames only submit cached draw calls; they do not regenerate stems, expand primitives or upload forest vertices. CPU scratch lists are reused during rebuilds. Each visited chunk retains one LOD, released with its terrain.
+
+`ForestSystem.Revision` signals potentially changed state. On a new revision, each visible chunk compares compact visual snapshots (species plus maturity, stocking, health and neighbour pressure rounded to 1/32). A changed visual snapshot, a terrain Props dirty flag, or a LOD transition rebuilds that chunk. Neighbour pressure is included so harvesting across a chunk boundary also updates the edge canopy. Previously invisible chunks validate their state on re-entry. Simulation/save precision is unchanged.
+
+LOD uses framebuffer pixels per world unit with hysteresis:
+
+- Near: enter at 9, leave below 7; full existing detail for sufficiently large stems and undergrowth.
+- Medium: enter from far at 3.5, leave below 2.5; no branches, secondary lobes or undergrowth.
+- Far: simplified crowns without wood. Stem positions are retained across LODs to preserve canopy coverage.
+
+The diagnostics panel reports `Forest rebuild/frame`. Expected value on a stable view is zero. A cold view or LOD switch still rebuilds its visible chunks synchronously; time-budgeted uploads and GPU instancing remain possible follow-ups. Far LOD currently preserves per-stem crowns rather than replacing an entire stand with one canopy mesh.
+
+Validation:
+
+```sh
+dotnet test ForesTycoon.sln
+dotnet run --project ForesTycoon/ForesTycoon.csproj -- --forest-smoke-test
+dotnet run --project ForesTycoon/ForesTycoon.csproj -- --smoke-test
+```
+
+The dedicated forest smoke test creates a hidden OpenGL window and checks stable-frame reuse, LOD transitions, plant/harvest invalidation, terrain edits, clear, and GL errors. On its deterministic 33-node test map: near 173,808; medium 77,952; far 30,300 submitted forest vertices (82.6% fewer at far than near). These are geometry counts, not an FPS benchmark.
+
+## 30 FPS performance correction
+
+Run the repeatable rendering benchmark with:
+
+```sh
+dotnet run --project ForesTycoon/ForesTycoon.csproj -- --forest-benchmark
+```
+
+The benchmark uses 1280×720, 4× MSAA, ten warm-up frames and ninety measured frames per view. GL.Finish includes GPU completion in the elapsed time; it is used only by diagnostics. Simulation, UI, input and swap are excluded, and cold cache/terrain generation costs are outside the steady-state measurements.
+
+On the available RTX 5060, the unoptimized 64×64 world took approximately 79–87 ms median in the first run. Pass profiling identified repeated foundation classification and terrain submissions as the dominant cost, not the forest shader. Surface classification now caches results until terrain/road changes, and terrain plus grid geometry use persistent chunk VBOs with the original baked colours and triangles.
+
+After the change: world64 zoom10 median 8.39 ms / p95 16.84 ms; zoom5 median 10.20 ms / p95 18.14 ms. Fixture16 zoom10 median 1.23 ms / p95 4.89 ms. These are measurements of the test scenes, not a guarantee for every map size or editing workload. The steady-state results fit inside the 33.3 ms render budget for 30 FPS without reducing forest detail.
+
+Cache invalidation is checked by the forest GL smoke test after road construction, road removal and terrain elevation changes. A map-wide visual revision currently rebuilds visible static chunks after such edits; incremental revision propagation is a future improvement if editing spikes are material.
+
+## Camera-motion stutter correction
+
+`--camera-benchmark` runs continuous rotation and a sinusoidal zoom crossing all LOD boundaries, while advancing the forest simulation at 30 Hz. This exercises both level changes and a monthly growth boundary. The ordinary benchmark remains a stationary render measurement.
+
+Changes:
+
+- Terrain and all three forest LOD buffers are prepared when the terrain renderer is created, before interactive frames. Previously only one forest LOD survived, so repeated zooming repeatedly regenerated the same geometry.
+- Prepared LODs are retained independently. Forest buffers release their CPU vertex copies after upload, retaining only their GPU geometry and vertex counts. This trades more GPU memory and loading work for predictable camera movement; very large maps still need streaming/instancing before this eager policy scales well.
+- Crown grid vertices and their numerical normals are evaluated once and reused by neighbouring triangles.
+- Monthly visual updates use a cooperative 2 ms CPU budget, preserving the previous mesh until the replacement is complete. Work includes wood, floor and undergrowth as well as crowns. At most one buffer group uploads per frame. The final allocation/upload is indivisible, so 2 ms is a work budget, not a strict wall-clock guarantee.
+- User edits remain immediately visible. Obsolete queued growth work is cancelled when the simulation revision or terrain changes. Road/elevation changes still invalidate cached terrain correctly.
+
+RTX 5060, 1280×720, 4× MSAA camera benchmark: before, world64 p95 about 103 ms and maximum 470 ms. After, with simulation advancing, world64 median 5.0–6.5 ms, p95 7.1–8.7 ms, maximum 11.3 ms in the measured runs. Dense fixture maximum 31.0 ms. These exclude initial loading and do not guarantee the same result on larger maps or different hardware.
+
+Regression coverage includes returning to a previously used LOD without a rebuild, completing incremental growth updates, cancellation after edits, and drawing buffers after releasing CPU geometry copies.

@@ -21,6 +21,8 @@ namespace ForesTycoon
             this.vehicles = vehicles ?? throw new ArgumentNullException(nameof(vehicles));
             this.effects = effects ?? throw new ArgumentNullException(nameof(effects));
             this.forest = forest ?? throw new ArgumentNullException(nameof(forest));
+            terrain.WarmStaticGeometry();
+            terrain.WarmForestGeometry(forest);
             RegisterPasses();
         }
 
@@ -47,7 +49,7 @@ namespace ForesTycoon
             });
             pipeline.Add(RenderLayer.ForestryPreview, "forestry-preview", _ => terrain.DrawForestryPreview());
             pipeline.Add(RenderLayer.DecalEnd, "decal-state-end", _ => EndDecals());
-            pipeline.Add(RenderLayer.Props, "props", _ => terrain.DrawTrees(forest));
+            pipeline.Add(RenderLayer.Props, "props", context => terrain.DrawTrees(forest, context));
             pipeline.Add(RenderLayer.Vehicles, "vehicles", context =>
                 VehicleRenderer.Draw(vehicles, terrain, context.InterpolationAlpha));
             pipeline.Add(RenderLayer.Effects, "world-effects", context =>

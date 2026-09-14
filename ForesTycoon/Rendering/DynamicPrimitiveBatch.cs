@@ -31,6 +31,30 @@ namespace ForesTycoon
         private static int vbo;
         private static bool drawing;
 
+        // Capture the existing procedural emitters without a GL context or a draw call.
+        internal static Vertex[] BuildGeometry(PrimitiveType primitiveType, Action draw)
+        {
+            if (draw == null) throw new ArgumentNullException(nameof(draw));
+            if (drawing) throw new InvalidOperationException("Primitive batches cannot be nested.");
+            drawing = true;
+            source.Clear();
+            expanded.Clear();
+            currentColor = 0xffffffff;
+            try
+            {
+                draw();
+                Expand(primitiveType);
+                var result = new Vertex[expanded.Count];
+                for (int i = 0; i < result.Length; i++)
+                    result[i] = new Vertex(expanded[i].Position, Vector3.UnitZ, expanded[i].Color);
+                return result;
+            }
+            finally
+            {
+                drawing = false;
+            }
+        }
+
         public static void Draw(PrimitiveType primitiveType, Action draw)
         {
             if (draw == null) throw new ArgumentNullException(nameof(draw));
@@ -69,6 +93,7 @@ namespace ForesTycoon
 
         public static void Color3(Color color) => currentColor = Pack(Color.FromArgb(255, color.R, color.G, color.B));
         public static void Color4(Color color) => currentColor = Pack(color);
+        internal static void ColorPacked(uint color) => currentColor = color;
         public static void Vertex3(float x, float y, float z) => Vertex3(new Vector3(x, y, z));
         public static void Vertex3(Vector3 position)
         {

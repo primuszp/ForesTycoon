@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using OpenTK.Graphics.OpenGL;
 
 namespace ForesTycoon
@@ -11,9 +11,11 @@ namespace ForesTycoon
         private bool disposed;
         private uint[] indices;
         private Vertex[] vertices;
+        private int vertexCount;
 
         private PrimitiveType mode = PrimitiveType.Triangles;
         private readonly BufferUsageHint usageHint;
+        internal ReadOnlySpan<Vertex> CpuVertices => vertices;
 
         public int VboId
         {
@@ -63,7 +65,7 @@ namespace ForesTycoon
             this.usageHint = usageHint;
         }
 
-        public void SetData(Vertex[] data)
+        public void SetData(Vertex[] data, bool retainCpuCopy = true)
         {
             ThrowIfDisposed();
             int size;
@@ -71,7 +73,8 @@ namespace ForesTycoon
             if (data == null) throw new ArgumentNullException(nameof(data));
             else
             {
-                this.vertices = data;
+                this.vertices = retainCpuCopy ? data : null;
+                vertexCount = data.Length;
                 GL.BindVertexArray(VaoId);
                 GL.BindBuffer(BufferTarget.ArrayBuffer, VboId);
                 GL.BufferData(BufferTarget.ArrayBuffer, new IntPtr(data.Length * Vertex.Stride), data, usageHint);
@@ -79,8 +82,10 @@ namespace ForesTycoon
                 GL.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, Vertex.Stride, 0);
                 GL.EnableVertexAttribArray(1);
                 GL.VertexAttribPointer(1, 4, VertexAttribPointerType.UnsignedByte, true, Vertex.Stride, 6 * sizeof(float));
+                GL.EnableVertexAttribArray(2);
+                GL.VertexAttribPointer(2, 3, VertexAttribPointerType.Float, false, Vertex.Stride, 3 * sizeof(float));
                 GL.GetBufferParameter(BufferTarget.ArrayBuffer, BufferParameterName.BufferSize, out size);
-                if (vertices.Length * Vertex.Stride != size)
+                if (data.Length * Vertex.Stride != size)
                     throw new ApplicationException("Vertex data not uploaded correctly");
                 GL.BindVertexArray(0);
             }
@@ -105,22 +110,24 @@ namespace ForesTycoon
             }
         }
 
-        public void DrawArray()
+        public void DrawArray() => DrawArray(true);
+
+        internal void DrawArray(bool useGeometryShader)
         {
             ThrowIfDisposed();
-            if (vertices == null || vertices.Length == 0) return;
+            if (vertexCount == 0) return;
 
-            RenderDevice.UseGeometryShader();
+            if (useGeometryShader) RenderDevice.UseGeometryShader();
             GL.BindVertexArray(VaoId);
-            GL.DrawArrays(mode, 0, vertices.Length);
-            RenderMetrics.RecordDraw(vertices.Length);
+            GL.DrawArrays(mode, 0, vertexCount);
+            RenderMetrics.RecordDraw(vertexCount);
             GL.BindVertexArray(0);
         }
 
         public void DrawElements()
         {
             ThrowIfDisposed();
-            if (vertices == null || vertices.Length == 0 || indices == null || indices.Length == 0) return;
+            if (vertexCount == 0 || indices == null || indices.Length == 0) return;
 
             RenderDevice.UseGeometryShader();
             GL.BindVertexArray(VaoId);

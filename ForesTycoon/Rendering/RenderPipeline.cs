@@ -7,6 +7,7 @@ namespace ForesTycoon
     {
         private readonly List<RenderPass> passes = new List<RenderPass>();
         private bool sorted = true;
+        internal static Action<string, bool> PassProbe;
 
         public void Add(RenderLayer layer, string name, Action<RenderContext> draw)
         {
@@ -24,7 +25,11 @@ namespace ForesTycoon
         {
             EnsureSorted();
             for (int i = 0; i < passes.Count; i++)
+            {
+                PassProbe?.Invoke(passes[i].Name, true);
                 passes[i].Draw(context);
+                PassProbe?.Invoke(passes[i].Name, false);
+            }
         }
 
         private void EnsureSorted()

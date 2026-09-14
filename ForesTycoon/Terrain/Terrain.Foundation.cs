@@ -123,6 +123,7 @@ namespace ForesTycoon
 
         private void DrawFoundationTerrainSurfaces()
         {
+            if (roads.Count == 0) return;
             DynamicPrimitiveBatch.Draw(PrimitiveType.Quads, () =>
             {
                 foreach (Tile tile in visibleTiles)
@@ -375,7 +376,35 @@ namespace ForesTycoon
             return GetTileSurfaceVisual(tile).SurfaceMaterial;
         }
 
+        private TileSurfaceVisual[] surfaceVisualCache;
+        private ulong[] surfaceVisualVersions;
+        private ulong surfaceVisualVersion = 1;
+
+        private void InvalidateSurfaceVisuals() => surfaceVisualVersion++;
+
+        internal bool SurfaceCacheMatchesFreshCalculation()
+        {
+            foreach (Tile tile in tiles)
+                if (!GetTileSurfaceVisual(tile).Equals(ComputeTileSurfaceVisual(tile))) return false;
+            return true;
+        }
+
         private TileSurfaceVisual GetTileSurfaceVisual(Tile tile)
+        {
+            if (surfaceVisualCache == null)
+            {
+                surfaceVisualCache = new TileSurfaceVisual[tiles.Length];
+                surfaceVisualVersions = new ulong[tiles.Length];
+            }
+            if (surfaceVisualVersions[tile.Id] != surfaceVisualVersion)
+            {
+                surfaceVisualCache[tile.Id] = ComputeTileSurfaceVisual(tile);
+                surfaceVisualVersions[tile.Id] = surfaceVisualVersion;
+            }
+            return surfaceVisualCache[tile.Id];
+        }
+
+        private TileSurfaceVisual ComputeTileSurfaceVisual(Tile tile)
         {
             int tpc = nodeRows - 1;
             int u = tile.Id / tpc;

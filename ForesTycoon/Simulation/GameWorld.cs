@@ -30,7 +30,7 @@ namespace ForesTycoon
             terrain = new Terrain(settings ?? throw new ArgumentNullException(nameof(settings)));
             forest = systems.Add(new ForestSystem(terrain));
             timberCargo = systems.Add(new TimberCargoSystem());
-            vehicles = systems.Add(new VehicleSystem(timberCargo));
+            vehicles = systems.Add(new VehicleSystem(timberCargo, route => terrain.CreateVehicleRoadRoute(route)));
             effects = systems.Add(new WorldEffectSystem());
             terrainRenderer = new TerrainRenderer(terrain, vehicles, effects, forest);
         }
@@ -48,6 +48,7 @@ namespace ForesTycoon
         public ForestryAreaSummary LastForestryArea => lastForestryArea;
         public bool TryGetForestStand(int tileId, out ForestStand stand) => forest.TryGetStand(tileId, out stand);
         public int VisibleChunkCount => terrain.VisibleChunkCount;
+        public int ForestChunkRebuilds => terrain.ForestChunkRebuilds;
         public int TotalChunkCount => terrain.TotalChunkCount;
         public int TileWidth => terrain.TileWidth;
         public int TileHeight => terrain.TileHeight;
@@ -210,6 +211,7 @@ namespace ForesTycoon
 
         public void Regenerate(TerrainSettings settings)
         {
+            vehicles.UseRoadPhysics = true;
             commands.Clear();
             commandJournal.Clear();
             systems.Clear();
@@ -223,6 +225,7 @@ namespace ForesTycoon
             WorldSaveSerializer.Write(destination, new WorldSaveData
             {
                 TickRate = tickRate,
+                VehiclePhysicsVersion = vehicles.UseRoadPhysics ? 1 : 0,
                 Tick = worldTick,
                 Terrain = TerrainSettingsData.From(terrain.Settings),
                 Commands = new List<WorldCommandRecord>(commandJournal)
@@ -232,6 +235,7 @@ namespace ForesTycoon
         public void Load(Stream source)
         {
             WorldSaveData save = WorldSaveSerializer.Read(source);
+            vehicles.UseRoadPhysics = save.VehiclePhysicsVersion == 1;
             commands.Clear();
             commandJournal.Clear();
             systems.Clear();

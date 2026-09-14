@@ -59,6 +59,8 @@ namespace ForesTycoon
     {
         public const int CurrentVersion = 1;
         public int Version { get; init; } = CurrentVersion;
+        // Missing in older journals: preserve their constant-speed cargo delivery times.
+        public int VehiclePhysicsVersion { get; init; }
         public double TickRate { get; init; } = 30.0;
         public ulong Tick { get; init; }
         public TerrainSettingsData Terrain { get; init; } = new TerrainSettingsData();
@@ -66,6 +68,8 @@ namespace ForesTycoon
 
         public void Validate()
         {
+            if (VehiclePhysicsVersion < 0 || VehiclePhysicsVersion > 1)
+                throw new NotSupportedException("Unsupported vehicle physics version.");
             if (Version != CurrentVersion)
                 throw new NotSupportedException($"Save version {Version} is not supported; expected {CurrentVersion}.");
             if (!double.IsFinite(TickRate) || TickRate <= 0.0)

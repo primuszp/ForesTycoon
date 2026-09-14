@@ -8,26 +8,15 @@ trees on the open grass, low undergrowth, a species/season colour per stand, and
 marked management parcel. The simulation model stays as it is; this is a placement,
 level-of-detail and tooling plan.
 
-## Current State
+## Current State (2026-09-13)
 
-- `Simulation/Forestry/ForestSystem.cs` — one `ForestStand` per tile id; growth,
-  crowding, seeding, mortality. This model is fine and stays untouched.
-- `Terrain/Terrain.PropRender.cs` — `DrawTrees(...)` walks `visibleTiles`, and
-  `TryGetTree(...)` emits **exactly one** `TreeInstance` per stand: tile centre plus
-  a hash jitter, one scale from `TreeVisualScale(stand)`.
-- Everything is immediate mode: two `DynamicPrimitiveBatch` passes (quads = wood,
-  triangles = foliage) rebuilt from scratch every frame.
-- `PlantForestCommand` plants a single tile.
+- Multi-stem deterministic placement, size tiers, crowding response, undergrowth and area planting are implemented.
+- Forest wood and crowns use persistent per-chunk GPU geometry, rebuilt on quantized visual changes, terrain edits or LOD changes.
+- Three zoom-dependent LOD bands use hysteresis. Far views retain simplified per-stem crowns; stand-wide canopy meshes are still planned.
+- Initial forest occupancy is still a per-tile hash filter. Spatially correlated woodland patches, species mixing and seasonal colour remain future work.
+- See `engine-architecture.md` for cache invalidation, thresholds and the dedicated OpenGL regression test.
 
-Three gaps produce the "not good yet" look:
-
-1. **Density.** One trunk per tile cannot make a canopy. A tile is `TileSizeM` metres
-   across and carries a whole stand's biomass in a single stem.
-2. **Uniformity.** All trees of a species share one silhouette, one age, one colour
-   family; a stand looks stamped instead of grown, and its edge is invisible.
-3. **Cost model.** Multiplying instances by 8–20 on top of a per-frame rebuild will
-   not hold frame time; the geometry has to be cached and LOD'd first.
-
+The design below records the broader visual direction; it includes both implemented and planned features.
 ## Design
 
 ### 1. Stand → many stems (`ForestStandVisual`)

@@ -16,13 +16,15 @@ namespace ForesTycoon
 
         public void Update(double deltaSeconds)
         {
-            if (deltaSeconds < 0) throw new ArgumentOutOfRangeException(nameof(deltaSeconds));
-            for (int i = active.Count - 1; i >= 0; i--)
+            if (!double.IsFinite(deltaSeconds) || deltaSeconds < 0)
+                throw new ArgumentOutOfRangeException(nameof(deltaSeconds));
+            int survivors = 0;
+            for (int i = 0; i < active.Count; i++)
             {
                 WorldEffect updated = active[i].Advance(deltaSeconds);
-                if (updated.IsExpired) active.RemoveAt(i);
-                else active[i] = updated;
+                if (!updated.IsExpired) active[survivors++] = updated;
             }
+            active.RemoveRange(survivors, active.Count - survivors);
         }
 
         public void Clear() => active.Clear();

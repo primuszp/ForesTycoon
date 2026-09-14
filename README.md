@@ -116,3 +116,47 @@ Planned next steps include:
 - biome and terrain-type layers
 - placeable timber depots, route assignment and delivery contracts
 - later transport, roads, and industrial chains
+
+Forest cache and LOD integration check (requires OpenGL):
+
+```sh
+dotnet run --project ForesTycoon/ForesTycoon.csproj -- --forest-smoke-test
+```
+
+This hidden-window test checks cached geometry reuse, detail reduction, and geometry refresh after planting, harvesting and terrain edits.
+
+## Erdő látványminta
+
+A képreferenciához készített, rögzített 16×16 csempés erdőminta külön nézetben indítható:
+
+```sh
+dotnet run --project ForesTycoon/ForesTycoon.csproj -- --forest-preview
+```
+
+Bal egérhúzás: forgatás; görgő: zoom; bal/jobb nyíl: 45° forgatás; fel/le nyíl: kameradöntés; Esc: bezárás. A mintában négy fafaj, összefüggő lombkorona, ritkuló tisztásszegély és enyhe tereplépcső szerepel. A minta nem ír játékmentést.
+
+36 összehasonlítható PNG exportja (4 kamerairány × 3 dőlés × 3 zoom):
+
+```sh
+dotnet run --project ForesTycoon/ForesTycoon.csproj -- --forest-preview --capture artifacts/forest-preview
+```
+
+Az új stilizált koronák, finom kontúrok és talpközeli árnyékok a normál játék erdőrenderelőjében is működnek. A mintaterület egy külön kezdeti állapot; a normál játék kezdőerdő-generátora és mentési formátuma változatlan.
+
+Zoom/forgatás és futó erdőszimuláció terheléses mérése:
+
+```sh
+dotnet run --project ForesTycoon/ForesTycoon.csproj -- --camera-benchmark
+```
+
+## Rönkszállító teherautó
+
+Az új játékok járművei háromtengelyes, forgó kerekű rönkszállítók. A rakomány mennyiségét legfeljebb kilenc látható rönk jelzi; üresen a tartórudazat marad. Az út befagyasztott vezetőfelületét követik, kanyarban negyedíven fordulnak, az első/hátsó tengely környezetéből számolt dőléssel és keresztlejtéssel. Egyszerű gyorsulás, terhelés- és emelkedőfüggő sebesség, kanyar előtti lassítás és végponti fékezés működik, fix szimulációs lépésekben.
+
+Ez útvonalhoz kötött kinematikai modell: még nincs ütközés, forgalomkövetés vagy külön kerékfelfüggesztés. A végponton megállás után a meglévő automatikus irányváltás történik. A korábbi mentések megőrzik az eredeti állandó sebességű szimulációt, hogy a parancsnapló visszajátszásakor a szállítások időzítése ne változzon; az új mentések külön járműfizika-verziót tárolnak.
+
+Grafikus ellenőrzés és három PNG (rakott emelkedő/lejtő, üres síkút), az `artifacts/truck-preview` könyvtárba:
+
+```sh
+dotnet run --project ForesTycoon/ForesTycoon.csproj -- --truck-smoke-test
+```
