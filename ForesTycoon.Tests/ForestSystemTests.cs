@@ -370,7 +370,7 @@ public class ForestSystemTests
         throw new InvalidOperationException("The deterministic test habitat generated no empty tile.");
     }
 
-    private sealed class TestHabitat : IForestHabitat
+    internal sealed class TestHabitat : IForestHabitat
     {
         private readonly bool[] supported;
 

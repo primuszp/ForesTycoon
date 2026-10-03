@@ -60,6 +60,37 @@ namespace ForesTycoon
         public ForestryActionResult LastForestryAction => lastForestryAction;
         public ForestryAreaSummary LastForestryArea => lastForestryArea;
         public bool TryGetForestStand(int tileId, out ForestStand stand) => forest.TryGetStand(tileId, out stand);
+
+        /// <summary>
+        /// Review-capture helper: finds the densest 5×5 block of forest, clears its western half
+        /// and half-loads the eastern half, so stumps and regrowth can be inspected. Bypasses
+        /// the command log, so it must never run in a game that will be saved.
+        /// </summary>
+        internal bool DiagnosticFellForestBlock(out Vector3 centre)
+        {
+            int rows = terrain.Settings.TileRows, columns = terrain.Settings.TileColumns;
+            int bestU = -1, bestV = -1, bestScore = 0;
+            for (int u = 3; u < columns - 3; u++)
+                for (int v = 3; v < rows - 3; v++)
+                {
+                    int score = 0;
+                    for (int du = -2; du <= 2; du++)
+                        for (int dv = -2; dv <= 2; dv++)
+                            if (forest.TryGetStand((u + du) * rows + v + dv, out ForestStand stand) && stand.Maturity > 0.5f) score++;
+                    if (score > bestScore) { bestScore = score; bestU = u; bestV = v; }
+                }
+            centre = default;
+            if (bestScore == 0) return false;
+            for (int du = -2; du <= 2; du++)
+                for (int dv = -2; dv <= 2; dv++)
+                {
+                    int id = (bestU + du) * rows + bestV + dv;
+                    if (du < 0) forest.Harvest(id, out _);
+                    else if (du == 0 && forest.TryGetStand(id, out ForestStand stand))
+                        forest.ExtractTimber(id, ForestSystem.TimberCubicMetres(stand) * 0.55f);
+                }
+            return terrain.TryGetTileCenter(bestU * rows + bestV, out centre);
+        }
         public int VisibleChunkCount => terrain.VisibleChunkCount;
         public int ForestChunkRebuilds => terrain.ForestChunkRebuilds;
         public int TotalChunkCount => terrain.TotalChunkCount;

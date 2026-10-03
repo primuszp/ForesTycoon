@@ -267,3 +267,15 @@ HUD és diorama ellenőrző képek az `artifacts/hud` mappába:
 ```sh
 dotnet run --project ForesTycoon/ForesTycoon.csproj -- --capture-frame artifacts/hud
 ```
+
+## Fafajonkénti textúrák, tönkök és rácsvonal
+
+**Textúrák**: Textúrázás bekapcsolva minden fafaj saját kéreg- és lombmintát kap. A mintákat a felület-shader procedurálisan rajzolja; a fafaj kódja a csúcsszín alfa-csatornájában érkezik (`Terrain.SurfaceSpeciesCode`).
+- Lucfenyő: vörösesbarna, pikkelyes kéreg; kékeszöld, emeletes tűlevél-sávok.
+- Nyír: krétafehér kéreg fekete, vízszintes paraszemölcsökkel és foltokkal; apró, csillogó sárgászöld levelek.
+- Tölgy: mélyen barázdált kéreg; nehéz, csomós lombtömegek árnyékos hézagokkal.
+- Bükk: sima ezüstszürke, foltos kéreg zuzmóval; tömör, réteges lomb.
+
+**Tönkök**: Kitermeléskor (teherautós rakodás vagy azonnali kivágás) a `ForestSystem` megjegyzi a kivágott állományt az első vágás előtti állapotában. A kirajzolás minden eltávolított törzs helyén tönköt rajzol (fajnak megfelelő kéreg, világos fűrészelt lap). A tönk 6 erdőév alatt lesüllyed, besötétedik, bemohásodik, majd eltűnik. Újratelepítéskor a felnövő fák fokozatosan átveszik a helyüket. Ültetést nem akadályoz; útépítéskor a tönk eltűnik. A mentés visszajátszása helyreállítja.
+
+**Rácsvonal**: a csemperács kb. 1,5 pixeles, lágy szélű, sötét mohazöld, félátlátszó vonal, így textúrázott fűn is látszik, de nem nyomja el a tájat (nagyon távoli nézetben 1 pixel). A Grafika ablakban kapcsolható.

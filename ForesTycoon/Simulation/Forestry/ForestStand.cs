@@ -26,6 +26,19 @@ namespace ForesTycoon
         float TotalBiomass,
         float AverageHealth);
 
+    /// <summary>
+    /// What a felled stand leaves behind: the stand as it stood before the first cut (so the
+    /// renderer can put a stump where every removed stem was), and how long ago it was cut.
+    /// Purely a by-product of harvesting; stumps never block planting or affect growth.
+    /// </summary>
+    readonly record struct ForestStump(ForestStand Felled, float Crowding, float YearsSinceFelled)
+    {
+        /// <summary>Stumps rot away and vanish after this many forest years.</summary>
+        internal const float LifetimeYears = 6f;
+        public bool IsEmpty => Felled.IsEmpty;
+        public float Decay => System.Math.Clamp(YearsSinceFelled / LifetimeYears, 0f, 1f);
+    }
+
     readonly record struct ForestHarvest(
         ForestSpecies Species,
         float AgeYears,

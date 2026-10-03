@@ -27,15 +27,33 @@ namespace ForesTycoon
             for (int i = 0; i < passes.Count; i++)
             {
                 PassProbe?.Invoke(passes[i].Name, true);
-                passes[i].Draw(context);
-                PassProbe?.Invoke(passes[i].Name, false);
+                try
+                {
+                    passes[i].Draw(context);
+                }
+                finally
+                {
+                    PassProbe?.Invoke(passes[i].Name, false);
+                }
             }
         }
 
         private void EnsureSorted()
         {
             if (sorted) return;
-            passes.Sort((a, b) => a.Layer.CompareTo(b.Layer));
+            // Stable insertion sort runs only after registration changes. Equal-layer
+            // passes retain registration order, including after another pass is added.
+            for (int i = 1; i < passes.Count; i++)
+            {
+                RenderPass pass = passes[i];
+                int previous = i - 1;
+                while (previous >= 0 && passes[previous].Layer > pass.Layer)
+                {
+                    passes[previous + 1] = passes[previous];
+                    previous--;
+                }
+                passes[previous + 1] = pass;
+            }
             sorted = true;
         }
     }

@@ -744,10 +744,19 @@ namespace ForesTycoon
                 ShowToast("Nincs látható szarvas a térképen.", HudTheme.Muted);
                 return;
             }
+            FocusOn(deer + new Vector3(0, 0, 1), Math.Max(zoom, 35));
+        }
+
+        private Vector3 cameraFocus;
+
+        /// <summary>Centres the view on a world point at the given zoom.</summary>
+        private void FocusOn(Vector3 point, float newZoom)
+        {
+            cameraFocus = point;
             rotationPivotActive = false;
             targetRotY = roty;
-            zoom = targetZoom = Math.Max(zoom, 35);
-            Vector3 view = WorldToView(deer + new Vector3(0, 0, 1), rotx, roty);
+            zoom = targetZoom = newZoom;
+            Vector3 view = WorldToView(point, rotx, roty);
             screenX = view.X - Width / (2.0 * zoom);
             screenY = view.Y - Height / (2.0 * zoom);
             pickMatricesReady = false;

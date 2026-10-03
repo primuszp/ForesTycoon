@@ -21,6 +21,16 @@ namespace ForesTycoon
         private static byte Quantize(float value) => (byte)Math.Clamp((int)MathF.Round(value * 32f), 0, 32);
     }
 
+    /// <summary>Quantized stump record: the felled stand's look plus a rot stage (0–8).</summary>
+    internal readonly record struct ForestStumpVisualState(ForestVisualState Felled, byte Decay)
+    {
+        internal static ForestStumpVisualState From(ForestStump stump) => stump.IsEmpty ? default
+            : new ForestStumpVisualState(ForestVisualState.From(stump.Felled, stump.Crowding),
+                (byte)Math.Clamp((int)MathF.Round(stump.Decay * 8f), 0, 8));
+        internal bool IsEmpty => Felled.Species == ForestSpecies.None;
+        internal float DecayFraction => Decay / 8f;
+    }
+
     internal enum ForestLod { Far, Medium, Near }
 
     internal static class ForestLodPolicy
@@ -54,8 +64,13 @@ namespace ForesTycoon
         private ulong revision;
         private bool initialized;
         internal ForestVisualState[] Tiles { get; }
+        internal ForestStumpVisualState[] Stumps { get; }
 
-        internal ForestChunkVisualState(int tileCount) => Tiles = new ForestVisualState[tileCount];
+        internal ForestChunkVisualState(int tileCount)
+        {
+            Tiles = new ForestVisualState[tileCount];
+            Stumps = new ForestStumpVisualState[tileCount];
+        }
 
         internal bool Refresh(ForestSystem forest, int[] tileIds)
         {
@@ -68,6 +83,10 @@ namespace ForesTycoon
                 var visual = ForestVisualState.From(stand, stand.IsEmpty ? 0 : forest.GetCrowding(tileIds[i]));
                 changed |= visual != Tiles[i];
                 Tiles[i] = visual;
+                forest.TryGetStump(tileIds[i], out ForestStump stump);
+                var stumpVisual = ForestStumpVisualState.From(stump);
+                changed |= stumpVisual != Stumps[i];
+                Stumps[i] = stumpVisual;
             }
             source = forest;
             revision = forest.Revision;

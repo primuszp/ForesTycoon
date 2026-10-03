@@ -46,7 +46,8 @@ namespace ForesTycoon
                 // Broad matte tones with a small smooth transition, no hard polygon outlines.
                 float tone = 0.69f + 0.18f * Smooth(0.05f, 0.40f, light) + 0.15f * Smooth(0.55f, 0.90f, light);
                 float pigment = 0.98f + 0.025f * MathF.Sin(angle * 5 + t * 17 + seed % 31);
-                uint packed = 0xff000000u | (uint)Channel(color.R * tone * pigment)
+                // Alpha carries the species code for the surface shader's foliage pattern.
+                uint packed = (uint)color.A << 24 | (uint)Channel(color.R * tone * pigment)
                     | (uint)Channel(color.G * tone * pigment) << 8 | (uint)Channel(color.B * tone * pigment) << 16;
                 return new Vertex(origin + local, normal, packed);
             }
@@ -59,10 +60,16 @@ namespace ForesTycoon
                     profile = t < 0.12f ? MathF.Sin(t / 0.12f * MathF.PI / 2) : MathF.Pow((1 - t) / 0.88f, 0.92f) * (1 + 0.075f * MathF.Sin(t * MathF.PI * 10));
                 else
                     profile = MathF.Pow(MathF.Sin(MathF.PI * t), species == ForestSpecies.Oak ? 0.62f : 0.80f)
-                        * (species == ForestSpecies.Beech ? 0.78f + 0.30f * t : 1);
+                        * (species == ForestSpecies.Beech ? 0.78f + 0.30f * t
+                            : species == ForestSpecies.Birch ? 1.12f - 0.32f * t : 1);
                 if (t == 0 || t == 1) profile = 0;
                 int variant = (int)((uint)seed % 4);
-                float lobes = 1 + (0.035f + variant * 0.012f) * MathF.Sin(angle * (3 + variant % 2) + t * 4 + variant);
+                float amplitude = species == ForestSpecies.Oak ? 0.11f : species == ForestSpecies.Birch ? 0.065f : 0.035f;
+                float lobes = 1 + (amplitude + variant * 0.012f) * MathF.Sin(angle * (3 + variant % 2) + t * 4 + variant);
+                // Fade leaf-mass ripples at both poles to retain a closed surface.
+                if (species != ForestSpecies.Spruce)
+                    lobes += MathF.Sin(MathF.PI * t) * amplitude * 0.45f
+                        * MathF.Sin(angle * 7 + variant) * MathF.Sin(t * MathF.PI * 4 + variant);
                 float width = 0.91f + variant * 0.055f;
                 float lean = radius * 0.10f * MathF.Sin(MathF.PI * t) * (variant - 1.5f);
                 return new Vector3(MathF.Cos(angle) * radius * profile * lobes * width + lean,

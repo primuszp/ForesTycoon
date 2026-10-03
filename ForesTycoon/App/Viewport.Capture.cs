@@ -34,7 +34,14 @@ namespace ForesTycoon
                 case 120: Save("03-without-diorama"); break;
                 case 121: world.Graphics.Diorama = true; FocusOnDeer(); break;
                 case 170: Save("04-deer-closeup"); break;
-                case 171: Close(); break;
+                case 171:
+                    world.Graphics.ShowGrid = true;
+                    if (world.DiagnosticFellForestBlock(out var block)) FocusOn(block, 30f);
+                    break;
+                case 230: Save("05-stumps-grid"); break;
+                case 231: FocusOn(cameraFocus, 60f); world.Graphics.ShowGrid = false; break;
+                case 270: Save("06-species-closeup"); break;
+                case 271: Close(); break;
             }
         }
     }

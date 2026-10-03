@@ -22,7 +22,8 @@ namespace ForesTycoon
 
         public void Update(double fixedDeltaSeconds)
         {
-            if (fixedDeltaSeconds < 0.0) throw new ArgumentOutOfRangeException(nameof(fixedDeltaSeconds));
+            if (!double.IsFinite(fixedDeltaSeconds) || fixedDeltaSeconds < 0.0)
+                throw new ArgumentOutOfRangeException(nameof(fixedDeltaSeconds));
             for (int i = 0; i < systems.Count; i++)
                 systems[i].Update(fixedDeltaSeconds);
         }

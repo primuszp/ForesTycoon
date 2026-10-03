@@ -28,6 +28,22 @@ public class WorldSystemCollectionTests
         Assert.Equal(new[] { "second:clear", "first:clear" }, events);
     }
 
+    [Theory]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    [InlineData(double.NegativeInfinity)]
+    [InlineData(-0.1)]
+    public void InvalidTimeDoesNotReachAnySystem(double seconds)
+    {
+        List<string> events = new();
+        var systems = new WorldSystemCollection();
+        systems.Add(new RecordingSystem("forest", events));
+        Assert.Throws<ArgumentOutOfRangeException>(() => systems.Update(seconds));
+        Assert.Empty(events);
+        systems.Update(0.1);
+        Assert.Equal(new[] { "forest" }, events);
+    }
+
     private sealed class RecordingSystem : IWorldSystem
     {
         private readonly string name;

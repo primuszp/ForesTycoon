@@ -72,6 +72,9 @@ void main()
             modelStack.Clear();
         }
 
+        /// <summary>Replaces only the camera matrix; the model stack is left untouched.</summary>
+        internal static void SetViewProjection(Matrix4 viewProjection) => ViewProjection = viewProjection;
+
         public static void UseGeometryShader()
         {
             EnsureInitialized();

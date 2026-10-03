@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using System.Diagnostics;
-using OpenTK.Mathematics;
 
 namespace ForesTycoon
 {
@@ -13,7 +12,8 @@ namespace ForesTycoon
             internal ForestChunkGeometry Geometry;
             internal ForestLod Lod;
             internal TreeInstance[] Trees;
-            internal int Next, NextStand;
+            internal (TreeInstance Stem, float Decay)[] Stumps;
+            internal int Next, NextStand, NextStump;
             internal (Tile Tile, int Offset, int Count)[] Stands;
             internal ulong Revision, TerrainVersion;
             internal readonly List<Vertex> Crowns = new(), Wood = new(), Floor = new(), Understory = new();
@@ -35,7 +35,7 @@ namespace ForesTycoon
                     request.Geometry.State.Refresh(forest, request.Chunk.TileIds);
                     PrepareForestStems(request.Chunk, request.Geometry, request.Lod);
                     pendingForestBuild = new PendingForestBuild { Chunk = request.Chunk, Geometry = request.Geometry,
-                        Lod = request.Lod, Trees = chunkStems.ToArray(), Stands = chunkStands.ToArray(), Revision = forest.Revision, TerrainVersion = forestTerrainVersion };
+                        Lod = request.Lod, Trees = chunkStems.ToArray(), Stumps = chunkStumps.ToArray(), Stands = chunkStands.ToArray(), Revision = forest.Revision, TerrainVersion = forestTerrainVersion };
                 }
                 var job = pendingForestBuild;
                 if (job.Revision != forest.Revision || job.TerrainVersion != forestTerrainVersion || !job.Geometry.Dirty)
@@ -58,12 +58,15 @@ namespace ForesTycoon
                     if (job.Lod != ForestLod.Far)
                         job.Wood.AddRange(DynamicPrimitiveBatch.BuildGeometry(OpenTK.Graphics.OpenGL.PrimitiveType.Quads, () => DrawTreeWood(tree)));
                     job.Floor.AddRange(DynamicPrimitiveBatch.BuildGeometry(OpenTK.Graphics.OpenGL.PrimitiveType.Triangles, () => DrawForestFloor(tree)));
-                    TreeModel model = TreeModel.For(tree.Stand.Species);
-                    float height = model.CrownHeight * tree.Scale * tree.CrownRise;
-                    ForestCrownMesh.Append(job.Crowns, tree.Stand.Species,
-                        new Vector3(tree.X, tree.Y, tree.TrunkTop(model) - height * model.CrownDrop),
-                        model.CrownRadius * tree.Scale * tree.CrownWidth, height, tree.Yaw, tree.Seed,
-                        Weather(Tinted(model.CrownColor, tree.Tint), tree.Stand.Health), job.Lod);
+                    AppendTreeCrown(job.Crowns, tree, job.Lod);
+                    continue;
+                }
+                if (job.NextStump < job.Stumps.Length && job.Lod != ForestLod.Far)
+                {
+                    var stump = job.Stumps[job.NextStump++];
+                    job.Wood.AddRange(DynamicPrimitiveBatch.BuildGeometry(OpenTK.Graphics.OpenGL.PrimitiveType.Quads,
+                        () => DrawStump(stump.Stem, stump.Decay)));
+                    // A clear-cut chunk must obey the same cooperative budget as living trees.
                     continue;
                 }
                 job.Geometry.Crowns.SetData(job.Crowns.ToArray(), false);

@@ -16,6 +16,8 @@ namespace ForesTycoon
         private IForestHabitat habitat;
         private ForestStand[] stands = Array.Empty<ForestStand>();
         private ForestStand[] nextStands = Array.Empty<ForestStand>();
+        private ForestStump[] stumps = Array.Empty<ForestStump>();
+        private int stumpCount;
         // Empty tiles that border a seeding stand. Rebuilt every month so that the
         // regeneration pass never has to probe the whole map through the habitat interface.
         private bool[] seedCandidate = Array.Empty<bool>();
@@ -77,6 +79,52 @@ namespace ForesTycoon
             return true;
         }
 
+        public bool TryGetStump(int tileId, out ForestStump stump)
+        {
+            if ((uint)tileId >= (uint)stumps.Length || stumps[tileId].IsEmpty)
+            {
+                stump = default;
+                return false;
+            }
+            stump = stumps[tileId];
+            return true;
+        }
+
+        internal int StumpCount => stumpCount;
+
+        /// <summary>
+        /// The first cut on a stand records it as it stood; later cuts on the same stand keep
+        /// that snapshot, so the stumps of earlier loads stay where they are.
+        /// </summary>
+        private void RecordFelling(int tileId, ForestStand stand)
+        {
+            ForestStump existing = stumps[tileId];
+            if (existing.IsEmpty) stumpCount++;
+            stumps[tileId] = !existing.IsEmpty && existing.Felled.Species == stand.Species && existing.YearsSinceFelled < 1f
+                ? existing with { YearsSinceFelled = 0f }
+                : new ForestStump(stand, GetCrowding(tileId), 0f);
+        }
+
+        private void ClearStump(int tileId)
+        {
+            if (stumps[tileId].IsEmpty) return;
+            stumps[tileId] = default;
+            stumpCount--;
+        }
+
+        private void AgeStumps()
+        {
+            if (stumpCount == 0) return;
+            for (int tileId = 0; tileId < stumps.Length; tileId++)
+            {
+                ForestStump stump = stumps[tileId];
+                if (stump.IsEmpty) continue;
+                float years = stump.YearsSinceFelled + YearsPerStep;
+                if (years >= ForestStump.LifetimeYears) ClearStump(tileId);
+                else stumps[tileId] = stump with { YearsSinceFelled = years };
+            }
+        }
+
         /// <summary>
         /// Canopy pressure from the four neighbouring tiles, 0 (open field) to 1 (closed canopy).
         /// Drives both suppressed growth and self-thinning mortality.
@@ -126,6 +174,7 @@ namespace ForesTycoon
 
             ForestStand stand = stands[tileId];
             harvest = new ForestHarvest(stand.Species, stand.AgeYears, TimberYield(stand));
+            RecordFelling(tileId, stand);
             stands[tileId] = default;
             Revision++; EditRevision++;
             RemoveFromStatistics(stand);
@@ -139,6 +188,7 @@ namespace ForesTycoon
             if(!TryGetStand(tileId,out var stand))return 0;
             float amount=Math.Min(requested,TimberCubicMetres(stand));
             if(amount<=0)return 0;
+            RecordFelling(tileId,stand);
             RemoveFromStatistics(stand);
             float biomass=Math.Max(0,stand.Biomass-amount/100);
             stands[tileId]=biomass<0.000001f?default:stand with {Biomass=biomass};
@@ -163,6 +213,7 @@ namespace ForesTycoon
         {
             for (int tileId = 0; tileId < stands.Length; tileId++)
             {
+                if (!stumps[tileId].IsEmpty && !habitat.CanSupportForest(tileId)) { ClearStump(tileId); Revision++; }
                 ForestStand stand = stands[tileId];
                 if (stand.IsEmpty || habitat.CanSupportForest(tileId)) continue;
                 stands[tileId] = default;
@@ -178,6 +229,7 @@ namespace ForesTycoon
             {
                 stands = new ForestStand[habitat.TileCount];
                 nextStands = new ForestStand[habitat.TileCount];
+                stumps = new ForestStump[habitat.TileCount];
                 seedCandidate = new bool[habitat.TileCount];
                 seedCandidateTiles = new int[habitat.TileCount];
             }
@@ -186,7 +238,9 @@ namespace ForesTycoon
                 Array.Clear(stands);
                 Array.Clear(nextStands);
                 Array.Clear(seedCandidate);
+                Array.Clear(stumps);
             }
+            stumpCount = 0;
 
             seedCandidateCount = 0;
             accumulatedSeconds = 0.0;
@@ -214,6 +268,8 @@ namespace ForesTycoon
         {
             Array.Clear(stands);
             Array.Clear(nextStands);
+            Array.Clear(stumps);
+            stumpCount = 0;
             Array.Clear(seedCandidate);
             seedCandidateCount = 0;
             accumulatedSeconds = 0.0;
@@ -289,6 +345,7 @@ namespace ForesTycoon
             }
 
             Environment?.FinishForestMonth();
+            AgeStumps();
             (stands, nextStands) = (nextStands, stands);
             Revision++;
         }

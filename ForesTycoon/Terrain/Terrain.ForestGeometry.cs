@@ -110,15 +110,24 @@ namespace ForesTycoon
             }
         }
 
+        private readonly List<(TreeInstance Stem, float Decay)> chunkStumps = new();
+
         private void PrepareForestStems(TerrainChunk chunk, ForestChunkGeometry geometry, ForestLod lod)
         {
             chunkStems.Clear();
             chunkStands.Clear();
+            chunkStumps.Clear();
             Span<TreeInstance> stems = stackalloc TreeInstance[MaximumStemsPerTile];
             for (int i = 0; i < chunk.TileIds.Length; i++)
             {
                 Tile tile = tiles[chunk.TileIds[i]];
                 ForestVisualState state = geometry.State.Tiles[i];
+                ForestStumpVisualState stump = geometry.State.Stumps[i];
+                if (!stump.IsEmpty && lod != ForestLod.Far && !roads.Has(tile.Id))
+                {
+                    int stumpCount = BuildStumps(stump, state, tile, stems);
+                    for (int s = 0; s < stumpCount; s++) chunkStumps.Add((stems[s], stump.DecayFraction));
+                }
                 int count = BuildStems(state.Stand, state.CanopyPressure, tile, stems, lod);
                 if (count == 0) continue;
                 chunkStands.Add((tile, chunkStems.Count, count));
@@ -133,16 +142,12 @@ namespace ForesTycoon
             {
                 if (lod == ForestLod.Far) return;
                 foreach (TreeInstance stem in chunkStems) DrawTreeWood(stem);
+                foreach (var stump in chunkStumps) DrawStump(stump.Stem, stump.Decay);
             }), false);
             crownVertices.Clear();
             foreach (TreeInstance tree in chunkStems)
             {
-                TreeModel model = TreeModel.For(tree.Stand.Species);
-                float height = model.CrownHeight * tree.Scale * tree.CrownRise;
-                ForestCrownMesh.Append(crownVertices, tree.Stand.Species,
-                    new Vector3(tree.X, tree.Y, tree.TrunkTop(model) - height * model.CrownDrop),
-                    model.CrownRadius * tree.Scale * tree.CrownWidth, height, tree.Yaw, tree.Seed,
-                    Weather(Tinted(model.CrownColor, tree.Tint), tree.Stand.Health), lod);
+                AppendTreeCrown(crownVertices, tree, lod);
             }
             geometry.Crowns.SetData(crownVertices.ToArray(), false);
             geometry.Understory.SetData(DynamicPrimitiveBatch.BuildGeometry(PrimitiveType.Triangles, () =>
@@ -155,6 +160,16 @@ namespace ForesTycoon
             {
                 foreach (TreeInstance tree in chunkStems) DrawForestFloor(tree);
             }), false);
+        }
+
+        private static void AppendTreeCrown(List<Vertex> vertices, in TreeInstance tree, ForestLod lod)
+        {
+            TreeModel model = TreeModel.For(tree.Stand.Species);
+            float height = model.CrownHeight * tree.Scale * tree.CrownRise;
+            ForestCrownMesh.Append(vertices, tree.Stand.Species,
+                new Vector3(tree.X, tree.Y, tree.TrunkTop(model) - height * model.CrownDrop),
+                model.CrownRadius * tree.Scale * tree.CrownWidth, height, tree.Yaw, tree.Seed,
+                Color.FromArgb(SurfaceSpeciesCode(tree.Stand.Species), Weather(Tinted(model.CrownColor, tree.Tint), tree.Stand.Health)), lod);
         }
 
         private void DrawForestFloor(TreeInstance tree)
@@ -191,6 +206,7 @@ namespace ForesTycoon
             crownVertices.Clear();
             chunkStems.Clear();
             chunkStands.Clear();
+            chunkStumps.Clear();
         }
     }
 }
