@@ -183,7 +183,6 @@ namespace ForesTycoon
         private void updateNodes(List<Node> nodes)
         {
             InvalidateSurfaceVisuals();
-            forestTerrainVersion++;
             Tile[] nodeTiles = new Tile[4];
             foreach (Node node in nodes)
             {
@@ -210,9 +209,18 @@ namespace ForesTycoon
                 }
             }
 
-            edges.SetData(vertices);
+            editedEdgesPendingUpload = true;
+            if (!suppressHydrologyRebuild) UploadEditedEdges();
             if (!suppressHydrologyRebuild)
                 RebuildHydrology();
+        }
+
+        private void UploadEditedEdges()
+        {
+            if (!editedEdgesPendingUpload) return;
+            edges.SetData(vertices);
+            editedEdgesPendingUpload = false;
+            TerrainEdgeUploads++;
         }
 
         private uint ColorToUInt(Color color)

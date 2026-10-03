@@ -33,7 +33,14 @@ namespace ForesTycoon
         public Vector3 Min { get; }
         public Vector3 Max { get; }
         public ChunkDirtyFlags DirtyFlags { get; private set; } = ChunkDirtyFlags.All;
-        public void MarkDirty(ChunkDirtyFlags flags) => DirtyFlags |= flags;
+        // Monotonic revisions survive another renderer clearing the dirty flags.
+        public ulong PropVersion { get; private set; }
+        public void MarkDirty(ChunkDirtyFlags flags)
+        {
+            DirtyFlags |= flags;
+            if ((flags & (ChunkDirtyFlags.Terrain | ChunkDirtyFlags.Props | ChunkDirtyFlags.Roads | ChunkDirtyFlags.Foundations)) != 0)
+                PropVersion++;
+        }
         public void ClearDirty(ChunkDirtyFlags flags) => DirtyFlags &= ~flags;
     }
 

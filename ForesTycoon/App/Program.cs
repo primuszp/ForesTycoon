@@ -6,6 +6,16 @@ namespace ForesTycoon
     {
         static void Main(string[] args)
         {
+            if (Array.Exists(args, argument => argument == "--procedural-tree-preview")) { ProceduralTreePreview.Run(); return; }
+            if (Array.Exists(args, argument => argument == "--forest-model-smoke-test")) { ForestModelSmokeTest.Run(); return; }
+            int treePreview = Array.FindIndex(args, argument => argument == "--tree-asset-preview");
+            if (treePreview >= 0) {
+                if (treePreview + 1 >= args.Length) throw new ArgumentException("--tree-asset-preview requires a GLB path.");
+                TreeAssetPreview.Run(args[treePreview + 1]); return;
+            }
+            if (Array.Exists(args, argument => argument == "--material-alpha-smoke-test")) { MaterialAlphaSmokeTest.Run(); return; }
+            if (Array.Exists(args, argument => argument == "--spruce-preview")) { SprucePreview.Run(); return; }
+            if (Array.Exists(args, argument => argument == "--tree-growth-smoke-test")) { ForestIndividualSmokeTest.Run(); return; }
             AppDomain.CurrentDomain.UnhandledException += (_, args) =>
                 Console.Error.WriteLine(args.ExceptionObject?.ToString() ?? "Unknown fatal error");
 

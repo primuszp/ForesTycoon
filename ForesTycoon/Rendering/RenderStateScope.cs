@@ -11,6 +11,8 @@ namespace ForesTycoon
         private readonly bool polygonOffsetFill;
         private readonly bool depthMask;
         private readonly float lineWidth;
+        private int blendSourceRgb,blendDestinationRgb,blendSourceAlpha,blendDestinationAlpha,blendEquationRgb,blendEquationAlpha;
+        private bool blendFunctionCaptured;
         private bool disposed;
 
         public RenderStateScope()
@@ -37,8 +39,20 @@ namespace ForesTycoon
 
         public RenderStateScope AlphaBlend()
         {
+            // Solid-only scopes need no additional driver state queries.
+            if(!blendFunctionCaptured) {
+                GL.GetInteger(GetPName.BlendSrcRgb,out blendSourceRgb);
+                GL.GetInteger(GetPName.BlendDstRgb,out blendDestinationRgb);
+                GL.GetInteger(GetPName.BlendSrcAlpha,out blendSourceAlpha);
+                GL.GetInteger(GetPName.BlendDstAlpha,out blendDestinationAlpha);
+                GL.GetInteger(GetPName.BlendEquationRgb,out blendEquationRgb);
+                GL.GetInteger(GetPName.BlendEquationAlpha,out blendEquationAlpha);
+                blendFunctionCaptured=true;
+            }
             GL.Enable(EnableCap.Blend);
-            GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
+            GL.BlendEquation(BlendEquationMode.FuncAdd);
+            GL.BlendFuncSeparate(BlendingFactorSrc.SrcAlpha, BlendingFactorDest.OneMinusSrcAlpha,
+                BlendingFactorSrc.One, BlendingFactorDest.OneMinusSrcAlpha);
             return this;
         }
 
@@ -73,6 +87,11 @@ namespace ForesTycoon
             Restore(EnableCap.CullFace, cullFace);
             Restore(EnableCap.PolygonOffsetFill, polygonOffsetFill);
             GL.DepthMask(depthMask);
+            if(blendFunctionCaptured) {
+                GL.BlendFuncSeparate((BlendingFactorSrc)blendSourceRgb,(BlendingFactorDest)blendDestinationRgb,
+                    (BlendingFactorSrc)blendSourceAlpha,(BlendingFactorDest)blendDestinationAlpha);
+                GL.BlendEquationSeparate((BlendEquationMode)blendEquationRgb,(BlendEquationMode)blendEquationAlpha);
+            }
             GL.LineWidth(lineWidth);
             GL.PolygonOffset(0.0f, 0.0f);
         }

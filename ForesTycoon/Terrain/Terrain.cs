@@ -6,7 +6,7 @@ using OpenTK.Graphics.OpenGL;
 
 namespace ForesTycoon
 {
-    partial class Terrain : IForestHabitat
+    partial class Terrain : IForestHabitat, IDisposable
     {
         private readonly TerrainSettings settings;
         private Hydrology hydro;
@@ -21,7 +21,8 @@ namespace ForesTycoon
         private readonly List<Tile> visibleTiles = new List<Tile>();
         private readonly List<TerrainChunk> visibleChunks = new List<TerrainChunk>();
         private int visibleChunkCount;
-        private ulong forestTerrainVersion = 1;
+        private bool editedEdgesPendingUpload;
+        internal int TerrainEdgeUploads { get; private set; }
 
         // Foundation-réteg: az út VEZETŐFELÜLETÉNEK befagyasztott magassága sarkonként
         // (nodeId → W az építés pillanatában). A terep alatta szabadon alakítható, de az

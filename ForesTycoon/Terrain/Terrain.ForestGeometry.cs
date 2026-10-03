@@ -8,158 +8,13 @@ namespace ForesTycoon
 {
     partial class Terrain
     {
-        private sealed class ForestChunkGeometry : IDisposable
-        {
-            internal readonly ForestChunkVisualState State;
-            internal readonly VertexBuffer Wood = new VertexBuffer(PrimitiveType.Triangles);
-            internal readonly VertexBuffer Crowns = new VertexBuffer(PrimitiveType.Triangles);
-            internal readonly VertexBuffer Floor = new VertexBuffer(PrimitiveType.Triangles);
-            internal readonly VertexBuffer Understory = new VertexBuffer(PrimitiveType.Triangles);
-            internal ForestLod? Lod;
-            internal ulong TerrainVersion;
-            internal ulong EditRevision;
-            internal bool Dirty, Queued;
-            internal ForestChunkGeometry(int count) => State = new ForestChunkVisualState(count);
-            public void Dispose() { Wood.Dispose(); Crowns.Dispose(); Floor.Dispose(); Understory.Dispose(); }
-        }
-
-        private readonly Dictionary<TerrainChunk, ForestChunkGeometry> forestGeometry = new();
-        private readonly Dictionary<(TerrainChunk, ForestLod), ForestChunkGeometry> forestLevels = new();
-
-        private ForestLod? forestLod;
-
-        internal void WarmForestGeometry(ForestSystem forest)
-        {
-            foreach (TerrainChunk chunk in chunkIndex.Chunks) GetForestGeometry(chunk,forest,ForestLod.Near);
-            ForestChunkRebuilds = 0;
-        }
-
-        private ForestChunkGeometry GetForestGeometry(TerrainChunk chunk, ForestSystem forest, ForestLod lod)
-        {
-            var key = (chunk, lod);
-            if (!forestLevels.TryGetValue(key, out ForestChunkGeometry geometry))
-            {
-                geometry = new ForestChunkGeometry(chunk.TileIds.Length);
-                forestLevels.Add(key, geometry);
-            }
-            bool changed = geometry.State.Refresh(forest, chunk.TileIds);
-            geometry.Dirty |= changed;
-            if (geometry.Lod != lod || geometry.TerrainVersion != forestTerrainVersion || (changed && geometry.EditRevision != forest.EditRevision))
-            {
-                BuildForestGeometry(chunk, geometry, lod);
-                geometry.Lod = lod;
-                geometry.TerrainVersion = forestTerrainVersion;
-                geometry.EditRevision = forest.EditRevision;
-                geometry.Dirty = false;
-                ForestChunkRebuilds++;
-            }
-            geometry.EditRevision = forest.EditRevision;
-            if (geometry.Dirty && !geometry.Queued)
-            {
-                geometry.Queued = true;
-                forestBuildQueue.Enqueue((chunk, geometry, lod));
-            }
-            return geometry;
-        }
         private readonly ForestMaterial forestMaterial = new ForestMaterial();
-        private readonly List<Vertex> crownVertices = new List<Vertex>();
         internal int ForestChunkRebuilds { get; private set; }
 
-        internal void DrawTrees(ForestSystem forest, RenderContext context, bool processBuildQueue = true)
+        internal void DrawTrees(ForestSystem forest, RenderContext context, GraphicsSettings graphics = null)
         {
             ForestChunkRebuilds = 0;
-            forestLod=ForestLod.Near;
-            DrawTreeLevel(forest,context,ForestLod.Near,processBuildQueue);
-        }
-
-        private void DrawTreeLevel(ForestSystem forest,RenderContext context,ForestLod lod,bool processBuildQueue)
-        {
-            foreach (TerrainChunk chunk in visibleChunks)
-            {
-                forestGeometry[chunk] = GetForestGeometry(chunk, forest, lod);
-            }
-            if (processBuildQueue) ProcessForestBuildQueue(forest);
-            bool shadow = RenderDevice.Visuals?.ShadowPass == true;
-            if (RenderDevice.Visuals != null) RenderDevice.Visuals.Kind = SurfaceKind.ForestFloor;
-            if (!shadow)
-            using (new RenderStateScope().AlphaBlend().DepthWrite(false).PolygonOffset(-1, -1))
-                foreach (TerrainChunk chunk in visibleChunks) forestGeometry[chunk].Floor.DrawArray();
-            if (RenderDevice.Visuals != null) RenderDevice.Visuals.Kind = SurfaceKind.Wood;
-            foreach (TerrainChunk chunk in visibleChunks) forestGeometry[chunk].Wood.DrawArray();
-            if (RenderDevice.Visuals != null) RenderDevice.Visuals.Kind = SurfaceKind.Foliage;
-            foreach (TerrainChunk chunk in visibleChunks) forestGeometry[chunk].Understory.DrawArray();
-            forestMaterial.Use();
-            foreach (TerrainChunk chunk in visibleChunks) forestGeometry[chunk].Crowns.DrawArray(false);
-            if (lod != ForestLod.Far && !shadow)
-            {
-                bool culling = GL.IsEnabled(EnableCap.CullFace);
-                GL.GetInteger(GetPName.CullFaceMode, out int oldCull);
-                try
-                {
-                    GL.Enable(EnableCap.CullFace);
-                    GL.CullFace(TriangleFace.Front);
-                    forestMaterial.Use((lod == ForestLod.Near ? 0.75f : 0.45f) / context.PixelsPerWorldUnit);
-                    foreach (TerrainChunk chunk in visibleChunks) forestGeometry[chunk].Crowns.DrawArray(false);
-                }
-                finally
-                {
-                    GL.CullFace((TriangleFace)oldCull);
-                    if (!culling) GL.Disable(EnableCap.CullFace);
-                    forestMaterial.Use();
-                }
-            }
-        }
-
-        private readonly List<(TreeInstance Stem, float Decay)> chunkStumps = new();
-
-        private void PrepareForestStems(TerrainChunk chunk, ForestChunkGeometry geometry, ForestLod lod)
-        {
-            chunkStems.Clear();
-            chunkStands.Clear();
-            chunkStumps.Clear();
-            Span<TreeInstance> stems = stackalloc TreeInstance[MaximumStemsPerTile];
-            for (int i = 0; i < chunk.TileIds.Length; i++)
-            {
-                Tile tile = tiles[chunk.TileIds[i]];
-                ForestVisualState state = geometry.State.Tiles[i];
-                ForestStumpVisualState stump = geometry.State.Stumps[i];
-                if (!stump.IsEmpty && lod != ForestLod.Far && !roads.Has(tile.Id))
-                {
-                    int stumpCount = BuildStumps(stump, state, tile, stems);
-                    for (int s = 0; s < stumpCount; s++) chunkStumps.Add((stems[s], stump.DecayFraction));
-                }
-                int count = BuildStems(state.Stand, state.CanopyPressure, tile, stems, lod);
-                if (count == 0) continue;
-                chunkStands.Add((tile, chunkStems.Count, count));
-                for (int stem = 0; stem < count; stem++) chunkStems.Add(stems[stem]);
-            }
-        }
-
-        private void BuildForestGeometry(TerrainChunk chunk, ForestChunkGeometry geometry, ForestLod lod)
-        {
-            PrepareForestStems(chunk, geometry, lod);
-            geometry.Wood.SetData(DynamicPrimitiveBatch.BuildGeometry(PrimitiveType.Quads, () =>
-            {
-                if (lod == ForestLod.Far) return;
-                foreach (TreeInstance stem in chunkStems) DrawTreeWood(stem);
-                foreach (var stump in chunkStumps) DrawStump(stump.Stem, stump.Decay);
-            }), false);
-            crownVertices.Clear();
-            foreach (TreeInstance tree in chunkStems)
-            {
-                AppendTreeCrown(crownVertices, tree, lod);
-            }
-            geometry.Crowns.SetData(crownVertices.ToArray(), false);
-            geometry.Understory.SetData(DynamicPrimitiveBatch.BuildGeometry(PrimitiveType.Triangles, () =>
-            {
-                if (lod != ForestLod.Near) return;
-                foreach (var stand in chunkStands)
-                    DrawUndergrowth(stand.Tile, chunkStems[stand.Offset], stand.Count);
-            }), false);
-            geometry.Floor.SetData(DynamicPrimitiveBatch.BuildGeometry(PrimitiveType.Triangles, () =>
-            {
-                foreach (TreeInstance tree in chunkStems) DrawForestFloor(tree);
-            }), false);
+            DrawIndividualTrees(forest, context, graphics);
         }
 
         private static void AppendTreeCrown(List<Vertex> vertices, in TreeInstance tree, ForestLod lod)
@@ -197,16 +52,8 @@ namespace ForesTycoon
 
         private void DisposeForestGeometry()
         {
-            foreach (ForestChunkGeometry geometry in forestLevels.Values) geometry.Dispose();
-            forestLevels.Clear();
-            forestBuildQueue.Clear();
-            pendingForestBuild = null;
-            forestGeometry.Clear();
+            DisposeIndividualForest();
             forestMaterial.Dispose();
-            crownVertices.Clear();
-            chunkStems.Clear();
-            chunkStands.Clear();
-            chunkStumps.Clear();
         }
     }
 }

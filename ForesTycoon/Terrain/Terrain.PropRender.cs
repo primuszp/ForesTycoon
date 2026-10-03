@@ -148,7 +148,7 @@ namespace ForesTycoon
 
             float top = tree.TrunkTop(model);
             // Sink the base below the surface so the stem never shows a gap on uneven tiles.
-            var profile = new ForestTrunkProfile(model.TrunkHeight * tree.Scale, model.TrunkRadius * tree.Scale);
+            var profile = new ForestTrunkProfile(model.TrunkHeight * tree.TrunkHeightScale, model.TrunkRadius * tree.TrunkScale);
             Vector3 boleBottom = new Vector3(tree.X, tree.Y, tree.BaseZ - ForestTrunkProfile.RootDepth);
             Vector3 boleTop = new Vector3(tree.X, tree.Y, top);
             // A flare at the base reads as a root collar and stops the stem looking like a pipe.
@@ -156,6 +156,23 @@ namespace ForesTycoon
             float topRadius = profile.TopRadius;
 
             DrawLimb(boleBottom, boleTop, bottomRadius, topRadius, wood, sides, tree.Yaw);
+
+              if (tree.Stand.Species == ForestSpecies.Spruce)
+              {
+                  float crownHeight = model.CrownHeight * tree.Scale * tree.CrownRise;
+                  Vector3 crownOrigin = new(tree.X, tree.Y, top - crownHeight * model.CrownDrop);
+                  float crownRadius = model.CrownRadius * tree.Scale * tree.CrownWidth;
+                  DrawLimb(boleTop, crownOrigin + Vector3.UnitZ * crownHeight,
+                      topRadius, topRadius * 0.08f, wood, sides, tree.Yaw);
+                  for (int tier = 0; tier < SpruceCrownMesh.NearTierCount; tier++)
+                    for (int branch = 0; branch < SpruceCrownMesh.BranchCount(tree.Seed); branch++)
+                      {
+                          var limb = SpruceCrownMesh.BranchAt(crownRadius, crownHeight, tree.Yaw, tree.Seed, tier, branch, SpruceCrownMesh.NearTierCount);
+                          DrawLimb(crownOrigin + limb.Root, crownOrigin + limb.Tip,
+                              topRadius * (0.35f - tier * 0.026f), topRadius * 0.025f, wood, 4, tree.Yaw);
+                      }
+                  return;
+              }
 
             if (model.BranchCount == 0 || !tree.IsFullDetail) return;
             DrawBranches(tree, model, wood, top, topRadius);

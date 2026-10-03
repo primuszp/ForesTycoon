@@ -169,21 +169,21 @@ Mérendő: havi ökológiai lépés p95/max ideje, növekedési lekérdezés kö
 | `ForestTreeRenderer` | Modellek, példányadatok, LOD, láthatóság és árnyék |
 | `ForestFallVisual` | A szimuláció által meghatározott kidőlés megjelenítése |
 
-A `ForestStand` kompatibilis lekérdezési nézet lesz. Vegyes fajoknál külön fajonkénti részösszesítések és domináns faj jelenjen meg; az átlagkor mellett korcsoport-eloszlás is kell. A környezeti modell az élő lombfelület és vízigény aggregátumát használja. Holtfa nem vesz fel vizet élő faként; bomlása nem módosítja automatikusan a jelenlegi talajvízmodellt.
+A `ForestStand` összesített lekérdezési nézet lesz. Vegyes fajoknál külön fajonkénti részösszesítések és domináns faj jelenjen meg; az átlagkor mellett korcsoport-eloszlás is kell. A környezeti modell az élő lombfelület és vízigény aggregátumát használja. Holtfa nem vesz fel vizet élő faként; bomlása nem módosítja automatikusan a jelenlegi talajvízmodellt.
 
 A kitermelés stabil sorrendben kiválasztott faegyedeket vág ki. Egy teherautó részrakománya nem csökkentheti az összes élő fa átmérőjét. A teljes kivágott törzs kitermelési depóba/rönkkészletbe kerül, a teherautó abból vesz át részleteket. A jelenlegi `ExtractTimber` adaptere ezt a készletet kezeli. A maradó fák nem méreteződnek át a kitermelés miatt; a felszabadult fény a későbbi növekedésüket módosítja.
 
 Az újulat külön fiatal egyedeket hoz létre a ténylegesen felszabadult helyeken, faji magforrás és fényviszony alapján. Meglévő, idős fák között is lehet fiatal fa. A holtfa eltűnése nem feltétele a csempe újratelepítésének, de az elfoglalt törzsalapok helyét figyelembe kell venni.
 
-Új `ForestModelVersion` szükséges. A régi mentések az eredeti állományszintű modell és paraméterek szerint játszódjanak vissza. Az új világok egyedi fákat használnak. Opcionális régi világ átalakítása csak egyszeri, dokumentált migráció lehet: az aktuális kirajzolt törzsekből hozunk létre egyedeket, közelített mérettel és korral; ez nem rekonstruálja az elveszett egyedi történetet.
+Nincsenek megőrzendő korábbi mentések. Egyetlen egyedi famodell és aktuális mentésséma szükséges; régi állománymodell, migráció és modellenkénti verziókapcsolók nélkül. Azonos build alatt a seed és a parancsnapló visszajátszásának ugyanazokat az egyedeket és készleteket kell előállítania.
 
-Az új mentés őrizze az egyedeket, növekedési horgonyokat/rátákat, maradványokat, következő azonosítókat, paraméterverziót és félbeszakadt kidőlés állapotát. Ellenőrzött snapshot + az azt követő ticknapló szükséges; a formátumverzió és modellverzió külön szerződés. A pontos bitazonos reprodukció első célja azonos build/runtime; eltérő platformon numerikus toleranciával ellenőrzött állapot-egyezést vállalunk, amíg külön determinisztikus matematikai réteg nem készül.
+Az életciklus későbbi mentési snapshotja őrizze az egyedeket, növekedési horgonyokat/rátákat, maradványokat, következő azonosítókat, paraméterprofilt és félbeszakadt kidőlés állapotát. Ellenőrzött snapshot + az azt követő ticknapló szükséges; az aktuális formátum egyetlen modellhez tartozik. A pontos bitazonos reprodukció első célja azonos build/runtime; eltérő platformon numerikus toleranciával ellenőrzött állapot-egyezést vállalunk, amíg külön determinisztikus matematikai réteg nem készül.
 
 Anyagmérleg: `korábbi készlet + növedék = élő készlet + álló/fekvő holtfa + kitermelt, még nem szállított fa + szállítás/üzemi készlet + összes könyvelt veszteség`. A halál belső átadás, nem automatikus veszteség. A rönkkészlet nem számolható egyszerre holtfaként és kitermelt faként.
 
 ## 10. Megvalósítási sorrend és elfogadás
 
-1. **Egyedi állapot és kompatibilitás:** tároló, azonosítók, kezdeti elhelyezés, aggregátumok, modellverzió és mentés. Képileg ekkor még a meglévő modellek használhatók. Elfogadás: újraindítás után ugyanazok az egyedek, régi mentés ugyanazt a régi eredményt adja.
+1. **Egyedi állapot és mentés:** tároló, azonosítók, kezdeti elhelyezés, aggregátumok és mentésséma. Képileg ekkor még a meglévő modellek használhatók. Elfogadás: újraindítás után ugyanazok az egyedek és készletek.
 2. **Folytonos növekedés és egyedi kitermelés:** külön magasság/átmérő/korona, horgonyfüggvény, éves statisztika, rönkdepó és mérethelyes tönk. Elfogadás: havi határon nincs méretugrás; az érett fa jó körülmények között tovább vastagszik; részrakodáskor a túlélők mérete változatlan.
 3. **Új famodellek és instancing:** először egy közeli tölgy- és lucmodell, majd mind a négy faj; fiatal, kifejlett, veterán és száraz ágváltozatok. Elfogadás: növekedéskor nincs teljes mesh-újraépítés, forgatva is felismerhető fajok, gyökérnyak nem mozdul el.
 4. **Öregedés, halál, kidőlés és bomlás:** stresszmemória, ágvesztés, álló és fekvő holtfa, menthető animáció. Elfogadás: az egyed nem tűnik el közvetlenül halálkor; a téli lombhullás nem vált holtfává; betöltés ugyanott folytatja a kidőlést.

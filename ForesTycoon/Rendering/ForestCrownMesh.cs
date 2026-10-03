@@ -5,15 +5,29 @@ using OpenTK.Mathematics;
 
 namespace ForesTycoon
 {
-    // One closed surface per crown: continuous normals allow a clean silhouette shell.
+    // Broadleaves use a closed crown surface; spruce has separate whorled branch masses.
     internal static class ForestCrownMesh
     {
         private static readonly Vector3 Light = Vector3.Normalize(new Vector3(0.45f, 0.65f, 1.05f));
         internal static void Append(List<Vertex> vertices, ForestSpecies species, Vector3 origin,
             float radius, float height, float yaw, int seed, Color color, ForestLod lod)
         {
+            if (species == ForestSpecies.Spruce)
+            {
+                SpruceCrownMesh.Append(vertices, origin, radius, height, yaw, seed, color, lod);
+                return;
+            }
             int sides = lod == ForestLod.Near ? 12 : lod == ForestLod.Medium ? 8 : 6;
             int rings = lod == ForestLod.Near ? 10 : lod == ForestLod.Medium ? 6 : 4;
+            float fullness = ForestTreeVariation.Range(seed, 101, -0.16f, 0.18f);
+            float width = ForestTreeVariation.Range(seed, 102, 0.84f, 1.18f);
+            float leanAngle = ForestTreeVariation.Range(seed, 103, 0, MathF.Tau);
+            float leanAmount = ForestTreeVariation.Range(seed, 104, 0.02f, 0.20f);
+            float phase = ForestTreeVariation.Range(seed, 105, 0, MathF.Tau);
+            float verticalBias = ForestTreeVariation.Range(seed, 106, -0.22f, 0.22f);
+            int lobeCount = 3 + (int)(ForestTreeVariation.Unit(seed, 107) * 3);
+            float amplitude = (species == ForestSpecies.Oak ? 0.12f : species == ForestSpecies.Birch ? 0.075f : 0.055f)
+                * ForestTreeVariation.Range(seed, 108, 0.65f, 1.35f);
             // Shared grid vertices used to be evaluated four times per quad, including
             // numerical normals and trigonometry. Evaluate each seam vertex once.
             Span<Vertex> grid = stackalloc Vertex[(rings + 1) * sides];
@@ -55,25 +69,19 @@ namespace ForesTycoon
             Vector3 Point(float t, float angle)
             {
                 t = Math.Clamp(t, 0, 1);
-                float profile;
-                if (species == ForestSpecies.Spruce)
-                    profile = t < 0.12f ? MathF.Sin(t / 0.12f * MathF.PI / 2) : MathF.Pow((1 - t) / 0.88f, 0.92f) * (1 + 0.075f * MathF.Sin(t * MathF.PI * 10));
-                else
-                    profile = MathF.Pow(MathF.Sin(MathF.PI * t), species == ForestSpecies.Oak ? 0.62f : 0.80f)
+                float envelope = MathF.Sin(MathF.PI * t);
+                float profile = MathF.Pow(envelope, (species == ForestSpecies.Oak ? 0.62f : 0.80f) + fullness)
                         * (species == ForestSpecies.Beech ? 0.78f + 0.30f * t
-                            : species == ForestSpecies.Birch ? 1.12f - 0.32f * t : 1);
+                            : species == ForestSpecies.Birch ? 1.12f - 0.32f * t : 1)
+                        * (1 + verticalBias * (2 * t - 1));
                 if (t == 0 || t == 1) profile = 0;
-                int variant = (int)((uint)seed % 4);
-                float amplitude = species == ForestSpecies.Oak ? 0.11f : species == ForestSpecies.Birch ? 0.065f : 0.035f;
-                float lobes = 1 + (amplitude + variant * 0.012f) * MathF.Sin(angle * (3 + variant % 2) + t * 4 + variant);
-                // Fade leaf-mass ripples at both poles to retain a closed surface.
-                if (species != ForestSpecies.Spruce)
-                    lobes += MathF.Sin(MathF.PI * t) * amplitude * 0.45f
-                        * MathF.Sin(angle * 7 + variant) * MathF.Sin(t * MathF.PI * 4 + variant);
-                float width = 0.91f + variant * 0.055f;
-                float lean = radius * 0.10f * MathF.Sin(MathF.PI * t) * (variant - 1.5f);
-                return new Vector3(MathF.Cos(angle) * radius * profile * lobes * width + lean,
-                    MathF.Sin(angle) * radius * profile * lobes / width, t * height);
+                // Coherent lobes describe leaf masses without allocating separate meshes.
+                float lobes = 1 + amplitude * MathF.Sin(angle * lobeCount + t * 4 + phase)
+                    + envelope * amplitude * 0.45f * MathF.Sin(angle * 2 - phase)
+                        * MathF.Sin(t * MathF.PI * 3 + phase);
+                float lean = radius * leanAmount * envelope;
+                return new Vector3(MathF.Cos(angle) * radius * profile * lobes * width + lean * MathF.Cos(leanAngle),
+                    MathF.Sin(angle) * radius * profile * lobes / width + lean * MathF.Sin(leanAngle), t * height);
             }
         }
 

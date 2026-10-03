@@ -12,6 +12,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Content Include="Assets/Forest/pine-tree-original.glb" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets/Forest/trees-low-poly-original.glb" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets/Forest/oak-trees-original.glb" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets/Forest/forest-pack-original.glb" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets/Forest/birch-original.glb" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets/Forest/Generated/*.glb" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets/Forest/Generated/EZ-TREE-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets/Wildlife/fish.glb" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets/Buildings/sawmill.glb" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets/Wildlife/elk.glb" CopyToOutputDirectory="PreserveNewest" />

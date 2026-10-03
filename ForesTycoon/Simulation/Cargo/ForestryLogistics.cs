@@ -23,13 +23,13 @@ namespace ForesTycoon
         internal readonly List<Sawmill> Mills=new();
         internal string Status="Jelölj ki kitermelési területet, és helyezz el egy fűrészmalmot.";
         internal ForestryLogistics(Terrain terrain,ForestSystem forest){this.terrain=terrain;this.forest=forest;}
-        internal float Volume(HarvestSite site){float result=0;foreach(int id in site.Tiles)if(forest.TryGetStand(id,out var stand))result+=ForestSystem.TimberCubicMetres(stand);return result;}
+        internal float Volume(HarvestSite site){float result=0;foreach(int id in site.Tiles)result+=forest.AvailableTimber(id);return result;}
         internal float Remaining {get {float sum=0;foreach(var site in Sites)sum+=Volume(site);return sum;}}
         internal bool ContainsTile(int id){foreach(var site in Sites)if(Array.IndexOf(site.Tiles,id)>=0)return true;return false;}
         internal int Designate(ReadOnlySpan<int> ids)
         {
             var selected=new List<int>();float volume=0;
-            foreach(int id in ids)if(!ContainsTile(id)&&forest.TryGetStand(id,out var stand)&&ForestSystem.TimberCubicMetres(stand)>0){selected.Add(id);volume+=ForestSystem.TimberCubicMetres(stand);}
+            foreach(int id in ids)if(!ContainsTile(id)&&forest.AvailableTimber(id)>0){selected.Add(id);volume+=forest.AvailableTimber(id);}
             if(selected.Count>0)Sites.Add(new HarvestSite{Tiles=selected.ToArray(),InitialVolume=volume});
             Status=selected.Count>0?$"Kitermelés kijelölve: {selected.Count} csempe, {volume:F1} m³.":"Nincs új kitermelhető erdő a kijelölésben.";
             return selected.Count;

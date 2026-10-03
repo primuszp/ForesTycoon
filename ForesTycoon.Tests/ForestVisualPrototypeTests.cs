@@ -6,14 +6,11 @@ namespace ForesTycoon.Tests;
 public class ForestVisualPrototypeTests
 {
     [Theory]
-    [InlineData(ForestSpecies.Spruce)]
-    [InlineData(ForestSpecies.Birch)]
-    [InlineData(ForestSpecies.Oak)]
-    [InlineData(ForestSpecies.Beech)]
-    internal void Crown_IsDeterministicClosedAndHasFiniteOutwardNormals(ForestSpecies species)
+    [MemberData(nameof(CrownCases))]
+    internal void Crown_IsDeterministicClosedAndHasFiniteOutwardNormals(ForestSpecies species, int seed)
     {
-        var first = Build(species, ForestLod.Near, 42);
-        var second = Build(species, ForestLod.Near, 42);
+        var first = Build(species, ForestLod.Near, seed);
+        var second = Build(species, ForestLod.Near, seed);
         Assert.Equal(first.ToArray(), second.ToArray());
         Assert.All(first, vertex =>
         {
@@ -27,19 +24,55 @@ public class ForestVisualPrototypeTests
         {
             Vector3 a = first[i].Position, b = first[i + 1].Position, c = first[i + 2].Position;
             Vector3 face = Vector3.Cross(b - a, c - a);
-            Assert.True(face.LengthSquared > 0.000001f);
+            // Terminal spruce sprays are much smaller than the former continuous crown panels.
+            Assert.True(face.LengthSquared > 1e-10f, $"{species} triangle {i / 3} is degenerate.");
             Vector3 normal = first[i].Normal + first[i + 1].Normal + first[i + 2].Normal;
-            Assert.True(Vector3.Dot(face, normal) > 0);
+            Assert.True(Vector3.Dot(face, normal) > 0, $"{species} triangle {i / 3} has inward normals: {Vector3.Dot(face, normal)}.");
             Edge(a, b); Edge(b, c); Edge(c, a);
         }
         Assert.All(edges.Values, count => Assert.Equal(2, count));
-        Assert.True(Build(species, ForestLod.Far, 42).Count < Build(species, ForestLod.Medium, 42).Count);
-        Assert.True(Build(species, ForestLod.Medium, 42).Count < first.Count);
+        Assert.True(Build(species, ForestLod.Far, seed).Count < Build(species, ForestLod.Medium, seed).Count);
+        Assert.True(Build(species, ForestLod.Medium, seed).Count < first.Count);
         void Edge(Vector3 a, Vector3 b)
         {
             if (a.X > b.X || (a.X == b.X && (a.Y > b.Y || (a.Y == b.Y && a.Z > b.Z)))) (a, b) = (b, a);
             var key = (a, b); edges[key] = edges.GetValueOrDefault(key) + 1;
         }
+    }
+
+    public static IEnumerable<object[]> CrownCases =>
+        Enum.GetValues<ForestSpecies>().Where(s => s != ForestSpecies.None)
+            .SelectMany(s => new[] { 0, 1, 42, 43, 104729, -1, int.MinValue, int.MaxValue }
+                .Select(seed => new object[] { s, seed }));
+
+    [Fact]
+    public void SameSizeIndividualsHaveManyDistinctSilhouettesWithinGeometryBudget()
+    {
+        foreach (ForestSpecies species in new[] { ForestSpecies.Spruce, ForestSpecies.Oak, ForestSpecies.Birch, ForestSpecies.Beech })
+        {
+            var silhouettes = new HashSet<Vector4>();
+            for (int seed = 0; seed < 64; seed++)
+            {
+                var crown = Build(species, ForestLod.Near, seed);
+                Assert.InRange(crown.Count, 1, species == ForestSpecies.Spruce ? 13032 : 648);
+                silhouettes.Add(new(crown.Min(v => v.Position.X), crown.Max(v => v.Position.X),
+                    crown.Min(v => v.Position.Y), crown.Max(v => v.Position.Y)));
+            }
+            Assert.Equal(64, silhouettes.Count);
+        }
+    }
+
+    [Fact]
+    public void SpruceWhorls_TaperUpwardHaveDroopingTipsAndStableVariation()
+    {
+        var lower = SpruceCrownMesh.BranchAt(2, 8, 0, 42, 0, 0, SpruceCrownMesh.NearTierCount);
+        var upper = SpruceCrownMesh.BranchAt(2, 8, 0, 42, 7, 0, SpruceCrownMesh.NearTierCount);
+        Assert.True(lower.Tip.Xy.Length > upper.Tip.Xy.Length);
+        Assert.True(lower.Tip.Z < lower.Root.Z);
+        Assert.True(upper.Tip.Z < upper.Root.Z);
+        Assert.True(upper.Root.Z > lower.Root.Z);
+        Assert.Equal(lower, SpruceCrownMesh.BranchAt(2, 8, 0, 42, 0, 0, SpruceCrownMesh.NearTierCount));
+        Assert.NotEqual(lower, SpruceCrownMesh.BranchAt(2, 8, 0, 43, 0, 0, SpruceCrownMesh.NearTierCount));
     }
 
     [Fact]

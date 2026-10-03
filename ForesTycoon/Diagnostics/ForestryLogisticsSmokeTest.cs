@@ -18,7 +18,16 @@ namespace ForesTycoon
                 var map=new Terrain(TerrainSettings.Default.WithNodeSize(17,42),(_,_)=>4);
                 try {
                     var snapshot=new ForestStand[256];snapshot[68]=new ForestStand(ForestSpecies.Oak,50,0.6f,1);
-                    var forest=new ForestSystem(map,snapshot);var logistics=new ForestryLogistics(map,forest);
+                    var forest=new ForestSystem(map,snapshot);
+                    forest.IndividualTrees.TryGet(68, out var patch);
+                    float factor = MathF.Sqrt(60 / forest.AvailableTimber(68));
+                    for (int i = 0; i < patch.Count; i++)
+                        patch.Trees[i] = patch.Trees[i] with {
+                            Dimensions = patch.Trees[i].Dimensions with { Diameter = patch.Trees[i].Dimensions.Diameter * factor },
+                            AnnualGrowth = default
+                        };
+                    patch.Revision++; forest.NotifyIndividualVisualEdit();
+                    var logistics=new ForestryLogistics(map,forest);
                     Require(logistics.Designate(new[]{68})==1,"Forest designation failed.");
                     Require(forest.TryGetStand(68,out var original)&&Math.Abs(ForestSystem.TimberCubicMetres(original)-60)<0.001f,"Designation cut trees.");
                     Require(logistics.PlaceMill(150),"Sawmill placement failed: "+logistics.Status);
@@ -49,6 +58,7 @@ namespace ForesTycoon
                     Require(world.Logistics.Mills.Count==1,"Natural map had no usable sawmill placement.");
                     float volume=world.Logistics.Remaining;int building=world.Logistics.Mills[0].TileId;
                     for(int i=0;i<30;i++)world.Update(1.0/30);
+                    volume=world.Logistics.Remaining; // Individual trees also grow between month boundaries.
                     using var save=new MemoryStream();world.Save(save);save.Position=0;world.Load(save);
                     Require(world.Logistics.Remaining==volume&&world.Logistics.Mills.Count==1&&world.Logistics.Mills[0].TileId==building,"Save/replay changed sources or buildings.");
                 }

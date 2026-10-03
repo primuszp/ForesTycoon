@@ -12,11 +12,11 @@ public class ForestryLogisticsTests
     [Fact] public void ExtractionReducesCubicMetresGraduallyAndCannotOverdraw()
     {
         var forest=new ForestSystem(new Habitat(),new[]{new ForestStand(ForestSpecies.Oak,50,1,1),default,default,default});
-        Assert.Equal(100,ForestSystem.TimberCubicMetres(Get()));
-        Assert.Equal(10,forest.ExtractTimber(0,10));
-        Assert.Equal(90,ForestSystem.TimberCubicMetres(Get()),3);
-        Assert.Equal(50,Get().AgeYears);
-        Assert.Equal(90,forest.ExtractTimber(0,200),3);
+        float volume = forest.AvailableTimber(0);
+        Assert.Equal(volume, ForestSystem.TimberCubicMetres(Get()), 5);
+        Assert.Equal(volume * 0.1f, forest.ExtractTimber(0, volume * 0.1f), 5);
+        Assert.Equal(volume * 0.9f, forest.AvailableTimber(0), 5);
+        Assert.Equal(volume * 0.9f, forest.ExtractTimber(0, volume * 2), 5);
         Assert.False(forest.TryGetStand(0,out _));Assert.Equal(0,forest.ExtractTimber(0,10));
         ForestStand Get(){Assert.True(forest.TryGetStand(0,out var stand));return stand;}
     }

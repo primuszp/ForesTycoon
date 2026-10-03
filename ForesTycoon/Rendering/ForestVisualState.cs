@@ -2,35 +2,6 @@ using System;
 
 namespace ForesTycoon
 {
-    // Quantization belongs to rendering: simulation and save data retain full precision.
-    internal readonly record struct ForestVisualState(
-        ForestSpecies Species, byte Maturity, byte Stocking, byte Health, byte Crowding)
-    {
-        internal static ForestVisualState From(ForestStand stand, float crowding)
-        {
-            if (stand.IsEmpty) return default;
-            return new ForestVisualState(stand.Species, Quantize(stand.Maturity),
-                Quantize(stand.Biomass / ForestSpeciesProfile.For(stand.Species).MaximumBiomass),
-                Quantize(stand.Health), Quantize(crowding));
-        }
-
-        internal ForestStand Stand => Species == ForestSpecies.None ? default : new ForestStand(
-            Species, Maturity / 32f * ForestSpeciesProfile.For(Species).MatureAgeYears,
-            Stocking / 32f * ForestSpeciesProfile.For(Species).MaximumBiomass, Health / 32f);
-        internal float CanopyPressure => Crowding / 32f;
-        private static byte Quantize(float value) => (byte)Math.Clamp((int)MathF.Round(value * 32f), 0, 32);
-    }
-
-    /// <summary>Quantized stump record: the felled stand's look plus a rot stage (0–8).</summary>
-    internal readonly record struct ForestStumpVisualState(ForestVisualState Felled, byte Decay)
-    {
-        internal static ForestStumpVisualState From(ForestStump stump) => stump.IsEmpty ? default
-            : new ForestStumpVisualState(ForestVisualState.From(stump.Felled, stump.Crowding),
-                (byte)Math.Clamp((int)MathF.Round(stump.Decay * 8f), 0, 8));
-        internal bool IsEmpty => Felled.Species == ForestSpecies.None;
-        internal float DecayFraction => Decay / 8f;
-    }
-
     internal enum ForestLod { Far, Medium, Near }
 
     internal static class ForestLodPolicy
@@ -58,40 +29,4 @@ namespace ForesTycoon
         }
     }
 
-    internal sealed class ForestChunkVisualState
-    {
-        private ForestSystem source;
-        private ulong revision;
-        private bool initialized;
-        internal ForestVisualState[] Tiles { get; }
-        internal ForestStumpVisualState[] Stumps { get; }
-
-        internal ForestChunkVisualState(int tileCount)
-        {
-            Tiles = new ForestVisualState[tileCount];
-            Stumps = new ForestStumpVisualState[tileCount];
-        }
-
-        internal bool Refresh(ForestSystem forest, int[] tileIds)
-        {
-            if (tileIds.Length != Tiles.Length) throw new ArgumentException("Chunk size changed.", nameof(tileIds));
-            if (initialized && ReferenceEquals(source, forest) && revision == forest.Revision) return false;
-            bool changed = !initialized;
-            for (int i = 0; i < tileIds.Length; i++)
-            {
-                forest.TryGetStand(tileIds[i], out ForestStand stand);
-                var visual = ForestVisualState.From(stand, stand.IsEmpty ? 0 : forest.GetCrowding(tileIds[i]));
-                changed |= visual != Tiles[i];
-                Tiles[i] = visual;
-                forest.TryGetStump(tileIds[i], out ForestStump stump);
-                var stumpVisual = ForestStumpVisualState.From(stump);
-                changed |= stumpVisual != Stumps[i];
-                Stumps[i] = stumpVisual;
-            }
-            source = forest;
-            revision = forest.Revision;
-            initialized = true;
-            return changed;
-        }
-    }
 }

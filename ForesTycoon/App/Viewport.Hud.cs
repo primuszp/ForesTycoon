@@ -467,7 +467,9 @@ namespace ForesTycoon
             ForestStatistics forest = world.ForestStatistics;
             ImGui.SeparatorText("Erdőállomány");
             HudTheme.KeyValue("Állományok", $"{forest.StandCount} ({forest.MatureStandCount} érett)");
-            HudTheme.KeyValue("Biomassza", $"{forest.TotalBiomass:F1}");
+            HudTheme.KeyValue("Faegyedek", $"{world.ForestTreeCount}");
+            HudTheme.KeyValue("Élő törzskészlet (havi)", $"{forest.TotalBiomass * 100:F1} m³");
+            HudTheme.KeyValue("Előző évi növedék", $"{world.LastAnnualForestGrowth:F2} m³");
             HudTheme.Meter("Átlagos egészség", forest.AverageHealth, $"{forest.AverageHealth:P0}",
                 forest.AverageHealth > 0.6f ? null : HudTheme.Bad);
 
@@ -565,6 +567,16 @@ namespace ForesTycoon
             ImGui.SliderFloat("Nap magassága", ref g.SunElevation, 15, 80, "%.0f°");
 
             ImGui.SeparatorText("Részletek");
+            int forestModels = (int)g.ForestModels;
+            if (ImGui.Combo("Fa modellek", ref forestModels, "Új modellek\0Új lombos fák + eredeti fenyő\0Eljárásos fák\0Generált fák (EZ-Tree)\0"))
+                g.ForestModels = (ForestModelStyle)forestModels;
+            if (g.ForestModels == ForestModelStyle.OriginalPine)
+                ImGui.TextDisabled("Az eredeti fenyő részletes, de lassabb.");
+            if (g.ForestModels != ForestModelStyle.Procedural)
+            {
+                ImGui.Checkbox("Importált nyírmodell", ref g.ImportedBirch);
+                if (g.ImportedBirch) ImGui.TextDisabled("CC BY-NC: nem kereskedelmi felhasználás.");
+            }
             ImGui.Checkbox("Textúrák", ref g.Textures);
             ImGui.SameLine(170);
             ImGui.Checkbox("Csemperács", ref g.ShowGrid);

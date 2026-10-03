@@ -23,8 +23,8 @@ namespace ForesTycoon
         internal void CollectWildlifeSpots(ForestSystem forest,List<WildlifeSpot> output)
         {
             output.Clear();
-            Span<TreeInstance> stems=stackalloc TreeInstance[MaximumStemsPerTile];
-            Span<TreeInstance> neighboursBuffer=stackalloc TreeInstance[MaximumStemsPerTile];
+            Span<TreeInstance> stems=stackalloc TreeInstance[16];
+            Span<TreeInstance> neighboursBuffer=stackalloc TreeInstance[16];
             foreach(Tile tile in tiles)
             {
                 if(roads.Has(tile.Id)||ShouldDrawStandingWater(tile)||CountRiverCorners(tile)>0||!((IForestHabitat)this).CanSupportForest(tile.Id))continue;
@@ -44,7 +44,7 @@ namespace ForesTycoon
                 rank=(rank&0x7fffffffu)|(stand.IsEmpty?0u:0x80000000u);
                 if(output.Count==16&&rank>=output[^1].Rank)continue;
                 Vector3 center=new((tile.W.xPos+tile.E.xPos)*0.5f,(tile.W.yPos+tile.E.yPos)*0.5f,0);
-                int count=BuildStems(stand,forest.GetCrowding(tile.Id),tile,stems,ForestLod.Near);
+                int count=CollectIndividualStems(forest,tile,stems);
                 Vector2 best=center.Xy;float bestDistance=-1;
                 for(int x=-1;x<=1;x++)for(int y=-1;y<=1;y++) {
                     Vector2 point=center.Xy+new Vector2(x*tileSizeH*0.2f,y*tileSizeV*0.2f);float distance=float.MaxValue;
@@ -52,7 +52,7 @@ namespace ForesTycoon
                     foreach(Tile adjacent in data.GetAdjacentTiles(tile)) {
                         if(!forest.TryGetStand(adjacent.Id,out var nearby))continue;
                         Span<TreeInstance> neighbourStems=neighboursBuffer;
-                        int nearbyCount=BuildStems(nearby,forest.GetCrowding(adjacent.Id),adjacent,neighbourStems,ForestLod.Near);
+                        int nearbyCount=CollectIndividualStems(forest,adjacent,neighbourStems);
                         for(int j=0;j<nearbyCount;j++)distance=Math.Min(distance,(point-new Vector2(neighbourStems[j].X,neighbourStems[j].Y)).LengthSquared);
                     }
                     if(distance>bestDistance){bestDistance=distance;best=point;}

@@ -45,7 +45,6 @@ namespace ForesTycoon
             this.graphics = graphics ?? new GraphicsSettings { Enhanced = false };
             surfaces = new SurfaceVisualRenderer(this.graphics, weather,environment,terrain);
             terrain.WarmStaticGeometry();
-            terrain.WarmForestGeometry(forest);
             RegisterPasses();
         }
 
@@ -74,7 +73,7 @@ namespace ForesTycoon
                         context.PixelsPerWorldUnit);
                     terrain.UpdateVisibleTiles(shadowContext);
                     terrain.DrawTerrainBase();
-                    terrain.DrawTrees(forest, shadowContext);
+                    terrain.DrawTrees(forest, shadowContext, graphics);
                     content.DrawMills(terrain,logistics,graphics);
                     wildlife.Draw(terrain, forest, graphics, context);
                     VehicleRenderer.Draw(vehicles, terrain, context.InterpolationAlpha);
@@ -108,7 +107,7 @@ namespace ForesTycoon
                 content.DrawBuildingPreview(terrain,forest,logistics,graphics.SawmillPreview);
             }));
             pipeline.Add(RenderLayer.DecalEnd, "decal-state-end", _ => EndDecals());
-            pipeline.Add(RenderLayer.Props, "props", context => terrain.DrawTrees(forest, context, !surfaces.ShadowsReady));
+            pipeline.Add(RenderLayer.Props, "props", context => terrain.DrawTrees(forest, context, graphics));
             pipeline.Add(RenderLayer.Buildings,"buildings", _=>content.DrawMills(terrain,logistics,graphics));
             pipeline.Add(RenderLayer.Wildlife, "wildlife", context => wildlife.Draw(terrain, forest, graphics, context));
             pipeline.Add(RenderLayer.Vehicles, "vehicles", context =>
@@ -119,7 +118,7 @@ namespace ForesTycoon
             {
                 if (graphics.Enhanced && graphics.Weather)
                 {
-                    forestWeather.Draw(terrain, weather, graphics, context,environment);
+                    forestWeather.Draw(terrain, forest, weather, graphics, context,environment);
                     precipitation.Draw(terrain, forest, weather, context, graphics);
                 }
             });

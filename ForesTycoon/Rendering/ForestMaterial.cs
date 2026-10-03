@@ -26,15 +26,16 @@ namespace ForesTycoon
         }
         private void Initialize()
         {
-            const string vertexSource = @"#version 330 core
+            string vertexSource = @"#version 330 core
 layout(location=0) in vec3 position;
 layout(location=1) in vec4 color;
 layout(location=2) in vec3 normal;
 uniform mat4 matrix;
 uniform float outline_width;
 out vec4 tint;
+" + ForestVertexGrowth.Shader + @"
 void main() {
-    gl_Position = matrix * vec4(position + normal * outline_width, 1);
+    gl_Position = matrix * vec4(forestPoint(position) + forestNormal(normal) * outline_width, 1);
     tint = outline_width > 0 ? vec4(0.075, 0.12, 0.045, 1) : color;
 }";
             const string fragmentSource = @"#version 330 core

@@ -61,12 +61,8 @@ namespace ForesTycoon
 
     sealed class WorldSaveData
     {
-        public const int CurrentVersion = 1;
+        public const int CurrentVersion = 2;
         public int Version { get; init; } = CurrentVersion;
-        // Missing in older journals: preserve their constant-speed cargo delivery times.
-        public int VehiclePhysicsVersion { get; init; }
-        public int LogisticsVersion { get; init; }
-        public int EnvironmentVersion { get; init; }
         public double TickRate { get; init; } = 30.0;
         public ulong Tick { get; init; }
         public TerrainSettingsData Terrain { get; init; } = new TerrainSettingsData();
@@ -74,11 +70,6 @@ namespace ForesTycoon
 
         public void Validate()
         {
-            if(LogisticsVersion<0||LogisticsVersion>1)throw new NotSupportedException("Unsupported logistics version.");
-            if (EnvironmentVersion < 0 || EnvironmentVersion > 1)
-                throw new NotSupportedException("Unsupported environment version.");
-            if (VehiclePhysicsVersion < 0 || VehiclePhysicsVersion > 2)
-                throw new NotSupportedException("Unsupported vehicle physics version.");
             if (Version != CurrentVersion)
                 throw new NotSupportedException($"Save version {Version} is not supported; expected {CurrentVersion}.");
             if (!double.IsFinite(TickRate) || TickRate <= 0.0)

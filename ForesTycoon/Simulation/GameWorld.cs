@@ -14,7 +14,6 @@ namespace ForesTycoon
         private Terrain terrain;
         private WildlifeSystem wildlife = new WildlifeSystem();
         internal ForestryLogistics Logistics { get; private set; }
-        private bool logisticsEnabled=true;
         private TerrainRenderer terrainRenderer;
         private readonly WorldCommandQueue commands = new WorldCommandQueue();
         private readonly WorldSystemCollection systems = new WorldSystemCollection();
@@ -26,7 +25,6 @@ namespace ForesTycoon
         private readonly TimberCargoSystem timberCargo;
         private ulong worldTick;
         internal EnvironmentSystem Environment { get; private set; }
-        private bool environmentEnabled=true;
         private ForestryActionResult lastForestryAction;
         private ForestryAreaSummary lastForestryArea;
         internal GraphicsSettings Graphics { get; } = new GraphicsSettings();
@@ -55,7 +53,9 @@ namespace ForesTycoon
         internal bool TryGetWildlifePosition(out Vector3 position) => terrainRenderer.TryGetWildlifePosition(out position);
         internal System.Collections.Generic.IReadOnlyList<Vehicle> Vehicles => vehicles.Vehicles;
         public ForestStatistics ForestStatistics => forest.Statistics;
-        public float TimberStockpile => logisticsEnabled?Logistics.Remaining:timberCargo.Available;
+        internal int ForestTreeCount => forest.IndividualTreeCount;
+        internal float LastAnnualForestGrowth => forest.LastAnnualGrowthCubicMetres;
+        public float TimberStockpile => Logistics.Remaining;
         public float DeliveredTimber => timberCargo.Delivered;
         public ForestryActionResult LastForestryAction => lastForestryAction;
         public ForestryAreaSummary LastForestryArea => lastForestryArea;
@@ -102,7 +102,7 @@ namespace ForesTycoon
 
         public void Update(double fixedDeltaSeconds)
         {
-            if(environmentEnabled)Environment.Update(fixedDeltaSeconds);else forest.Update(fixedDeltaSeconds);
+            Environment.Update(fixedDeltaSeconds);
             Logistics?.Update(fixedDeltaSeconds);
             wildlife.Update(fixedDeltaSeconds, terrain, forest, Environment);
             systems.Update(fixedDeltaSeconds);
@@ -124,7 +124,6 @@ namespace ForesTycoon
         internal void QueueWeather(WeatherPreset preset,int intensity,int duration) => Enqueue(new SetWeatherCommand(preset,intensity,duration));
         void IWorldCommandTarget.ExecuteWeather(WeatherPreset preset,int intensity,int duration)
         {
-            if(!environmentEnabled)throw new InvalidOperationException("Environment commands require model version 1.");
             Environment.ForceWeather(preset,intensity,duration);
         }
         public void QueuePlantForest(int tileId, ForestSpecies species) =>
@@ -169,14 +168,7 @@ namespace ForesTycoon
 
         void IWorldCommandTarget.ExecuteSpawnVehicle()
         {
-            if(logisticsEnabled){Logistics.Dispatch(vehicles);return;}
-            int[] route = terrain.FindDemoRoadRoute();
-            if (route.Length >= 2)
-            {
-                vehicles.Spawn(route);
-                if (terrain.TryGetRoadTileCenter(route[0], out Vector3 position))
-                    effects.Spawn(WorldEffectKind.VehicleSpawned, position);
-            }
+            Logistics.Dispatch(vehicles);
         }
 
         void IWorldCommandTarget.ExecutePlantForest(int tileId, ForestSpecies species)
@@ -190,17 +182,7 @@ namespace ForesTycoon
 
         void IWorldCommandTarget.ExecuteHarvestForest(int tileId)
         {
-            if(logisticsEnabled){DesignateHarvest(tileId,tileId);return;}
-            lastForestryAction = forest.Harvest(tileId, out ForestHarvest harvest);
-            if (lastForestryAction != ForestryActionResult.Harvested)
-            {
-                if (terrain.TryGetTileCenter(tileId, out Vector3 rejectedPosition))
-                    effects.Spawn(WorldEffectKind.ForestryRejected, rejectedPosition);
-                return;
-            }
-            timberCargo.AddHarvested(harvest.TimberVolume);
-            if (terrain.TryGetTileCenter(tileId, out Vector3 position))
-                effects.Spawn(WorldEffectKind.ForestHarvested, position);
+            DesignateHarvest(tileId, tileId);
         }
 
         void IWorldCommandTarget.ExecutePlantForestArea(int startTileId, int endTileId, ForestSpecies species)
@@ -222,24 +204,7 @@ namespace ForesTycoon
 
         void IWorldCommandTarget.ExecuteHarvestForestArea(int startTileId, int endTileId)
         {
-            if(logisticsEnabled){DesignateHarvest(startTileId,endTileId);return;}
-            Span<int> tileIds = stackalloc int[Terrain.MaximumAreaTiles];
-            int count = terrain.GetTileRectangle(startTileId, endTileId, tileIds);
-
-            int felled = 0;
-            float volume = 0f;
-            for (int i = 0; i < count; i++)
-            {
-                lastForestryAction = forest.Harvest(tileIds[i], out ForestHarvest harvest);
-                if (lastForestryAction != ForestryActionResult.Harvested) continue;
-                felled++;
-                volume += harvest.TimberVolume;
-                timberCargo.AddHarvested(harvest.TimberVolume);
-            }
-
-            lastForestryArea = new ForestryAreaSummary(count, felled, volume);
-            SpawnAreaEffect(startTileId, endTileId,
-                felled > 0 ? WorldEffectKind.ForestHarvested : WorldEffectKind.ForestryRejected);
+            DesignateHarvest(startTileId, endTileId);
         }
 
         /// <summary>
@@ -273,8 +238,6 @@ namespace ForesTycoon
 
         public void Regenerate(TerrainSettings settings)
         {
-            environmentEnabled=true;
-            logisticsEnabled=true;
             vehicles.UseRoadPhysics = true; vehicles.UseCargoStops = true;
             commands.Clear();
             commandJournal.Clear();
@@ -289,9 +252,6 @@ namespace ForesTycoon
             WorldSaveSerializer.Write(destination, new WorldSaveData
             {
                 TickRate = tickRate,
-                EnvironmentVersion = environmentEnabled?1:0,
-                LogisticsVersion = logisticsEnabled?1:0,
-                VehiclePhysicsVersion = vehicles.UseRoadPhysics ? (vehicles.UseCargoStops ? 2 : 1) : 0,
                 Tick = worldTick,
                 Terrain = TerrainSettingsData.From(terrain.Settings),
                 Commands = new List<WorldCommandRecord>(commandJournal)
@@ -301,10 +261,8 @@ namespace ForesTycoon
         public void Load(Stream source)
         {
             WorldSaveData save = WorldSaveSerializer.Read(source);
-            environmentEnabled=save.EnvironmentVersion==1;
-            logisticsEnabled=save.LogisticsVersion==1;
-            vehicles.UseRoadPhysics = save.VehiclePhysicsVersion >= 1;
-            vehicles.UseCargoStops = save.VehiclePhysicsVersion >= 2;
+            vehicles.UseRoadPhysics = true;
+            vehicles.UseCargoStops = true;
             commands.Clear();
             commandJournal.Clear();
             systems.Clear();
@@ -339,6 +297,7 @@ namespace ForesTycoon
             terrainRenderer.Dispose();
             terrain.Dispose();
             terrain = new Terrain(settings ?? throw new ArgumentNullException(nameof(settings)));
+            forest.Environment = null;
             forest.Reset(terrain);
             InitializeEnvironment();
             wildlife = new WildlifeSystem();
@@ -356,17 +315,17 @@ namespace ForesTycoon
         }
         private void InitializeLogistics()
         {
-            Logistics=logisticsEnabled?new ForestryLogistics(terrain,forest):null;
-            vehicles.SourceLoader=Logistics==null?null:Logistics.Load;
-            vehicles.DestinationReceiver=Logistics==null?null:Logistics.Deliver;
-            vehicles.RouteValidator=Logistics==null?null:Logistics.RouteConnected;
+            Logistics=new ForestryLogistics(terrain,forest);
+            vehicles.SourceLoader = Logistics.Load;
+            vehicles.DestinationReceiver = Logistics.Deliver;
+            vehicles.RouteValidator = Logistics.RouteConnected;
         }
 
         private void InitializeEnvironment()
         {
             forest.Environment=null;
-            forest.SetEnvironmentTempo(environmentEnabled);
-            Environment=environmentEnabled?new EnvironmentSystem(terrain,forest):null;
+            forest.UseEnvironmentTempo();
+            Environment=new EnvironmentSystem(terrain,forest);
             forest.Environment=Environment;
         }
 

@@ -8,6 +8,7 @@ namespace ForesTycoon
     // CPU asset/pose layer. GPU buffers are shared by all instances in AnimatedModelRenderer.
     internal sealed class AnimatedGlbModel
     {
+        internal enum AlphaMode { Opaque, Mask, Blend }
         internal sealed class Node {
             internal string Name;
             internal Vector3 Translation, Scale=Vector3.One;
@@ -20,6 +21,11 @@ namespace ForesTycoon
             internal float[] Vertices; // position3, normal3, uv2, joints4, weights4
             internal uint[] Indices;
             internal Vector4 Color=Vector4.One;
+            internal AlphaMode Alpha;
+            internal float AlphaCutoff=0.5f;
+            internal bool DoubleSided;
+            internal Vector3 Center;
+            internal Vector3? FlatColor;
         }
         internal sealed class Skin { internal int[] Joints; internal Matrix4[] InverseBind; }
         internal sealed class Channel {
@@ -176,17 +182,30 @@ namespace ForesTycoon
                     Array.Copy(p,vertex*3,mesh.Vertices,vertex*16,3);Array.Copy(n,vertex*3,mesh.Vertices,vertex*16+3,3);Array.Copy(uv,vertex*2,mesh.Vertices,vertex*16+6,2);
                     if(skin>=0){float sum=0;for(int j=0;j<4;j++){int joint=(int)joints[vertex*4+j];if(joint<0||joint>=model.Skins[skin].Joints.Length||weights[vertex*4+j]<0)throw new InvalidDataException("Vertex joint/weight.");mesh.Vertices[vertex*16+8+j]=joint;sum+=weights[vertex*4+j];}if(sum<=0)throw new InvalidDataException("Zero skin weights.");for(int j=0;j<4;j++)mesh.Vertices[vertex*16+12+j]=weights[vertex*4+j]/sum;}
                 }
+                Vector3 min=new(float.MaxValue),max=new(float.MinValue);
+                for(int vertex=0;vertex<p.Length;vertex+=3) {
+                    Vector3 point=new(p[vertex],p[vertex+1],p[vertex+2]);
+                    min=Vector3.ComponentMin(min,point);max=Vector3.ComponentMax(max,point);
+                }
+                mesh.Center=(min+max)*0.5f;
                 float[] indices=Read(primitive.GetProperty("indices").GetInt32());mesh.Indices=new uint[indices.Length];
                 if(indices.Length%3!=0)throw new InvalidDataException("Triangle indices.");
                 for(int j=0;j<indices.Length;j++){if(indices[j]<0||indices[j]>=p.Length/3||indices[j]!=(int)indices[j])throw new InvalidDataException("Index bounds.");mesh.Indices[j]=(uint)indices[j];}
                 if(primitive.TryGetProperty("material",out var materialId)) {
                     var material=root.GetProperty("materials")[materialId.GetInt32()];JsonElement diffuse=default;
+                    mesh.Alpha=material.TryGetProperty("alphaMode",out v)?v.GetString() switch {
+                        "OPAQUE"=>AlphaMode.Opaque,"MASK"=>AlphaMode.Mask,"BLEND"=>AlphaMode.Blend,
+                        _=>throw new InvalidDataException("Unknown material alpha mode.")}:AlphaMode.Opaque;
+                    if(material.TryGetProperty("alphaCutoff",out v))mesh.AlphaCutoff=v.GetSingle();
+                    if(!float.IsFinite(mesh.AlphaCutoff)||mesh.AlphaCutoff<0)throw new InvalidDataException("Invalid alpha cutoff.");
+                    mesh.DoubleSided=material.TryGetProperty("doubleSided",out v)&&v.GetBoolean();
                     if(material.TryGetProperty("extensions",out v)&&v.TryGetProperty("KHR_materials_pbrSpecularGlossiness",out var spec))diffuse=spec;
                     else if(material.TryGetProperty("pbrMetallicRoughness",out v))diffuse=v;
                     if(diffuse.ValueKind!=JsonValueKind.Undefined) {
                         if(diffuse.TryGetProperty("diffuseFactor",out v)||diffuse.TryGetProperty("baseColorFactor",out v))mesh.Color=Vector(v);
                         if(diffuse.TryGetProperty("diffuseTexture",out v)||diffuse.TryGetProperty("baseColorTexture",out v))mesh.Image=root.GetProperty("textures")[v.GetProperty("index").GetInt32()].GetProperty("source").GetInt32();
                     }
+                    if(mesh.Image < -1 || mesh.Image >= model.Images.Length)throw new InvalidDataException("Material image bounds.");
                 }
                 meshList.Add(mesh);
             }

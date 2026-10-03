@@ -59,15 +59,20 @@ public class EnvironmentSystemTests
     }
     [Fact] public void DroughtReducesActualForestGrowthAndHealth()
     {
-        var habitat=new Habitat(1,0);
+        var habitat=new Habitat(1,0.27f);
         ForestStand[] stands=[new ForestStand(ForestSpecies.Oak,20,0.5f,0.3f)];
-        var stressed=new ForestSystem(habitat,stands);stressed.SetEnvironmentTempo(true);
-        var control=new ForestSystem(habitat,stands);control.SetEnvironmentTempo(true);
+        var stressed=new ForestSystem(habitat,stands);stressed.UseEnvironmentTempo();
+        var control=new ForestSystem(habitat,stands);control.UseEnvironmentTempo();
         var environment=new EnvironmentSystem(habitat,stressed);stressed.Environment=environment;
-        environment.ForceWeather(WeatherPreset.Sunny,0,600);environment.Update(600);control.Update(600);
+        stressed.TryGetStand(0, out var before);
+        for (int i = 0; i < 10; i++) {
+            environment.ForceWeather(WeatherPreset.Sunny,0,600);
+            environment.Update(600);
+            control.Update(600);
+        }
         Assert.True(stressed.TryGetStand(0,out var dry));Assert.True(control.TryGetStand(0,out var normal));
         Assert.True(dry.Biomass<normal.Biomass);Assert.True(dry.Health<normal.Health);
-        Assert.Equal(20.5f,dry.AgeYears,3);
+        Assert.Equal(before.AgeYears + 5, dry.AgeYears, 3);
     }
     [Fact] public void PauseAndGraphicsOptionsDoNotModifyWater()
     {
@@ -78,18 +83,13 @@ public class EnvironmentSystemTests
         visual.Update(environment,settings);environment.Update(0);
         Assert.Equal(before,environment.Cell(0));Assert.Equal(rain,environment.TotalRain);
     }
-    [Fact] public void WeatherCommandAndModelVersionRoundTrip()
+    [Fact] public void WeatherCommandRoundTrip()
     {
         var command=new SetWeatherCommand(WeatherPreset.Storm,32,60);
-        var save=new WorldSaveData{EnvironmentVersion=1,Commands=[command.ToRecord(17)]};
+        var save=new WorldSaveData{Commands=[command.ToRecord(17)]};
         using var stream=new MemoryStream();WorldSaveSerializer.Write(stream,save);stream.Position=0;
-        var loaded=WorldSaveSerializer.Read(stream);Assert.Equal(1,loaded.EnvironmentVersion);
+        var loaded=WorldSaveSerializer.Read(stream);Assert.Equal(WorldSaveData.CurrentVersion,loaded.Version);
         Assert.Equal(command.ToRecord(17),WorldCommandFactory.Create(loaded.Commands[0]).ToRecord(17));
-    }
-    [Fact] public void LegacySaveKeepsEnvironmentDisabled()
-    {
-        using var stream=new MemoryStream(System.Text.Encoding.UTF8.GetBytes("{\"version\":1,\"tickRate\":30,\"terrain\":{},\"commands\":[]}"));
-        Assert.Equal(0,WorldSaveSerializer.Read(stream).EnvironmentVersion);
     }
     [Theory] [InlineData(-1)] [InlineData(double.NaN)] [InlineData(double.PositiveInfinity)]
     public void InvalidTimeIsRejected(double seconds)=>Assert.Throws<ArgumentOutOfRangeException>(()=>new EnvironmentSystem(new Habitat(),null).Update(seconds));

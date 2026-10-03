@@ -1,5 +1,11 @@
 # ForesTycoon
 
+## Egyedi fák és folytonos növekedés
+
+Az új világok fái saját azonosítót, kort, törzsátmérőt, magasságot és koronaméretet kapnak. Hónapon belül folyamatosan nőnek a GPU-n, háló-újraépítés nélkül; az érett fák tovább vastagodhatnak. A részrakodás egész fákat vág ki, a teherautó a helyi rönkdepóból vesz át, és a tönk az adott fa méretét őrzi. Az Erdészet ablak az egyedek számát és az előző évi növedéket is mutatja. Minden világ az egyedi famodellt használja; régi mentésekhez nincs kompatibilitási ág.
+
+Ellenőrzés: `dotnet run --project ForesTycoon -- --tree-growth-smoke-test`. A részletek és a még hátralévő öregedési/kidőlési szakasz az [első megvalósítási lépcső leírásában](docs/tree-individual-implementation.md) találhatók.
+
 ## Live Preview
 
 ![Current state](images/preview/hero_demo.gif)
@@ -183,7 +189,7 @@ A talajköd most **soft particle rendszer**: világkoordinátákban sodródó, e
 
 A köd most a környezethez igazodik: erdőben, víz mellett és helyi terepmélyedésekben jelenhet meg, lassan változó, összefüggő foltokban. Eső után a nedves talaj növeli az esélyét és sűrűségét; erős szél és napsütés gyengíti. Az utak önmagukban nem képeznek ködöt, de nedves völgyekben vagy vízparton azok mentén is megjelenhet. Ez vizuális mikroklíma-közelítés, hőmérséklet/harmatpont szimuláció nélkül.
 
-**Fájl / Új nagy erdős térkép**: Fenyves és lombos erdő, Nagy fenyves vagy Nagy lombos erdő. A menüpont új térképet készít a választott térképmérettel. Nagy, összefüggő erdőtömbök és tisztások keletkeznek; a víz, utak és térképszél kizárása megmarad. Az új seed és a térképméret-váltás megtartja a kiválasztott erdőmintát. A mintát a mentés tárolja, a régi mentések a korábbi generátort használják.
+**Fájl / Új nagy erdős térkép**: Fenyves és lombos erdő, Nagy fenyves vagy Nagy lombos erdő. A menüpont új térképet készít a választott térképmérettel. Nagy, összefüggő erdőtömbök és tisztások keletkeznek; a víz, utak és térképszél kizárása megmarad. Az új seed és a térképméret-váltás megtartja a kiválasztott erdőmintát. A mintát a mentés tárolja, a világ betöltése ugyanazt a generátort használja.
 
 
 A játék járműve most az átadott trucks_collection.glb gyűjteményből kiválasztott, világoskék rönkszállító. A külön kivágott Assets/Vehicles/log-truck.glb automatikusan a program mellé másolódik. A kerekek forognak, a jármű az út lejtéséhez igazodik, a hat külön rönk pedig a rakomány mennyisége szerint jelenik meg. Az eredeti színalapú grafikai mód működik ezzel a modellel is. Az import részletei az [asset leírásában](ForesTycoon/Assets/Vehicles/README.md) találhatók.
@@ -199,7 +205,7 @@ A Nézet menüben választható alacsony, közepes vagy magas effektminőség. A
 
 ### Teherautó és rakodás
 
-Új világban a teherautó kitermelt faanyagra vár, három másodperc alatt rakodik, majd a célvégponton külön lerakodik. Az állapot és a rakomány a járműlistában látható. A Nézet menü Járműkontúrok kapcsolója finom sötét vonalat ad a közeli modelleknek. A rönkök külön faanyagot kaptak, a kormányzás átmenete simább. Régi mentéseknél a korábbi szállítási időzítés marad meg; új világ/újragenerálás aktiválja az új rakodási rendet. A nagyobb sugarú útívek és a környezet szimulációja a [következő szakasz terve](docs/vehicle-environment-plan.md).
+Új világban a teherautó kitermelt faanyagra vár, három másodperc alatt rakodik, majd a célvégponton külön lerakodik. Az állapot és a rakomány a járműlistában látható. A Nézet menü Járműkontúrok kapcsolója finom sötét vonalat ad a közeli modelleknek. A rönkök külön faanyagot kaptak, a kormányzás átmenete simább. Minden világ ezt a rakodási rendet használja. A nagyobb sugarú útívek és a környezet szimulációja a [következő szakasz terve](docs/vehicle-environment-plan.md).
 
 ### Animált erdei szarvasok
 
@@ -242,7 +248,7 @@ A teherautó a kijelölt forrásnál rakodik, a malomnál fokozatosan lerakodik,
 
 A megadott `sawmill_paropank.glb` és `animated_low_poly_fish.glb` modellek kerültek be. A vízben a halak csontvázas animációval úsznak; nagy, térképszélhez csatlakozó tengerekben 8–120 hal, kis belső vizekben 1–2 hal jelenik meg, a kellően mély részeken. A víz saját finom rácsa megmarad.
 
-Az új mentések `logisticsVersion=1` jelölése a kijelölési, építési és teherautó-indítási parancsokat visszajátssza. Régi mentések megtartják az azonnali kitermelés korábbi viselkedését. Az új működéshez új világot vagy újragenerálást használj.
+A mentés visszajátssza a kijelölési, építési és teherautó-indítási parancsokat. A 2-es formátumverzió egységesen az aktuális erdő-, környezet-, logisztika- és járműmodellt használja.
 
 Ellenőrzés: `dotnet run --project ForesTycoon -- --logistics-smoke-test`. A próba a fokozatos 60 m³-es kitermelést, útkapcsolatot, lerakott malmot, készletmérleget, mentés/visszajátszást és a tengeri/tavi halpopulációt ellenőrzi; képek az `artifacts/forestry-logistics` mappában.
 
@@ -279,3 +285,7 @@ dotnet run --project ForesTycoon/ForesTycoon.csproj -- --capture-frame artifacts
 **Tönkök**: Kitermeléskor (teherautós rakodás vagy azonnali kivágás) a `ForestSystem` megjegyzi a kivágott állományt az első vágás előtti állapotában. A kirajzolás minden eltávolított törzs helyén tönköt rajzol (fajnak megfelelő kéreg, világos fűrészelt lap). A tönk 6 erdőév alatt lesüllyed, besötétedik, bemohásodik, majd eltűnik. Újratelepítéskor a felnövő fák fokozatosan átveszik a helyüket. Ültetést nem akadályoz; útépítéskor a tönk eltűnik. A mentés visszajátszása helyreállítja.
 
 **Rácsvonal**: a csemperács kb. 1,5 pixeles, lágy szélű, sötét mohazöld, félátlátszó vonal, így textúrázott fűn is látszik, de nem nyomja el a tájat (nagyon távoli nézetben 1 pixel). A Grafika ablakban kapcsolható.
+
+Alapértelmezésként a változatosabb saját eljárásos fák jelennek meg. Egyedenként változik a korona alakja és a fenyők ágazása; részletek és képi ellenőrzés: [eljárásos változatosság](docs/procedural-tree-variation.md). A **Grafika → Fa modellek** választóval a könnyű importált készlet és az eredeti részletes fenyő is visszakapcsolható; az eredeti fájlok megmaradtak. Az importált nyír külön kapcsolható (CC BY-NC, alapból kikapcsolva). A lomb alpha-kivágást használ; a merev ágak anyagonként összevont, megosztott GPU-geometriával készülnek. Részletek: [modellértékelés](docs/tree-asset-candidates.md), [eredeti lucfenyőmodell](docs/spruce-model-redesign.md). Integrációs képek és ellenőrzés: `dotnet run --project ForesTycoon/ForesTycoon.csproj -- --forest-model-smoke-test`.
+
+Ugyanitt a **Generált fák (EZ-Tree)** mód két fenyő- és két tölgyváltozatot ad, három, közös ágvázból készített részletességi szinten. A generátor előre készít GLB-modelleket; a játék futtatásához JavaScript nem szükséges. A korábbi modellkészletek megmaradnak. Paraméterek, újragenerálás és ellenőrzés: [EZ-Tree integráció](docs/ez-tree-integration.md).

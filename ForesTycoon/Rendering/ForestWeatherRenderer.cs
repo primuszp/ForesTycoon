@@ -15,10 +15,10 @@ namespace ForesTycoon
         private long eventId = long.MinValue;
         private int fogProgram, vao, buffer, depthTexture, depthFramebuffer, depthWidth, depthHeight;
         private readonly List<(Vector4 Position, Vector4 Life)> particles = new();
-        internal void Draw(Terrain terrain, WeatherVisualState weather, GraphicsSettings settings, RenderContext context,EnvironmentSystem environment=null)
+        internal void Draw(Terrain terrain, ForestSystem forest, WeatherVisualState weather, GraphicsSettings settings, RenderContext context,EnvironmentSystem environment=null)
         {
             if((!settings.Fog || settings.FogDensity <= 0) && weather.Flash < 0.002f) return;
-            terrain.CollectForestWeather(mist, crowns, settings.Lightning && weather.Flash >= 0.002f && eventId != weather.LightningEvent,environment);
+            terrain.CollectForestWeather(mist, forest, crowns, settings.Lightning && weather.Flash >= 0.002f && eventId != weather.LightningEvent,environment);
             var basis=FogParticleMotion.CameraBasis(context.CameraYaw,context.CameraTilt);
             Vector3 right=basis.Right, up=basis.Up;
             if(settings.Fog && settings.FogDensity > 0 && mist.Count>0)

@@ -11,7 +11,7 @@ namespace ForesTycoon
         {
             decay = Math.Clamp(decay, 0, 1);
             TreeModel model = TreeModel.For(tree.Stand.Species);
-            var profile = new ForestTrunkProfile(model.TrunkHeight * tree.Scale, model.TrunkRadius * tree.Scale);
+            var profile = new ForestTrunkProfile(model.TrunkHeight * tree.TrunkHeightScale, model.TrunkRadius * tree.TrunkScale);
             float height = profile.CutHeight;
             float sink = height * 0.45f * decay;
             Color bark = Weather(Tinted(model.TrunkColor, tree.Tint * 0.5f), tree.Stand.Health);

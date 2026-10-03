@@ -9,7 +9,6 @@ public class WorldSaveSerializerTests
         {
             Tick = 12,
             TickRate = 30,
-            VehiclePhysicsVersion = 1,
             Terrain = TerrainSettingsData.From(TerrainSettings.Default.WithSeed(1234)),
             Commands = new List<WorldCommandRecord>
             {
@@ -26,18 +25,17 @@ public class WorldSaveSerializerTests
         WorldSaveData actual = WorldSaveSerializer.Read(stream);
 
         Assert.Equal(WorldSaveData.CurrentVersion, actual.Version);
-        Assert.Equal(1, actual.VehiclePhysicsVersion);
         Assert.Equal((ulong)12, actual.Tick);
         Assert.Equal(1234, actual.Terrain.Seed);
         Assert.Equal(expected.Commands, actual.Commands);
     }
 
     [Fact]
-    public void OldJournalWithoutPhysicsVersion_UsesLegacyMovement()
+    public void Read_RejectsObsoleteFormatRatherThanSelectingLegacySystems()
     {
         using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(
             "{\"version\":1,\"tickRate\":30,\"terrain\":{},\"commands\":[]}"));
-        Assert.Equal(0, WorldSaveSerializer.Read(stream).VehiclePhysicsVersion);
+        Assert.Throws<NotSupportedException>(() => WorldSaveSerializer.Read(stream));
     }
 
     [Fact]

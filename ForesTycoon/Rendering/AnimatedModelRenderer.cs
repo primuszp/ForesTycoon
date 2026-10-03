@@ -8,13 +8,16 @@ namespace ForesTycoon
         private readonly AnimatedGlbModel model;
         private readonly int[] vaos,vbos,ebos,textures;
         private readonly float[] palette=new float[64*16];
+        private readonly int[] drawOrder;
+        private readonly float[] drawDepth;
         private int program, boneBuffer;
         private bool disposed;
         internal AnimatedModelRenderer(AnimatedGlbModel model)
         {
             this.model=model;vaos=new int[model.Meshes.Length];vbos=new int[vaos.Length];ebos=new int[vaos.Length];textures=new int[model.Images.Length];
+            drawOrder=new int[vaos.Length];drawDepth=new float[vaos.Length];
         }
-        internal void Draw(AnimatedGlbModel.Pose pose,Matrix4 transform,GraphicsSettings settings,float outlineWorldWidth=0)
+        internal void Draw(AnimatedGlbModel.Pose pose,Matrix4 transform,GraphicsSettings settings,float outlineWorldWidth=0,bool sourceMaterial=false)
         {
             ObjectDisposedException.ThrowIf(disposed,this);
             if(program==0)Initialize();
@@ -24,6 +27,8 @@ namespace ForesTycoon
             Matrix4 camera=shadow?visuals.ShadowCamera:RenderDevice.ViewProjection;
             Matrix4 light=visuals?.ShadowCamera??Matrix4.Identity;
             GL.UseProgram(program);
+            GL.Uniform1(GlProgram.Uniform(program,"source_material"),sourceMaterial?1:0);
+            GL.Uniform1(GlProgram.Uniform(program,"shadow_pass"),shadow?1:0);
             GL.UniformMatrix4(GlProgram.Uniform(program,"camera"),false,ref camera);
             GL.UniformMatrix4(GlProgram.Uniform(program,"instance"),false,ref transform);
             GL.UniformMatrix4(GlProgram.Uniform(program,"light_camera"),false,ref light);
@@ -36,10 +41,27 @@ namespace ForesTycoon
             GL.Uniform4(GlProgram.Uniform(program,"climate"),visuals?.Atmosphere??Vector4.Zero);
             GL.BindBufferBase(BufferRangeTarget.UniformBuffer,2,boneBuffer);
             int uploadedSkin=-2;
-            using(new RenderStateScope().Enable(EnableCap.DepthTest).Disable(EnableCap.CullFace))
-            for(int i=0;i<model.Meshes.Length;i++)
-            {
+            // Solid/cutout surfaces first, then blended primitives back to front.
+            // Sorting is per model instance; intersecting instances need a scene queue.
+            for(int i=0;i<model.Meshes.Length;i++) {
+                drawOrder[i]=i;
                 var mesh=model.Meshes[i];
+                Vector4 projected=Vector4.TransformRow(new Vector4(mesh.Center,1),pose.World[mesh.Node]*transform*camera);
+                drawDepth[i]=mesh.Alpha==AnimatedGlbModel.AlphaMode.Blend&&!shadow
+                    ? -(MathF.Abs(projected.W)>0.000001f?projected.Z/projected.W:projected.Z):float.NegativeInfinity;
+            }
+            Array.Sort(drawDepth,drawOrder);
+            using var drawState=new RenderStateScope().Enable(EnableCap.DepthTest).Disable(EnableCap.CullFace);
+            for(int draw=0;draw<drawOrder.Length;draw++)
+            {
+                int i=drawOrder[draw];
+                var mesh=model.Meshes[i];
+                bool blend=mesh.Alpha==AnimatedGlbModel.AlphaMode.Blend&&!shadow;
+                if(blend)drawState.AlphaBlend();else GL.Disable(EnableCap.Blend);
+                GL.DepthMask(!blend);
+                GL.Uniform1(GlProgram.Uniform(program,"alpha_mode"),(int)mesh.Alpha);
+                GL.Uniform1(GlProgram.Uniform(program,"alpha_cutoff"),mesh.AlphaCutoff);
+                GL.Uniform1(GlProgram.Uniform(program,"has_albedo"),mesh.Image>=0?1:0);
                 GL.Uniform1(GlProgram.Uniform(program,"outline_width"),0f);
                 GL.Uniform1(GlProgram.Uniform(program,"skinned"),mesh.Skin>=0?1:0);
                 if(mesh.Skin>=0 && uploadedSkin!=mesh.Skin) {
@@ -55,11 +77,12 @@ namespace ForesTycoon
                 Matrix4 node=pose.World[mesh.Node];
                 GL.UniformMatrix4(GlProgram.Uniform(program,"node"),false,ref node);
                 GL.Uniform4(GlProgram.Uniform(program,"tint"),mesh.Color);
+                GL.Uniform3(GlProgram.Uniform(program,"flat_color"),mesh.FlatColor??mesh.Color.Xyz);
                 GL.Uniform1(GlProgram.Uniform(program,"textured"),settings.Enhanced&&settings.Textures&&mesh.Image>=0?1:0);
                 GL.ActiveTexture(TextureUnit.Texture4);GL.BindTexture(TextureTarget.Texture2D,mesh.Image>=0?textures[mesh.Image]:0);
                 GL.BindVertexArray(vaos[i]);GL.DrawElements(PrimitiveType.Triangles,mesh.Indices.Length,DrawElementsType.UnsignedInt,IntPtr.Zero);
                 RenderMetrics.RecordDraw(mesh.Indices.Length);
-                if(outline) {
+                if(outline&&!blend) {
                     using var contourState=new RenderStateScope().Enable(EnableCap.CullFace);
                     GL.GetInteger(GetPName.CullFaceMode,out int previousCull);
                     try {
@@ -108,13 +131,20 @@ uniform sampler2D albedo;
 uniform sampler2DShadow shadow_map;
 uniform vec4 tint,climate;
 uniform vec3 sun;
-uniform int textured,lit,shadowed;
-uniform float outline_width;
+uniform vec3 flat_color;
+uniform int textured,lit,shadowed,source_material,alpha_mode,has_albedo,shadow_pass;
+uniform float outline_width,alpha_cutoff;
 out vec4 output_color;
 void main(){
+    // Coverage is geometry: keep alpha sampling even when colour textures are off.
+    vec4 texel=(textured!=0||(alpha_mode!=0&&has_albedo!=0))?texture(albedo,uv):vec4(1);
+    float alpha=texel.a*tint.a;
+    if(alpha_mode==1&&alpha<alpha_cutoff)discard;
+    // Conventional depth shadows approximate BLEND with 50% coverage.
+    if(alpha_mode==2&&(shadow_pass!=0?alpha<0.5:alpha<=0.0))discard;
     if(outline_width>0){output_color=vec4(0.07,0.085,0.09,1);return;}
-    vec4 color=textured!=0?texture(albedo,uv)*tint:vec4(0.42,0.28,0.16,1)*tint;
-    vec3 base=pow(max(color.rgb,vec3(0)),vec3(2.2));
+    vec4 color=textured!=0?texel*tint:vec4(0.42,0.28,0.16,1)*tint;
+    vec3 base=source_material!=0?(textured!=0?max(tint.rgb,vec3(0))*pow(max(texel.rgb,vec3(0)),vec3(2.2)):flat_color):pow(max(color.rgb,vec3(0)),vec3(2.2));
     vec3 normal=normalize(n);if(!gl_FrontFacing)normal=-normal;
     float shade=1;
     if(shadowed!=0){
@@ -128,7 +158,7 @@ void main(){
         base*=ambient*(1-climate.y*0.16)+direct*max(dot(normal,sun),0)*shade;
         base+=vec3(0.65,0.75,1)*climate.z*(0.35+max(normal.z,0)*0.65);
     }
-    output_color=vec4(pow(max(base,vec3(0)),vec3(1.0/2.2)),1);
+    output_color=vec4(pow(max(base,vec3(0)),vec3(1.0/2.2)),alpha_mode==2&&shadow_pass==0?alpha:1);
 }");
             boneBuffer=GL.GenBuffer();
             GL.BindBuffer(BufferTarget.UniformBuffer,boneBuffer);

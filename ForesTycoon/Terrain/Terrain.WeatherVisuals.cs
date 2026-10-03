@@ -38,22 +38,20 @@ namespace ForesTycoon
             }
         }
 
-        private readonly System.Collections.Generic.Dictionary<int, (ForestVisualState State, ForestLod Lod, ulong TerrainRevision, FogSource? Source)> fogSources = new();
-        internal void CollectForestWeather(System.Collections.Generic.List<FogSource> mist,
+        private readonly System.Collections.Generic.Dictionary<int, (bool HasTrees, ulong TerrainRevision, FogSource? Source)> fogSources = new();
+        internal void CollectForestWeather(System.Collections.Generic.List<FogSource> mist, ForestSystem forest,
             System.Collections.Generic.List<Vector3> crowns, bool collectCrowns,EnvironmentSystem environment=null)
         {
             mist.Clear(); crowns.Clear();
-            Span<TreeInstance> stems = stackalloc TreeInstance[MaximumStemsPerTile];
             foreach (TerrainChunk chunk in visibleChunks)
             {
-                if (!forestGeometry.TryGetValue(chunk, out var geometry)) continue;
                 for(int i=0;i<chunk.TileIds.Length;i++)
                 {
                     Tile tile=tiles[chunk.TileIds[i]];
-                    ForestVisualState state=geometry.State.Tiles[i];
-                    ForestLod lod = forestLod ?? ForestLod.Near;
-                    bool cached = fogSources.TryGetValue(tile.Id, out var entry) && entry.State == state && entry.Lod == lod && entry.TerrainRevision == WeatherSurfaceRevision;
-                    int count = !cached || collectCrowns ? BuildStems(state.Stand,state.CanopyPressure,tile,stems,lod) : 0;
+                    forest.IndividualTrees.TryGet(tile.Id, out var patch);
+                    int count = patch?.Count ?? 0;
+                    bool cached = fogSources.TryGetValue(tile.Id, out var entry)
+                        && entry.HasTrees == (count > 0) && entry.TerrainRevision == WeatherSurfaceRevision;
                     if (!cached)
                     {
                         float x=(tile.W.xPos+tile.E.xPos)*0.5f, y=(tile.W.yPos+tile.E.yPos)*0.5f;
@@ -70,7 +68,7 @@ namespace ForesTycoon
                         if(count>0||water>0||valley>0.25f)
                             source = new FogSource(new Vector4(x,y,Math.Max(z,water>0?settings.SeaLevel:z)+1.4f,
                                 Math.Max(3,(tile.E.xPos-tile.W.xPos)*0.7f)),count>0?1:0,water,valley,tileMoisture[tile.Id]);
-                        entry = (state, lod, WeatherSurfaceRevision, source);
+                        entry = (count > 0, WeatherSurfaceRevision, source);
                         fogSources[tile.Id] = entry;
                     }
                     if (entry.Source.HasValue && mist.Count < 768) {
@@ -79,7 +77,7 @@ namespace ForesTycoon
                         mist.Add(source);
                     }
                     for(int j=0;collectCrowns && j<count;j++){
-                        TreeInstance tree=stems[j]; TreeModel model=TreeModel.For(tree.Stand.Species);
+                        TreeInstance tree=IndividualStem(tile,patch.Trees[j],forest.ForestYear); TreeModel model=TreeModel.For(tree.Stand.Species);
                         float h=model.CrownHeight*tree.Scale*tree.CrownRise;
                         crowns.Add(new Vector3(tree.X,tree.Y,tree.TrunkTop(model)+h*(1-model.CrownDrop)));
                     }

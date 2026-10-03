@@ -10,39 +10,6 @@ public class ForestStemGeometryTests
     [InlineData(ForestSpecies.Birch)]
     [InlineData(ForestSpecies.Oak)]
     [InlineData(ForestSpecies.Beech)]
-    internal void FellingPreservesEveryRenderedStemIncludingTheFallback(ForestSpecies species)
-    {
-        var data = new TerrainData(TerrainSettings.Default.WithNodeSize(17, 42));
-        for (int id = 0; id < 64; id++)
-        foreach (float maturity in new[] { 0f, 0.5f, 1f })
-        {
-            var profile = ForestSpeciesProfile.For(species);
-            var stand = new ForestStand(species, profile.MatureAgeYears * maturity,
-                profile.MaximumBiomass * MathF.Max(0.03f, maturity), 1);
-            var visual = ForestVisualState.From(stand, 0.5f);
-            var trees = new Terrain.TreeInstance[Terrain.MaximumStemsPerTile];
-            var stumps = new Terrain.TreeInstance[Terrain.MaximumStemsPerTile];
-            Tile tile = data.Tiles[id];
-            int treeCount = Terrain.BuildStems(visual.Stand, visual.CanopyPressure, tile, trees, ForestLod.Near);
-            int stumpCount = Terrain.BuildStumps(new ForestStumpVisualState(visual, 0), default, tile, stumps);
-            Assert.Equal(treeCount, stumpCount);
-            for (int i = 0; i < treeCount; i++)
-            {
-                Assert.Equal(trees[i].Seed, stumps[i].Seed);
-                Assert.Equal(trees[i].Scale, stumps[i].Scale);
-                Assert.Equal(trees[i].X, stumps[i].X);
-                Assert.Equal(trees[i].Y, stumps[i].Y);
-                Assert.Equal(trees[i].BaseZ, stumps[i].BaseZ);
-            }
-            Assert.Equal(0, Terrain.BuildStumps(new ForestStumpVisualState(visual, 0), visual, tile, stumps));
-        }
-    }
-
-    [Theory]
-    [InlineData(ForestSpecies.Spruce)]
-    [InlineData(ForestSpecies.Birch)]
-    [InlineData(ForestSpecies.Oak)]
-    [InlineData(ForestSpecies.Beech)]
     internal void CutRimMatchesBoleTaperAndSharesEdgesWithTheBark(ForestSpecies species)
     {
         foreach (float scale in new[] { 0.03f, 0.2f, 1f, 1.8f })

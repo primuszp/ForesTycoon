@@ -22,15 +22,16 @@ namespace ForesTycoon
         public static void Initialize()
         {
             if (initialized) return;
-            const string vertexSource = @"#version 330 core
+            string vertexSource = @"#version 330 core
 layout(location = 0) in vec3 in_position;
 layout(location = 1) in vec4 in_color;
 uniform mat4 view_projection;
 uniform mat4 model;
 out vec4 vertex_color;
+" + ForestVertexGrowth.Shader + @"
 void main()
 {
-    gl_Position = view_projection * model * vec4(in_position, 1.0);
+    gl_Position = view_projection * model * vec4(forestPoint(in_position), 1.0);
     vertex_color = in_color;
 }";
             const string fragmentSource = @"#version 330 core

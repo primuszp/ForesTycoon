@@ -47,11 +47,9 @@ namespace ForesTycoon
                 Require(RenderDevice.LodRange==new Vector2(0,1),"LOD mask leaked to other objects.");
                 forest.Update(ForestSystem.DefaultSecondsPerYear / 12);
                 Draw(terrain, forest, 12);
-                int remainingFrames = 1000;
-                while (terrain.PendingForestBuildCount > 0 && remainingFrames-- > 0) Draw(terrain, forest, 12);
-                Require(terrain.PendingForestBuildCount == 0, "Incremental forest refresh never completed.");
+                Require(terrain.ForestChunkRebuilds > 0, "Monthly growth did not refresh geometry.");
                 Draw(terrain, forest, 12);
-                Require(terrain.ForestChunkRebuilds == 0, "Completed incremental refresh rebuilt again.");
+                Require(terrain.ForestChunkRebuilds == 0, "Stable frame rebuilt monthly geometry.");
                 Draw(terrain, forest, 1.5f);
                 int tileId = 0;
                 while (!forest.TryGetStand(tileId, out _)) tileId++;
@@ -62,6 +60,15 @@ namespace ForesTycoon
                 forest.Plant(tileId, ForestSpecies.Oak);
                 Draw(terrain, forest, 1.5f);
                 Require(terrain.ForestChunkRebuilds > 0, "Planting did not invalidate geometry.");
+                var editTimer = System.Diagnostics.Stopwatch.StartNew();
+                terrain.EditElevationAtNode(4 * 33 + 4, 1, 0, 1);
+                Draw(terrain, forest, 1.5f);
+                editTimer.Stop();
+                Console.WriteLine($"Local terrain edit + forest refresh: {editTimer.Elapsed.TotalMilliseconds:F1} ms, {terrain.ForestChunkRebuilds}/{terrain.VisibleChunkCount} forest chunks rebuilt.");
+                Require(terrain.ForestChunkRebuilds > 0 && terrain.ForestChunkRebuilds < terrain.VisibleChunkCount,
+                    "Local terrain edit rebuilt unrelated forest chunks.");
+                Draw(terrain, forest, 1.5f);
+                Require(terrain.ForestChunkRebuilds == 0, "Edited forest cache did not settle.");
                 // A central terrain edit must invalidate positions even without a forest revision.
                 terrain.EditElevationAtNode(16 * 33 + 16, 1, 0, 1);
                 Draw(terrain, forest, 1.5f);
@@ -109,6 +116,10 @@ namespace ForesTycoon
                 Check(true);
                 Check(false);
                 terrain.EditElevationAtNode(3 * 17 + 3, 1, 0, 1);
+                Check(true);
+                int uploads = terrain.TerrainEdgeUploads;
+                terrain.EditElevationAtNode(10 * 17 + 10, 1, 2, 2);
+                Require(terrain.TerrainEdgeUploads == uploads + 1, "Brush uploaded the entire terrain grid more than once.");
                 Check(true);
                 terrain.RemoveRoadTilePath(34, 37);
                 Check(true);

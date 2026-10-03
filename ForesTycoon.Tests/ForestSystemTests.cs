@@ -174,13 +174,14 @@ public class ForestSystemTests
     }
 
     [Fact]
-    public void Harvest_YieldsMoreRoundwoodFromDenserTimberSpecies()
+    public void Harvest_UsesPhysicalVolumeWithoutSpeciesDensityConversion()
     {
-        ForestStand oak = new ForestStand(ForestSpecies.Oak, 60f, 1.0f, 0.9f);
-        ForestStand spruce = new ForestStand(ForestSpecies.Spruce, 60f, 1.0f, 0.9f);
-
-        Assert.True(ForestSystem.TimberYield(oak) > ForestSystem.TimberYield(spruce));
-        Assert.Equal(0f, ForestSystem.TimberYield(default));
+        var habitat = new TestHabitat(96, seed: 42);
+        var forest = new ForestSystem(habitat);
+        int tile = FindFirstStand(forest, habitat.TileCount);
+        float volume = forest.AvailableTimber(tile);
+        forest.Harvest(tile, out var harvest);
+        Assert.Equal(volume, harvest.TimberVolume, 5);
     }
 
     [Fact]
@@ -203,8 +204,16 @@ public class ForestSystemTests
         forest.Plant(crowded + 1, ForestSpecies.Spruce);
         forest.Plant(open, ForestSpecies.Birch);
 
+        // Match individual size and age: seeded variation must not bias the light comparison.
+        forest.IndividualTrees.TryGet(crowded, out var crowdedTrees);
+        forest.IndividualTrees.TryGet(open, out var openTrees);
+        openTrees.Trees[0] = openTrees.Trees[0] with {
+            Dimensions = crowdedTrees.Trees[0].Dimensions,
+            BirthYear = crowdedTrees.Trees[0].BirthYear
+        };
+
         // Nine years in, the neighbouring spruce are established but the birch is still
-        // alive; later on it is thinned out entirely, which the next test covers.
+        // alive; mortality belongs to the next lifecycle phase.
         forest.Update(9.0);
 
         Assert.True(forest.GetCrowding(crowded) > forest.GetCrowding(open));
@@ -217,7 +226,7 @@ public class ForestSystemTests
     }
 
     [Fact]
-    public void SuppressedPioneer_IsEventuallyThinnedOutByItsShadeBearingNeighbours()
+    public void Growth_KeepsIndividualIdentitiesUntilExplicitFelling()
     {
         const int crowded = 52;
         TestHabitat habitat = new TestHabitat(96, seed: 7);
@@ -231,10 +240,12 @@ public class ForestSystemTests
         forest.Plant(crowded, ForestSpecies.Birch);
         forest.Plant(crowded + 1, ForestSpecies.Spruce);
 
+        forest.IndividualTrees.TryGet(crowded, out var patch);
+        ulong[] ids = patch.Trees.Take(patch.Count).Select(tree => tree.Id).ToArray();
         forest.Update(12.0);
 
-        Assert.False(forest.TryGetStand(crowded, out _),
-            "Self-thinning must remove a light-demanding stand that loses the canopy race.");
+        Assert.Equal(ids, patch.Trees.Take(patch.Count).Select(tree => tree.Id));
+        Assert.True(forest.TryGetStand(crowded, out _));
         Assert.True(forest.TryGetStand(crowded - 1, out _));
         Assert.True(forest.TryGetStand(crowded + 1, out _));
     }

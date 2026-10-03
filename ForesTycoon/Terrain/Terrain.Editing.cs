@@ -51,6 +51,7 @@ namespace ForesTycoon
             finally
             {
                 suppressHydrologyRebuild = false;
+                UploadEditedEdges();
             }
 
             actualNode = center;

@@ -9,6 +9,7 @@
 # Build outputs
 **/bin/
 **/obj/
+**/__pycache__/
 artifacts/
 
 # Logs

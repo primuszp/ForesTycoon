@@ -148,7 +148,7 @@ namespace ForesTycoon
 
         private void Initialize()
         {
-            const string vertex = @"#version 330 core
+            string vertex = @"#version 330 core
 layout(location=0) in vec3 position;
 layout(location=1) in vec4 color;
 layout(location=2) in vec3 normal;
@@ -156,9 +156,11 @@ uniform mat4 model, camera, light_matrix;
 uniform float outline_width;
 out vec3 world, smooth_normal;
 out vec4 tint, light_position;
+" + ForestVertexGrowth.Shader + @"
 void main() {
-    vec4 p = model * vec4(position + normal * outline_width, 1);
-    world = p.xyz; smooth_normal = mat3(transpose(inverse(model))) * normal;
+    vec3 n = forestNormal(normal);
+    vec4 p = model * vec4(forestPoint(position) + n * outline_width, 1);
+    world = p.xyz; smooth_normal = mat3(transpose(inverse(model))) * n;
     tint = color; light_position = light_matrix * p;
     gl_Position = camera * p;
 }";
@@ -353,7 +355,8 @@ void main() {
             depthProgram = GlProgram.Create(@"#version 330 core
 layout(location=0) in vec3 position;
 uniform mat4 model, camera;
-void main(){gl_Position=camera*model*vec4(position,1);}",
+" + ForestVertexGrowth.Shader + @"
+void main(){gl_Position=camera*model*vec4(forestPoint(position),1);}",
                 "#version 330 core\n" + @"uniform vec2 lod_range;
 void lodMask(){
     float rank=fract(52.9829189*fract(dot(floor(gl_FragCoord.xy),vec2(0.06711056,0.00583715))));

@@ -2,6 +2,7 @@ namespace ForesTycoon
 {
     internal enum GraphicsQuality { Low, Medium, High }
     internal enum WeatherPreset { Sunny, Cloudy, Rain, Snow, Storm }
+    internal enum ForestModelStyle { Imported, OriginalPine, Procedural, Generated }
 
     // Display options never change forestry, transport, or replay state.
     internal sealed class GraphicsSettings
@@ -14,6 +15,8 @@ namespace ForesTycoon
         internal int CloudSteps => Quality == GraphicsQuality.Low ? 6 : Quality == GraphicsQuality.Medium ? 8 : 12;
         internal bool Enhanced = true;
         internal bool Textures = true;
+        internal ForestModelStyle ForestModels = ForestModelStyle.Procedural;
+        internal bool ImportedBirch;
         internal bool VehicleOutlines = true;
         internal bool Wildlife = true;
         internal bool WildlifeOutlines = true;

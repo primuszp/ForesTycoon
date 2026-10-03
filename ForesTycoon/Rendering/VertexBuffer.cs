@@ -8,6 +8,8 @@ namespace ForesTycoon
         private int vboId;
         private int eboId;
         private int vaoId;
+        private int growthVbo;
+        internal float ForestElapsedYears { get; set; }
         private bool disposed;
         private uint[] indices;
         private Vertex[] vertices;
@@ -110,6 +112,21 @@ namespace ForesTycoon
             }
         }
 
+        internal void SetForestGrowth(ForestVertexGrowth[] data)
+        {
+            ThrowIfDisposed();
+            if (data.Length != vertexCount) throw new ArgumentException("Growth metadata must match the vertex count.", nameof(data));
+            if (growthVbo == 0) growthVbo = GL.GenBuffer();
+            GL.BindVertexArray(VaoId);
+            GL.BindBuffer(BufferTarget.ArrayBuffer, growthVbo);
+            GL.BufferData(BufferTarget.ArrayBuffer, new IntPtr(data.Length * ForestVertexGrowth.Stride), data, usageHint);
+            GL.EnableVertexAttribArray(3);
+            GL.VertexAttribPointer(3, 3, VertexAttribPointerType.Float, false, ForestVertexGrowth.Stride, 0);
+            GL.EnableVertexAttribArray(4);
+            GL.VertexAttribPointer(4, 3, VertexAttribPointerType.Float, false, ForestVertexGrowth.Stride, 3 * sizeof(float));
+            GL.BindVertexArray(0);
+        }
+
         public void DrawArray() => DrawArray(true);
 
         internal void DrawArray(bool useGeometryShader)
@@ -118,6 +135,11 @@ namespace ForesTycoon
             if (vertexCount == 0) return;
 
             if (useGeometryShader) RenderDevice.UseGeometryShader();
+            if (growthVbo != 0)
+            {
+                GL.GetInteger(GetPName.CurrentProgram, out int currentProgram);
+                GL.Uniform1(GlProgram.Uniform(currentProgram, "forest_elapsed"), ForestElapsedYears);
+            }
             GL.BindVertexArray(VaoId);
             GL.DrawArrays(mode, 0, vertexCount);
             RenderMetrics.RecordDraw(vertexCount);
@@ -143,6 +165,7 @@ namespace ForesTycoon
             if (vboId != 0) { GL.DeleteBuffers(1, ref vboId); vboId = 0; }
             if (eboId != 0) { GL.DeleteBuffers(1, ref eboId); eboId = 0; }
             if (vaoId != 0) { GL.DeleteVertexArray(vaoId); vaoId = 0; }
+            if (growthVbo != 0) { GL.DeleteBuffers(1, ref growthVbo); growthVbo = 0; }
         }
 
         private void ThrowIfDisposed()

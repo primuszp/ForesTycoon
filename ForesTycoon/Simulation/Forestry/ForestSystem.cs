@@ -3,10 +3,10 @@ using System;
 namespace ForesTycoon
 {
     /// <summary>
-    /// Deterministic, allocation-free forest growth model. Simulation work is performed
+    /// Deterministic individual-tree growth model. Simulation work is performed
     /// monthly rather than every render frame, so cost scales predictably with map size.
     /// </summary>
-    sealed class ForestSystem : IWorldSystem
+    sealed partial class ForestSystem : IWorldSystem
     {
         internal const double DefaultSecondsPerYear = 30.0;
         private const int MonthsPerYear = 12;
@@ -15,9 +15,6 @@ namespace ForesTycoon
 
         private IForestHabitat habitat;
         private ForestStand[] stands = Array.Empty<ForestStand>();
-        private ForestStand[] nextStands = Array.Empty<ForestStand>();
-        private ForestStump[] stumps = Array.Empty<ForestStump>();
-        private int stumpCount;
         // Empty tiles that border a seeding stand. Rebuilt every month so that the
         // regeneration pass never has to probe the whole map through the habitat interface.
         private bool[] seedCandidate = Array.Empty<bool>();
@@ -25,7 +22,7 @@ namespace ForesTycoon
         private int seedCandidateCount;
         private double secondsPerYear;
         internal EnvironmentSystem Environment { get; set; }
-        internal void SetEnvironmentTempo(bool enabled) => secondsPerYear=enabled?EnvironmentSystem.SecondsPerForestYear:DefaultSecondsPerYear;
+        internal void UseEnvironmentTempo() => secondsPerYear = EnvironmentSystem.SecondsPerForestYear;
         private double accumulatedSeconds;
         internal double SecondsUntilMonth => secondsPerYear/MonthsPerYear-accumulatedSeconds;
         private ulong month;
@@ -45,7 +42,7 @@ namespace ForesTycoon
         public int Count => standCount;
 
         // Explicit initial snapshots for isolated visual fixtures; ordinary worlds still use
-        // the version-compatible seed generator and replay path.
+        // the seed generator and deterministic replay path.
         internal ForestSystem(IForestHabitat habitat, ReadOnlySpan<ForestStand> initialStands) : this(habitat)
         {
             if (initialStands.Length != stands.Length) throw new ArgumentException("Incorrect stand count.", nameof(initialStands));
@@ -58,6 +55,7 @@ namespace ForesTycoon
                     throw new ArgumentException("Invalid initial stand.", nameof(initialStands));
                 stands[i] = stand.IsEmpty || !habitat.CanSupportForest(i) ? default : stand;
             }
+            InitializeIndividuals();
             RecalculateStatistics();
             Revision++; EditRevision++;
         }
@@ -69,65 +67,13 @@ namespace ForesTycoon
 
         public bool TryGetStand(int tileId, out ForestStand stand)
         {
-            if ((uint)tileId >= (uint)stands.Length || stands[tileId].IsEmpty)
-            {
-                stand = default;
-                return false;
-            }
-
-            stand = stands[tileId];
-            return true;
-        }
-
-        public bool TryGetStump(int tileId, out ForestStump stump)
-        {
-            if ((uint)tileId >= (uint)stumps.Length || stumps[tileId].IsEmpty)
-            {
-                stump = default;
-                return false;
-            }
-            stump = stumps[tileId];
-            return true;
-        }
-
-        internal int StumpCount => stumpCount;
-
-        /// <summary>
-        /// The first cut on a stand records it as it stood; later cuts on the same stand keep
-        /// that snapshot, so the stumps of earlier loads stay where they are.
-        /// </summary>
-        private void RecordFelling(int tileId, ForestStand stand)
-        {
-            ForestStump existing = stumps[tileId];
-            if (existing.IsEmpty) stumpCount++;
-            stumps[tileId] = !existing.IsEmpty && existing.Felled.Species == stand.Species && existing.YearsSinceFelled < 1f
-                ? existing with { YearsSinceFelled = 0f }
-                : new ForestStump(stand, GetCrowding(tileId), 0f);
-        }
-
-        private void ClearStump(int tileId)
-        {
-            if (stumps[tileId].IsEmpty) return;
-            stumps[tileId] = default;
-            stumpCount--;
-        }
-
-        private void AgeStumps()
-        {
-            if (stumpCount == 0) return;
-            for (int tileId = 0; tileId < stumps.Length; tileId++)
-            {
-                ForestStump stump = stumps[tileId];
-                if (stump.IsEmpty) continue;
-                float years = stump.YearsSinceFelled + YearsPerStep;
-                if (years >= ForestStump.LifetimeYears) ClearStump(tileId);
-                else stumps[tileId] = stump with { YearsSinceFelled = years };
-            }
+            stand = IndividualStand(tileId, ForestYear);
+            return !stand.IsEmpty;
         }
 
         /// <summary>
         /// Canopy pressure from the four neighbouring tiles, 0 (open field) to 1 (closed canopy).
-        /// Drives both suppressed growth and self-thinning mortality.
+        /// Reduces growth and health when neighbouring canopies limit the light.
         /// </summary>
         public float GetCrowding(int tileId)
         {
@@ -154,72 +100,37 @@ namespace ForesTycoon
                 profile.MaximumBiomass * 0.015f,
                 0.50f + suitability * 0.40f);
             stands[tileId] = planted;
+            CreateIndividuals(tileId, planted, ForestYear);
+            stands[tileId] = IndividualStand(tileId, ForestYear);
+            RecalculateStatistics();
             Revision++; EditRevision++;
-            AddToStatistics(planted);
             return ForestryActionResult.Planted;
         }
 
-        public ForestryActionResult Harvest(int tileId, out ForestHarvest harvest)
-        {
-            if ((uint)tileId >= (uint)stands.Length)
-            {
-                harvest = default;
-                return ForestryActionResult.InvalidTile;
-            }
-            if (stands[tileId].IsEmpty)
-            {
-                harvest = default;
-                return ForestryActionResult.NoForest;
-            }
-
-            ForestStand stand = stands[tileId];
-            harvest = new ForestHarvest(stand.Species, stand.AgeYears, TimberYield(stand));
-            RecordFelling(tileId, stand);
-            stands[tileId] = default;
-            Revision++; EditRevision++;
-            RemoveFromStatistics(stand);
-            return ForestryActionResult.Harvested;
-        }
+        public ForestryActionResult Harvest(int tileId, out ForestHarvest harvest) =>
+            HarvestIndividuals(tileId, out harvest);
 
         internal static float TimberCubicMetres(ForestStand stand) => stand.IsEmpty?0:stand.Biomass*100;
-        internal float ExtractTimber(int tileId,float requested)
+        internal float ExtractTimber(int tileId, float requested)
         {
-            if(!float.IsFinite(requested)||requested<0)throw new ArgumentOutOfRangeException(nameof(requested));
-            if(!TryGetStand(tileId,out var stand))return 0;
-            float amount=Math.Min(requested,TimberCubicMetres(stand));
-            if(amount<=0)return 0;
-            RecordFelling(tileId,stand);
-            RemoveFromStatistics(stand);
-            float biomass=Math.Max(0,stand.Biomass-amount/100);
-            stands[tileId]=biomass<0.000001f?default:stand with {Biomass=biomass};
-            if(!stands[tileId].IsEmpty)AddToStatistics(stands[tileId]);
-            // Quantized visual refresh gradually removes stems without rebuilding every tick.
-            Revision++;
-            return amount;
+            if (!float.IsFinite(requested) || requested < 0) throw new ArgumentOutOfRangeException(nameof(requested));
+            return ExtractIndividualTimber(tileId, requested);
         }
 
-        /// <summary>
-        /// Recoverable roundwood in tonnes. One biomass unit is one hundred tonnes of stem wood,
-        /// scaled by how valuable and dense the species' timber is.
-        /// </summary>
-        public static float TimberYield(ForestStand stand)
-        {
-            if (stand.IsEmpty) return 0f;
-            return stand.Biomass * 100f * ForestSpeciesProfile.For(stand.Species).WoodDensity;
-        }
-
-        /// <summary>Applies infrequent terrain/road changes without adding a full-map scan to every tick.</summary>
+        /// <summary>Removes living trees, stumps and depots when terrain becomes unavailable.</summary>
         public void RefreshHabitat()
         {
+            bool changed = false;
             for (int tileId = 0; tileId < stands.Length; tileId++)
             {
-                if (!stumps[tileId].IsEmpty && !habitat.CanSupportForest(tileId)) { ClearStump(tileId); Revision++; }
-                ForestStand stand = stands[tileId];
-                if (stand.IsEmpty || habitat.CanSupportForest(tileId)) continue;
+                if (habitat.CanSupportForest(tileId) || !IndividualTrees.TryGet(tileId, out _)) continue;
+                IndividualTrees.RemoveTile(tileId);
                 stands[tileId] = default;
-                Revision++; EditRevision++;
-                RemoveFromStatistics(stand);
+                changed = true;
             }
+            if (!changed) return;
+            RecalculateStatistics();
+            Revision++; EditRevision++;
         }
 
         public void Reset(IForestHabitat newHabitat)
@@ -228,24 +139,20 @@ namespace ForesTycoon
             if (stands.Length != habitat.TileCount)
             {
                 stands = new ForestStand[habitat.TileCount];
-                nextStands = new ForestStand[habitat.TileCount];
-                stumps = new ForestStump[habitat.TileCount];
                 seedCandidate = new bool[habitat.TileCount];
                 seedCandidateTiles = new int[habitat.TileCount];
             }
             else
             {
                 Array.Clear(stands);
-                Array.Clear(nextStands);
                 Array.Clear(seedCandidate);
-                Array.Clear(stumps);
             }
-            stumpCount = 0;
 
             seedCandidateCount = 0;
             accumulatedSeconds = 0.0;
             month = 0;
             GenerateInitialForest();
+            InitializeIndividuals();
             RecalculateStatistics();
             Revision++; EditRevision++;
         }
@@ -266,10 +173,9 @@ namespace ForesTycoon
 
         public void Clear()
         {
+            currentYearGrowth = lastYearGrowth = 0;
+            IndividualTrees.Clear();
             Array.Clear(stands);
-            Array.Clear(nextStands);
-            Array.Clear(stumps);
-            stumpCount = 0;
             Array.Clear(seedCandidate);
             seedCandidateCount = 0;
             accumulatedSeconds = 0.0;
@@ -315,39 +221,7 @@ namespace ForesTycoon
         private void StepMonth()
         {
             month++;
-            Array.Clear(nextStands);
-            ClearSeedCandidates();
-            ClearStatistics();
-
-            // Pass one: grow the existing stands and record which empty tiles they can seed.
-            for (int tileId = 0; tileId < stands.Length; tileId++)
-            {
-                ForestStand stand = stands[tileId];
-                if (stand.IsEmpty) continue;
-
-                ForestStand grown = GrowOrDie(tileId, stand);
-                nextStands[tileId] = grown;
-                if (!grown.IsEmpty) AddToStatistics(grown);
-                if (IsSeedSource(stand)) MarkSeedCandidates(tileId);
-            }
-
-            // Pass two: only tiles that actually border a seeding stand can regenerate,
-            // so an empty map costs no habitat queries at all.
-            for (int i = 0; i < seedCandidateCount; i++)
-            {
-                int tileId = seedCandidateTiles[i];
-                if (!stands[tileId].IsEmpty) continue;
-
-                ForestStand seedling = TryRegenerate(tileId);
-                if (seedling.IsEmpty) continue;
-                nextStands[tileId] = seedling;
-                AddToStatistics(seedling);
-            }
-
-            Environment?.FinishForestMonth();
-            AgeStumps();
-            (stands, nextStands) = (nextStands, stands);
-            Revision++;
+            StepIndividualMonth();
         }
 
         private void ClearSeedCandidates()
@@ -371,35 +245,6 @@ namespace ForesTycoon
 
         private static bool IsSeedSource(ForestStand stand) =>
             !stand.IsEmpty && stand.Maturity >= 1f && stand.Health >= 0.45f;
-
-        private ForestStand GrowOrDie(int tileId, ForestStand stand)
-        {
-            if (!habitat.CanSupportForest(tileId)) return default;
-
-            ForestSpeciesProfile profile = ForestSpeciesProfile.For(stand.Species);
-            float suitability = Suitability(stand.Species, tileId);
-            float crowding = GetCrowding(tileId);
-            float waterFactor=(float)(Environment?.GrowthFactor(tileId,stand.Species)??1);
-            // Light-demanding species stall under a closed canopy; shade bearers barely notice.
-            float shadePressure = crowding * (1f - profile.ShadeTolerance);
-            float lightFactor = Math.Clamp(1f - shadePressure, 0.05f, 1f);
-
-            float targetHealth = (0.25f + suitability * 0.75f) * (0.55f + lightFactor * 0.45f)*waterFactor;
-            float health = MoveTowards(stand.Health, Math.Clamp(targetHealth, 0f, 1f), 0.035f);
-            float age = stand.AgeYears + YearsPerStep;
-            float remainingCapacity = Math.Max(0f, 1f - stand.Biomass / profile.MaximumBiomass);
-            float growth = profile.MaximumBiomass * profile.AnnualGrowthRate
-                * remainingCapacity * health * lightFactor * waterFactor * YearsPerStep;
-            float biomass = Math.Clamp(stand.Biomass + growth, 0f, profile.MaximumBiomass);
-
-            float agePressure = Math.Max(0f, (age - profile.MaximumAgeYears) / (profile.MaximumAgeYears * 0.25f));
-            // Suppressed trees die out of the stand: this is what makes thinning worth doing.
-            float mortalityChance = (1f - health) * 0.004f + agePressure * 0.012f + shadePressure * 0.006f;
-            if (UnitFloat(Hash(habitat.Seed, tileId, month)) < mortalityChance)
-                return default;
-
-            return new ForestStand(stand.Species, age, biomass, health);
-        }
 
         private ForestStand TryRegenerate(int tileId)
         {
@@ -463,14 +308,6 @@ namespace ForesTycoon
             if (stand.Maturity >= 1f) matureCount++;
             totalBiomass += stand.Biomass;
             totalHealth += stand.Health;
-        }
-
-        private void RemoveFromStatistics(ForestStand stand)
-        {
-            standCount--;
-            if (stand.Maturity >= 1f) matureCount--;
-            totalBiomass = Math.Max(0f, totalBiomass - stand.Biomass);
-            totalHealth = Math.Max(0f, totalHealth - stand.Health);
         }
 
         private void RecalculateStatistics()
