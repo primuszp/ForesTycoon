@@ -12,6 +12,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Content Include="Assets/Wildlife/elk.glb" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets/Vehicles/log-truck.glb" CopyToOutputDirectory="PreserveNewest" />
     <PackageReference Include="OpenTK" Version="4.9.4" />
     <PackageReference Include="ImGui.NET" Version="1.91.6.1" />
   </ItemGroup>

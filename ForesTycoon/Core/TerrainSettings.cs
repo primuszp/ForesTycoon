@@ -2,6 +2,8 @@ using System;
 
 namespace ForesTycoon
 {
+    enum ForestPattern { Natural, LargeMixed, LargeSpruce, LargeBroadleaf }
+
     sealed class TerrainSettings
     {
         public static readonly TerrainSettings Default = new TerrainSettings(
@@ -26,15 +28,19 @@ namespace ForesTycoon
         public float SeaLevel { get; }
         public int Seed { get; }
         public int MaxHeight { get; }
+        public ForestPattern ForestPattern { get; }
 
         /// <summary>Másolat új seed-del (terep-regeneráláshoz).</summary>
         public TerrainSettings WithSeed(int seed) => new TerrainSettings(
             NodeColumns, NodeRows, TileWidth, TileHeight, HeightScale,
-            MinimumWaterDepth, RiverWaterHeight, SeaLevel, seed, MaxHeight);
+            MinimumWaterDepth, RiverWaterHeight, SeaLevel, seed, MaxHeight, ForestPattern);
 
         public TerrainSettings WithNodeSize(int nodeSize, int seed) => new TerrainSettings(
             nodeSize, nodeSize, TileWidth, TileHeight, HeightScale,
-            MinimumWaterDepth, RiverWaterHeight, SeaLevel, seed, MaxHeight);
+            MinimumWaterDepth, RiverWaterHeight, SeaLevel, seed, MaxHeight, ForestPattern);
+
+        public TerrainSettings WithForestPattern(ForestPattern pattern) => new TerrainSettings(
+            NodeColumns,NodeRows,TileWidth,TileHeight,HeightScale,MinimumWaterDepth,RiverWaterHeight,SeaLevel,Seed,MaxHeight,pattern);
 
         public int TileColumns => NodeColumns - 1;
         public int TileRows => NodeRows - 1;
@@ -51,7 +57,8 @@ namespace ForesTycoon
             float riverWaterHeight,
             float seaLevel,
             int seed = 42,
-            int maxHeight = 6)
+            int maxHeight = 6,
+            ForestPattern forestPattern = ForestPattern.Natural)
         {
             if (nodeColumns < 2) throw new ArgumentOutOfRangeException(nameof(nodeColumns));
             if (nodeRows < 2) throw new ArgumentOutOfRangeException(nameof(nodeRows));
@@ -75,7 +82,9 @@ namespace ForesTycoon
             RiverWaterHeight = riverWaterHeight;
             SeaLevel = seaLevel;
             Seed = seed;
+            if (!Enum.IsDefined(forestPattern)) throw new ArgumentOutOfRangeException(nameof(forestPattern));
             MaxHeight = maxHeight;
+            ForestPattern = forestPattern;
         }
 
         private static bool IsPowerOfTwoPlusOne(int value)

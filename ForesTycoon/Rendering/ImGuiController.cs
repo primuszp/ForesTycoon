@@ -52,8 +52,8 @@ namespace ForesTycoon
             GL.BufferData(BufferTarget.ElementArrayBuffer, eboSize, IntPtr.Zero, BufferUsageHint.DynamicDraw);
 
             shader = BuildShader();
-            projLoc = GL.GetUniformLocation(shader, "projection_matrix");
-            texLoc = GL.GetUniformLocation(shader, "in_fontTexture");
+            projLoc = GlProgram.Uniform(shader, "projection_matrix");
+            texLoc = GlProgram.Uniform(shader, "in_fontTexture");
 
             vao = GL.GenVertexArray();
             GL.BindVertexArray(vao);
@@ -285,7 +285,7 @@ void main()
             GL.DeleteBuffer(vbo);
             GL.DeleteBuffer(ebo);
             GL.DeleteTexture(fontTexture);
-            GL.DeleteProgram(shader);
+            GlProgram.Delete(shader);
             if (glyphRangeHandle.IsAllocated) glyphRangeHandle.Free();
         }
 

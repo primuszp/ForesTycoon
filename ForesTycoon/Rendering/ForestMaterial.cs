@@ -11,6 +11,12 @@ namespace ForesTycoon
         private int matrixLocation, widthLocation;
         internal void Use(float outlineWorldWidth = 0)
         {
+            if (RenderDevice.Visuals?.Active == true)
+            {
+                RenderDevice.Visuals.Kind = SurfaceKind.Foliage;
+                RenderDevice.Visuals.Use(outlineWorldWidth);
+                return;
+            }
             if (program == 0) Initialize();
             GL.UseProgram(program);
             Matrix4 matrix = RenderDevice.Model * RenderDevice.ViewProjection;
@@ -44,8 +50,8 @@ void main() { output_color = tint; }";
                 GL.LinkProgram(program);
                 GL.GetProgram(program, GetProgramParameterName.LinkStatus, out int ok);
                 if (ok == 0) throw new InvalidOperationException(GL.GetProgramInfoLog(program));
-                matrixLocation = GL.GetUniformLocation(program, "matrix");
-                widthLocation = GL.GetUniformLocation(program, "outline_width");
+                matrixLocation = GlProgram.Uniform(program, "matrix");
+                widthLocation = GlProgram.Uniform(program, "outline_width");
             }
             catch { Dispose(); throw; }
             finally { if (vertex != 0) GL.DeleteShader(vertex); if (fragment != 0) GL.DeleteShader(fragment); }
@@ -58,6 +64,6 @@ void main() { output_color = tint; }";
             if (ok == 0) { string error = GL.GetShaderInfoLog(shader); GL.DeleteShader(shader); throw new InvalidOperationException(error); }
             return shader;
         }
-        public void Dispose() { if (program != 0) GL.DeleteProgram(program); program = 0; }
+        public void Dispose() { if (program != 0) GlProgram.Delete(program); program = 0; }
     }
 }

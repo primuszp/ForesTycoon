@@ -65,7 +65,7 @@ namespace ForesTycoon
         private readonly List<Vertex> crownVertices = new List<Vertex>();
         internal int ForestChunkRebuilds { get; private set; }
 
-        internal void DrawTrees(ForestSystem forest, RenderContext context)
+        internal void DrawTrees(ForestSystem forest, RenderContext context, bool processBuildQueue = true)
         {
             ForestChunkRebuilds = 0;
             ForestLod lod = ForestLodPolicy.Select(context.PixelsPerWorldUnit, forestLod);
@@ -74,14 +74,19 @@ namespace ForesTycoon
             {
                 forestGeometry[chunk] = GetForestGeometry(chunk, forest, lod);
             }
-            ProcessForestBuildQueue(forest);
+            if (processBuildQueue) ProcessForestBuildQueue(forest);
+            bool shadow = RenderDevice.Visuals?.ShadowPass == true;
+            if (RenderDevice.Visuals != null) RenderDevice.Visuals.Kind = SurfaceKind.ForestFloor;
+            if (!shadow)
             using (new RenderStateScope().AlphaBlend().DepthWrite(false).PolygonOffset(-1, -1))
                 foreach (TerrainChunk chunk in visibleChunks) forestGeometry[chunk].Floor.DrawArray();
+            if (RenderDevice.Visuals != null) RenderDevice.Visuals.Kind = SurfaceKind.Wood;
             foreach (TerrainChunk chunk in visibleChunks) forestGeometry[chunk].Wood.DrawArray();
+            if (RenderDevice.Visuals != null) RenderDevice.Visuals.Kind = SurfaceKind.Foliage;
             foreach (TerrainChunk chunk in visibleChunks) forestGeometry[chunk].Understory.DrawArray();
             forestMaterial.Use();
             foreach (TerrainChunk chunk in visibleChunks) forestGeometry[chunk].Crowns.DrawArray(false);
-            if (lod != ForestLod.Far)
+            if (lod != ForestLod.Far && !shadow)
             {
                 bool culling = GL.IsEnabled(EnableCap.CullFace);
                 GL.GetInteger(GetPName.CullFaceMode, out int oldCull);

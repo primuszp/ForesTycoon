@@ -35,6 +35,7 @@ namespace ForesTycoon
         public float SeaLevel { get; init; }
         public int Seed { get; init; }
         public int MaxHeight { get; init; }
+        public ForestPattern ForestPattern { get; init; }
 
         public static TerrainSettingsData From(TerrainSettings settings) => new TerrainSettingsData
         {
@@ -47,12 +48,13 @@ namespace ForesTycoon
             RiverWaterHeight = settings.RiverWaterHeight,
             SeaLevel = settings.SeaLevel,
             Seed = settings.Seed,
-            MaxHeight = settings.MaxHeight
+            MaxHeight = settings.MaxHeight,
+            ForestPattern = settings.ForestPattern
         };
 
         public TerrainSettings ToSettings() => new TerrainSettings(
             NodeColumns, NodeRows, TileWidth, TileHeight, HeightScale,
-            MinimumWaterDepth, RiverWaterHeight, SeaLevel, Seed, MaxHeight);
+            MinimumWaterDepth, RiverWaterHeight, SeaLevel, Seed, MaxHeight, ForestPattern);
     }
 
     sealed class WorldSaveData
@@ -68,7 +70,7 @@ namespace ForesTycoon
 
         public void Validate()
         {
-            if (VehiclePhysicsVersion < 0 || VehiclePhysicsVersion > 1)
+            if (VehiclePhysicsVersion < 0 || VehiclePhysicsVersion > 2)
                 throw new NotSupportedException("Unsupported vehicle physics version.");
             if (Version != CurrentVersion)
                 throw new NotSupportedException($"Save version {Version} is not supported; expected {CurrentVersion}.");

@@ -7,6 +7,7 @@ namespace ForesTycoon
     {
         private readonly bool depthTest;
         private readonly bool blend;
+        private readonly bool cullFace;
         private readonly bool polygonOffsetFill;
         private readonly bool depthMask;
         private readonly float lineWidth;
@@ -16,6 +17,7 @@ namespace ForesTycoon
         {
             depthTest = GL.IsEnabled(EnableCap.DepthTest);
             blend = GL.IsEnabled(EnableCap.Blend);
+            cullFace = GL.IsEnabled(EnableCap.CullFace);
             polygonOffsetFill = GL.IsEnabled(EnableCap.PolygonOffsetFill);
             GL.GetBoolean(GetPName.DepthWritemask, out depthMask);
             GL.GetFloat(GetPName.LineWidth, out lineWidth);
@@ -68,6 +70,7 @@ namespace ForesTycoon
 
             Restore(EnableCap.DepthTest, depthTest);
             Restore(EnableCap.Blend, blend);
+            Restore(EnableCap.CullFace, cullFace);
             Restore(EnableCap.PolygonOffsetFill, polygonOffsetFill);
             GL.DepthMask(depthMask);
             GL.LineWidth(lineWidth);

@@ -9,8 +9,13 @@ namespace ForesTycoon
             AppDomain.CurrentDomain.UnhandledException += (_, args) =>
                 Console.Error.WriteLine(args.ExceptionObject?.ToString() ?? "Unknown fatal error");
 
+            if (Array.Exists(args, argument => argument == "--wildlife-smoke-test")) { WildlifeSmokeTest.Run(); return; }
+            if (Array.Exists(args, argument => argument == "--graphics-smoke-test")) { GraphicsWeatherSmokeTest.Run(); return; }
+
             if (Array.Exists(args, argument => argument == "--truck-smoke-test")) { TruckRenderSmokeTest.Run(); return; }
             if (Array.Exists(args, argument => argument == "--camera-benchmark")) { ForestBenchmark.Run(true); return; }
+            if (Array.Exists(args, argument => argument == "--engine-stress-benchmark")) { EngineStressBenchmark.Run(); return; }
+            if (Array.Exists(args, argument => argument == "--engine-benchmark")) { ForestBenchmark.Run(false, true); return; }
             if (Array.Exists(args, argument => argument == "--forest-benchmark")) { ForestBenchmark.Run(); return; }
             if (Array.Exists(args, argument => string.Equals(argument, "--forest-preview", StringComparison.OrdinalIgnoreCase)))
             {

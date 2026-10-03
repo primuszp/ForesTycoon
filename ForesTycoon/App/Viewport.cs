@@ -434,6 +434,13 @@ namespace ForesTycoon
                 if (ImGui.MenuItem("Gyorsbetöltés", "Ctrl+L")) QuickLoad();
                 ImGui.Separator();
                 if (ImGui.MenuItem("Új terep (seed)")) RegenerateTerrain();
+                if (ImGui.BeginMenu("Új nagy erdős térkép"))
+                {
+                    if(ImGui.MenuItem("Fenyves és lombos erdő")) RegenerateTerrain(forestPattern: ForestPattern.LargeMixed);
+                    if(ImGui.MenuItem("Nagy fenyves")) RegenerateTerrain(forestPattern: ForestPattern.LargeSpruce);
+                    if(ImGui.MenuItem("Nagy lombos erdő")) RegenerateTerrain(forestPattern: ForestPattern.LargeBroadleaf);
+                    ImGui.EndMenu();
+                }
                 if (ImGui.BeginMenu("Térképméret"))
                 {
                     MapSizeMenuItem(64);
@@ -450,6 +457,52 @@ namespace ForesTycoon
             if (ImGui.BeginMenu("Nézet"))
             {
                 if (ImGui.MenuItem("Kamera alaphelyzet")) ResetCamera();
+                ImGui.Separator();
+                ImGui.Checkbox("Új grafikai megjelenítés", ref world.Graphics.Enhanced);
+                ImGui.Checkbox("Erdei szarvasok", ref world.Graphics.Wildlife);
+                if (ImGui.MenuItem("Szarvas megkeresése", "", false, world.WildlifeCount > 0) && world.TryGetWildlifePosition(out var deer))
+                {
+                    rotationPivotActive = false;
+                    targetRotY = roty;
+                    zoom = targetZoom = Math.Max(zoom, 35);
+                    Vector3 view = WorldToView(deer + new Vector3(0,0,1), rotx, roty);
+                    screenX = view.X - Width / (2.0 * zoom);
+                    screenY = view.Y - Height / (2.0 * zoom);
+                    pickMatricesReady = false;
+                    RequestFrame();
+                }
+                if (ImGui.MenuItem("Eredeti színalapú mód", "", !world.Graphics.Enhanced)) world.Graphics.Enhanced = false;
+                if (world.Graphics.Enhanced)
+                {
+                    ImGui.Checkbox("Textúrázás", ref world.Graphics.Textures);
+                    ImGui.Checkbox("Járműkontúrok", ref world.Graphics.VehicleOutlines);
+                    ImGui.Checkbox("Szarvaskontúrok", ref world.Graphics.WildlifeOutlines);
+                    ImGui.Checkbox("Napfény", ref world.Graphics.Lighting);
+                    ImGui.Checkbox("Vetett árnyékok", ref world.Graphics.Shadows);
+                    int quality = (int)world.Graphics.Quality;
+                    if (ImGui.Combo("Effektek minősége", ref quality, "Alacsony\0Közepes\0Magas\0"))
+                        world.Graphics.Quality = (GraphicsQuality)quality;
+                    ImGui.Checkbox("Csemperács", ref world.Graphics.ShowGrid);
+                    ImGui.SliderFloat("Nap iránya", ref world.Graphics.SunAzimuth, 0, 360, "%.0f°");
+                    ImGui.SliderFloat("Nap magassága", ref world.Graphics.SunElevation, 15, 80, "%.0f°");
+                    ImGui.Separator();
+                    ImGui.Checkbox("Időjárás", ref world.Graphics.Weather);
+                    if (world.Graphics.Weather)
+                    {
+                        ImGui.Checkbox("Automatikus időjárás", ref world.Graphics.AutomaticWeather);
+                        int preset = world.Graphics.Preset == WeatherPreset.Storm ? 3 : Math.Min(2, (int)world.Graphics.Preset);
+                        if (ImGui.Combo("Időjárási kép", ref preset, "Napsütés\0Borult\0Eső\0Vihar\0"))
+                        { world.Graphics.Preset = preset == 3 ? WeatherPreset.Storm : (WeatherPreset)preset; world.Graphics.AutomaticWeather = false; }
+                        ImGui.Checkbox("Felhőzet", ref world.Graphics.Clouds);
+                        ImGui.Checkbox("Villámlás", ref world.Graphics.Lightning);
+                        if (ImGui.Button("Villám most"))
+                        { world.Graphics.Lightning = true; world.Graphics.LightningRequest++; }
+                        ImGui.Checkbox("Talajköd", ref world.Graphics.Fog);
+                        if (world.Graphics.Fog) ImGui.SliderFloat("Köd sűrűsége", ref world.Graphics.FogDensity, 0, 1, "%.2f");
+                        ImGui.TextDisabled("A talajköd napsütésben is bekapcsolható.");
+                        ImGui.TextDisabled("Eső után a talaj fokozatosan szárad.");
+                    }
+                }
                 ImGui.EndMenu();
             }
             if (ImGui.BeginMenu("Játék"))
@@ -542,6 +595,18 @@ namespace ForesTycoon
             ImGui.Text($"{ImGui.GetIO().Framerate:F0} FPS");
             ImGui.Text($"Tick: {simulationClock.Tick}  {(simulationClock.IsPaused ? "Szünet" : $"{simulationClock.Speed:0}x")}");
             ImGui.Text($"Járművek: {world.VehicleCount}");
+            ImGui.Text($"Erdei szarvasok: {world.WildlifeCount}");
+            for (int i = 0; i < Math.Min(8, world.Vehicles.Count); i++)
+            {
+                var vehicle = world.Vehicles[i];
+                string status = vehicle.TransportState switch {
+                    VehicleTransportState.Waiting => "Faanyagra vár",
+                    VehicleTransportState.Loading => "Rakodik",
+                    VehicleTransportState.Unloading => "Lerakodik",
+                    VehicleTransportState.Returning => "Üres visszaút",
+                    _ => vehicle.CargoAmount > 0 ? "Rakott menet" : "Üres menet" };
+                ImGui.Text($"#{vehicle.Id}: {status} – {vehicle.CargoAmount:F1}/{vehicle.CargoCapacity:F0} t");
+            }
             ForestStatistics forest = world.ForestStatistics;
             ImGui.Text($"Erdő: {forest.StandCount} állomány, {forest.MatureStandCount} érett");
             ImGui.Text($"Biomassza: {forest.TotalBiomass:F1}  Egészség: {forest.AverageHealth:P0}");
@@ -707,14 +772,14 @@ namespace ForesTycoon
             nodeHovered = world.SearchScreenPoint(px, fy, 14.0 * scale, pickModelMatrix, pickProjMatrix, pickViewMatrix);
         }
 
-        private void RegenerateTerrain(int? tileCount = null)
+        private void RegenerateTerrain(int? tileCount = null, ForestPattern? forestPattern = null)
         {
             if (!isLoaded) return;
             // A GL-kontextus a render alatt aktuális, így a buffer-csere itt biztonságos.
             int seed = new Random().Next();
             if (tileCount.HasValue) currentMapTiles = tileCount.Value;
             interaction.CancelGesture();
-            world.Regenerate(TerrainSettings.Default.WithNodeSize(currentMapTiles + 1, seed));
+            world.Regenerate(TerrainSettings.Default.WithNodeSize(currentMapTiles + 1, seed).WithForestPattern(forestPattern ?? world.InitialForestPattern));
             simulationClock.Reset();
             RequestFrame();
         }

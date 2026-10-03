@@ -160,3 +160,44 @@ Grafikus ellenőrzés és három PNG (rakott emelkedő/lejtő, üres síkút), a
 ```sh
 dotnet run --project ForesTycoon/ForesTycoon.csproj -- --truck-smoke-test
 ```
+
+## Grafika és időjárás
+
+A Nézet menüben az Új grafikai megjelenítés kapcsolóval az eredeti színalapú mód is visszaállítható. A Textúrázás, Napfény, Vetett árnyékok és Csemperács külön kapcsolható; a nap iránya és magassága állítható. Ezek a beállítások a futó játékban megmaradnak térképcsere közben.
+
+A Nézet / Időjárási kép menüben Napsütés, Borult, Eső és Vihar választható, vagy automatikus ciklus használható. A Felhőzet és Villámlás külön kapcsolható. Az eső nedvesíti a talajt, amely utána fokozatosan szárad; a szünet megállítja az effekteket. A hó kísérleti kódja megmaradt, de a normál játék nem kapcsolja be.
+
+A vihar szélirányba dőlő, világkoordinátákhoz rögzített esőt, térfogati felhőhátteret, puha mozgó felhőárnyékot, villámfényt és procedurális vízgyűrűket használ. A [grafikai terv](docs/graphics-weather-plan.md) és a [kutatási jegyzet](docs/rain-storm-cloud-research.md) ismerteti a technikákat és a közelítéseket.
+
+Ellenőrzés: dotnet test ForesTycoon.sln --no-restore; a lefordított játék --graphics-smoke-test kapcsolója PNG-ket ment az artifacts/graphics-weather mappába, és ellenőrzi a grafikai kapcsolókat, a cache megőrzését és az eredeti kép visszaállítását.
+
+
+Viharban most elágazó, fényudvarral rajzolt villámcsatornák is megjelennek: a kisülések végpontja egy látható fa koronája. A **Talajköd** kapcsoló és **Köd sűrűsége** csúszka az erdő alacsony, lassan sodródó ködfoltjait szabályozza. A talajköd alapból engedélyezett, és a helyi körülmények alapján foltokban jelenik meg. A Villám most gomb azonnali kisülést indít, akár szünet alatt is. A villám csak látványelem, nem károsítja a fákat.
+
+
+A talajköd most **soft particle rendszer**: világkoordinátákban sodródó, eltérő életciklusú, zajmintás ködpamacsok jelennek meg az erdőben és a széleken. A részecskék fokozatosan megjelennek, növekednek és eltűnnek; a jelenet mélységéből számított átmenet lágyítja a talajjal és a fákkal való metszést. A Köd sűrűsége csúszkával állítható a hatás.
+
+
+A köd most a környezethez igazodik: erdőben, víz mellett és helyi terepmélyedésekben jelenhet meg, lassan változó, összefüggő foltokban. Eső után a nedves talaj növeli az esélyét és sűrűségét; erős szél és napsütés gyengíti. Az utak önmagukban nem képeznek ködöt, de nedves völgyekben vagy vízparton azok mentén is megjelenhet. Ez vizuális mikroklíma-közelítés, hőmérséklet/harmatpont szimuláció nélkül.
+
+**Fájl / Új nagy erdős térkép**: Fenyves és lombos erdő, Nagy fenyves vagy Nagy lombos erdő. A menüpont új térképet készít a választott térképmérettel. Nagy, összefüggő erdőtömbök és tisztások keletkeznek; a víz, utak és térképszél kizárása megmarad. Az új seed és a térképméret-váltás megtartja a kiválasztott erdőmintát. A mintát a mentés tárolja, a régi mentések a korábbi generátort használják.
+
+
+A játék járműve most az átadott trucks_collection.glb gyűjteményből kiválasztott, világoskék rönkszállító. A külön kivágott Assets/Vehicles/log-truck.glb automatikusan a program mellé másolódik. A kerekek forognak, a jármű az út lejtéséhez igazodik, a hat külön rönk pedig a rakomány mennyisége szerint jelenik meg. Az eredeti színalapú grafikai mód működik ezzel a modellel is. Az import részletei az [asset leírásában](ForesTycoon/Assets/Vehicles/README.md) találhatók.
+
+A rönkszállító egyenletesen skálázva az aszfaltozott egyetlen sáv szélességének 80%-át foglalja el, így a térképmérettől és csempemérettől függetlenül illeszkedik az úthoz.
+
+
+A rönkszállító az íveket a modell tényleges tengelytávolságával mintavételezi, folyamatosan változó helyzettel és iránnyal. Az első kerekek előretekintő, ívfüggő Ackermann-kormányzást kapnak, így a belső kerék nagyobb szögben fordul. A felépítmény finom fel-le mozgása és billenése az út magasságváltozásától, a sebességtől és a rakománytól függ; sima úton minimális, egyenetlen úton erősebb. Ez látványbeli rugózás, nem teljes futóműfizika. A szállítási út két végpontján a rakodáshoz szükséges megállás megmarad; köztes íveken a jármű továbbhalad.
+
+### Motor teljesítménye
+
+A Nézet menüben választható alacsony, közepes vagy magas effektminőség. A mérési eredmények, a megvalósított optimalizálások és a további skálázási feladatok a [motoráttekintésben](docs/engine-performance.md) találhatók. Az `--engine-benchmark` az alapjeleneteket, az `--engine-stress-benchmark` a sűrű erdőt és az 1/25/100 teherautós vihart méri.
+
+### Teherautó és rakodás
+
+Új világban a teherautó kitermelt faanyagra vár, három másodperc alatt rakodik, majd a célvégponton külön lerakodik. Az állapot és a rakomány a járműlistában látható. A Nézet menü Járműkontúrok kapcsolója finom sötét vonalat ad a közeli modelleknek. A rönkök külön faanyagot kaptak, a kormányzás átmenete simább. Régi mentéseknél a korábbi szállítási időzítés marad meg; új világ/újragenerálás aktiválja az új rakodási rendet. A nagyobb sugarú útívek és a környezet szimulációja a [következő szakasz terve](docs/vehicle-environment-plan.md).
+
+### Animált erdei szarvasok
+
+A Nézet → Erdei szarvasok kapcsolóval legelő és lassan sétáló szarvasok jelennek meg az erdők tisztásain/szélein. A Szarvas megkeresése menüpont rájuk közelít. Az importált GLB valódi csontvázas animációt, textúrákat és árnyékot használ, a szünetet követi. A [betöltő, animáció és ellenőrzések leírása](docs/animated-models.md) tartalmazza a támogatott formátumrészhalmazt; a `--wildlife-smoke-test` képi ellenőrzést futtat.

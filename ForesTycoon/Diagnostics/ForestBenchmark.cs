@@ -9,7 +9,7 @@ namespace ForesTycoon
 {
     internal static class ForestBenchmark
     {
-        internal static void Run(bool cameraMotion = false)
+        internal static void Run(bool cameraMotion = false, bool enhanced = false)
         {
             using var window = new NativeWindow(new NativeWindowSettings {
                 StartVisible = false, ClientSize = new Vector2i(1280, 720), NumberOfSamples = 4,
@@ -23,12 +23,13 @@ namespace ForesTycoon
                 var terrain = fixture ? new Terrain(TerrainSettings.Default.WithNodeSize(17, 42), ForestVisualFixture.Height)
                     : new Terrain(TerrainSettings.Default);
                 var forest = fixture ? new ForestSystem(terrain, ForestVisualFixture.CreateStands()) : new ForestSystem(terrain);
-                using var renderer = new TerrainRenderer(terrain, new VehicleSystem(), new WorldEffectSystem(), forest);
+                using var renderer = new TerrainRenderer(terrain, new VehicleSystem(), new WorldEffectSystem(), forest, enhanced ? new GraphicsSettings { Preset = WeatherPreset.Sunny } : null);
                 try
                 {
                     foreach (float zoom in new[] { 10f, 5f })
                     {
                         var times = new double[90];
+                        long allocated = 0;
                         var context = new RenderContext(0, 0, 0, 0, 0, 0, false, false, 1, -60, -45,
                             -640 / zoom, -360 / zoom, 640 / zoom, 360 / zoom, zoom);
                         var view = Matrix4.CreateRotationZ(-MathF.PI / 4) * Matrix4.CreateRotationX(-MathF.PI / 3);
@@ -46,6 +47,7 @@ namespace ForesTycoon
                                 projection = Matrix4.CreateOrthographicOffCenter(-640 / movingZoom, 640 / movingZoom,
                                     -360 / movingZoom, 360 / movingZoom, -1000, 1000);
                             }
+                            long allocationStart = GC.GetAllocatedBytesForCurrentThread();
                             long start = Stopwatch.GetTimestamp();
                             if (cameraMotion) forest.Update(1.0 / 30.0);
                             RenderDevice.SetCamera(view * projection);
@@ -53,7 +55,7 @@ namespace ForesTycoon
                             RenderMetrics.BeginFrame();
                             renderer.Draw(context);
                             GL.Finish(); // Benchmark only: includes completion, not just CPU submission.
-                            if (frame >= 0) times[frame] = Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+                            if (frame >= 0) { times[frame] = Stopwatch.GetElapsedTime(start).TotalMilliseconds; allocated += GC.GetAllocatedBytesForCurrentThread() - allocationStart; }
                         }
                         if (!cameraMotion && !fixture && zoom == 10)
                         {
@@ -67,7 +69,7 @@ namespace ForesTycoon
                             try { renderer.Draw(context); } finally { RenderPipeline.PassProbe = null; }
                         }
                         Array.Sort(times);
-                        Console.WriteLine($"{(fixture ? "fixture16" : "world64")} zoom={zoom}: median={times[45]:F2}ms p95={times[85]:F2}ms max={times[89]:F2}ms vertices={RenderMetrics.SubmittedVertices} draws={RenderMetrics.DrawCalls}");
+                        Console.WriteLine($"{(fixture ? "fixture16" : "world64")} zoom={zoom}: median={times[45]:F2}ms p95={times[85]:F2}ms max={times[89]:F2}ms vertices={RenderMetrics.SubmittedVertices} draws={RenderMetrics.DrawCalls} alloc/frame={allocated / times.Length}B");
                     }
                 }
                 finally { terrain.Dispose(); }

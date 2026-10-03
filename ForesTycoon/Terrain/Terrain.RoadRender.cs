@@ -9,6 +9,7 @@ namespace ForesTycoon
     {
         private const float RoadShoulderWidthFactor = 1.0f;
         private const float RoadSurfaceWidthFactor = 0.62f;
+        internal float RoadLaneWidth => Math.Min(tileSizeH,tileSizeV)*RoadSurfaceWidthFactor;
 
         internal void DrawRoads()
         {

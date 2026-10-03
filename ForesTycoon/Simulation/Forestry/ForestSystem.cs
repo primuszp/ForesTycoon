@@ -205,6 +205,12 @@ namespace ForesTycoon
 
         private void GenerateInitialForest()
         {
+            if(habitat is Terrain terrain && terrain.Settings.ForestPattern != ForestPattern.Natural)
+            {
+                var generated=LargeForestGenerator.Create(habitat,terrain.Settings.TileColumns,terrain.Settings.TileRows,terrain.Settings.ForestPattern);
+                generated.CopyTo(stands,0);
+                return;
+            }
             for (int tileId = 0; tileId < stands.Length; tileId++)
             {
                 if (!habitat.CanSupportForest(tileId)) continue;
@@ -220,7 +226,7 @@ namespace ForesTycoon
 
                 // Species must be drawn from an independent hash. Reusing the value the
                 // density filter just tested keeps only tiles where random % density == 0,
-                // which collapsed every mixture below to its first branch — the whole map
+                // which collapsed every mixture below to its first branch â€” the whole map
                 // came out as a single species.
                 ForestSpecies species = SelectSpecies(moisture, elevation, Hash(habitat.Seed, tileId, 2));
                 ForestSpeciesProfile profile = ForestSpeciesProfile.For(species);
@@ -412,7 +418,7 @@ namespace ForesTycoon
                 };
 
             // Dry lowland: oak country, with birch on the poorest ground and a minority of
-            // spruce, which survives here but never thrives — Fitness keeps it small and sickly.
+            // spruce, which survives here but never thrives â€” Fitness keeps it small and sickly.
             if (moisture < 0.52f)
                 return (random % 5u) switch
                 {

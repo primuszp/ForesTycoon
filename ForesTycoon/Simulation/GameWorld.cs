@@ -24,6 +24,7 @@ namespace ForesTycoon
         private ulong worldTick;
         private ForestryActionResult lastForestryAction;
         private ForestryAreaSummary lastForestryArea;
+        internal GraphicsSettings Graphics { get; } = new GraphicsSettings();
 
         public GameWorld(TerrainSettings settings)
         {
@@ -32,7 +33,7 @@ namespace ForesTycoon
             timberCargo = systems.Add(new TimberCargoSystem());
             vehicles = systems.Add(new VehicleSystem(timberCargo, route => terrain.CreateVehicleRoadRoute(route)));
             effects = systems.Add(new WorldEffectSystem());
-            terrainRenderer = new TerrainRenderer(terrain, vehicles, effects, forest);
+            terrainRenderer = new TerrainRenderer(terrain, vehicles, effects, forest, Graphics);
         }
 
         public Tile HoveredTile => terrain.HoveredTile;
@@ -41,6 +42,9 @@ namespace ForesTycoon
         public int RoadCount => terrain.RoadCount;
         public int RoadPreviewCount => terrain.RoadPreviewCount;
         public int VehicleCount => vehicles.Count;
+        internal int WildlifeCount => terrainRenderer.WildlifeCount;
+        internal bool TryGetWildlifePosition(out Vector3 position) => terrainRenderer.TryGetWildlifePosition(out position);
+        internal System.Collections.Generic.IReadOnlyList<Vehicle> Vehicles => vehicles.Vehicles;
         public ForestStatistics ForestStatistics => forest.Statistics;
         public float TimberStockpile => timberCargo.Available;
         public float DeliveredTimber => timberCargo.Delivered;
@@ -53,6 +57,7 @@ namespace ForesTycoon
         public int TileWidth => terrain.TileWidth;
         public int TileHeight => terrain.TileHeight;
         public int MapTileColumns => terrain.Settings.TileColumns;
+        public ForestPattern InitialForestPattern => terrain.Settings.ForestPattern;
         public ulong SimulationTick => worldTick;
 
         public void Update(double fixedDeltaSeconds)
@@ -211,7 +216,7 @@ namespace ForesTycoon
 
         public void Regenerate(TerrainSettings settings)
         {
-            vehicles.UseRoadPhysics = true;
+            vehicles.UseRoadPhysics = true; vehicles.UseCargoStops = true;
             commands.Clear();
             commandJournal.Clear();
             systems.Clear();
@@ -225,7 +230,7 @@ namespace ForesTycoon
             WorldSaveSerializer.Write(destination, new WorldSaveData
             {
                 TickRate = tickRate,
-                VehiclePhysicsVersion = vehicles.UseRoadPhysics ? 1 : 0,
+                VehiclePhysicsVersion = vehicles.UseRoadPhysics ? (vehicles.UseCargoStops ? 2 : 1) : 0,
                 Tick = worldTick,
                 Terrain = TerrainSettingsData.From(terrain.Settings),
                 Commands = new List<WorldCommandRecord>(commandJournal)
@@ -235,7 +240,8 @@ namespace ForesTycoon
         public void Load(Stream source)
         {
             WorldSaveData save = WorldSaveSerializer.Read(source);
-            vehicles.UseRoadPhysics = save.VehiclePhysicsVersion == 1;
+            vehicles.UseRoadPhysics = save.VehiclePhysicsVersion >= 1;
+            vehicles.UseCargoStops = save.VehiclePhysicsVersion >= 2;
             commands.Clear();
             commandJournal.Clear();
             systems.Clear();
@@ -271,7 +277,7 @@ namespace ForesTycoon
             terrain.Dispose();
             terrain = new Terrain(settings ?? throw new ArgumentNullException(nameof(settings)));
             forest.Reset(terrain);
-            terrainRenderer = new TerrainRenderer(terrain, vehicles, effects, forest);
+            terrainRenderer = new TerrainRenderer(terrain, vehicles, effects, forest, Graphics);
         }
 
         public void Dispose()

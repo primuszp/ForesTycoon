@@ -2,6 +2,8 @@ using System;
 
 namespace ForesTycoon
 {
+    enum VehicleTransportState { Waiting, Loading, Hauling, Unloading, Returning }
+
     sealed class Vehicle
     {
         public Vehicle(int id, int[] route, double speedTilesPerSecond, float cargoCapacity = 25f,
@@ -32,6 +34,34 @@ namespace ForesTycoon
         public float CargoCapacity { get; }
         public float CargoAmount { get; private set; }
         public float CargoFill => CargoAmount / CargoCapacity;
+        internal bool CargoStopsEnabled;
+        public VehicleTransportState TransportState { get; internal set; } = VehicleTransportState.Hauling;
+        public float TransferProgress { get; private set; }
+        public float VisualCargoFill => TransportState == VehicleTransportState.Loading ? CargoFill * TransferProgress :
+            TransportState == VehicleTransportState.Unloading ? CargoFill * (1 - TransferProgress) : CargoFill;
+        internal void Hold()
+        {
+            PreviousRoutePosition = RoutePosition;
+            CurrentSpeed = 0;
+        }
+        internal void BeginLoading(float amount)
+        {
+            Load(amount); TransferProgress = 0;
+            TransportState = amount > 0 ? VehicleTransportState.Loading : VehicleTransportState.Waiting;
+            Hold();
+        }
+        internal void BeginUnloading()
+        {
+            TransferProgress = 0;
+            TransportState = VehicleTransportState.Unloading;
+            Hold();
+        }
+        internal bool AdvanceTransfer(double delta)
+        {
+            Hold();
+            TransferProgress = Math.Min(1, TransferProgress + (float)(delta / 3.0));
+            return TransferProgress >= 1;
+        }
 
         internal void Load(float amount)
         {

@@ -15,8 +15,10 @@ namespace ForesTycoon
         ForestryPreview = 425,
         DecalEnd = 430,
         Props = 500,
+        Wildlife = 550,
         Vehicles = 600,
         Effects = 700,
+        Weather = 710,
         Interface = 800,
         DebugOverlay = 900
     }

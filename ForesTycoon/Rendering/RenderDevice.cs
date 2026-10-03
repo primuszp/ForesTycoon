@@ -16,6 +16,7 @@ namespace ForesTycoon
 
         public static Matrix4 ViewProjection { get; private set; } = Matrix4.Identity;
         public static Matrix4 Model { get; private set; } = Matrix4.Identity;
+        internal static SurfaceVisualRenderer Visuals { get; set; }
 
         public static void Initialize()
         {
@@ -51,8 +52,8 @@ void main()
             GL.DeleteShader(fragment);
             if (linked == 0) throw new InvalidOperationException("Geometry shader link failed: " + log);
 
-            viewProjectionLocation = GL.GetUniformLocation(shader, "view_projection");
-            modelLocation = GL.GetUniformLocation(shader, "model");
+            viewProjectionLocation = GlProgram.Uniform(shader, "view_projection");
+            modelLocation = GlProgram.Uniform(shader, "model");
             initialized = true;
         }
 
@@ -67,6 +68,7 @@ void main()
         public static void UseGeometryShader()
         {
             EnsureInitialized();
+            if (Visuals?.Active == true) { Visuals.Use(); return; }
             GL.UseProgram(shader);
             Matrix4 viewProjection = ViewProjection;
             Matrix4 model = Model;
@@ -82,17 +84,21 @@ void main()
             Model = modelStack.Pop();
         }
 
+        internal static void SetModel(Matrix4 matrix) => Model = matrix;
+
         public static void Translate(float x, float y, float z) =>
             Model = Matrix4.CreateTranslation(x, y, z) * Model;
 
         public static void Dispose()
         {
             if (!initialized) return;
+            VehicleRenderer.DisposeImportedModel();
             DynamicPrimitiveBatch.DisposeDeviceResources();
-            GL.DeleteProgram(shader);
+            GlProgram.Delete(shader);
             shader = 0;
             initialized = false;
             modelStack.Clear();
+            Visuals = null;
         }
 
         private static int Compile(ShaderType type, string source)
