@@ -10,6 +10,7 @@ namespace ForesTycoon
     {
         private readonly ForestMaterial forestMaterial = new ForestMaterial();
         internal int ForestChunkRebuilds { get; private set; }
+        internal long TotalForestChunkRebuilds { get; private set; }
 
         internal void DrawTrees(ForestSystem forest, RenderContext context, GraphicsSettings graphics = null)
         {
@@ -24,7 +25,8 @@ namespace ForesTycoon
             ForestCrownMesh.Append(vertices, tree.Stand.Species,
                 new Vector3(tree.X, tree.Y, tree.TrunkTop(model) - height * model.CrownDrop),
                 model.CrownRadius * tree.Scale * tree.CrownWidth, height, tree.Yaw, tree.Seed,
-                Color.FromArgb(SurfaceSpeciesCode(tree.Stand.Species), Weather(Tinted(model.CrownColor, tree.Tint), tree.Stand.Health)), lod);
+                Color.FromArgb(SurfaceSpeciesCode(tree.Stand.Species), Weather(Tinted(model.CrownColor, tree.Tint), tree.Stand.Health)), lod,
+                ForestTreeAppearance.Stage(tree.Stand.Species, tree.Stand.AgeYears));
         }
 
         private void DrawForestFloor(TreeInstance tree)

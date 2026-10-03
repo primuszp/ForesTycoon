@@ -568,8 +568,10 @@ namespace ForesTycoon
 
             ImGui.SeparatorText("Részletek");
             int forestModels = (int)g.ForestModels;
-            if (ImGui.Combo("Fa modellek", ref forestModels, "Új modellek\0Új lombos fák + eredeti fenyő\0Eljárásos fák\0Generált fák (EZ-Tree)\0"))
+            if (ImGui.Combo("Fa modellek", ref forestModels, "Importált modellek\0Importált lombos fák + eredeti fenyő\0Eljárásos fák (életfázisok)\0Generált fák (EZ-Tree)\0"))
                 g.ForestModels = (ForestModelStyle)forestModels;
+            if (g.ForestModels == ForestModelStyle.Procedural)
+                ImGui.TextDisabled("Fajonként 3 változat: csemete, fiatal, középkorú, idős.");
             if (g.ForestModels == ForestModelStyle.OriginalPine)
                 ImGui.TextDisabled("Az eredeti fenyő részletes, de lassabb.");
             if (g.ForestModels != ForestModelStyle.Procedural)

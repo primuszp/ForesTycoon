@@ -3,6 +3,7 @@ using OpenTK.Mathematics;
 
 namespace ForesTycoon.Tests;
 
+[Collection("Primitive geometry capture")]
 public class ForestStemGeometryTests
 {
     [Theory]

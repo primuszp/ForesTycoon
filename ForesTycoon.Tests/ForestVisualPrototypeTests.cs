@@ -7,10 +7,10 @@ public class ForestVisualPrototypeTests
 {
     [Theory]
     [MemberData(nameof(CrownCases))]
-    internal void Crown_IsDeterministicClosedAndHasFiniteOutwardNormals(ForestSpecies species, int seed)
+    internal void Crown_IsDeterministicClosedAndHasFiniteOutwardNormals(ForestSpecies species, int seed, TreeLifeStage stage)
     {
-        var first = Build(species, ForestLod.Near, seed);
-        var second = Build(species, ForestLod.Near, seed);
+        var first = Build(species, ForestLod.Near, seed, stage);
+        var second = Build(species, ForestLod.Near, seed, stage);
         Assert.Equal(first.ToArray(), second.ToArray());
         Assert.All(first, vertex =>
         {
@@ -31,8 +31,8 @@ public class ForestVisualPrototypeTests
             Edge(a, b); Edge(b, c); Edge(c, a);
         }
         Assert.All(edges.Values, count => Assert.Equal(2, count));
-        Assert.True(Build(species, ForestLod.Far, seed).Count < Build(species, ForestLod.Medium, seed).Count);
-        Assert.True(Build(species, ForestLod.Medium, seed).Count < first.Count);
+        Assert.True(Build(species, ForestLod.Far, seed, stage).Count < Build(species, ForestLod.Medium, seed, stage).Count);
+        Assert.True(Build(species, ForestLod.Medium, seed, stage).Count < first.Count);
         void Edge(Vector3 a, Vector3 b)
         {
             if (a.X > b.X || (a.X == b.X && (a.Y > b.Y || (a.Y == b.Y && a.Z > b.Z)))) (a, b) = (b, a);
@@ -43,7 +43,7 @@ public class ForestVisualPrototypeTests
     public static IEnumerable<object[]> CrownCases =>
         Enum.GetValues<ForestSpecies>().Where(s => s != ForestSpecies.None)
             .SelectMany(s => new[] { 0, 1, 42, 43, 104729, -1, int.MinValue, int.MaxValue }
-                .Select(seed => new object[] { s, seed }));
+                .SelectMany(seed => Enum.GetValues<TreeLifeStage>().Select(stage => new object[] { s, seed, stage })));
 
     [Fact]
     public void SameSizeIndividualsHaveManyDistinctSilhouettesWithinGeometryBudget()
@@ -54,7 +54,7 @@ public class ForestVisualPrototypeTests
             for (int seed = 0; seed < 64; seed++)
             {
                 var crown = Build(species, ForestLod.Near, seed);
-                Assert.InRange(crown.Count, 1, species == ForestSpecies.Spruce ? 13032 : 648);
+                Assert.InRange(crown.Count, 1, species == ForestSpecies.Spruce ? 13032 : 2088);
                 silhouettes.Add(new(crown.Min(v => v.Position.X), crown.Max(v => v.Position.X),
                     crown.Min(v => v.Position.Y), crown.Max(v => v.Position.Y)));
             }
@@ -102,10 +102,10 @@ public class ForestVisualPrototypeTests
         Assert.Equal(2f, z); // N-S diagonal.
     }
 
-    private static List<Vertex> Build(ForestSpecies species, ForestLod lod, int seed)
+    private static List<Vertex> Build(ForestSpecies species, ForestLod lod, int seed, TreeLifeStage stage = TreeLifeStage.Mature)
     {
         var vertices = new List<Vertex>();
-        ForestCrownMesh.Append(vertices, species, Vector3.Zero, 2, 5, 0, seed, Color.Green, lod);
+        ForestCrownMesh.Append(vertices, species, Vector3.Zero, 2, 5, 0, seed, Color.Green, lod, stage);
         return vertices;
     }
 }

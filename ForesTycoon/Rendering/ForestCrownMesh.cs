@@ -10,13 +10,25 @@ namespace ForesTycoon
     {
         private static readonly Vector3 Light = Vector3.Normalize(new Vector3(0.45f, 0.65f, 1.05f));
         internal static void Append(List<Vertex> vertices, ForestSpecies species, Vector3 origin,
-            float radius, float height, float yaw, int seed, Color color, ForestLod lod)
+            float radius, float height, float yaw, int seed, Color color, ForestLod lod,
+            TreeLifeStage stage = TreeLifeStage.Mature)
         {
             if (species == ForestSpecies.Spruce)
             {
-                SpruceCrownMesh.Append(vertices, origin, radius, height, yaw, seed, color, lod);
+                SpruceCrownMesh.Append(vertices, origin, radius, height, yaw, seed, color, lod, stage);
                 return;
             }
+            Span<ForestTreeAppearance.CrownLobe> lobes = stackalloc ForestTreeAppearance.CrownLobe[8];
+            int count = ForestTreeAppearance.BroadleafLobes(lobes, species, stage, seed, radius, height, yaw);
+            for (int i = 0; i < count; i++)
+                AppendLobe(vertices, species, origin + lobes[i].Origin, lobes[i].Radius, lobes[i].Height,
+                    yaw, unchecked(seed + i * 104729), color,
+                    i > 0 && lod == ForestLod.Near ? ForestLod.Medium : lod);
+        }
+
+        private static void AppendLobe(List<Vertex> vertices, ForestSpecies species, Vector3 origin,
+            float radius, float height, float yaw, int seed, Color color, ForestLod lod)
+        {
             int sides = lod == ForestLod.Near ? 12 : lod == ForestLod.Medium ? 8 : 6;
             int rings = lod == ForestLod.Near ? 10 : lod == ForestLod.Medium ? 6 : 4;
             float fullness = ForestTreeVariation.Range(seed, 101, -0.16f, 0.18f);

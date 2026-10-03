@@ -4,6 +4,11 @@ using System.Drawing;
 
 namespace ForesTycoon.Tests;
 
+[CollectionDefinition("Primitive geometry capture")]
+public sealed class PrimitiveGeometryCaptureCollection { }
+
+// The production emitter deliberately shares one batch on the render thread.
+[Collection("Primitive geometry capture")]
 public class ForestRenderingTests
 {
     [Fact]

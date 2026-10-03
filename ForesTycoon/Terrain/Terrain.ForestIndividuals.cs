@@ -18,6 +18,7 @@ namespace ForesTycoon
             internal readonly ulong[] TileRevisions;
             internal ulong TerrainVersion, Generation, ForestRevision;
             internal double AnchorYear;
+            internal double NextStageYear;
             internal bool Initialized;
             internal ForestModelStyle ModelStyle;
             internal bool ImportedBirch;
@@ -38,6 +39,7 @@ namespace ForesTycoon
             if (!individualForestChunks.TryGetValue(chunk, out var geometry))
                 individualForestChunks.Add(chunk, geometry = new(chunk.TileIds.Length));
             bool changed = !geometry.Initialized || geometry.TerrainVersion != chunk.PropVersion
+                || forest.ForestYear >= geometry.NextStageYear
                 || geometry.Generation != forest.IndividualTrees.Generation
                 || geometry.ModelStyle != graphics.ForestModels || geometry.ImportedBirch != graphics.ImportedBirch;
             if (changed || geometry.ForestRevision != forest.Revision)
@@ -59,6 +61,7 @@ namespace ForesTycoon
                 geometry.TerrainVersion = chunk.PropVersion;
                 geometry.Generation = forest.IndividualTrees.Generation;
                 ForestChunkRebuilds++;
+                TotalForestChunkRebuilds++;
             }
             float elapsed = (float)Math.Max(0, forest.ForestYear - geometry.AnchorYear);
             geometry.Wood.ForestElapsedYears = geometry.Crowns.ForestElapsedYears = geometry.Floor.ForestElapsedYears = elapsed;
@@ -79,11 +82,8 @@ namespace ForesTycoon
             TreeModel model = TreeModel.For(tree.Species);
             float scale = size.Height * TreeMetresToWorld / model.TotalHeight;
             float width = size.CrownRadius * TreeMetresToWorld / (model.CrownRadius * scale);
-            float crownFraction = tree.Species switch
-            {
-                ForestSpecies.Spruce => 0.86f, ForestSpecies.Oak => 0.70f,
-                ForestSpecies.Birch => 0.65f, _ => 0.72f
-            };
+            float crownFraction = ForestTreeAppearance.CrownFraction(tree.Species,
+                ForestTreeAppearance.Stage(tree.Species, tree.Age(year)));
             float crownHeight = size.Height * crownFraction * TreeMetresToWorld;
             float rise = crownHeight / (model.CrownHeight * scale);
             float boleHeight = size.Height * TreeMetresToWorld - crownHeight * (1 - model.CrownDrop);
@@ -102,6 +102,7 @@ namespace ForesTycoon
             individualWood.Clear(); individualCrowns.Clear(); individualFloor.Clear();
             individualWoodGrowth.Clear(); individualCrownGrowth.Clear(); individualFloorGrowth.Clear();
             geometry.AnchorYear = forest.ForestYear;
+            geometry.NextStageYear = double.PositiveInfinity;
             foreach (int id in chunk.TileIds)
             {
                 if (roads.Has(id) || !forest.IndividualTrees.TryGet(id, out var patch)) continue;
@@ -109,6 +110,9 @@ namespace ForesTycoon
                 for (int i = 0; i < patch.Count; i++)
                 {
                     ForestTree tree = patch.Trees[i];
+                    var stage = ForestTreeAppearance.Stage(tree.Species, tree.Age(geometry.AnchorYear));
+                    geometry.NextStageYear = Math.Min(geometry.NextStageYear,
+                        tree.BirthYear + ForestTreeAppearance.NextStageAge(tree.Species, stage));
                     TreeInstance stem = IndividualStem(tile, tree, geometry.AnchorYear);
                     var size = tree.At(geometry.AnchorYear);
                     float radial = tree.AnnualGrowth.Diameter / size.Diameter;

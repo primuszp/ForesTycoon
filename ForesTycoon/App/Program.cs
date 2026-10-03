@@ -7,6 +7,7 @@ namespace ForesTycoon
         static void Main(string[] args)
         {
             if (Array.Exists(args, argument => argument == "--procedural-tree-preview")) { ProceduralTreePreview.Run(); return; }
+            if (Array.Exists(args, argument => argument == "--tree-life-stage-preview")) { ProceduralTreePreview.Run(true); return; }
             if (Array.Exists(args, argument => argument == "--forest-model-smoke-test")) { ForestModelSmokeTest.Run(); return; }
             int treePreview = Array.FindIndex(args, argument => argument == "--tree-asset-preview");
             if (treePreview >= 0) {

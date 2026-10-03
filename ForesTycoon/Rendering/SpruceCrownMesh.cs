@@ -12,20 +12,39 @@ namespace ForesTycoon
         private static readonly Vector3 Light = Vector3.Normalize(new(0.4f, 0.6f, 1));
         internal readonly record struct Branch(Vector3 Root, Vector3 Tip, float Width, float Thickness, float Bend);
 
-        internal static int BranchCount(int seed) => 4 + (int)(ForestTreeVariation.Unit(seed, 201) * 3);
+        internal static int BranchCount(int seed, TreeLifeStage stage = TreeLifeStage.Mature) =>
+            (stage == TreeLifeStage.Seedling ? 3 : 4) + ForestTreeAppearance.Variant(seed);
+
+        internal static int TierCount(ForestLod lod, TreeLifeStage stage, int seed)
+        {
+            int near = stage == TreeLifeStage.Seedling ? 3 + ForestTreeAppearance.Variant(seed)
+                : stage == TreeLifeStage.Young ? 7 + ForestTreeAppearance.Variant(seed)
+                : stage == TreeLifeStage.Old ? 7 : NearTierCount;
+            return Math.Max(2, near - (lod == ForestLod.Near ? 0 : lod == ForestLod.Medium ? 2 : 4));
+        }
+
+        internal static bool HasNeedles(int seed, int tier, int branch, TreeLifeStage stage) =>
+            stage != TreeLifeStage.Old || tier >= 2 || (branch + seed) % 3 == 0;
 
         // Wood and foliage share the layout so exposed limbs carry their own needle masses.
-        internal static Branch BranchAt(float radius, float height, float yaw, int seed, int tier, int branch, int tiers)
+        internal static Branch BranchAt(float radius, float height, float yaw, int seed, int tier, int branch, int tiers,
+            TreeLifeStage stage = TreeLifeStage.Mature)
         {
+            int variant = ForestTreeAppearance.Variant(seed);
             float level = tier / (float)tiers;
-            float angle = yaw + tier * ForestTreeVariation.Range(seed, 202, 2.1f, 2.7f) + MathF.Tau * branch / BranchCount(seed)
+            float angle = yaw + tier * ForestTreeVariation.Range(seed, 202, 2.1f, 2.7f) + MathF.Tau * branch / BranchCount(seed, stage)
                 + (Random(seed, tier * 37 + branch) - 0.5f) * 0.30f;
-            float reach = radius * MathF.Pow(1 - level, ForestTreeVariation.Range(seed, 203, 0.75f, 1.20f))
+            float taper = variant == 0 ? 1.25f : variant == 1 ? 0.75f : 0.95f;
+            if (stage == TreeLifeStage.Seedling) taper = 0.65f;
+            if (stage == TreeLifeStage.Old) taper *= 0.70f;
+            float reach = radius * (variant == 0 ? 0.72f : 1) * MathF.Pow(1 - level, taper)
                 * (0.82f + 0.22f * Random(seed, tier * 37 + branch + 11));
-            float crownBase = ForestTreeVariation.Range(seed, 204, 0.08f, 0.17f);
+            float crownBase = stage == TreeLifeStage.Young ? 0.05f : stage == TreeLifeStage.Seedling ? 0.12f
+                : ForestTreeVariation.Range(seed, 204, 0.08f, 0.17f);
             float z = height * (crownBase + level * (0.90f - crownBase))
                 + height / tiers * (Random(seed, tier * 13 + 19) - 0.5f) * 0.16f;
-            float drop = Math.Min(z * 0.7f, reach * (ForestTreeVariation.Range(seed, 205, 0.07f, 0.22f)
+            float drop = Math.Min(z * 0.7f, reach * ((stage == TreeLifeStage.Seedling ? 0.04f
+                : stage == TreeLifeStage.Old ? 0.25f : ForestTreeVariation.Range(seed, 205, 0.07f, 0.22f))
                 + Random(seed, tier * 37 + branch + 23) * 0.07f));
             var root = new Vector3(0, 0, z);
             var tip = new Vector3(MathF.Cos(angle) * reach, MathF.Sin(angle) * reach, z - drop);
@@ -34,21 +53,22 @@ namespace ForesTycoon
         }
 
         internal static void Append(List<Vertex> output, Vector3 origin, float radius, float height,
-            float yaw, int seed, Color color, ForestLod lod)
+            float yaw, int seed, Color color, ForestLod lod, TreeLifeStage stage = TreeLifeStage.Mature)
         {
-            int tiers = lod == ForestLod.Near ? NearTierCount : lod == ForestLod.Medium ? 7 : 5;
-            int sides = lod == ForestLod.Near ? 6 : 4;
+            int tiers = TierCount(lod, stage, seed);
+            int sides = lod == ForestLod.Near ? 6 : lod == ForestLod.Medium ? 4 : 3;
             const int rings = 3;
-            int branches = BranchCount(seed);
+            int branches = BranchCount(seed, stage);
             for (int tier = 0; tier < tiers; tier++)
                 for (int branch = 0; branch < branches; branch++)
                 {
-                    Branch layout = BranchAt(radius, height, yaw, seed, tier, branch, tiers);
+                    if (!HasNeedles(seed, tier, branch, stage)) continue;
+                    Branch layout = BranchAt(radius, height, yaw, seed, tier, branch, tiers, stage);
                     Vector3 radial = Vector3.Normalize(new Vector3(layout.Tip.X, layout.Tip.Y, 0));
                     Vector3 tangent = new(-radial.Y, radial.X, 0);
                     // Alternate fans overlap near the trunk, with open sky between their tips.
                     AppendFan(layout, tangent, radial, tier, branch);
-                    if (lod == ForestLod.Far) continue;
+                    if (lod == ForestLod.Far || stage == TreeLifeStage.Seedling) continue;
                     float reach = new Vector2(layout.Tip.X, layout.Tip.Y).Length;
                     for (int shoot = 0; shoot < 2; shoot++)
                     {
@@ -63,7 +83,8 @@ namespace ForesTycoon
                     }
                 }
             // Small terminal whorls continue the branching silhouette right up to the leader.
-            for (int tier = 0; tier < 3; tier++)
+            int terminalTiers = stage == TreeLifeStage.Seedling ? 0 : stage == TreeLifeStage.Old ? 1 : 3;
+            for (int tier = 0; tier < terminalTiers; tier++)
                 for (int branch = 0; branch < branches; branch++)
                 {
                     float angle = yaw + tier * 2.399963f + branch * MathF.Tau / branches;

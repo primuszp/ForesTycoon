@@ -59,6 +59,23 @@ namespace ForesTycoon
                 growthPatch.Revision++; forest.NotifyIndividualVisualEdit();
                 forest.Update(30 * 25 - 1.5);
                 Capture("02-grown");
+                // Cross an age boundary between monthly ticks without changing dimensions.
+                forest.IndividualTrees.TryGet(105, out var phasePatch);
+                var savedPhaseTree = phasePatch.Trees[0];
+                phasePatch.Trees[0] = savedPhaseTree.Settle(forest.ForestYear) with {
+                    BirthYear = forest.ForestYear - 1.99, AnnualGrowth = default };
+                phasePatch.Revision++; forest.NotifyIndividualVisualEdit();
+                Draw(); byte[] seedlingPixels = Pixels();
+                var fixedSize = phasePatch.Trees[0].At(forest.ForestYear);
+                long phaseBuilds = terrain.TotalForestChunkRebuilds;
+                forest.Update(0.6);
+                Draw();
+                Require(terrain.TotalForestChunkRebuilds > phaseBuilds, "Life-stage boundary did not replace cached geometry.");
+                Require(fixedSize == phasePatch.Trees[0].At(forest.ForestYear), "Stage fixture changed physical size.");
+                Require(!seedlingPixels.AsSpan().SequenceEqual(Pixels()), "Life-stage model changed only its scale.");
+                Draw(); Require(terrain.ForestChunkRebuilds == 0, "Life-stage cache kept rebuilding.");
+                phasePatch.Trees[0] = savedPhaseTree;
+                phasePatch.Revision++; forest.NotifyIndividualVisualEdit();
                 forest.IndividualTrees.TryGet(102, out var patch);
                 Require(patch.Count > 0 && patch.Trees[0].At(forest.ForestYear).Diameter > 0.1f, "Individual did not grow.");
                 forest.ExtractTimber(102, forest.AvailableTimber(102) * 0.15f);

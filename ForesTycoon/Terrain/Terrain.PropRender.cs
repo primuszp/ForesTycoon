@@ -142,8 +142,11 @@ namespace ForesTycoon
         private static void DrawTreeWood(in TreeInstance tree)
         {
             TreeModel model = TreeModel.For(tree.Stand.Species);
+            TreeLifeStage stage = ForestTreeAppearance.Stage(tree.Stand.Species, tree.Stand.AgeYears);
+            Color bark = tree.Stand.Species == ForestSpecies.Birch && stage == TreeLifeStage.Seedling
+                ? Color.FromArgb(115, 77, 48) : model.TrunkColor;
             Color wood = Color.FromArgb(SurfaceSpeciesCode(tree.Stand.Species),
-                Weather(Tinted(model.TrunkColor, tree.Tint * 0.5f), tree.Stand.Health));
+                Weather(Tinted(bark, tree.Tint * 0.5f), tree.Stand.Health));
             int sides = tree.Sides >= 8 ? 6 : 4;
 
             float top = tree.TrunkTop(model);
@@ -164,17 +167,25 @@ namespace ForesTycoon
                   float crownRadius = model.CrownRadius * tree.Scale * tree.CrownWidth;
                   DrawLimb(boleTop, crownOrigin + Vector3.UnitZ * crownHeight,
                       topRadius, topRadius * 0.08f, wood, sides, tree.Yaw);
-                  for (int tier = 0; tier < SpruceCrownMesh.NearTierCount; tier++)
-                    for (int branch = 0; branch < SpruceCrownMesh.BranchCount(tree.Seed); branch++)
+                  int tiers = SpruceCrownMesh.TierCount(ForestLod.Near, stage, tree.Seed);
+                  for (int tier = 0; tier < tiers; tier++)
+                    for (int branch = 0; branch < SpruceCrownMesh.BranchCount(tree.Seed, stage); branch++)
                       {
-                          var limb = SpruceCrownMesh.BranchAt(crownRadius, crownHeight, tree.Yaw, tree.Seed, tier, branch, SpruceCrownMesh.NearTierCount);
+                          var limb = SpruceCrownMesh.BranchAt(crownRadius, crownHeight, tree.Yaw, tree.Seed, tier, branch, tiers, stage);
                           DrawLimb(crownOrigin + limb.Root, crownOrigin + limb.Tip,
                               topRadius * (0.35f - tier * 0.026f), topRadius * 0.025f, wood, 4, tree.Yaw);
                       }
                   return;
               }
 
-            if (model.BranchCount == 0 || !tree.IsFullDetail) return;
+            if (model.BranchCount == 0) return;
+            if (stage == TreeLifeStage.Seedling)
+            {
+                float crownHeight = model.CrownHeight * tree.Scale * tree.CrownRise;
+                // A continuous main shoot carries the separated juvenile leaves.
+                Vector3 leader = new(tree.X, tree.Y, top + crownHeight * (0.98f - model.CrownDrop));
+                DrawLimb(boleTop, leader, topRadius, topRadius * 0.08f, wood, 4, tree.Yaw);
+            }
             DrawBranches(tree, model, wood, top, topRadius);
         }
 
@@ -196,27 +207,29 @@ namespace ForesTycoon
             float crownHeight = model.CrownHeight * tree.Scale * tree.CrownRise;
             float crownBase = boleTopZ - crownHeight * model.CrownDrop;
             float crownRadius = model.CrownRadius * tree.Scale * tree.CrownWidth;
-            // Fork below the crown so the limbs are visible before they disappear into foliage.
-            float forkZ = crownBase - (crownBase - tree.BaseZ) * 0.55f;
-
-            for (int branch = 0; branch < model.BranchCount; branch++)
+            TreeLifeStage stage = ForestTreeAppearance.Stage(tree.Stand.Species, tree.Stand.AgeYears);
+            Span<ForestTreeAppearance.CrownLobe> lobes = stackalloc ForestTreeAppearance.CrownLobe[8];
+            int count = ForestTreeAppearance.BroadleafLobes(lobes, tree.Stand.Species, stage,
+                tree.Seed, crownRadius, crownHeight, tree.Yaw);
+            Vector3 origin = new(tree.X, tree.Y, crownBase);
+            for (int branch = 0; branch < count; branch++)
             {
-                int seed = tree.Seed * 31 + branch;
-                float angle = tree.Yaw + MathF.Tau * branch / model.BranchCount
-                    + (UnitFloat(TreeHash(seed, 11u)) - 0.5f) * 0.7f;
-                // Tips stop just inside the canopy edge, so limbs show through the crown
-                // without leaving bare sticks poking into open air.
-                float reach = crownRadius * (0.66f + UnitFloat(TreeHash(seed, 12u)) * 0.20f);
-                float rise = crownHeight * (0.14f + UnitFloat(TreeHash(seed, 13u)) * 0.20f);
-
-                Vector3 from = new Vector3(tree.X, tree.Y, forkZ);
-                Vector3 to = new Vector3(
-                    tree.X + MathF.Cos(angle) * reach,
-                    tree.Y + MathF.Sin(angle) * reach,
-                    crownBase + rise);
-
-                DrawLimb(from, to, boleTopRadius * 0.78f, boleTopRadius * 0.30f, wood, 4, angle);
+                var lobe = lobes[branch];
+                Vector3 to = origin + lobe.Origin + Vector3.UnitZ * lobe.Height * 0.35f;
+                float forkZ = stage == TreeLifeStage.Seedling ? crownBase + lobe.Origin.Z * 0.75f
+                    : crownBase - (crownBase - tree.BaseZ) * 0.35f + lobe.Origin.Z * 0.12f;
+                Vector3 from = new(tree.X, tree.Y, forkZ);
+                DrawLimb(from, to, boleTopRadius * (stage == TreeLifeStage.Seedling ? 0.35f : 0.65f),
+                    boleTopRadius * 0.16f, wood, 4, tree.Yaw + branch);
             }
+            if (stage == TreeLifeStage.Old)
+                for (int branch = 0; branch < 2; branch++)
+                {
+                    float angle = tree.Yaw + branch * 2.5f;
+                    Vector3 from = origin - Vector3.UnitZ * crownHeight * 0.08f;
+                    Vector3 to = origin + new Vector3(MathF.Cos(angle), MathF.Sin(angle), -0.12f) * crownRadius * 0.78f;
+                    DrawLimb(from, to, boleTopRadius * 0.28f, boleTopRadius * 0.025f, wood, 4, angle);
+                }
         }
 
         /// <summary>Tapered prism between two points, used for both the bole and its limbs.</summary>
