@@ -15,7 +15,7 @@ namespace ForesTycoon
         {
             if(fishRevision!=terrain.WeatherSurfaceRevision){terrain.CollectFishHabitats(habitats);fishRevision=terrain.WeatherSurfaceRevision;}
             if(habitats.Count==0)return;
-            fish??=new ImportedSceneAsset("Assets/Wildlife/fish.glb",0.8f,true);
+            fish??=new ImportedSceneAsset("Assets/Wildlife/fish.glb",DioramaScale.FishLength,true);
             int index=0;
             foreach(var habitat in habitats){
                 double phase=context.SimulationTimeSeconds*0.22+habitat.Seed%628*0.01;
@@ -26,10 +26,11 @@ namespace ForesTycoon
                 fish.Draw(Matrix4.CreateRotationZ((float)phase+MathF.PI/2)*Matrix4.CreateTranslation(position),settings);index++;
             }
         }
-        internal void DrawMills(ForestryLogistics logistics,GraphicsSettings settings)
+        internal void DrawMills(Terrain terrain,ForestryLogistics logistics,GraphicsSettings settings)
         {
             if(logistics==null||logistics.Mills.Count==0)return;
-            mill??=new ImportedSceneAsset("Assets/Buildings/sawmill.glb",8.5f);
+            mill??=new ImportedSceneAsset("Assets/Buildings/sawmill.glb",DioramaScale.SawmillWidth(terrain.TileWidth,terrain.TileHeight),
+                footprint:DioramaScale.SawmillFootprint(terrain.TileWidth,terrain.TileHeight));
             foreach(var building in logistics.Mills){
                 mill.Draw(Matrix4.CreateTranslation(building.Position),settings);
             }

@@ -7,10 +7,11 @@ namespace ForesTycoon
     // Local food depletion, hunger and shelter preference drive movement; no activity timeline.
     internal sealed class WildlifeSystem
     {
-        internal const float WalkingSpeed = 1.5f;
-        internal const float TurningRadius = 3.2f;
-        // WalkSlow advances 156.8 cm in 1.333333 s; rendered elk scale is 1.3.
-        internal const float WalkingClipSpeed = 1.568f * 1.3f / 1.333333f;
+        // Gait and turning follow the drawn body size, so the stride cadence stays natural.
+        internal const float WalkingSpeed = 1.5f * DioramaScale.Elk / 1.3f;
+        internal const float TurningRadius = 3.2f * DioramaScale.Elk / 1.3f;
+        // WalkSlow advances 156.8 cm in 1.333333 s at the rendered elk scale.
+        internal const float WalkingClipSpeed = 1.568f * DioramaScale.Elk / 1.333333f;
         internal sealed class Animal
         {
             internal int Id, TileId, TargetTile;

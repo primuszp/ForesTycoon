@@ -33,5 +33,16 @@ namespace ForesTycoon
         internal WeatherPreset Preset = WeatherPreset.Sunny;
         internal float SunAzimuth = 135;
         internal float SunElevation = 48;
+        // Diorama post-processing: a miniature-photography look over the finished frame.
+        internal bool Diorama = true;
+        internal bool TiltShift = true;
+        internal float TiltShiftStrength = 0.55f;
+        internal bool AmbientOcclusion = true;
+        internal float AmbientOcclusionStrength = 0.8f;
+        internal bool ColorGrading = true;
+        internal bool Vignette = true;
+        internal bool StudioBackdrop = true;
+        internal int TiltShiftTaps => Quality == GraphicsQuality.Low ? 8 : Quality == GraphicsQuality.Medium ? 12 : 20;
+        internal int OcclusionPairs => Quality == GraphicsQuality.Low ? 0 : Quality == GraphicsQuality.Medium ? 4 : 8;
     }
 }

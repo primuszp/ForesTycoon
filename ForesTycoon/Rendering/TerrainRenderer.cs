@@ -75,7 +75,7 @@ namespace ForesTycoon
                     terrain.UpdateVisibleTiles(shadowContext);
                     terrain.DrawTerrainBase();
                     terrain.DrawTrees(forest, shadowContext);
-                    content.DrawMills(logistics,graphics);
+                    content.DrawMills(terrain,logistics,graphics);
                     wildlife.Draw(terrain, forest, graphics, context);
                     VehicleRenderer.Draw(vehicles, terrain, context.InterpolationAlpha);
                 });
@@ -109,7 +109,7 @@ namespace ForesTycoon
             }));
             pipeline.Add(RenderLayer.DecalEnd, "decal-state-end", _ => EndDecals());
             pipeline.Add(RenderLayer.Props, "props", context => terrain.DrawTrees(forest, context, !surfaces.ShadowsReady));
-            pipeline.Add(RenderLayer.Buildings,"buildings", _=>content.DrawMills(logistics,graphics));
+            pipeline.Add(RenderLayer.Buildings,"buildings", _=>content.DrawMills(terrain,logistics,graphics));
             pipeline.Add(RenderLayer.Wildlife, "wildlife", context => wildlife.Draw(terrain, forest, graphics, context));
             pipeline.Add(RenderLayer.Vehicles, "vehicles", context =>
                 DrawSurface(SurfaceKind.Vehicle, () => VehicleRenderer.Draw(vehicles, terrain, context.InterpolationAlpha)));

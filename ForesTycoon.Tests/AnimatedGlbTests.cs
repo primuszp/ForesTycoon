@@ -12,7 +12,7 @@ public class AnimatedGlbTests
         var pose=model.CreatePose();pose.Evaluate("WalkSlow",0);
         Vector3 local=channel.Sample(clip.Duration).Xyz-channel.Sample(0).Xyz;
         Vector3 world=Vector3.TransformVector(local,pose.World[model.Nodes[root].Parent]);
-        float speed=world.Length*1.3f/clip.Duration;
+        float speed=world.Length*DioramaScale.Elk/clip.Duration;
         Assert.InRange(MathF.Abs(speed-WildlifeSystem.WalkingClipSpeed),0,0.001f);
     }
     [Fact]

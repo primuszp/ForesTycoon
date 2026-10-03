@@ -34,7 +34,9 @@ namespace ForesTycoon
             }
             bool smokeTest = Array.Exists(args, argument =>
                 string.Equals(argument, "--smoke-test", StringComparison.OrdinalIgnoreCase));
-            using Viewport game = new Viewport(smokeTest ? 120UL : null);
+            int captureFrame = Array.FindIndex(args, argument => argument == "--capture-frame");
+            if (captureFrame >= 0 && captureFrame + 1 >= args.Length) throw new ArgumentException("--capture-frame requires an output directory.");
+            using Viewport game = new Viewport(smokeTest ? 120UL : null, captureFrame >= 0 ? args[captureFrame + 1] : null);
             game.Run();
         }
     }

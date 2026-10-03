@@ -92,6 +92,9 @@ The smoke test renders 120 frames and exits automatically.
 - Left click with the harvesting tool: cut a stand and add its biomass to the timber stockpile
 - Cmd/Ctrl+S: quicksave
 - Cmd/Ctrl+L: quickload
+- 1–8: tools in toolbar order (inspect, raise, lower, road, remove road, plant, harvest, sawmill); Esc: back to inspect
+- Space: pause · T: launch log truck · Home: reset camera
+- V / F / E / G: vehicles / forestry / environment / graphics window · F1: help · F12: developer tools
 
 Quicksaves are stored under the operating system's local application-data directory in `ForesTycoon/quicksave.json`.
 
@@ -242,3 +245,25 @@ A megadott `sawmill_paropank.glb` és `animated_low_poly_fish.glb` modellek ker�
 Az új mentések `logisticsVersion=1` jelölése a kijelölési, építési és teherautó-indítási parancsokat visszajátssza. Régi mentések megtartják az azonnali kitermelés korábbi viselkedését. Az új működéshez új világot vagy újragenerálást használj.
 
 Ellenőrzés: `dotnet run --project ForesTycoon -- --logistics-smoke-test`. A próba a fokozatos 60 m³-es kitermelést, útkapcsolatot, lerakott malmot, készletmérleget, mentés/visszajátszást és a tengeri/tavi halpopulációt ellenőrzi; képek az `artifacts/forestry-logistics` mappában.
+
+## Menürendszer és diorama-látvány
+
+A felület a Transport Tycoon mintáját követi:
+
+- **Felső ikonsor**, feladat szerinti csoportokban: játék menü (új térkép, térképméret, mentés, betöltés, kilépés) · idő (szünet, 1×/2×/4×) · terep · utak · erdészet · ipar és szállítás · információs ablakok · nézet, grafika, fejlesztői eszközök és súgó. Minden gomb tooltipje mutatja a nevet, a gyorsbillentyűt és egy rövid leírást.
+- **Eszköz-alsáv** az ikonsor alatt, csak ha az eszköznek vannak beállításai (fafajválasztó ikonokkal, ecsetméret, építési tipp).
+- **Állapotsor** alul: aktív eszköz, erdőév és évszak, időjárás, sebesség, leszállított faanyag, járművek.
+- **Ablakok**: Járművek, Erdészet, Környezet, Grafika, Súgó. Vizsgálat eszközzel az erdőcsempe adatai az egér mellett jelennek meg; a mentés és az erdészeti műveletek eredménye rövid értesítésként jelenik meg.
+- **Fejlesztői eszközök** (F12) egy ablakban: teljesítménymérés, időjárás-teszt és környezeti esemény, új seed és 512×512-es stresszteszt, kamera- és megjelenítés-hibakeresés.
+
+Az ikonok vektorosan, ImGui rajzlistába készülnek ([UI/GameIcons.cs](ForesTycoon/UI/GameIcons.cs)), így nincs szükség ikonfontra vagy képfájlra, és bármilyen DPI-n élesek.
+
+**Arányok** ([Rendering/DioramaScale.cs](ForesTycoon/Rendering/DioramaScale.cs)): a világ nem méretarányos, de a méretsorrend helyes: szarvas < teherautó < fűrészmalom. A teherautó a sáv 62%-át foglalja (≈5,8 egység hosszú), a malom épülete a 2×2 csempés telek 80%-át, az udvari rönkrakások a telek szélén belül maradnak, a szarvas a teherautónál alacsonyabb. A `DioramaScaleTests` ellenőrzi ezt a sorrendet.
+
+**Diorama utófeldolgozás** (Grafika ablak): a jelenet többmintás offscreen célba készül, majd tilt-shift mélységélesség (éles középső sáv, távolról erősebb), mélységpufferből számolt kontakt-árnyékolás a fák, épületek és partok tövében, makrófotó-színkorrekció, vignetta és stúdió háttér kerül rá. Minden hatás külön kapcsolható; alacsony minőségen az AO kikapcsol. A szimulációt nem befolyásolja.
+
+HUD és diorama ellenőrző képek az `artifacts/hud` mappába:
+
+```sh
+dotnet run --project ForesTycoon/ForesTycoon.csproj -- --capture-frame artifacts/hud
+```

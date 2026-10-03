@@ -18,7 +18,7 @@ namespace ForesTycoon
         {
             if (vehicles.Count == 0) return;
             importedModel ??= GlbTruckModel.Load(System.IO.Path.Combine(AppContext.BaseDirectory,"Assets","Vehicles","log-truck.glb"));
-            float scale=terrain.RoadLaneWidth*0.8f/importedModel.Width;
+            float scale=terrain.RoadLaneWidth*DioramaScale.TruckLaneFill/importedModel.Width;
 
             {
                 foreach (Vehicle vehicle in vehicles.Vehicles)

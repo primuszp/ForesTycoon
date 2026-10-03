@@ -49,7 +49,7 @@ namespace ForesTycoon
                     terrain.TryGetSurfaceZ(position.X-left.X*0.45f,position.Y-left.Y*0.45f,out float other))left.Z=(side-other)/0.9f;
                 forward.Normalize();Vector3 up=Vector3.Cross(forward,left).Normalized();left=Vector3.Cross(up,forward).Normalized();
                 Matrix4 placement=new(new Vector4(forward,0),new Vector4(left,0),new Vector4(up,0),new Vector4(position,1));
-                Matrix4 transform=Axis*Matrix4.CreateScale(1.3f)*placement;
+                Matrix4 transform=Axis*Matrix4.CreateScale(DioramaScale.Elk)*placement;
                 renderer.Draw(pose,transform,settings,outlineBudget>0?0.7f/context.PixelsPerWorldUnit:0);
                 if(outlineBudget>0)outlineBudget--;
             }

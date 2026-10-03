@@ -18,7 +18,7 @@ namespace ForesTycoon
     /// Jobb egér: pan (eltolás).
     /// Görgő: zoom.
     /// </summary>
-    sealed class Viewport : GameWindow
+    sealed partial class Viewport : GameWindow
     {
         // ── Vetítési paraméterek ─────────────────────────────────────────────
         private const double Z_NEAR = -1000.0;
@@ -71,13 +71,13 @@ namespace ForesTycoon
         private bool         isLoaded     = false;
         private bool glResourcesDisposed;
         private ImGuiController imgui;
+        private readonly DioramaPostProcess postProcess = new DioramaPostProcess();
         private readonly FrameClock frameClock = new FrameClock();
         private readonly SimulationFrameRunner simulation = new SimulationFrameRunner(30.0);
         private FixedStepClock simulationClock => simulation.Clock;
         private readonly FramePerformanceMonitor performance = new FramePerformanceMonitor();
         private ulong frameIndex;
         private int currentMapTiles = 64;
-        private string persistenceStatus = "";
         private const int MaximumVisibleTiles = 64;
         private bool frameInProgress;
         private readonly ulong? smokeTestFrameLimit;
@@ -211,7 +211,7 @@ namespace ForesTycoon
         private static readonly Color BG_COLOR = Color.FromArgb(44, 53, 64);
 
         // ────────────────────────────────────────────────────────────────────
-        public Viewport(ulong? smokeTestFrameLimit = null) : base(
+        public Viewport(ulong? smokeTestFrameLimit = null, string captureDirectory = null) : base(
             new GameWindowSettings
             {
                 UpdateFrequency = 0
@@ -231,6 +231,7 @@ namespace ForesTycoon
             })
         {
             this.smokeTestFrameLimit = smokeTestFrameLimit;
+            this.captureDirectory = captureDirectory;
         }
 
         protected override void OnLoad()
@@ -251,6 +252,7 @@ namespace ForesTycoon
                 world = new GameWorld(TerrainSettings.Default);
                 interaction = new WorldInteractionController(world);
                 imgui = new ImGuiController();
+                HudTheme.Apply();
                 isLoaded = true;
                 frameClock.Reset();
                 simulationClock.Reset();
@@ -284,8 +286,11 @@ namespace ForesTycoon
         // ── Rajzolás ─────────────────────────────────────────────────────────
         private void Render()
         {
+            bool diorama = postProcess.Begin(world.Graphics, FramebufferWidth, FramebufferHeight);
             GL.ClearColor(BG_COLOR);
             GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
+            if (diorama)
+                postProcess.DrawBackdrop(world.Graphics, new Vector3(BG_COLOR.R / 255f, BG_COLOR.G / 255f, BG_COLOR.B / 255f));
 
             modelView = camera.CreateViewMatrix();
             RenderDevice.SetCamera(modelView * projection);
@@ -318,11 +323,15 @@ namespace ForesTycoon
                 zoom * FramebufferWidth / Math.Max(1, Width));
 
             world.Draw(renderContext);
+            if (diorama)
+                postProcess.End(world.Graphics, renderContext.PixelsPerWorldUnit, DpiScale, (float)frameClock.TotalTimeSeconds);
 
             DrawImGui();
 
             if (smokeTestFrameLimit.HasValue && frameIndex == 10)
                 ValidateSmokeFramebuffer();
+            if (captureDirectory != null)
+                RunCaptureScript();
 
             SwapBuffers();
         }
@@ -409,350 +418,12 @@ namespace ForesTycoon
             camera.ClampMinimumZoom(minimumZoom);
         }
 
-        private void DrawImGui()
-        {
-            if (imgui == null) return;
-
-            float scale = DpiScale;
-            imgui.Update(Width, Height, FramebufferWidth, FramebufferHeight, new NVec2(scale, scale), frameClock.DeltaTimeSeconds);
-
-            DrawMainMenu();
-            DrawToolbar();
-            DrawStatusPanel();
-            DrawEnvironmentPanel();
-
-            imgui.Render();
-        }
-
-        // ── Felső menüsor (Transport Tycoon stílus) ──────────────────────────
-        private void DrawMainMenu()
-        {
-            if (!ImGui.BeginMainMenuBar()) return;
-
-            if (ImGui.BeginMenu("Fájl"))
-            {
-                if (ImGui.MenuItem("Gyorsmentés", "Ctrl+S")) QuickSave();
-                if (ImGui.MenuItem("Gyorsbetöltés", "Ctrl+L")) QuickLoad();
-                ImGui.Separator();
-                if (ImGui.MenuItem("Új terep (seed)")) RegenerateTerrain();
-                if (ImGui.BeginMenu("Új nagy erdős térkép"))
-                {
-                    if(ImGui.MenuItem("Fenyves és lombos erdő")) RegenerateTerrain(forestPattern: ForestPattern.LargeMixed);
-                    if(ImGui.MenuItem("Nagy fenyves")) RegenerateTerrain(forestPattern: ForestPattern.LargeSpruce);
-                    if(ImGui.MenuItem("Nagy lombos erdő")) RegenerateTerrain(forestPattern: ForestPattern.LargeBroadleaf);
-                    ImGui.EndMenu();
-                }
-                if (ImGui.BeginMenu("Térképméret"))
-                {
-                    MapSizeMenuItem(64);
-                    MapSizeMenuItem(128);
-                    MapSizeMenuItem(256);
-                    MapSizeMenuItem(512, experimental: true);
-                    ImGui.EndMenu();
-                }
-                ImGui.Separator();
-                if (ImGui.MenuItem("Kilépés"))
-                    Close();
-                ImGui.EndMenu();
-            }
-            if (ImGui.BeginMenu("Nézet"))
-            {
-                if (ImGui.MenuItem("Kamera alaphelyzet")) ResetCamera();
-                ImGui.Separator();
-                ImGui.Checkbox("Új grafikai megjelenítés", ref world.Graphics.Enhanced);
-                ImGui.Checkbox("Erdei szarvasok", ref world.Graphics.Wildlife);
-                if (ImGui.MenuItem("Szarvas megkeresése", "", false, world.WildlifeCount > 0) && world.TryGetWildlifePosition(out var deer))
-                {
-                    rotationPivotActive = false;
-                    targetRotY = roty;
-                    zoom = targetZoom = Math.Max(zoom, 35);
-                    Vector3 view = WorldToView(deer + new Vector3(0,0,1), rotx, roty);
-                    screenX = view.X - Width / (2.0 * zoom);
-                    screenY = view.Y - Height / (2.0 * zoom);
-                    pickMatricesReady = false;
-                    RequestFrame();
-                }
-                if (ImGui.MenuItem("Eredeti színalapú mód", "", !world.Graphics.Enhanced)) world.Graphics.Enhanced = false;
-                if (world.Graphics.Enhanced)
-                {
-                    ImGui.Checkbox("Textúrázás", ref world.Graphics.Textures);
-                    ImGui.Checkbox("Járműkontúrok", ref world.Graphics.VehicleOutlines);
-                    ImGui.Checkbox("Szarvaskontúrok", ref world.Graphics.WildlifeOutlines);
-                    ImGui.Checkbox("Napfény", ref world.Graphics.Lighting);
-                    ImGui.Checkbox("Vetett árnyékok", ref world.Graphics.Shadows);
-                    int quality = (int)world.Graphics.Quality;
-                    if (ImGui.Combo("Effektek minősége", ref quality, "Alacsony\0Közepes\0Magas\0"))
-                        world.Graphics.Quality = (GraphicsQuality)quality;
-                    ImGui.Checkbox("Csemperács", ref world.Graphics.ShowGrid);
-                    ImGui.SliderFloat("Nap iránya", ref world.Graphics.SunAzimuth, 0, 360, "%.0f°");
-                    ImGui.SliderFloat("Nap magassága", ref world.Graphics.SunElevation, 15, 80, "%.0f°");
-                    ImGui.Separator();
-                    ImGui.Checkbox("Időjárás", ref world.Graphics.Weather);
-                    if (world.Graphics.Weather)
-                    {
-                        ImGui.Checkbox("Szimulált időjárás látványa", ref world.Graphics.AutomaticWeather);
-                        ImGui.TextDisabled("Az alábbi képválasztás látványteszt.");
-                        int preset = world.Graphics.Preset == WeatherPreset.Storm ? 3 : Math.Min(2, (int)world.Graphics.Preset);
-                        if (ImGui.Combo("Időjárási kép", ref preset, "Napsütés\0Borult\0Eső\0Vihar\0"))
-                        { world.Graphics.Preset = preset == 3 ? WeatherPreset.Storm : (WeatherPreset)preset; world.Graphics.AutomaticWeather = false; }
-                        ImGui.Checkbox("Felhőzet", ref world.Graphics.Clouds);
-                        ImGui.Checkbox("Villámlás", ref world.Graphics.Lightning);
-                        if (ImGui.Button("Villám most"))
-                        { world.Graphics.Lightning = true; world.Graphics.LightningRequest++; }
-                        ImGui.Checkbox("Talajköd", ref world.Graphics.Fog);
-                        if (world.Graphics.Fog) ImGui.SliderFloat("Köd sűrűsége", ref world.Graphics.FogDensity, 0, 1, "%.2f");
-                        ImGui.TextDisabled("A talajköd napsütésben is bekapcsolható.");
-                        ImGui.TextDisabled("Eső után a talaj fokozatosan szárad.");
-                    }
-                }
-                ImGui.EndMenu();
-            }
-            if (ImGui.BeginMenu("Játék"))
-            {
-                if (ImGui.MenuItem("Szünet", "Space", simulationClock.IsPaused))
-                    simulationClock.IsPaused = !simulationClock.IsPaused;
-                ImGui.Separator();
-                SimulationSpeedMenuItem("1x", 1.0);
-                SimulationSpeedMenuItem("2x", 2.0);
-                SimulationSpeedMenuItem("4x", 4.0);
-                ImGui.Separator();
-                ImGui.Checkbox("Környezeti panel",ref showEnvironment);
-                if (ImGui.MenuItem("Rönkszállító indítása")) world.QueueSpawnVehicle();
-                ImGui.EndMenu();
-            }
-            if (ImGui.BeginMenu("Eszközök"))
-            {
-                ToolMenuItem("Vizsgálat", TerrainEditTool.Inspect);
-                ToolMenuItem("Emelés", TerrainEditTool.Raise);
-                ToolMenuItem("Süllyesztés", TerrainEditTool.Lower);
-                ToolMenuItem("Út építés", TerrainEditTool.Road);
-                ToolMenuItem("Út bontás", TerrainEditTool.RoadRemove);
-                ImGui.Separator();
-                ToolMenuItem("Erdő ültetés", TerrainEditTool.PlantForest);
-                ToolMenuItem("Kitermelési terület", TerrainEditTool.HarvestForest);
-                ToolMenuItem("Fűrészmalom elhelyezése",TerrainEditTool.PlaceSawmill);
-                if (ImGui.BeginMenu("Ültetett fafaj"))
-                {
-                    SpeciesMenuItem("Lucfenyő", ForestSpecies.Spruce);
-                    SpeciesMenuItem("Nyír", ForestSpecies.Birch);
-                    SpeciesMenuItem("Tölgy", ForestSpecies.Oak);
-                    SpeciesMenuItem("Bükk", ForestSpecies.Beech);
-                    ImGui.EndMenu();
-                }
-                ImGui.EndMenu();
-            }
-
-            ImGui.EndMainMenuBar();
-        }
-
-        // ── Eszköztár (terepalakítás) ────────────────────────────────────────
-        private void DrawToolbar()
-        {
-            ImGui.SetNextWindowPos(new NVec2(8, 30), ImGuiCond.Always);
-            ImGui.Begin("##toolbar",
-                ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoResize |
-                ImGuiWindowFlags.NoMove | ImGuiWindowFlags.AlwaysAutoResize);
-
-            ToolButton("Vizsg.", TerrainEditTool.Inspect); ImGui.SameLine();
-            ToolButton("Emel", TerrainEditTool.Raise); ImGui.SameLine();
-            ToolButton("Süly.", TerrainEditTool.Lower); ImGui.SameLine();
-            ToolButton("Út", TerrainEditTool.Road); ImGui.SameLine();
-            ToolButton("Bontás", TerrainEditTool.RoadRemove); ImGui.SameLine();
-            ToolButton("Ültet", TerrainEditTool.PlantForest); ImGui.SameLine();
-            ToolButton("Kitermelés", TerrainEditTool.HarvestForest); ImGui.SameLine();
-            ToolButton("Fűrészmalom",TerrainEditTool.PlaceSawmill);
-            if(ImGui.Button("Rönkszállító indítása"))world.QueueSpawnVehicle();
-            if(world.Logistics!=null) {
-                ImGui.TextWrapped(world.Logistics.Status);
-                ImGui.Text($"Kitermelési területek: {world.Logistics.Sites.Count} · hátralévő {world.Logistics.Remaining:F1} m³");
-                foreach(var mill in world.Logistics.Mills)ImGui.Text($"Malom #{mill.TileId}: átvett {mill.Received:F1} m³ · feldolgozott {mill.Processed:F1} m³");
-            }
-            if(interaction.ActiveTool==TerrainEditTool.PlaceSawmill)ImGui.TextWrapped("Kattints 2×2 sík, üres, száraz csempére. A malom mellé út szükséges.");
-            if(interaction.ActiveTool==TerrainEditTool.HarvestForest)ImGui.TextWrapped("Húzással jelöld ki az erdőterületet. A fák rakodás közben, fokozatosan fogynak.");
-
-            if (interaction.ActiveTool == TerrainEditTool.PlantForest)
-            {
-                SpeciesButton("Luc", ForestSpecies.Spruce); ImGui.SameLine();
-                SpeciesButton("Nyír", ForestSpecies.Birch); ImGui.SameLine();
-                SpeciesButton("Tölgy", ForestSpecies.Oak); ImGui.SameLine();
-                SpeciesButton("Bükk", ForestSpecies.Beech);
-            }
-
-            if (interaction.ActiveTool == TerrainEditTool.Raise || interaction.ActiveTool == TerrainEditTool.Lower)
-            {
-                ImGui.PushItemWidth(150);
-                int brushSize = interaction.BrushSize;
-                int brushStrength = interaction.BrushStrength;
-                if (ImGui.SliderInt("Méret", ref brushSize, 1, 5)) interaction.BrushSize = brushSize;
-                if (ImGui.SliderInt("Erő", ref brushStrength, 1, 5)) interaction.BrushStrength = brushStrength;
-                ImGui.PopItemWidth();
-            }
-
-            ImGui.End();
-        }
-
-        private int environmentPreset, environmentIntensity=12, environmentDuration=90;
-        private bool showEnvironment=true;
-        private void DrawEnvironmentPanel()
-        {
-            var environment=world.Environment;
-            if(!showEnvironment||environment==null)return;
-            ImGui.SetNextWindowPos(new NVec2(Math.Max(8,Width-345),30),ImGuiCond.FirstUseEver);
-            ImGui.SetNextWindowSize(new NVec2(330,0),ImGuiCond.FirstUseEver);
-            if(ImGui.Begin("Környezet 1.0",ref showEnvironment,ImGuiWindowFlags.AlwaysAutoResize)) {
-                string name=environment.Preset switch {WeatherPreset.Sunny=>"Napos",WeatherPreset.Cloudy=>"Borult",WeatherPreset.Rain=>"Eső",_=>"Vihar"};
-                ImGui.Text($"{name} · hátralévő: {environment.EventEnd-environment.Time:0} s");
-                ImGui.Text($"Csapadék: {environment.RainRate:0.0} mm/környezeti óra");
-                ImGui.Text($"Esemény: {environment.EventRain:0.00} / {environment.ExpectedEventRain:0.00} mm");
-                ImGui.Text($"Hőmérséklet: {environment.Temperature:0.0} °C · szél: {environment.WindSpeed:0.0} m/s");
-                ImGui.Text($"Gyökérzóna átlaga: {environment.MeanSoil*100:0}% · év: {1+(int)(environment.Time/EnvironmentSystem.SecondsPerForestYear)}");
-                ImGui.TextDisabled("1 erdőév: 20 perc · 1 játékperc: 1 vízóra");
-                int id=world.HoveredTileId;
-                if(id>=0&&id<environment.CellCount){var cell=environment.Cell(id);
-                    ImGui.Separator();ImGui.Text($"Csempe {id}: gyökérzóna {cell.Soil:0.0} / 180 mm");
-                    ImGui.Text($"Felszíni víz: {cell.Surface:0.00} mm · korona: {cell.Canopy:0.00} mm");
-                    ImGui.Text($"Aszálystressz: {cell.Drought*100:0}% · túl nedves: {cell.Waterlogging*100:0}%");
-                    ImGui.Text($"Víz szerinti növekedés: {cell.GrowthFactor*100:0}%");}
-                if(ImGui.CollapsingHeader("Időjárási esemény indítása")){
-                    ImGui.Combo("Esemény",ref environmentPreset,"Napos\0Borult\0Eső\0Vihar\0");
-                    ImGui.SliderInt("Csúcsintenzitás",ref environmentIntensity,0,60,"%d mm/óra");
-                    ImGui.SliderInt("Időtartam",ref environmentDuration,20,300,"%d s");
-                    ImGui.TextDisabled("Ez a vízkészletet is módosítja és menthető.");
-                    if(ImGui.Button("Esemény indítása")){
-                        world.QueueWeather(environmentPreset==3?WeatherPreset.Storm:(WeatherPreset)environmentPreset,environmentIntensity,environmentDuration);
-                        world.Graphics.AutomaticWeather=true;
-                    }
-                }
-            }
-            ImGui.End();
-        }
-
-        private void DrawStatusPanel()
-        {
-            ImGui.SetNextWindowPos(new NVec2(8, Math.Max(80, Height - 220)), ImGuiCond.Always);
-            ImGui.Begin("##status",
-                ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoResize |
-                ImGuiWindowFlags.NoMove | ImGuiWindowFlags.AlwaysAutoResize);
-
-            ImGui.Text($"Eszköz: {ToolName(interaction.ActiveTool)}");
-            if (WorldInteractionController.IsRoadTool(interaction.ActiveTool))
-            {
-                ImGui.Text($"Út-csempék: {world.RoadCount}");
-                if (interaction.IsRoadDragging)
-                    ImGui.Text($"Hossz: {world.RoadPreviewCount}");
-            }
-            ImGui.Text($"{ImGui.GetIO().Framerate:F0} FPS");
-            ImGui.Text($"Tick: {simulationClock.Tick}  {(simulationClock.IsPaused ? "Szünet" : $"{simulationClock.Speed:0}x")}");
-            ImGui.Text($"Járművek: {world.VehicleCount}");
-            ImGui.Text($"Erdei szarvasok: {world.WildlifeCount} · halak: {world.FishCount}");
-            for (int i = 0; i < Math.Min(8, world.Vehicles.Count); i++)
-            {
-                var vehicle = world.Vehicles[i];
-                string status = vehicle.TransportState switch {
-                    VehicleTransportState.Waiting => "Faanyagra vár",
-                    VehicleTransportState.Loading => "Rakodik",
-                    VehicleTransportState.Unloading => "Lerakodik",
-                    VehicleTransportState.Returning => "Üres visszaút",
-                    _ => vehicle.CargoAmount > 0 ? "Rakott menet" : "Üres menet" };
-                if(vehicle.RouteBlocked)status="Útkapcsolatra vár";
-                ImGui.Text($"#{vehicle.Id}: {status} – {vehicle.CargoAmount:F1}/{vehicle.CargoCapacity:F0} m³");
-            }
-            ForestStatistics forest = world.ForestStatistics;
-            ImGui.Text($"Erdő: {forest.StandCount} állomány, {forest.MatureStandCount} érett");
-            ImGui.Text($"Biomassza: {forest.TotalBiomass:F1}  Egészség: {forest.AverageHealth:P0}");
-            ImGui.Text($"Kitermelt faanyag: {world.TimberStockpile:F1} m³");
-            ImGui.Text($"Leszállított faanyag: {world.DeliveredTimber:F1} m³");
-            if (world.TryGetForestStand(world.HoveredTileId, out ForestStand stand))
-                ImGui.Text($"Csempe: {ForestSpeciesName(stand.Species)}, {stand.AgeYears:F1} év, {stand.Health:P0}, {ForestSystem.TimberCubicMetres(stand):F1} m³");
-            if (WorldInteractionController.IsForestryTool(interaction.ActiveTool) && interaction.IsForestryDragging)
-                ImGui.Text($"Terület: {world.ForestryPreviewCount} csempe");
-            ForestryAreaSummary area = world.LastForestryArea;
-            if (!area.IsEmpty)
-                ImGui.Text($"Terület művelet: {area.Applied}/{area.TileCount} csempe"
-                    + (area.TimberVolume > 0f ? $", {area.TimberVolume:F1} m³" : string.Empty));
-            if (world.LastForestryAction != ForestryActionResult.None)
-                ImGui.TextColored(ForestryActionSucceeded(world.LastForestryAction)
-                        ? new NVec4(0.55f, 0.90f, 0.45f, 1f)
-                        : new NVec4(1.00f, 0.42f, 0.35f, 1f),
-                    ForestryActionText(world.LastForestryAction));
-            ImGui.Text($"Chunk: {world.VisibleChunkCount}/{world.TotalChunkCount}");
-            ImGui.Text($"Forest rebuild/frame: {world.ForestChunkRebuilds}");
-            ImGui.Text($"Frame: {performance.FrameMilliseconds:F1} ms  Sim: {performance.SimulationMilliseconds:F2} ms");
-            ImGui.Text($"Render: {performance.RenderMilliseconds:F1} ms  Draw: {performance.DrawCalls}");
-            ImGui.Text($"GC/frame: {performance.AllocatedBytes / 1024.0:F1} KiB");
-            if (!string.IsNullOrEmpty(persistenceStatus)) ImGui.Text(persistenceStatus);
-
-            ImGui.End();
-        }
-
-        private void ToolButton(string label, TerrainEditTool tool)
-        {
-            bool active = interaction.ActiveTool == tool;
-            if (active) ImGui.PushStyleColor(ImGuiCol.Button, new NVec4(0.34f, 0.48f, 0.28f, 1f));
-            if (ImGui.Button(label, new NVec2(Math.Max(54,ImGui.CalcTextSize(label).X+18), 40))) SelectTool(tool);
-            if (active) ImGui.PopStyleColor();
-        }
-
-        private void ToolMenuItem(string label, TerrainEditTool tool)
-        {
-            if (ImGui.MenuItem(label, "", interaction.ActiveTool == tool)) SelectTool(tool);
-        }
-
-        private void SpeciesButton(string label, ForestSpecies species)
-        {
-            bool active = interaction.PlantingSpecies == species;
-            if (active) ImGui.PushStyleColor(ImGuiCol.Button, new NVec4(0.30f, 0.52f, 0.25f, 1f));
-            if (ImGui.Button(label)) interaction.PlantingSpecies = species;
-            if (active) ImGui.PopStyleColor();
-        }
-
-        private void SpeciesMenuItem(string label, ForestSpecies species)
-        {
-            if (ImGui.MenuItem(label, "", interaction.PlantingSpecies == species))
-                interaction.PlantingSpecies = species;
-        }
-
         private void SelectTool(TerrainEditTool tool)
         {
             interaction.SelectTool(tool);
             world.Graphics.SawmillPreview=tool==TerrainEditTool.PlaceSawmill;
             RequestFrame();
         }
-
-        private string ToolName(TerrainEditTool tool) => tool switch
-        {
-            TerrainEditTool.Raise => "Emelés",
-            TerrainEditTool.Lower => "Süllyesztés",
-            TerrainEditTool.Road => "Út építés",
-            TerrainEditTool.RoadRemove => "Út bontás",
-            TerrainEditTool.PlantForest => $"Ültetés ({ForestSpeciesName(interaction.PlantingSpecies)})",
-            TerrainEditTool.HarvestForest => "Kitermelési terület",
-            TerrainEditTool.PlaceSawmill => "Fűrészmalom elhelyezése",
-            _ => "Vizsgálat"
-        };
-
-        private static string ForestSpeciesName(ForestSpecies species) => species switch
-        {
-            ForestSpecies.Spruce => "lucfenyő",
-            ForestSpecies.Birch => "nyír",
-            ForestSpecies.Oak => "tölgy",
-            ForestSpecies.Beech => "bükk",
-            _ => "nincs"
-        };
-
-        private static bool ForestryActionSucceeded(ForestryActionResult result) =>
-            result == ForestryActionResult.Designated || result == ForestryActionResult.Planted || result == ForestryActionResult.Harvested;
-
-        private static string ForestryActionText(ForestryActionResult result) => result switch
-        {
-            ForestryActionResult.Planted => "Ültetés sikeres – a facsemete már látható.",
-            ForestryActionResult.Designated => "Kitermelési terület kijelölve – a fák rakodáskor fogynak.",
-            ForestryActionResult.Harvested => "Fakitermelés sikeres.",
-            ForestryActionResult.TileOccupied => "Ültetés sikertelen: a csempe már foglalt.",
-            ForestryActionResult.UnsuitableTerrain => "Ültetés sikertelen: víz, út vagy térképszél.",
-            ForestryActionResult.NoForest => "Nincs kitermelhető fa ezen a csempén.",
-            _ => "Érvénytelen erdészeti művelet."
-        };
 
         private void ResetCamera()
         {
@@ -844,11 +515,11 @@ namespace ForesTycoon
                 string path = SaveGamePath.Default;
                 using FileStream stream = File.Create(path);
                 world.Save(stream, 1.0 / simulationClock.StepSeconds);
-                persistenceStatus = $"Mentve: {path}";
+                ShowToast($"Mentve: {path}", HudTheme.Good);
             }
             catch (Exception ex)
             {
-                persistenceStatus = "Mentési hiba: " + ex.Message;
+                ShowToast("Mentési hiba: " + ex.Message, HudTheme.Bad);
             }
         }
 
@@ -862,11 +533,11 @@ namespace ForesTycoon
                 world.Load(stream);
                 currentMapTiles = world.MapTileColumns;
                 simulationClock.Reset(world.SimulationTick);
-                persistenceStatus = $"Betöltve: {path}";
+                ShowToast($"Betöltve: {path}", HudTheme.Good);
             }
             catch (Exception ex)
             {
-                persistenceStatus = "Betöltési hiba: " + ex.Message;
+                ShowToast("Betöltési hiba: " + ex.Message, HudTheme.Bad);
             }
         }
 
@@ -931,22 +602,6 @@ namespace ForesTycoon
             }
         }
 
-        private void SimulationSpeedMenuItem(string label, double speed)
-        {
-            if (ImGui.MenuItem(label, "", !simulationClock.IsPaused && simulationClock.Speed == speed))
-            {
-                simulationClock.Speed = speed;
-                simulationClock.IsPaused = false;
-            }
-        }
-
-        private void MapSizeMenuItem(int tileCount, bool experimental = false)
-        {
-            string label = experimental ? $"{tileCount} x {tileCount} (stresszteszt)" : $"{tileCount} x {tileCount}";
-            if (ImGui.MenuItem(label, "", currentMapTiles == tileCount))
-                RegenerateTerrain(tileCount);
-        }
-
         protected override void OnUnload()
         {
             DisposeGlResources();
@@ -965,6 +620,7 @@ namespace ForesTycoon
                 Context.MakeCurrent();
 
                 imgui?.Dispose();
+                postProcess.Dispose();
                 world?.Dispose();
                 RenderDevice.Dispose();
             }
@@ -1068,17 +724,7 @@ namespace ForesTycoon
             base.OnKeyDown(e);
             if (!isLoaded) return;
 
-            if (e.Key == Keys.Space)
-            {
-                simulationClock.IsPaused = !simulationClock.IsPaused;
-                RequestFrame();
-                return;
-            }
-
-            bool commandModifier = e.Modifiers.HasFlag(KeyModifiers.Control)
-                || e.Modifiers.HasFlag(KeyModifiers.Super);
-            if (commandModifier && e.Key == Keys.S) { QuickSave(); return; }
-            if (commandModifier && e.Key == Keys.L) { QuickLoad(); return; }
+            if (HandleHotkey(e)) { RequestFrame(); return; }
 
             // Bal/Jobb: kamera forgatás 90°-os lépésekkel
             if (e.Key == Keys.Left)
