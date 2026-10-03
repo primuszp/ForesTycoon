@@ -19,6 +19,7 @@ namespace ForesTycoon
             }
             if (program == 0) Initialize();
             GL.UseProgram(program);
+            GL.Uniform2(GlProgram.Uniform(program,"lod_range"),RenderDevice.LodRange);
             Matrix4 matrix = RenderDevice.Model * RenderDevice.ViewProjection;
             GL.UniformMatrix4(matrixLocation, false, ref matrix);
             GL.Uniform1(widthLocation, outlineWorldWidth);
@@ -39,7 +40,12 @@ void main() {
             const string fragmentSource = @"#version 330 core
 in vec4 tint;
 out vec4 output_color;
-void main() { output_color = tint; }";
+uniform vec2 lod_range;
+void lodMask(){
+    float rank=fract(52.9829189*fract(dot(floor(gl_FragCoord.xy),vec2(0.06711056,0.00583715))));
+    if(rank<lod_range.x||rank>=lod_range.y)discard;
+}
+void main() { lodMask(); output_color = tint; }";
             int vertex = 0, fragment = 0;
             try
             {

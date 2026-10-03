@@ -19,6 +19,7 @@ namespace ForesTycoon
         internal bool WildlifeOutlines = true;
         internal bool Lighting = true;
         internal bool Shadows = true;
+        internal bool SawmillPreview;
         internal bool ShowGrid = false;
         internal bool Weather = true;
         internal bool AutomaticWeather;

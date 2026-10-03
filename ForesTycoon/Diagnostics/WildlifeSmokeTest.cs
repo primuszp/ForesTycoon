@@ -31,10 +31,13 @@ namespace ForesTycoon
                     settings.WildlifeOutlines=true;
                     if(!moving.AsSpan().SequenceEqual(Frame("Stand_Eating_01",2,"elk-outline-restored")))throw new InvalidOperationException("Deer contour toggle did not restore frame.");
                     Frame("Stand_Eating_01",5,"elk-grazing-5");Frame("WalkSlow",0.5,"elk-walk");
+                    double walkDuration=model.Clips["WalkSlow"].Duration;
+                    Frame("WalkSlow",walkDuration-0.001,"elk-walk-loop-before");
+                    Frame("WalkSlow",walkDuration+0.001,"elk-walk-loop-after");
                     settings.Textures=false;Frame("Stand_Eating_01",2,"elk-untextured");
                     settings.Enhanced=false;Frame("Stand_Eating_01",2,"elk-original-mode");
                     byte[] Frame(string clip,double time,string name) {
-                        pose.Evaluate(clip,time);RenderDevice.SetCamera(camera);
+                        pose.Evaluate(clip,time,inPlaceRoot:Array.FindIndex(model.Nodes,node=>node.Name=="RigRoot_01"));RenderDevice.SetCamera(camera);
                         GL.ClearColor(0.17f,0.21f,0.25f,1);GL.Clear(ClearBufferMask.ColorBufferBit|ClearBufferMask.DepthBufferBit);
                         mesh.Draw(pose,WildlifeRenderer.Axis*Matrix4.CreateScale(1.3f),settings,0.7f*7.6f/1000);GL.Finish();
                         if(GL.GetError()!=ErrorCode.NoError)throw new InvalidOperationException("Animated renderer GL error.");
@@ -48,6 +51,31 @@ namespace ForesTycoon
                     using var scene=new TerrainRenderer(terrain,new VehicleSystem(),new WorldEffectSystem(),forest,settings);
                     var spots=new System.Collections.Generic.List<WildlifeSpot>();terrain.CollectWildlifeSpots(forest,spots);
                     if(spots.Count==0)throw new InvalidOperationException("No deer habitat found.");
+                    var animals=new WildlifeSystem();
+                    animals.Update(0,terrain,forest,null);
+                    Vector3 initial=animals.Animals[0].Position;
+                    bool grazed=false,walked=false;
+                    float travelled=0,maxDisplacement=0;
+                    for(int tick=0;tick<5400;tick++) {
+                        Vector3 previous=animals.Animals[0].Position;
+                        animals.Update(1.0/30,terrain,forest,null);
+                        var animal=animals.Animals[0];
+                        if((animal.Position-previous).Length>WildlifeSystem.WalkingSpeed/30+0.001f)throw new InvalidOperationException("Wildlife teleported.");
+                        float step=(animal.Position-previous).Length;
+                        travelled+=step;maxDisplacement=Math.Max(maxDisplacement,(animal.Position-initial).Length);
+                        if(step>0.001f) {
+                            float turn=MathF.Abs(MathF.Atan2(MathF.Sin(animal.Yaw-animal.PreviousYaw),MathF.Cos(animal.Yaw-animal.PreviousYaw)));
+                            if(turn>step/WildlifeSystem.TurningRadius+0.0001f)throw new InvalidOperationException("Wildlife turned too tightly.");
+                        }
+                        walked|=(animal.Position-initial).Length>1;
+                        grazed|=animal.Blend<0.1f;
+                    }
+                    if(!walked||!grazed)throw new InvalidOperationException("Wildlife failed to roam and graze.");
+                    if(travelled<25||maxDisplacement<10)throw new InvalidOperationException($"Wildlife roamed too little: {travelled:F1} m, range {maxDisplacement:F1} m.");
+                    Console.WriteLine($"Wildlife roaming: {travelled:F1} m travelled, {maxDisplacement:F1} m range; turning radius at least {WildlifeSystem.TurningRadius:F1} m.");
+                    Vector3 paused=animals.Animals[0].Position;
+                    animals.Update(0,terrain,forest,null);
+                    if(animals.Animals[0].Position!=paused)throw new InvalidOperationException("Paused wildlife moved.");
                     Vector3 target=spots[0].Position;
                     Matrix4 camera=Matrix4.CreateTranslation(-target-new Vector3(0,0,1))*Matrix4.CreateRotationZ(-MathF.PI/4)*
                         Matrix4.CreateRotationX(-MathF.PI/4)*Matrix4.CreateOrthographicOffCenter(-8,8,-6,6,-1000,1000);

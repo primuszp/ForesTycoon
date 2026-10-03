@@ -27,6 +27,20 @@ namespace ForesTycoon
         private double previousTime;
         private bool started;
 
+        internal void Update(EnvironmentSystem environment,GraphicsSettings settings,double? visualTime=null)
+        {
+            // Existing lightning/particle clocks remain driven by simulation time.
+            Update(visualTime??environment.Time,settings);
+            Cloud=(float)environment.Cloud;
+            Rain=(float)Math.Clamp(environment.RainRate/25,0,1);
+            Storm=environment.Preset==WeatherPreset.Storm?(float)Math.Clamp(environment.RainRate/25,0,1):0;
+            Wind=new OpenTK.Mathematics.Vector2(1,0.35f)*(float)(environment.WindSpeed*0.45);
+            Wetness=(float)environment.MeanWetness;Snowfall=SnowCover=0;
+            double age=manualLightning?Time-requestedLightningTime:Time-LightningOnset((long)Math.Floor(Time/14));
+            Flash=settings.Weather&&settings.Lightning&&age>=0&&age<0.65
+                ? (manualLightning?1:Storm)*0.22f*(MathF.Exp(-(float)age*12)+(age>=0.15?0.35f*MathF.Exp(-(float)(age-0.15)*18):0)):0;
+        }
+
         internal void Update(double simulationTime, GraphicsSettings settings)
         {
             if (!double.IsFinite(simulationTime) || simulationTime < 0) throw new ArgumentOutOfRangeException(nameof(simulationTime));

@@ -37,6 +37,18 @@ namespace ForesTycoon
                 byte[] original = Frame("original");
                 settings.Enhanced = true;
                 byte[] sunny = Frame("sunny-textured");
+                settings.ShowGrid = true;
+                byte[] texturedGrid = Frame("grid-textured-all-surfaces");
+                Require(!sunny.AsSpan().SequenceEqual(texturedGrid), "Textured grid is missing.");
+                Require(terrain.CachedGridHasAllTileBoundaries(), "Textured grid omits tile boundaries.");
+                settings.Textures = false;
+                byte[] plainGrid = Frame("grid-plain-all-surfaces");
+                settings.ShowGrid = false;
+                Require(!plainGrid.AsSpan().SequenceEqual(Frame("grid-plain-disabled")), "Plain grid is missing.");
+                settings.Textures = true;
+                Frame("lod-far-medium-blend",3.5f);
+                byte[] lodBlend=Frame("lod-medium-near-blend",9);
+                CheckRestored(lodBlend,Frame("lod-medium-near-paused",9));
                 Require(!original.AsSpan().SequenceEqual(sunny), "Enhanced graphics did not change the image.");
                 settings.Shadows = false;
                 Require(!sunny.AsSpan().SequenceEqual(Frame("sunny-no-shadows")), "Shadow toggle did not change the image.");
@@ -111,12 +123,33 @@ namespace ForesTycoon
                 Console.WriteLine("Graphics/weather smoke passed: texture toggle, sunlight/shadows, rain/storm/clouds, paused frame, drying, cache reuse, original mode restoration (1/255 channel tolerance).");
                 Console.WriteLine($"Captures: {output}");
                 CaptureLoading();
+                CaptureWaterGrid();
                 CaptureCurve();
                 CaptureTruck(1,"imported-log-truck-loaded");
                 CaptureTruck(0,"imported-log-truck-empty");
                 CaptureLargeForest(ForestPattern.LargeMixed,"large-mixed-forest");
                 CaptureLargeForest(ForestPattern.LargeSpruce,"large-spruce-forest");
                 CaptureLargeForest(ForestPattern.LargeBroadleaf,"large-broadleaf-forest");
+
+                void CaptureWaterGrid()
+                {
+                    var map=new Terrain(TerrainSettings.Default.WithNodeSize(17,42),
+                        (u,v)=>(u-8)*(u-8)+(v-8)*(v-8)<20?-1:2);
+                    try {
+                    var options=new GraphicsSettings { ShowGrid=true, Weather=false, Fog=false, Wildlife=false };
+                    using var scene=new TerrainRenderer(map,new VehicleSystem(),new WorldEffectSystem(),
+                        new ForestSystem(map,new ForestStand[256]),options);
+                    foreach(bool textured in new[]{false,true}) {
+                        options.Textures=textured;
+                        GL.Clear(ClearBufferMask.ColorBufferBit|ClearBufferMask.DepthBufferBit);
+                        RenderDevice.SetCamera(matrix);
+                        scene.Draw(new RenderContext(0,0,0,0,0,1,false,false,1,-45,-45,-1000,-1000,1000,1000,8));
+                        GL.Finish();Require(GL.GetError()==ErrorCode.NoError,"Water grid render error.");
+                        Require(map.CachedGridHasAllTileBoundaries(),"Shore grid is incomplete.");
+                        FramebufferCapture.SavePng(Path.Combine(output,textured?"grid-water-textured.png":"grid-water-plain.png"),1100,800);
+                    }
+                    } finally { map.Dispose(); }
+                }
 
                 void CaptureLoading()
                 {
@@ -224,13 +257,13 @@ namespace ForesTycoon
                         Require(Math.Abs(expected[i] - actual[i]) <= (i%4==3?2:1), "Display toggle failed to restore its baseline image.");
                 }
 
-                byte[] Frame(string name = null)
+                byte[] Frame(string name = null,float pixelsPerWorldUnit=8)
                 {
                     GL.ClearColor(0.1725f, 0.2078f, 0.251f, 1);
                     GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
                     RenderDevice.SetCamera(matrix); RenderMetrics.BeginFrame();
                     renderer.Draw(new RenderContext(time, 1, 0, time, (ulong)(time * 30), 0, false, false, 1,
-                        -45, -45, -65, -43, 65, 51, 8));
+                          -45, -45, -65, -43, 65, 51, pixelsPerWorldUnit));
                     GL.Finish(); Require(GL.GetError() == ErrorCode.NoError, "Graphics/weather OpenGL error.");
                     if(name == null) return Array.Empty<byte>();
                     FramebufferCapture.SavePng(Path.Combine(output, name + ".png"), 1100, 800);

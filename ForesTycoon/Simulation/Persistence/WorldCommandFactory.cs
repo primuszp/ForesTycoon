@@ -8,7 +8,9 @@ namespace ForesTycoon
         {
             WorldCommandKind.EditElevation => new EditElevationCommand(record.A, record.B, record.C, record.D),
             WorldCommandKind.RoadPath => new RoadPathCommand(record.A, record.B, record.Flag),
+            WorldCommandKind.PlaceSawmill => new PlaceSawmillCommand(record.A),
             WorldCommandKind.SpawnVehicle => new SpawnVehicleCommand(),
+            WorldCommandKind.SetWeather => new SetWeatherCommand((WeatherPreset)record.A,record.B,record.C),
             WorldCommandKind.PlantForest => new PlantForestCommand(record.A, (ForestSpecies)record.B),
             WorldCommandKind.HarvestForest => new HarvestForestCommand(record.A),
             WorldCommandKind.PlantForestArea =>

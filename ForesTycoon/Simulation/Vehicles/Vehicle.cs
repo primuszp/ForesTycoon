@@ -35,9 +35,13 @@ namespace ForesTycoon
         public float CargoAmount { get; private set; }
         public float CargoFill => CargoAmount / CargoCapacity;
         internal bool CargoStopsEnabled;
+        internal int[] SourceTiles;
+        internal int SawmillTileId=-1;
+        internal bool LocalCargo=>SourceTiles!=null;
+        internal bool RouteBlocked;
         public VehicleTransportState TransportState { get; internal set; } = VehicleTransportState.Hauling;
         public float TransferProgress { get; private set; }
-        public float VisualCargoFill => TransportState == VehicleTransportState.Loading ? CargoFill * TransferProgress :
+        public float VisualCargoFill => LocalCargo?CargoFill:TransportState == VehicleTransportState.Loading ? CargoFill * TransferProgress :
             TransportState == VehicleTransportState.Unloading ? CargoFill * (1 - TransferProgress) : CargoFill;
         internal void Hold()
         {
@@ -76,6 +80,7 @@ namespace ForesTycoon
             CargoAmount = 0f;
             return amount;
         }
+        internal float TakeCargo(float requested){float amount=Math.Min(CargoAmount,requested);CargoAmount-=amount;return amount;}
 
         public void Update(double deltaSeconds)
         {

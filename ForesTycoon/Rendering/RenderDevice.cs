@@ -16,6 +16,7 @@ namespace ForesTycoon
 
         public static Matrix4 ViewProjection { get; private set; } = Matrix4.Identity;
         public static Matrix4 Model { get; private set; } = Matrix4.Identity;
+        internal static Vector2 LodRange = new Vector2(0,1);
         internal static SurfaceVisualRenderer Visuals { get; set; }
 
         public static void Initialize()
@@ -35,8 +36,14 @@ void main()
             const string fragmentSource = @"#version 330 core
 in vec4 vertex_color;
 out vec4 output_color;
+uniform vec2 lod_range;
+void lodMask(){
+    float rank=fract(52.9829189*fract(dot(floor(gl_FragCoord.xy),vec2(0.06711056,0.00583715))));
+    if(rank<lod_range.x||rank>=lod_range.y)discard;
+}
 void main()
 {
+    lodMask();
     output_color = vertex_color;
 }";
 
@@ -70,6 +77,7 @@ void main()
             EnsureInitialized();
             if (Visuals?.Active == true) { Visuals.Use(); return; }
             GL.UseProgram(shader);
+            GL.Uniform2(GlProgram.Uniform(shader,"lod_range"),LodRange);
             Matrix4 viewProjection = ViewProjection;
             Matrix4 model = Model;
             GL.UniformMatrix4(viewProjectionLocation, false, ref viewProjection);

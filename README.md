@@ -165,7 +165,7 @@ dotnet run --project ForesTycoon/ForesTycoon.csproj -- --truck-smoke-test
 
 A Nézet menüben az Új grafikai megjelenítés kapcsolóval az eredeti színalapú mód is visszaállítható. A Textúrázás, Napfény, Vetett árnyékok és Csemperács külön kapcsolható; a nap iránya és magassága állítható. Ezek a beállítások a futó játékban megmaradnak térképcsere közben.
 
-A Nézet / Időjárási kép menüben Napsütés, Borult, Eső és Vihar választható, vagy automatikus ciklus használható. A Felhőzet és Villámlás külön kapcsolható. Az eső nedvesíti a talajt, amely utána fokozatosan szárad; a szünet megállítja az effekteket. A hó kísérleti kódja megmaradt, de a normál játék nem kapcsolja be.
+Új világokban a látvány a Környezet 1.0 rendszer tartós eseményeit követi. A Nézet / Időjárási kép menü Napsütés, Borult, Eső és Vihar választása külön látványteszt; a Szimulált időjárás látványa kapcsolóval visszaállítható a környezet hiteles időjárása. A Felhőzet és Villámlás külön kapcsolható. Az eső nedvesíti a talajt, amely utána fokozatosan szárad; a szünet megállítja az effekteket. A hó kísérleti kódja megmaradt, de a normál játék nem kapcsolja be.
 
 A vihar szélirányba dőlő, világkoordinátákhoz rögzített esőt, térfogati felhőhátteret, puha mozgó felhőárnyékot, villámfényt és procedurális vízgyűrűket használ. A [grafikai terv](docs/graphics-weather-plan.md) és a [kutatási jegyzet](docs/rain-storm-cloud-research.md) ismerteti a technikákat és a közelítéseket.
 
@@ -201,3 +201,44 @@ A Nézet menüben választható alacsony, közepes vagy magas effektminőség. A
 ### Animált erdei szarvasok
 
 A Nézet → Erdei szarvasok kapcsolóval legelő és lassan sétáló szarvasok jelennek meg az erdők tisztásain/szélein. A Szarvas megkeresése menüpont rájuk közelít. Az importált GLB valódi csontvázas animációt, textúrákat és árnyékot használ, a szünetet követi. A [betöltő, animáció és ellenőrzések leírása](docs/animated-models.md) tartalmazza a támogatott formátumrészhalmazt; a `--wildlife-smoke-test` képi ellenőrzést futtat.
+
+
+## Környezet 1.0: időjárás, víz és erdő
+
+Új világban egy erdőév 20 játékperc. A vízidő átváltása 1 játékperc = 1 környezeti óra. Az események nem képkockánként váltakoznak: napos idő 2–5 perc, borult idő 1–3 perc, eső 45–120 másodperc, vihar 20–60 másodperc. Az eső intenzitása mm/környezeti óra; a felerősödés és lecsengés integrálja adja a lehulló vizet.
+
+A **Környezet 1.0** panelen látható az esemény hátralévő ideje, intenzitása, lehulló/várható vízmennyisége, hőmérséklet és szél. A csempére mutatva a koronavíz, felszíni víz, gyökérzóna és vízstressz olvasható. Az **Időjárási esemény indítása** részben állítható a típus, csúcsintenzitás és időtartam; az indítás a tényleges vízkészletet módosító, menthető parancs. Bezárt panel a Játék → Környezeti panel kapcsolóval nyitható újra.
+
+Csempénként koronaintercepció, beszivárgás, párolgás/növényi vízfelvétel, mélyebb tároló és lejtő menti lefolyás működik. A napi helyett fél játék-másodperces vízlépések biztosítják a rövid események feldolgozását. A vízhiány/túlnedvesség havi átlagából csökken a növekedés és az egészség; a regeneráció is érzékeny a stresszre. A helyi nedvesség a terepanyagokra és a ködfoltokra is hat. A szünet és gyorsítás a szimulációt közösen vezérli; textúrázás és effektek kikapcsolása nem változtatja meg a vízmérleget.
+
+A mentés `environmentVersion=1` mellett az eredeti seedből, parancsnaplóból és tick-számból pontosan újraszámolja a környezetet. Régebbi mentések megtartják a 30 másodperces erdőévet és a korábbi növekedést. Új világ létrehozásakor az 1.0 rendszer aktív.
+
+Az első modell egy effektív talajprofilt használ. A tavak/folyók vízszintje még rögzített; a mélyebb alapvízhozamot és térképi kifolyást könyvelt veszteségként kezeli. Fagy/jég, hóborítás, csúszós út és erdőtűz későbbi fejlesztés. Ez gyors növekedésre hangolt játékmodell; nem 365 napos fizikai éves hidrológiai előrejelzés.
+
+Részletek: [szimulációs terv és 1.0 megvalósítás](docs/environment-simulation-plan.md).
+
+```sh
+dotnet run --project ForesTycoon/ForesTycoon.csproj -- --environment-smoke-test
+```
+
+A próba az `artifacts/environment` mappába ment képeket, ellenőrzi a nedvesedést/száradást, szünetet, grafikai függetlenséget, mentés visszajátszását és vízmérleget; külön méri a 64², 128² és 256² cellás vízlépéseket.
+
+
+## Kitermelési területek és fűrészmalmok
+
+A LOD-váltás jelenleg ki van kapcsolva: minden zoomnál a közeli erdőgeometria marad látható.
+
+Új világban a **Kitermelés** eszköz húzással forrásterületet jelöl ki. A narancssárga jelölés tartós; kijelöléskor egyetlen fa sem tűnik el. Minden erdőcsempe rendelkezik faanyaggal, köbméterben (`biomassza × 100 m³`). A köbméter csak a forrásnál történő tényleges rakodás közben csökken; a törzsek a megmaradó biomassza alapján fokozatosan fogynak. A kijelölt terület készlete és a csempe faanyaga a felületen olvasható.
+
+1. Jelölj ki kitermelési területet az erdőben.
+2. A **Fűrészmalom** eszközzel kattints 2×2 sík, üres, száraz csempére.
+3. Építs összefüggő utat a forrásterület és a malom mellé. Az út a szomszédos csempéken csatlakozik, nem az épület alatt.
+4. Nyomd meg a **Rönkszállító indítása** gombot. A rendszer a tényleges úthálózaton keres útvonalat a forrástól a célhoz.
+
+A teherautó a kijelölt forrásnál rakodik, a malomnál fokozatosan lerakodik, majd visszatér. A malom külön könyveli az átvett készletet és a feldolgozott mennyiséget. A forrás kifogyásakor az autó vár; megszakított út esetén megőrzi a rakományát, és az út helyreállítása után folytatja az utat. Épületre út és erdő nem telepíthető, az alatta lévő terep magassága védett.
+
+A megadott `sawmill_paropank.glb` és `animated_low_poly_fish.glb` modellek kerültek be. A vízben a halak csontvázas animációval úsznak; nagy, térképszélhez csatlakozó tengerekben 8–120 hal, kis belső vizekben 1–2 hal jelenik meg, a kellően mély részeken. A víz saját finom rácsa megmarad.
+
+Az új mentések `logisticsVersion=1` jelölése a kijelölési, építési és teherautó-indítási parancsokat visszajátssza. Régi mentések megtartják az azonnali kitermelés korábbi viselkedését. Az új működéshez új világot vagy újragenerálást használj.
+
+Ellenőrzés: `dotnet run --project ForesTycoon -- --logistics-smoke-test`. A próba a fokozatos 60 m³-es kitermelést, útkapcsolatot, lerakott malmot, készletmérleget, mentés/visszajátszást és a tengeri/tavi halpopulációt ellenőrzi; képek az `artifacts/forestry-logistics` mappában.

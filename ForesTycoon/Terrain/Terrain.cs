@@ -159,7 +159,7 @@ namespace ForesTycoon
 
         bool IForestHabitat.CanSupportForest(int tileId)
         {
-            if (!IsValidTileId(tileId) || roads.Has(tileId)) return false;
+            if (!IsValidTileId(tileId) || roads.Has(tileId) || IsBuildingTile(tileId)) return false;
             Tile tile = tiles[tileId];
             return !data.IsBorderTile(tile)
                 && !ShouldDrawStandingWater(tile)

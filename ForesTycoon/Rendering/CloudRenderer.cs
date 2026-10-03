@@ -41,6 +41,11 @@ uniform mat4 inverse_camera;
 uniform vec4 climate;
 uniform float height;
 uniform int steps;
+float hash2(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+float noise2(vec2 p){
+    vec2 i=floor(p),f=fract(p); f=f*f*(3-2*f);
+    return mix(mix(hash2(i),hash2(i+vec2(1,0)),f.x),mix(hash2(i+vec2(0,1)),hash2(i+vec2(1)),f.x),f.y);
+}
 float hash3(vec3 p){return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453);}
 float noise3(vec3 p){
     vec3 i=floor(p),f=fract(p); f=f*f*(3-2*f);
@@ -62,9 +67,11 @@ void main(){
         vec3 q=(p+direction*float(i)*1.3*12.0/float(steps))/vec3(42,42,14);
         q.xy-=vec2(climate.w*0.012,climate.w*0.004);
         float n=noise3(q)*0.65+noise3(q*2.03)*0.25+noise3(q*4.1)*0.1;
-        float density=smoothstep(0.35,0.72,n)*climate.x;
+        // The same coverage field drives the ground shadow shader.
+        float coverage=noise2(q.xy)*0.65+noise2(q.xy*2.03)*0.25+noise2(q.xy*4.1)*0.1;
+        float density=smoothstep(0.28,0.72,coverage)*(0.65+0.35*n)*climate.x;
         float alpha=1-exp(-density*0.19*12.0/float(steps));
-        vec3 illumination=mix(vec3(0.53,0.59,0.66),vec3(0.24,0.29,0.36),climate.y)
+        vec3 illumination=mix(vec3(0.92,0.94,0.96),vec3(0.32,0.37,0.44),climate.y)
             *(0.75+0.25*n)+vec3(0.6,0.7,1)*climate.z;
         scattered+=transmittance*alpha*illumination;
         transmittance*=1-alpha;

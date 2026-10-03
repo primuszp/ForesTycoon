@@ -21,8 +21,11 @@ namespace ForesTycoon
         private bool[] seedCandidate = Array.Empty<bool>();
         private int[] seedCandidateTiles = Array.Empty<int>();
         private int seedCandidateCount;
-        private readonly double secondsPerYear;
+        private double secondsPerYear;
+        internal EnvironmentSystem Environment { get; set; }
+        internal void SetEnvironmentTempo(bool enabled) => secondsPerYear=enabled?EnvironmentSystem.SecondsPerForestYear:DefaultSecondsPerYear;
         private double accumulatedSeconds;
+        internal double SecondsUntilMonth => secondsPerYear/MonthsPerYear-accumulatedSeconds;
         private ulong month;
         private int standCount;
         private int matureCount;
@@ -127,6 +130,22 @@ namespace ForesTycoon
             Revision++; EditRevision++;
             RemoveFromStatistics(stand);
             return ForestryActionResult.Harvested;
+        }
+
+        internal static float TimberCubicMetres(ForestStand stand) => stand.IsEmpty?0:stand.Biomass*100;
+        internal float ExtractTimber(int tileId,float requested)
+        {
+            if(!float.IsFinite(requested)||requested<0)throw new ArgumentOutOfRangeException(nameof(requested));
+            if(!TryGetStand(tileId,out var stand))return 0;
+            float amount=Math.Min(requested,TimberCubicMetres(stand));
+            if(amount<=0)return 0;
+            RemoveFromStatistics(stand);
+            float biomass=Math.Max(0,stand.Biomass-amount/100);
+            stands[tileId]=biomass<0.000001f?default:stand with {Biomass=biomass};
+            if(!stands[tileId].IsEmpty)AddToStatistics(stands[tileId]);
+            // Quantized visual refresh gradually removes stems without rebuilding every tick.
+            Revision++;
+            return amount;
         }
 
         /// <summary>
@@ -269,6 +288,7 @@ namespace ForesTycoon
                 AddToStatistics(seedling);
             }
 
+            Environment?.FinishForestMonth();
             (stands, nextStands) = (nextStands, stands);
             Revision++;
         }
@@ -302,16 +322,17 @@ namespace ForesTycoon
             ForestSpeciesProfile profile = ForestSpeciesProfile.For(stand.Species);
             float suitability = Suitability(stand.Species, tileId);
             float crowding = GetCrowding(tileId);
+            float waterFactor=(float)(Environment?.GrowthFactor(tileId,stand.Species)??1);
             // Light-demanding species stall under a closed canopy; shade bearers barely notice.
             float shadePressure = crowding * (1f - profile.ShadeTolerance);
             float lightFactor = Math.Clamp(1f - shadePressure, 0.05f, 1f);
 
-            float targetHealth = (0.25f + suitability * 0.75f) * (0.55f + lightFactor * 0.45f);
+            float targetHealth = (0.25f + suitability * 0.75f) * (0.55f + lightFactor * 0.45f)*waterFactor;
             float health = MoveTowards(stand.Health, Math.Clamp(targetHealth, 0f, 1f), 0.035f);
             float age = stand.AgeYears + YearsPerStep;
             float remainingCapacity = Math.Max(0f, 1f - stand.Biomass / profile.MaximumBiomass);
             float growth = profile.MaximumBiomass * profile.AnnualGrowthRate
-                * remainingCapacity * health * lightFactor * YearsPerStep;
+                * remainingCapacity * health * lightFactor * waterFactor * YearsPerStep;
             float biomass = Math.Clamp(stand.Biomass + growth, 0f, profile.MaximumBiomass);
 
             float agePressure = Math.Max(0f, (age - profile.MaximumAgeYears) / (profile.MaximumAgeYears * 0.25f));
@@ -356,7 +377,7 @@ namespace ForesTycoon
             if (UnitFloat(Hash(habitat.Seed, tileId, month)) >= monthlyChance) return default;
 
             float suitability = Suitability(seedSpecies, tileId);
-            if (suitability < 0.18f) return default;
+            if (suitability < 0.18f || (Environment?.GrowthFactor(tileId,seedSpecies)??1)<0.3) return default;
             ForestSpeciesProfile profile = ForestSpeciesProfile.For(seedSpecies);
             return new ForestStand(seedSpecies, YearsPerStep, profile.MaximumBiomass * 0.015f, 0.55f + suitability * 0.35f);
         }

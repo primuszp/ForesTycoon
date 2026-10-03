@@ -9,6 +9,8 @@ namespace ForesTycoon
             AppDomain.CurrentDomain.UnhandledException += (_, args) =>
                 Console.Error.WriteLine(args.ExceptionObject?.ToString() ?? "Unknown fatal error");
 
+            if (Array.Exists(args, argument => argument == "--logistics-smoke-test")) { ForestryLogisticsSmokeTest.Run(); return; }
+            if (Array.Exists(args, argument => argument == "--environment-smoke-test")) { EnvironmentSmokeTest.Run(); return; }
             if (Array.Exists(args, argument => argument == "--wildlife-smoke-test")) { WildlifeSmokeTest.Run(); return; }
             if (Array.Exists(args, argument => argument == "--graphics-smoke-test")) { GraphicsWeatherSmokeTest.Run(); return; }
 

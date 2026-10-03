@@ -11,7 +11,9 @@ namespace ForesTycoon
         PlantForest,
         HarvestForest,
         PlantForestArea,
-        HarvestForestArea
+        HarvestForestArea,
+        SetWeather,
+        PlaceSawmill
     }
 
     readonly record struct WorldCommandRecord(
@@ -63,6 +65,8 @@ namespace ForesTycoon
         public int Version { get; init; } = CurrentVersion;
         // Missing in older journals: preserve their constant-speed cargo delivery times.
         public int VehiclePhysicsVersion { get; init; }
+        public int LogisticsVersion { get; init; }
+        public int EnvironmentVersion { get; init; }
         public double TickRate { get; init; } = 30.0;
         public ulong Tick { get; init; }
         public TerrainSettingsData Terrain { get; init; } = new TerrainSettingsData();
@@ -70,6 +74,9 @@ namespace ForesTycoon
 
         public void Validate()
         {
+            if(LogisticsVersion<0||LogisticsVersion>1)throw new NotSupportedException("Unsupported logistics version.");
+            if (EnvironmentVersion < 0 || EnvironmentVersion > 1)
+                throw new NotSupportedException("Unsupported environment version.");
             if (VehiclePhysicsVersion < 0 || VehiclePhysicsVersion > 2)
                 throw new NotSupportedException("Unsupported vehicle physics version.");
             if (Version != CurrentVersion)

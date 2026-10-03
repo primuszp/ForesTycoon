@@ -40,7 +40,7 @@ namespace ForesTycoon
 
         private readonly System.Collections.Generic.Dictionary<int, (ForestVisualState State, ForestLod Lod, ulong TerrainRevision, FogSource? Source)> fogSources = new();
         internal void CollectForestWeather(System.Collections.Generic.List<FogSource> mist,
-            System.Collections.Generic.List<Vector3> crowns, bool collectCrowns)
+            System.Collections.Generic.List<Vector3> crowns, bool collectCrowns,EnvironmentSystem environment=null)
         {
             mist.Clear(); crowns.Clear();
             Span<TreeInstance> stems = stackalloc TreeInstance[MaximumStemsPerTile];
@@ -73,7 +73,11 @@ namespace ForesTycoon
                         entry = (state, lod, WeatherSurfaceRevision, source);
                         fogSources[tile.Id] = entry;
                     }
-                    if (entry.Source.HasValue && mist.Count < 768) mist.Add(entry.Source.Value);
+                    if (entry.Source.HasValue && mist.Count < 768) {
+                        var source=entry.Source.Value;
+                        if(environment!=null){var cell=environment.Cell(tile.Id);source=source with {Moisture=(float)Math.Clamp(cell.Soil/180+cell.Surface/5,0,1)};}
+                        mist.Add(source);
+                    }
                     for(int j=0;collectCrowns && j<count;j++){
                         TreeInstance tree=stems[j]; TreeModel model=TreeModel.For(tree.Stand.Species);
                         float h=model.CrownHeight*tree.Scale*tree.CrownRise;

@@ -92,7 +92,7 @@ namespace ForesTycoon
 
         private bool ValidateRoadsAgainstPendingTerrain(Dictionary<int, int> pending)
         {
-            if (roads.Count == 0) return true;
+            if (roads.Count == 0 && buildingTiles.Count == 0) return true;
 
             int HeightOf(Node nd) => pending.TryGetValue(nd.Id, out int v) ? v : nd.W;
             Tile[] nodeTiles = new Tile[4];
@@ -107,7 +107,7 @@ namespace ForesTycoon
                     for (int i = 0; i < nodeTileCount; i++)
                     {
                         Tile tile = nodeTiles[i];
-                        if (roads.Has(tile.Id))
+                        if (roads.Has(tile.Id) || IsBuildingTile(tile.Id))
                             return false;
                     }
                 }

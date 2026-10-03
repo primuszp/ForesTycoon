@@ -9,6 +9,7 @@ namespace ForesTycoon
     internal sealed class AnimatedGlbModel
     {
         internal sealed class Node {
+            internal string Name;
             internal Vector3 Translation, Scale=Vector3.One;
             internal Quaternion Rotation=Quaternion.Identity;
             internal Matrix4? Matrix;
@@ -65,10 +66,10 @@ namespace ForesTycoon
                 translations=new Vector3[n];scales=new Vector3[n];rotations=new Quaternion[n];
                 otherTranslations=new Vector3[n];otherScales=new Vector3[n];otherRotations=new Quaternion[n];
             }
-            internal void Evaluate(string clip,double time,string other=null,double otherTime=0,float blend=0) {
-                Sample(clip,time,translations,scales,rotations);
+            internal void Evaluate(string clip,double time,string other=null,double otherTime=0,float blend=0,int inPlaceRoot=-1) {
+                Sample(clip,time,translations,scales,rotations,inPlaceRoot);
                 if(other!=null&&blend>0) {
-                    Sample(other,otherTime,otherTranslations,otherScales,otherRotations);
+                    Sample(other,otherTime,otherTranslations,otherScales,otherRotations,inPlaceRoot);
                     for(int i=0;i<World.Length;i++) {
                         translations[i]=Vector3.Lerp(translations[i],otherTranslations[i],blend);
                         scales[i]=Vector3.Lerp(scales[i],otherScales[i],blend);
@@ -80,14 +81,16 @@ namespace ForesTycoon
                     World[i]=model.Nodes[i].Parent<0?local:local*World[model.Nodes[i].Parent];
                 }
             }
-            private void Sample(string name,double time,Vector3[] t,Vector3[] s,Quaternion[] r) {
+            private void Sample(string name,double time,Vector3[] t,Vector3[] s,Quaternion[] r,int inPlaceRoot) {
                 for(int i=0;i<World.Length;i++){t[i]=model.Nodes[i].Translation;s[i]=model.Nodes[i].Scale;r[i]=model.Nodes[i].Rotation;}
                 if(name==null)return;
                 if(!model.Clips.TryGetValue(name,out var clip))throw new ArgumentException("Unknown animation: "+name);
                 float wrapped=clip.Duration>0?(float)((time%clip.Duration+clip.Duration)%clip.Duration):0;
                 foreach(var channel in clip.Channels) {
                     Vector4 v=channel.Sample(wrapped);
-                    if(channel.Path==0)t[channel.Node]=v.Xyz;
+                    // Freeze only locomotion translation before blending. Limb motion and
+                    // pelvis bob remain animated; world movement belongs to the simulation.
+                    if(channel.Path==0)t[channel.Node]=channel.Node==inPlaceRoot?channel.Sample(0).Xyz:v.Xyz;
                     else if(channel.Path==1)r[channel.Node]=new Quaternion(v.X,v.Y,v.Z,v.W).Normalized();
                     else s[channel.Node]=v.Xyz;
                 }
@@ -134,6 +137,7 @@ namespace ForesTycoon
             var model=new AnimatedGlbModel();var nodes=root.GetProperty("nodes");model.Nodes=new Node[nodes.GetArrayLength()];
             for(int i=0;i<model.Nodes.Length;i++) {
                 var n=nodes[i];var node=new Node();model.Nodes[i]=node;
+                node.Name=n.TryGetProperty("name",out var nodeName)?nodeName.GetString():null;
                 if(n.TryGetProperty("translation",out var v))node.Translation=Vector(v).Xyz;
                 if(n.TryGetProperty("scale",out v))node.Scale=Vector(v).Xyz;
                 if(n.TryGetProperty("rotation",out v)){var q=Vector(v);node.Rotation=new Quaternion(q.X,q.Y,q.Z,q.W).Normalized();}

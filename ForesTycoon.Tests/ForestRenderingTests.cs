@@ -7,6 +7,23 @@ namespace ForesTycoon.Tests;
 public class ForestRenderingTests
 {
     [Fact]
+    public void LodTransitionIsContinuousAcrossBothZoomBands()
+    {
+        foreach(var band in new[]{(2.5f,4.5f),(7f,11f)}) {
+            float previous=0;
+            for(int step=1;step<100;step++) {
+                var transition=ForestLodPolicy.Transition(band.Item1+(band.Item2-band.Item1)*step/100);
+                Assert.NotEqual(transition.Low,transition.High);
+                Assert.InRange(transition.Blend,previous,previous+0.02f);
+                previous=transition.Blend;
+            }
+            Assert.InRange(previous,0.99f,1);
+        }
+        Assert.Equal(ForestLod.Far,ForestLodPolicy.Transition(1).Low);
+        Assert.Equal(ForestLod.Near,ForestLodPolicy.Transition(12).Low);
+    }
+
+    [Fact]
     public void Lod_HasHysteresisAndSupportsLargeZoomJumps()
     {
         Assert.Equal(ForestLod.Near, ForestLodPolicy.Select(10, null));

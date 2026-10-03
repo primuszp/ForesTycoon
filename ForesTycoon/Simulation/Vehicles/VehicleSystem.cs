@@ -11,6 +11,15 @@ namespace ForesTycoon
         private readonly Func<int[], VehicleRoadRoute> roadRouteFactory;
         public bool UseRoadPhysics { get; set; } = true;
         public bool UseCargoStops { get; set; } = true;
+        internal Func<Vehicle,float,float> SourceLoader;
+        internal Action<Vehicle,float> DestinationReceiver;
+        internal Func<Vehicle,bool> RouteValidator;
+        internal Vehicle SpawnLogistics(int[] route,int[] sources,int mill)
+        {
+            var vehicle=new Vehicle(nextId++,route,1.5,roadRoute:roadRouteFactory?.Invoke(route),roadPhysics:UseRoadPhysics);
+            vehicle.SourceTiles=(int[])sources.Clone();vehicle.SawmillTileId=mill;vehicle.CargoStopsEnabled=true;
+            vehicle.TransportState=VehicleTransportState.Loading;vehicle.Hold();vehicles.Add(vehicle);return vehicle;
+        }
 
         public VehicleSystem(TimberCargoSystem timberCargo = null, Func<int[], VehicleRoadRoute> roadRouteFactory = null)
         {
@@ -39,6 +48,8 @@ namespace ForesTycoon
             for (int i = 0; i < vehicles.Count; i++)
             {
                 Vehicle vehicle = vehicles[i];
+                if(vehicle.RouteBlocked){vehicle.Hold();continue;}
+                if(vehicle.LocalCargo){UpdateLogistics(vehicle,deltaSeconds);continue;}
                 if (!vehicle.CargoStopsEnabled)
                 {
                     vehicle.Update(deltaSeconds); ProcessRouteEndpoints(vehicle);
@@ -72,6 +83,33 @@ namespace ForesTycoon
             }
         }
 
+        private void UpdateLogistics(Vehicle vehicle,double seconds)
+        {
+            while(seconds>1e-9){double dt=Math.Min(seconds,1.0/30);seconds-=dt;
+                switch(vehicle.TransportState){
+                    case VehicleTransportState.Waiting:
+                    case VehicleTransportState.Loading:
+                        vehicle.Hold();
+                        float amount=SourceLoader?.Invoke(vehicle,Math.Min(vehicle.CargoCapacity-vehicle.CargoAmount,(float)dt*vehicle.CargoCapacity/3))??0;
+                        vehicle.Load(amount);
+                        if(vehicle.CargoAmount>=vehicle.CargoCapacity-0.001f||(amount<0.000001f&&vehicle.CargoAmount>0))vehicle.TransportState=VehicleTransportState.Hauling;
+                        else vehicle.TransportState=amount>0?VehicleTransportState.Loading:VehicleTransportState.Waiting;
+                        break;
+                    case VehicleTransportState.Unloading:
+                        vehicle.Hold();float delivered=vehicle.TakeCargo((float)dt*vehicle.CargoCapacity/3);
+                        DestinationReceiver?.Invoke(vehicle,delivered);timberCargo.Deliver(delivered);
+                        if(vehicle.CargoAmount<=0)vehicle.TransportState=VehicleTransportState.Returning;
+                        break;
+                    default:
+                        vehicle.Update(dt);
+                        int last=vehicle.Route.Length-1;
+                        long before=(long)Math.Floor(vehicle.PreviousRoutePosition/last),after=(long)Math.Floor(vehicle.RoutePosition/last);
+                        if(after>before){vehicle.Hold();vehicle.TransportState=(after&1)==1?VehicleTransportState.Unloading:VehicleTransportState.Loading;}
+                        break;
+                }
+            }
+        }
+
         private void ProcessRouteEndpoints(Vehicle vehicle)
         {
             int last = vehicle.Route.Length - 1;
@@ -98,8 +136,10 @@ namespace ForesTycoon
         public int RemoveInvalidRoutes(Func<int, bool> isRoadTile)
         {
             if (isRoadTile == null) throw new ArgumentNullException(nameof(isRoadTile));
+            RefreshLogisticsRoutes(isRoadTile);
             return vehicles.RemoveAll(vehicle =>
             {
+                if(vehicle.LocalCargo)return false;
                 for (int i = 0; i < vehicle.Route.Length; i++)
                     if (!isRoadTile(vehicle.Route[i]))
                     {
@@ -108,6 +148,14 @@ namespace ForesTycoon
                     }
                 return false;
             });
+        }
+        internal void RefreshLogisticsRoutes(Func<int,bool> isRoadTile)
+        {
+            foreach(var vehicle in vehicles)if(vehicle.LocalCargo){
+                vehicle.RouteBlocked=false;
+                foreach(int id in vehicle.Route)if(!isRoadTile(id)){vehicle.RouteBlocked=true;vehicle.Hold();break;}
+                if(!vehicle.RouteBlocked&&RouteValidator?.Invoke(vehicle)==false){vehicle.RouteBlocked=true;vehicle.Hold();}
+            }
         }
     }
 }

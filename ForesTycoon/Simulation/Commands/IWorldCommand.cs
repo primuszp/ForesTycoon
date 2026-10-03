@@ -11,6 +11,8 @@ namespace ForesTycoon
         void ExecuteElevationEdit(int nodeId, int delta, int radius, int strength);
         void ExecuteRoadPath(int startTileId, int endTileId, bool remove);
         void ExecuteSpawnVehicle();
+        void ExecutePlaceSawmill(int tileId) => throw new System.NotSupportedException();
+        void ExecuteWeather(WeatherPreset preset,int intensity,int duration) => throw new System.NotSupportedException();
         void ExecutePlantForest(int tileId, ForestSpecies species);
         void ExecuteHarvestForest(int tileId);
         void ExecutePlantForestArea(int startTileId, int endTileId, ForestSpecies species);

@@ -25,12 +25,12 @@ namespace ForesTycoon
 
         private readonly Dictionary<TerrainChunk, ForestChunkGeometry> forestGeometry = new();
         private readonly Dictionary<(TerrainChunk, ForestLod), ForestChunkGeometry> forestLevels = new();
+
         private ForestLod? forestLod;
 
         internal void WarmForestGeometry(ForestSystem forest)
         {
-            foreach (TerrainChunk chunk in chunkIndex.Chunks)
-                foreach (ForestLod lod in Enum.GetValues<ForestLod>()) GetForestGeometry(chunk, forest, lod);
+            foreach (TerrainChunk chunk in chunkIndex.Chunks) GetForestGeometry(chunk,forest,ForestLod.Near);
             ForestChunkRebuilds = 0;
         }
 
@@ -68,8 +68,12 @@ namespace ForesTycoon
         internal void DrawTrees(ForestSystem forest, RenderContext context, bool processBuildQueue = true)
         {
             ForestChunkRebuilds = 0;
-            ForestLod lod = ForestLodPolicy.Select(context.PixelsPerWorldUnit, forestLod);
-            forestLod = lod;
+            forestLod=ForestLod.Near;
+            DrawTreeLevel(forest,context,ForestLod.Near,processBuildQueue);
+        }
+
+        private void DrawTreeLevel(ForestSystem forest,RenderContext context,ForestLod lod,bool processBuildQueue)
+        {
             foreach (TerrainChunk chunk in visibleChunks)
             {
                 forestGeometry[chunk] = GetForestGeometry(chunk, forest, lod);

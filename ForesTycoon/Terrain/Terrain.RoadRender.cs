@@ -26,6 +26,14 @@ namespace ForesTycoon
                     }
                 });
 
+                // A continuous border follows bends and junctions without tile seams.
+                DynamicPrimitiveBatch.Draw(PrimitiveType.Quads, () => {
+                    foreach(Tile tile in visibleTiles) {
+                        if(!roads.Has(tile.Id))continue;
+                        RoadSurface(tile,roads.GetEdges(tile.Id),RoadSurfaceWidthFactor*1.025f,Color.FromArgb(65,67,69));
+                    }
+                });
+
                 DynamicPrimitiveBatch.Draw(PrimitiveType.Quads, () =>
                 {
                     foreach (Tile tile in visibleTiles)

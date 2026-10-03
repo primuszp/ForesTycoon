@@ -81,6 +81,7 @@ namespace ForesTycoon
         /// <returns>True when the active world-edit tool consumed the release.</returns>
         public bool EndPrimaryGesture(bool hasHoveredNode)
         {
+            if(ActiveTool==TerrainEditTool.PlaceSawmill){if(world.HoveredTileId>=0)world.QueuePlaceSawmill(world.HoveredTileId);return true;}
             if (IsRoadTool(ActiveTool))
             {
                 int endTileId = world.HoveredTileId;

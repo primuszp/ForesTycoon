@@ -54,7 +54,7 @@ namespace ForesTycoon
                     geometry.Land.SetData(staticTerrainScratch.ToArray());
                     geometry.Grid.SetData(DynamicPrimitiveBatch.BuildGeometry(PrimitiveType.Lines, () => {
                         foreach (int id in chunk.TileIds)
-                            if (!ShouldDrawStandingWater(tiles[id])) DrawTileGrid(tiles[id], Color.FromArgb(82, 115, 38));
+                            if (!roads.Has(id) && !ShouldDrawStandingWater(tiles[id]) && !CanRenderFallbackRiver(tiles[id])) DrawTileGrid(tiles[id], Color.FromArgb(82, 115, 38));
                     }));
                     geometry.Version = surfaceVisualVersion;
                     StaticTerrainRebuilds++;
@@ -65,6 +65,17 @@ namespace ForesTycoon
         private void DrawCachedGrid()
         {
             foreach (TerrainChunk chunk in visibleChunks) staticTerrain[chunk].Grid.DrawArray();
+        }
+        internal bool CachedGridHasAllTileBoundaries()
+        {
+            foreach (var pair in staticTerrain)
+            {
+                int expected = 0;
+                foreach (int id in pair.Key.TileIds)
+                    if (!roads.Has(id) && !ShouldDrawStandingWater(tiles[id]) && !CanRenderFallbackRiver(tiles[id])) expected += 8;
+                if (pair.Value.Grid.CpuVertices.Length != expected) return false;
+            }
+            return true;
         }
         private void DisposeStaticTerrain()
         {

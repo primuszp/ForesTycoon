@@ -26,9 +26,10 @@ namespace ForesTycoon
             DynamicPrimitiveBatch.Vertex3(n);
         }
 
-        internal void DrawTerrainDecals()
+        internal void DrawTerrainDecals(RenderContext context = default)
         {
             DrawLandGrid();
+
         }
 
 
@@ -39,25 +40,8 @@ namespace ForesTycoon
 
         private void DrawTileGrid(Tile tile, Color terrainLine)
         {
-            TileSurfaceVisual visual = GetTileSurfaceVisual(tile);
-
-            switch (visual.SurfaceMaterial)
-            {
-                case TileRenderMaterial.Grass:
-                    DrawTileEdgesByMaterial(tile, visual, terrainLine);
-                    return;
-
-                case TileRenderMaterial.Foundation:
-                    DrawTileEdgesByMaterial(tile, visual, terrainLine);
-                    if (visual.DrawFoundationDiagonal)
-                        DrawTileDiagonal(tile, visual);
-                    return;
-
-                case TileRenderMaterial.MixedFoundation:
-                    DrawTileEdgesByMaterial(tile, visual, terrainLine);
-                    DrawTileDiagonal(tile, visual);
-                    return;
-            }
+            // A grid consists of all four tile boundaries, independent of material or triangulation.
+            DrawTileEdgesByMaterial(tile, GetTileSurfaceVisual(tile), terrainLine);
         }
 
         private static Color EdgeLineColor(TileRenderMaterial material, Color terrainLine)

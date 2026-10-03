@@ -12,6 +12,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Content Include="Assets/Wildlife/fish.glb" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets/Buildings/sawmill.glb" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets/Wildlife/elk.glb" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets/Vehicles/log-truck.glb" CopyToOutputDirectory="PreserveNewest" />
     <PackageReference Include="OpenTK" Version="4.9.4" />

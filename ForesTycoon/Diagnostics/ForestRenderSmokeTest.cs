@@ -29,23 +29,28 @@ namespace ForesTycoon
                 var forest = new ForestSystem(terrain);
                 Require(forest.Count > 0, "Test map has no forest.");
                 RenderDevice.SetCamera(Matrix4.Identity);
-                int near = Draw(terrain, forest, 10);
+                int near = Draw(terrain, forest, 12);
                 Require(terrain.ForestChunkRebuilds == terrain.VisibleChunkCount, "Initial chunks were not built.");
-                Draw(terrain, forest, 10);
+                Draw(terrain, forest, 12);
                 Require(terrain.ForestChunkRebuilds == 0, "Unchanged frame rebuilt the forest.");
                 int medium = Draw(terrain, forest, 5);
                 int far = Draw(terrain, forest, 1);
-                Require(far < medium && medium < near, "LOD did not reduce vertex submissions.");
+                Require(far == medium && medium == near, "Disabled LOD changed forest detail with zoom.");
                 Draw(terrain, forest, 1.5f);
                 Require(terrain.ForestChunkRebuilds == 0, "Zoom inside one LOD rebuilt the forest.");
-                Draw(terrain, forest, 10);
+                Draw(terrain, forest, 12);
                 Require(terrain.ForestChunkRebuilds == 0, "Returning to a cached LOD rebuilt the forest.");
+                Draw(terrain,forest,3.5f);
+                Draw(terrain,forest,9);
+                Draw(terrain,forest,9);
+                Require(terrain.ForestChunkRebuilds==0,"LOD blending rebuilt cached meshes.");
+                Require(RenderDevice.LodRange==new Vector2(0,1),"LOD mask leaked to other objects.");
                 forest.Update(ForestSystem.DefaultSecondsPerYear / 12);
-                Draw(terrain, forest, 10);
+                Draw(terrain, forest, 12);
                 int remainingFrames = 1000;
-                while (terrain.PendingForestBuildCount > 0 && remainingFrames-- > 0) Draw(terrain, forest, 10);
+                while (terrain.PendingForestBuildCount > 0 && remainingFrames-- > 0) Draw(terrain, forest, 12);
                 Require(terrain.PendingForestBuildCount == 0, "Incremental forest refresh never completed.");
-                Draw(terrain, forest, 10);
+                Draw(terrain, forest, 12);
                 Require(terrain.ForestChunkRebuilds == 0, "Completed incremental refresh rebuilt again.");
                 Draw(terrain, forest, 1.5f);
                 int tileId = 0;
@@ -113,6 +118,7 @@ namespace ForesTycoon
                 {
                     terrain.DrawTerrainBase();
                     terrain.DrawTerrainDecals();
+                    Require(terrain.CachedGridHasAllTileBoundaries(), "A tile is missing one or more grid boundaries.");
                     Require((terrain.StaticTerrainRebuilds > 0) == rebuild, "Unexpected static terrain rebuild count.");
                     Require(terrain.SurfaceCacheMatchesFreshCalculation(), "Stale terrain surface classification.");
                 }

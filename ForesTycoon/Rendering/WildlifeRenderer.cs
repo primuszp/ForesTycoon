@@ -9,54 +9,39 @@ namespace ForesTycoon
     {
         private AnimatedGlbModel model;
         private AnimatedModelRenderer renderer;
+        private int motionRoot=-1;
         private readonly Dictionary<int,AnimatedGlbModel.Pose> poses=new();
-        private readonly List<WildlifeSpot> spots=new();
-        private readonly List<int> obsolete=new();
-        private ulong forestRevision=ulong.MaxValue,terrainRevision=ulong.MaxValue;
-        internal int Count=>spots.Count;
+        private readonly WildlifeSystem simulation;
+        internal WildlifeRenderer(WildlifeSystem simulation) { this.simulation = simulation; }
+        internal int Count => simulation.Animals.Count;
         internal bool TryGetPosition(out Vector3 position) {
-            position=spots.Count>0?spots[0].Position:Vector3.Zero;return spots.Count>0;
+            position = Count > 0 ? simulation.Animals[0].Position : Vector3.Zero; return Count > 0;
         }
         internal static readonly Matrix4 Axis=Matrix4.CreateRotationX(MathF.PI/2)*Matrix4.CreateRotationZ(MathF.PI/2);
-        internal static (bool Walking,float Blend,double ClipTime,float Travel) Activity(double time,uint seed)
-        {
-            double phase=(time+seed%240)*1.0, cycle=(phase%40+40)%40;
-            if(cycle<30)return(false,0,phase,0);
-            double walk=cycle-30;
-            float blend=(float)Math.Min(1,Math.Min(walk/1.0,(10-walk)/1.0));
-            float travel=(float)(walk*Math.PI/5);
-            return(true,blend,walk,travel);
-        }
         internal void Draw(Terrain terrain,ForestSystem forest,GraphicsSettings settings,RenderContext context)
         {
             if(!settings.Wildlife)return;
-            if(forestRevision!=forest.Revision||terrainRevision!=terrain.WeatherSurfaceRevision) {
-                terrain.CollectWildlifeSpots(forest,spots);forestRevision=forest.Revision;terrainRevision=terrain.WeatherSurfaceRevision;
-                obsolete.Clear();
-                foreach(int id in poses.Keys) {
-                    bool remains=false;foreach(var spot in spots)if(spot.TileId==id){remains=true;break;}
-                    if(!remains)obsolete.Add(id);
-                }
-                foreach(int id in obsolete)poses.Remove(id);
+            if(Count==0)return;
+            if(model==null) {
+                model=AnimatedGlbModel.Load(Path.Combine(AppContext.BaseDirectory,"Assets","Wildlife","elk.glb"));
+                motionRoot=Array.FindIndex(model.Nodes,node=>node.Name=="RigRoot_01");
+                if(motionRoot<0)throw new InvalidDataException("Elk locomotion root is missing.");
             }
-            if(spots.Count==0)return;
-            model??=AnimatedGlbModel.Load(Path.Combine(AppContext.BaseDirectory,"Assets","Wildlife","elk.glb"));
             renderer??=new AnimatedModelRenderer(model);
             int outlineBudget=settings.Enhanced&&settings.WildlifeOutlines&&context.PixelsPerWorldUnit>=7&&RenderDevice.Visuals?.ShadowPass!=true
                 ? settings.Quality==GraphicsQuality.High?8:settings.Quality==GraphicsQuality.Medium?4:0 :0;
-            foreach(var spot in spots)
+            foreach(var animal in simulation.Animals)
             {
-                var activity=Activity(context.SimulationTimeSeconds,spot.Rank);
-                float yaw=(spot.Rank%6283)*0.001f;
-                Vector2 local=new Vector2(MathF.Sin(activity.Travel),1-MathF.Cos(activity.Travel))*0.35f;
-                Vector3 position=spot.Position+new Vector3(local.X*MathF.Cos(yaw)-local.Y*MathF.Sin(yaw),local.X*MathF.Sin(yaw)+local.Y*MathF.Cos(yaw),0);
-                yaw+=activity.Travel;
+                float alpha=(float)Math.Clamp(context.InterpolationAlpha,0,1);
+                float turn=MathF.Atan2(MathF.Sin(animal.Yaw-animal.PreviousYaw),MathF.Cos(animal.Yaw-animal.PreviousYaw));
+                float yaw=animal.PreviousYaw+turn*alpha;
+                Vector3 position=Vector3.Lerp(animal.PreviousPosition,animal.Position,alpha);
                 if(!terrain.TryGetSurfaceZ(position.X,position.Y,out float z))continue;position.Z=z+0.02f;
                 if(RenderDevice.Visuals?.ShadowPass!=true&&!RenderVisibility.SphereVisible(position+new Vector3(0,0,1.5f),3.5f,RenderDevice.ViewProjection))continue;
-                if(!poses.TryGetValue(spot.TileId,out var pose))poses.Add(spot.TileId,pose=model.CreatePose());
+                if(!poses.TryGetValue(animal.Id,out var pose))poses.Add(animal.Id,pose=model.CreatePose());
                 // Cross-fade per-node TRS; rigid antlers follow their animated parent too.
-                pose.Evaluate("Stand_Eating_01",context.SimulationTimeSeconds+spot.Rank%100,
-                    activity.Walking?"WalkSlow":null,activity.ClipTime,activity.Blend);
+                pose.Evaluate("Stand_Eating_01",animal.Age+animal.Seed%100,
+                    "WalkSlow",animal.WalkTime,animal.Blend,inPlaceRoot:motionRoot);
                 Vector3 forward=new(MathF.Cos(yaw),MathF.Sin(yaw),0),left=new(-MathF.Sin(yaw),MathF.Cos(yaw),0);
                 if(terrain.TryGetSurfaceZ(position.X+forward.X*0.8f,position.Y+forward.Y*0.8f,out float front)&&
                     terrain.TryGetSurfaceZ(position.X-forward.X*0.8f,position.Y-forward.Y*0.8f,out float back))forward.Z=(front-back)/1.6f;

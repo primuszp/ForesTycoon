@@ -49,6 +49,7 @@ namespace ForesTycoon
         InvalidTile,
         TileOccupied,
         UnsuitableTerrain,
-        NoForest
+        NoForest,
+        Designated
     }
 }

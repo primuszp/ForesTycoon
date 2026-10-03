@@ -9,6 +9,11 @@ namespace ForesTycoon
     internal sealed class SurfaceVisualRenderer : IDisposable
     {
         private int program, depthProgram, textures, shadowTexture, shadowFramebuffer;
+        private int environmentTexture;
+        private float[] environmentPixels;
+        private ulong environmentRevision=ulong.MaxValue;
+        private readonly EnvironmentSystem environment;
+        private readonly Terrain environmentTerrain;
         private readonly GraphicsSettings settings;
         private readonly WeatherVisualState weather;
         internal SurfaceKind Kind;
@@ -24,8 +29,8 @@ namespace ForesTycoon
         private bool globalsUploaded, mainCameraUploaded, shadowCameraUploaded;
         private Matrix4 mainCamera, shadowCamera;
 
-        internal SurfaceVisualRenderer(GraphicsSettings settings, WeatherVisualState weather)
-        { this.settings = settings; this.weather = weather; }
+        internal SurfaceVisualRenderer(GraphicsSettings settings, WeatherVisualState weather,EnvironmentSystem environment=null,Terrain terrain=null)
+        { this.settings = settings; this.weather = weather;this.environment=environment;environmentTerrain=terrain; }
 
         internal void BeginFrame()
         {
@@ -34,6 +39,7 @@ namespace ForesTycoon
             shadowsReady = false;
             globalsUploaded = mainCameraUploaded = shadowCameraUploaded = false;
             if (settings.Enhanced && program == 0) Initialize();
+            if(settings.Enhanced&&environment!=null)UploadEnvironment();
             if (settings.Enhanced && shadowSize != settings.ShadowResolution)
             {
                 shadowSize = settings.ShadowResolution;
@@ -77,6 +83,7 @@ namespace ForesTycoon
         {
             int shader = ShadowPass ? depthProgram : program;
             GL.UseProgram(shader);
+            GL.Uniform2(GlProgram.Uniform(shader,"lod_range"),RenderDevice.LodRange);
             Matrix4 model = RenderDevice.Model;
             Matrix4 camera = ShadowPass ? lightMatrix : RenderDevice.ViewProjection;
             GL.UniformMatrix4(GlProgram.Uniform(shader, "model"), false, ref model);
@@ -102,11 +109,40 @@ namespace ForesTycoon
                 GL.Uniform1(GlProgram.Uniform(shader, "storm"), settings.Weather ? weather.Storm : 0);
                 GL.Uniform1(GlProgram.Uniform(shader, "time"), (float)(weather.Time % 4096));
                 GL.Uniform1(GlProgram.Uniform(shader, "materials"), 0);
+                GL.Uniform1(GlProgram.Uniform(shader,"environment_map"),5);
+                GL.Uniform1(GlProgram.Uniform(shader,"environment_active"),environment!=null&&settings.AutomaticWeather&&settings.Weather?1:0);
+                if(environmentTerrain!=null){environmentTerrain.GetWeatherBounds(out var min,out var max);
+                    GL.Uniform4(GlProgram.Uniform(shader,"environment_bounds"),min.X,min.Y,max.X-min.X,max.Y-min.Y);}
                 GL.Uniform1(GlProgram.Uniform(shader, "shadow_map"), 1);
                 globalsUploaded = true;
             }
             GL.ActiveTexture(TextureUnit.Texture0); GL.BindTexture(TextureTarget.Texture2DArray, textures);
             GL.ActiveTexture(TextureUnit.Texture1); GL.BindTexture(TextureTarget.Texture2D, shadowTexture);
+            GL.ActiveTexture(TextureUnit.Texture0);
+        }
+
+        private void UploadEnvironment()
+        {
+            GL.ActiveTexture(TextureUnit.Texture5);
+            if(environmentTexture==0){environmentTexture=GL.GenTexture();GL.BindTexture(TextureTarget.Texture2D,environmentTexture);
+                GL.TexParameter(TextureTarget.Texture2D,TextureParameterName.TextureMinFilter,(int)TextureMinFilter.Nearest);
+                GL.TexParameter(TextureTarget.Texture2D,TextureParameterName.TextureMagFilter,(int)TextureMagFilter.Nearest);
+                GL.TexParameter(TextureTarget.Texture2D,TextureParameterName.TextureWrapS,(int)TextureWrapMode.ClampToEdge);
+                GL.TexParameter(TextureTarget.Texture2D,TextureParameterName.TextureWrapT,(int)TextureWrapMode.ClampToEdge);}
+            GL.BindTexture(TextureTarget.Texture2D,environmentTexture);
+            if(environmentRevision!=environment.Revision){
+                int columns=environmentTerrain.Settings.TileColumns,rows=environmentTerrain.Settings.TileRows;
+                environmentPixels??=new float[columns*rows*4];
+                for(int id=0;id<environment.CellCount;id++){
+                    var cell=environment.Cell(id);int offset=((id%rows)*columns+id/rows)*4;
+                    environmentPixels[offset]=(float)Math.Clamp(cell.Surface/2+cell.Canopy/4,0,1);
+                    environmentPixels[offset+1]=(float)(cell.Soil/180);
+                    environmentPixels[offset+2]=(float)cell.Drought;
+                    environmentPixels[offset+3]=(float)cell.Waterlogging;
+                }
+                GL.TexImage2D(TextureTarget.Texture2D,0,PixelInternalFormat.Rgba32f,columns,rows,0,PixelFormat.Rgba,PixelType.Float,environmentPixels);
+                environmentRevision=environment.Revision;
+            }
             GL.ActiveTexture(TextureUnit.Texture0);
         }
 
@@ -130,8 +166,16 @@ void main() {
 in vec3 world, smooth_normal;
 in vec4 tint, light_position;
 out vec4 output_color;
+uniform vec2 lod_range;
+void lodMask(){
+    float rank=fract(52.9829189*fract(dot(floor(gl_FragCoord.xy),vec2(0.06711056,0.00583715))));
+    if(rank<lod_range.x||rank>=lod_range.y)discard;
+}
 uniform sampler2DArray materials;
 uniform sampler2DShadow shadow_map;
+uniform sampler2D environment_map;
+uniform vec4 environment_bounds;
+uniform int environment_active;
 uniform int kind, textured, lit, shadowed;
 uniform float outline_width, time, flash, storm;
 uniform int clouds;
@@ -158,6 +202,7 @@ float cloudDensity(vec2 p){
     return smoothstep(0.28,0.72,noise2(p)*0.65+noise2(p*2.03)*0.25+noise2(p*4.1)*0.1);
 }
 void main() {
+    lodMask();
     if(kind == 0) { output_color = tint; return; }
     if(outline_width > 0 && (kind == 4 || kind == 9 || kind == 10)) { output_color = vec4(0.07,0.085,0.09,1); return; }
     if(outline_width > 0) { output_color = vec4(mix(vec3(0.075,0.12,0.045),vec3(0.27,0.32,0.33),climate.z),1); return; }
@@ -180,7 +225,10 @@ void main() {
         if(kind == 2) detail *= 0.92 + 0.08*sin(world.z*1.8 + patch*2);
     }
     base *= detail;
-    if(kind != 2 && kind != 7) base *= 1 - climate.y * (kind == 6 ? 0.08 : 0.24);
+    vec4 local_environment=environment_active!=0?texture(environment_map,(world.xy-environment_bounds.xy)/environment_bounds.zw):vec4(0);
+    float wetness=environment_active!=0?local_environment.r:climate.y;
+    if(environment_active!=0&&kind==6)base=mix(base,base*vec3(1.22,0.83,0.52),local_environment.b*0.65);
+    if(kind != 2 && kind != 7) base *= 1 - wetness * (kind == 6 ? 0.08 : 0.24);
     float snow = 0;
     if(kind != 2 && kind != 5 && kind != 7) {
         float up = smoothstep(0.25,0.8,n.z);
@@ -223,7 +271,7 @@ void main() {
         base += climate.w * vec3(0.045,0.065,0.08) * rings;
     }
     if(kind == 3 || kind == 1) {
-        float wet=climate.y*smoothstep(0.7,0.98,patch)*smoothstep(0.75,0.98,n.z);
+        float wet=wetness*smoothstep(0.7,0.98,patch)*smoothstep(0.75,0.98,n.z);
         vec3 halfVector=normalize(sun+vec3(0,-0.7,0.7));
         base += wet * pow(max(dot(n,halfVector),0),48) * vec3(0.18,0.21,0.25);
     }
@@ -235,7 +283,12 @@ void main() {
 layout(location=0) in vec3 position;
 uniform mat4 model, camera;
 void main(){gl_Position=camera*model*vec4(position,1);}",
-                "#version 330 core\nvoid main(){}");
+                "#version 330 core\n" + @"uniform vec2 lod_range;
+void lodMask(){
+    float rank=fract(52.9829189*fract(dot(floor(gl_FragCoord.xy),vec2(0.06711056,0.00583715))));
+    if(rank<lod_range.x||rank>=lod_range.y)discard;
+}
+void main(){lodMask();}");
             textures = ProceduralSurfaceTextures.Upload();
             shadowTexture = GL.GenTexture();
             shadowSize = settings.ShadowResolution;
@@ -264,6 +317,7 @@ void main(){gl_Position=camera*model*vec4(position,1);}",
             if(textures != 0) GL.DeleteTexture(textures);
             if(shadowTexture != 0) GL.DeleteTexture(shadowTexture);
             if(shadowFramebuffer != 0) GL.DeleteFramebuffer(shadowFramebuffer);
+            if(environmentTexture!=0)GL.DeleteTexture(environmentTexture);environmentTexture=0;
             program = depthProgram = textures = shadowTexture = shadowFramebuffer = 0;
         }
     }

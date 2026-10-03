@@ -6,6 +6,20 @@ namespace ForesTycoon
     internal readonly record struct WildlifeSpot(int TileId, Vector3 Position, uint Rank);
     partial class Terrain
     {
+        internal bool CanWildlifeWalkAt(float x,float y) =>
+            TryGetTileCoordinates(x,y,out int u,out int v,out _,out _) &&
+            TryGetWildlifeDestination(getTileByCoords(u,v).Id,out _);
+        internal bool TryGetWildlifeDestination(int id, out Vector3 position)
+        {
+            position = default;
+            Tile tile = tiles[id];
+            if (roads.Has(id) || ShouldDrawStandingWater(tile) || CountRiverCorners(tile) > 0 ||
+                !((IForestHabitat)this).CanSupportForest(id)) return false;
+            float low = Math.Min(Math.Min(tile.W.zPos, tile.S.zPos), Math.Min(tile.E.zPos, tile.N.zPos));
+            float high = Math.Max(Math.Max(tile.W.zPos, tile.S.zPos), Math.Max(tile.E.zPos, tile.N.zPos));
+            if (high - low > Math.Min(tileSizeH, tileSizeV) * 0.4f) return false;
+            return TryGetTileCenter(id, out position);
+        }
         internal void CollectWildlifeSpots(ForestSystem forest,List<WildlifeSpot> output)
         {
             output.Clear();

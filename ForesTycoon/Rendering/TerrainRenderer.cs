@@ -16,22 +16,34 @@ namespace ForesTycoon
         private RenderStateScope decalState;
         private readonly GraphicsSettings graphics;
         private readonly WeatherVisualState weather = new WeatherVisualState();
+        private readonly EnvironmentSystem environment;
         private readonly SurfaceVisualRenderer surfaces;
+        private readonly ForestryLogistics logistics;
+        private readonly WorldContentRenderer content=new WorldContentRenderer();
+        internal int FishCount=>content.FishCount;
         private readonly ForestWeatherRenderer forestWeather = new ForestWeatherRenderer();
         private readonly CloudRenderer clouds = new CloudRenderer();
-        private readonly WildlifeRenderer wildlife = new WildlifeRenderer();
+        private readonly WildlifeRenderer wildlife;
+        private readonly WildlifeSystem wildlifeSimulation;
+        private readonly bool ownsWildlife;
+        private double wildlifeTime;
         internal int WildlifeCount => graphics.Wildlife ? wildlife.Count : 0;
         internal bool TryGetWildlifePosition(out OpenTK.Mathematics.Vector3 position) => wildlife.TryGetPosition(out position);
         private readonly WeatherRenderer precipitation = new WeatherRenderer();
 
-        public TerrainRenderer(Terrain terrain, VehicleSystem vehicles, WorldEffectSystem effects, ForestSystem forest, GraphicsSettings graphics = null)
+        public TerrainRenderer(Terrain terrain, VehicleSystem vehicles, WorldEffectSystem effects, ForestSystem forest, GraphicsSettings graphics = null,EnvironmentSystem environment=null, WildlifeSystem wildlifeSystem=null,ForestryLogistics logistics=null)
         {
+            this.environment=environment;
+            this.logistics=logistics;
+            ownsWildlife = wildlifeSystem == null;
+            wildlifeSimulation = wildlifeSystem ?? new WildlifeSystem();
+            wildlife = new WildlifeRenderer(wildlifeSimulation);
             this.terrain = terrain ?? throw new ArgumentNullException(nameof(terrain));
             this.vehicles = vehicles ?? throw new ArgumentNullException(nameof(vehicles));
             this.effects = effects ?? throw new ArgumentNullException(nameof(effects));
             this.forest = forest ?? throw new ArgumentNullException(nameof(forest));
             this.graphics = graphics ?? new GraphicsSettings { Enhanced = false };
-            surfaces = new SurfaceVisualRenderer(this.graphics, weather);
+            surfaces = new SurfaceVisualRenderer(this.graphics, weather,environment,terrain);
             terrain.WarmStaticGeometry();
             terrain.WarmForestGeometry(forest);
             RegisterPasses();
@@ -39,8 +51,10 @@ namespace ForesTycoon
 
         public void Draw(RenderContext context)
         {
+            if (ownsWildlife) { wildlifeSimulation.Update(Math.Max(0, context.SimulationTimeSeconds-wildlifeTime), terrain, forest, environment); wildlifeTime=context.SimulationTimeSeconds; }
             terrain.UpdateVisibleTiles(context);
-            weather.Update(context.SimulationTimeSeconds, graphics);
+            if(environment!=null && graphics.AutomaticWeather)weather.Update(environment,graphics,context.SimulationTimeSeconds);
+            else weather.Update(context.SimulationTimeSeconds, graphics);
             surfaces.BeginFrame();
             VehicleRenderer.BeginFrame(context, graphics);
             var previous = RenderDevice.Visuals;
@@ -61,6 +75,7 @@ namespace ForesTycoon
                     terrain.UpdateVisibleTiles(shadowContext);
                     terrain.DrawTerrainBase();
                     terrain.DrawTrees(forest, shadowContext);
+                    content.DrawMills(logistics,graphics);
                     wildlife.Draw(terrain, forest, graphics, context);
                     VehicleRenderer.Draw(vehicles, terrain, context.InterpolationAlpha);
                 });
@@ -75,21 +90,26 @@ namespace ForesTycoon
         {
             pipeline.Add(RenderLayer.TerrainBase, "terrain-base", _ => DrawSurface(SurfaceKind.Ground, terrain.DrawTerrainBase));
             pipeline.Add(RenderLayer.TerrainSkirts, "terrain-skirts", _ => DrawSurface(SurfaceKind.Skirt, terrain.DrawSkirts));
+            pipeline.Add(RenderLayer.Fish,"fish", context=>content.DrawFish(terrain,graphics,context));
             pipeline.Add(RenderLayer.WaterSurface, "water-surface", context => DrawSurface(SurfaceKind.Water, () => terrain.DrawWater(context)));
             pipeline.Add(RenderLayer.WaterWalls, "water-walls", context => DrawSurface(SurfaceKind.Water, () => terrain.DrawWaterWalls(context)));
             pipeline.Add(RenderLayer.RiverFallback, "river-fallback", context => DrawSurface(SurfaceKind.Water, () => terrain.DrawRivers(context)));
             pipeline.Add(RenderLayer.Foundations, "road-foundations", _ => DrawSurface(SurfaceKind.Road, terrain.DrawRoadFoundations));
             pipeline.Add(RenderLayer.DecalBegin, "decal-state-begin", _ => BeginDecals());
-            pipeline.Add(RenderLayer.Grid, "terrain-grid", _ => { if (!graphics.Enhanced || graphics.ShowGrid) DrawSurface(SurfaceKind.Plain, terrain.DrawTerrainDecals); });
+            pipeline.Add(RenderLayer.Grid, "terrain-grid", context => { if (!graphics.Enhanced || graphics.ShowGrid) DrawSurface(SurfaceKind.Plain, () => terrain.DrawTerrainDecals(context)); });
             pipeline.Add(RenderLayer.Roads, "roads", _ => DrawSurface(SurfaceKind.Road, terrain.DrawRoads));
             pipeline.Add(RenderLayer.HoverOverlay, "hover-overlay", context =>
             {
                 surfaces.Kind = SurfaceKind.Plain;
                 if (context.ShowTileHighlight) terrain.DrawHoveredTile();
             });
-            pipeline.Add(RenderLayer.ForestryPreview, "forestry-preview", _ => DrawSurface(SurfaceKind.Plain, terrain.DrawForestryPreview));
+            pipeline.Add(RenderLayer.ForestryPreview, "forestry-preview", _ => DrawSurface(SurfaceKind.Plain,()=> {
+                terrain.DrawHarvestSites(logistics);terrain.DrawForestryPreview();
+                content.DrawBuildingPreview(terrain,forest,logistics,graphics.SawmillPreview);
+            }));
             pipeline.Add(RenderLayer.DecalEnd, "decal-state-end", _ => EndDecals());
             pipeline.Add(RenderLayer.Props, "props", context => terrain.DrawTrees(forest, context, !surfaces.ShadowsReady));
+            pipeline.Add(RenderLayer.Buildings,"buildings", _=>content.DrawMills(logistics,graphics));
             pipeline.Add(RenderLayer.Wildlife, "wildlife", context => wildlife.Draw(terrain, forest, graphics, context));
             pipeline.Add(RenderLayer.Vehicles, "vehicles", context =>
                 DrawSurface(SurfaceKind.Vehicle, () => VehicleRenderer.Draw(vehicles, terrain, context.InterpolationAlpha)));
@@ -99,7 +119,7 @@ namespace ForesTycoon
             {
                 if (graphics.Enhanced && graphics.Weather)
                 {
-                    forestWeather.Draw(terrain, weather, graphics, context);
+                    forestWeather.Draw(terrain, weather, graphics, context,environment);
                     precipitation.Draw(terrain, forest, weather, context, graphics);
                 }
             });
@@ -126,7 +146,7 @@ namespace ForesTycoon
 
         public void Dispose()
         {
-            EndDecals(); wildlife.Dispose(); forestWeather.Dispose(); clouds.Dispose(); precipitation.Dispose(); surfaces.Dispose();
+            EndDecals(); content.Dispose(); wildlife.Dispose(); forestWeather.Dispose(); clouds.Dispose(); precipitation.Dispose(); surfaces.Dispose();
         }
     }
 }

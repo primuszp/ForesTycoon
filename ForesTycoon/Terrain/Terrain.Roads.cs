@@ -112,7 +112,7 @@ namespace ForesTycoon
 
         private RoadPlacement AnalyzeRoadPlacement(Tile t, RoadEdge requestedEdges, Func<Node, int> heightOf)
         {
-            if (t == null) return InvalidRoadPlacement;
+            if (t == null || IsBuildingTile(t.Id)) return InvalidRoadPlacement;
             if (hydro.ShouldDrawStandingWater(t)) return InvalidRoadPlacement;
 
             RoadEdge mergedEdges = requestedEdges | roads.GetEdges(t.Id);
