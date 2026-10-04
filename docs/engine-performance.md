@@ -243,6 +243,25 @@ A rács alapértelmezésben bekapcsolt. Minden zoomnál egyetlen 1 pixeles GL-vo
 
 381 automatizált teszt sikeres: a 8×/32×/128×/256× ütemezés, változatlan fix delta, budget miatti leállás, legalább egy tick előrehaladása és a visszalassítás utáni adósságmentes működés ellenőrzött. A grafikus erdőpróba három zoomértéknél egyetlen rácsmenetet és változatlan kameramátrixot igazol. A grafika/időjárás próbája a bekapcsolt alapértelmezést és a ki/be kapcsolás képi eredményét ellenőrzi. Kezelőfelület-képek: `artifacts/grid-speed-hud`; validációs build: `artifacts/grid-speed-validation/ForesTycoon.dll`.
 
+## Holtfák LOD-állapota és az erdőév új üteme
+
+A holtfa kidőlése korábban a mesh építésének erdőévéből számolódott. Emiatt az életfázisokat és LOD-okat külön tároló cache egyik meshében fekvő, másikban még álló fa maradhatott. A holtfa mesh most álló alapgeometriát és gyökérpozíciót, elhalási évet, forgásirányt, talajtávolságot tárol. A közös növekedési shader minden rajzoláskor az aktuális erdőévből választja a két év utáni fekvő állapotot, pozícióra és normálra egyaránt. Nem használja a holtfa forgásszögét élőfa-textúraindexként. Ez az eredeti, textúrázott és árnyékpasszban is ugyanaz; a kidőléshez nincs új mesh szükség.
+
+Új játékvilágban az évhossz 1200-ról 120 szimulációs másodpercre csökkent. Az évszak, a természetes időjárási események időtartama, a felhőátmenet és esőrámpa arányosan rövidül; a környezeti órák száma szimulációs másodpercenként arányosan nő. Így a természetes eseménysorrend és éves csapadékmennyiség megmarad, és a párolgás/transzspiráció/vízmozgatás is ugyanarra az időskálára kerül. A 0,5 másodperces vízlépés változatlan: az új évben kevesebb, környezeti időben nagyobb lépés fut, ezért a talaj-/növekedési állapot nem várható bitre azonosnak a régi tempóval. A vízmérleg és a készletek korlátai továbbra is ellenőrzöttek. A kézzel megadott időjárási esemény időtartama továbbra is szimulációs másodperc; csak a természetes és alapértelmezett időtartamok skálázódnak.
+
+Az új 5-ös mentés tárolja az évhosszt. A 4-es mentés támogatott, eredeti 1200-as évhosszal kerül visszajátszásra; nem öregítjük visszamenőleg tízszeresére a meglévő erdőt. Új térkép generálásakor a 120-as évhossz érvényes. A régebbi történeti mérések és a `--world-benchmark` továbbra is a 1200-as referenciát használják az összehasonlíthatóságért.
+
+Az új `--forest-tempo-benchmark` 30 kirajzolt/frissített bemelegítő képkocka után 180 képkockán futtatja a valódi világot, 256× kiválasztott sebességgel és a felület 8 ms-os szimulációs munkakeretével. 1280×720, MSAA4, magas minőség, 64²-es alapvilág, RTX 5060, Debug build:
+
+| Évhossz | Eltelt erdőév / valós idő | Erdőév / valós másodperc | Leglassabb képkocka |
+| --- | ---: | ---: | ---: |
+| Régi, 1200 s | 0,36 / 5,01 s | 0,07 | 62,97 ms |
+| Új, 120 s | 3,07 / 5,12 s | 0,60 | 50,34 ms |
+
+A megfigyelhető éves haladás ebben a futásban körülbelül 8,4-szeres. Ez nem garantált 256× vagy FPS: a render, a havi munka és a gépterhelés korlátozza. Egy korábbi, csak renderrel bemelegített futás első gyorsított frissítése 0,6–0,7 s-os csúcsot adott; a fenti számok a szimulációt is bemelegítő változathoz tartoznak. UI, diorama és aktív járműforgalom nincs a mérésben. Az érett természetes állomány néhány éves változása továbbra is kisebb a fiatal telepítésekénél; a fajok éves fizikai növekedési görbéjét nem sokszoroztuk meg.
+
+389 automatizált teszt sikeres. Új próbák: éves időjárás és esőmennyiség skálázása, közös környezeti/erdőév és vízmérleg, régi/nem megfelelő/új évhosszú mentés. A célzott GL-próba a kidőlési határt minden előre bemelegített LOD-ban újraépítés nélkül lépi át, és pixelre azonos holtfát ellenőriz az eredeti és textúrázott/árnyék útvonalon. Az időgyorsítási benchmark mindkét évhossznál tényleges mentés-visszajátszással ellenőrzi az időskála, eső, vízkészlet és erdőstatisztika pontos egyezését. A környezeti és egyednövekedési grafikus próbák is sikeresek. Validációs build: `artifacts/forest-tempo-validation/ForesTycoon.dll`.
+
 ## Ellenőrzés
 
 - 130 sikeres automatizált teszt, köztük kamerakivágás és importált modell.

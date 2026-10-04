@@ -3,6 +3,30 @@ namespace ForesTycoon.Tests;
 public class WorldSaveSerializerTests
 {
     [Fact]
+    public void VersionFourKeepsLegacyCalendarEvenWithoutTempoField()
+    {
+        using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(
+            "{\"version\":4,\"tickRate\":30,\"terrain\":{},\"commands\":[]}"));
+        Assert.Equal(1200, WorldSaveSerializer.Read(stream).ReplayForestYearSeconds);
+    }
+
+    [Fact]
+    public void VersionFivePreservesRetunedCalendar()
+    {
+        using var stream = new MemoryStream();
+        WorldSaveSerializer.Write(stream, new WorldSaveData { ForestYearSeconds = 120 });
+        stream.Position = 0;
+        var loaded = WorldSaveSerializer.Read(stream);
+        Assert.Equal(5, loaded.Version);
+        Assert.Equal(120, loaded.ReplayForestYearSeconds);
+    }
+
+    [Theory]
+    [InlineData(0)] [InlineData(119)] [InlineData(1201)] [InlineData(double.NaN)]
+    public void InvalidCalendarIsRejectedBeforeReplay(double tempo)
+        => Assert.Throws<InvalidOperationException>(() => new WorldSaveData { ForestYearSeconds = tempo }.ValidateReplay());
+
+    [Fact]
     public void RoundTrip_PreservesVersionedSettingsAndCommandTicks()
     {
         WorldSaveData expected = new WorldSaveData

@@ -31,10 +31,16 @@ namespace ForesTycoon
         private ForestryAreaSummary lastForestryArea;
         internal GraphicsSettings Graphics { get; }
 
-        public GameWorld(TerrainSettings settings) : this(settings, new GraphicsSettings { AutomaticWeather = true }) { }
+        private double forestYearSeconds;
+        public GameWorld(TerrainSettings settings, double forestYearSeconds = EnvironmentSystem.DefaultGameSecondsPerYear)
+            : this(settings, new GraphicsSettings { AutomaticWeather = true }, forestYearSeconds) { }
 
-        private GameWorld(TerrainSettings settings, GraphicsSettings graphics)
+        private GameWorld(TerrainSettings settings, GraphicsSettings graphics, double forestYearSeconds)
         {
+            // Validate before allocating terrain/GPU resources, including direct diagnostic callers.
+            if (!EnvironmentSystem.IsValidForestYearSeconds(forestYearSeconds))
+                throw new ArgumentOutOfRangeException(nameof(forestYearSeconds));
+            this.forestYearSeconds = forestYearSeconds;
             Graphics = graphics;
             terrain = new Terrain(settings ?? throw new ArgumentNullException(nameof(settings)));
             forest = new ForestSystem(terrain);
@@ -256,6 +262,7 @@ namespace ForesTycoon
 
         public void Regenerate(TerrainSettings settings)
         {
+            forestYearSeconds = EnvironmentSystem.DefaultGameSecondsPerYear;
             vehicles.UseRoadPhysics = true; vehicles.UseCargoStops = true;
             commands.Clear();
             commandJournal.Clear();
@@ -270,6 +277,7 @@ namespace ForesTycoon
             WorldSaveSerializer.Write(destination, new WorldSaveData
             {
                 TickRate = tickRate,
+                ForestYearSeconds = forestYearSeconds,
                 Tick = worldTick,
                 Terrain = TerrainSettingsData.From(terrain.Settings),
                 Commands = new List<WorldCommandRecord>(commandJournal)
@@ -282,7 +290,7 @@ namespace ForesTycoon
             save.ValidateReplay();
             var settings = save.Terrain.ToSettings();
             // Replay into an isolated world. Failure leaves the live world and queued commands intact.
-            using var candidate = new GameWorld(settings, Graphics);
+            using var candidate = new GameWorld(settings, Graphics, save.ReplayForestYearSeconds);
             candidate.Replay(save);
 
             (terrain, candidate.terrain) = (candidate.terrain, terrain);
@@ -290,6 +298,7 @@ namespace ForesTycoon
             (forest, candidate.forest) = (candidate.forest, forest);
             (Environment, candidate.Environment) = (candidate.Environment, Environment);
             (forestEnvironment, candidate.forestEnvironment) = (candidate.forestEnvironment, forestEnvironment);
+            (forestYearSeconds, candidate.forestYearSeconds) = (candidate.forestYearSeconds, forestYearSeconds);
             (wildlife, candidate.wildlife) = (candidate.wildlife, wildlife);
             (Logistics, candidate.Logistics) = (candidate.Logistics, Logistics);
             (vehicles, candidate.vehicles) = (candidate.vehicles, vehicles);
@@ -352,8 +361,8 @@ namespace ForesTycoon
         private void InitializeEnvironment()
         {
             forest.Environment=null;
-            forest.UseEnvironmentTempo();
-            Environment=new EnvironmentSystem(terrain,forest);
+            forest.UseEnvironmentTempo(forestYearSeconds);
+            Environment=new EnvironmentSystem(terrain,forest,forestYearSeconds);
             forestEnvironment = new ForestEnvironmentCoordinator(forest, Environment);
         }
 

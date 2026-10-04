@@ -9,6 +9,9 @@ namespace ForesTycoon
     internal sealed class EnvironmentSystem
     {
         internal const double SecondsPerForestYear = 1200;
+        internal const double DefaultGameSecondsPerYear = 120;
+        internal static bool IsValidForestYearSeconds(double seconds) => double.IsFinite(seconds)
+            && seconds >= DefaultGameSecondsPerYear && seconds <= SecondsPerForestYear;
         internal const double HoursPerSecond = 1.0 / 60;
         internal const double StepSeconds = 0.5;
         private readonly IForestHabitat habitat;
@@ -21,6 +24,7 @@ namespace ForesTycoon
         private readonly int[] destinations;
         private double remainder, monthSeconds, radiationIntegral;
         private readonly WeatherSystem weather;
+        internal double ForestYearSeconds => weather.ForestYearSeconds;
         
         internal double Time => weather.Time;
         internal double EventStart => weather.EventStart;
@@ -56,11 +60,11 @@ namespace ForesTycoon
         }
         internal double BalanceError => StoredWater - (InitialWater + TotalRain * CellCount - Evaporated - Transpired - Outflow);
 
-        internal EnvironmentSystem(IForestHabitat habitat, ForestSystem forest)
+        internal EnvironmentSystem(IForestHabitat habitat, ForestSystem forest, double forestYearSeconds = SecondsPerForestYear)
         {
             this.habitat = habitat ?? throw new ArgumentNullException(nameof(habitat));
             this.forest = forest;
-            weather = new WeatherSystem(habitat.Seed);
+            weather = new WeatherSystem(habitat.Seed, forestYearSeconds);
             int n = habitat.TileCount;
             canopy = new double[n]; surface = new double[n]; soil = new double[n]; deep = new double[n];
             drought = new double[n]; wet = new double[n]; wetIntegral = new double[n]; transfer = new double[n];
@@ -131,7 +135,7 @@ namespace ForesTycoon
         {
             double dt = interval.Seconds, rain = interval.Rain;
             RefreshVegetation();
-            double hours = dt * HoursPerSecond;
+            double hours = dt * weather.HoursPerSecond;
             // Shared atmospheric forcing drives both soil evaporation and leaf-water demand.
             double potential = interval.Forcing.PotentialEvaporationPerHour * hours;
             monthSeconds += dt;

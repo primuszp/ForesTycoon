@@ -324,7 +324,7 @@ namespace ForesTycoon
             if (environment != null)
             {
                 ImGui.SameLine(0, 28);
-                double year = environment.Time / EnvironmentSystem.SecondsPerForestYear;
+                double year = environment.Time / environment.ForestYearSeconds;
                 HudTheme.IconText(GameIcon.Calendar, $"{1 + (int)year}. erdőév · {SeasonName(year - Math.Floor(year))}");
                 ImGui.SameLine(0, 22);
                 HudTheme.IconText(WeatherIcon(environment.Preset), $"{WeatherName(environment.Preset)} · {environment.Temperature:0} °C");

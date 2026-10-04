@@ -61,17 +61,21 @@ namespace ForesTycoon
 
     sealed class WorldSaveData
     {
-        public const int CurrentVersion = 4;
+        public const int CurrentVersion = 5;
         public int Version { get; init; } = CurrentVersion;
         public double TickRate { get; init; } = 30.0;
+        public double ForestYearSeconds { get; init; } = EnvironmentSystem.SecondsPerForestYear;
+        internal double ReplayForestYearSeconds => Version == 4 ? EnvironmentSystem.SecondsPerForestYear : ForestYearSeconds;
         public ulong Tick { get; init; }
         public TerrainSettingsData Terrain { get; init; } = new TerrainSettingsData();
         public List<WorldCommandRecord> Commands { get; init; } = new List<WorldCommandRecord>();
 
         public void Validate()
         {
-            if (Version != CurrentVersion)
+            if (Version != 4 && Version != CurrentVersion)
                 throw new NotSupportedException($"Save version {Version} is not supported; expected {CurrentVersion}.");
+            if (!EnvironmentSystem.IsValidForestYearSeconds(ReplayForestYearSeconds))
+                throw new InvalidOperationException("Save forest year duration must be between 120 and 1200 seconds.");
             if (!double.IsFinite(TickRate) || TickRate <= 0.0)
                 throw new InvalidOperationException("Save tick rate must be positive.");
             if (Terrain == null) throw new InvalidOperationException("Save has no terrain settings.");

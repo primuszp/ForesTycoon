@@ -22,7 +22,7 @@ namespace ForesTycoon
         private int seedCandidateCount;
         private double secondsPerYear;
         internal EnvironmentSystem Environment { get; set; }
-        internal void UseEnvironmentTempo() => secondsPerYear = EnvironmentSystem.SecondsPerForestYear;
+        internal void UseEnvironmentTempo(double forestYearSeconds = EnvironmentSystem.SecondsPerForestYear) => secondsPerYear = forestYearSeconds;
         private double accumulatedSeconds;
         internal double SecondsUntilMonth => secondsPerYear/MonthsPerYear-accumulatedSeconds;
         private ulong month;

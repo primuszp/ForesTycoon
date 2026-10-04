@@ -15,6 +15,9 @@ namespace ForesTycoon
     internal sealed class WeatherSystem
     {
         private uint random;
+        private readonly double timeScale;
+        internal double ForestYearSeconds { get; }
+        internal double HoursPerSecond => EnvironmentSystem.HoursPerSecond / timeScale;
         private double previousCloud;
         internal double Time { get; private set; }
         internal double EventStart { get; private set; }
@@ -24,9 +27,9 @@ namespace ForesTycoon
         internal double EventRain { get; private set; }
         internal double TotalRain { get; private set; }
         internal double RainRate => RateAt(Time);
-        private double Ramp => Math.Min(10, (EventEnd - EventStart) * 0.2);
-        internal double ExpectedEventRain => PeakRain * (EventEnd - EventStart - Ramp) * EnvironmentSystem.HoursPerSecond;
-        internal double Temperature => 12 + 9 * Math.Sin(2 * Math.PI * Time / EnvironmentSystem.SecondsPerForestYear);
+        private double Ramp => Math.Min(10 * timeScale, (EventEnd - EventStart) * 0.2);
+        internal double ExpectedEventRain => PeakRain * (EventEnd - EventStart - Ramp) * HoursPerSecond;
+        internal double Temperature => 12 + 9 * Math.Sin(2 * Math.PI * Time / ForestYearSeconds);
         internal double Humidity => Preset is WeatherPreset.Rain or WeatherPreset.Storm ? 0.9 : 0.55;
         internal double Wind => 1.5 + (Preset == WeatherPreset.Storm ? 8.5 : Preset == WeatherPreset.Rain ? 1.5 : 0)
             * Math.Clamp(RainRate / Math.Max(1, PeakRain), 0, 1);
@@ -36,17 +39,21 @@ namespace ForesTycoon
             get
             {
                 double target = Preset == WeatherPreset.Sunny ? 0.12 : Preset == WeatherPreset.Cloudy ? 0.65 : 1;
-                double t = Math.Clamp((Time - EventStart) / 10, 0, 1);
+                double t = Math.Clamp((Time - EventStart) / (10 * timeScale), 0, 1);
                 t = t * t * (3 - 2 * t);
                 return previousCloud + (target - previousCloud) * t;
             }
         }
 
-        internal WeatherSystem(int seed)
+        internal WeatherSystem(int seed, double forestYearSeconds = EnvironmentSystem.SecondsPerForestYear)
         {
+            if (!EnvironmentSystem.IsValidForestYearSeconds(forestYearSeconds))
+                throw new ArgumentOutOfRangeException(nameof(forestYearSeconds));
+            ForestYearSeconds = forestYearSeconds;
+            timeScale = forestYearSeconds / EnvironmentSystem.SecondsPerForestYear;
             random = unchecked((uint)seed) ^ 0x73A94F21u;
             if (random == 0) random = 1;
-            StartEvent(WeatherPreset.Sunny, 150, 0);
+            StartEvent(WeatherPreset.Sunny, 150 * timeScale, 0);
         }
 
         private double Random()
@@ -67,7 +74,7 @@ namespace ForesTycoon
             if (peak < -1 || peak > 100) throw new ArgumentOutOfRangeException(nameof(peak));
             if (duration < -1 || (duration != -1 && duration < 20) || duration > 600)
                 throw new ArgumentOutOfRangeException(nameof(duration));
-            StartEvent(preset, duration < 0 ? (preset == WeatherPreset.Storm ? 45 : preset == WeatherPreset.Rain ? 90 : 180) : duration,
+            StartEvent(preset, duration < 0 ? (preset == WeatherPreset.Storm ? 45 : preset == WeatherPreset.Rain ? 90 : 180) * timeScale : duration,
                 preset is WeatherPreset.Rain or WeatherPreset.Storm ? (peak < 0 ? (preset == WeatherPreset.Storm ? 32 : 12) : peak) : 0);
         }
 
@@ -85,7 +92,7 @@ namespace ForesTycoon
                 WeatherPreset.Rain => 45 + Random() * 75,
                 _ => 20 + Random() * 40
             };
-            StartEvent(next, duration, next == WeatherPreset.Rain ? 6 + Random() * 12 : next == WeatherPreset.Storm ? 20 + Random() * 20 : 0);
+            StartEvent(next, duration * timeScale, next == WeatherPreset.Rain ? 6 + Random() * 12 : next == WeatherPreset.Storm ? 20 + Random() * 20 : 0);
         }
 
         private double RateAt(double time) => PeakRain * Math.Clamp(
@@ -99,7 +106,7 @@ namespace ForesTycoon
             if (Time < EventStart + Ramp - 1e-9) dt = Math.Min(dt, EventStart + Ramp - Time);
             else if (Time < EventEnd - Ramp - 1e-9) dt = Math.Min(dt, EventEnd - Ramp - Time);
             var forcing = new WeatherForcing(Radiation, Temperature, Humidity, Wind);
-            double rain = (RateAt(Time) + RateAt(Time + dt)) * 0.5 * dt * EnvironmentSystem.HoursPerSecond;
+            double rain = (RateAt(Time) + RateAt(Time + dt)) * 0.5 * dt * HoursPerSecond;
             Time += dt; TotalRain += rain; EventRain += rain;
             return new(dt, rain, forcing);
         }

@@ -36,7 +36,8 @@ namespace ForesTycoon
         private static void RunCase(WeatherPreset preset)
         {
             const double secondsPerMonth = EnvironmentSystem.SecondsPerForestYear / 12;
-            using var world = new GameWorld(TerrainSettings.Default);
+            // Preserve the original calendar for comparison with historical measurements.
+            using var world = new GameWorld(TerrainSettings.Default, EnvironmentSystem.SecondsPerForestYear);
             using var renderProfile = new RenderPassProfiler();
             world.ProfileUpdates = true;
             world.QueueWeather(preset, preset == WeatherPreset.Storm ? 32 : 0, 600);

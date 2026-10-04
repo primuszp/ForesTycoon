@@ -79,6 +79,7 @@ namespace ForesTycoon
                 CheckStaticTerrainCache();
                 CheckDeferredForestBuild();
                 CheckPagedForestUpload();
+                CheckDeadTreeLodState();
                 Console.WriteLine($"Forest GL smoke test passed: near={near}, medium={medium}, far={far} vertices; stable frames rebuild 0 chunks.");
             }
             finally
@@ -181,6 +182,49 @@ namespace ForesTycoon
             for (int frame = 0; frame < 5; frame++)
                 Require(Draw(terrain, forest, 12) == 0, "Cancelled build reintroduced old trees.");
             Console.WriteLine("Deferred forest geometry: stage publication and cancellation after clear passed.");
+        }
+
+        private static void CheckDeadTreeLodState()
+        {
+            using var terrain = new Terrain(TerrainSettings.Default.WithNodeSize(17, 42), (_, _) => 4);
+            var forest = new ForestSystem(terrain);
+            forest.Clear(); forest.Plant(34, ForestSpecies.Spruce);
+            forest.IndividualTrees.TryGet(34, out var patch);
+            var tree = patch.Trees[0] with { Health = 0, AnnualGrowth = default,
+                Dimensions = new(.5f, 20, 3), BirthYear = -100 };
+            patch.Count = 0;
+            patch.DeadTrees = new() { new(tree, -1.99) };
+            forest.NotifyIndividualVisualEdit();
+            var graphics = new GraphicsSettings { Enhanced = false, Weather = false, Fog = false, Wildlife = false };
+            terrain.WarmIndividualForest(forest, graphics);
+            using var scene = new TerrainRenderer(terrain,new VehicleSystem(),new WorldEffectSystem(),forest,graphics);
+            terrain.TryGetTileCenter(34, out var root);
+            var camera = Matrix4.CreateTranslation(-root) * Matrix4.CreateRotationZ(-MathF.PI/4)
+                * Matrix4.CreateRotationX(-MathF.PI/4) * Matrix4.CreateOrthographic(18,18,-100,100);
+            var standing = Frame(12);
+            forest.Update(.6); // Cross death+2 years without a month/topology change.
+            var fallen = Frame(12);
+            Require(!standing.AsSpan().SequenceEqual(fallen), "Dead spruce did not fall without a mesh rebuild.");
+            foreach (float scale in new[] { 1f, 5f, 12f, 1f })
+                Require(fallen.AsSpan().SequenceEqual(Frame(scale)), "Cached LOD changed fallen spruce back into a snag.");
+            graphics.Enhanced = true;
+            var textured = Frame(12);
+            foreach (float scale in new[] { 1f, 5f, 12f })
+                Require(textured.AsSpan().SequenceEqual(Frame(scale)), "Textured/shadow LOD changed dead-tree fall state.");
+            Require(GL.GetError() == ErrorCode.NoError, "Dead tree LOD shader GL error.");
+            Console.WriteLine("Dead spruce: exact fallen pixels in all warmed LODs, no topology rebuild at fall threshold.");
+            byte[] Frame(float scale)
+            {
+                RenderDevice.SetCamera(camera);
+                GL.Viewport(0,0,256,256);
+                GL.Clear(ClearBufferMask.ColorBufferBit|ClearBufferMask.DepthBufferBit);
+                var context = new RenderContext(0,0,0,0,0,0,false,false,1,-45,-45,-10000,-10000,10000,10000,scale);
+                scene.Draw(context); GL.Finish();
+                Require(terrain.ForestChunkRebuilds == 0, "Dead fall state rebuilt LOD geometry.");
+                var pixels = new byte[256*256*4];
+                GL.ReadPixels(0,0,256,256,PixelFormat.Rgba,PixelType.UnsignedByte,pixels);
+                return pixels;
+            }
         }
 
         private static void CheckPagedForestUpload()

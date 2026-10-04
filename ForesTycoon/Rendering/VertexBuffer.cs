@@ -11,6 +11,7 @@ namespace ForesTycoon
         private int vaoId;
         private int growthVbo;
         internal float ForestElapsedYears { get; set; }
+        internal float ForestCurrentYear { get; set; }
         internal int ForestStateTexture { get; set; }
         private bool disposed;
         private uint[] indices;
@@ -231,6 +232,7 @@ namespace ForesTycoon
         {
             GL.GetInteger(GetPName.CurrentProgram, out int currentProgram);
             GL.Uniform1(GlProgram.Uniform(currentProgram, "forest_elapsed"), growthVbo != 0 ? ForestElapsedYears : 0);
+            GL.Uniform1(GlProgram.Uniform(currentProgram, "forest_year"), ForestCurrentYear);
             GL.Uniform1(GlProgram.Uniform(currentProgram, "forest_dynamic"), ForestStateTexture != 0 ? 1 : 0);
             if (ForestStateTexture == 0) return;
             GL.ActiveTexture(TextureUnit.Texture7);

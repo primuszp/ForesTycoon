@@ -2,6 +2,37 @@ namespace ForesTycoon.Tests;
 
 public class EnvironmentSystemTests
 {
+    [Fact]
+    public void RetunedCalendarKeepsSeasonalWeatherAndAnnualRain()
+    {
+        var original = new WeatherSystem(821, 1200);
+        var faster = new WeatherSystem(821, 120);
+        for (int interval = 0; interval < 2400; interval++)
+        {
+            Advance(original, .5); Advance(faster, .05);
+            Assert.Equal(original.Temperature, faster.Temperature, 7);
+            Assert.Equal(original.Cloud, faster.Cloud, 7);
+            Assert.Equal(original.TotalRain, faster.TotalRain, 7);
+        }
+        static void Advance(WeatherSystem weather, double seconds)
+        {
+            while (seconds > 1e-9) seconds -= weather.AdvanceInterval(seconds).Seconds;
+        }
+    }
+
+    [Fact]
+    public void RetunedForestEnvironmentSharesYearAndConservesWater()
+    {
+        var habitat = new Habitat(2);
+        var forest = new ForestSystem(habitat, 120);
+        var environment = new EnvironmentSystem(habitat, forest, 120);
+        var coupled = new ForestEnvironmentCoordinator(forest, environment);
+        for (int tick = 0; tick < 30 * 120; tick++) coupled.Update(1.0 / 30);
+        Assert.Equal(1, forest.ForestYear, 7);
+        Assert.Equal(1, environment.Time / environment.ForestYearSeconds, 7);
+        Assert.InRange(Math.Abs(environment.BalanceError), 0, 1e-6);
+    }
+
     private sealed class Habitat(int count=2,float moisture=0.5f,bool slope=false) : IForestHabitat
     {
         public int TileCount=>count;

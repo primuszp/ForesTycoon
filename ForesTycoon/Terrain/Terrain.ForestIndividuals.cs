@@ -119,6 +119,7 @@ namespace ForesTycoon
         {
             float elapsed = (float)Math.Max(0, year - geometry.GrowthYear);
             geometry.Wood.ForestElapsedYears = geometry.Crowns.ForestElapsedYears = elapsed;
+            geometry.Wood.ForestCurrentYear = geometry.Crowns.ForestCurrentYear = (float)year;
             geometry.Floor.ForestElapsedYears = 0;
         }
 
@@ -282,22 +283,13 @@ namespace ForesTycoon
                     foreach (var dead in patch.DeadTrees)
                     {
                         var stem = IndividualStem(tile, dead.Tree, dead.DeathYear);
-                        if (geometry.AnchorYear < dead.DeathYear + 2)
-                            geometry.NextStageYear = Math.Min(geometry.NextStageYear, dead.DeathYear + 2);
                         Vertex[] wood = DynamicPrimitiveBatch.BuildGeometry(PrimitiveType.Quads, () => DrawTreeWood(stem));
-                        if (geometry.AnchorYear - dead.DeathYear >= 2)
-                        {
-                            Vector3 root = new(stem.X, stem.Y, stem.BaseZ);
-                            var rotation = Matrix4.CreateRotationY(MathF.PI / 2) * Matrix4.CreateRotationZ(stem.Yaw);
-                            for (int i = 0; i < wood.Length; i++)
-                            {
-                                wood[i].Position = root + Vector3.TransformPosition(wood[i].Position - root, rotation)
-                                    + Vector3.UnitZ * dead.Tree.Dimensions.Diameter * TreeMetresToWorld;
-                                wood[i].Normal = Vector3.TransformNormal(wood[i].Normal, rotation);
-                            }
-                        }
                         individualWood.AddRange(wood);
-                        Repeat(individualWoodGrowth, wood.Length, new(Vector3.Zero, Vector3.Zero));
+                        // Physical snag/fallen state follows the current year in every cached LOD,
+                        // rather than waiting for each LOD to replace a differently aged mesh.
+                        Repeat(individualWoodGrowth, wood.Length, ForestVertexGrowth.DeadWood(
+                            new Vector3(stem.X,stem.Y,stem.BaseZ),dead.DeathYear,
+                            dead.Tree.Dimensions.Diameter*TreeMetresToWorld,stem.Yaw));
                         yield return true;
                     }
                 if (patch.Stumps == null) continue;
