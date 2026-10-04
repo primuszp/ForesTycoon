@@ -136,7 +136,7 @@ Az éles világ `ForestEnvironmentCoordinator` rendszere félmásodperces szimul
 
 Az előkészítés nem módosít egyedeket, egészséget, havi vízösszegzést vagy publikált revíziót. A hónap végén a kész geometriai eredmény a tényleges havi besugárzással és vízellátással együtt kerül alkalmazásra. A kész versengési pillanatkép két újrahasználható puffer cseréjével kerül az erdőhöz; az új csemeték is a megfelelő, frissítés előtti állapotot olvassák. Az egy csempén azonos fajhoz tartozó termőhely- és vízválaszt nem számoljuk újra minden egyednél.
 
-Erdőrevízió-változás után az előkészítés újraindul. Hiányzó vagy érvénytelen eredménynél a szinkron számítás megmarad. Az egyedazonosító, index, revízió és célhónap együttes ellenőrzése megakadályozza a régi eredmény alkalmazását kivágás, újratelepítés vagy törlés után. Az önálló `ForestSystem.Update` továbbra is használható előkészítés nélkül.
+Globális vagy nem követett erdőrevízió-változás után az előkészítés újraindul. A helyi módosítások kezelését az alábbi javítási sorok szakasza részletezi. Hiányzó vagy érvénytelen eredménynél a szinkron számítás megmarad. Az egyedazonosító, index, revízió és célhónap együttes ellenőrzése megakadályozza a régi eredmény alkalmazását kivágás, újratelepítés vagy törlés után. Az önálló `ForestSystem.Update` továbbra is használható előkészítés nélkül.
 
 Ugyanazon `--simulation-benchmark` hét mért hónapja, Debug build; a szinkron és előkészített változat azonos egyedujjlenyomattal:
 
@@ -148,9 +148,52 @@ Ugyanazon `--simulation-benchmark` hét mért hónapja, Debug build; a szinkron 
 
 A mérés a geometriai előkészítés és havi erdőfrissítés idejét együtt tartalmazza, de továbbra sem teljes világfrissítés: vízlépés, logisztika és render nincs benne. A növekedési ráták, egészség, elhalás, regeneráció és statisztikák alkalmazása még egyetlen hónapvégi lépésben történik. A két pillanatképpuffer és az egyedenkénti eredménytár több memóriát használ; a tömbök újrahasználhatók és világcserekor felszabadulnak.
 
-**Korlát:** a hónap utolsó félmásodpercében végzett kivágás/újratelepítés után nincs elég előkészítési idő. A külön 128²-es próba ilyen újraindulással 55,68 ms-os hónapváltást mért (egy minta). Gyakori kitermelés szintén sok újraindulást okozhat. Nincs szigorú időkeret: egy állomány feldolgozása, a sor újraindítása és a hónapvégi alkalmazás oszthatatlan. Következő javítás a helyi szerkesztésekhez tartozó részleges érvénytelenítés, majd a hónapvégi alkalmazás további felosztása.
+Az első előkészítési változat a hónap utolsó félmásodpercében végzett kivágás/újratelepítés után teljes újraindulással 55,68 ms-os hónapváltást mért a 128²-es próbában (egy minta). Ezt a helyi szerkesztések alábbi részleges érvénytelenítése javítja. Nincs szigorú időkeret: egy állomány feldolgozása, a globális sor újraindítása és a hónapvégi alkalmazás továbbra is oszthatatlan.
 
 `ForestMonthlyPreparationTests` a szinkron referenciával a teljes fa-, holtfa-, tönk-, készlet- és környezeti állapotot hasonlítja össze: normál és tört hónaphatárokkal, viharral, elhalással, közbenső és közvetlenül hónap végi kivágással/újratelepítéssel, törléssel és szünettel. 362 automatizált teszt, valamint a környezeti, egyednövekedési és logisztikai grafikus próbák sikeresek. Az új előkészítés a mentésformátumot nem változtatja meg.
+
+## Helyi változások javítási sorai
+
+Fakivágás és ültetés után az előkészítés megtartja a változatlan térképrészek pillanatképét és eredményét. A ténylegesen módosult növekedési ráták csempéi a pillanatkép-javítási sorba kerülnek. Ezek két szomszédgyűrűjének erőforrásszámítása külön javítási sort kap: a módosult ráta megváltoztatja a hónap végére előrejelzett koronát, ezért a közvetlen szerkesztési területnél távolabbi megfigyelők is érintettek. Egyetlen csempe művelésénél a rátafrissítés legfeljebb két, az erőforrásjavítás legfeljebb négy gyűrűre terjed ki.
+
+A sorok csempeazonosítónként deduplikálnak, és a tényleges aktuális állományt olvassák. Eltávolított vagy újra létrehozott állományra nem támaszkodnak régi objektumreferenciára. A teljes alap-pillanatkép után először minden esedékes pillanatkép-javítás fut, aztán folytatódik az alap-erőforrásszámítás és a javítások. Új szerkesztés ismét előreveszi a pillanatkép-javítást. Amíg bármelyik sorban munka marad, nincs kész állapot és publikálás.
+
+A részleges javítás kezeli az előkészítés elején, közben és végén végzett kivágást, az új állomány hozzáadását, az ismételt teherautós kitermelést és a halasztott területi ültetést. A végső revíziókönyvelés csak már ismert helyi módosításhoz kapcsolható. Globális frissítés, diagnosztikai geometriaátírás, törlés vagy célhónapváltás továbbra is teljes újrakezdést igényel. A már publikált pillanatképet helyi javítás nem módosíthatja.
+
+A hónap utolsó félmásodpercében végzett kivágás/újratelepítés 128²-es próbája: **55,68 ms → 22,25 ms**. Az új változat utolsó lépése 9 pillanatképcsempét és 54 javítandó vagy még hátralévő erőforráscsempét dolgozott fel; nem indította újra a teljes térképet. Ez egy célzott mintamérés, nem teljes képkocka vagy általános FPS-garancia. A változatlan 128²-es jelenet hónapváltási mediánja 21,53 ms, maximuma 22,25 ms maradt.
+
+367 automatizált teszt sikeres. Új ellenőrzések: szerkesztés a pillanatképépítés és erőforrásszámítás alatt, késői javítás munkamennyiségének térképmérettől független korlátja, ismételt kitermelés és területi ültetés összevetése a teljes szinkron állapottal, valamint a globális változások teljes újraindulása. A környezeti, egyednövekedési és logisztikai grafikus próbák is sikeresek; mentésverzió továbbra is 4.
+
+Megmaradó korlátok: nagy szerkesztési terület sok helyi javítást is jelenthet, a globális változások teljes munkát okoznak. A hónapvégi alkalmazás következő előkészítési lépését az alábbi szakasz részletezi.
+
+## Növekedési görbék és hónapvégi állomány előkészítése
+
+A bontott havi profil szerint a 128²-es természetes jelenetben az előkészített versengés mellett a növekedés/egészség/elhalás még körülbelül 14,3 ms-ot, a kezdeti állományösszegzés 1,8 ms-ot igényelt. A `ProfileMonthlyWork` kapcsoló alapból kikapcsolt; a benchmark bekapcsolja, és külön méri az állományzárást, pillanatkép/magforrás előkészítést, növekedést/elhalást és regeneráció/publikálást. Ezek az utolsó hónap fázisai, nem a teljes futás fázisonkénti mediánjai.
+
+Az előkészítés most egyedenként tárolja a hónaphatáron várható méretet, a térfogatnövekményt, a geometriai növekedési görbe tagjait és a növőtér négyzetgyökös válaszát. Csempénként előre összegzi a hónap kezdeti kor-, biomassza- és egészségadatait is. Mindez a meglévő, javítható második előkészítési menetben történik. Egy helyi rátafrissítés ezeket az adatokat is érvényteleníti; a javítás friss méretből és ütemből számol.
+
+Hónapváltáskor a lezárt környezeti időszak tényleges víz- és fényadatai adják a végső szorzót. A fény fajspecifikus válaszát egyedenként egyszer számoljuk, a szezonális tagot egy rátafrissítéshez egyszer. Az eredeti lebegőpontos szorzási/osztási sorrend megmarad. A térfogatnövekmény csak a havi alkalmazáskor kerül az éves könyvelésbe; az előkészítés nem módosít élő fát, statisztikát vagy vízkészletet.
+
+Mérés azonos benchmarkkal, hét hónap, Debug build:
+
+| Jelenet | Hónapváltás medián előtte → utána | Új maximum |
+| --- | ---: | ---: |
+| Természetes 64² | 5,00 → 3,71 ms | 4,14 ms |
+| Természetes 128² | 22,75 → 16,02 ms | 17,02 ms |
+| Érett tölgy 64² | 14,27 → 10,46 ms | 12,79 ms |
+
+A 128²-es jelenet előkészítési lépéseinek p95 ideje 0,37 ms; a késői helyi szerkesztés próbája 17,31 ms-os hónapváltást adott. A külön futások közötti zaj miatt a mért 128²-es havi medián 15,5–16,0 ms között változott. Az új geometriai/görbe-adattár kapacitásonként további 40 bájtot tárol egyedenként, a tömbfejléceken és csempeösszegzéseken felül; a tár újrahasználható, világcserekor elengedhető.
+
+A benchmark ezután **valóban együtt futtatja a vizet, időjárást és erdőt** 900 szimulációs másodpercig, 30 Hz-es hívásokkal. Az első 200 másodperc bemelegítés; 700 másodperc mért tick. A teljes szinkron változat más képkockacsoportosítással ugyanazt a faállapotot, vízkészletet és transzspirációt adja.
+
+| Együtt futó környezet/erdő | Tick p95 | Tick maximum | Hónapváltás maximum |
+| --- | ---: | ---: | ---: |
+| 64² | 0,83 ms | 14,27 ms | 8,45 ms |
+| 128² | 3,35 ms | 20,31 ms | 20,31 ms |
+
+Ez még nem teljes játék-képkocka: a render, UI, terepszerkesztés, vadállatok és logisztika nincsenek benne. A ráták végső szorzása, egészség/stressz/elhalás és regeneráció a hónaphatáron továbbra is egyetlen állapotfrissítésben fut. Tömeges elhalás, nagyobb térkép vagy globális változás más költséget adhat; nincs szigorú képkockaidő-garancia.
+
+372 automatizált teszt sikeres. A fagyasztott régi növekedési képlet 2000 faj/méret/év/erőforrás esete pontosan egyezik az új görbefelbontással. Külön teszt igazolja, hogy az előkészítés nem publikál élő állapotot. Az öt korábbi benchmark állapotlenyomata változatlan; a környezeti, egyednövekedési és logisztikai grafikus próbák mentés/visszajátszás ellenőrzése is sikeres. A mentésverzió változatlanul 4.
 
 ## Ellenőrzés
 

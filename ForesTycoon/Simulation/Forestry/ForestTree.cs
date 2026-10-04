@@ -31,6 +31,20 @@ namespace ForesTycoon
 
     internal readonly record struct ForestDeadTree(ForestTree Tree, double DeathYear);
 
+    // Geometry-only growth terms. Apply preserves the original floating-point operation order.
+    internal readonly record struct ForestGrowthShape(float DiameterNumerator, float DiameterDenominator,
+        float HeightMultiplier, float CrownRatio, float CrownSpread)
+    {
+        internal ForestTreeDimensions Apply(float factor)
+        {
+            float diameter = DiameterNumerator * factor / DiameterDenominator;
+            float height = HeightMultiplier * factor;
+            return new(diameter, height, Math.Max(height * CrownRatio, diameter * CrownSpread));
+        }
+    }
+    internal readonly record struct ForestBoundaryGeometry(ForestTreeDimensions Dimensions,
+        float VolumeIncrement, ForestGrowthShape Growth, float SpaceResponse);
+
     /// <summary>Species-specific gameplay growth curves in physical metres.</summary>
     internal static class ForestTreeGrowth
     {
@@ -69,19 +83,25 @@ namespace ForesTycoon
 
         internal static ForestTreeDimensions RatesWithResources(in ForestTree tree, double year, float fitness, ForestResources resources)
         {
-            ForestTreeDimensions size = tree.At(year);
-            float season = Math.Clamp(0.65f + 0.8f * MathF.Cos(MathF.Tau * ((float)(year % 1) - 0.25f)), 0, 1.45f);
-            float factor = Math.Clamp(fitness, 0, 1) * resources.LightResponse(tree.Species)
-                * Math.Clamp(resources.Water, 0, 1) * MathF.Sqrt(Math.Clamp(resources.Space, 0, 1)) * tree.Health * season;
-            float maxHeight = tree.Species switch { ForestSpecies.Spruce => 40, ForestSpecies.Birch => 28, ForestSpecies.Oak => 35, _ => 38 };
-            float radial = tree.Species == ForestSpecies.Birch ? 0.0055f : tree.Species == ForestSpecies.Oak ? 0.0045f : 0.005f;
+            return Shape(tree.Species, tree.At(year)).Apply(Factor(fitness, resources.LightResponse(tree.Species),
+                resources.Water, MathF.Sqrt(Math.Clamp(resources.Space, 0, 1)), tree.Health, Season(year)));
+        }
+
+        internal static float Season(double year) =>
+            Math.Clamp(0.65f + 0.8f * MathF.Cos(MathF.Tau * ((float)(year % 1) - 0.25f)), 0, 1.45f);
+
+        internal static float Factor(float fitness, float lightResponse, float water, float spaceResponse, float health, float season) =>
+            Math.Clamp(fitness, 0, 1) * lightResponse * Math.Clamp(water, 0, 1) * spaceResponse * health * season;
+
+        internal static ForestGrowthShape Shape(ForestSpecies species, ForestTreeDimensions size)
+        {
+            float maxHeight = species switch { ForestSpecies.Spruce => 40, ForestSpecies.Birch => 28, ForestSpecies.Oak => 35, _ => 38 };
+            float radial = species == ForestSpecies.Birch ? 0.0055f : species == ForestSpecies.Oak ? 0.0045f : 0.005f;
             // Mature trees continue thickening; height approaches a species-dependent envelope.
-            float diameter = radial * 2 * factor / (1 + size.Diameter * 0.8f);
-            float height = 0.9f * Math.Max(0, 1 - size.Height / maxHeight) * factor;
             // Young crowns expand with the leader; older crowns still spread as
             // the trunk thickens. A diameter-only rate kept saplings artificially narrow.
-            float crown = Math.Max(height * CrownRatio(tree.Species), diameter * (tree.Species == ForestSpecies.Oak ? 9 : 6));
-            return new(diameter, height, crown);
+            return new(radial * 2, 1 + size.Diameter * 0.8f,
+                0.9f * Math.Max(0, 1 - size.Height / maxHeight), CrownRatio(species), species == ForestSpecies.Oak ? 9 : 6);
         }
     }
 }

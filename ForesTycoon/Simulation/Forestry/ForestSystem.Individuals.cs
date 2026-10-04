@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace ForesTycoon
 {
@@ -9,6 +10,16 @@ namespace ForesTycoon
         private ForestCompetition competition = new();
         private readonly ForestMonthlyPreparation monthlyPreparation = new();
         internal int LastMonthlyPreparedTrees { get; private set; }
+        internal bool ProfileMonthlyWork { get; set; }
+        internal ForestMonthProfile LastMonthProfile { get; private set; }
+        internal int LastPreparationSnapshotPatches => monthlyPreparation.LastStepSnapshotPatches;
+        internal int LastPreparationResourcePatches => monthlyPreparation.LastStepResourcePatches;
+        private void CompleteLocalEditRevision()
+        {
+            ulong before = Revision;
+            Revision++; EditRevision++;
+            monthlyPreparation.AcceptLocalRevision(before, Revision);
+        }
         internal void PrepareNextMonthStep()
         {
             if (Environment != null)
@@ -70,9 +81,10 @@ namespace ForesTycoon
             float radiation = Environment != null ? (float)(currentConditions ? Environment.Radiation : Environment.PeriodRadiation) : 1;
             ForestSpecies siteSpecies = ForestSpecies.None;
             float water = 0, fitness = 0;
+            float season = ForestTreeGrowth.Season(year);
             for (int i = 0; i < patch.Count; i++)
             {
-                ForestTree tree = SettleIndividual(patch.Trees[i], year);
+                ForestTree tree = patch.Trees[i];
                 if (siteSpecies != tree.Species)
                 {
                     siteSpecies = tree.Species;
@@ -82,15 +94,29 @@ namespace ForesTycoon
                     fitness = Suitability(tree.Species, id);
                 }
                 ForestResources resources = default;
+                ForestBoundaryGeometry geometry = default;
                 bool cached = updateHealth && !currentConditions && Environment != null
-                    && monthlyPreparation.TryGet(Revision, year, id, i, tree.Id, water, radiation, out resources);
-                if (cached) LastMonthlyPreparedTrees++;
-                else resources = competition.Evaluate(habitat, tree, year, water, radiation, Environment != null);
-                float limit = resources.Limitation(tree.Species);
+                    && monthlyPreparation.TryGet(Revision, year, id, i, tree.Id, water, radiation, out resources, out geometry);
+                if (cached)
+                {
+                    LastMonthlyPreparedTrees++;
+                    currentYearGrowth += geometry.VolumeIncrement;
+                    tree = tree with { Dimensions = geometry.Dimensions, AnchorYear = year };
+                }
+                else
+                {
+                    tree = SettleIndividual(tree, year);
+                    resources = competition.Evaluate(habitat, tree, year, water, radiation, Environment != null);
+                    geometry = new(tree.Dimensions, 0, ForestTreeGrowth.Shape(tree.Species, tree.At(year)),
+                        MathF.Sqrt(Math.Clamp(resources.Space, 0, 1)));
+                }
+                float lightResponse = resources.LightResponse(tree.Species);
+                float limit = Math.Min(resources.Space, Math.Min(resources.Water, lightResponse));
                 float target = Math.Clamp(fitness * (0.15f + 0.85f * limit), 0, 1);
                 if (updateHealth) tree = tree with { Health = MoveTowards(tree.Health, target, 0.035f) };
                 patch.Trees[i] = tree with { Resources = resources,
-                    AnnualGrowth = ForestTreeGrowth.RatesWithResources(tree, year, fitness, resources) };
+                    AnnualGrowth = geometry.Growth.Apply(ForestTreeGrowth.Factor(fitness, lightResponse,
+                        resources.Water, geometry.SpaceResponse, tree.Health, season)) };
             }
             patch.Revision++;
         }
@@ -119,6 +145,7 @@ namespace ForesTycoon
         private void RefreshChangedResourceRates(double year, bool currentConditions)
         {
             if (changedResourceTiles.Count == 0) return;
+            ulong before = Revision;
             competition.SnapshotAffected(habitat, IndividualTrees, year, changedResourceTiles);
             foreach (int id in changedResourceTiles)
                 if (IndividualTrees.TryGet(id, out var patch))
@@ -126,22 +153,27 @@ namespace ForesTycoon
                     UpdateIndividualRates(id, patch, year, updateHealth: false, currentConditions: currentConditions);
                     stands[id] = IndividualStand(id, year);
                 }
-            changedResourceTiles.Clear();
             RecalculateStatistics();
             Revision++;
+            monthlyPreparation.InvalidateLocal(habitat, before, Revision, (month + 1) / 12.0, changedResourceTiles);
+            changedResourceTiles.Clear();
         }
         private void StepIndividualMonth()
         {
+            long started = ProfileMonthlyWork ? Stopwatch.GetTimestamp() : 0;
             LastMonthlyPreparedTrees = 0;
             double year = month / 12.0;
             // Close all growth intervals first. Competition reads a common immutable tile snapshot.
             foreach (var entry in IndividualTrees.Patches)
-                stands[entry.Key] = IndividualStand(entry.Key, year);
+                stands[entry.Key] = monthlyPreparation.TryGetStand(Revision, year, entry.Key, out var preparedStand)
+                    ? preparedStand : IndividualStand(entry.Key, year);
+            long closed = ProfileMonthlyWork ? Stopwatch.GetTimestamp() : 0;
             if (!monthlyPreparation.PublishSnapshot(Revision, year, ref competition))
                 competition.Snapshot(habitat, IndividualTrees, year);
             ClearSeedCandidates();
             for (int id = 0; id < stands.Length; id++)
                 if (IsSeedSource(stands[id])) MarkSeedCandidates(id);
+            long seeded = ProfileMonthlyWork ? Stopwatch.GetTimestamp() : 0;
             foreach (var entry in IndividualTrees.Patches)
             {
                 var patch = entry.Value;
@@ -176,6 +208,7 @@ namespace ForesTycoon
                         patch.Stumps.RemoveAt(i); IndividualTrees.NotifyTopologyChanged(patch);
                     }
             }
+            long grown = ProfileMonthlyWork ? Stopwatch.GetTimestamp() : 0;
             for (int i = 0; i < seedCandidateCount; i++)
             {
                 int id = seedCandidateTiles[i];
@@ -192,6 +225,11 @@ namespace ForesTycoon
                 currentYearGrowth = 0;
             }
             Revision++;
+            if (ProfileMonthlyWork)
+                LastMonthProfile = new(Stopwatch.GetElapsedTime(started, closed).TotalMilliseconds,
+                    Stopwatch.GetElapsedTime(closed, seeded).TotalMilliseconds,
+                    Stopwatch.GetElapsedTime(seeded, grown).TotalMilliseconds,
+                    Stopwatch.GetElapsedTime(grown).TotalMilliseconds);
         }
 
         private ForestTree SettleIndividual(ForestTree tree, double year)
@@ -225,7 +263,7 @@ namespace ForesTycoon
             {
                 stands[id] = IndividualStand(id, ForestYear);
                 MarkResourceArea(id); RefreshChangedResourceRates(ForestYear, currentConditions: true);
-                Revision++; EditRevision++;
+                CompleteLocalEditRevision();
             }
             return loaded;
         }
@@ -243,7 +281,7 @@ namespace ForesTycoon
             harvest = new(stand.Species, stand.AgeYears, volume);
             stands[id] = default;
             MarkResourceArea(id); RefreshChangedResourceRates(ForestYear, currentConditions: true);
-            Revision++; EditRevision++;
+            CompleteLocalEditRevision();
             return ForestryActionResult.Harvested;
         }
     }

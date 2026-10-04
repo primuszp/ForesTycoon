@@ -112,7 +112,9 @@ namespace ForesTycoon
             PlantationRevision++;
             stands[tileId] = IndividualStand(tileId, ForestYear);
             if (!deferStatistics) FinishPlantingArea(areaId);
+            ulong before = Revision;
             Revision++; EditRevision++;
+            monthlyPreparation.InvalidateLocalTile(habitat, before, Revision, (month + 1) / 12.0, tileId);
             return ForestryActionResult.Planted;
         }
 

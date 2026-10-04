@@ -16,6 +16,37 @@ namespace ForesTycoon
             RunPreparedCase(128, false);
             RunPreparedCase(64, true);
             RunLateEditCase();
+            RunCoupledCase(64);
+            RunCoupledCase(128);
+        }
+
+        private static void RunCoupledCase(int side)
+        {
+            var habitat = new GridHabitat(side);
+            var forest = new ForestSystem(habitat, secondsPerYear: 1200);
+            var environment = new EnvironmentSystem(habitat, forest);
+            var clock = new ForestEnvironmentCoordinator(forest, environment);
+            var ticks = new double[700 * 30];
+            double monthlyMaximum = 0;
+            for (int tick = 0; tick < 900 * 30; tick++)
+            {
+                int previousMonth = (int)Math.Floor(forest.ForestYear * 12 + 1e-9);
+                long start = Stopwatch.GetTimestamp();
+                clock.Update(1.0 / 30);
+                double elapsed = Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+                if (tick < 200 * 30) continue;
+                ticks[tick - 200 * 30] = elapsed;
+                if ((int)Math.Floor(forest.ForestYear * 12 + 1e-9) != previousMonth)
+                    monthlyMaximum = Math.Max(monthlyMaximum, elapsed);
+            }
+            var reference = new ForestSystem(habitat, secondsPerYear: 1200);
+            var referenceWater = new EnvironmentSystem(habitat, reference);
+            new ForestEnvironmentCoordinator(reference, referenceWater, prepareMonthlyGrowth: false).Update(900);
+            if (Fingerprint(forest) != Fingerprint(reference) || environment.StoredWater != referenceWater.StoredWater
+                || environment.Transpired != referenceWater.Transpired)
+                throw new InvalidOperationException("Coupled benchmark differs from synchronous reference.");
+            Array.Sort(ticks);
+            Console.WriteLine($"Coupled environment/forest {side}x{side}, 30 Hz: tick p95 {ticks[(int)(ticks.Length * .95)]:0.00} ms, max {ticks[^1]:0.00} ms, month-boundary max {monthlyMaximum:0.00} ms; exact synchronous reference. No rendering, wildlife or logistics.");
         }
 
         private static void RunLateEditCase()
@@ -34,7 +65,7 @@ namespace ForesTycoon
             long start = Stopwatch.GetTimestamp();
             forest.PrepareNextMonthStep();
             forest.Update(.5);
-            Console.WriteLine($"Prepared natural 128x128, edit in final half-second: {Stopwatch.GetElapsedTime(start).TotalMilliseconds:0.00} ms boundary including restart (single sample, not steady-state).");
+            Console.WriteLine($"Prepared natural 128x128, edit in final half-second: {Stopwatch.GetElapsedTime(start).TotalMilliseconds:0.00} ms boundary; {forest.LastPreparationSnapshotPatches} snapshot / {forest.LastPreparationResourcePatches} resource patches repaired or remaining (single sample, not steady-state).");
         }
 
         private static void RunPreparedCase(int side, bool dense)
@@ -54,6 +85,7 @@ namespace ForesTycoon
                 return forest;
             }
             var prepared = Create();
+            prepared.ProfileMonthlyWork = true;
             var reference = Create();
             var boundaries = new double[7];
             var slices = new double[7 * 200];
@@ -77,6 +109,8 @@ namespace ForesTycoon
             if (fingerprint != Fingerprint(reference)) throw new InvalidOperationException("Prepared monthly growth differs from reference.");
             Array.Sort(boundaries); Array.Sort(slices);
             Console.WriteLine($"Prepared {(dense ? "dense" : "natural")} {side}x{side}: boundary median {boundaries[3]:0.00} ms, max {boundaries[^1]:0.00} ms; all slices p95 {slices[(int)(slices.Length * .95)]:0.00} ms, max {slices[^1]:0.00} ms; {prepared.LastMonthlyPreparedTrees} prepared trees; exact fingerprint {fingerprint:X16}.");
+            var profile = prepared.LastMonthProfile;
+            Console.WriteLine($"  Last month phases: close {profile.CloseStandsMs:0.00}, snapshot/seeds {profile.SnapshotAndSeedsMs:0.00}, growth/mortality {profile.GrowthAndMortalityMs:0.00}, regeneration/publish {profile.RegenerationAndPublishMs:0.00} ms.");
         }
 
         private static void RunCase(int side, bool dense)

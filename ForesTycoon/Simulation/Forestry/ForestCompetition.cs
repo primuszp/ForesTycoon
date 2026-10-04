@@ -100,6 +100,7 @@ namespace ForesTycoon
             neighbours.Add(tileId, result);
             return result;
         }
+        internal ReadOnlySpan<int> NeighbourTiles(IForestHabitat habitat, int tileId) => Neighbours(habitat, tileId);
 
         internal ForestResources Evaluate(IForestHabitat habitat, in ForestTree tree, double year, float siteWater, float radiation = 1, bool waterAllocated = false)
         {
