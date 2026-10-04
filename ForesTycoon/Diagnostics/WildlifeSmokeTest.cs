@@ -50,9 +50,22 @@ namespace ForesTycoon
                     var forest=new ForestSystem(terrain);var settings=new GraphicsSettings{Weather=false,Fog=false};
                     using var scene=new TerrainRenderer(terrain,new VehicleSystem(),new WorldEffectSystem(),forest,settings);
                     var spots=new System.Collections.Generic.List<WildlifeSpot>();terrain.CollectWildlifeSpots(forest,spots);
+                    VerifyHabitat();
                     if(spots.Count==0)throw new InvalidOperationException("No deer habitat found.");
                     var animals=new WildlifeSystem();
                     animals.Update(0,terrain,forest,null);
+                    void VerifyHabitat()
+                    {
+                        var actual = new System.Collections.Generic.List<WildlifeSpot>();
+                        var reference = new System.Collections.Generic.List<WildlifeSpot>();
+                        terrain.CollectWildlifeSpots(forest, actual);
+                        terrain.DiagnosticCollectWildlifeSpotsReference(forest, reference);
+                        if (!System.Linq.Enumerable.SequenceEqual(actual, reference))
+                            throw new InvalidOperationException("Optimized habitat differs from original ranked positions.");
+                        terrain.CollectWildlifeSpots(forest, actual, stopAfterFirst: true);
+                        if ((actual.Count > 0) != (reference.Count > 0))
+                            throw new InvalidOperationException("Early habitat existence check differs from full selection.");
+                    }
                     Vector3 initial=animals.Animals[0].Position;
                     bool grazed=false,walked=false;
                     float travelled=0,maxDisplacement=0;
@@ -83,10 +96,23 @@ namespace ForesTycoon
                     scene.Draw(new RenderContext(5,0,0,5,0,0,false,false,1,-45,-45,-100,-100,100,100,62.5f));GL.Finish();
                     if(scene.WildlifeCount<1||scene.WildlifeCount>16||GL.GetError()!=ErrorCode.NoError)throw new InvalidOperationException("Forest wildlife render failed.");
                     FramebufferCapture.SavePng(Path.Combine(output,"elk-in-forest.png"),1000,750);
+                    var survivors=animals.Animals.ToArray();
+                    forest.Update(5);
+                    VerifyHabitat();
+                    animals.Update(0,terrain,forest,null);
+                    if(!System.Linq.Enumerable.SequenceEqual(survivors,animals.Animals))
+                        throw new InvalidOperationException("Forest month replaced existing wildlife.");
+                    foreach(var spot in spots)forest.Harvest(spot.TileId,out _);
+                    VerifyHabitat();
                     forest.Clear();scene.Draw(new RenderContext(5,0,1,5,0,0,false,false,1,-45,-45,-100,-100,100,100,62.5f));
                     if(scene.WildlifeCount!=0)throw new InvalidOperationException("Deer remained after removing forest habitat.");
+                    VerifyHabitat();
+                    animals.Update(0,terrain,forest,null);
+                    if(animals.Animals.Count!=0)throw new InvalidOperationException("Wildlife habitat existence check missed an empty forest.");
+                    forest.Plant(spots[0].TileId,ForestSpecies.Oak);
+                    VerifyHabitat();
                 }finally{terrain.Dispose();}
-                Console.WriteLine("Wildlife smoke passed: GPU skinning, contour on/off/restoration, textures, antlers, walk/eating clips, pause, original mode, forest placement/shadows and habitat removal.");
+                Console.WriteLine("Wildlife smoke passed: GPU skinning, contour on/off/restoration, textures, antlers, walk/eating clips, pause, original mode, forest placement/shadows, habitat removal and exact habitat reference after growth/harvest/clear/replant.");
                 Console.WriteLine("Captures: "+output);
             }finally{RenderDevice.Dispose();}
         }

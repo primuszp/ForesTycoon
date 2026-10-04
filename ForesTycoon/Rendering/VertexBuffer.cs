@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using OpenTK.Graphics.OpenGL;
 
 namespace ForesTycoon
@@ -81,12 +82,7 @@ namespace ForesTycoon
                 GL.BindVertexArray(VaoId);
                 GL.BindBuffer(BufferTarget.ArrayBuffer, VboId);
                 GL.BufferData(BufferTarget.ArrayBuffer, new IntPtr(data.Length * Vertex.Stride), data, usageHint);
-                GL.EnableVertexAttribArray(0);
-                GL.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, Vertex.Stride, 0);
-                GL.EnableVertexAttribArray(1);
-                GL.VertexAttribPointer(1, 4, VertexAttribPointerType.UnsignedByte, true, Vertex.Stride, 6 * sizeof(float));
-                GL.EnableVertexAttribArray(2);
-                GL.VertexAttribPointer(2, 3, VertexAttribPointerType.Float, false, Vertex.Stride, 3 * sizeof(float));
+                ConfigureVertexAttributes();
                 GL.GetBufferParameter(BufferTarget.ArrayBuffer, BufferParameterName.BufferSize, out size);
                 if (data.Length * Vertex.Stride != size)
                     throw new ApplicationException("Vertex data not uploaded correctly");
@@ -121,13 +117,76 @@ namespace ForesTycoon
             GL.BindVertexArray(VaoId);
             GL.BindBuffer(BufferTarget.ArrayBuffer, growthVbo);
             GL.BufferData(BufferTarget.ArrayBuffer, new IntPtr(data.Length * ForestVertexGrowth.Stride), data, usageHint);
+            ConfigureGrowthAttributes();
+            GL.BindVertexArray(0);
+        }
+
+        // A replacement forest mesh is not drawn until its owner publishes it. Stream
+        // bounded pages directly from the build lists, avoiding whole-mesh array copies.
+        internal IEnumerable<bool> UploadForestPages(List<Vertex> data, List<ForestVertexGrowth> growth)
+        {
+            ThrowIfDisposed();
+            if (data.Count != growth.Count) throw new ArgumentException("Growth metadata must match vertices.");
+            const int pageVertices = 16384;
+            int count = data.Count;
+            vertexCount = 0; vertices = null;
+            GL.BindVertexArray(VaoId);
+            GL.BindBuffer(BufferTarget.ArrayBuffer, VboId);
+            GL.BufferData(BufferTarget.ArrayBuffer, count * Vertex.Stride, IntPtr.Zero, usageHint);
+            ConfigureVertexAttributes();
+            GL.BindVertexArray(0);
+            yield return true;
+
+            var page = new Vertex[Math.Min(pageVertices, count)];
+            for (int offset = 0; offset < count; offset += pageVertices)
+            {
+                ThrowIfDisposed();
+                int length = Math.Min(pageVertices, count - offset);
+                data.CopyTo(offset, page, 0, length);
+                GL.BindBuffer(BufferTarget.ArrayBuffer, VboId);
+                GL.BufferSubData(BufferTarget.ArrayBuffer, (IntPtr)(offset * Vertex.Stride), length * Vertex.Stride, page);
+                yield return true;
+            }
+            if (growthVbo == 0) growthVbo = GL.GenBuffer();
+            GL.BindVertexArray(VaoId);
+            GL.BindBuffer(BufferTarget.ArrayBuffer, growthVbo);
+            GL.BufferData(BufferTarget.ArrayBuffer, count * ForestVertexGrowth.Stride, IntPtr.Zero, usageHint);
+            ConfigureGrowthAttributes();
+            GL.BindVertexArray(0);
+            yield return true;
+
+            var growthPage = new ForestVertexGrowth[Math.Min(pageVertices, count)];
+            for (int offset = 0; offset < count; offset += pageVertices)
+            {
+                ThrowIfDisposed();
+                int length = Math.Min(pageVertices, count - offset);
+                growth.CopyTo(offset, growthPage, 0, length);
+                GL.BindBuffer(BufferTarget.ArrayBuffer, growthVbo);
+                GL.BufferSubData(BufferTarget.ArrayBuffer, (IntPtr)(offset * ForestVertexGrowth.Stride), length * ForestVertexGrowth.Stride, growthPage);
+                yield return true;
+            }
+            vertexCount = count;
+        }
+
+        // Both direct uploads and page uploads must use the same shader layout.
+        private static void ConfigureVertexAttributes()
+        {
+            GL.EnableVertexAttribArray(0);
+            GL.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, Vertex.Stride, 0);
+            GL.EnableVertexAttribArray(1);
+            GL.VertexAttribPointer(1, 4, VertexAttribPointerType.UnsignedByte, true, Vertex.Stride, 6 * sizeof(float));
+            GL.EnableVertexAttribArray(2);
+            GL.VertexAttribPointer(2, 3, VertexAttribPointerType.Float, false, Vertex.Stride, 3 * sizeof(float));
+        }
+
+        private static void ConfigureGrowthAttributes()
+        {
             GL.EnableVertexAttribArray(3);
             GL.VertexAttribPointer(3, 3, VertexAttribPointerType.Float, false, ForestVertexGrowth.Stride, 0);
             GL.EnableVertexAttribArray(4);
             GL.VertexAttribPointer(4, 3, VertexAttribPointerType.Float, false, ForestVertexGrowth.Stride, 3 * sizeof(float));
             GL.EnableVertexAttribArray(5);
             GL.VertexAttribPointer(5, 1, VertexAttribPointerType.Float, false, ForestVertexGrowth.Stride, 6 * sizeof(float));
-            GL.BindVertexArray(0);
         }
 
         public void DrawArray() => DrawArray(true);

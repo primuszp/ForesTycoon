@@ -31,7 +31,9 @@ namespace ForesTycoon
             if (!double.IsFinite(seconds) || seconds < 0) throw new ArgumentOutOfRangeException(nameof(seconds));
             if (revision != forest.Revision || surfaceRevision != terrain.WeatherSurfaceRevision)
             {
-                terrain.CollectWildlifeSpots(forest, spots);
+                // Existing animals only need to know whether any habitat remains. Ranked spawn
+                // positions are needed when populating an empty world, not at every forest month.
+                terrain.CollectWildlifeSpots(forest, spots, stopAfterFirst: Animals.Count > 0 && revision != ulong.MaxValue);
                 if (spots.Count == 0) Animals.Clear();
                 if (revision == ulong.MaxValue || Animals.Count == 0)
                     foreach (var spot in spots) Animals.Add(new Animal { Id = spot.TileId, TileId = spot.TileId,

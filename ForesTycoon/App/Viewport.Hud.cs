@@ -97,7 +97,7 @@ namespace ForesTycoon
             ImGui.SameLine();
             SpeedButton("speed2", GameIcon.Fast, 2.0, size, "Gyorsítás 2×");
             ImGui.SameLine();
-            SpeedButton("speed4", GameIcon.Faster, 4.0, size, "Gyorsítás 4×");
+            DrawFastSpeedButton(size);
 
             HudTheme.GroupDivider(size);
             // Terrain
@@ -203,6 +203,29 @@ namespace ForesTycoon
             {
                 simulationClock.Speed = speed;
                 simulationClock.IsPaused = false;
+            }
+        }
+
+        private void DrawFastSpeedButton(float size)
+        {
+            NVec2 menuPosition = ImGui.GetCursorScreenPos() + new NVec2(0, size + 6);
+            if (captureDirectory != null && frameIndex == 284) ImGui.OpenPopup("simulation-speed");
+            bool active = !simulationClock.IsPaused && simulationClock.Speed >= 4;
+            if (HudTheme.IconButton("fast-forward", GameIcon.Faster, size, active,
+                $"Időgyorsítás ({simulationClock.Speed:0}×)", null,
+                "Válassz 4×–256× sebességet az erdő fejlődésének megfigyeléséhez. Nagy terhelésnél az elért gyorsítás kisebb lehet."))
+                ImGui.OpenPopup("simulation-speed");
+            if (ImGui.IsPopupOpen("simulation-speed"))
+                ImGui.SetNextWindowPos(menuPosition, ImGuiCond.Appearing);
+            if (ImGui.BeginPopup("simulation-speed"))
+            {
+                foreach (int speed in new[] { 4, 8, 16, 32, 64, 128, 256 })
+                    if (ImGui.MenuItem($"{speed}×", "", !simulationClock.IsPaused && simulationClock.Speed == speed))
+                    {
+                        simulationClock.Speed = speed;
+                        simulationClock.IsPaused = false;
+                    }
+                ImGui.EndPopup();
             }
         }
 

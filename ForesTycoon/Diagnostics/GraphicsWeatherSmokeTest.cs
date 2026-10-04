@@ -27,7 +27,9 @@ namespace ForesTycoon
                 int[] route = terrain.FindDemoRoadRoute();
                 Require(route.Length >= 2, "Graphics fixture has no road.");
                 vehicles.Spawn(route);
-                var settings = new GraphicsSettings { Enhanced = false, Fog = false, Wildlife = false };
+                Require(new GraphicsSettings().ShowGrid, "Grid is not enabled by default.");
+                // Toggle comparisons intentionally start with the grid disabled.
+                var settings = new GraphicsSettings { Enhanced = false, Fog = false, Wildlife = false, ShowGrid = false };
                 using var renderer = new TerrainRenderer(terrain, vehicles, new WorldEffectSystem(), forest, settings);
                 string output = Path.GetFullPath("artifacts/graphics-weather"); Directory.CreateDirectory(output);
                 GL.Enable(EnableCap.DepthTest); GL.Viewport(0, 0, 1100, 800);

@@ -2,6 +2,13 @@ namespace ForesTycoon.Tests;
 
 public class SimulationFrameRunnerTests
 {
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(double.NaN)]
+    public void RejectsInvalidWorkBudget(double budget)
+        => Assert.Throws<ArgumentOutOfRangeException>(() => new SimulationFrameRunner(maximumWorkMilliseconds: budget));
+
     [Fact]
     public void Advance_AppliesCommandsBeforeFixedTicks()
     {

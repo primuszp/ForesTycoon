@@ -62,35 +62,17 @@ namespace ForesTycoon
                 if (draw) geometry.Land.DrawArray();
             }
         }
-        // Dark moss line at partial opacity: it reads on both flat colour and textured grass,
-        // and the overlapping passes below make the centre of the line the darkest part.
         // Dark moss line at partial opacity: it reads on both flat colour and textured grass.
         private static readonly Color GridLineColor = Color.FromArgb(115, 34, 52, 18);
 
         /// <summary>
-        /// Core-profile OpenGL has no wide lines, so the cached 1-pixel line set is drawn
-        /// twice, shifted a quarter pixel either way. Multisampling turns the overlap into a
-        /// soft line of about one and a half pixels, without touching the line geometry.
+        /// One native 1-pixel pass, independent of camera zoom. Multisampling provides
+        /// edge coverage without widening the lines or offsetting the camera.
         /// </summary>
-        private void DrawCachedGrid(float pixelsPerWorldUnit = 0f)
+        private void DrawCachedGrid()
         {
-            int[] viewport = new int[4];
-            GL.GetInteger(GetPName.Viewport, viewport);
-            Matrix4 camera = RenderDevice.ViewProjection;
-            float pixelX = 2f / Math.Max(1, viewport[2]), pixelY = 2f / Math.Max(1, viewport[3]);
-            // Very distant views keep a single pass so the grid never swallows the terrain.
-            bool distant = pixelsPerWorldUnit > 0f && pixelsPerWorldUnit < 4f;
-            try
-            {
-                using var state = new RenderStateScope().AlphaBlend();
-                for (int pass = 0; pass < (distant ? 1 : 2); pass++)
-                {
-                    float shift = distant ? 0f : (pass == 0 ? -0.25f : 0.25f);
-                    RenderDevice.SetViewProjection(camera * Matrix4.CreateTranslation(shift * pixelX, shift * pixelY, 0));
-                    foreach (TerrainChunk chunk in visibleChunks) staticTerrain[chunk].Grid.DrawArray();
-                }
-            }
-            finally { RenderDevice.SetViewProjection(camera); }
+            using var state = new RenderStateScope().AlphaBlend().LineWidth(1);
+            foreach (TerrainChunk chunk in visibleChunks) staticTerrain[chunk].Grid.DrawArray();
         }
         internal bool CachedGridHasAllTileBoundaries()
         {

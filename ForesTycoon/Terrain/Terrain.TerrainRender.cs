@@ -28,7 +28,7 @@ namespace ForesTycoon
 
         internal void DrawTerrainDecals(RenderContext context = default)
         {
-            DrawCachedGrid(context.PixelsPerWorldUnit);
+            DrawCachedGrid();
         }
 
         private void DrawTileGrid(Tile tile, Color terrainLine)

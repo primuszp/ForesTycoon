@@ -312,20 +312,13 @@ namespace ForesTycoon
                         yield return true;
                 }
             }
-            Upload(geometry.Wood, individualWood, individualWoodGrowth);
-            yield return true;
-            Upload(geometry.Crowns, individualCrowns, individualCrownGrowth);
-            yield return true;
-            Upload(geometry.Floor, individualFloor, individualFloorGrowth);
+            foreach (var page in geometry.Wood.UploadForestPages(individualWood, individualWoodGrowth)) yield return page;
+            foreach (var page in geometry.Crowns.UploadForestPages(individualCrowns, individualCrownGrowth)) yield return page;
+            foreach (var page in geometry.Floor.UploadForestPages(individualFloor, individualFloorGrowth)) yield return page;
 
             static void Repeat(List<ForestVertexGrowth> target, int count, ForestVertexGrowth value)
             {
                 for (int i = 0; i < count; i++) target.Add(value);
-            }
-            static void Upload(VertexBuffer buffer, List<Vertex> vertices, List<ForestVertexGrowth> growth)
-            {
-                buffer.SetData(vertices.ToArray(), false);
-                buffer.SetForestGrowth(growth.ToArray());
             }
         }
 

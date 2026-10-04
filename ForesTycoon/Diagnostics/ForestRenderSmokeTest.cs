@@ -78,6 +78,7 @@ namespace ForesTycoon
                 Require(GL.GetError() == ErrorCode.NoError, "OpenGL reported an error.");
                 CheckStaticTerrainCache();
                 CheckDeferredForestBuild();
+                CheckPagedForestUpload();
                 Console.WriteLine($"Forest GL smoke test passed: near={near}, medium={medium}, far={far} vertices; stable frames rebuild 0 chunks.");
             }
             finally
@@ -112,6 +113,15 @@ namespace ForesTycoon
                 terrain.UpdateVisibleTiles(context);
                 Check(true);
                 Check(false);
+                foreach (float zoom in new[] { 1.5f, 5f, 12f })
+                {
+                    var camera = RenderDevice.ViewProjection;
+                    RenderMetrics.BeginFrame();
+                    terrain.DrawTerrainDecals(new RenderContext(0,0,0,0,0,0,false,false,1,
+                        -60,-45,-10000,-10000,10000,10000,zoom));
+                    Require(RenderMetrics.DrawCalls == terrain.VisibleChunkCount, "Grid used more than one pass at this zoom.");
+                    Require(RenderDevice.ViewProjection == camera, "Grid changed the camera projection.");
+                }
                 terrain.BuildRoadTilePath(34, 37);
                 Require(terrain.RoadCount > 0, "Road cache test did not build a road.");
                 Check(true);
@@ -171,6 +181,57 @@ namespace ForesTycoon
             for (int frame = 0; frame < 5; frame++)
                 Require(Draw(terrain, forest, 12) == 0, "Cancelled build reintroduced old trees.");
             Console.WriteLine("Deferred forest geometry: stage publication and cancellation after clear passed.");
+        }
+
+        private static void CheckPagedForestUpload()
+        {
+            foreach (int count in new[] { 0, 3, 16389, 32769 })
+            {
+                var vertices = new System.Collections.Generic.List<Vertex>();
+                var growth = new System.Collections.Generic.List<ForestVertexGrowth>();
+                for (int i = 0; i < count; i++)
+                {
+                    int triangle = i / 3;
+                    var origin = new Vector3((triangle % 32) / 16f - 1, (triangle / 32 % 32) / 16f - 1, 0);
+                    var corner = i % 3 == 0 ? Vector3.Zero : i % 3 == 1 ? new Vector3(.05f, 0, 0) : new Vector3(0, .05f, 0);
+                    vertices.Add(new Vertex(origin + corner, Vector3.UnitZ, 0xff0077aau + (uint)(triangle % 64)));
+                    growth.Add(new(origin, new Vector3(.15f, .1f, .05f)));
+                }
+                using var direct = new VertexBuffer(PrimitiveType.Triangles);
+                using var paged = new VertexBuffer(PrimitiveType.Triangles);
+                direct.SetData(vertices.ToArray(), false); direct.SetForestGrowth(growth.ToArray());
+                using var work = paged.UploadForestPages(vertices, growth).GetEnumerator();
+                int steps = 0;
+                while (work.MoveNext())
+                {
+                    steps++;
+                    RenderMetrics.BeginFrame(); paged.DrawArray();
+                    Require(RenderMetrics.DrawCalls == 0, "Incomplete upload exposed a partial mesh.");
+                }
+                if (count > 16384) Require(steps >= 6, "Large mesh upload did not yield between pages.");
+                var readback = new Vertex[count];
+                GL.BindBuffer(BufferTarget.ArrayBuffer, paged.VboId);
+                if (count > 0) GL.GetBufferSubData(BufferTarget.ArrayBuffer, IntPtr.Zero, count * Vertex.Stride, readback);
+                Require(System.Runtime.InteropServices.MemoryMarshal.AsBytes(vertices.ToArray().AsSpan()).SequenceEqual(
+                    System.Runtime.InteropServices.MemoryMarshal.AsBytes(readback.AsSpan())), "Paged vertex bytes differ from source.");
+                foreach (float elapsed in new[] { 0f, .7f, 1.5f })
+                {
+                    direct.ForestElapsedYears = paged.ForestElapsedYears = elapsed;
+                    Require(Frame(direct).AsSpan().SequenceEqual(Frame(paged)), "Paged geometry/growth pixels differ from direct upload.");
+                }
+            }
+            Require(GL.GetError() == ErrorCode.NoError, "Paged forest upload GL error.");
+            Console.WriteLine("Paged forest uploads: empty/small/page-tail/multiple-page buffers, exact vertex bytes, growth pixels and no partial draws passed.");
+            static byte[] Frame(VertexBuffer buffer)
+            {
+                RenderDevice.SetCamera(Matrix4.Identity);
+                GL.Viewport(0, 0, 256, 256);
+                GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
+                buffer.DrawArray(); GL.Finish();
+                var pixels = new byte[256 * 256 * 4];
+                GL.ReadPixels(0, 0, 256, 256, PixelFormat.Rgba, PixelType.UnsignedByte, pixels);
+                return pixels;
+            }
         }
     }
 }

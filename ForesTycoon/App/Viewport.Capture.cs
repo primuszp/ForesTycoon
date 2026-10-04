@@ -41,7 +41,14 @@ namespace ForesTycoon
                 case 230: Save("05-stumps-grid"); break;
                 case 231: FocusOn(cameraFocus, 60f); world.Graphics.ShowGrid = false; break;
                 case 270: Save("06-species-closeup"); break;
-                case 271: Close(); break;
+                case 271:
+                    world.Graphics.ShowGrid = true;
+                    SelectTool(TerrainEditTool.Inspect);
+                    simulationClock.Speed = 256;
+                    simulationClock.IsPaused = false;
+                    break;
+                case 285: Save("07-fast-forward-menu"); break;
+                case 286: Close(); break;
             }
         }
     }

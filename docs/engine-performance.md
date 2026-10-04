@@ -195,6 +195,54 @@ Ez még nem teljes játék-képkocka: a render, UI, terepszerkesztés, vadállat
 
 372 automatizált teszt sikeres. A fagyasztott régi növekedési képlet 2000 faj/méret/év/erőforrás esete pontosan egyezik az új görbefelbontással. Külön teszt igazolja, hogy az előkészítés nem publikál élő állapotot. Az öt korábbi benchmark állapotlenyomata változatlan; a környezeti, egyednövekedési és logisztikai grafikus próbák mentés/visszajátszás ellenőrzése is sikeres. A mentésverzió változatlanul 4.
 
+## Játékvilág és havi élőhely-ellenőrzés
+
+Az új `--world-benchmark` a valódi `GameWorld.Update` és `GameWorld.Draw` útvonalat méri, a GPU befejezését is megvárva (`GL.Finish`, csak a diagnosztikában). A kikapcsolható `ProfileUpdates` külön bontja a környezet/erdő, logisztika, vadállatok és egyéb rendszerek frissítési idejét. Normál játékban a profilozás kikapcsolt.
+
+A mérés 64²-es alapértelmezett, seed 42-es természetes világot használ 1887 fával, magas grafikai minőségen, 1280×720 felbontásban, MSAA4 mellett. Külön napsütéses és viharos futás készül. A 90 másodperces szimulációs bemelegítést 30 kirajzolt bemelegítő képkocka és 600 mért képkocka követi, 30 Hz-es szimulációval; a mért szakasz egy hónaphatárt tartalmaz. A képkockánkénti JSON-minták az `artifacts/world-benchmark/sunny.json` és `storm.json` fájlokba kerülnek.
+
+A havi profilban a szarvasok élőhelykeresése önmagában körülbelül 5 ms-ot igényelt. A teljes rangsor építésekor most csempénként egyszer gyűjtjük össze a törzspozíciókat, és ugyanazt a mintát használjuk a kilenc jelölt helyhez. A pozíciókeresés nem számolja ki a fa modelljét, méretét és megjelenését. A csempe-, szomszéd- és összehasonlítási sorrend megmarad, a kiválasztott legfeljebb 16 születési hely változatlan.
+
+Már létező állatoknál a korábbi rendszer is csak az üres eredményt használta: megszűnt-e minden élőhely. Ez az ellenőrzés most az első megfelelő hely után befejeződik. Üres világ benépesítése továbbra is a teljes rangsorból történik. A havi változás nem cseréli le az állatokat és nem módosítja mozgásukat.
+
+Debug build, NVIDIA RTX 5060, összehasonlítható futások (ms):
+
+| Jelenet | Havi vadállat-frissítés előtte → utána | Teljes havi világfrissítés előtte → utána | Új update + render havi képkocka | Új képkocka medián / p95 / max |
+| --- | ---: | ---: | ---: | ---: |
+| Napsütés | 5,18 → 0,12 | 11,74 → 6,97 | 28,00 | 15,38 / 17,90 / 29,62 |
+| Vihar | 5,07 → 0,07 | 8,31 → 3,12 | 22,39 | 15,52 / 18,27 / 27,29 |
+
+A kirajzolás továbbra is jelentős költség: a havi képkockán 21,03 és 19,27 ms. Az új futások leglassabb képkockái a hónaphatár után jelentkeztek, 0,04 ms-os frissítéssel és 27–30 ms-os renderrel. Más futásban 50 ms-os rendercsúcs is előfordult. Ezek egy-egy futás mintái, nincs általános FPS-garancia. A mérés nem tartalmaz host inputot, UI-t, diorama utófeldolgozást, swapot vagy képkockaütemezést; járművek száma 0, ezért aktív logisztikai terhelést sem igazol. Világlétrehozás és kezdeti cache-feltöltés kívül esik a mért szakaszon.
+
+372 automatizált teszt sikeres. A vadállatok grafikus próbája az eredeti, diagnosztikába fagyasztott élőhelyalgoritmussal pontosan összeveti a teljes helylistát, rangsort és az élőhely-létezést: kezdeti erdőben, növekedés, kitermelés, törlés és újratelepítés után. Ellenőrzi a meglévő állatok megőrzését hónapváltáskor, az élőhely nélküli világ kiürítését és a szokásos animációs/megjelenítési viselkedést. A mentésformátum változatlan.
+
+## Erdőmesh feltöltése adagokban és renderfázisok mérése
+
+A `--world-benchmark` most a renderfázisok CPU-idejét és OpenGL-időbélyegek közötti GPU-időt is rögzíti a JSON-mintákban (`RenderPasses`). A pipeline lépésein túl külön méri a képkocka előkészítését, az árnyéktérképet és a felhőket. A query-k csak a diagnosztikai futásban jönnek létre, eredményüket a benchmark meglévő `GL.Finish` hívása után olvassuk; normál játékban nincs query vagy GPU-várakozás. A GPU-időbélyeg-intervallum tartalmazhat parancsbeküldési szünetet is, a CPU-idő pedig driver-várakozást: a két idő nem összeadható. Az instrumentált benchmark kis többletterhelést okoz.
+
+A napsütéses referenciafutás hónapváltás utáni leglassabb képkockájában a `props` erdőfázis CPU-ideje 14,40 ms volt. Az előkészítés már fokozatosan építette a fákat, de a feltöltés még teljes mesh- és növekedésitömb-másolatokat készített, majd egészben adta át őket a drivernek. A feltöltés most közvetlenül az építési listákból, legfeljebb 16 384 csúcsos adagokban történik. Ez adagonként legfeljebb 448 KiB csúcsadatot vagy növekedési metaadatot jelent. A két újrahasznált átmeneti tömb a teljes mesh méretétől függetlenül legfeljebb összesen 896 KiB; a meglévő építési listák és teljes GPU-tárak továbbra is szükségesek.
+
+Az adagok között az építő visszaadja a vezérlést a meglévő, 2 ms-os együttműködő ütemezésnek. A csúcs- és növekedési attribútumok beállítását közös segédfüggvény végzi a közvetlen és az adagolt feltöltésben. Részben feltöltött buffer nem rajzolható; a régi erdőgeometria csak mindhárom új buffer és az aktuális egyedállapot elkészülte után cserélődik. Közbenső módosításnál a meglévő revízióellenőrzés eldobja a helyettesítő mesht. A növekedés, faazonosítók és mentésformátum változatlanok.
+
+Ugyanazon instrumentált benchmark, Debug build, RTX 5060, 64²-es világ; külön futások mintái:
+
+| Jelenet | Erdőfázis CPU maximum előtte → utána | Teljes képkocka maximum előtte → utána | Képkocka medián előtte → utána |
+| --- | ---: | ---: | ---: |
+| Napsütés | 14,40 → 6,50 ms | 30,43 → 27,09 ms | 15,82 → 16,17 ms |
+| Vihar | 12,82 → 5,42 ms | 53,48 → 25,90 ms | 16,02 → 16,05 ms |
+
+A mérés az erdőfázis csúcsának csökkenését mutatja; az átlagos képkocka nem gyorsult. A teljes maximum zajos, ezért a táblázatból nem következik általános 50%-os rendergyorsulás. A terep, víz és halak továbbra is folyamatos terhelést adnak. A teljes GPU-buffer lefoglalása, egy adag feltöltése és egy fa meshének előállítása oszthatatlan; nagyobb térképen vagy más driverrel továbbra is lehet megakadás. A kisebb adagok több GL-hívást jelentenek, a kezdeti feltöltés ára nincs ebben a mérésben. UI, diorama, aktív járműforgalom és más térképméretek továbbra sincsenek lefedve.
+
+372 automatizált teszt sikeres. Az erdő grafikus próbája üres, kis, egy adag határán túlnyúló és többadagos bufferrel ellenőrzi a forrással byte-ra azonos GPU-csúcsadatot, a közvetlen feltöltéssel pixelre egyező növekedést három időpontban és a részleges mesh rajzolhatatlanságát. A halasztott publikálás/törlés próbája, az egyednövekedés mentés-visszajátszás próbája és a grafika/időjárás megjelenítési próbája is sikeres.
+
+## Interaktív időgyorsítás és vékony rács
+
+A felület 4×–256× fokozatokat kínál. A korábbi képkockánkénti 8 tickes korlát gyors gépen is korlátozta volna a nagyobb fokozatokat. Az interaktív futtató most legfeljebb 2048 fix, 30 Hz-es tickre jogosult képkockánként, de 8 ms-os együttműködő munkakeretben. Az időkeret ellenőrzése teljes tickek között történik; legalább egy esedékes tick mindig lefut. A szimulációs idő és a mentés tick-számlálója csak a ténylegesen végrehajtott lépésekkel halad, a környezet/erdő/szállítás sorrendje megmarad. A keret miatt bent maradó teljes időadósság eldobódik, a tört tick megmarad; ezért visszalassításkor nincs elnyújtott gyorsított felzárkózás. Terhelés alatt az elért gyorsítás kisebb a kiválasztottnál. Egy nehéz havi tick továbbra is átlépheti a 8 ms-ot.
+
+A rács alapértelmezésben bekapcsolt. Minden zoomnál egyetlen 1 pixeles GL-vonalmenet fut, nincs közeli/távoli vastagságváltás vagy eltolás a kameramátrixon. Ez a közeli rács két korábbi rajzolási menetét egyre csökkenti. A korábbi benchmark-táblázatok a régi, kikapcsolt alapértelmezett rács mellett készültek; új alapbeállítású méréssel nem közvetlenül összehasonlíthatók.
+
+381 automatizált teszt sikeres: a 8×/32×/128×/256× ütemezés, változatlan fix delta, budget miatti leállás, legalább egy tick előrehaladása és a visszalassítás utáni adósságmentes működés ellenőrzött. A grafikus erdőpróba három zoomértéknél egyetlen rácsmenetet és változatlan kameramátrixot igazol. A grafika/időjárás próbája a bekapcsolt alapértelmezést és a ki/be kapcsolás képi eredményét ellenőrzi. Kezelőfelület-képek: `artifacts/grid-speed-hud`; validációs build: `artifacts/grid-speed-validation/ForesTycoon.dll`.
+
 ## Ellenőrzés
 
 - 130 sikeres automatizált teszt, köztük kamerakivágás és importált modell.

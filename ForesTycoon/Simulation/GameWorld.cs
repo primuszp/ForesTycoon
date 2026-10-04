@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Diagnostics;
 using OpenTK.Mathematics;
 
 namespace ForesTycoon
@@ -103,14 +104,25 @@ namespace ForesTycoon
         public int MapTileColumns => terrain.Settings.TileColumns;
         public ForestPattern InitialForestPattern => terrain.Settings.ForestPattern;
         public ulong SimulationTick => worldTick;
+        internal bool ProfileUpdates { get; set; }
+        internal WorldUpdateProfile LastUpdateProfile { get; private set; }
 
         public void Update(double fixedDeltaSeconds)
         {
+            long start = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
             forestEnvironment.Update(fixedDeltaSeconds);
+            long environmentUpdated = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
             Logistics?.Update(fixedDeltaSeconds);
+            long logisticsUpdated = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
             wildlife.Update(fixedDeltaSeconds, terrain, forest, Environment);
+            long wildlifeUpdated = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
             systems.Update(fixedDeltaSeconds);
             worldTick++;
+            if (ProfileUpdates)
+                LastUpdateProfile = new(Stopwatch.GetElapsedTime(start, environmentUpdated).TotalMilliseconds,
+                    Stopwatch.GetElapsedTime(environmentUpdated, logisticsUpdated).TotalMilliseconds,
+                    Stopwatch.GetElapsedTime(logisticsUpdated, wildlifeUpdated).TotalMilliseconds,
+                    Stopwatch.GetElapsedTime(wildlifeUpdated).TotalMilliseconds);
         }
 
         public int ExecutePendingCommands()

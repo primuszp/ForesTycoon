@@ -25,7 +25,7 @@ namespace ForesTycoon
         public double SimulationTimeSeconds => Tick * StepSeconds;
         public float InterpolationAlpha => (float)(accumulatorSeconds / StepSeconds);
 
-        public int Advance(double elapsedSeconds, Action<double> update)
+        public int Advance(double elapsedSeconds, Action<double> update, Func<bool> canContinue = null)
         {
             if (update == null) throw new ArgumentNullException(nameof(update));
             if (!double.IsFinite(elapsedSeconds) || elapsedSeconds < 0.0) throw new ArgumentOutOfRangeException(nameof(elapsedSeconds));
@@ -40,12 +40,16 @@ namespace ForesTycoon
             int executed = 0;
             while (accumulatorSeconds >= StepSeconds && executed < MaxTicksPerFrame)
             {
+                // The host budget is checked between complete deterministic ticks.
+                if (executed > 0 && canContinue != null && !canContinue()) break;
                 update(StepSeconds);
                 accumulatorSeconds -= StepSeconds;
                 Tick++;
                 executed++;
             }
 
+            // Slow down under load instead of retaining whole-tick debt after fast-forward.
+            if (accumulatorSeconds >= StepSeconds) accumulatorSeconds %= StepSeconds;
             return executed;
         }
 

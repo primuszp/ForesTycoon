@@ -231,6 +231,12 @@ Aktuális modell, felelősségek és korlátok: [időjárás–talaj–fa kapcso
 A `--simulation-benchmark` grafika nélkül méri a havi erdőfrissítést, a helyi kitermelést és a versengés hónap közbeni előkészítését. Az előkészítés csökkenti a hónapváltás terhelését; [mérések és korlátok](docs/engine-performance.md#havi-versengés-fokozatos-előkészítése). Nagy térképen és közvetlenül hónap végi erdőművelésnél még lehet megakadás.
 
 ```sh
+dotnet run --project ForesTycoon/ForesTycoon.csproj -- --world-benchmark
+```
+
+A világbenchmark a valódi világfrissítést és a befejezett GPU-kirajzolást méri egy hónapváltáson át, napsütésben és viharban. Képkockánkénti adatok: `artifacts/world-benchmark`. A havi profil külön méri az erdő/környezet, logisztika és vadállatok költségét; a renderprofil fázisonként CPU- és GPU-időbélyeg-adatokat ment. UI, diorama utófeldolgozás és aktív járműforgalom nincs a mérésben; [eredmények és mérési korlátok](docs/engine-performance.md#játékvilág-és-havi-élőhely-ellenőrzés), [adagolt erdőmesh-feltöltés](docs/engine-performance.md#erdőmesh-feltöltése-adagokban-és-renderfázisok-mérése).
+
+```sh
 dotnet run --project ForesTycoon/ForesTycoon.csproj -- --environment-smoke-test
 ```
 
@@ -260,7 +266,7 @@ Ellenőrzés: `dotnet run --project ForesTycoon -- --logistics-smoke-test`. A pr
 
 A felület a Transport Tycoon mintáját követi:
 
-- **Felső ikonsor**, feladat szerinti csoportokban: játék menü (új térkép, térképméret, mentés, betöltés, kilépés) · idő (szünet, 1×/2×/4×) · terep · utak · erdészet · ipar és szállítás · információs ablakok · nézet, grafika, fejlesztői eszközök és súgó. Minden gomb tooltipje mutatja a nevet, a gyorsbillentyűt és egy rövid leírást.
+- **Felső ikonsor**, feladat szerinti csoportokban: játék menü (új térkép, térképméret, mentés, betöltés, kilépés) · idő (szünet, 1×/2×, gyorsítási menü 4×–256×) · terep · utak · erdészet · ipar és szállítás · információs ablakok · nézet, grafika, fejlesztői eszközök és súgó. Minden gomb tooltipje mutatja a nevet, a gyorsbillentyűt és egy rövid leírást.
 - **Eszköz-alsáv** az ikonsor alatt, csak ha az eszköznek vannak beállításai (fafajválasztó ikonokkal, ecsetméret, építési tipp).
 - **Állapotsor** alul: aktív eszköz, erdőév és évszak, időjárás, sebesség, leszállított faanyag, járművek.
 - **Ablakok**: Járművek, Erdészet, Környezet, Grafika, Súgó. Vizsgálat eszközzel az erdőcsempe adatai az egér mellett jelennek meg; a mentés és az erdészeti műveletek eredménye rövid értesítésként jelenik meg.
@@ -288,7 +294,9 @@ dotnet run --project ForesTycoon/ForesTycoon.csproj -- --capture-frame artifacts
 
 **Tönkök**: Kitermeléskor (teherautós rakodás vagy azonnali kivágás) a `ForestSystem` megjegyzi a kivágott állományt az első vágás előtti állapotában. A kirajzolás minden eltávolított törzs helyén tönköt rajzol (fajnak megfelelő kéreg, világos fűrészelt lap). A tönk 6 erdőév alatt lesüllyed, besötétedik, bemohásodik, majd eltűnik. Újratelepítéskor a felnövő fák fokozatosan átveszik a helyüket. Ültetést nem akadályoz; útépítéskor a tönk eltűnik. A mentés visszajátszása helyreállítja.
 
-**Rácsvonal**: a csemperács kb. 1,5 pixeles, lágy szélű, sötét mohazöld, félátlátszó vonal, így textúrázott fűn is látszik, de nem nyomja el a tájat (nagyon távoli nézetben 1 pixel). A Grafika ablakban kapcsolható.
+**Rácsvonal**: a csemperács alapból bekapcsolt, minden zoomnál egyetlen 1 pixeles, sötét mohazöld, félátlátszó vonallal készül. A Grafika ablakban kapcsolható.
+
+**Erdő megfigyelése gyorsítva**: a felső ikonsor háromnyilas gombja nyitja a 4×, 8×, 16×, 32×, 64×, 128× és 256× időgyorsítást. A kiválasztott sebesség az alsó állapotsorban látszik; az 1×/2× gombbal vissza lehet lassítani, Space-szel szüneteltetni. A fa-, talajvíz-, időjárás- és szállítási rendszerek azonos fix lépésekkel haladnak. Egy erdőév 1200 szimulációs másodperc: 256× mellett ideális esetben körülbelül 4,7 valós másodperc. Nagy terhelésnél a tényleges gyorsítás kisebb, hogy a felület használható maradjon.
 
 Alapértelmezésként a változatosabb saját eljárásos fák jelennek meg. A lucfenyő, tölgy, nyír és bükk csemete, fiatal, középkorú és idős életfázisai külön ág- és koronageometriát kapnak, fázisonként három változattal. A mód neve **Eljárásos fák (életfázisok)**. Egyedenként változik a korona alakja és a fenyők ágazása; részletek és képi ellenőrzés: [eljárásos változatosság](docs/procedural-tree-variation.md). A **Grafika → Fa modellek** választóval a könnyű importált készlet és az eredeti részletes fenyő is visszakapcsolható; az eredeti fájlok megmaradtak. Az importált nyír külön kapcsolható (CC BY-NC, alapból kikapcsolva). A lomb alpha-kivágást használ; a merev ágak anyagonként összevont, megosztott GPU-geometriával készülnek. Részletek: [modellértékelés](docs/tree-asset-candidates.md), [eredeti lucfenyőmodell](docs/spruce-model-redesign.md). Integrációs képek és ellenőrzés: `dotnet run --project ForesTycoon/ForesTycoon.csproj -- --forest-model-smoke-test`.
 

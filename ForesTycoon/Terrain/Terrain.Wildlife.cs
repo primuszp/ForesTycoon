@@ -20,11 +20,12 @@ namespace ForesTycoon
             if (high - low > Math.Min(tileSizeH, tileSizeV) * 0.4f) return false;
             return TryGetTileCenter(id, out position);
         }
-        internal void CollectWildlifeSpots(ForestSystem forest,List<WildlifeSpot> output)
+        internal void CollectWildlifeSpots(ForestSystem forest,List<WildlifeSpot> output,bool stopAfterFirst=false)
         {
             output.Clear();
-            Span<TreeInstance> stems=stackalloc TreeInstance[ForestTreeStore.PlantedTreesPerTile];
-            Span<TreeInstance> neighboursBuffer=stackalloc TreeInstance[ForestTreeStore.PlantedTreesPerTile];
+            // Reuse one flattened sample for all nine candidate positions. Preserve the
+            // original own-tile/adjacent-tile order so minimum-distance ties stay identical.
+            Span<Vector2> stems=stackalloc Vector2[ForestTreeStore.PlantedTreesPerTile * 5];
             foreach(Tile tile in tiles)
             {
                 if(roads.Has(tile.Id)||ShouldDrawStandingWater(tile)||CountRiverCorners(tile)>0||!((IForestHabitat)this).CanSupportForest(tile.Id))continue;
@@ -44,24 +45,38 @@ namespace ForesTycoon
                 rank=(rank&0x7fffffffu)|(stand.IsEmpty?0u:0x80000000u);
                 if(output.Count==16&&rank>=output[^1].Rank)continue;
                 Vector3 center=new((tile.W.xPos+tile.E.xPos)*0.5f,(tile.W.yPos+tile.E.yPos)*0.5f,0);
-                int count=CollectIndividualStems(forest,tile,stems);
+                int count=CollectWildlifeStemPositions(forest,tile,stems.Slice(0,ForestTreeStore.PlantedTreesPerTile));
+                foreach(Tile adjacent in data.GetAdjacentTiles(tile)) {
+                    if(!forest.TryGetStand(adjacent.Id,out _))continue;
+                    count+=CollectWildlifeStemPositions(forest,adjacent,stems.Slice(count,ForestTreeStore.PlantedTreesPerTile));
+                }
                 Vector2 best=center.Xy;float bestDistance=-1;
                 for(int x=-1;x<=1;x++)for(int y=-1;y<=1;y++) {
                     Vector2 point=center.Xy+new Vector2(x*tileSizeH*0.2f,y*tileSizeV*0.2f);float distance=float.MaxValue;
-                    for(int j=0;j<count;j++)distance=Math.Min(distance,(point-new Vector2(stems[j].X,stems[j].Y)).LengthSquared);
-                    foreach(Tile adjacent in data.GetAdjacentTiles(tile)) {
-                        if(!forest.TryGetStand(adjacent.Id,out var nearby))continue;
-                        Span<TreeInstance> neighbourStems=neighboursBuffer;
-                        int nearbyCount=CollectIndividualStems(forest,adjacent,neighbourStems);
-                        for(int j=0;j<nearbyCount;j++)distance=Math.Min(distance,(point-new Vector2(neighbourStems[j].X,neighbourStems[j].Y)).LengthSquared);
-                    }
+                    for(int j=0;j<count;j++)distance=Math.Min(distance,(point-stems[j]).LengthSquared);
                     if(distance>bestDistance){bestDistance=distance;best=point;}
                 }
                 if(!TryGetSurfaceZ(best.X,best.Y,out float z))continue;
                 var spot=new WildlifeSpot(tile.Id,new Vector3(best.X,best.Y,z),rank);
                 int index=0;while(index<output.Count&&output[index].Rank<rank)index++;
                 output.Insert(index,spot);if(output.Count>16)output.RemoveAt(16);
+                if(stopAfterFirst)return;
             }
+        }
+
+        // Habitat selection needs physical stem positions, not species rendering models,
+        // life-stage meshes or appearance/scale parameters.
+        private static int CollectWildlifeStemPositions(ForestSystem forest, Tile tile, Span<Vector2> output)
+        {
+            if (!forest.IndividualTrees.TryGet(tile.Id, out var patch)) return 0;
+            int count = Math.Min(patch.Count, output.Length);
+            for (int i = 0; i < count; i++)
+            {
+                var tree = patch.Trees[i];
+                SurfacePoint(tile, tree.U, tree.V, out float x, out float y, out _);
+                output[i] = new(x, y);
+            }
+            return count;
         }
     }
 }

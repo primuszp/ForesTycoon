@@ -51,36 +51,51 @@ namespace ForesTycoon
 
         public void Draw(RenderContext context)
         {
-            if (ownsWildlife) { wildlifeSimulation.Update(Math.Max(0, context.SimulationTimeSeconds-wildlifeTime), terrain, forest, environment); wildlifeTime=context.SimulationTimeSeconds; }
-            terrain.UpdateVisibleTiles(context);
-            if(environment!=null && graphics.AutomaticWeather)weather.Update(environment,graphics,context.SimulationTimeSeconds);
-            else weather.Update(context.SimulationTimeSeconds, graphics);
-            surfaces.BeginFrame();
-            VehicleRenderer.BeginFrame(context, graphics);
+            RenderPipeline.PassProbe?.Invoke("frame-preparation", true);
+            try
+            {
+                if (ownsWildlife) { wildlifeSimulation.Update(Math.Max(0, context.SimulationTimeSeconds-wildlifeTime), terrain, forest, environment); wildlifeTime=context.SimulationTimeSeconds; }
+                terrain.UpdateVisibleTiles(context);
+                if(environment!=null && graphics.AutomaticWeather)weather.Update(environment,graphics,context.SimulationTimeSeconds);
+                else weather.Update(context.SimulationTimeSeconds, graphics);
+                surfaces.BeginFrame();
+                VehicleRenderer.BeginFrame(context, graphics);
+            }
+            finally { RenderPipeline.PassProbe?.Invoke("frame-preparation", false); }
             var previous = RenderDevice.Visuals;
             RenderDevice.Visuals = surfaces;
             try
             {
                 bool shadowDrawn = false;
-                surfaces.RenderShadows(terrain, () =>
-
+                RenderPipeline.PassProbe?.Invoke("shadow-map", true);
+                try
                 {
-                    shadowDrawn = true;
-                    // Expanded camera footprint includes nearby off-screen shadow casters.
-                    var shadowContext = new RenderContext(context.TotalTimeSeconds, context.DeltaTimeSeconds,
-                        context.FrameIndex, context.SimulationTimeSeconds, context.SimulationTick, context.InterpolationAlpha,
-                        false, false, 1, context.CameraTilt, context.CameraYaw,
-                        context.ViewMinX - 40, context.ViewMinY - 40, context.ViewMaxX + 40, context.ViewMaxY + 40,
-                        context.PixelsPerWorldUnit);
-                    terrain.UpdateVisibleTiles(shadowContext);
-                    terrain.DrawTerrainBase();
-                    terrain.DrawTrees(forest, shadowContext, graphics);
-                    content.DrawMills(terrain,logistics,graphics);
-                    wildlife.Draw(terrain, forest, graphics, context);
-                    VehicleRenderer.Draw(vehicles, terrain, context.InterpolationAlpha);
-                });
+                    surfaces.RenderShadows(terrain, () =>
+
+                    {
+                        shadowDrawn = true;
+                        // Expanded camera footprint includes nearby off-screen shadow casters.
+                        var shadowContext = new RenderContext(context.TotalTimeSeconds, context.DeltaTimeSeconds,
+                            context.FrameIndex, context.SimulationTimeSeconds, context.SimulationTick, context.InterpolationAlpha,
+                            false, false, 1, context.CameraTilt, context.CameraYaw,
+                            context.ViewMinX - 40, context.ViewMinY - 40, context.ViewMaxX + 40, context.ViewMaxY + 40,
+                            context.PixelsPerWorldUnit);
+                        terrain.UpdateVisibleTiles(shadowContext);
+                        terrain.DrawTerrainBase();
+                        terrain.DrawTrees(forest, shadowContext, graphics);
+                        content.DrawMills(terrain,logistics,graphics);
+                        wildlife.Draw(terrain, forest, graphics, context);
+                        VehicleRenderer.Draw(vehicles, terrain, context.InterpolationAlpha);
+                    });
+                }
+                finally { RenderPipeline.PassProbe?.Invoke("shadow-map", false); }
                 if (shadowDrawn) terrain.UpdateVisibleTiles(context);
-                if(graphics.Enhanced && graphics.Weather && graphics.Clouds) clouds.Draw(terrain, weather, graphics);
+                RenderPipeline.PassProbe?.Invoke("clouds", true);
+                try
+                {
+                    if(graphics.Enhanced && graphics.Weather && graphics.Clouds) clouds.Draw(terrain, weather, graphics);
+                }
+                finally { RenderPipeline.PassProbe?.Invoke("clouds", false); }
                 pipeline.Render(context);
             }
             finally { EndDecals(); RenderDevice.Visuals = previous; }

@@ -73,7 +73,8 @@ namespace ForesTycoon
         private ImGuiController imgui;
         private readonly DioramaPostProcess postProcess = new DioramaPostProcess();
         private readonly FrameClock frameClock = new FrameClock();
-        private readonly SimulationFrameRunner simulation = new SimulationFrameRunner(30.0);
+        private readonly SimulationFrameRunner simulation = new SimulationFrameRunner(
+            ticksPerSecond: 30.0, maximumTicksPerFrame: 2048, maximumWorkMilliseconds: 8);
         private FixedStepClock simulationClock => simulation.Clock;
         private readonly FramePerformanceMonitor performance = new FramePerformanceMonitor();
         private ulong frameIndex;
