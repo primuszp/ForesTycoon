@@ -524,6 +524,7 @@ namespace ForesTycoon
             HudTheme.KeyValue("Esemény", $"{environment.EventRain:0.00} / {environment.ExpectedEventRain:0.00} mm");
             HudTheme.KeyValue("Hőmérséklet", $"{environment.Temperature:0.0} °C");
             HudTheme.KeyValue("Szél", $"{environment.WindSpeed:0.0} m/s");
+            HudTheme.KeyValue("Besugárzás", $"{environment.Radiation * 100:0}%");
             HudTheme.Meter("Gyökérzóna átlagos víztelítettsége", (float)environment.MeanSoil, $"{environment.MeanSoil * 100:0}%",
                 new NVec4(0.36f, 0.62f, 0.86f, 1f));
             ImGui.TextDisabled("1 erdőév = 20 perc · 1 játékperc = 1 vízóra");
@@ -533,9 +534,10 @@ namespace ForesTycoon
             {
                 var cell = environment.Cell(id);
                 ImGui.SeparatorText($"Csempe {id}");
-                HudTheme.Meter("Gyökérzóna", (float)(cell.Soil / 180), $"{cell.Soil:0.0} / 180 mm", new NVec4(0.36f, 0.62f, 0.86f, 1f));
+                HudTheme.Meter("Gyökérzóna", (float)(cell.Soil / cell.Capacity), $"{cell.Soil:0.0} / {cell.Capacity:0} mm", new NVec4(0.36f, 0.62f, 0.86f, 1f));
                 HudTheme.KeyValue("Felszíni víz", $"{cell.Surface:0.00} mm");
                 HudTheme.KeyValue("Koronavíz", $"{cell.Canopy:0.00} mm");
+                HudTheme.KeyValue("Fák vízfelvétele / igénye", $"{cell.UptakePerHour:0.000} / {cell.DemandPerHour:0.000} mm/óra");
                 HudTheme.KeyValue("Aszálystressz", $"{cell.Drought * 100:0}%");
                 HudTheme.KeyValue("Túlnedvesség", $"{cell.Waterlogging * 100:0}%");
                 HudTheme.KeyValue("Növekedés (víz)", $"{cell.GrowthFactor * 100:0}%");

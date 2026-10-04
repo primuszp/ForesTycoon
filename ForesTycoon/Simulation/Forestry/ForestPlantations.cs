@@ -15,14 +15,9 @@ namespace ForesTycoon
         internal bool TryGetPlantation(int tileId, out ForestPlantation plantation) => plantations.TryGetValue(tileId, out plantation);
         internal void FinishPlantingArea(int areaId)
         {
-            competition.Snapshot(habitat, IndividualTrees, ForestYear);
             foreach (var entry in plantations)
-                if (entry.Value.AreaId == areaId && IndividualTrees.TryGet(entry.Key, out var patch))
-                {
-                    UpdateIndividualRates(entry.Key, patch, ForestYear);
-                    stands[entry.Key] = IndividualStand(entry.Key, ForestYear);
-                }
-            RecalculateStatistics();
+                if (entry.Value.AreaId == areaId) MarkResourceArea(entry.Key);
+            RefreshChangedResourceRates(ForestYear, currentConditions: true);
         }
         private void ClearPlantations() { plantations.Clear(); nextPlantationId = 1; PlantationRevision++; }
         internal bool TryGetPlantationStatus(int tileId, out PlantationStatus status)

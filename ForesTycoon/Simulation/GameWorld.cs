@@ -25,6 +25,7 @@ namespace ForesTycoon
         private TimberCargoSystem timberCargo;
         private ulong worldTick;
         internal EnvironmentSystem Environment { get; private set; }
+        private ForestEnvironmentCoordinator forestEnvironment;
         private ForestryActionResult lastForestryAction;
         private ForestryAreaSummary lastForestryArea;
         internal GraphicsSettings Graphics { get; }
@@ -105,7 +106,7 @@ namespace ForesTycoon
 
         public void Update(double fixedDeltaSeconds)
         {
-            Environment.Update(fixedDeltaSeconds);
+            forestEnvironment.Update(fixedDeltaSeconds);
             Logistics?.Update(fixedDeltaSeconds);
             wildlife.Update(fixedDeltaSeconds, terrain, forest, Environment);
             systems.Update(fixedDeltaSeconds);
@@ -276,6 +277,7 @@ namespace ForesTycoon
             (terrainRenderer, candidate.terrainRenderer) = (candidate.terrainRenderer, terrainRenderer);
             (forest, candidate.forest) = (candidate.forest, forest);
             (Environment, candidate.Environment) = (candidate.Environment, Environment);
+            (forestEnvironment, candidate.forestEnvironment) = (candidate.forestEnvironment, forestEnvironment);
             (wildlife, candidate.wildlife) = (candidate.wildlife, wildlife);
             (Logistics, candidate.Logistics) = (candidate.Logistics, Logistics);
             (vehicles, candidate.vehicles) = (candidate.vehicles, vehicles);
@@ -340,7 +342,7 @@ namespace ForesTycoon
             forest.Environment=null;
             forest.UseEnvironmentTempo();
             Environment=new EnvironmentSystem(terrain,forest);
-            forest.Environment=Environment;
+            forestEnvironment = new ForestEnvironmentCoordinator(forest, Environment);
         }
 
         public void Dispose()

@@ -61,7 +61,7 @@ namespace ForesTycoon
 
     sealed class WorldSaveData
     {
-        public const int CurrentVersion = 3;
+        public const int CurrentVersion = 4;
         public int Version { get; init; } = CurrentVersion;
         public double TickRate { get; init; } = 30.0;
         public ulong Tick { get; init; }

@@ -85,7 +85,13 @@ public class ForestIndividualTests
         float requested = ForestTree.Volume(original[0].At(forest.ForestYear)) * 0.25f;
         Assert.Equal(requested, forest.ExtractTimber(tile, requested), 6);
         Assert.Equal(original.Length - 1, patch.Count);
-        for (int i = 0; i < patch.Count; i++) Assert.Equal(original[i + 1], patch.Trees[i]);
+        for (int i = 0; i < patch.Count; i++)
+        {
+            var survivor = patch.Trees[i];
+            // Identity, physical size and health persist; freed resources immediately change future growth.
+            Assert.Equal(original[i + 1] with { AnnualGrowth = survivor.AnnualGrowth, Resources = survivor.Resources }, survivor);
+            Assert.True(survivor.Resources.Light >= original[i + 1].Resources.Light);
+        }
         Assert.Single(patch.Stumps);
         Assert.Equal(original[0].Id, patch.Stumps[0].Felled.Id);
         Assert.Equal(before, forest.AvailableTimber(tile) + requested, 4);

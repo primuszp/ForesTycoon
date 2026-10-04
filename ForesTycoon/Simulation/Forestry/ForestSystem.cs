@@ -134,11 +134,12 @@ namespace ForesTycoon
             {
                 if (habitat.CanSupportForest(tileId) || !IndividualTrees.TryGet(tileId, out _)) continue;
                 IndividualTrees.RemoveTile(tileId);
+                MarkResourceArea(tileId);
                 stands[tileId] = default;
                 changed = true;
             }
-            if (!changed) return;
-            RecalculateStatistics();
+            if (!changed) { RefreshEnvironmentRates(); return; }
+            RefreshChangedResourceRates(ForestYear, currentConditions: true);
             Revision++; EditRevision++;
         }
 
@@ -182,9 +183,10 @@ namespace ForesTycoon
 
         public void Clear()
         {
+            monthlyPreparation.Clear();
             currentYearGrowth = lastYearGrowth = 0;
             IndividualTrees.Clear();
-            ClearPlantations(); competition.Clear();
+            ClearPlantations(); competition.Clear(); changedResourceTiles.Clear();
             Array.Clear(stands);
             Array.Clear(seedCandidate);
             seedCandidateCount = 0;
@@ -363,8 +365,14 @@ namespace ForesTycoon
             };
         }
 
-        private float Suitability(ForestSpecies species, int tileId) =>
-            Fitness(species, habitat.GetMoisture(tileId), habitat.GetNormalizedElevation(tileId));
+        private float Suitability(ForestSpecies species, int tileId)
+        {
+            if (Environment == null) return Fitness(species, habitat.GetMoisture(tileId), habitat.GetNormalizedElevation(tileId));
+            var profile = ForestSpeciesProfile.For(species);
+            float elevationFit = Math.Clamp(1 - Math.Abs(habitat.GetNormalizedElevation(tileId) - profile.PreferredElevation)
+                / profile.ElevationTolerance, 0, 1);
+            return habitat.GetSoilProperties(tileId).Fertility * (0.45f + elevationFit * 0.55f);
+        }
 
         /// <summary>
         /// How well a species matches the site. Moisture and elevation are combined

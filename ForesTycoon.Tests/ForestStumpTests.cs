@@ -37,7 +37,12 @@ public class ForestStumpTests
         forest.ExtractTimber(tile, firstVolume * 0.3f);
         Assert.Equal(stump, Assert.Single(patch.Stumps));
         Assert.Equal(trees[0] with { AnnualGrowth = default }, stump.Felled);
-        Assert.Equal(trees.Skip(1), patch.Trees.Take(patch.Count));
+        for (int i = 0; i < patch.Count; i++)
+        {
+            var survivor = patch.Trees[i];
+            Assert.Equal(trees[i + 1] with { AnnualGrowth = survivor.AnnualGrowth, Resources = survivor.Resources }, survivor);
+            Assert.True(survivor.Resources.Light >= trees[i + 1].Resources.Light);
+        }
         Assert.Equal(firstVolume * 0.4f, patch.Depot, 5);
     }
 

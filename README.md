@@ -212,7 +212,7 @@ A Nézet menüben választható alacsony, közepes vagy magas effektminőség. A
 A Nézet → Erdei szarvasok kapcsolóval legelő és lassan sétáló szarvasok jelennek meg az erdők tisztásain/szélein. A Szarvas megkeresése menüpont rájuk közelít. Az importált GLB valódi csontvázas animációt, textúrákat és árnyékot használ, a szünetet követi. A [betöltő, animáció és ellenőrzések leírása](docs/animated-models.md) tartalmazza a támogatott formátumrészhalmazt; a `--wildlife-smoke-test` képi ellenőrzést futtat.
 
 
-## Környezet 1.0: időjárás, víz és erdő
+## Időjárás, talaj, víz és faegyedek
 
 A kijelölt erdőtelepítések tartós borostyánsárga határt és sorjelölést kapnak. Csempénként 6×6 csemete nő a fajára jellemző életfázisokon keresztül. Az egyedek a fényért, vízért és növőtérért versengenek; a tartósan elnyomott fák elhalnak, majd kidőlnek. A Vizsgálat eszköz mutatja a telepítés egyedszámát és erőforrásmutatóit. Modell, források, mentés és ellenőrzés: [erdőtelepítés és dinamika](docs/forest-plantation-dynamics.md). Képi próba: `dotnet run --project ForesTycoon -- --plantation-smoke-test`.
 
@@ -220,13 +220,15 @@ A kijelölt erdőtelepítések tartós borostyánsárga határt és sorjelölés
 
 A **Környezet 1.0** panelen látható az esemény hátralévő ideje, intenzitása, lehulló/várható vízmennyisége, hőmérséklet és szél. A csempére mutatva a koronavíz, felszíni víz, gyökérzóna és vízstressz olvasható. Az **Időjárási esemény indítása** részben állítható a típus, csúcsintenzitás és időtartam; az indítás a tényleges vízkészletet módosító, menthető parancs. Bezárt panel a Játék → Környezeti panel kapcsolóval nyitható újra.
 
-Csempénként koronaintercepció, beszivárgás, párolgás/növényi vízfelvétel, mélyebb tároló és lejtő menti lefolyás működik. A napi helyett fél játék-másodperces vízlépések biztosítják a rövid események feldolgozását. A vízhiány/túlnedvesség havi átlagából csökken a növekedés és az egészség; a regeneráció is érzékeny a stresszre. A helyi nedvesség a terepanyagokra és a ködfoltokra is hat. A szünet és gyorsítás a szimulációt közösen vezérli; textúrázás és effektek kikapcsolása nem változtatja meg a vízmérleget.
+Csempénként koronaintercepció, beszivárgás, párolgás, növényi vízfelvétel, mélyebb tároló és lejtő menti lefolyás működik. A fél játék-másodperces vízlépéseket és a havi erdőnövekedést közös koordinátor rendezi. A felhőzet csökkenti a tényleges besugárzást; az élő koronák levélfelülete vízigényt ad, a növekedéshez felhasznált víz pedig valóban levonódik a talajból. A havi teljesített vízigény és túlnedvesség hat a növekedésre és egészségre. Kivágáskor a szomszédok több fényt kapnak, a koronavíz a felszínre kerül. A helyi nedvesség a terepanyagokra és a ködfoltokra is hat. A szünet és gyorsítás közös; textúrázás és effektek kikapcsolása nem változtatja meg a vízmérleget.
 
-A mentés `environmentVersion=1` mellett az eredeti seedből, parancsnaplóból és tick-számból pontosan újraszámolja a környezetet. Régebbi mentések megtartják a 30 másodperces erdőévet és a korábbi növekedést. Új világ létrehozásakor az 1.0 rendszer aktív.
+A mentés **4-es formátumverziója** az eredeti seedből, parancsnaplóból és tick-számból pontosan újraszámolja a környezetet és az egyedeket. A 3-as és korábbi verziók nem tölthetők be az új növekedési szabályokkal; a régi fájlok megmaradnak, automatikus migráció nincs.
 
 Az első modell egy effektív talajprofilt használ. A tavak/folyók vízszintje még rögzített; a mélyebb alapvízhozamot és térképi kifolyást könyvelt veszteségként kezeli. Fagy/jég, hóborítás, csúszós út és erdőtűz későbbi fejlesztés. Ez gyors növekedésre hangolt játékmodell; nem 365 napos fizikai éves hidrológiai előrejelzés.
 
-Részletek: [szimulációs terv és 1.0 megvalósítás](docs/environment-simulation-plan.md).
+Aktuális modell, felelősségek és korlátok: [időjárás–talaj–fa kapcsolat](docs/environment-forest-coupling.md). Korábbi terv: [környezeti szimuláció](docs/environment-simulation-plan.md).
+
+A `--simulation-benchmark` grafika nélkül méri a havi erdőfrissítést, a helyi kitermelést és a versengés hónap közbeni előkészítését. Az előkészítés csökkenti a hónapváltás terhelését; [mérések és korlátok](docs/engine-performance.md#havi-versengés-fokozatos-előkészítése). Nagy térképen és közvetlenül hónap végi erdőművelésnél még lehet megakadás.
 
 ```sh
 dotnet run --project ForesTycoon/ForesTycoon.csproj -- --environment-smoke-test
@@ -250,7 +252,7 @@ A teherautó a kijelölt forrásnál rakodik, a malomnál fokozatosan lerakodik,
 
 A megadott `sawmill_paropank.glb` és `animated_low_poly_fish.glb` modellek kerültek be. A vízben a halak csontvázas animációval úsznak; nagy, térképszélhez csatlakozó tengerekben 8–120 hal, kis belső vizekben 1–2 hal jelenik meg, a kellően mély részeken. A víz saját finom rácsa megmarad.
 
-A mentés visszajátssza a kijelölési, építési és teherautó-indítási parancsokat. A 2-es formátumverzió egységesen az aktuális erdő-, környezet-, logisztika- és járműmodellt használja.
+A mentés visszajátssza a kijelölési, építési és teherautó-indítási parancsokat. A 4-es formátumverzió egységesen az aktuális erdő-, környezet-, logisztika- és járműmodellt használja.
 
 Ellenőrzés: `dotnet run --project ForesTycoon -- --logistics-smoke-test`. A próba a fokozatos 60 m³-es kitermelést, útkapcsolatot, lerakott malmot, készletmérleget, mentés/visszajátszást és a tengeri/tavi halpopulációt ellenőrzi; képek az `artifacts/forestry-logistics` mappában.
 

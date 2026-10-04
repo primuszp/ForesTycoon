@@ -6,6 +6,7 @@ namespace ForesTycoon
     {
         static void Main(string[] args)
         {
+            if (Array.Exists(args, argument => argument == "--simulation-benchmark")) { ForestSimulationBenchmark.Run(); return; }
             if (Array.Exists(args, argument => argument == "--plantation-smoke-test"))
             {
                 try { PlantationSmokeTest.Run(); }

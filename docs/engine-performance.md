@@ -96,7 +96,61 @@ dotnet ForesTycoon/bin/Debug/net8.0/ForesTycoon.dll --camera-benchmark
 | Háttérfeladatok | CPU-feladatok elkülönítve, korlátozott párhuzamosság és publikálás | A beadott feladatok sorhosszának korlátozása; modellimport CPU-részének ide helyezése, OpenGL-műveletek a renderelő szálon |
 | Mentés/visszajátszás | Determinisztikus parancsnapló és fix tick | Hosszú játékokhoz ellenőrzőpont/snapshot; a betöltés jelenleg az eltelt tickeket visszajátssza |
 
-Az első további prioritás a korlátozott erdőcache és a tömeges jármű-instancing. Ezek még nincsenek megvalósítva; a motor nem tekinthető korlátlanul skálázhatónak. A jelenlegi változtatások mérhetően javítják a meglévő funkciók működését, és állítható terhelési keretet adnak az effekteknek.
+További prioritás a korlátozott erdőcache és a tömeges jármű-instancing. A havi szimuláció külön mérése és első optimalizálása az alábbi új szakaszban szerepel. A motor nem tekinthető korlátlanul skálázhatónak.
+
+## Havi erdőszimuláció és helyi kitermelés (2026-10-04)
+
+Új, OpenGL és ablak nélküli mérés:
+
+```powershell
+dotnet build ForesTycoon/ForesTycoon.csproj -p:UseAppHost=false
+dotnet ForesTycoon/bin/Debug/net8.0/ForesTycoon.dll --simulation-benchmark
+```
+
+A benchmark a 42-es seeddel, 16×16 méteres sík csempékkel, természetes vegyes és teljesen telepített érett tölgyállományokkal fut. Két hónap bemelegítés után hét havi frissítést és hét külön helyi kitermelést mér. A környezeti kapcsolat aktív, de az időjárás és víz nem lép: ez a havi erdőfrissítés költségét izolálja. Render, UI, betöltés, vízlépés és teljes világfrissítés nincs a mért időben. A „sűrű” jelenet minden csempén tartalmaz erdőt; nem 36 egyedes csemeteültetvény.
+
+Változtatások:
+
+- A versengés nem számol korona- és magasságválaszt olyan fa-párra, amelynek sem koronája, sem az önálló erdőmodellben használt gyökértere nem érintkezik.
+- Egy pillanatképezett csempe törzskoordinátáinak befoglaló téglalapja és legnagyobb koronája konzervatív előszűrést ad: a teljesen távoli csempét nem kell egyedenként bejárni. A minimális kölcsönhatási sugár és a nagyobb gyökérsugár is benne van a korlátban.
+- Ültetés, elhalás és kivágás utáni rátafrissítés a ténylegesen frissített egyedek valamennyi kétgyűrűs függőségét pillanatképezi. Ez legfeljebb négy gyűrű a módosítás körül. Az eltávolított állományok mintái törlődnek; az üres csempékhez nem foglalunk külön mintatárat.
+- A hozzájáruló fa-párok összeadási sorrendje változatlan. A globális havi pillanatkép továbbra is megelőzi a ráták módosítását.
+
+Debug build, ugyanazon gép, mediánok egy összehasonlítható mérési sorozatban (ms):
+
+| Jelenet | Havi frissítés előtte → utána | Helyi kitermelés előtte → utána |
+| --- | ---: | ---: |
+| Természetes 32² | 4,12 → 2,96 | 0,17 → 0,06 |
+| Természetes 64² | 17,86 → 12,61 | 0,64 → 0,13 |
+| Természetes 128² | 77,38 → 54,51 | 2,45 → 0,38 |
+| Érett tölgy 32² | 18,23 → 10,82 | 0,62 → 0,19 |
+| Érett tölgy 64² | 75,59 → 45,00 | 2,47 → 0,34 |
+
+A futások között van mérési zaj. A páronkénti előszűrés ezekben a jelenetekben körülbelül 30–40%-kal gyorsította a havi frissítést. A következő szakasz az időbeli felosztás külön eredményeit mutatja.
+
+Az öt jelenet egyedazonosság-, méret-, egészség-, növekedés- és erőforrás-ujjlenyomata változatlan. `ForestCompetitionPruningTests` ezen felül az eredeti, szűrés nélküli páronkénti számítással ellenőrzi az eredményt: nagyon kis és túlméretezett koronákkal, mindkét vízmodellel, majd kivágás és időben előrehaladó növekedés után a helyi és teljes pillanatkép egyezését. 357 automatizált teszt és az egyednövekedési, illetve logisztikai grafikus próbák sikeresek. A mentésverzió változatlanul 4.
+
+## Havi versengés fokozatos előkészítése
+
+Az éles világ `ForestEnvironmentCoordinator` rendszere félmásodperces szimulációs lépésekben előkészíti a következő hónap határán várható geometriai versengést. A `ForestMonthlyPreparation` előbb minden állomány jövőbeli méretét pillanatképezi, majd egy második menetben számítja a fényt és növőteret. A munkamennyiség az állományok számából és a határig hátralévő lépésekből adódik; nem a gép sebességéből vagy faliórából. A képkockacsoportosítás és visszajátszás eredménye változatlan.
+
+Az előkészítés nem módosít egyedeket, egészséget, havi vízösszegzést vagy publikált revíziót. A hónap végén a kész geometriai eredmény a tényleges havi besugárzással és vízellátással együtt kerül alkalmazásra. A kész versengési pillanatkép két újrahasználható puffer cseréjével kerül az erdőhöz; az új csemeték is a megfelelő, frissítés előtti állapotot olvassák. Az egy csempén azonos fajhoz tartozó termőhely- és vízválaszt nem számoljuk újra minden egyednél.
+
+Erdőrevízió-változás után az előkészítés újraindul. Hiányzó vagy érvénytelen eredménynél a szinkron számítás megmarad. Az egyedazonosító, index, revízió és célhónap együttes ellenőrzése megakadályozza a régi eredmény alkalmazását kivágás, újratelepítés vagy törlés után. Az önálló `ForestSystem.Update` továbbra is használható előkészítés nélkül.
+
+Ugyanazon `--simulation-benchmark` hét mért hónapja, Debug build; a szinkron és előkészített változat azonos egyedujjlenyomattal:
+
+| Jelenet | Szinkron havi medián | Előkészített hónapváltás medián / max | Minden előkészítési és havi lépés p95 |
+| --- | ---: | ---: | ---: |
+| Természetes 64² | 12,07 ms | 5,20 / 5,55 ms | 0,09 ms |
+| Természetes 128² | 50,96 ms | 22,33 / 23,06 ms | 0,34 ms |
+| Érett tölgy 64² | 43,32 ms | 14,85 / 18,65 ms | 0,40 ms |
+
+A mérés a geometriai előkészítés és havi erdőfrissítés idejét együtt tartalmazza, de továbbra sem teljes világfrissítés: vízlépés, logisztika és render nincs benne. A növekedési ráták, egészség, elhalás, regeneráció és statisztikák alkalmazása még egyetlen hónapvégi lépésben történik. A két pillanatképpuffer és az egyedenkénti eredménytár több memóriát használ; a tömbök újrahasználhatók és világcserekor felszabadulnak.
+
+**Korlát:** a hónap utolsó félmásodpercében végzett kivágás/újratelepítés után nincs elég előkészítési idő. A külön 128²-es próba ilyen újraindulással 55,68 ms-os hónapváltást mért (egy minta). Gyakori kitermelés szintén sok újraindulást okozhat. Nincs szigorú időkeret: egy állomány feldolgozása, a sor újraindítása és a hónapvégi alkalmazás oszthatatlan. Következő javítás a helyi szerkesztésekhez tartozó részleges érvénytelenítés, majd a hónapvégi alkalmazás további felosztása.
+
+`ForestMonthlyPreparationTests` a szinkron referenciával a teljes fa-, holtfa-, tönk-, készlet- és környezeti állapotot hasonlítja össze: normál és tört hónaphatárokkal, viharral, elhalással, közbenső és közvetlenül hónap végi kivágással/újratelepítéssel, törléssel és szünettel. 362 automatizált teszt, valamint a környezeti, egyednövekedési és logisztikai grafikus próbák sikeresek. Az új előkészítés a mentésformátumot nem változtatja meg.
 
 ## Ellenőrzés
 

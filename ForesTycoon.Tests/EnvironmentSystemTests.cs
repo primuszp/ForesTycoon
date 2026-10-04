@@ -63,11 +63,11 @@ public class EnvironmentSystemTests
         ForestStand[] stands=[new ForestStand(ForestSpecies.Oak,20,0.5f,0.3f)];
         var stressed=new ForestSystem(habitat,stands);stressed.UseEnvironmentTempo();
         var control=new ForestSystem(habitat,stands);control.UseEnvironmentTempo();
-        var environment=new EnvironmentSystem(habitat,stressed);stressed.Environment=environment;
+        var environment=new EnvironmentSystem(habitat,stressed);var coupled=new ForestEnvironmentCoordinator(stressed,environment);
         stressed.TryGetStand(0, out var before);
         for (int i = 0; i < 40; i++) {
             environment.ForceWeather(WeatherPreset.Sunny,0,600);
-            environment.Update(600);
+            coupled.Update(600);
             control.Update(600);
         }
         bool survived = stressed.TryGetStand(0,out var dry);

@@ -48,6 +48,13 @@ public class EngineReliabilityTests
     }
 
     [Fact]
+    public void PreviousEcologySaveVersionCannotReplayWithChangedGrowthRules()
+    {
+        var save = new WorldSaveData { Version = 3 };
+        Assert.Throws<NotSupportedException>(save.ValidateReplay);
+    }
+
+    [Fact]
     public void FailedSaveKeepsPreviousFileAndRemovesTemporaryFile()
     {
         string directory = Path.Combine(Path.GetTempPath(), "forestycoon-save-test-" + Guid.NewGuid().ToString("N"));
