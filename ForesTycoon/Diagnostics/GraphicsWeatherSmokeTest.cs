@@ -49,6 +49,7 @@ namespace ForesTycoon
                 Frame("lod-far-medium-blend",3.5f);
                 byte[] lodBlend=Frame("lod-medium-near-blend",9);
                 CheckRestored(lodBlend,Frame("lod-medium-near-paused",9));
+                Frame(null, 1); // Leave the near hysteresis band before comparing the initial medium-LOD baseline.
                 Require(!original.AsSpan().SequenceEqual(sunny), "Enhanced graphics did not change the image.");
                 settings.Shadows = false;
                 Require(!sunny.AsSpan().SequenceEqual(Frame("sunny-no-shadows")), "Shadow toggle did not change the image.");

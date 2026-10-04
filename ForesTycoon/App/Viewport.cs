@@ -513,8 +513,7 @@ namespace ForesTycoon
             try
             {
                 string path = SaveGamePath.Default;
-                using FileStream stream = File.Create(path);
-                world.Save(stream, 1.0 / simulationClock.StepSeconds);
+                SaveGameFile.Write(path, stream => world.Save(stream, 1.0 / simulationClock.StepSeconds));
                 ShowToast($"Mentve: {path}", HudTheme.Good);
             }
             catch (Exception ex)

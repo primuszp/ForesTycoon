@@ -155,9 +155,12 @@ public class ForestIndividualTests
         var original = patch.Trees[0];
         forest.Update(0.5);
         var before = original.At(forest.ForestYear);
+        float totalVolume = Enumerable.Range(0, patch.Count).Sum(i => ForestTree.Volume(patch.Trees[i].At(forest.ForestYear)));
+        int count = patch.Count;
         forest.Harvest(0, out var harvest);
-        Assert.Equal(ForestTree.Volume(before), harvest.TimberVolume, 5);
-        var stump = Assert.Single(patch.Stumps);
+        Assert.Equal(totalVolume, harvest.TimberVolume, 5);
+        Assert.Equal(count, patch.Stumps.Count);
+        var stump = patch.Stumps.Single(s => s.Felled.Id == original.Id);
         Assert.Equal(before, stump.Felled.Dimensions);
         Assert.Equal(default, stump.Felled.AnnualGrowth);
         var terrain = new TerrainData(TerrainSettings.Default.WithNodeSize(17, 42));

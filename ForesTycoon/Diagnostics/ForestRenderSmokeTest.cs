@@ -35,7 +35,7 @@ namespace ForesTycoon
                 Require(terrain.ForestChunkRebuilds == 0, "Unchanged frame rebuilt the forest.");
                 int medium = Draw(terrain, forest, 5);
                 int far = Draw(terrain, forest, 1);
-                Require(far == medium && medium == near, "Disabled LOD changed forest detail with zoom.");
+                Require(far < medium && medium < near, "Forest LOD did not reduce geometry with zoom.");
                 Draw(terrain, forest, 1.5f);
                 Require(terrain.ForestChunkRebuilds == 0, "Zoom inside one LOD rebuilt the forest.");
                 Draw(terrain, forest, 12);
@@ -47,7 +47,7 @@ namespace ForesTycoon
                 Require(RenderDevice.LodRange==new Vector2(0,1),"LOD mask leaked to other objects.");
                 forest.Update(ForestSystem.DefaultSecondsPerYear / 12);
                 Draw(terrain, forest, 12);
-                Require(terrain.ForestChunkRebuilds > 0, "Monthly growth did not refresh geometry.");
+                Require(terrain.ForestChunkRebuilds == 0, "Monthly growth rebuilt topology instead of refreshing GPU state.");
                 Draw(terrain, forest, 12);
                 Require(terrain.ForestChunkRebuilds == 0, "Stable frame rebuilt monthly geometry.");
                 Draw(terrain, forest, 1.5f);
@@ -77,6 +77,7 @@ namespace ForesTycoon
                 Require(Draw(terrain, forest, 1.5f) == 0, "Cleared forest left stale GPU geometry.");
                 Require(GL.GetError() == ErrorCode.NoError, "OpenGL reported an error.");
                 CheckStaticTerrainCache();
+                CheckDeferredForestBuild();
                 Console.WriteLine($"Forest GL smoke test passed: near={near}, medium={medium}, far={far} vertices; stable frames rebuild 0 chunks.");
             }
             finally
@@ -135,6 +136,41 @@ namespace ForesTycoon
                 }
             }
             finally { terrain.Dispose(); }
+        }
+
+        private static void CheckDeferredForestBuild()
+        {
+            using var terrain = new Terrain(TerrainSettings.Default.WithNodeSize(17, 42), (_, _) => 4);
+            var forest = new ForestSystem(terrain);
+            forest.Clear(); forest.Plant(34, ForestSpecies.Oak);
+            forest.IndividualTrees.TryGet(34, out var patch);
+            void SetBoundary()
+            {
+                for (int i = 0; i < patch.Count; i++)
+                    patch.Trees[i] = patch.Trees[i].Settle(forest.ForestYear) with
+                        { BirthYear = forest.ForestYear - 2.99, AnnualGrowth = default };
+                forest.NotifyIndividualVisualEdit();
+                Draw(terrain, forest, 12);
+            }
+            SetBoundary();
+            forest.Update(.6);
+            Draw(terrain, forest, 12);
+            Require(terrain.ForestChunkRebuilds == 0, "Life-stage geometry was built synchronously.");
+            bool published = false;
+            for (int frame = 0; frame < 500 && !published; frame++)
+            {
+                Draw(terrain, forest, 12);
+                published = terrain.ForestChunkRebuilds > 0;
+            }
+            Require(published, "Deferred forest build never published.");
+            Draw(terrain, forest, 12);
+            Require(terrain.ForestChunkRebuilds == 0, "Completed forest build did not settle.");
+            SetBoundary(); forest.Update(.6); Draw(terrain, forest, 12);
+            forest.Clear();
+            Require(Draw(terrain, forest, 12) == 0, "Clear retained stale deferred geometry.");
+            for (int frame = 0; frame < 5; frame++)
+                Require(Draw(terrain, forest, 12) == 0, "Cancelled build reintroduced old trees.");
+            Console.WriteLine("Deferred forest geometry: stage publication and cancellation after clear passed.");
         }
     }
 }

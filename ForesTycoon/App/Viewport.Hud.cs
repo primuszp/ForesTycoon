@@ -387,13 +387,32 @@ namespace ForesTycoon
         private void DrawHoverInspector()
         {
             if (interaction.ActiveTool != TerrainEditTool.Inspect || activeButton != PointerButton.None) return;
-            if (imgui.WantCaptureMouse || !world.TryGetForestStand(world.HoveredTileId, out ForestStand stand)) return;
+            if (imgui.WantCaptureMouse) return;
+            bool hasStand = world.TryGetForestStand(world.HoveredTileId, out ForestStand stand);
+            bool planted = world.TryGetPlantationStatus(world.HoveredTileId, out var plot);
+            if (!hasStand && !planted) return;
 
             ImGui.BeginTooltip();
-            HudTheme.IconText(SpeciesIcon(stand.Species), Capitalize(ForestSpeciesName(stand.Species)), HudTheme.AmberAccent);
-            HudTheme.KeyValue("Kor", $"{stand.AgeYears:F1} év");
-            HudTheme.KeyValue("Egészség", $"{stand.Health:P0}");
-            HudTheme.KeyValue("Faanyag", $"{ForestSystem.TimberCubicMetres(stand):F1} m³");
+            if (hasStand)
+            {
+                HudTheme.IconText(SpeciesIcon(stand.Species), Capitalize(ForestSpeciesName(stand.Species)), HudTheme.AmberAccent);
+                HudTheme.KeyValue("Kor", $"{stand.AgeYears:F1} év");
+                HudTheme.KeyValue("Egészség", $"{stand.Health:P0}");
+                HudTheme.KeyValue("Faanyag", $"{ForestSystem.TimberCubicMetres(stand):F1} m³");
+            }
+            if (planted)
+            {
+                ImGui.SeparatorText("Erdőtelepítés");
+                HudTheme.KeyValue("Terület", $"#{plot.Plantation.AreaId} · {Capitalize(ForestSpeciesName(plot.Plantation.Species))}");
+                HudTheme.KeyValue("Soros telepítés", $"{plot.Living}/{plot.Plantation.InitialTrees} élő fa/csempe");
+                HudTheme.KeyValue("Látható holtfa", $"{plot.Dead}");
+                if (plot.Living > 0)
+                {
+                    HudTheme.KeyValue("Fény", $"{plot.Resources.Light:P0}");
+                    HudTheme.KeyValue("Vízellátás", $"{plot.Resources.Water:P0}");
+                    HudTheme.KeyValue("Növőtér", $"{plot.Resources.Space:P0}");
+                }
+            }
             var environment = world.Environment;
             if (environment != null && world.HoveredTileId < environment.CellCount)
                 HudTheme.KeyValue("Víz szerinti növ.", $"{environment.Cell(world.HoveredTileId).GrowthFactor * 100:0}%");
@@ -582,6 +601,7 @@ namespace ForesTycoon
             ImGui.Checkbox("Textúrák", ref g.Textures);
             ImGui.SameLine(170);
             ImGui.Checkbox("Csemperács", ref g.ShowGrid);
+            ImGui.Checkbox("Erdőtelepítések jelölése", ref g.ShowPlantations);
             ImGui.Checkbox("Járműkontúrok", ref g.VehicleOutlines);
             ImGui.SameLine(170);
             ImGui.Checkbox("Szarvaskontúrok", ref g.WildlifeOutlines);

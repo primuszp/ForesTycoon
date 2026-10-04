@@ -22,6 +22,7 @@ namespace ForesTycoon
             try
             {
                 using var terrain = new Terrain(TerrainSettings.Default.WithNodeSize(17, 42), (_, _) => 4);
+                terrain.SynchronousForestBuilds = true;
                 var stands = new ForestStand[256];
                 foreach (var (id, species) in new[] { (102, ForestSpecies.Oak), (105, ForestSpecies.Birch), (150, ForestSpecies.Spruce), (153, ForestSpecies.Beech) })
                     stands[id] = new(species, 3, 0.1f, 1);
@@ -105,6 +106,22 @@ namespace ForesTycoon
                 using var fresh = new MemoryStream(); world.Save(fresh); fresh.Position = 0;
                 world.Load(fresh);
                 Require(world.ForestTreeCount == count, "Fresh save replay changed individual count.");
+                // A malformed journal must preserve both the running state and its save data.
+                world.QueueWeather(WeatherPreset.Storm, 32, 60); world.ExecutePendingCommands();
+                world.Update(1.0 / 30);
+                using var intact = new MemoryStream(); world.Save(intact);
+                var brokenSave = new WorldSaveData {
+                    Terrain = TerrainSettingsData.From(TerrainSettings.Default.WithNodeSize(17, 42)),
+                    Tick = 1, Commands = new() { new SpawnVehicleCommand().ToRecord(2) }
+                };
+                using var broken = new MemoryStream(); WorldSaveSerializer.Write(broken, brokenSave); broken.Position = 0;
+                bool rejected = false;
+                try { world.Load(broken); } catch (InvalidDataException) { rejected = true; }
+                Require(rejected, "Invalid journal was accepted.");
+                using var retained = new MemoryStream(); world.Save(retained);
+                Require(intact.ToArray().AsSpan().SequenceEqual(retained.ToArray()), "Failed load changed the live world.");
+                // The transferred vehicle route factory must still work after a successful load and regeneration.
+                world.Regenerate(TerrainSettings.Default.WithNodeSize(17, 42));
                 Console.WriteLine("Individual forest smoke passed: continuous cached growth, real cut stems, both shaders, monthly save/replay and regeneration.");
 
                 void Draw()
@@ -148,6 +165,7 @@ namespace ForesTycoon
             public bool CanSupportForest(int id) => terrain.CanSupportForest(id);
             public float GetMoisture(int id) => 0.65f;
             public float GetNormalizedElevation(int id) => 0.45f;
+            public ForestTileGeometry GetForestTileGeometry(int id) => terrain.GetForestTileGeometry(id);
             public int GetAdjacentTileIds(int id, Span<int> target) => terrain.GetAdjacentTileIds(id, target);
         }
     }

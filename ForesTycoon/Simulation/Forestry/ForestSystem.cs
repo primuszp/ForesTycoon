@@ -73,7 +73,7 @@ namespace ForesTycoon
 
         /// <summary>
         /// Canopy pressure from the four neighbouring tiles, 0 (open field) to 1 (closed canopy).
-        /// Reduces growth and health when neighbouring canopies limit the light.
+        /// Used by natural regeneration; individual growth uses metric crown/root competition.
         /// </summary>
         public float GetCrowding(int tileId)
         {
@@ -85,6 +85,12 @@ namespace ForesTycoon
         }
 
         public ForestryActionResult Plant(int tileId, ForestSpecies species)
+            => PlantCore(tileId, species, 0, false);
+
+        internal ForestryActionResult PlantInArea(int tileId, ForestSpecies species, int areaId)
+            => PlantCore(tileId, species, areaId, true);
+
+        private ForestryActionResult PlantCore(int tileId, ForestSpecies species, int areaId, bool deferStatistics)
         {
             if (!Enum.IsDefined(species) || species == ForestSpecies.None)
                 throw new ArgumentOutOfRangeException(nameof(species));
@@ -100,9 +106,12 @@ namespace ForesTycoon
                 profile.MaximumBiomass * 0.015f,
                 0.50f + suitability * 0.40f);
             stands[tileId] = planted;
-            CreateIndividuals(tileId, planted, ForestYear);
+            CreateIndividuals(tileId, planted, ForestYear, true);
+            if (areaId == 0) areaId = AllocatePlantationId();
+            plantations[tileId] = new(areaId, species, ForestYear, ForestTreeStore.PlantedTreesPerTile);
+            PlantationRevision++;
             stands[tileId] = IndividualStand(tileId, ForestYear);
-            RecalculateStatistics();
+            if (!deferStatistics) FinishPlantingArea(areaId);
             Revision++; EditRevision++;
             return ForestryActionResult.Planted;
         }
@@ -175,6 +184,7 @@ namespace ForesTycoon
         {
             currentYearGrowth = lastYearGrowth = 0;
             IndividualTrees.Clear();
+            ClearPlantations(); competition.Clear();
             Array.Clear(stands);
             Array.Clear(seedCandidate);
             seedCandidateCount = 0;

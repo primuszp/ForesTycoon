@@ -6,6 +6,12 @@ namespace ForesTycoon
     {
         static void Main(string[] args)
         {
+            if (Array.Exists(args, argument => argument == "--plantation-smoke-test"))
+            {
+                try { PlantationSmokeTest.Run(); }
+                catch (Exception error) { Console.Error.WriteLine(error); Environment.ExitCode = 1; }
+                return;
+            }
             if (Array.Exists(args, argument => argument == "--procedural-tree-preview")) { ProceduralTreePreview.Run(); return; }
             if (Array.Exists(args, argument => argument == "--tree-life-stage-preview")) { ProceduralTreePreview.Run(true); return; }
             if (Array.Exists(args, argument => argument == "--forest-model-smoke-test")) { ForestModelSmokeTest.Run(); return; }

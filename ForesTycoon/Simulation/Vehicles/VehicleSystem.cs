@@ -8,7 +8,7 @@ namespace ForesTycoon
         private readonly List<Vehicle> vehicles = new List<Vehicle>();
         private readonly TimberCargoSystem timberCargo;
         private int nextId = 1;
-        private readonly Func<int[], VehicleRoadRoute> roadRouteFactory;
+        internal Func<int[], VehicleRoadRoute> RoadRouteFactory { get; set; }
         public bool UseRoadPhysics { get; set; } = true;
         public bool UseCargoStops { get; set; } = true;
         internal Func<Vehicle,float,float> SourceLoader;
@@ -16,7 +16,7 @@ namespace ForesTycoon
         internal Func<Vehicle,bool> RouteValidator;
         internal Vehicle SpawnLogistics(int[] route,int[] sources,int mill)
         {
-            var vehicle=new Vehicle(nextId++,route,1.5,roadRoute:roadRouteFactory?.Invoke(route),roadPhysics:UseRoadPhysics);
+            var vehicle=new Vehicle(nextId++,route,1.5,roadRoute:RoadRouteFactory?.Invoke(route),roadPhysics:UseRoadPhysics);
             vehicle.SourceTiles=(int[])sources.Clone();vehicle.SawmillTileId=mill;vehicle.CargoStopsEnabled=true;
             vehicle.TransportState=VehicleTransportState.Loading;vehicle.Hold();vehicles.Add(vehicle);return vehicle;
         }
@@ -24,7 +24,7 @@ namespace ForesTycoon
         public VehicleSystem(TimberCargoSystem timberCargo = null, Func<int[], VehicleRoadRoute> roadRouteFactory = null)
         {
             this.timberCargo = timberCargo ?? new TimberCargoSystem();
-            this.roadRouteFactory = roadRouteFactory;
+            RoadRouteFactory = roadRouteFactory;
         }
 
         public IReadOnlyList<Vehicle> Vehicles => vehicles;
@@ -33,7 +33,7 @@ namespace ForesTycoon
         public Vehicle Spawn(int[] route, double speedTilesPerSecond = 1.5)
         {
             Vehicle vehicle = new Vehicle(nextId++, route, speedTilesPerSecond,
-                roadRoute: roadRouteFactory?.Invoke(route), roadPhysics: UseRoadPhysics);
+                roadRoute: RoadRouteFactory?.Invoke(route), roadPhysics: UseRoadPhysics);
             vehicle.CargoStopsEnabled = UseCargoStops && vehicle.RoadRoute != null && UseRoadPhysics;
             float initialCargo = timberCargo.Load(vehicle.CargoCapacity);
             if (vehicle.CargoStopsEnabled) vehicle.BeginLoading(initialCargo);

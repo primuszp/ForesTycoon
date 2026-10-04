@@ -10,6 +10,8 @@ namespace ForesTycoon
     {
         int TileCount { get; }
         int Seed { get; }
+        // Fallback keeps small headless habitats usable; real terrain supplies metric positions.
+        ForestTileGeometry GetForestTileGeometry(int tileId) => new(tileId * 16, 0, 16, 16);
         bool CanSupportForest(int tileId);
         float GetMoisture(int tileId);
         float GetNormalizedElevation(int tileId);

@@ -17,6 +17,7 @@ namespace ForesTycoon
         internal bool Textures = true;
         internal ForestModelStyle ForestModels = ForestModelStyle.Procedural;
         internal bool ImportedBirch;
+        internal bool ShowPlantations = true;
         internal bool VehicleOutlines = true;
         internal bool Wildlife = true;
         internal bool WildlifeOutlines = true;

@@ -16,25 +16,27 @@ namespace ForesTycoon
         internal ForestryLogistics Logistics { get; private set; }
         private TerrainRenderer terrainRenderer;
         private readonly WorldCommandQueue commands = new WorldCommandQueue();
-        private readonly WorldSystemCollection systems = new WorldSystemCollection();
-        private readonly BackgroundJobScheduler backgroundJobs = new BackgroundJobScheduler();
+        private WorldSystemCollection systems = new WorldSystemCollection();
+        private BackgroundJobScheduler backgroundJobs = new BackgroundJobScheduler();
         private readonly List<WorldCommandRecord> commandJournal = new List<WorldCommandRecord>();
-        private readonly VehicleSystem vehicles;
-        private readonly WorldEffectSystem effects;
-        private readonly ForestSystem forest;
-        private readonly TimberCargoSystem timberCargo;
+        private VehicleSystem vehicles;
+        private WorldEffectSystem effects;
+        private ForestSystem forest;
+        private TimberCargoSystem timberCargo;
         private ulong worldTick;
         internal EnvironmentSystem Environment { get; private set; }
         private ForestryActionResult lastForestryAction;
         private ForestryAreaSummary lastForestryArea;
-        internal GraphicsSettings Graphics { get; } = new GraphicsSettings();
+        internal GraphicsSettings Graphics { get; }
 
-        public GameWorld(TerrainSettings settings)
+        public GameWorld(TerrainSettings settings) : this(settings, new GraphicsSettings { AutomaticWeather = true }) { }
+
+        private GameWorld(TerrainSettings settings, GraphicsSettings graphics)
         {
+            Graphics = graphics;
             terrain = new Terrain(settings ?? throw new ArgumentNullException(nameof(settings)));
             forest = new ForestSystem(terrain);
             InitializeEnvironment();
-            Graphics.AutomaticWeather=true;
             timberCargo = systems.Add(new TimberCargoSystem());
             vehicles = systems.Add(new VehicleSystem(timberCargo, route => terrain.CreateVehicleRoadRoute(route)));
             effects = systems.Add(new WorldEffectSystem());
@@ -60,6 +62,7 @@ namespace ForesTycoon
         public ForestryActionResult LastForestryAction => lastForestryAction;
         public ForestryAreaSummary LastForestryArea => lastForestryArea;
         public bool TryGetForestStand(int tileId, out ForestStand stand) => forest.TryGetStand(tileId, out stand);
+        internal bool TryGetPlantationStatus(int tileId, out PlantationStatus status) => forest.TryGetPlantationStatus(tileId, out status);
 
         /// <summary>
         /// Review-capture helper: finds the densest 5×5 block of forest, clears its western half
@@ -191,13 +194,15 @@ namespace ForesTycoon
             int count = terrain.GetTileRectangle(startTileId, endTileId, tileIds);
 
             int planted = 0;
+            int areaId = forest.AllocatePlantationId();
             for (int i = 0; i < count; i++)
             {
-                lastForestryAction = forest.Plant(tileIds[i], species);
+                lastForestryAction = forest.PlantInArea(tileIds[i], species, areaId);
                 if (lastForestryAction == ForestryActionResult.Planted) planted++;
             }
 
             lastForestryArea = new ForestryAreaSummary(count, planted, 0f);
+            if (planted > 0) forest.FinishPlantingArea(areaId);
             SpawnAreaEffect(startTileId, endTileId,
                 planted > 0 ? WorldEffectKind.TreePlanted : WorldEffectKind.ForestryRejected);
         }
@@ -261,37 +266,46 @@ namespace ForesTycoon
         public void Load(Stream source)
         {
             WorldSaveData save = WorldSaveSerializer.Read(source);
-            vehicles.UseRoadPhysics = true;
-            vehicles.UseCargoStops = true;
+            save.ValidateReplay();
+            var settings = save.Terrain.ToSettings();
+            // Replay into an isolated world. Failure leaves the live world and queued commands intact.
+            using var candidate = new GameWorld(settings, Graphics);
+            candidate.Replay(save);
+
+            (terrain, candidate.terrain) = (candidate.terrain, terrain);
+            (terrainRenderer, candidate.terrainRenderer) = (candidate.terrainRenderer, terrainRenderer);
+            (forest, candidate.forest) = (candidate.forest, forest);
+            (Environment, candidate.Environment) = (candidate.Environment, Environment);
+            (wildlife, candidate.wildlife) = (candidate.wildlife, wildlife);
+            (Logistics, candidate.Logistics) = (candidate.Logistics, Logistics);
+            (vehicles, candidate.vehicles) = (candidate.vehicles, vehicles);
+            (effects, candidate.effects) = (candidate.effects, effects);
+            (timberCargo, candidate.timberCargo) = (candidate.timberCargo, timberCargo);
+            (systems, candidate.systems) = (candidate.systems, systems);
+            (backgroundJobs, candidate.backgroundJobs) = (candidate.backgroundJobs, backgroundJobs);
+            // Route creation must follow this world's terrain after the ownership transfer.
+            vehicles.RoadRouteFactory = route => terrain.CreateVehicleRoadRoute(route);
             commands.Clear();
             commandJournal.Clear();
-            systems.Clear();
-            worldTick = 0;
-            lastForestryAction = ForestryActionResult.None;
-            ReplaceTerrain(save.Terrain.ToSettings());
+            commandJournal.AddRange(save.Commands);
+            worldTick = candidate.worldTick;
+            lastForestryAction = candidate.lastForestryAction;
+            lastForestryArea = candidate.lastForestryArea;
+        }
 
+        private void Replay(WorldSaveData save)
+        {
             int commandIndex = 0;
-            ulong previousTick = 0;
-            for (int i = 0; i < save.Commands.Count; i++)
-            {
-                WorldCommandRecord record = save.Commands[i];
-                if (record.Tick > save.Tick || (i > 0 && record.Tick < previousTick))
-                    throw new InvalidDataException("Save commands are not in deterministic tick order.");
-                previousTick = record.Tick;
-            }
-
             double fixedDelta = 1.0 / save.TickRate;
-            for (ulong tick = 0; tick <= save.Tick; tick++)
+            for (ulong tick = 0; ; tick++)
             {
                 while (commandIndex < save.Commands.Count && save.Commands[commandIndex].Tick == tick)
                     commands.Enqueue(WorldCommandFactory.Create(save.Commands[commandIndex++]));
                 commands.ExecutePending(this);
-                if (tick < save.Tick) Update(fixedDelta);
+                if (tick == save.Tick) break;
+                Update(fixedDelta);
             }
-
-            commandJournal.AddRange(save.Commands);
         }
-
         private void ReplaceTerrain(TerrainSettings settings)
         {
             terrainRenderer.Dispose();

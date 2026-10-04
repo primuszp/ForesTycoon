@@ -32,7 +32,7 @@ out vec4 vertex_color;
 void main()
 {
     gl_Position = view_projection * model * vec4(forestPoint(in_position), 1.0);
-    vertex_color = in_color;
+    vertex_color = forestTint(in_color);
 }";
             const string fragmentSource = @"#version 330 core
 in vec4 vertex_color;

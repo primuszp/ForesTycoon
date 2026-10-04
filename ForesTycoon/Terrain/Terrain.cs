@@ -168,6 +168,9 @@ namespace ForesTycoon
         }
 
         float IForestHabitat.GetMoisture(int tileId) => tileMoisture[tileId];
+        ForestTileGeometry IForestHabitat.GetForestTileGeometry(int tileId) => new(
+            tiles[tileId].W.xPos / TreeMetresToWorld, tiles[tileId].W.yPos / TreeMetresToWorld,
+            tileSizeH / TreeMetresToWorld, tileSizeV / TreeMetresToWorld);
 
         float IForestHabitat.GetNormalizedElevation(int tileId) =>
             Math.Clamp(tiles[tileId].Low / (float)Math.Max(1, settings.MaxHeight), 0f, 1f);

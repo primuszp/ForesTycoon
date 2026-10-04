@@ -18,7 +18,7 @@ A részrakodás egész faegyedeket vág ki és átadja a teljes törzstérfogato
 
 ## Mentés
 
-Minden világ az egyedi famodellt használja. A mentés egyetlen formátumverziót (`Version = 2`) tárol; nincsenek külön erdő-, környezet-, logisztika- vagy járműverzió-kapcsolók. Korábbi mentésformátumhoz nincs migráció vagy tartalék szimulációs ág. Az aktuális formátum betöltése minden rendszert azonos módon indít.
+Minden világ az egyedi famodellt használja. A mentés egyetlen formátumverziót (`Version = 3`) tárol; nincsenek külön erdő-, környezet-, logisztika- vagy járműverzió-kapcsolók. Korábbi mentésformátumhoz nincs migráció vagy tartalék szimulációs ág. Az aktuális formátum betöltése minden rendszert azonos módon indít. A tartós telepítési területek és a versengés részletei az [erdődinamika leírásában](forest-plantation-dynamics.md) szerepelnek.
 
 A mentés egyelőre továbbra is seedből és ticknaplóból játszik vissza. Ebből az egyedazonosítók, méretek, növekedési ráták és rönkdepók determinisztikusan újraépülnek azonos build mellett. Önálló állapot-snapshot és hosszú játékhoz checkpoint ebben a lépcsőben még nem készült. A régi környezeti állapotot új térkép létrehozása előtt leválasztjuk, hogy ne befolyásolhassa a kezdeti növekedési rátákat.
 

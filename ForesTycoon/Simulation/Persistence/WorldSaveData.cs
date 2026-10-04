@@ -61,7 +61,7 @@ namespace ForesTycoon
 
     sealed class WorldSaveData
     {
-        public const int CurrentVersion = 2;
+        public const int CurrentVersion = 3;
         public int Version { get; init; } = CurrentVersion;
         public double TickRate { get; init; } = 30.0;
         public ulong Tick { get; init; }
@@ -76,6 +76,21 @@ namespace ForesTycoon
                 throw new InvalidOperationException("Save tick rate must be positive.");
             if (Terrain == null) throw new InvalidOperationException("Save has no terrain settings.");
             if (Commands == null) throw new InvalidOperationException("Save has no command journal.");
+        }
+
+        internal void ValidateReplay()
+        {
+            Validate();
+            if (!double.IsFinite(1.0 / TickRate)) throw new InvalidOperationException("Save tick duration must be finite.");
+            ulong previousTick = 0;
+            for (int i = 0; i < Commands.Count; i++)
+            {
+                var record = Commands[i];
+                if (record.Tick > Tick || (i > 0 && record.Tick < previousTick))
+                    throw new System.IO.InvalidDataException("Save commands are not in deterministic tick order.");
+                WorldCommandFactory.Create(record);
+                previousTick = record.Tick;
+            }
         }
     }
 }

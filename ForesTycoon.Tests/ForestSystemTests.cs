@@ -204,23 +204,40 @@ public class ForestSystemTests
         forest.Plant(crowded + 1, ForestSpecies.Spruce);
         forest.Plant(open, ForestSpecies.Birch);
 
+        // Established edge trees cast shade; equally young spruce would not reach
+        // the neighbouring birch rows during this interval.
+        foreach (int id in new[] { crowded - 1, crowded + 1 })
+        {
+            forest.IndividualTrees.TryGet(id, out var edge);
+            while (edge.Count > 1) forest.IndividualTrees.RemoveLiving(edge, edge.Count - 1);
+            edge.Trees[0] = edge.Trees[0] with {
+                U = id < crowded ? .98f : .02f, V = .5f,
+                Dimensions = ForestTreeGrowth.Initial(ForestSpecies.Spruce, 60, 1),
+                BirthYear = -60, AnnualGrowth = default, Health = 1
+            };
+        }
+
         // Match individual size and age: seeded variation must not bias the light comparison.
         forest.IndividualTrees.TryGet(crowded, out var crowdedTrees);
         forest.IndividualTrees.TryGet(open, out var openTrees);
-        openTrees.Trees[0] = openTrees.Trees[0] with {
-            Dimensions = crowdedTrees.Trees[0].Dimensions,
-            BirthYear = crowdedTrees.Trees[0].BirthYear
-        };
+        Assert.Equal(crowdedTrees.Count, openTrees.Count);
+        for (int i = 0; i < crowdedTrees.Count; i++)
+        {
+            crowdedTrees.Trees[i] = crowdedTrees.Trees[i] with { AnnualGrowth = default };
+            openTrees.Trees[i] = openTrees.Trees[i] with {
+                Dimensions = crowdedTrees.Trees[i].Dimensions, Health = crowdedTrees.Trees[i].Health,
+                BirthYear = crowdedTrees.Trees[i].BirthYear, AnnualGrowth = default
+            };
+        }
 
-        // Nine years in, the neighbouring spruce are established but the birch is still
-        // alive; mortality belongs to the next lifecycle phase.
+        // Compare the surviving birch stands after nine years of edge competition.
         forest.Update(9.0);
 
         Assert.True(forest.GetCrowding(crowded) > forest.GetCrowding(open));
         Assert.True(forest.TryGetStand(crowded, out ForestStand suppressed));
         Assert.True(forest.TryGetStand(open, out ForestStand openGrown));
         Assert.True(openGrown.Biomass > suppressed.Biomass,
-            "A birch hemmed in by spruce must accumulate less biomass than one grown in the open.");
+            $"A birch hemmed in by spruce must accumulate less biomass than one grown in the open: {suppressed.Biomass}/{openGrown.Biomass}, health {suppressed.Health}/{openGrown.Health}.");
         Assert.True(openGrown.Health > suppressed.Health,
             "Shade must cost the suppressed birch some of its health.");
     }

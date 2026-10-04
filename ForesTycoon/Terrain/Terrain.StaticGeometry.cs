@@ -23,7 +23,7 @@ namespace ForesTycoon
         private void DrawCachedTerrain(IReadOnlyList<TerrainChunk> chunks = null, bool draw = true)
         {
             StaticTerrainRebuilds = 0;
-            foreach (TerrainChunk chunk in visibleChunks)
+            foreach (TerrainChunk chunk in chunks ?? visibleChunks)
             {
                 if (!staticTerrain.TryGetValue(chunk, out var geometry))
                 {

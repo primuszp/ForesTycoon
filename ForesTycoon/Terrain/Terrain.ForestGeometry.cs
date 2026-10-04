@@ -55,6 +55,7 @@ namespace ForesTycoon
         private void DisposeForestGeometry()
         {
             DisposeIndividualForest();
+            DisposePlantations();
             forestMaterial.Dispose();
         }
     }

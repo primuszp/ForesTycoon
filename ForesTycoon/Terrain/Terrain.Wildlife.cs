@@ -23,8 +23,8 @@ namespace ForesTycoon
         internal void CollectWildlifeSpots(ForestSystem forest,List<WildlifeSpot> output)
         {
             output.Clear();
-            Span<TreeInstance> stems=stackalloc TreeInstance[16];
-            Span<TreeInstance> neighboursBuffer=stackalloc TreeInstance[16];
+            Span<TreeInstance> stems=stackalloc TreeInstance[ForestTreeStore.PlantedTreesPerTile];
+            Span<TreeInstance> neighboursBuffer=stackalloc TreeInstance[ForestTreeStore.PlantedTreesPerTile];
             foreach(Tile tile in tiles)
             {
                 if(roads.Has(tile.Id)||ShouldDrawStandingWater(tile)||CountRiverCorners(tile)>0||!((IForestHabitat)this).CanSupportForest(tile.Id))continue;

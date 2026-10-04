@@ -214,6 +214,8 @@ A Nézet → Erdei szarvasok kapcsolóval legelő és lassan sétáló szarvasok
 
 ## Környezet 1.0: időjárás, víz és erdő
 
+A kijelölt erdőtelepítések tartós borostyánsárga határt és sorjelölést kapnak. Csempénként 6×6 csemete nő a fajára jellemző életfázisokon keresztül. Az egyedek a fényért, vízért és növőtérért versengenek; a tartósan elnyomott fák elhalnak, majd kidőlnek. A Vizsgálat eszköz mutatja a telepítés egyedszámát és erőforrásmutatóit. Modell, források, mentés és ellenőrzés: [erdőtelepítés és dinamika](docs/forest-plantation-dynamics.md). Képi próba: `dotnet run --project ForesTycoon -- --plantation-smoke-test`.
+
 Új világban egy erdőév 20 játékperc. A vízidő átváltása 1 játékperc = 1 környezeti óra. Az események nem képkockánként váltakoznak: napos idő 2–5 perc, borult idő 1–3 perc, eső 45–120 másodperc, vihar 20–60 másodperc. Az eső intenzitása mm/környezeti óra; a felerősödés és lecsengés integrálja adja a lehulló vizet.
 
 A **Környezet 1.0** panelen látható az esemény hátralévő ideje, intenzitása, lehulló/várható vízmennyisége, hőmérséklet és szél. A csempére mutatva a koronavíz, felszíni víz, gyökérzóna és vízstressz olvasható. Az **Időjárási esemény indítása** részben állítható a típus, csúcsintenzitás és időtartam; az indítás a tényleges vízkészletet módosító, menthető parancs. Bezárt panel a Játék → Környezeti panel kapcsolóval nyitható újra.

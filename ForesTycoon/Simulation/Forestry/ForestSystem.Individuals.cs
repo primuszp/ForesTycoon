@@ -6,28 +6,34 @@ namespace ForesTycoon
     sealed partial class ForestSystem
     {
         internal ForestTreeStore IndividualTrees { get; } = new();
+        private readonly ForestCompetition competition = new();
         internal double ForestYear => month / 12.0 + accumulatedSeconds / secondsPerYear;
         internal int IndividualTreeCount => IndividualTrees.TreeCount;
         private double currentYearGrowth, lastYearGrowth;
         internal float LastAnnualGrowthCubicMetres => (float)lastYearGrowth;
         // Diagnostic fixtures only. Normal edits go through planting/harvest operations.
-        internal void NotifyIndividualVisualEdit() { Revision++; EditRevision++; }
+        internal void NotifyIndividualVisualEdit() {
+            foreach (var entry in IndividualTrees.Patches) IndividualTrees.NotifyTopologyChanged(entry.Value);
+            Revision++; EditRevision++;
+        }
 
         private void InitializeIndividuals()
         {
             currentYearGrowth = lastYearGrowth = 0;
             IndividualTrees.Clear();
+            ClearPlantations(); competition.Clear();
             for (int id = 0; id < stands.Length; id++)
                 if (!stands[id].IsEmpty) IndividualTrees.Create(id, stands[id], ForestYear, habitat.Seed);
             for (int id = 0; id < stands.Length; id++) stands[id] = IndividualStand(id, ForestYear);
+            competition.Snapshot(habitat, IndividualTrees, ForestYear);
             foreach (var entry in IndividualTrees.Patches) UpdateIndividualRates(entry.Key, entry.Value, ForestYear);
         }
 
-        private void CreateIndividuals(int id, ForestStand stand, double year)
+        private void CreateIndividuals(int id, ForestStand stand, double year, bool planted = false)
         {
-            IndividualTrees.Create(id, stand, year, habitat.Seed);
+            IndividualTrees.Create(id, stand, year, habitat.Seed, planted);
             IndividualTrees.TryGet(id, out var patch);
-            UpdateIndividualRates(id, patch, year);
+            if (!planted) UpdateIndividualRates(id, patch, year);
         }
 
         private ForestStand IndividualStand(int id, double year)
@@ -52,16 +58,18 @@ namespace ForesTycoon
 
         private void UpdateIndividualRates(int id, ForestTreeStore.Patch patch, double year)
         {
-            float crowding = GetCrowding(id);
             for (int i = 0; i < patch.Count; i++)
             {
                 ForestTree tree = SettleIndividual(patch.Trees[i], year);
-                float water = (float)(Environment?.GrowthFactor(id, tree.Species) ?? 1);
+                float water = (float)(Environment?.GrowthFactor(id, tree.Species)
+                    ?? Math.Clamp(habitat.GetMoisture(id) / ForestSpeciesProfile.For(tree.Species).PreferredMoisture, 0, 1));
                 float fitness = Suitability(tree.Species, id);
-                float light = Math.Clamp(1 - crowding * (1 - ForestSpeciesProfile.For(tree.Species).ShadeTolerance), 0.05f, 1);
-                float target = Math.Clamp((0.25f + fitness * 0.75f) * (0.55f + light * 0.45f) * water, 0, 1);
+                var resources = competition.Evaluate(habitat, tree, year, water);
+                float limit = resources.Limitation(tree.Species);
+                float target = Math.Clamp(fitness * (0.15f + 0.85f * limit), 0, 1);
                 tree = tree with { Health = MoveTowards(tree.Health, target, 0.035f) };
-                patch.Trees[i] = tree with { AnnualGrowth = ForestTreeGrowth.Rates(tree, year, fitness, crowding, water) };
+                patch.Trees[i] = tree with { Resources = resources,
+                    AnnualGrowth = ForestTreeGrowth.RatesWithResources(tree, year, fitness, resources) };
             }
             patch.Revision++;
         }
@@ -72,6 +80,7 @@ namespace ForesTycoon
             // Close all growth intervals first. Competition reads a common immutable tile snapshot.
             foreach (var entry in IndividualTrees.Patches)
                 stands[entry.Key] = IndividualStand(entry.Key, year);
+            competition.Snapshot(habitat, IndividualTrees, year);
             ClearSeedCandidates();
             for (int id = 0; id < stands.Length; id++)
                 if (IsSeedSource(stands[id])) MarkSeedCandidates(id);
@@ -79,9 +88,34 @@ namespace ForesTycoon
             {
                 var patch = entry.Value;
                 UpdateIndividualRates(entry.Key, patch, year);
+                for (int i = patch.Count - 1; i >= 0; i--)
+                {
+                    var tree = patch.Trees[i];
+                    float shadeTolerance = ForestSpeciesProfile.For(tree.Species).ShadeTolerance;
+                    // Pioneers need more sustained light; shade-tolerant species can
+                    // persist with fewer resources. Thresholds are gameplay parameters.
+                    float stressThreshold = 0.25f + 0.25f * (1 - shadeTolerance);
+                    bool suppressed = tree.Resources.Limitation(tree.Species) < stressThreshold || tree.Health < 0.18f;
+                    float stress = suppressed ? tree.StressYears + YearsPerStep : Math.Max(0, tree.StressYears - YearsPerStep * 0.5f);
+                    tree = tree with { StressYears = stress };
+                    patch.Trees[i] = tree;
+                    if ((stress >= 4 && tree.Health < 0.4f + 0.25f * (1 - shadeTolerance))
+                        || tree.Age(year) > ForestSpeciesProfile.For(tree.Species).MaximumAgeYears)
+                    {
+                        (patch.DeadTrees ??= new()).Add(new(tree with { AnnualGrowth = default, Health = 0 }, year));
+                        IndividualTrees.RemoveLiving(patch, i);
+                    }
+                }
+                if (patch.DeadTrees != null)
+                    for (int i = patch.DeadTrees.Count - 1; i >= 0; i--)
+                        if (year - patch.DeadTrees[i].DeathYear >= 8) {
+                            patch.DeadTrees.RemoveAt(i); IndividualTrees.NotifyTopologyChanged(patch);
+                        }
                 if (patch.Stumps == null) continue;
                 for (int i = patch.Stumps.Count - 1; i >= 0; i--)
-                    if (patch.Stumps[i].Decay(year) >= 1) patch.Stumps.RemoveAt(i);
+                    if (patch.Stumps[i].Decay(year) >= 1) {
+                        patch.Stumps.RemoveAt(i); IndividualTrees.NotifyTopologyChanged(patch);
+                    }
             }
             for (int i = 0; i < seedCandidateCount; i++)
             {

@@ -45,6 +45,7 @@ namespace ForesTycoon
             this.graphics = graphics ?? new GraphicsSettings { Enhanced = false };
             surfaces = new SurfaceVisualRenderer(this.graphics, weather,environment,terrain);
             terrain.WarmStaticGeometry();
+            terrain.WarmIndividualForest(forest, this.graphics);
             RegisterPasses();
         }
 
@@ -103,6 +104,7 @@ namespace ForesTycoon
                 if (context.ShowTileHighlight) terrain.DrawHoveredTile();
             });
             pipeline.Add(RenderLayer.ForestryPreview, "forestry-preview", _ => DrawSurface(SurfaceKind.Plain,()=> {
+                terrain.DrawPlantations(forest,graphics);
                 terrain.DrawHarvestSites(logistics);terrain.DrawForestryPreview();
                 content.DrawBuildingPreview(terrain,forest,logistics,graphics.SawmillPreview);
             }));

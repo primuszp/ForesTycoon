@@ -59,20 +59,24 @@ public class EnvironmentSystemTests
     }
     [Fact] public void DroughtReducesActualForestGrowthAndHealth()
     {
-        var habitat=new Habitat(1,0.27f);
+        var habitat=new Habitat(1,0.55f);
         ForestStand[] stands=[new ForestStand(ForestSpecies.Oak,20,0.5f,0.3f)];
         var stressed=new ForestSystem(habitat,stands);stressed.UseEnvironmentTempo();
         var control=new ForestSystem(habitat,stands);control.UseEnvironmentTempo();
         var environment=new EnvironmentSystem(habitat,stressed);stressed.Environment=environment;
         stressed.TryGetStand(0, out var before);
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 40; i++) {
             environment.ForceWeather(WeatherPreset.Sunny,0,600);
             environment.Update(600);
             control.Update(600);
         }
-        Assert.True(stressed.TryGetStand(0,out var dry));Assert.True(control.TryGetStand(0,out var normal));
-        Assert.True(dry.Biomass<normal.Biomass);Assert.True(dry.Health<normal.Health);
-        Assert.Equal(before.AgeYears + 5, dry.AgeYears, 3);
+        bool survived = stressed.TryGetStand(0,out var dry);
+        Assert.True(control.TryGetStand(0,out var normal));
+        Assert.True(stressed.Statistics.TotalBiomass < normal.Biomass, $"dry={stressed.Statistics.TotalBiomass} wet={normal.Biomass} health={dry.Health}/{normal.Health} count={stressed.IndividualTreeCount}/{control.IndividualTreeCount} water={environment.GrowthFactor(0, ForestSpecies.Oak)}");
+        Assert.True(!survived || dry.Health < normal.Health);
+        Assert.True(environment.GrowthFactor(0, ForestSpecies.Oak) < 1);
+        if (survived) Assert.Equal(before.AgeYears + 20, dry.AgeYears, 3);
+        else Assert.True(stressed.IndividualTreeCount < control.IndividualTreeCount);
     }
     [Fact] public void PauseAndGraphicsOptionsDoNotModifyWater()
     {

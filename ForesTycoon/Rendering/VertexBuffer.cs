@@ -10,6 +10,7 @@ namespace ForesTycoon
         private int vaoId;
         private int growthVbo;
         internal float ForestElapsedYears { get; set; }
+        internal int ForestStateTexture { get; set; }
         private bool disposed;
         private uint[] indices;
         private Vertex[] vertices;
@@ -124,6 +125,8 @@ namespace ForesTycoon
             GL.VertexAttribPointer(3, 3, VertexAttribPointerType.Float, false, ForestVertexGrowth.Stride, 0);
             GL.EnableVertexAttribArray(4);
             GL.VertexAttribPointer(4, 3, VertexAttribPointerType.Float, false, ForestVertexGrowth.Stride, 3 * sizeof(float));
+            GL.EnableVertexAttribArray(5);
+            GL.VertexAttribPointer(5, 1, VertexAttribPointerType.Float, false, ForestVertexGrowth.Stride, 6 * sizeof(float));
             GL.BindVertexArray(0);
         }
 
@@ -135,11 +138,7 @@ namespace ForesTycoon
             if (vertexCount == 0) return;
 
             if (useGeometryShader) RenderDevice.UseGeometryShader();
-            if (growthVbo != 0)
-            {
-                GL.GetInteger(GetPName.CurrentProgram, out int currentProgram);
-                GL.Uniform1(GlProgram.Uniform(currentProgram, "forest_elapsed"), ForestElapsedYears);
-            }
+            ApplyForestState();
             GL.BindVertexArray(VaoId);
             GL.DrawArrays(mode, 0, vertexCount);
             RenderMetrics.RecordDraw(vertexCount);
@@ -152,6 +151,7 @@ namespace ForesTycoon
             if (vertexCount == 0 || indices == null || indices.Length == 0) return;
 
             RenderDevice.UseGeometryShader();
+            ApplyForestState();
             GL.BindVertexArray(VaoId);
             GL.DrawElements(mode, indices.Length, DrawElementsType.UnsignedInt, IntPtr.Zero);
             RenderMetrics.RecordDraw(indices.Length);
@@ -166,6 +166,18 @@ namespace ForesTycoon
             if (eboId != 0) { GL.DeleteBuffers(1, ref eboId); eboId = 0; }
             if (vaoId != 0) { GL.DeleteVertexArray(vaoId); vaoId = 0; }
             if (growthVbo != 0) { GL.DeleteBuffers(1, ref growthVbo); growthVbo = 0; }
+        }
+
+        private void ApplyForestState()
+        {
+            GL.GetInteger(GetPName.CurrentProgram, out int currentProgram);
+            GL.Uniform1(GlProgram.Uniform(currentProgram, "forest_elapsed"), growthVbo != 0 ? ForestElapsedYears : 0);
+            GL.Uniform1(GlProgram.Uniform(currentProgram, "forest_dynamic"), ForestStateTexture != 0 ? 1 : 0);
+            if (ForestStateTexture == 0) return;
+            GL.ActiveTexture(TextureUnit.Texture7);
+            GL.BindTexture(TextureTarget.TextureBuffer, ForestStateTexture);
+            GL.Uniform1(GlProgram.Uniform(currentProgram, "forest_state"), 7);
+            GL.ActiveTexture(TextureUnit.Texture0);
         }
 
         private void ThrowIfDisposed()

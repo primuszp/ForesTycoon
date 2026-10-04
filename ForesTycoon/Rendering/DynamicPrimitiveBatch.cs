@@ -72,6 +72,9 @@ namespace ForesTycoon
 
                 EnsureDeviceResources();
                 RenderDevice.UseGeometryShader();
+                GL.GetInteger(GetPName.CurrentProgram, out int activeProgram);
+                GL.Uniform1(GlProgram.Uniform(activeProgram, "forest_dynamic"), 0);
+                GL.Uniform1(GlProgram.Uniform(activeProgram, "forest_elapsed"), 0f);
                 GL.BindVertexArray(vao);
                 GL.BindBuffer(BufferTarget.ArrayBuffer, vbo);
                 EnsureUploadCapacity(expanded.Count);

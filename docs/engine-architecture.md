@@ -31,7 +31,7 @@ This separation keeps input responsive, makes commands replayable, and lets simu
 ## Forestry simulation
 
 - Forest state is stored in contiguous arrays indexed by tile ID; no entities or temporary collections are allocated per tick.
-- Growth runs in deterministic monthly steps. One simulated year currently lasts 30 real-time simulation seconds.
+- Growth runs in deterministic monthly steps. A normal world uses 1200 simulation seconds per forest year; isolated diagnostics may use the faster 30-second tempo.
 - Spruce, birch, oak and beech have distinct maturity ages, biomass limits, growth rates, site preferences, shade tolerance and timber value.
 - Terrain moisture, elevation, standing water, rivers and roads determine habitat availability.
 - Mature, healthy neighbouring stands can seed empty suitable tiles naturally.
@@ -118,3 +118,11 @@ Changes:
 RTX 5060, 1280×720, 4× MSAA camera benchmark: before, world64 p95 about 103 ms and maximum 470 ms. After, with simulation advancing, world64 median 5.0–6.5 ms, p95 7.1–8.7 ms, maximum 11.3 ms in the measured runs. Dense fixture maximum 31.0 ms. These exclude initial loading and do not guarantee the same result on larger maps or different hardware.
 
 Regression coverage includes returning to a previously used LOD without a rebuild, completing incremental growth updates, cancellation after edits, and drawing buffers after releasing CPU geometry copies.
+
+## Individual-tree rendering and transactional loading (2026-10-04)
+
+The individual-tree renderer retains a mesh per chunk and LOD. Monthly physical dimensions, growth rates and health are separate per-tree GPU data. Only topology, terrain, model style or visual life-stage changes replace mesh geometry. Natural changes are built cooperatively from copied tree state while the last complete mesh remains visible; user edits invalidate immediately. The details and measured limits are in `engine-performance.md`.
+
+`GameWorld.Load` validates the command journal and terrain settings before constructing a candidate world. Replay runs in that candidate. The active runtime is exchanged only after successful replay, preserving current graphics preferences and rebinding the vehicle route factory to the adopted terrain. Failed validation or replay leaves the live world and its pending commands intact. Quicksave writes and flushes a sibling temporary file before replacing the existing save.
+
+Next simulation milestone: move scheduling out of the mutual Environment/Forest callbacks and into an explicit world coordinator. Preserve the current fixed time steps, derive authoritative radiation from weather, separate soil properties from current water stores, aggregate individual root-water demand, distribute actual uptake within the water budget, then use that same uptake and light exposure for growth and mortality. This milestone has not yet changed the ecology model or save version.

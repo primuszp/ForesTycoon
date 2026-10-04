@@ -161,7 +161,7 @@ void main() {
     vec3 n = forestNormal(normal);
     vec4 p = model * vec4(forestPoint(position) + n * outline_width, 1);
     world = p.xyz; smooth_normal = mat3(transpose(inverse(model))) * n;
-    tint = color; light_position = light_matrix * p;
+    tint = forestTint(color); light_position = light_matrix * p;
     gl_Position = camera * p;
 }";
             const string fragment = @"#version 330 core
