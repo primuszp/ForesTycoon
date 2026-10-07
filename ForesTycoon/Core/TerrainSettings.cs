@@ -2,8 +2,6 @@ using System;
 
 namespace ForesTycoon
 {
-    enum ForestPattern { Natural, LargeMixed, LargeSpruce, LargeBroadleaf }
-
     sealed class TerrainSettings
     {
         public static readonly TerrainSettings Default = new TerrainSettings(

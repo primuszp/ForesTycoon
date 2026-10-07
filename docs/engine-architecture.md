@@ -1,5 +1,7 @@
 # Engine architecture
 
+> A szerelvényekre bontott, egyirányú rétegezést az [architecture.md](architecture.md) írja le (Engine ← Ecology ← TreeModels ← játék). Az alábbi szöveg a futási folyamatot és a teljesítménypolitikát tartalmazza; a `Simulation` mappa neve azóta `World`, az erdő/víz/időjárás a `ForesTycoon.Ecology` szerelvényben van.
+
 The engine is organized around one rule: simulation state is deterministic and independent from the window and renderer.
 
 ## Runtime flow

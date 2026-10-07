@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Procedural tree and shrub models at species level: Arbaro-format parameter sets per species, a
+    topologically exact branch skeleton with pipe-model radii, and low-poly trunk, branch and crown
+    meshes with levels of detail. Pure geometry: no OpenGL, terrain or game-world knowledge.
+    Input is a TreeShapeSpec from the ecology; output is vertices and shape metrics.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>ForesTycoon.TreeModels</RootNamespace>
+    <AssemblyName>ForesTycoon.TreeModels</AssemblyName>
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Using Include="ForesTycoon.Engine" />
+    <Using Include="ForesTycoon.Ecology" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../ForesTycoon.Engine/ForesTycoon.Engine.csproj" />
+    <ProjectReference Include="../ForesTycoon.Ecology/ForesTycoon.Ecology.csproj" />
+    <ProjectReference Include="../ThirdParty/DendroKit.Core/DendroKit.Core.csproj" />
+    <PackageReference Include="OpenTK.Mathematics" Version="4.9.4" />
+    <EmbeddedResource Include="Architecture/Presets/*.xml" LogicalName="Trees.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ForesTycoon" />
+    <InternalsVisibleTo Include="ForesTycoon.Tests" />
+  </ItemGroup>
+
+</Project>

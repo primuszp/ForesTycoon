@@ -1,7 +1,7 @@
 # Fagenerálás: irodalmi áttekintés és fajmodellek
 
 Ez a leírás a DendroKit (Weber–Penn) alapú generátor fajparamétereinek és
-poligonkeretének hátterét foglalja össze. A kód: `ForesTycoon/Rendering/DendroTreeGenerator.cs`
+poligonkeretének hátterét foglalja össze. A kód: `ForesTycoon.TreeModels/Meshing/DendroTreeGenerator.cs`
 és `DendroCrownMesh.cs`.
 
 ## 1. Eljárásos famodellek – áttekintés
