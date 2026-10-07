@@ -38,7 +38,7 @@ namespace ForesTycoon
                     {
                         var sample=FogParticleMotion.Sample(anchor,layer,weather.Time);
                         Vector4 position=sample.Position;
-                        if(!terrain.TryGetSurfaceZ(position.X,position.Y,out float ground)) continue;
+                        if(!terrain.Map.TryGetSurfaceZ(position.X,position.Y,out float ground)) continue;
                         position.Z=Math.Max(ground,source.Water>0?source.Position.Z-1.4f:ground)+2.2f+layer*0.8f;
                         Vector4 life=sample.Life; life.X*=density;
                         particles.Add((position,life));

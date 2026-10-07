@@ -38,8 +38,8 @@ namespace ForesTycoon
                     }
                     vehicle.GetSegment(vehicle.InterpolatedRoutePosition(interpolationAlpha),
                         out int fromTile, out int toTile, out float amount);
-                    if (!terrain.TryGetRoadTileCenter(fromTile, out Vector3 from)
-                        || !terrain.TryGetRoadTileCenter(toTile, out Vector3 to)) continue;
+                    if (!terrain.Map.TryGetRoadTileCenter(fromTile, out Vector3 from)
+                        || !terrain.Map.TryGetRoadTileCenter(toTile, out Vector3 to)) continue;
 
                     Vector3 direction = to - from;
                     float yaw = MathF.Atan2(direction.Y, direction.X);

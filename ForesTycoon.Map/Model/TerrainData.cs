@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace ForesTycoon
+namespace ForesTycoon.Map
 {
     /// <summary>
     /// GL-mentes terep-modell: rács, node-ok, tile-ok és a tisztán topológiai

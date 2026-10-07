@@ -1,19 +1,19 @@
 using System;
 using System.Collections.Generic;
 
-namespace ForesTycoon
+namespace ForesTycoon.Map
 {
-    partial class Terrain
+    internal sealed partial class TerrainMap
     {
-        public void UpElevation()
-        {
-            ElevationManager(+1);
-        }
+        private Node actualNode;
 
-        public void DownElevation()
-        {
-            ElevationManager(-1);
-        }
+        /// <summary>The node under the editing cursor, or -1.</summary>
+        public int SelectedNodeId => actualNode?.Id ?? -1;
+        internal Node SelectedNode => actualNode;
+
+        public void UpElevation() => RaiseOrLowerSelected(+1);
+
+        public void DownElevation() => RaiseOrLowerSelected(-1);
 
         /// <summary>
         /// Ecsetes terepszerkesztés a kijelölt (hover) node körül: korong alakú
@@ -38,27 +38,22 @@ namespace ForesTycoon
                     for (int dv = -radius; dv <= radius; dv++)
                     {
                         if (du * du + dv * dv > radius * radius) continue;
-                        if (!checkNode(cu + du, cv + dv)) continue;
+                        if (!data.CheckNode(cu + du, cv + dv)) continue;
 
-                        Node n = getNodeByCoords(cu + du, cv + dv);
+                        Node n = GetNode(cu + du, cv + dv);
                         for (int s = 0; s < strength; s++)
-                        {
-                            actualNode = n;
-                            ElevationManager(delta);
-                        }
+                            RaiseOrLower(n, delta);
                     }
             }
             finally
             {
                 suppressHydrologyRebuild = false;
-                UploadEditedEdges();
+                EditsFlushed?.Invoke();
             }
 
             actualNode = center;
             RebuildHydrology();
         }
-
-        public int SelectedNodeId => actualNode?.Id ?? -1;
 
         public void EditElevationAtNode(int nodeId, int delta, int radius, int strength)
         {
@@ -67,16 +62,19 @@ namespace ForesTycoon
             EditElevation(delta, radius, strength);
         }
 
+        private void RaiseOrLowerSelected(int delta)
+        {
+            if (actualNode != null) RaiseOrLower(actualNode, delta);
+        }
+
         // OpenTTD-stílusú terraform (terraform_cmd.cpp): egy sarkot delta-val mozdít, és
         // rekurzívan a cél felé 1-gyel közelíti a szomszéd-sarkokat, amíg minden ÉL-
         // szomszédos sarok eltérése ≤1 (a szemközti sarok 2-vel is → meredek, érvényes).
         // A változásokat előbb egy pending-térképbe gyűjti; ha bármelyik a [0, MaxHeight]
         // korláton kívülre esne, az EGÉSZ művelet elbukik és semmi nem változik (atomikus).
-        private void ElevationManager(int delta)
+        private void RaiseOrLower(Node corner, int delta)
         {
-            if (actualNode == null) return;
-
-            if (!TerrainElevationPlanner.TryCreate(data, actualNode.Id, delta, settings.MaxHeight,
+            if (!TerrainElevationPlanner.TryCreate(data, corner.Id, delta, settings.MaxHeight,
                 out Dictionary<int, int> pending)) return;
             if (!ValidateRoadsAgainstPendingTerrain(pending)) return;
 
@@ -88,7 +86,7 @@ namespace ForesTycoon
                 nd.zPos = nd.W * tileSizeM;   // zPos szinkron a hidrológiához
                 changed.Add(nd);
             }
-            updateNodes(changed);
+            ApplyNodeChanges(changed);
         }
 
         private bool ValidateRoadsAgainstPendingTerrain(Dictionary<int, int> pending)

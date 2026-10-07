@@ -5,7 +5,7 @@ namespace ForesTycoon
 {
     partial class Terrain
     {
-        internal ulong WeatherSurfaceRevision => surfaceVisualVersion;
+        internal ulong WeatherSurfaceRevision => map.SurfaceVersion;
 
         internal void GetWeatherBounds(out Vector3 min, out Vector3 max)
         {

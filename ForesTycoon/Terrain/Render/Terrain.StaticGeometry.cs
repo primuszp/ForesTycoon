@@ -30,21 +30,21 @@ namespace ForesTycoon
                     geometry = new StaticTerrainGeometry();
                     staticTerrain.Add(chunk, geometry);
                 }
-                if (geometry.Version != surfaceVisualVersion)
+                if (geometry.Version != map.SurfaceVersion)
                 {
                     staticTerrainScratch.Clear();
                     staticTerrainScratch.AddRange(DynamicPrimitiveBatch.BuildGeometry(PrimitiveType.Quads, () => {
                         foreach (int id in chunk.TileIds)
                         {
                             Tile tile = tiles[id];
-                            if (!roads.Has(id) && tile.Shape.IsPlanar && GetTileRenderMaterial(tile) == TileRenderMaterial.Grass)
+                            if (!roads.Has(id) && tile.Shape.IsPlanar && GetTileSurfaceMaterial(tile) == TileSurfaceMaterial.Grass)
                                 DrawTerrainTileQuad(tile);
                         }
                     }));
                     foreach (int id in chunk.TileIds)
                     {
                         Tile tile = tiles[id];
-                        if (roads.Has(id) || tile.Shape.IsPlanar || GetTileRenderMaterial(tile) != TileRenderMaterial.Grass) continue;
+                        if (roads.Has(id) || tile.Shape.IsPlanar || GetTileSurfaceMaterial(tile) != TileSurfaceMaterial.Grass) continue;
                         bool flip = flippedDiagonalTiles.Contains(id);
                         var mesh = vbos[tile.Code + "_" + tile.Low + (flip ? "_f" : "")];
                         Vector3 offset = new Vector3(tile.W.xPos, tile.W.yPos, tile.LowPos);
@@ -56,7 +56,7 @@ namespace ForesTycoon
                         foreach (int id in chunk.TileIds)
                             if (!roads.Has(id) && !ShouldDrawStandingWater(tiles[id]) && !CanRenderFallbackRiver(tiles[id])) DrawTileGrid(tiles[id], GridLineColor);
                     }));
-                    geometry.Version = surfaceVisualVersion;
+                    geometry.Version = map.SurfaceVersion;
                     StaticTerrainRebuilds++;
                 }
                 if (draw) geometry.Land.DrawArray();

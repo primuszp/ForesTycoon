@@ -18,7 +18,7 @@ namespace ForesTycoon
                 var map=new Terrain(TerrainSettings.Default.WithNodeSize(17,42),(_,_)=>4);
                 try {
                     var snapshot=new ForestStand[256];snapshot[68]=new ForestStand(ForestSpecies.Oak,50,0.6f,1);
-                    var forest=new ForestSystem(map,snapshot);
+                    var forest=new ForestSystem(map.Map,snapshot);
                     forest.IndividualTrees.TryGet(68, out var patch);
                     float factor = MathF.Sqrt(60 / forest.AvailableTimber(68));
                     for (int i = 0; i < patch.Count; i++)
@@ -27,15 +27,15 @@ namespace ForesTycoon
                             AnnualGrowth = default
                         };
                     patch.Revision++; forest.NotifyIndividualVisualEdit();
-                    var logistics=new ForestryLogistics(map,forest);
+                    var logistics=new ForestryLogistics(map.Map,forest);
                     Require(logistics.Designate(new[]{68})==1,"Forest designation failed.");
                     Require(forest.TryGetStand(68,out var original)&&Math.Abs(ForestSystem.TimberCubicMetres(original)-60)<0.001f,"Designation cut trees.");
                     Require(logistics.PlaceMill(150),"Sawmill placement failed: "+logistics.Status);
                     Require(!logistics.PlaceMill(150),"Overlapping mill was accepted.");
-                    var inventory=new TimberCargoSystem();var vehicles=new VehicleSystem(inventory,map.CreateVehicleRoadRoute);
+                    var inventory=new TimberCargoSystem();var vehicles=new VehicleSystem(inventory,route => VehicleRoadRoute.Create(map.Map, route));
                     vehicles.SourceLoader=logistics.Load;vehicles.DestinationReceiver=logistics.Deliver;
                     Require(!logistics.Dispatch(vehicles),"Disconnected truck route was accepted.");
-                    map.BuildRoadTilePath(69,149);
+                    map.Map.BuildRoadTilePath(69,149);
                     Require(logistics.Dispatch(vehicles),"Connected delivery route was not found: "+logistics.Status);
                     using var scene=new TerrainRenderer(map,vehicles,new WorldEffectSystem(),forest,new GraphicsSettings{Fog=false,Weather=false,Wildlife=false},logistics:logistics);
                     Capture(scene,"source-and-mill",0);
@@ -67,7 +67,7 @@ namespace ForesTycoon
                 int FishCase(bool sea) {
                     var water=new Terrain(TerrainSettings.Default.WithNodeSize(17,71),(u,v)=>sea?-1:((u-8)*(u-8)+(v-8)*(v-8)<20?-1:4));
                     try {
-                        using var scene=new TerrainRenderer(water,new VehicleSystem(),new WorldEffectSystem(),new ForestSystem(water,new ForestStand[256]),new GraphicsSettings{Fog=false,Weather=false,Wildlife=false});
+                        using var scene=new TerrainRenderer(water,new VehicleSystem(),new WorldEffectSystem(),new ForestSystem(water.Map,new ForestStand[256]),new GraphicsSettings{Fog=false,Weather=false,Wildlife=false});
                         Capture(scene,sea?"sea-fish":"pond-fish",3);return scene.FishCount;
                     } finally {water.Dispose();}
                 }

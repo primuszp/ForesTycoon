@@ -18,6 +18,7 @@
     <Using Include="ForesTycoon.Rendering" />
     <Using Include="ForesTycoon.Models" />
     <Using Include="ForesTycoon.Effects" />
+    <Using Include="ForesTycoon.Map" />
   </ItemGroup>
 
   <ItemGroup>
@@ -27,6 +28,7 @@
     <ProjectReference Include="../ForesTycoon.Rendering/ForesTycoon.Rendering.csproj" />
     <ProjectReference Include="../ForesTycoon.Models/ForesTycoon.Models.csproj" />
     <ProjectReference Include="../ForesTycoon.Effects/ForesTycoon.Effects.csproj" />
+    <ProjectReference Include="../ForesTycoon.Map/ForesTycoon.Map.csproj" />
     <ProjectReference Include="../ThirdParty/DendroKit.Core/DendroKit.Core.csproj" />
     <Content Include="../ThirdParty/DendroKit.Core/LICENSE.txt" Link="Licenses/DendroKit-GPL-2.0.txt" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../ThirdParty/DendroKit.Core/NOTICE.md" Link="Licenses/DendroKit-NOTICE.md" CopyToOutputDirectory="PreserveNewest" />

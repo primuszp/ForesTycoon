@@ -6,7 +6,7 @@ namespace ForesTycoon.TreeModels
     internal static class TreeScale
     {
         /// <summary>A physical metre is intentionally compressed for the existing diorama proportions.</summary>
-        internal const float MetresToWorld = 0.32f;
+        internal const float MetresToWorld = WorldScale.MetresToWorld;
 
         /// <summary>
         /// Alpha byte of a vertex colour: 246 + material family. The surface shader decodes it to pick the

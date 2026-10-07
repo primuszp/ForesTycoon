@@ -54,9 +54,9 @@ namespace ForesTycoon
                 {
                     DynamicPrimitiveBatch.Draw(PrimitiveType.Quads, () =>
                     {
-                        foreach (RoadPlanStep step in previewTiles)
+                        foreach (TerrainMap.RoadPlanStep step in previewTiles)
                         {
-                            RoadPlacement placement = AnalyzeRoadPlacement(tiles[step.TileId], step.Edges);
+                            RoadPlacement placement = map.AnalyzeRoadPlacement(tiles[step.TileId], step.Edges);
                             bool bad = previewRemove || !placement.IsValid;
                             bool foundation = !bad && placement.Kind == RoadPlacementKind.FoundationSurface;
                             RoadEdge shown = previewRemove ? step.Edges : step.Edges | roads.GetEdges(step.TileId);
@@ -67,10 +67,10 @@ namespace ForesTycoon
 
                     using (new RenderStateScope().LineWidth(2.5f))
                     {
-                        foreach (RoadPlanStep step in previewTiles)
+                        foreach (TerrainMap.RoadPlanStep step in previewTiles)
                         {
                             Tile t = tiles[step.TileId];
-                            RoadPlacement placement = AnalyzeRoadPlacement(t, step.Edges);
+                            RoadPlacement placement = map.AnalyzeRoadPlacement(t, step.Edges);
                             bool bad = previewRemove || !placement.IsValid;
                             bool foundation = !bad && placement.Kind == RoadPlacementKind.FoundationSurface;
                             DynamicPrimitiveBatch.Color4(bad ? badLine : (foundation ? foundationLine : okLine));
@@ -97,10 +97,10 @@ namespace ForesTycoon
 
         private void RoadSurface(Tile t, RoadEdge edges, float widthFactor, Color color, RoadPlacement placement)
         {
-            Vector3 W = RoadCorner(t.W, placement.W);
-            Vector3 S = RoadCorner(t.S, placement.S);
-            Vector3 E = RoadCorner(t.E, placement.E);
-            Vector3 N = RoadCorner(t.N, placement.N);
+            Vector3 W = new Vector3(t.W.xPos, t.W.yPos, placement.W * tileSizeM);
+            Vector3 S = new Vector3(t.S.xPos, t.S.yPos, placement.S * tileSizeM);
+            Vector3 E = new Vector3(t.E.xPos, t.E.yPos, placement.E * tileSizeM);
+            Vector3 N = new Vector3(t.N.xPos, t.N.yPos, placement.N * tileSizeM);
             RoadSurface(t, edges, widthFactor, color, W, S, E, N);
         }
 
@@ -108,7 +108,7 @@ namespace ForesTycoon
         {
             Vector3 C = (W + S + E + N) * 0.25f;
             float width = Math.Min(tileSizeH, tileSizeV) * widthFactor;
-            int n = CountEdges(edges);
+            int n = TerrainMap.CountEdges(edges);
 
             DynamicPrimitiveBatch.Color4(color);
 

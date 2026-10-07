@@ -7,7 +7,7 @@ namespace ForesTycoon
     partial class Terrain
     {
         internal bool CanWildlifeWalkAt(float x,float y) =>
-            TryGetTileCoordinates(x,y,out int u,out int v,out _,out _) &&
+            map.TryGetTileCoordinates(x,y,out int u,out int v,out _,out _) &&
             TryGetWildlifeDestination(getTileByCoords(u,v).Id,out _);
         internal bool TryGetWildlifeDestination(int id, out Vector3 position)
         {
@@ -18,7 +18,7 @@ namespace ForesTycoon
             float low = Math.Min(Math.Min(tile.W.zPos, tile.S.zPos), Math.Min(tile.E.zPos, tile.N.zPos));
             float high = Math.Max(Math.Max(tile.W.zPos, tile.S.zPos), Math.Max(tile.E.zPos, tile.N.zPos));
             if (high - low > Math.Min(tileSizeH, tileSizeV) * 0.4f) return false;
-            return TryGetTileCenter(id, out position);
+            return map.TryGetTileCenter(id, out position);
         }
         internal void CollectWildlifeSpots(ForestSystem forest,List<WildlifeSpot> output,bool stopAfterFirst=false)
         {
@@ -56,7 +56,7 @@ namespace ForesTycoon
                     for(int j=0;j<count;j++)distance=Math.Min(distance,(point-stems[j]).LengthSquared);
                     if(distance>bestDistance){bestDistance=distance;best=point;}
                 }
-                if(!TryGetSurfaceZ(best.X,best.Y,out float z))continue;
+                if(!map.TryGetSurfaceZ(best.X,best.Y,out float z))continue;
                 var spot=new WildlifeSpot(tile.Id,new Vector3(best.X,best.Y,z),rank);
                 int index=0;while(index<output.Count&&output[index].Rank<rank)index++;
                 output.Insert(index,spot);if(output.Count>16)output.RemoveAt(16);

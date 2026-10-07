@@ -35,7 +35,7 @@ namespace ForesTycoon
                 terrain.CollectForestWeather(mist, forest, crowns, true);
                 Require(crowns.Count == forest.IndividualTreeCount, "Weather omitted actual individual crowns.");
                 forest.IndividualTrees.TryGet(102, out var weatherPatch);
-                terrain.TryGetTileCenter(102, out var root);
+                terrain.Map.TryGetTileCenter(102, out var root);
                 float expectedHeight = root.Z + weatherPatch.Trees[0].At(forest.ForestYear).Height * Terrain.TreeMetresToWorld;
                 Require(crowns.Exists(point => Math.Abs(point.Z - expectedHeight) < 0.00001f),
                     "Lightning crown height does not match the drawn individual.");
@@ -159,7 +159,7 @@ namespace ForesTycoon
         private sealed class GrowthHabitat : IForestHabitat
         {
             private readonly IForestHabitat terrain;
-            internal GrowthHabitat(Terrain terrain) => this.terrain = terrain;
+            internal GrowthHabitat(Terrain terrain) => this.terrain = terrain.Map;
             public int TileCount => terrain.TileCount;
             public int Seed => terrain.Seed;
             public bool CanSupportForest(int id) => terrain.CanSupportForest(id);

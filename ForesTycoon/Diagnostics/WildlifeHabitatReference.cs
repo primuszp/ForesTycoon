@@ -44,7 +44,7 @@ namespace ForesTycoon
                     }
                     if(distance>bestDistance){bestDistance=distance;best=point;}
                 }
-                if(!TryGetSurfaceZ(best.X,best.Y,out float z))continue;
+                if(!map.TryGetSurfaceZ(best.X,best.Y,out float z))continue;
                 var spot=new WildlifeSpot(tile.Id,new Vector3(best.X,best.Y,z),rank);
                 int index=0;while(index<output.Count&&output[index].Rank<rank)index++;
                 output.Insert(index,spot);if(output.Count>16)output.RemoveAt(16);

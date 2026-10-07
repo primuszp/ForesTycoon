@@ -23,12 +23,12 @@ namespace ForesTycoon
                     var terrain = new Terrain(TerrainSettings.Default.WithNodeSize(33,42).WithForestPattern(ForestPattern.LargeMixed), (_,_)=>4);
                     try
                     {
-                    terrain.BuildRoadTilePath(264,744); terrain.BuildRoadTilePath(744,758);
-                    int[] route = terrain.FindDemoRoadRoute();
+                    terrain.Map.BuildRoadTilePath(264,744); terrain.Map.BuildRoadTilePath(744,758);
+                    int[] route = terrain.Map.FindDemoRoadRoute();
                     var cargo = new TimberCargoSystem(); cargo.AddHarvested(count * 25);
-                    var traffic = new VehicleSystem(cargo,terrain.CreateVehicleRoadRoute) { UseCargoStops = false };
+                    var traffic = new VehicleSystem(cargo,route => VehicleRoadRoute.Create(terrain.Map, route)) { UseCargoStops = false };
                     for(int i=0;i<count;i++) traffic.Spawn(route).Update(i*0.13);
-                    var forest = new ForestSystem(terrain);
+                    var forest = new ForestSystem(terrain.Map);
                     var settings = new GraphicsSettings { Quality=quality, Preset=WeatherPreset.Storm };
                     long startup = Stopwatch.GetTimestamp();
                     using var renderer = new TerrainRenderer(terrain, traffic, new WorldEffectSystem(), forest,settings);

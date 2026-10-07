@@ -92,7 +92,7 @@ namespace ForesTycoon
                 // Advance along the facing direction while turning, forming an actual broad arc.
                 float midpoint=(animal.Yaw+yaw)*0.5f;
                 Vector3 next = animal.Position + new Vector3(MathF.Cos(midpoint)*distance,MathF.Sin(midpoint)*distance,0);
-                if (terrain.CanWildlifeWalkAt(next.X,next.Y) && terrain.TryGetSurfaceZ(next.X, next.Y, out float z)) {
+                if (terrain.CanWildlifeWalkAt(next.X,next.Y) && terrain.Map.TryGetSurfaceZ(next.X, next.Y, out float z)) {
                     next.Z = z; animal.Position = next; animal.Yaw=yaw;
                     animal.WalkTime += distance / WalkingClipSpeed;
                     animal.WanderNeed = Math.Max(0,animal.WanderNeed-distance*0.012f);

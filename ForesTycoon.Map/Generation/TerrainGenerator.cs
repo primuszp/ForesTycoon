@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace ForesTycoon
+namespace ForesTycoon.Map
 {
     /// <summary>
     /// Tisztán számítási domborzatgenerátor: Diamond-Square + FBM + sziget-falloff

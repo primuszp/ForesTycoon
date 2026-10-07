@@ -14,7 +14,7 @@ namespace ForesTycoon
                 visited[origin.Id]=true;queue.Enqueue(origin.Id);suitable.Clear();int area=0;bool border=false;
                 while(queue.Count>0){Tile tile=tiles[queue.Dequeue()];area++;border|=data.IsBorderTile(tile);
                     float depth=Math.Min(Math.Min(nodeWaterDepth[tile.W.Id],nodeWaterDepth[tile.S.Id]),Math.Min(nodeWaterDepth[tile.E.Id],nodeWaterDepth[tile.N.Id]));
-                    if(depth>0.3f&&TryGetTileCenter(tile.Id,out Vector3 center)){
+                    if(depth>0.3f&&map.TryGetTileCenter(tile.Id,out Vector3 center)){
                         float level=(NodeWaterZ(tile.W,0)+NodeWaterZ(tile.S,0)+NodeWaterZ(tile.E,0)+NodeWaterZ(tile.N,0))*0.25f;
                         center.Z=level-Math.Min(depth*0.45f,0.55f);
                         suitable.Add(new FishHabitat(center,depth,unchecked((uint)(tile.Id*7919+settings.Seed))));

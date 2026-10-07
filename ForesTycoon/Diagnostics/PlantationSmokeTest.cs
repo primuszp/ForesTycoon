@@ -38,7 +38,7 @@ namespace ForesTycoon
                 forest.Harvest(119, out _); Capture("05-harvested-tile-marked");
                 Require(forest.TryGetPlantationStatus(119, out var status) && status.Living == 0, "Harvest erased the designation.");
                 Draw(); Require(terrain.PlantationMeshRebuilds == 0, "Harvest rebuilt unchanged markers.");
-                terrain.EditElevationAtNode(7 * 17 + 7, 1, 0, 1); Draw();
+                terrain.Map.EditElevationAtNode(7 * 17 + 7, 1, 0, 1); Draw();
                 Require(terrain.PlantationMeshRebuilds > 0, "Terrain edit left stale marker elevations.");
                 Draw(); Require(terrain.PlantationMeshRebuilds == 0, "Edited marker cache did not settle.");
                 CheckReplay();
@@ -97,7 +97,7 @@ namespace ForesTycoon
         private static void Require(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
         private sealed class Habitat(Terrain terrain) : IForestHabitat
         {
-            private readonly IForestHabitat source = terrain;
+            private readonly IForestHabitat source = terrain.Map;
             public int TileCount => source.TileCount;
             public int Seed => source.Seed;
             public bool CanSupportForest(int id) => source.CanSupportForest(id);

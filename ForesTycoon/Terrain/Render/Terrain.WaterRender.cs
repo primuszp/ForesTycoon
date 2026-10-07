@@ -63,7 +63,6 @@ namespace ForesTycoon
                 });
             }
         }
-        private bool ShouldDrawStandingWater(Tile tile) => hydro.ShouldDrawStandingWater(tile);
 
         private bool CanRenderFallbackRiver(Tile tile) => hydro.CanRenderFallbackRiver(tile);
 

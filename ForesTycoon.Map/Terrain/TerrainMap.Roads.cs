@@ -1,68 +1,26 @@
 using System;
 using System.Collections.Generic;
-using System.Drawing;
 using OpenTK.Mathematics;
 
-namespace ForesTycoon
+namespace ForesTycoon.Map
 {
-    partial class Terrain
+    internal sealed partial class TerrainMap
     {
-        // ── Út-render konstansok (referencia tile-készlet: szürke aszfalt + krém padka) ─
-        private static readonly Color RoadSurfaceColor = Color.FromArgb(108, 110, 112);  // szürke úttest
-        private static readonly Color RoadShoulder     = Color.FromArgb(214, 210, 190);  // világos krém padka
-        private const float ShoulderFrac = 0.16f;  // padka szélessége a középpont felé
-
-        // Csempe-alapú úthálózat: a kapcsolatok a szomszédos út-csempékből adódnak.
-        private enum RoadPlacementKind
-        {
-            Invalid,
-            NaturalSurface,
-            FoundationSurface
-        }
-
-        private readonly struct RoadPlacement
-        {
-            public readonly RoadPlacementKind Kind;
-            public readonly int W;
-            public readonly int S;
-            public readonly int E;
-            public readonly int N;
-
-            public RoadPlacement(RoadPlacementKind kind, int w, int s, int e, int n)
-            {
-                Kind = kind;
-                W = w;
-                S = s;
-                E = e;
-                N = n;
-            }
-
-            public bool IsValid => Kind != RoadPlacementKind.Invalid;
-        }
-
-        private static readonly RoadPlacement InvalidRoadPlacement =
-            new RoadPlacement(RoadPlacementKind.Invalid, 0, 0, 0, 0);
-
-        public Tile HoveredTile => hoveredTile;
         public int RoadCount => roads.Count;
         public bool IsRoadTile(int tileId) => IsValidTileId(tileId) && roads.Has(tileId);
 
         public int[] FindDemoRoadRoute() => RoadPathfinder.FindDemoRoute(roads, nodeRows - 1);
 
-        internal VehicleRoadRoute CreateVehicleRoadRoute(int[] route)
+        /// <summary>Centre and slope (dz/dx, dz/dy) of the frozen road surface of a road tile.</summary>
+        public bool TryGetRoadSurface(int tileId, out Vector3 center, out Vector2 gradient)
         {
-            var centers = new Vector3[route.Length];
-            var gradients = new Vector2[route.Length];
-            for (int i = 0; i < route.Length; i++)
-            {
-                if (!TryGetRoadTileCenter(route[i], out centers[i]))
-                    throw new ArgumentException("Vehicle route contains a missing road tile.", nameof(route));
-                Tile tile = tiles[route[i]];
-                Vector3 w = RoadCorner(tile.W), s = RoadCorner(tile.S), n = RoadCorner(tile.N);
-                Vector3 normal = Vector3.Cross(s - w, n - w);
-                gradients[i] = new Vector2(-normal.X / normal.Z, -normal.Y / normal.Z);
-            }
-            return new VehicleRoadRoute(centers, gradients);
+            gradient = Vector2.Zero;
+            if (!TryGetRoadTileCenter(tileId, out center)) return false;
+            Tile tile = tiles[tileId];
+            Vector3 w = RoadCorner(tile.W), s = RoadCorner(tile.S), n = RoadCorner(tile.N);
+            Vector3 normal = Vector3.Cross(s - w, n - w);
+            gradient = new Vector2(-normal.X / normal.Z, -normal.Y / normal.Z);
+            return true;
         }
 
         public bool TryGetRoadTileCenter(int tileId, out Vector3 center)
@@ -78,13 +36,6 @@ namespace ForesTycoon
             return true;
         }
 
-        public void SetRoadPreview(int startTileId, int endTileId, bool remove)
-        {
-            Tile from = startTileId >= 0 && startTileId < tiles.Length ? tiles[startTileId] : null;
-            Tile to = endTileId >= 0 && endTileId < tiles.Length ? tiles[endTileId] : null;
-            SetRoadPreview(from, to, remove);
-        }
-
         public bool AddRoadTile(Tile t)
         {
             RoadEdge edges = RoadEdge.WS | RoadEdge.EN;
@@ -92,7 +43,7 @@ namespace ForesTycoon
             if (!placement.IsValid) return false;
 
             bool added = roads.Add(t.Id, edges);
-            if (added) { CaptureRoadSurface(t, placement); InvalidateSurfaceVisuals(); }
+            if (added) { CaptureRoadSurface(t, placement); InvalidateSurface(); }
             return added;
         }
 
@@ -105,24 +56,24 @@ namespace ForesTycoon
             return AnalyzeRoadPlacement(t, edges).IsValid;
         }
 
-        private RoadPlacement AnalyzeRoadPlacement(Tile t, RoadEdge requestedEdges)
+        internal RoadPlacement AnalyzeRoadPlacement(Tile t, RoadEdge requestedEdges)
         {
             return AnalyzeRoadPlacement(t, requestedEdges, n => n.W);
         }
 
         private RoadPlacement AnalyzeRoadPlacement(Tile t, RoadEdge requestedEdges, Func<Node, int> heightOf)
         {
-            if (t == null || IsBuildingTile(t.Id)) return InvalidRoadPlacement;
-            if (hydro.ShouldDrawStandingWater(t)) return InvalidRoadPlacement;
+            if (t == null || IsBuildingTile(t.Id)) return RoadPlacement.Invalid;
+            if (hydro.ShouldDrawStandingWater(t)) return RoadPlacement.Invalid;
 
             RoadEdge mergedEdges = requestedEdges | roads.GetEdges(t.Id);
-            if (mergedEdges == RoadEdge.None) return InvalidRoadPlacement;
+            if (mergedEdges == RoadEdge.None) return RoadPlacement.Invalid;
 
             int w = heightOf(t.W);
             int s = heightOf(t.S);
             int e = heightOf(t.E);
             int n = heightOf(t.N);
-            if (!RoadTerrainStaysAboveWater(w, s, e, n)) return InvalidRoadPlacement;
+            if (!RoadTerrainStaysAboveWater(w, s, e, n)) return RoadPlacement.Invalid;
 
             if (roads.Has(t.Id) && TryGetFullLockedRoadSurface(t, out int lw, out int ls, out int le, out int ln))
                 return ValidateLockedRoadPlacement(mergedEdges, w, s, e, n, lw, ls, le, ln);
@@ -132,11 +83,11 @@ namespace ForesTycoon
                 || shape.Kind == TileShapeKind.Saddle
                 || shape.Kind == TileShapeKind.OneHigh
                 || shape.Kind == TileShapeKind.ThreeHigh)
-                return InvalidRoadPlacement;
+                return RoadPlacement.Invalid;
 
             // Ramp only valid when it aligns with the road direction.
             if (shape.Kind == TileShapeKind.Ramp && !IsRampAligned(shape, mergedEdges))
-                return InvalidRoadPlacement;
+                return RoadPlacement.Invalid;
 
             bool naturalAllowed = shape.Kind == TileShapeKind.Flat
                 || (shape.Kind == TileShapeKind.Ramp && IsSimpleRoadShape(mergedEdges));
@@ -145,10 +96,10 @@ namespace ForesTycoon
 
             // Foundation (platform) only on flat terrain
             if (shape.Kind != TileShapeKind.Flat)
-                return InvalidRoadPlacement;
+                return RoadPlacement.Invalid;
 
             if (!TryResolveFlatFoundationLevel(t, shape.Max, w, s, e, n, out int level))
-                return InvalidRoadPlacement;
+                return RoadPlacement.Invalid;
 
             return new RoadPlacement(RoadPlacementKind.FoundationSurface, level, level, level, level);
         }
@@ -167,7 +118,7 @@ namespace ForesTycoon
                 _ => RoadPlacementKind.Invalid
             };
             return kind == RoadPlacementKind.Invalid
-                ? InvalidRoadPlacement
+                ? RoadPlacement.Invalid
                 : new RoadPlacement(kind, surfaceW, surfaceS, surfaceE, surfaceN);
         }
 
@@ -247,7 +198,7 @@ namespace ForesTycoon
                 {
                     roads.Add(step.TileId, step.Edges);
                     CaptureRoadSurface(tile, placement);
-                    InvalidateSurfaceVisuals();
+                    InvalidateSurface();
                     chunkIndex.MarkTileAndNeighboursDirty(step.TileId, ChunkDirtyFlags.Roads | ChunkDirtyFlags.Foundations);
                 }
             }
@@ -267,7 +218,7 @@ namespace ForesTycoon
                 if (roads.Remove(step.TileId, step.Edges))
                 {
                     ReleaseRoadSurface(tiles[step.TileId]);
-                    InvalidateSurfaceVisuals();
+                    InvalidateSurface();
                     chunkIndex.MarkTileAndNeighboursDirty(step.TileId, ChunkDirtyFlags.Roads | ChunkDirtyFlags.Foundations);
                 }
             }
@@ -280,9 +231,7 @@ namespace ForesTycoon
             RemoveRoadTilePath(tiles[startTileId], tiles[endTileId]);
         }
 
-        private bool IsValidTileId(int tileId) => tileId >= 0 && tileId < tiles.Length;
-
-        // Teljes újraépítés minden road módosítás után: sorrendfüggetlen, univerzális.
+                // Teljes újraépítés minden road módosítás után: sorrendfüggetlen, univerzális.
         // Minden road tile minden szomszédos él-párjánál beállítja a diagonális szomszéd flipjét.
         private void RebuildFlippedDiagonalTiles()
         {
@@ -297,6 +246,7 @@ namespace ForesTycoon
                 if ((e & RoadEdge.SE) != 0 && (e & RoadEdge.EN) != 0) AddFlipTile(u + 1, v + 1);
                 if ((e & RoadEdge.EN) != 0 && (e & RoadEdge.NW) != 0) AddFlipTile(u - 1, v + 1);
             }
+            RoadDiagonalsChanged?.Invoke();
         }
 
         private void AddFlipTile(int iu, int iv)
@@ -305,9 +255,7 @@ namespace ForesTycoon
             Tile inner = getTileByCoords(iu, iv);
             if (roads.Has(inner.Id)) return;
             flippedDiagonalTiles.Add(inner.Id);
-            string fkey = inner.Code + "_" + inner.Low + "_f";
-            if (!vbos.ContainsKey(fkey)) makeBuffer(inner.Code, inner.Low, true);
-        }
+                    }
 
         // Az út-csempe 4 sarkának aktuális magasságát befagyasztjuk vezetőfelületnek
         // (csak ha még nincs rögzítve, hogy a meglévő szomszéd-úttal folytonos maradjon).
@@ -355,27 +303,15 @@ namespace ForesTycoon
 
         // Az út vezetőfelületének z-je egy sarokban: a befagyasztott magasság, ha van,
         // különben a jelenlegi terep (még szerkesztetlen út, vagy nem-út sarok).
-        private float RoadSurfaceZ(Node n) =>
+        internal float RoadSurfaceZ(Node n) =>
             (roadSurfaceW.TryGetValue(n.Id, out int w) ? w : n.W) * tileSizeM;
 
-        private Vector3 RoadCorner(Node n) => new Vector3(n.xPos, n.yPos, RoadSurfaceZ(n));
+        internal Vector3 RoadCorner(Node n) => new Vector3(n.xPos, n.yPos, RoadSurfaceZ(n));
 
         private Vector3 RoadCorner(Node n, int w) => new Vector3(n.xPos, n.yPos, w * tileSizeM);
 
-        // Húzás közbeni előnézet csempéi (remove = bontás, piros előnézet).
-        private readonly List<RoadPlanStep> previewTiles = new List<RoadPlanStep>();
-        private bool previewRemove;
-        public void SetRoadPreview(Tile a, Tile b, bool remove)
-        {
-            previewTiles.Clear();
-            previewRemove = remove;
-            previewTiles.AddRange(BuildRoadPlan(a, b));
-        }
-        public void ClearRoadPreview() => previewTiles.Clear();
-        public int RoadPreviewCount => previewTiles.Count;
-
         // Csempe-útvonal bejárása a rácson (egyenes lépcsős út a → b között).
-        private readonly struct RoadPlanStep
+        internal readonly struct RoadPlanStep
         {
             public readonly int TileId;
             public readonly RoadEdge Edges;
@@ -387,7 +323,7 @@ namespace ForesTycoon
             }
         }
 
-        private List<RoadPlanStep> BuildRoadPlan(Tile a, Tile b)
+        internal List<RoadPlanStep> BuildRoadPlan(Tile a, Tile b)
         {
             List<RoadPlanStep> result = new List<RoadPlanStep>();
             if (a == null || b == null) return result;
@@ -461,7 +397,7 @@ namespace ForesTycoon
             return RoadEdge.None;
         }
 
-        private static Vector3 Corner(Node n) => new Vector3(n.xPos, n.yPos, n.zPos);
+        internal static Vector3 Corner(Node n) => new Vector3(n.xPos, n.yPos, n.zPos);
 
         // ── Földmű (platform-rézsű): lokális, csempénként ───────────────────────
         // Az út a befagyasztott vezetőfelületen ül. Ahol a szomszéd NEM út ÉS a terep a
@@ -472,16 +408,7 @@ namespace ForesTycoon
         // Egy él behúzási hányada [0..1]: a rés (felület−terep) / fél csempe, 1:1-ig.
         // 0, ha az él megosztott (szomszéd is út) vagy nincs rés.
 
-        // Az út-lábnyom sarkai megegyeznek a csempe eredeti sarkaival (nincs behúzás, hézagmentes).
-        private void RoadFootprintCorners(Tile t, out Vector3 W, out Vector3 S, out Vector3 E, out Vector3 N)
-        {
-            W = RoadCorner(t.W);
-            S = RoadCorner(t.S);
-            E = RoadCorner(t.E);
-            N = RoadCorner(t.N);
-        }
-
-        private static int CountEdges(RoadEdge edges)
+        internal static int CountEdges(RoadEdge edges)
         {
             int count = 0;
             if ((edges & RoadEdge.WS) != 0) count++;

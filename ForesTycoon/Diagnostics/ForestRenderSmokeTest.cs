@@ -26,7 +26,7 @@ namespace ForesTycoon
             try
             {
                 terrain = new Terrain(TerrainSettings.Default.WithNodeSize(33, 42));
-                var forest = new ForestSystem(terrain);
+                var forest = new ForestSystem(terrain.Map);
                 Require(forest.Count > 0, "Test map has no forest.");
                 RenderDevice.SetCamera(Matrix4.Identity);
                 int near = Draw(terrain, forest, 12);
@@ -66,7 +66,7 @@ namespace ForesTycoon
                 Draw(terrain, forest, 1.5f);
                 Require(terrain.ForestChunkRebuilds > 0, "Planting did not invalidate geometry.");
                 var editTimer = System.Diagnostics.Stopwatch.StartNew();
-                terrain.EditElevationAtNode(4 * 33 + 4, 1, 0, 1);
+                terrain.Map.EditElevationAtNode(4 * 33 + 4, 1, 0, 1);
                 Draw(terrain, forest, 1.5f);
                 editTimer.Stop();
                 Console.WriteLine($"Local terrain edit + forest refresh: {editTimer.Elapsed.TotalMilliseconds:F1} ms, {terrain.ForestChunkRebuilds}/{terrain.VisibleChunkCount} forest chunks rebuilt.");
@@ -75,7 +75,7 @@ namespace ForesTycoon
                 Draw(terrain, forest, 1.5f);
                 Require(terrain.ForestChunkRebuilds == 0, "Edited forest cache did not settle.");
                 // A central terrain edit must invalidate positions even without a forest revision.
-                terrain.EditElevationAtNode(16 * 33 + 16, 1, 0, 1);
+                terrain.Map.EditElevationAtNode(16 * 33 + 16, 1, 0, 1);
                 Draw(terrain, forest, 1.5f);
                 Require(terrain.ForestChunkRebuilds > 0, "Terrain edit did not invalidate geometry.");
                 forest.Clear();
@@ -128,17 +128,17 @@ namespace ForesTycoon
                     Require(RenderMetrics.DrawCalls == terrain.VisibleChunkCount, "Grid used more than one pass at this zoom.");
                     Require(RenderDevice.ViewProjection == camera, "Grid changed the camera projection.");
                 }
-                terrain.BuildRoadTilePath(34, 37);
-                Require(terrain.RoadCount > 0, "Road cache test did not build a road.");
+                terrain.Map.BuildRoadTilePath(34, 37);
+                Require(terrain.Map.RoadCount > 0, "Road cache test did not build a road.");
                 Check(true);
                 Check(false);
-                terrain.EditElevationAtNode(3 * 17 + 3, 1, 0, 1);
+                terrain.Map.EditElevationAtNode(3 * 17 + 3, 1, 0, 1);
                 Check(true);
                 int uploads = terrain.TerrainEdgeUploads;
-                terrain.EditElevationAtNode(10 * 17 + 10, 1, 2, 2);
+                terrain.Map.EditElevationAtNode(10 * 17 + 10, 1, 2, 2);
                 Require(terrain.TerrainEdgeUploads == uploads + 1, "Brush uploaded the entire terrain grid more than once.");
                 Check(true);
-                terrain.RemoveRoadTilePath(34, 37);
+                terrain.Map.RemoveRoadTilePath(34, 37);
                 Check(true);
                 Require(GL.GetError() == ErrorCode.NoError, "Static terrain cache GL error.");
                 Console.WriteLine("Static terrain cache: stable reuse, road build/removal and elevation invalidation passed.");
@@ -148,7 +148,7 @@ namespace ForesTycoon
                     terrain.DrawTerrainDecals();
                     Require(terrain.CachedGridHasAllTileBoundaries(), "A tile is missing one or more grid boundaries.");
                     Require((terrain.StaticTerrainRebuilds > 0) == rebuild, "Unexpected static terrain rebuild count.");
-                    Require(terrain.SurfaceCacheMatchesFreshCalculation(), "Stale terrain surface classification.");
+                    Require(terrain.Map.SurfaceCacheMatchesFreshCalculation(), "Stale terrain surface classification.");
                 }
             }
             finally { terrain.Dispose(); }
@@ -157,7 +157,7 @@ namespace ForesTycoon
         private static void CheckDeferredForestBuild()
         {
             using var terrain = new Terrain(TerrainSettings.Default.WithNodeSize(17, 42), (_, _) => 4);
-            var forest = new ForestSystem(terrain);
+            var forest = new ForestSystem(terrain.Map);
             forest.Clear(); forest.Plant(34, ForestSpecies.Oak);
             forest.IndividualTrees.TryGet(34, out var patch);
             void SetBoundary()
@@ -192,7 +192,7 @@ namespace ForesTycoon
         private static void CheckDeadTreeLodState()
         {
             using var terrain = new Terrain(TerrainSettings.Default.WithNodeSize(17, 42), (_, _) => 4);
-            var forest = new ForestSystem(terrain);
+            var forest = new ForestSystem(terrain.Map);
             forest.Clear(); forest.Plant(34, ForestSpecies.Spruce);
             forest.IndividualTrees.TryGet(34, out var patch);
             var tree = patch.Trees[0] with { Health = 0, AnnualGrowth = default,
@@ -203,7 +203,7 @@ namespace ForesTycoon
             var graphics = new GraphicsSettings { Enhanced = false, Weather = false, Fog = false, Wildlife = false };
             terrain.WarmIndividualForest(forest, graphics);
             using var scene = new TerrainRenderer(terrain,new VehicleSystem(),new WorldEffectSystem(),forest,graphics);
-            terrain.TryGetTileCenter(34, out var root);
+            terrain.Map.TryGetTileCenter(34, out var root);
             var camera = Matrix4.CreateTranslation(-root) * Matrix4.CreateRotationZ(-MathF.PI/4)
                 * Matrix4.CreateRotationX(-MathF.PI/4) * Matrix4.CreateOrthographic(18,18,-100,100);
             var standing = Frame(12);

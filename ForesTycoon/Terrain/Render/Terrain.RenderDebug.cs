@@ -4,12 +4,12 @@ namespace ForesTycoon
     {
         internal void DrawNodeMarker(float radius)
         {
-            if (onpos) DebugOverlayRenderer.DrawNodeMarker(actualNode, radius);
+            if (map.HasHoveredNode) DebugOverlayRenderer.DrawNodeMarker(map.SelectedNode, radius);
         }
 
         internal void DrawHoveredTile()
         {
-            DebugOverlayRenderer.DrawHoveredTile(hoveredTile);
+            DebugOverlayRenderer.DrawHoveredTile(map.HoveredTile);
         }
     }
 }

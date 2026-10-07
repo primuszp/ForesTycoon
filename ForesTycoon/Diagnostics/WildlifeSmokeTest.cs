@@ -47,7 +47,7 @@ namespace ForesTycoon
                 }
                 var terrain=new Terrain(TerrainSettings.Default.WithNodeSize(33,8127).WithForestPattern(ForestPattern.LargeMixed),(_,_)=>4);
                 try {
-                    var forest=new ForestSystem(terrain);var settings=new GraphicsSettings{Weather=false,Fog=false};
+                    var forest=new ForestSystem(terrain.Map);var settings=new GraphicsSettings{Weather=false,Fog=false};
                     using var scene=new TerrainRenderer(terrain,new VehicleSystem(),new WorldEffectSystem(),forest,settings);
                     var spots=new System.Collections.Generic.List<WildlifeSpot>();terrain.CollectWildlifeSpots(forest,spots);
                     VerifyHabitat();
