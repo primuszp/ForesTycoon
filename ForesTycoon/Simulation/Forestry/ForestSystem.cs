@@ -337,32 +337,45 @@ namespace ForesTycoon
 
         private static ForestSpecies SelectSpecies(float moisture, float elevation, uint random)
         {
-            // Montane and wet ground: spruce belt, with beech mixed in and birch on the edges.
+            // Montane and wet ground: spruce and fir belt, with beech and maple mixed in, larch on the
+            // highest ground and birch on the edges.
             if (elevation > 0.68f || moisture > 0.78f)
-                return (random % 5u) switch
+                return (random % 8u) switch
                 {
                     0u => ForestSpecies.Birch,
                     1u => ForestSpecies.Beech,
+                    2u => ForestSpecies.Fir,
+                    3u => ForestSpecies.Maple,
+                    4u => elevation > 0.8f ? ForestSpecies.Larch : ForestSpecies.Spruce,
                     _ => ForestSpecies.Spruce
                 };
 
-            // Dry lowland: oak country, with birch on the poorest ground and a minority of
-            // spruce, which survives here but never thrives â€” Fitness keeps it small and sickly.
+            // Dry lowland: oak country (pedunculate, sessile and Turkey oak), with birch and pine on the
+            // poorest ground, hawthorn scrub, and a few spruce, which survive here but never thrive —
+            // Fitness keeps them small and sickly.
             if (moisture < 0.52f)
-                return (random % 5u) switch
+                return (random % 10u) switch
                 {
                     0u => ForestSpecies.Birch,
                     1u => ForestSpecies.Spruce,
+                    2u => ForestSpecies.Pine,
+                    3u => ForestSpecies.TurkeyOak,
+                    4u => ForestSpecies.SessileOak,
+                    5u => ForestSpecies.Hawthorn,
                     _ => ForestSpecies.Oak
                 };
 
-            // Fresh mid-slope soils: mixed forest. Beech leads, but a share of spruce keeps
-            // conifers present outside the montane belt, the way managed mixed stands are.
-            return (random % 5u) switch
+            // Fresh mid-slope soils: mixed forest. Beech leads, with maple and ash on the richer soil,
+            // hazel in the understorey, and a share of spruce keeps conifers present outside the montane
+            // belt, the way managed mixed stands are.
+            return (random % 10u) switch
             {
                 0u => ForestSpecies.Birch,
                 1u => ForestSpecies.Oak,
                 2u => ForestSpecies.Spruce,
+                3u => ForestSpecies.Maple,
+                4u => ForestSpecies.Ash,
+                5u => ForestSpecies.Hazel,
                 _ => ForestSpecies.Beech
             };
         }

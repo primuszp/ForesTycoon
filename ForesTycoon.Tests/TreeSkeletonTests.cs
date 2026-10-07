@@ -19,7 +19,7 @@ public class TreeSkeletonTests
     {
         foreach (int seed in new[] { 0, 1, 7, 31, 42, -1 })
         {
-            var skeleton = TreeArchitecture.Skeleton(species, seed, phase, light, 0);
+            var skeleton = TreeArchitecture.Skeleton(species, seed, phase, light);
             Assert.Empty(skeleton.Validate());
             Assert.True(skeleton.StemCount > (phase == TreeLifePhase.Seedling ? 3 : 10), $"{species} {phase}: {skeleton.StemCount} stems");
             Assert.True(skeleton.Leaves.Length > 0);
@@ -34,7 +34,7 @@ public class TreeSkeletonTests
         foreach (var species in new[] { ForestSpecies.Spruce, ForestSpecies.Birch, ForestSpecies.Oak, ForestSpecies.Beech })
             foreach (var phase in Enum.GetValues<TreeLifePhase>())
             {
-                var sk = TreeArchitecture.Skeleton(species, 42, phase, 2, 0);
+                var sk = TreeArchitecture.Skeleton(species, 42, phase, 2);
                 int[] perLevel = new int[4];
                 foreach (var s in sk.Stems) perLevel[Math.Min(3, s.Level)]++;
                 output.WriteLine($"{species,-7}{phase,-10} stems L0/L1/L2 = {perLevel[0]}/{perLevel[1]}/{perLevel[2]} vertices {sk.Points.Length} leaves {sk.LeafTotal} height {sk.Height:0.00} leafR {sk.LeafRadius:0.00} flow(base) {sk.Flow[0]:0}");

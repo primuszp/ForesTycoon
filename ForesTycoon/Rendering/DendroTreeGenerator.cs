@@ -24,10 +24,14 @@ namespace ForesTycoon
             Generate(new TreeShapeSpec(species, seed, TreeLifePhases.From(stage), size, includeCrown ? 1 : 0,
                 new TreeSite(light), includeCrown ? LeafState.Full : LeafState.Bare, yaw, !includeCrown), lod);
 
+        /// <summary>Legacy entry for the two original shrub forms; shrubs are now ordinary species.</summary>
         internal static Mesh GenerateShrub(int seed, TreeLifeStage stage, float light,
-            ForestTreeDimensions size, float yaw, ForestLod lod, ShrubForm form = ShrubForm.Hazel) =>
-            Generate(new TreeShapeSpec(ForestSpecies.Beech, seed, TreeLifePhases.From(stage), size, 1,
-                new TreeSite(light), LeafState.Full, yaw, false, (byte)form), lod);
+            ForestTreeDimensions size, float yaw, ForestLod lod, ShrubForm form = ShrubForm.Hazel)
+        {
+            if (!Enum.IsDefined(form)) throw new ArgumentOutOfRangeException(nameof(form));
+            return Generate(new TreeShapeSpec(form == ShrubForm.Hazel ? ForestSpecies.Hazel : ForestSpecies.Hawthorn, seed,
+                TreeLifePhases.From(stage), size, 1, new TreeSite(light), LeafState.Full, yaw), lod);
+        }
 
         internal static Mesh Generate(in TreeShapeSpec spec, ForestLod lod, TreeSkeleton skeleton = null) => Build(new TreeForm(spec, skeleton), lod);
 
@@ -46,7 +50,7 @@ namespace ForesTycoon
                     if (!form.Dead[sk.LeafStem[i]]) support.Add(form.ToFrame(sk.Leaves[i]));
                 if (support.Count == 0) foreach (var leaf in sk.Leaves) support.Add(form.ToFrame(leaf));
                 // The crown applies the site warp itself, so it gets the unwarped support points.
-                crown = DendroCrownMesh.Build(CrownFormOf(spec), spec.Seed, TreeLifePhases.Coarse(spec.Phase),
+                crown = DendroCrownMesh.Build(DendroCrownMesh.For(spec.Species, spec.Phase), spec.Seed, TreeLifePhases.Coarse(spec.Phase),
                     form.Height, form.CrownRadius, form.CrownFraction, spec.Yaw, support, form.CrownColor, lod,
                     new CrownShaping(form.Foliage, form.Dieback,
                         form.Dieback > 0.45f && spec.Phase >= TreeLifePhase.Old ? Math.Min(0.25f, (form.Dieback - 0.3f) * 0.5f) : 0,
@@ -54,8 +58,5 @@ namespace ForesTycoon
             }
             return new(trunk.ToArray(), branches.ToArray(), crown, sk.StemCount, sk.LeafTotal);
         }
-
-        private static CrownForm CrownFormOf(in TreeShapeSpec spec) => spec.Form == (int)ShrubForm.Hazel ? CrownForm.Hazel
-            : spec.Form == (int)ShrubForm.Hawthorn ? CrownForm.Hawthorn : DendroCrownMesh.For(spec.Species);
     }
 }

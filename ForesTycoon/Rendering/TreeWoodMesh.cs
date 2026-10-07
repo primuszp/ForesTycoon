@@ -87,6 +87,7 @@ namespace ForesTycoon
             for (int i = 0; i < n; i++) if (fraction[i] > 0) order.Add(i);
             order.Sort((a, b) =>
             {
+                if (a == 0 || b == 0) return a == 0 ? (b == 0 ? 0 : -1) : 1; // the main stem always comes first
                 int c = sk.Flow[sk.Stems[b].Start].CompareTo(sk.Flow[sk.Stems[a].Start]);
                 return c != 0 ? c : a.CompareTo(b);
             });
@@ -109,7 +110,7 @@ namespace ForesTycoon
                 if (stem.Level == 0 && i != 0 && !form.Shrub && forks++ >= 4) continue; // the first few forks of the trunk
                 if (i != 0 && !(stem.Level == 0 && !form.Shrub))
                 {
-                    if (used + cost > budget) break; // thickest first: everything left is thinner
+                    if (used + cost > budget) { if (stem.Level == 0) continue; break; } // thickest first: the rest is thinner
                     used += cost;
                 }
                 if (Environment.GetEnvironmentVariable("TREE_DEBUG") != null) Console.WriteLine($"stem {i} L{stem.Level} kept {kept.Count} sides {sides} cost {cost} r {maxRadius}");

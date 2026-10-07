@@ -20,8 +20,8 @@ namespace ForesTycoon
                 var size = tree.At(ForestYear);
                 double crown = Math.PI * size.CrownRadius * size.CrownRadius * tree.Health;
                 crownArea += crown;
-                interception += crown * (tree.Species == ForestSpecies.Spruce ? 2.5 : 1.5);
-                leafArea += crown * (tree.Species == ForestSpecies.Spruce ? 3.5 : 2.5);
+                interception += crown * (ForestSpeciesTraits.For(tree.Species).Evergreen ? 2.5 : 1.5);
+                leafArea += crown * (ForestSpeciesTraits.For(tree.Species).Evergreen ? 3.5 : 2.5);
             }
             double cover = 1 - Math.Exp(-crownArea / area);
             return new(cover, crownArea > 0 ? cover * interception / crownArea : 0,

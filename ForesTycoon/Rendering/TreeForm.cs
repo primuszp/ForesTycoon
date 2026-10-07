@@ -69,14 +69,14 @@ namespace ForesTycoon
             var size = spec.Size;
             if (spec.Species == ForestSpecies.None || !float.IsFinite(spec.Yaw)
                 || !float.IsFinite(size.Height + size.Diameter + size.CrownRadius)
-                || size.Height <= 0 || size.Diameter <= 0 || size.CrownRadius <= 0
-                || (spec.Form != 0 && !Enum.IsDefined((ShrubForm)spec.Form)))
+                || size.Height <= 0 || size.Diameter <= 0 || size.CrownRadius <= 0)
                 throw new ArgumentOutOfRangeException(nameof(spec));
-            Spec = spec; Bands = spec.Bands; Shrub = spec.Form != 0;
-            Skeleton = skeleton ?? TreeArchitecture.Skeleton(spec.Species, spec.Seed, spec.Phase, Bands.Light, spec.Form);
+            var traits = ForestSpeciesTraits.For(spec.Species);
+            Spec = spec; Bands = spec.Bands; Shrub = traits.Shrub;
+            Skeleton = skeleton ?? TreeArchitecture.Skeleton(spec.Species, spec.Seed, spec.Phase, Bands.Light);
             float light = Bands.Light01;
             float response = TreeArchitecture.LightResponse(spec.Species, light);
-            CrownFraction = TreeArchitecture.CrownFraction(spec.Species, spec.Phase, Bands.Light, spec.Form);
+            CrownFraction = TreeArchitecture.CrownFraction(spec.Species, spec.Phase, Bands.Light);
             Height = size.Height * Terrain.TreeMetresToWorld;
             CrownRadius = size.CrownRadius * Terrain.TreeMetresToWorld * (0.74f + 0.26f * response);
             CrownBase = Height * (1 - CrownFraction);
@@ -93,11 +93,13 @@ namespace ForesTycoon
             // Breast-height radius pins the trunk to the simulated diameter.
             BreastRadius = size.Diameter * 0.5f * Terrain.TreeMetresToWorld;
             BreastHeight = Math.Min(1.3f * Terrain.TreeMetresToWorld, 0.2f * Height);
-            (float k, float scale) = spec.Species switch
+            float k = spec.Species switch
             {
-                ForestSpecies.Beech => (0.65f, 1f), ForestSpecies.Oak => (0.55f, 1f),
-                ForestSpecies.Spruce => (0.40f, 1f), _ => (0.25f, 1f)
+                ForestSpecies.Beech => 0.65f, ForestSpecies.Oak or ForestSpecies.SessileOak => 0.55f, ForestSpecies.TurkeyOak => 0.5f,
+                ForestSpecies.Maple => 0.5f, ForestSpecies.Ash => 0.45f, ForestSpecies.Spruce => 0.40f, ForestSpecies.Fir => 0.5f,
+                ForestSpecies.Pine or ForestSpecies.Larch => 0.35f, _ => 0.25f
             };
+            const float scale = 1f;
             float age = spec.Phase switch { TreeLifePhase.Seedling => 0.1f, TreeLifePhase.Sapling => 0.3f,
                 TreeLifePhase.Young => 0.6f, TreeLifePhase.Mature => 1f, _ => 1.15f };
             FlareStrength = Shrub ? 0 : k * scale * age;
@@ -105,13 +107,9 @@ namespace ForesTycoon
             float unit = Skeleton.MainStemUnitRadiusAt(BreastHeight / ZScale);
             TwigRadius = BreastRadius / (Math.Max(unit, 1e-3f) * (1 + FlareStrength * MathF.Exp(-BreastHeight / FlareHeight)));
 
-            var model = Terrain.TreeModel.For(spec.Species);
             float pigment = ForestTreeVariation.Range(spec.Seed, 601, 0.90f, 1.08f);
-            Color bark = spec.Form == (int)ShrubForm.Hazel ? Color.FromArgb(128, 98, 72)
-                : spec.Form == (int)ShrubForm.Hawthorn ? Color.FromArgb(104, 96, 86)
-                : spec.Species == ForestSpecies.Birch && spec.Phase <= TreeLifePhase.Sapling ? Color.FromArgb(115, 77, 48) : model.TrunkColor;
-            Color crown = spec.Form == (int)ShrubForm.Hazel ? Color.FromArgb(104, 146, 62)
-                : spec.Form == (int)ShrubForm.Hawthorn ? Color.FromArgb(66, 104, 50) : model.CrownColor;
+            Color bark = spec.Species == ForestSpecies.Birch && spec.Phase <= TreeLifePhase.Sapling ? Color.FromArgb(115, 77, 48) : traits.Bark;
+            Color crown = traits.Crown;
             DeadColor = Pack(Color.FromArgb(112, 102, 92), spec.Species, pigment);
             WoodColor = spec.Dead ? DeadColor : Pack(bark, spec.Species, pigment);
             CrownColor = Pack(LeafTint(crown, spec), spec.Species, pigment);
@@ -139,6 +137,12 @@ namespace ForesTycoon
                 {
                     ForestSpecies.Birch => Color.FromArgb(214, 180, 50),
                     ForestSpecies.Beech => Color.FromArgb(190, 110, 40),
+                    ForestSpecies.Maple => Color.FromArgb(204, 120, 30),
+                    ForestSpecies.Ash => Color.FromArgb(170, 160, 60),
+                    ForestSpecies.Larch => Color.FromArgb(214, 164, 44),
+                    ForestSpecies.TurkeyOak => Color.FromArgb(164, 118, 52),
+                    ForestSpecies.Hazel or ForestSpecies.Elder => Color.FromArgb(196, 172, 54),
+                    ForestSpecies.Hawthorn or ForestSpecies.Blackthorn => Color.FromArgb(180, 90, 48),
                     _ => Color.FromArgb(176, 112, 40)
                 },
                 _ => crown

@@ -214,7 +214,7 @@ namespace ForesTycoon
 
         private static double WaterResponse(double supply, double waterlogging, ForestSpecies species)
         {
-            double drySensitivity = species == ForestSpecies.Oak ? 0.6 : species == ForestSpecies.Spruce ? 1 : 0.85;
+            double drySensitivity = ForestSpeciesTraits.For(species).DrySensitivity;
             return Math.Clamp(Math.Pow(Math.Clamp(supply, 0, 1), drySensitivity) * (1 - waterlogging * 0.65), 0, 1);
         }
 

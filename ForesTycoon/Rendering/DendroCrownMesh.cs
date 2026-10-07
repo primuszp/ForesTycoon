@@ -4,7 +4,7 @@ using OpenTK.Mathematics;
 
 namespace ForesTycoon
 {
-    internal enum CrownForm { Spruce, Oak, Birch, Beech, Hazel, Hawthorn }
+    internal enum CrownForm { Spruce, Oak, Birch, Beech, Hazel, Hawthorn, Maple, Ash, Pine, Juniper }
 
     /// <summary>Season, vitality and site adjustments of the crown envelope.</summary>
     /// <param name="Foliage">1 = full leaf, lower values shrink the crown (budding, leaf fall, thin foliage).</param>
@@ -17,10 +17,19 @@ namespace ForesTycoon
 
     internal static class DendroCrownMesh
     {
-        internal static CrownForm For(ForestSpecies species) => species switch
+        internal static CrownForm For(ForestSpecies species, TreeLifePhase phase = TreeLifePhase.Mature) => species switch
         {
-            ForestSpecies.Spruce => CrownForm.Spruce, ForestSpecies.Oak => CrownForm.Oak,
-            ForestSpecies.Birch => CrownForm.Birch, _ => CrownForm.Beech
+            ForestSpecies.Spruce or ForestSpecies.Fir or ForestSpecies.Larch => CrownForm.Spruce,
+            // Young pines are tiered cones; the flat, high crown comes with age.
+            ForestSpecies.Pine => phase <= TreeLifePhase.Young ? CrownForm.Spruce : CrownForm.Pine,
+            ForestSpecies.Juniper => CrownForm.Juniper,
+            ForestSpecies.Oak or ForestSpecies.SessileOak or ForestSpecies.TurkeyOak => CrownForm.Oak,
+            ForestSpecies.Birch => CrownForm.Birch,
+            ForestSpecies.Maple => CrownForm.Maple,
+            ForestSpecies.Ash => CrownForm.Ash,
+            ForestSpecies.Hazel => CrownForm.Hazel,
+            ForestSpecies.Hawthorn or ForestSpecies.Blackthorn or ForestSpecies.Elder => CrownForm.Hawthorn,
+            _ => CrownForm.Beech
         };
 
         // Reference zoom (pixels per world unit) at the fine end of each LOD band.
@@ -65,6 +74,14 @@ namespace ForesTycoon
             CrownForm.Hazel => new(0.66f, 0.85f, 0.60f, 0.65f, 0.02f, 6),
             // Hawthorn: compact, dense, roughly hemispherical.
             CrownForm.Hawthorn => new(0.45f, 0.40f, 0.50f, 0.55f, 0.06f, 5),
+            // Sycamore maple: dense, rounded dome.
+            CrownForm.Maple => stage == TreeLifeStage.Old ? new(0.40f, 0.50f, 0.65f, 0.55f, 0.12f, 4) : new(0.40f, 0.55f, 0.75f, 0.50f, 0.08f, 3),
+            // Ash: open, oval, irregular crown that thins with age.
+            CrownForm.Ash => stage == TreeLifeStage.Old ? new(0.50f, 0.55f, 0.70f, 0.75f, 0.10f, 7) : new(0.48f, 0.60f, 0.80f, 0.70f, 0.06f, 6),
+            // Mature Scots pine: broad flat-topped, clumpy crown high on a clear bole.
+            CrownForm.Pine => new(0.50f, 0.50f, 0.70f, 0.85f, 0.08f, 6),
+            // Juniper: narrow, pointed, columnar.
+            CrownForm.Juniper => new(0.40f, 0.60f, 1.20f, 0.60f, 0.02f, 4),
             _ => new(0.10f, 0.40f, 0.95f, 0.40f, 0f, 3) // spruce: cone, shaped further by whorl tiers
         };
 

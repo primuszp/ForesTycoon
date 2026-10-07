@@ -48,6 +48,7 @@ namespace ForesTycoon
             int count = Math.Clamp((int)MathF.Round((1 + (capacity - 1) * stand.Maturity) * (0.4f + 0.6f * stock)), 1, capacity);
             int lattice = (int)MathF.Ceiling(MathF.Sqrt(capacity));
             if (planted) { count = PlantedTreesPerTile; lattice = PlantingRows; }
+            if (patch.Trees.Length < count) Array.Resize(ref patch.Trees, count); // shrub tiles hold more than 16 stems
             Span<int> cells = stackalloc int[lattice * lattice];
             for (int i = 0; i < cells.Length; i++) cells[i] = i;
             // Select scattered cells rather than filling every tile row from the same corner.

@@ -45,7 +45,9 @@ namespace ForesTycoon
             };
         }
 
-        private static float SeedlingAge(ForestSpecies species) => species == ForestSpecies.Birch ? 2 : 3;
+        // Shrubs mature in a few years, so their seedling phase is correspondingly short.
+        private static float SeedlingAge(ForestSpecies species) =>
+            Math.Min(species == ForestSpecies.Birch ? 2f : 3f, 0.15f * ForestSpeciesProfile.For(species).MatureAgeYears);
 
         /// <summary>Mapping onto the legacy stages used by the glTF and lobe-based crowns.</summary>
         internal static TreeLifeStage Coarse(TreeLifePhase phase) => phase switch
@@ -72,17 +74,33 @@ namespace ForesTycoon
         };
 
         /// <summary>Broadly the crown fraction of the total height, before light and vigour.</summary>
-        internal static float CrownFraction(ForestSpecies species, TreeLifePhase phase) => phase switch
+        internal static float CrownFraction(ForestSpecies species, TreeLifePhase phase)
         {
-            TreeLifePhase.Sapling => 0.5f * (ForestTreeAppearance.CrownFraction(species, TreeLifeStage.Seedling)
-                + ForestTreeAppearance.CrownFraction(species, TreeLifeStage.Young)),
-            // Old broadleaves keep a broad low crown; they lose a little from the base and a lot from the top.
-            TreeLifePhase.Old => species == ForestSpecies.Spruce ? ForestTreeAppearance.CrownFraction(species, TreeLifeStage.Old)
-                : ForestTreeAppearance.CrownFraction(species, TreeLifeStage.Mature) - 0.04f,
-            TreeLifePhase.Senescent => species == ForestSpecies.Spruce ? ForestTreeAppearance.CrownFraction(species, TreeLifeStage.Old) - 0.05f
-                : ForestTreeAppearance.CrownFraction(species, TreeLifeStage.Mature) - 0.10f,
-            _ => ForestTreeAppearance.CrownFraction(species, Coarse(phase))
-        };
+            if (ForestSpeciesTraits.For(species).Shrub) return 0.98f;
+            if (species == ForestSpecies.Pine)
+                // Scots pine self-prunes early: tiered cone when young, a high flat crown on a long clear bole later.
+                return phase switch { TreeLifePhase.Seedling => 0.95f, TreeLifePhase.Sapling => 0.92f, TreeLifePhase.Young => 0.78f,
+                    TreeLifePhase.Mature => 0.46f, TreeLifePhase.Old => 0.40f, _ => 0.34f };
+            float mature = species switch { ForestSpecies.Ash => 0.62f, ForestSpecies.Maple => 0.68f, ForestSpecies.SessileOak => 0.66f,
+                ForestSpecies.TurkeyOak => 0.70f, ForestSpecies.Larch or ForestSpecies.Fir => 0.86f, _ => -1f };
+            if (mature < 0)
+                return phase switch
+                {
+                    TreeLifePhase.Sapling => 0.5f * (ForestTreeAppearance.CrownFraction(species, TreeLifeStage.Seedling)
+                        + ForestTreeAppearance.CrownFraction(species, TreeLifeStage.Young)),
+                    // Old broadleaves keep a broad low crown; they lose a little from the base and a lot from the top.
+                    TreeLifePhase.Old => species == ForestSpecies.Spruce ? ForestTreeAppearance.CrownFraction(species, TreeLifeStage.Old)
+                        : ForestTreeAppearance.CrownFraction(species, TreeLifeStage.Mature) - 0.04f,
+                    TreeLifePhase.Senescent => species == ForestSpecies.Spruce ? ForestTreeAppearance.CrownFraction(species, TreeLifeStage.Old) - 0.05f
+                        : ForestTreeAppearance.CrownFraction(species, TreeLifeStage.Mature) - 0.10f,
+                    _ => ForestTreeAppearance.CrownFraction(species, Coarse(phase))
+                };
+            return phase switch
+            {
+                TreeLifePhase.Seedling => 0.90f, TreeLifePhase.Sapling => 0.86f, TreeLifePhase.Young => 0.80f,
+                TreeLifePhase.Mature => mature, TreeLifePhase.Old => mature - 0.04f, _ => mature - 0.10f
+            };
+        }
     }
 
     /// <summary>
@@ -92,14 +110,22 @@ namespace ForesTycoon
     /// </summary>
     internal static class TreePhenology
     {
-        internal static bool Evergreen(ForestSpecies species) => species == ForestSpecies.Spruce;
+        internal static bool Evergreen(ForestSpecies species) => ForestSpeciesTraits.For(species).Evergreen;
 
         // Segment ends within the cycle that starts at bud burst: budding, full, autumn colour, leaf fall.
         private readonly record struct Calendar(float Start, float Budding, float Full, float Autumn, float Falling);
         private static Calendar For(ForestSpecies species) => species switch
         {
             ForestSpecies.Birch => new(0.95f, 0.07f, 0.49f, 0.60f, 0.69f),
-            ForestSpecies.Oak => new(0.97f, 0.07f, 0.49f, 0.59f, 0.67f),
+            ForestSpecies.Oak or ForestSpecies.SessileOak => new(0.97f, 0.07f, 0.49f, 0.59f, 0.67f),
+            ForestSpecies.TurkeyOak => new(0.99f, 0.07f, 0.53f, 0.64f, 0.72f),
+            ForestSpecies.Maple => new(0.96f, 0.07f, 0.50f, 0.60f, 0.68f),
+            // Ash breaks bud late and drops its leaves early, often still green.
+            ForestSpecies.Ash => new(0.04f, 0.08f, 0.46f, 0.54f, 0.62f),
+            ForestSpecies.Larch => new(0.95f, 0.08f, 0.52f, 0.64f, 0.72f),
+            ForestSpecies.Hazel => new(0.93f, 0.07f, 0.50f, 0.60f, 0.68f),
+            ForestSpecies.Hawthorn or ForestSpecies.Blackthorn => new(0.95f, 0.07f, 0.52f, 0.62f, 0.69f),
+            ForestSpecies.Elder => new(0.92f, 0.07f, 0.52f, 0.62f, 0.69f),
             _ => new(0.98f, 0.07f, 0.52f, 0.62f, 0.69f)
         };
 
@@ -153,13 +179,11 @@ namespace ForesTycoon
     }
 
     /// <summary>
-    /// Everything the generator needs to know about one tree (<c>Form</c> 0 = tree, otherwise a
-    /// <see cref="ShrubForm"/>). Continuous inputs are quantised by
+    /// Everything the generator needs to know about one tree or shrub. Continuous inputs are quantised by
     /// <see cref="Bands"/>, so a tree only needs a new mesh when a band boundary is crossed.
     /// </summary>
     internal readonly record struct TreeShapeSpec(ForestSpecies Species, int Seed, TreeLifePhase Phase,
-        ForestTreeDimensions Size, float Vigor, TreeSite Site, LeafState Leaves, float Yaw, bool Dead = false,
-        byte Form = 0)
+        ForestTreeDimensions Size, float Vigor, TreeSite Site, LeafState Leaves, float Yaw, bool Dead = false)
     {
         internal static TreeShapeSpec From(in ForestTree tree, double year, TreeSite site, float yaw, bool dead = false)
         {

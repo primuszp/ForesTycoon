@@ -51,3 +51,41 @@ háromszegmenses görbület szabályos, merev vázat adott.
 * Hangolás: az XML-ben a faj jellegzetes értékei – `1DownAngle`/`1Curve` (ágtartás),
   `1CurveV`/`2CurveV` (szabálytalanság), `1Branches` (sűrűség), `0SegSplits` (törzsvillásodás),
   `Shape` (burokforma). Az életfázis- és fényhatás a `PresetParameters` kapcsolóiban van.
+
+## Fajkatalógus: 16 játszható faj
+
+Az Arbaro-repó `trees/` mappájában **16 fájl** van, ebből csak ~10 fa (a többi pálma, gabona, zsurló,
+sivatagi bokor), és nincs köztük juhar, kőris, erdeifenyő vagy cserje. A hiányzó fajok
+készleteit ezért a legközelebbi Arbaro-preset és a fajok botanikai jellemzői alapján, azonos XML-formátumban
+készítettem el (`ForesTycoon/Assets/Trees/`). Minden faj egy sora a `ForestSpeciesTraits` katalógusnak
+(`ForestSpeciesCatalog.cs`: név, méretek, koronaarány, növekedési ráták, tűlevelű/örökzöld/cserje jelleg,
+kéreg- és lombszín, shader-mintacsalád, leírás); az ökológiát a `ForestSpeciesProfile` adja.
+
+| Faj | Alap Arbaro-preset | Jellemző |
+|---|---|---|
+| Lucfenyő *Picea abies* | tamarack, european_larch | kúpos, emeletes, lecsüngő ágak |
+| Jegenyefenyő *Abies alba* | tamarack | keskeny, sűrű, vízszintes ágak, sima szürke kéreg; legárnyéktűrőbb |
+| Erdeifenyő *Pinus sylvestris* | tamarack | fiatalon kúpos, később magas, lapos korona hosszú, vörösesbarna törzsön; fényigényes |
+| Vörösfenyő *Larix decidua* | european_larch | **lombhullató fenyő**: arany ősz, téli csupasz váz |
+| Nyír *Betula pendula* | quaking_aspen | karcsú, felfelé törő ágak, lecsüngő hajtások |
+| Bükk *Fagus sylvatica* | black_tupelo | sima törzs, sűrű tojásdad kupola |
+| Hegyi juhar *Acer pseudoplatanus* | sassafras, black_tupelo | sűrű gömbölyű kupola, szemközti ágak, narancs ősz |
+| Magas kőris *Fraxinus excelsior* | black_tupelo | egyenes, magas törzs, nyitott ovális korona, korai lombhullás |
+| Tölgy *Quercus robur* | ca_black_oak | széles, tekervényes ágak, villás törzs |
+| Kocsánytalan tölgy *Quercus petraea* | ca_black_oak | egyenesebb, hosszabb törzs, szabályosabb korona |
+| Csertölgy *Quercus cerris* | ca_black_oak | felfelé törőbb, gömbölyű, lebenyes kupola |
+| Mogyoró *Corylus avellana* | (saját) | 5–9 tőhajtás, kehely alak |
+| Galagonya *Crataegus monogyna* | (saját) | rövid, villás törzs, sűrű gömbölyű bokor |
+| Kökény *Prunus spinosa* | (saját) | sűrű, tövises, cikcakkos bozót |
+| Fekete bodza *Sambucus nigra* | (saját) | íves, kehely alakú, gyors cserje |
+| Boróka *Juniperus communis* | (saját) | örökzöld, oszlopos–terülő cserje |
+
+A cserjék szimulációs egyedek, mint a fák (kis méret, gyors érés, csempénként 16–24 szál, törzs- és
+gyökérfej nélkül). Új fajok: a szimulációban a `ForestSpecies` enum, a katalógus sora és az XML együtt
+elég; a világgenerálás (`ForestSystem.SelectSpecies`) a termőhely szerint vegyít (hegyvidék: lucfenyő,
+jegenyefenyő, juhar, vörösfenyő; száraz alföld: tölgyek, erdeifenyő, galagonya; friss lejtő: bükk, juhar,
+kőris, mogyoró). A shader öt anyagcsaládot ismer, ezért minden faj kérge és lombja a legközelebbi családot
+használja (`Pattern`).
+
+Az ültetési eszköztárban a négy klasszikus faj gombja mellett a „További fajok” legördülő listában
+található a többi (lombos fák, fenyők, cserjék csoportosítva, latin névvel és leírással).

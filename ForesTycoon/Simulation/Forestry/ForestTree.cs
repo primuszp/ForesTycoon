@@ -48,32 +48,21 @@ namespace ForesTycoon
     /// <summary>Species-specific gameplay growth curves in physical metres.</summary>
     internal static class ForestTreeGrowth
     {
-        internal static int Capacity(ForestSpecies species) => species switch
-        {
-            ForestSpecies.Spruce => 14, ForestSpecies.Birch => 12,
-            ForestSpecies.Oak => 4, ForestSpecies.Beech => 7, _ => 0
-        };
+        internal static int Capacity(ForestSpecies species) =>
+            species == ForestSpecies.None ? 0 : ForestSpeciesTraits.For(species).Capacity;
 
         internal static ForestTreeDimensions Initial(ForestSpecies species, float age, float variation)
         {
-            var (height, diameter) = species switch
-            {
-                ForestSpecies.Spruce => (34f, 0.52f), ForestSpecies.Birch => (24f, 0.30f),
-                ForestSpecies.Oak => (27f, 0.70f), ForestSpecies.Beech => (31f, 0.56f),
-                _ => throw new ArgumentOutOfRangeException(nameof(species))
-            };
+            if (species == ForestSpecies.None) throw new ArgumentOutOfRangeException(nameof(species));
+            var traits = ForestSpeciesTraits.For(species);
             float mature = ForestSpeciesProfile.For(species).MatureAgeYears;
             float growth = 1 - MathF.Exp(-Math.Max(0, age) / mature * 1.8f);
-            float h = (0.8f + (height - 0.8f) * growth) * variation;
-            float d = (0.012f + diameter * growth) * variation;
-            return new(d, h, Math.Max(0.15f, h * CrownRatio(species)));
+            float startHeight = Math.Min(0.8f, 0.15f * traits.MatureHeight);
+            float startDiameter = Math.Min(0.012f, 0.1f * traits.MatureDiameter);
+            float h = (startHeight + (traits.MatureHeight - startHeight) * growth) * variation;
+            float d = (startDiameter + traits.MatureDiameter * growth) * variation;
+            return new(d, h, Math.Max(0.15f, h * traits.CrownRatio));
         }
-
-        private static float CrownRatio(ForestSpecies species) => species switch
-        {
-            ForestSpecies.Oak => 0.28f, ForestSpecies.Spruce => 0.26f,
-            ForestSpecies.Birch => 0.16f, _ => 0.22f
-        };
 
         internal static ForestTreeDimensions Rates(in ForestTree tree, double year, float fitness, float crowding, float water)
         {
@@ -95,13 +84,12 @@ namespace ForesTycoon
 
         internal static ForestGrowthShape Shape(ForestSpecies species, ForestTreeDimensions size)
         {
-            float maxHeight = species switch { ForestSpecies.Spruce => 40, ForestSpecies.Birch => 28, ForestSpecies.Oak => 35, _ => 38 };
-            float radial = species == ForestSpecies.Birch ? 0.0055f : species == ForestSpecies.Oak ? 0.0045f : 0.005f;
+            var traits = ForestSpeciesTraits.For(species);
             // Mature trees continue thickening; height approaches a species-dependent envelope.
             // Young crowns expand with the leader; older crowns still spread as
             // the trunk thickens. A diameter-only rate kept saplings artificially narrow.
-            return new(radial * 2, 1 + size.Diameter * 0.8f,
-                0.9f * Math.Max(0, 1 - size.Height / maxHeight), CrownRatio(species), species == ForestSpecies.Oak ? 9 : 6);
+            return new(traits.RadialRate * 2, 1 + size.Diameter * 0.8f,
+                traits.HeightRate * Math.Max(0, 1 - size.Height / traits.MaxHeight), traits.CrownRatio, traits.CrownSpread);
         }
     }
 }

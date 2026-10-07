@@ -119,6 +119,7 @@ namespace ForesTycoon
         private readonly Dictionary<(ForestAsset,ForestLod),ImportedTreeModel> models=new();
         internal static bool UsesImported(ForestSpecies species,GraphicsSettings graphics)=>
             graphics.ForestModels!=ForestModelStyle.Procedural
+            &&species is ForestSpecies.Spruce or ForestSpecies.Birch or ForestSpecies.Oak or ForestSpecies.Beech
             &&(species!=ForestSpecies.Birch||graphics.ImportedBirch);
         internal static ForestAsset Select(in ForestTree tree,ForestModelStyle style=ForestModelStyle.Imported)=>tree.Species switch {
             ForestSpecies.Spruce when style==ForestModelStyle.Generated=>tree.Seed%2==0?ForestAsset.GeneratedPineA:ForestAsset.GeneratedPineB,

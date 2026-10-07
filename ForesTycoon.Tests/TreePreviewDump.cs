@@ -130,4 +130,31 @@ public class TreePreviewDump
             Write(Path.Combine(dir, $"ref-{name}.json"), name, trees.ToArray());
         }
     }
+
+    // One row per species: the six life phases leafed, then mature bare.
+    [Fact]
+    public void DumpAllSpecies()
+    {
+        string dir = Environment.GetEnvironmentVariable("TREE_PREVIEW_DIR");
+        if (string.IsNullOrEmpty(dir)) return;
+        foreach (var species in ForestSpeciesTraits.Playable)
+        {
+            var profile = ForestSpeciesProfile.For(species);
+            var trees = new List<(DendroTreeGenerator.Mesh, float)>(); int i = 0;
+            foreach (var (phase, leaves) in new[] { (TreeLifePhase.Seedling, LeafState.Full), (TreeLifePhase.Young, LeafState.Full), (TreeLifePhase.Mature, LeafState.Full),
+                (TreeLifePhase.Old, LeafState.Full), (TreeLifePhase.Senescent, LeafState.Full), (TreeLifePhase.Mature, LeafState.Bare), (TreeLifePhase.Mature, LeafState.Autumn) })
+            {
+                float age = phase switch { TreeLifePhase.Seedling => 1f, TreeLifePhase.Sapling => profile.MatureAgeYears * 0.2f,
+                    TreeLifePhase.Young => profile.MatureAgeYears * 0.5f, TreeLifePhase.Mature => profile.MatureAgeYears * 1.5f,
+                    TreeLifePhase.Old => profile.MaximumAgeYears * 0.75f, _ => profile.MaximumAgeYears * 0.92f };
+                var size = ForestTreeGrowth.Initial(species, age, 1);
+                var spec = new TreeShapeSpec(species, 42, phase, size, phase == TreeLifePhase.Senescent ? 0.5f : 1, new TreeSite(0.85f), leaves, 0.3f);
+                var mesh = DendroTreeGenerator.Generate(spec, ForestLod.Near);
+                if (phase == TreeLifePhase.Mature && leaves == LeafState.Full) Console.WriteLine($"{species}: H {size.Height:0.0} m D {size.Diameter:0.00} m crown {size.CrownRadius:0.0} m, tris {(mesh.Trunk.Length + mesh.Branches.Length) / 3}+{mesh.Crown.Length / 3}");
+                // Draw every species at its own height scale so shrubs are readable next to trees.
+                trees.Add((mesh, i++ * 14f));
+            }
+            Write(Path.Combine(dir, $"sp-{species}.json"), species.ToString(), trees.ToArray());
+        }
+    }
 }
