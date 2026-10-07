@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using OpenTK.Mathematics;
-namespace ForesTycoon
+namespace ForesTycoon.Models
 {
     internal sealed class ImportedSceneAsset : IDisposable
     {
@@ -64,7 +64,7 @@ namespace ForesTycoon
             Normalization=axis*Matrix4.CreateTranslation(-center)*Matrix4.CreateScale(scale);
             if(centerHeight&&max.Y-min.Y>max.X-min.X)Normalization*=Matrix4.CreateRotationZ(-MathF.PI/2);
         }
-        internal void Draw(Matrix4 placement,GraphicsSettings settings)=>renderer.Draw(Pose,Normalization*placement,settings);
+        internal void Draw(Matrix4 placement,IShadingSettings settings)=>renderer.Draw(Pose,Normalization*placement,settings);
         public void Dispose()=>renderer.Dispose();
     }
 }

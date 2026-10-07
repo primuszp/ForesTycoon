@@ -1,4 +1,4 @@
-namespace ForesTycoon
+namespace ForesTycoon.Rendering
 {
     public enum RenderLayer
     {

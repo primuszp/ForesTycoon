@@ -1,7 +1,7 @@
 using System;
 using OpenTK.Graphics.OpenGL;
 
-namespace ForesTycoon
+namespace ForesTycoon.Rendering
 {
     internal sealed class RenderStateScope : IDisposable
     {

@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.IO.Compression;
 using System.Buffers.Binary;
-namespace ForesTycoon
+namespace ForesTycoon.Rendering
 {
     // Embedded non-interlaced PNG textures, including palette/tRNS alpha.
     internal readonly record struct PngImage(int Width, int Height, byte[] Pixels)

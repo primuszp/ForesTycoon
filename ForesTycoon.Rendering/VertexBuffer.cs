@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using OpenTK.Graphics.OpenGL;
 
-namespace ForesTycoon
+namespace ForesTycoon.Rendering
 {
     public sealed class VertexBuffer : IDisposable
     {

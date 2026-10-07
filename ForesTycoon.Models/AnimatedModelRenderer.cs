@@ -1,7 +1,7 @@
 using System;
 using OpenTK.Graphics.OpenGL;
 using OpenTK.Mathematics;
-namespace ForesTycoon
+namespace ForesTycoon.Models
 {
     internal sealed class AnimatedModelRenderer : IDisposable
     {
@@ -17,13 +17,13 @@ namespace ForesTycoon
             this.model=model;vaos=new int[model.Meshes.Length];vbos=new int[vaos.Length];ebos=new int[vaos.Length];textures=new int[model.Images.Length];
             drawOrder=new int[vaos.Length];drawDepth=new float[vaos.Length];
         }
-        internal void Draw(AnimatedGlbModel.Pose pose,Matrix4 transform,GraphicsSettings settings,float outlineWorldWidth=0,bool sourceMaterial=false)
+        internal void Draw(AnimatedGlbModel.Pose pose,Matrix4 transform,IShadingSettings settings,float outlineWorldWidth=0,bool sourceMaterial=false)
         {
             ObjectDisposedException.ThrowIf(disposed,this);
             if(program==0)Initialize();
             var visuals=RenderDevice.Visuals;
             bool shadow=visuals?.ShadowPass==true;
-            bool outline=!shadow&&settings.Enhanced&&settings.WildlifeOutlines&&outlineWorldWidth>0;
+            bool outline=!shadow&&settings.Enhanced&&settings.ModelOutlines&&outlineWorldWidth>0;
             Matrix4 camera=shadow?visuals.ShadowCamera:RenderDevice.ViewProjection;
             Matrix4 light=visuals?.ShadowCamera??Matrix4.Identity;
             GL.UseProgram(program);

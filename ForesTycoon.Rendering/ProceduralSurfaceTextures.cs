@@ -1,7 +1,7 @@
 using System;
 using OpenTK.Graphics.OpenGL;
 
-namespace ForesTycoon
+namespace ForesTycoon.Rendering
 {
     // Seamless, fixed-seed material detail. No downloads or asset licence dependencies.
     internal static class ProceduralSurfaceTextures

@@ -2,7 +2,7 @@ using System;
 using OpenTK.Graphics.OpenGL;
 using OpenTK.Mathematics;
 
-namespace ForesTycoon
+namespace ForesTycoon.Rendering
 {
     /// <summary>
     /// Miniature-photography finish for the world view. The scene is drawn into an offscreen
@@ -24,10 +24,10 @@ namespace ForesTycoon
 
         internal bool Active => active;
 
-        internal static bool Enabled(GraphicsSettings settings) => settings.Enhanced && settings.Diorama;
+        internal static bool Enabled(IPostProcessSettings settings) => settings.Enhanced && settings.Diorama;
 
         /// <summary>Redirects drawing into the offscreen target. Returns false when the effect is off.</summary>
-        internal bool Begin(GraphicsSettings settings, int framebufferWidth, int framebufferHeight)
+        internal bool Begin(IPostProcessSettings settings, int framebufferWidth, int framebufferHeight)
         {
             active = false;
             if (!Enabled(settings) || framebufferWidth <= 0 || framebufferHeight <= 0) return false;
@@ -40,7 +40,7 @@ namespace ForesTycoon
         }
 
         /// <summary>Soft radial studio backdrop, drawn right after the clear and before the world.</summary>
-        internal void DrawBackdrop(GraphicsSettings settings, Vector3 clearColor)
+        internal void DrawBackdrop(IPostProcessSettings settings, Vector3 clearColor)
         {
             if (!active || !settings.StudioBackdrop) return;
             using var state = new RenderStateScope().Disable(EnableCap.DepthTest).Disable(EnableCap.Blend).DepthWrite(false);
@@ -51,7 +51,7 @@ namespace ForesTycoon
         }
 
         /// <summary>Resolves the offscreen frame and composites it into the default framebuffer.</summary>
-        internal void End(GraphicsSettings settings, float pixelsPerWorldUnit, float dpiScale, float time)
+        internal void End(IPostProcessSettings settings, float pixelsPerWorldUnit, float dpiScale, float time)
         {
             if (!active) return;
             active = false;

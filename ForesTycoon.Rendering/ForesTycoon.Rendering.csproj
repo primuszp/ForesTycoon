@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    GPU core of the renderer: device and shader state, render pipeline and passes, vertex buffers,
+    dynamic primitive batching, post-processing and frame metrics. Knows nothing about forests, terrain,
+    models or effects; those are separate renderer modules built on top of this one.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>ForesTycoon.Rendering</RootNamespace>
+    <AssemblyName>ForesTycoon.Rendering</AssemblyName>
+    <RollForward>Major</RollForward>
+    <NoWarn>NU1701</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Using Include="ForesTycoon.Engine" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../ForesTycoon.Engine/ForesTycoon.Engine.csproj" />
+    <PackageReference Include="OpenTK" Version="4.9.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ForesTycoon" />
+    <InternalsVisibleTo Include="ForesTycoon.Models" />
+    <InternalsVisibleTo Include="ForesTycoon.Effects" />
+    <InternalsVisibleTo Include="ForesTycoon.Tests" />
+  </ItemGroup>
+
+</Project>

@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 using OpenTK.Graphics.OpenGL;
 using OpenTK.Mathematics;
 
-namespace ForesTycoon
+namespace ForesTycoon.Rendering
 {
     internal static class DynamicPrimitiveBatch
     {

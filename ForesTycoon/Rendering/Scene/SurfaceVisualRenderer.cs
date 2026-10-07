@@ -4,9 +4,7 @@ using OpenTK.Mathematics;
 
 namespace ForesTycoon
 {
-    internal enum SurfaceKind { Plain = 0, Ground = 1, Skirt = 2, Road = 3, Vehicle = 4, Wood = 5, Foliage = 6, Water = 7, ForestFloor = 8, Rubber = 9, LogCargo = 10 }
-
-    internal sealed class SurfaceVisualRenderer : IDisposable
+    internal sealed class SurfaceVisualRenderer : IDisposable, ISurfaceVisuals
     {
         private int program, depthProgram, textures, shadowTexture, shadowFramebuffer;
         private int environmentTexture;
@@ -16,12 +14,12 @@ namespace ForesTycoon
         private readonly Terrain environmentTerrain;
         private readonly GraphicsSettings settings;
         private readonly WeatherVisualState weather;
-        internal SurfaceKind Kind;
-        internal bool ShadowPass { get; private set; }
-        internal Matrix4 ShadowCamera => lightMatrix;
-        internal Vector4 Atmosphere => settings.Weather ? new Vector4(weather.Cloud,weather.Storm,weather.Flash,weather.Wetness) : Vector4.Zero;
-        internal bool ShadowsReady => shadowsReady;
-        internal bool Active => settings.Enhanced || ShadowPass;
+        public SurfaceKind Kind { get; set; }
+        public bool ShadowPass { get; private set; }
+        public Matrix4 ShadowCamera => lightMatrix;
+        public Vector4 Atmosphere => settings.Weather ? new Vector4(weather.Cloud,weather.Storm,weather.Flash,weather.Wetness) : Vector4.Zero;
+        public bool ShadowsReady => shadowsReady;
+        public bool Active => settings.Enhanced || ShadowPass;
         private Matrix4 lightMatrix;
         private Vector3 sun;
         private bool shadowsReady;
@@ -79,7 +77,7 @@ namespace ForesTycoon
             }
         }
 
-        internal void Use(float outlineWidth = 0)
+        public void Use(float outlineWidth = 0)
         {
             int shader = ShadowPass ? depthProgram : program;
             GL.UseProgram(shader);

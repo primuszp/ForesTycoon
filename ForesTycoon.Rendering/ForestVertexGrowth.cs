@@ -2,7 +2,7 @@ using System;
 using System.Runtime.InteropServices;
 using OpenTK.Mathematics;
 
-namespace ForesTycoon
+namespace ForesTycoon.Rendering
 {
     [StructLayout(LayoutKind.Sequential)]
     internal readonly record struct ForestVertexGrowth(Vector3 Origin, Vector3 AnnualScale, float TreeIndex = -1)

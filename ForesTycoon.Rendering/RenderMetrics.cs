@@ -1,6 +1,6 @@
 using System.Threading;
 
-namespace ForesTycoon
+namespace ForesTycoon.Rendering
 {
     /// <summary>Low-overhead counters populated by renderer entry points.</summary>
     static class RenderMetrics

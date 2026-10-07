@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using OpenTK.Graphics.OpenGL;
 using OpenTK.Mathematics;
 
-namespace ForesTycoon
+namespace ForesTycoon.Rendering
 {
     /// <summary>Shared core-profile geometry shader and explicit camera/model state.</summary>
     static class RenderDevice
@@ -17,7 +17,9 @@ namespace ForesTycoon
         public static Matrix4 ViewProjection { get; private set; } = Matrix4.Identity;
         public static Matrix4 Model { get; private set; } = Matrix4.Identity;
         internal static Vector2 LodRange = new Vector2(0,1);
-        internal static SurfaceVisualRenderer Visuals { get; set; }
+        internal static ISurfaceVisuals Visuals { get; set; }
+        /// <summary>Raised once when the device shuts down, so owners of GPU resources can release them first.</summary>
+        internal static event Action Disposing;
 
         public static void Initialize()
         {
@@ -104,7 +106,8 @@ void main()
         public static void Dispose()
         {
             if (!initialized) return;
-            VehicleRenderer.DisposeImportedModel();
+            Disposing?.Invoke();
+            Disposing = null;
             DynamicPrimitiveBatch.DisposeDeviceResources();
             GlProgram.Delete(shader);
             shader = 0;

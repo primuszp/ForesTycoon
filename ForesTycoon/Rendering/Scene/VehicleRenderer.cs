@@ -17,7 +17,7 @@ namespace ForesTycoon
         public static void Draw(VehicleSystem vehicles, Terrain terrain, float interpolationAlpha)
         {
             if (vehicles.Count == 0) return;
-            importedModel ??= GlbTruckModel.Load(System.IO.Path.Combine(AppContext.BaseDirectory,"Assets","Vehicles","log-truck.glb"));
+            EnsureModel();
             float scale=terrain.RoadLaneWidth*DioramaScale.TruckLaneFill/importedModel.Width;
 
             {
@@ -58,7 +58,7 @@ namespace ForesTycoon
 
         private static void DrawTruck(VehicleTransform transform, float cargoFill, float scale, float wheelAngle = 0,float curvature=0,Matrix4? suspension=null)
         {
-            importedModel ??= GlbTruckModel.Load(System.IO.Path.Combine(AppContext.BaseDirectory,"Assets","Vehicles","log-truck.glb"));
+            EnsureModel();
             Matrix4 matrix=new Matrix4(
                 new Vector4(transform.Apply(1,0,0)-transform.Apply(0,0,0),0),
                 new Vector4(transform.Apply(0,1,0)-transform.Apply(0,0,0),0),
@@ -73,11 +73,17 @@ namespace ForesTycoon
         }
 
         private static GlbTruckModel importedModel;
+        private static void EnsureModel()
+        {
+            if (importedModel != null) return;
+            importedModel = GlbTruckModel.Load(System.IO.Path.Combine(AppContext.BaseDirectory,"Assets","Vehicles","log-truck.glb"));
+            RenderDevice.Disposing += DisposeImportedModel;
+        }
         internal static void DisposeImportedModel(){importedModel?.Dispose(); importedModel=null;}
 
         internal static void DrawPreview(float cargoFill)
         {
-            importedModel ??= GlbTruckModel.Load(System.IO.Path.Combine(AppContext.BaseDirectory,"Assets","Vehicles","log-truck.glb"));
+            EnsureModel();
             using(new RenderStateScope().Disable(EnableCap.CullFace))
                 importedModel.Draw(Matrix4.Identity,cargoFill,0);
         }

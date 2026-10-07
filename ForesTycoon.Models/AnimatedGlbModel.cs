@@ -3,7 +3,7 @@ using System.IO;
 using System.Collections.Generic;
 using System.Text.Json;
 using OpenTK.Mathematics;
-namespace ForesTycoon
+namespace ForesTycoon.Models
 {
     // CPU asset/pose layer. GPU buffers are shared by all instances in AnimatedModelRenderer.
     internal sealed class AnimatedGlbModel

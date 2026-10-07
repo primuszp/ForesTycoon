@@ -1,4 +1,4 @@
-namespace ForesTycoon
+namespace ForesTycoon.Rendering
 {
     /// <summary>
     /// One shared size table for everything placed on the terrain. The world is a diorama,

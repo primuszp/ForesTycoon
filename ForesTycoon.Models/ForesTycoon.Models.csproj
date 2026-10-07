@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Model loading and drawing: glTF/GLB parsing, skinned animation sampling, imported scene assets and
+    their GPU renderer. Game-agnostic; builds on the GPU core and knows no vehicles, forests or terrain.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>ForesTycoon.Models</RootNamespace>
+    <AssemblyName>ForesTycoon.Models</AssemblyName>
+    <RollForward>Major</RollForward>
+    <NoWarn>NU1701</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Using Include="ForesTycoon.Engine" />
+    <Using Include="ForesTycoon.Rendering" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../ForesTycoon.Engine/ForesTycoon.Engine.csproj" />
+    <ProjectReference Include="../ForesTycoon.Rendering/ForesTycoon.Rendering.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ForesTycoon" />
+    <InternalsVisibleTo Include="ForesTycoon.Tests" />
+  </ItemGroup>
+
+</Project>
