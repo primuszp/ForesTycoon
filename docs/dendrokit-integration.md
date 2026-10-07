@@ -10,6 +10,10 @@ kell a helyi DendroKit projekt vagy WPF.
 
 ## Levélpontokból tömör korona
 
+Az érett és idős kocsányos tölgy közelnézeti modellje az alábbi általános
+burkolástól eltér: egymásba érő, külön-külön zárt lombtömegekből áll.
+Részletek: [a tölgy modelljének felépítése](oak-model-study.md).
+
 1. A DendroKit elkészíti a fajra, életfázisra és fénysávra jellemző ágrendszert
    és a levelek helyét. A fajparaméterek botanikai hátterét a
    [fagenerálási irodalmi áttekintés](tree-generation-literature.md) írja le.

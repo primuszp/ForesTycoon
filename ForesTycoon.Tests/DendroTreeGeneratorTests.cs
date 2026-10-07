@@ -10,7 +10,7 @@ public class DendroTreeGeneratorTests
 
     [Theory]
     [MemberData(nameof(Cases))]
-    internal void GeneratedTreeHasOneConnectedManifoldCrownAndFiniteNondegenerateWood(
+    internal void GeneratedTreeHasClosedFoliageAndFiniteNondegenerateWood(
         ForestSpecies species, TreeLifeStage stage, int seed)
     {
         var size = ForestTreeGrowth.Initial(species, stage == TreeLifeStage.Seedling ? 0.1f : 40, 1);
@@ -37,7 +37,10 @@ public class DendroTreeGeneratorTests
         var reached = new HashSet<Vector3>(); var work = new Stack<Vector3>();
         work.Push(neighbours.Keys.First());
         while (work.TryPop(out var p)) if (reached.Add(p)) foreach (var n in neighbours[p]) work.Push(n);
-        Assert.Equal(neighbours.Count, reached.Count);
+        if (species == ForestSpecies.Oak && stage >= TreeLifeStage.Mature)
+            AssertOverlappingOakMasses(mesh.Crown);
+        else
+            Assert.Equal(neighbours.Count, reached.Count);
         Assert.Equal(size.Height * Terrain.TreeMetresToWorld, mesh.Crown.Max(v => v.Position.Z), 5);
         foreach (var vertices in new[] { mesh.Trunk, mesh.Branches, mesh.Crown })
         {
@@ -55,6 +58,67 @@ public class DendroTreeGeneratorTests
             if (!neighbours.TryGetValue(b, out ns)) neighbours.Add(b, ns = new()); ns.Add(a);
             if (a.X > b.X || (a.X == b.X && (a.Y > b.Y || (a.Y == b.Y && a.Z > b.Z)))) (a, b) = (b, a);
             edges[(a, b)] = edges.GetValueOrDefault((a, b)) + 1;
+        }
+    }
+
+    // Close oak foliage consists of closed convex masses rather than one shell.
+    // A connected intersection graph proves there are no floating foliage balls.
+    private static void AssertOverlappingOakMasses(Vertex[] crown)
+    {
+        Assert.Equal(0, crown.Length % 60); // 20 triangles per closed icosahedron
+        var masses = crown.Chunk(60).ToArray();
+        Assert.InRange(masses.Length, 2, 9);
+        var centres = masses.Select(m => m.Aggregate(Vector3.Zero, (sum, v) => sum + v.Position) / m.Length).ToArray();
+        var reached = new HashSet<int> { 0 };
+        bool changed;
+        do
+        {
+            changed = false;
+            for (int a = 0; a < masses.Length; a++)
+            for (int b = 0; b < masses.Length; b++)
+            {
+                if (!reached.Contains(a) || reached.Contains(b)) continue;
+                Vector3 delta = centres[b] - centres[a]; float distance = delta.Length;
+                if (distance > 1e-7f)
+                {
+                    var direction = delta / distance;
+                    if (Reach(a, direction) + Reach(b, -direction) < distance) continue;
+                }
+                reached.Add(b); changed = true;
+            }
+        } while (changed);
+        Assert.Equal(masses.Length, reached.Count);
+
+        float Reach(int mass, Vector3 direction)
+        {
+            float reach = float.MaxValue;
+            var vertices = masses[mass];
+            for (int i = 0; i < vertices.Length; i += 3)
+            {
+                Vector3 a = vertices[i].Position;
+                Vector3 normal = Vector3.Cross(vertices[i + 1].Position - a, vertices[i + 2].Position - a).Normalized();
+                float facing = Vector3.Dot(normal, direction);
+                if (facing > 1e-6f) reach = Math.Min(reach, Vector3.Dot(normal, a - centres[mass]) / facing);
+            }
+            return reach;
+        }
+    }
+
+    [Fact]
+    public void MatureOakFoliageRotatesWithItsSkeleton()
+    {
+        var size = new ForestTreeDimensions(0.85f, 18, 8);
+        Vertex[] Build(float yaw) => DendroTreeGenerator.Generate(ForestSpecies.Oak, 42,
+            TreeLifeStage.Mature, 1, size, yaw, ForestLod.Near).Crown;
+        var source = Build(0); var rotated = Build(1.2f);
+        Assert.Equal(160 * 3, source.Length);
+        Assert.Equal(source.Length, rotated.Length);
+        float c = MathF.Cos(1.2f), s = MathF.Sin(1.2f);
+        for (int i = 0; i < source.Length; i++)
+        {
+            var p = source[i].Position;
+            Vector3 expected = new(p.X * c - p.Y * s, p.X * s + p.Y * c, p.Z);
+            Assert.InRange((rotated[i].Position - expected).Length, 0, 0.0001f);
         }
     }
 

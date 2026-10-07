@@ -6,6 +6,7 @@ namespace ForesTycoon
     {
         static void Main(string[] args)
         {
+            if (Array.Exists(args, a => a == "--oak-study-preview")) { OakStudyPreview.Run(Array.Exists(args, a => a == "--before")); return; }
             if (Array.Exists(args, a => a == "--ui-font-smoke-test")) { UiFontSmokeTest.Run(); return; }
             if (Array.Exists(args, a => a == "--vegetation-preview")) { VegetationPreview.Run(); return; }
             if (Array.Exists(args, a => a == "--vegetation-benchmark")) { VegetationBenchmark.Run(Array.Exists(args, a => a == "--before") ? "before" : "after"); return; }
