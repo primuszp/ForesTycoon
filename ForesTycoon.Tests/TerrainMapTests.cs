@@ -5,6 +5,57 @@ public class TerrainMapTests
 {
     private static TerrainMap Create() => new TerrainMap(TerrainSettings.Default);
 
+    [Theory]
+    [InlineData(33, "D17FC10ABC7AFEA479AA2971B4642AAE808AF08751DF911EC7A02EB0CE8A938F")]
+    [InlineData(65, "8B86A9974986C9A766152F3393D5FF44B54A89EA5F9EF69A231579237432FDAF")]
+    [InlineData(129, "DEA5FA77E74972C0228722AAF5DFAFF0E7413F089A651A40B33740D55F147905")]
+    public void GenerationPreservesTheHeightGeometryAndWaterDataFromBeforeBatching(int side, string expected)
+    {
+        var map = new TerrainMap(TerrainSettings.Default.WithNodeSize(side, 42));
+        Assert.Equal(expected, ForesTycoon.TerrainMapBenchmark.Fingerprint(map));
+    }
+
+    private static void AssertTileGeometryMatchesNodes(TerrainMap map)
+    {
+        foreach (var tile in map.Tiles)
+        {
+            var expected = TileShapeInfo.FromCorners(tile.W.W, tile.S.W, tile.E.W, tile.N.W);
+            Assert.Equal(expected.RelativeCodeNESW, tile.Code);
+            Assert.Equal(expected.Min, tile.Low);
+            Assert.Equal(expected.Min * map.TileSizeM, tile.LowPos);
+            Assert.Equal(expected, tile.Shape);
+        }
+    }
+
+    [Fact]
+    public void GeneratedTileGeometryIsReadyBeforeARendererExists()
+    {
+        var map = Create();
+        Assert.Contains(map.Nodes, node => node.W > 1);
+        AssertTileGeometryMatchesNodes(map);
+        Assert.Contains(map.Tiles, tile => ((IForestHabitat)map).CanSupportForest(tile.Id));
+        Assert.True(new ForestSystem(map).Count > 0);
+    }
+
+    [Fact]
+    public void CustomHeightsAndEditsRefreshGeometryBeforeNotifyingFollowers()
+    {
+        var map = new TerrainMap(TerrainSettings.Default.WithNodeSize(9, 42), (u, v) => 3);
+        AssertTileGeometryMatchesNodes(map);
+        int notifications = 0;
+        map.NodesChanged += _ =>
+        {
+            notifications++;
+            AssertTileGeometryMatchesNodes(map);
+        };
+        int nodeId = map.GetNode(4, 4).Id;
+        map.EditElevationAtNode(nodeId, +1, 1, 2);
+        Assert.True(notifications > 0);
+        AssertTileGeometryMatchesNodes(map);
+        map.EditElevationAtNode(nodeId, -1, 1, 2);
+        AssertTileGeometryMatchesNodes(map);
+    }
+
     [Fact]
     public void TheMapBuildsAndAnswersGroundQueriesWithoutAGraphicsContext()
     {

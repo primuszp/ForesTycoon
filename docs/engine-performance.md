@@ -271,3 +271,65 @@ A megfigyelhető éves haladás ebben a futásban körülbelül 8,4-szeres. Ez n
 - Kanyarbeli teherautó képi ellenőrzése; a kormányzás és rugózás megmaradt.
 
 A futó játék és Visual Studio miatt zárolt normál build helyett a legutolsó változat külön, `artifacts/engine-validation` mappában is le lett fordítva és tesztelve. Innen a `run-game.ps1` indítja el. A normál projektbuild a futó játék bezárása után használható.
+
+## Kódreview és mért optimalizálás (2026-10-07)
+
+A kiinduló mérés már tartalmazza a TerrainMap-szétválasztás javítását: a csempealak és alapmagasság a modellben frissül, a procedurális farajzolás pedig a térkép élőhelyét használja. A korábbi, hibásan üres erdő teljesítménye nem összehasonlítási alap.
+
+### Javított megállapítások
+
+- **Ismételt driver-lekérdezések a halaknál:** a `WorldContentRenderer.DrawFish` minden példányhoz külön mentette és visszaállította az OpenGL állapotát. Most egy közös állapotkeret veszi körül a teljes menetet; az animáció, láthatóság és példányonkénti transzformáció megmarad. Más modellhívások továbbra is saját keretet használnak.
+- **Azonos shader-paraméterek ismételt feltöltése:** az `AnimatedModelRenderer` a kamera, fény, légkör és anyag értékeit összehasonlítja az előző feltöltéssel. Csak azonos értékeket hagy ki. A cache a renderer saját shaderprogramjához tartozik; kamera-, árnyék-, textúra-, anyag- és időjárásváltás frissíti. Az instance/node mátrix és csontpaletta továbbra is példányonként frissül. Az átlátszó primitívek mélységi sorrendje megmarad; tömör primitívekhez nem számolunk felesleges mélységmátrixot.
+- **Többször kiszámolt vízhullám:** egy közös sarok hullámát a szomszédos vízcsempék, rácsélek és oldalfalak újra felhasználják. A cache idő- és térképverzióhoz kötött, ezért szüneteltetett terepszerkesztéskor is érvénytelenedik. A víz oldalfala most ugyanahhoz a mélységkorlátozott felszínhez csatlakozik, mint a tető; korábban külön, korlátozatlan hullámot használt, ami parton rést okozhatott.
+- **Felesleges származtatott frissítés generáláskor:** a konstruktor minden elemi terraformlépés után frissítette a csempéket és chunkokat, miközben még nincs megfigyelő. A magasságtervező és a műveletsorrend megmaradt, a származtatott adatokat egyszer, a végleges rácsból képezzük. Interaktív szerkesztéskor továbbra is azonnali a frissítés. Három pályaméret korábbi magasság-, geometria- és hidrológiai SHA256-értékét regressziós teszt rögzíti.
+
+### Release-mérés ugyanazon a gépen
+
+RTX 5060, 1280×720, MSAA4, magas minőség, seed 42, 64×64 csempe, 2001 fa, 0 jármű. A meglévő `--world-benchmark` 600 mintát mér egy hónaphatárral, GPU-befejezést megvárva. Mindkét változat a korábbi 1200 másodperces referencia-évhosszt használja. Nincs UI, képkockaütemezés vagy diorama-kompozitálás; az eredmény nem a teljes alkalmazás garantált FPS-e. Egy-egy összehasonlító futás:
+
+| Mérés | Előtte | Utána |
+| --- | ---: | ---: |
+| Napsütés, medián / p95 | 10,32 / 12,36 ms | 7,29 / 9,29 ms |
+| Vihar, medián / p95 | 10,53 / 14,15 ms | 7,54 / 11,08 ms |
+| Halmenet átlagos CPU-ideje, napsütés | 2,33 ms | 0,27 ms |
+| Vízfelszín átlagos CPU-ideje, napsütés | 1,28 ms | 0,67 ms |
+| Napsütés / vihar leglassabb mintája | 22,06 / 18,23 ms | 21,23 / 23,65 ms |
+
+A képkockamedián körülbelül 28–29%-kal csökkent. A legrosszabb képkockák továbbra is ingadoznak, különösen háttérben készülő koronahálóknál; a mért mediánjavulás nem bizonyít minden csúcsra javulást. A referencia JSON-minták helyben `artifacts/world-benchmark/before-sunny.json` és `before-storm.json`; az optimalizált minták `sunny.json` és `storm.json`.
+
+Az új, ablak nélküli `--map-benchmark` két bemelegítő és hét mért generálást végez méretenként. A mérés csak a TerrainMap felépítésére vonatkozik, nem az erdők/GPU-cache teljes indulására:
+
+| Csempeméret | Generálás mediánja előtte / utána | Szálon lefoglalt memória előtte / utána |
+| --- | ---: | ---: |
+| 32×32 | 8,14 / 4,58 ms | 1,87 / 1,55 MiB |
+| 64×64 | 36,46 / 16,21 ms | 7,26 / 6,03 MiB |
+| 128×128 | 70,85 / 71,78 ms | 28,60 / 23,78 MiB |
+
+A 128-as időmérés nem mutat gyorsulást; a memóriafoglalás minden méreten körülbelül 17%-kal kisebb. A térképi ellenőrzőösszeg mindhárom méreten bitre azonos a kiindulással.
+
+### Ellenőrzés és további prioritások
+
+Az egységteszteken túl a material-alpha próba képponttal ellenőrzi az élő kameraváltást, példánytranszformációt, anyagváltozást, közös blend-keretet és állapot-visszaállítást. A grafikus próba azonos időpontban végzett terepszerkesztés után friss renderpéldánnyal hasonlítja össze a cache-elt vízmagasságokat. A forest próba különíti a vizsgált háttérfeladatot a szomszédos LOD-ok előkészítésétől, hogy az utóbbi publikálása ne tűnjön szinkron életkorváltásnak.
+
+Végső eredmény: 1310/1310 Release-egységteszt sikeres. A material-alpha, forest és tree-growth GL-próba sikeres; utóbbi a havi mentés/visszajátszás és regenerálás útvonalát is ellenőrzi. A grafikus/időjárási próba az alábbi numerikus megkötéssel sikeres. A buildben megmaradtak a korábbi, `TreePreviewDump` nullable figyelmeztetései.
+
+A Debug grafikus próba normál beállításokkal sikeres. A Release próba tiered fordítás mellett egy ködös képkockában egyetlen RGB-csatornán 2/255 különbséggel túllépte az 1/255-os toleranciát; kikapcsolt tiered fordítással sikeres. A képtoleranciát nem lazítottuk. Ez a képpontos diagnosztika numerikus stabilitási korlátja; a normál játék és a teljesítménymérés alapértelmezett futtatási beállításai megmaradnak.
+
+Fennmaradó review-megállapítások:
+
+- **P2, globális statikus terepérvénytelenítés:** a `Terrain.StaticGeometry.DrawCachedTerrain` továbbra is a teljes `SurfaceVersion` alapján épít újra, így egy helyi szerkesztés minden látható statikus chunkot érinthet. Szűkítéshez a távoli vízmedencékre és szomszédos útalapokra gyakorolt hatást is követni kell; egyszerű helyi dirty flag használata hibás cache-t eredményezhet.
+- **P2, teljes erdő-előtöltés:** a `TerrainRenderer` konstruktorában a `WarmIndividualForest` minden chunk mindhárom LOD-ját felépíti. Nagy pályáknál ez továbbra is indulási és memóriaköltség. Korlátos cache csak a jelenlegi szezon-/méretfolytonosság és a hideg LOD-ok helyes helyettesítésének megőrzésével vezethető be.
+
+Újrafuttatás:
+
+```powershell
+dotnet test ForesTycoon.sln -c Release
+dotnet run --project ForesTycoon -c Release -- --map-benchmark
+dotnet run --project ForesTycoon -c Release -- --world-benchmark
+dotnet run --project ForesTycoon -c Release -- --material-alpha-smoke-test
+dotnet run --project ForesTycoon -c Release -- --forest-smoke-test
+# Képpontos Release-ellenőrzés, a futtató PowerShell-folyamatra korlátozva:
+$env:DOTNET_TieredCompilation = '0'
+dotnet run --project ForesTycoon -c Release -- --graphics-smoke-test
+Remove-Item Env:DOTNET_TieredCompilation
+```

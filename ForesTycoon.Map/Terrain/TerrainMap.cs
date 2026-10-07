@@ -23,6 +23,7 @@ namespace ForesTycoon.Map
         private readonly HashSet<int> flippedDiagonalTiles = new HashSet<int>();
         private readonly HashSet<int> buildingTiles = new HashSet<int>();
         private bool suppressHydrologyRebuild;
+        private bool generatingTerrain;
         // Foundation-réteg: az út VEZETŐFELÜLETÉNEK befagyasztott magassága sarkonként
         // (nodeId → W az építés pillanatában). A terep alatta szabadon alakítható, de az
         // út felülete itt marad; a kettő közti rést a foundation-fal tölti ki (OpenTTD-elv).
@@ -94,6 +95,7 @@ namespace ForesTycoon.Map
 
             // ── ElevationManager – szomszéd-meredekség szabály ────────────────
             suppressHydrologyRebuild = true;
+            generatingTerrain = true;
             try
             {
                 for (int pass = 0; pass < maxHeight; pass++)
@@ -103,9 +105,13 @@ namespace ForesTycoon.Map
                             Node node = GetNode(u, v);
                             if (node.W < targetW[u, v]) RaiseOrLower(node, +1);
                         }
+                // No renderer or ecosystem observes construction. Derive tile geometry
+                // once from the completed height grid instead of after every raise.
+                ApplyNodeChanges(new List<Node>(nodes));
             }
             finally
             {
+                generatingTerrain = false;
                 suppressHydrologyRebuild = false;
             }
 
@@ -152,6 +158,9 @@ namespace ForesTycoon.Map
                     chunkIndex.MarkTileDirty(tile.Id, ChunkDirtyFlags.All);
                     // Crown contact shadows can cross into the neighbouring tile.
                     chunkIndex.MarkTileAndNeighboursDirty(tile.Id, ChunkDirtyFlags.Props);
+                    // Shape, minimum height and render offset are map facts. Refresh them
+                    // before hydrology or followers read the tile, even without a renderer.
+                    tile.getCode();
                     tile.LowPos = tile.Low * tileSizeM;
                 }
             }

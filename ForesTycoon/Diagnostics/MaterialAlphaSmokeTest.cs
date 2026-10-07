@@ -35,6 +35,14 @@ namespace ForesTycoon
                 RenderDevice.SetCamera(Matrix4.Identity);
                 Clear();renderer.Draw(pose,Matrix4.Identity,settings,sourceMaterial:true);
                 Require(Pixel(16)[0]>245&&Pixel(48)[1]>245,"MASK must preserve background through transparent texels");
+                RenderDevice.SetCamera(Matrix4.CreateTranslation(3,0,0));
+                Clear();renderer.Draw(pose,Matrix4.Identity,settings,sourceMaterial:true);
+                Require(Pixel(48)[0]>245,"Cached scene uniforms ignored a camera change");
+                RenderDevice.SetCamera(Matrix4.Identity);
+                Clear();renderer.Draw(pose,Matrix4.CreateTranslation(3,0,0),settings,sourceMaterial:true);
+                Require(Pixel(48)[0]>245,"Repeated instances reused a stale placement");
+                Clear();renderer.Draw(pose,Matrix4.Identity,settings,sourceMaterial:true);
+                Require(Pixel(48)[1]>245,"Camera or instance restoration left stale uniforms");
                 string output=Path.GetFullPath("artifacts/tree-asset-review");Directory.CreateDirectory(output);
                 FramebufferCapture.SavePng(Path.Combine(output,"alpha-mask.png"),64,64);
                 settings.Enhanced=false;settings.Textures=false;
@@ -54,6 +62,19 @@ namespace ForesTycoon
                 GL.GetInteger(GetPName.BlendSrcRgb,out int source);
                 Require(!writes&&!GL.IsEnabled(EnableCap.Blend)&&source==(int)BlendingFactor.One,"GL blend/depth state must be restored");
                 FramebufferCapture.SavePng(Path.Combine(output,"alpha-blend.png"),64,64);
+                Clear();
+                renderer.Draw(pose,Matrix4.Identity,settings,sourceMaterial:true);
+                renderer.Draw(pose,Matrix4.Identity,settings,sourceMaterial:true);
+                byte[] separate=Pixel(48);
+                Clear(); GL.Disable(EnableCap.Blend); GL.DepthMask(false);
+                using(var batch=new RenderStateScope().Enable(EnableCap.DepthTest).Disable(EnableCap.CullFace))
+                {
+                    renderer.Draw(pose,Matrix4.Identity,settings,sourceMaterial:true,sharedState:batch);
+                    renderer.Draw(pose,Matrix4.Identity,settings,sourceMaterial:true,sharedState:batch);
+                }
+                Require(separate.AsSpan().SequenceEqual(Pixel(48)),"Shared model state changed blended instance pixels");
+                GL.GetBoolean(GetPName.DepthWritemask,out writes);
+                Require(!writes&&!GL.IsEnabled(EnableCap.Blend),"Shared model state was not restored");
                 // Intentionally list the near blue surface before the far green one.
                 // Correct compositing is far green first, then near blue.
                 float[] nearVertices=(float[])mesh.Vertices.Clone(),farVertices=(float[])mesh.Vertices.Clone();

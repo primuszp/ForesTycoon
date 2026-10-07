@@ -12,12 +12,19 @@ namespace ForesTycoon.Models
         private readonly float[] drawDepth;
         private int program, boneBuffer;
         private bool disposed;
+        private readonly record struct SceneUniforms(Matrix4 Camera, Matrix4 Light, Vector4 Climate,
+            float SunAzimuth, float SunElevation, bool Lit, bool Shadowed, bool Shadow, bool SourceMaterial);
+        private SceneUniforms? sceneUniforms;
+        private readonly record struct MaterialUniforms(AnimatedGlbModel.AlphaMode Alpha, float Cutoff,
+            bool HasAlbedo, bool Skinned, Vector4 Tint, Vector3 FlatColor, bool Textured);
+        private MaterialUniforms? materialUniforms;
         internal AnimatedModelRenderer(AnimatedGlbModel model)
         {
             this.model=model;vaos=new int[model.Meshes.Length];vbos=new int[vaos.Length];ebos=new int[vaos.Length];textures=new int[model.Images.Length];
             drawOrder=new int[vaos.Length];drawDepth=new float[vaos.Length];
         }
-        internal void Draw(AnimatedGlbModel.Pose pose,Matrix4 transform,IShadingSettings settings,float outlineWorldWidth=0,bool sourceMaterial=false)
+        // A caller drawing consecutive instances may share one depth/cull state scope.
+        internal void Draw(AnimatedGlbModel.Pose pose,Matrix4 transform,IShadingSettings settings,float outlineWorldWidth=0,bool sourceMaterial=false,RenderStateScope sharedState=null)
         {
             ObjectDisposedException.ThrowIf(disposed,this);
             if(program==0)Initialize();
@@ -27,18 +34,27 @@ namespace ForesTycoon.Models
             Matrix4 camera=shadow?visuals.ShadowCamera:RenderDevice.ViewProjection;
             Matrix4 light=visuals?.ShadowCamera??Matrix4.Identity;
             GL.UseProgram(program);
-            GL.Uniform1(GlProgram.Uniform(program,"source_material"),sourceMaterial?1:0);
-            GL.Uniform1(GlProgram.Uniform(program,"shadow_pass"),shadow?1:0);
-            GL.UniformMatrix4(GlProgram.Uniform(program,"camera"),false,ref camera);
             GL.UniformMatrix4(GlProgram.Uniform(program,"instance"),false,ref transform);
-            GL.UniformMatrix4(GlProgram.Uniform(program,"light_camera"),false,ref light);
-            float az=MathHelper.DegreesToRadians(settings.SunAzimuth),el=MathHelper.DegreesToRadians(settings.SunElevation);
-            GL.Uniform3(GlProgram.Uniform(program,"sun"),MathF.Cos(az)*MathF.Cos(el),MathF.Sin(az)*MathF.Cos(el),MathF.Sin(el));
-            GL.Uniform1(GlProgram.Uniform(program,"lit"),settings.Enhanced&&settings.Lighting?1:0);
-            GL.Uniform1(GlProgram.Uniform(program,"shadowed"),!shadow&&visuals?.ShadowsReady==true?1:0);
-            GL.Uniform1(GlProgram.Uniform(program,"shadow_map"),1);
-            GL.Uniform1(GlProgram.Uniform(program,"albedo"),4);
-            GL.Uniform4(GlProgram.Uniform(program,"climate"),visuals?.Atmosphere??Vector4.Zero);
+            var scene = new SceneUniforms(camera, light, visuals?.Atmosphere??Vector4.Zero,
+                settings.SunAzimuth, settings.SunElevation, settings.Enhanced&&settings.Lighting,
+                !shadow&&visuals?.ShadowsReady==true, shadow, sourceMaterial);
+            // Uniforms belong to this renderer's private program and survive other programs
+            // drawing. Compare values so camera, weather and shadow-pass changes stay live.
+            if (sceneUniforms != scene)
+            {
+                GL.Uniform1(GlProgram.Uniform(program,"source_material"),sourceMaterial?1:0);
+                GL.Uniform1(GlProgram.Uniform(program,"shadow_pass"),shadow?1:0);
+                GL.UniformMatrix4(GlProgram.Uniform(program,"camera"),false,ref camera);
+                GL.UniformMatrix4(GlProgram.Uniform(program,"light_camera"),false,ref light);
+                float az=MathHelper.DegreesToRadians(settings.SunAzimuth),el=MathHelper.DegreesToRadians(settings.SunElevation);
+                GL.Uniform3(GlProgram.Uniform(program,"sun"),MathF.Cos(az)*MathF.Cos(el),MathF.Sin(az)*MathF.Cos(el),MathF.Sin(el));
+                GL.Uniform1(GlProgram.Uniform(program,"lit"),scene.Lit?1:0);
+                GL.Uniform1(GlProgram.Uniform(program,"shadowed"),scene.Shadowed?1:0);
+                GL.Uniform1(GlProgram.Uniform(program,"shadow_map"),1);
+                GL.Uniform1(GlProgram.Uniform(program,"albedo"),4);
+                GL.Uniform4(GlProgram.Uniform(program,"climate"),scene.Climate);
+                sceneUniforms = scene;
+            }
             GL.BindBufferBase(BufferRangeTarget.UniformBuffer,2,boneBuffer);
             int uploadedSkin=-2;
             // Solid/cutout surfaces first, then blended primitives back to front.
@@ -46,12 +62,16 @@ namespace ForesTycoon.Models
             for(int i=0;i<model.Meshes.Length;i++) {
                 drawOrder[i]=i;
                 var mesh=model.Meshes[i];
-                Vector4 projected=Vector4.TransformRow(new Vector4(mesh.Center,1),pose.World[mesh.Node]*transform*camera);
-                drawDepth[i]=mesh.Alpha==AnimatedGlbModel.AlphaMode.Blend&&!shadow
-                    ? -(MathF.Abs(projected.W)>0.000001f?projected.Z/projected.W:projected.Z):float.NegativeInfinity;
+                drawDepth[i]=float.NegativeInfinity;
+                if(mesh.Alpha==AnimatedGlbModel.AlphaMode.Blend&&!shadow)
+                {
+                    Vector4 projected=Vector4.TransformRow(new Vector4(mesh.Center,1),pose.World[mesh.Node]*transform*camera);
+                    drawDepth[i]=-(MathF.Abs(projected.W)>0.000001f?projected.Z/projected.W:projected.Z);
+                }
             }
             Array.Sort(drawDepth,drawOrder);
-            using var drawState=new RenderStateScope().Enable(EnableCap.DepthTest).Disable(EnableCap.CullFace);
+            using var ownedState=sharedState==null?new RenderStateScope().Enable(EnableCap.DepthTest).Disable(EnableCap.CullFace):null;
+            var drawState=sharedState??ownedState;
             for(int draw=0;draw<drawOrder.Length;draw++)
             {
                 int i=drawOrder[draw];
@@ -59,11 +79,21 @@ namespace ForesTycoon.Models
                 bool blend=mesh.Alpha==AnimatedGlbModel.AlphaMode.Blend&&!shadow;
                 if(blend)drawState.AlphaBlend();else GL.Disable(EnableCap.Blend);
                 GL.DepthMask(!blend);
-                GL.Uniform1(GlProgram.Uniform(program,"alpha_mode"),(int)mesh.Alpha);
-                GL.Uniform1(GlProgram.Uniform(program,"alpha_cutoff"),mesh.AlphaCutoff);
-                GL.Uniform1(GlProgram.Uniform(program,"has_albedo"),mesh.Image>=0?1:0);
                 GL.Uniform1(GlProgram.Uniform(program,"outline_width"),0f);
-                GL.Uniform1(GlProgram.Uniform(program,"skinned"),mesh.Skin>=0?1:0);
+                bool textured=settings.Enhanced&&settings.Textures&&mesh.Image>=0;
+                var material = new MaterialUniforms(mesh.Alpha, mesh.AlphaCutoff, mesh.Image>=0,
+                    mesh.Skin>=0, mesh.Color, mesh.FlatColor??mesh.Color.Xyz, textured);
+                if(materialUniforms != material)
+                {
+                    GL.Uniform1(GlProgram.Uniform(program,"alpha_mode"),(int)mesh.Alpha);
+                    GL.Uniform1(GlProgram.Uniform(program,"alpha_cutoff"),mesh.AlphaCutoff);
+                    GL.Uniform1(GlProgram.Uniform(program,"has_albedo"),mesh.Image>=0?1:0);
+                    GL.Uniform1(GlProgram.Uniform(program,"skinned"),mesh.Skin>=0?1:0);
+                    GL.Uniform4(GlProgram.Uniform(program,"tint"),mesh.Color);
+                    GL.Uniform3(GlProgram.Uniform(program,"flat_color"),mesh.FlatColor??mesh.Color.Xyz);
+                    GL.Uniform1(GlProgram.Uniform(program,"textured"),textured?1:0);
+                    materialUniforms=material;
+                }
                 if(mesh.Skin>=0 && uploadedSkin!=mesh.Skin) {
                     int count=model.Skins[mesh.Skin].Joints.Length;
                     for(int j=0;j<count;j++) {
@@ -76,9 +106,6 @@ namespace ForesTycoon.Models
                 }
                 Matrix4 node=pose.World[mesh.Node];
                 GL.UniformMatrix4(GlProgram.Uniform(program,"node"),false,ref node);
-                GL.Uniform4(GlProgram.Uniform(program,"tint"),mesh.Color);
-                GL.Uniform3(GlProgram.Uniform(program,"flat_color"),mesh.FlatColor??mesh.Color.Xyz);
-                GL.Uniform1(GlProgram.Uniform(program,"textured"),settings.Enhanced&&settings.Textures&&mesh.Image>=0?1:0);
                 GL.ActiveTexture(TextureUnit.Texture4);GL.BindTexture(TextureTarget.Texture2D,mesh.Image>=0?textures[mesh.Image]:0);
                 GL.BindVertexArray(vaos[i]);GL.DrawElements(PrimitiveType.Triangles,mesh.Indices.Length,DrawElementsType.UnsignedInt,IntPtr.Zero);
                 RenderMetrics.RecordDraw(mesh.Indices.Length);

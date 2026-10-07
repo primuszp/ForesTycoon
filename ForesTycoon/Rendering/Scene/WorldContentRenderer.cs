@@ -16,6 +16,9 @@ namespace ForesTycoon
             if(fishRevision!=terrain.WeatherSurfaceRevision){terrain.Map.CollectFishHabitats(habitats, node => terrain.NodeWaterZ(node, 0));fishRevision=terrain.WeatherSurfaceRevision;}
             if(habitats.Count==0)return;
             fish??=new ImportedSceneAsset("Assets/Wildlife/fish.glb",DioramaScale.FishLength,true);
+            // All fish share one asset and draw consecutively: capture/restore GL state
+            // once for the pass instead of querying it again for every instance.
+            using var state=new RenderStateScope().Enable(EnableCap.DepthTest).Disable(EnableCap.CullFace);
             int index=0;
             foreach(var habitat in habitats){
                 double phase=context.SimulationTimeSeconds*0.22+habitat.Seed%628*0.01;
@@ -23,7 +26,7 @@ namespace ForesTycoon
                 Vector3 position=habitat.Position+new Vector3(MathF.Cos((float)phase)*radius,MathF.Sin((float)phase)*radius,MathF.Sin((float)phase*1.3f)*0.05f);
                 if(!RenderVisibility.SphereVisible(position,2,RenderDevice.ViewProjection)){index++;continue;}
                 fish.Pose.Evaluate("ArmatureAction",context.SimulationTimeSeconds+index*0.71);
-                fish.Draw(Matrix4.CreateRotationZ((float)phase+MathF.PI/2)*Matrix4.CreateTranslation(position),settings);index++;
+                fish.Draw(Matrix4.CreateRotationZ((float)phase+MathF.PI/2)*Matrix4.CreateTranslation(position),settings,state);index++;
             }
         }
         internal void DrawMills(Terrain terrain,ForestryLogistics logistics,GraphicsSettings settings)

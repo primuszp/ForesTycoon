@@ -363,7 +363,7 @@ namespace ForesTycoon
                     {
                         int slot = geometry.Trees.Count;
                         var site = ForestTreeSites.Gap(patch.Trees, patch.Count, i, tileSizeH / TreeMetresToWorld,
-                            tileSizeV / TreeMetresToWorld, geometry.AnchorYear, ((IForestHabitat)this).GetNormalizedElevation(id));
+                            tileSizeV / TreeMetresToWorld, geometry.AnchorYear, ((IForestHabitat)map).GetNormalizedElevation(id));
                         var spec = TreeShapeSpec.From(tree, geometry.AnchorYear, site, stem.Yaw);
                         geometry.NextStageYear = Math.Min(geometry.NextStageYear,
                             TreePhenology.NextChange(tree.Species, tree.Seed, geometry.AnchorYear));

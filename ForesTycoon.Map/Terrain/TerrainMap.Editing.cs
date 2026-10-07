@@ -78,15 +78,15 @@ namespace ForesTycoon.Map
                 out Dictionary<int, int> pending)) return;
             if (!ValidateRoadsAgainstPendingTerrain(pending)) return;
 
-            List<Node> changed = new List<Node>(pending.Count);
+            List<Node> changed = generatingTerrain ? null : new List<Node>(pending.Count);
             foreach (KeyValuePair<int, int> kv in pending)
             {
                 Node nd = data.Nodes[kv.Key];
                 nd.W = kv.Value;
                 nd.zPos = nd.W * tileSizeM;   // zPos szinkron a hidrológiához
-                changed.Add(nd);
+                changed?.Add(nd);
             }
-            ApplyNodeChanges(changed);
+            if (!generatingTerrain) ApplyNodeChanges(changed);
         }
 
         private bool ValidateRoadsAgainstPendingTerrain(Dictionary<int, int> pending)

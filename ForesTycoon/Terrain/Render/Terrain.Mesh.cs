@@ -191,7 +191,7 @@ namespace ForesTycoon
                 for (int i = 0; i < nodeTileCount; i++)
                 {
                     Tile tile = nodeTiles[i];
-                    string code = tile.getCode();
+                    string code = tile.Code;
                     if (!vbos.ContainsKey(code + "_" + tile.Low))
                         makeBuffer(code, tile.Low);
                     if (map.IsDiagonalFlipped(tile.Id) && !vbos.ContainsKey(code + "_" + tile.Low + "_f"))

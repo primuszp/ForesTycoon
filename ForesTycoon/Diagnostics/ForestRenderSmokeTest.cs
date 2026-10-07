@@ -33,6 +33,9 @@ namespace ForesTycoon
                 Require(terrain.ForestChunkRebuilds == terrain.VisibleChunkCount, "Initial chunks were not built.");
                 Draw(terrain, forest, 12);
                 Require(terrain.ForestChunkRebuilds == 0, "Unchanged frame rebuilt the forest.");
+                // Cold LODs keep drawing a current mesh while their replacement builds.
+                // Compare completed geometry rather than the transitional fallback.
+                terrain.WarmIndividualForest(forest, new GraphicsSettings { Enhanced = false });
                 int medium = Draw(terrain, forest, 5);
                 int far = Draw(terrain, forest, 1);
                 Require(far < medium && medium < near, "Forest LOD did not reduce geometry with zoom.");
@@ -167,6 +170,11 @@ namespace ForesTycoon
                         { BirthYear = forest.ForestYear - 2.99, AnnualGrowth = default };
                 forest.NotifyIndividualVisualEdit();
                 Draw(terrain, forest, 12);
+                // Remove neighbour-LOD work before measuring the requested stage build.
+                // Otherwise an unrelated pending LOD can publish on the next frame.
+                terrain.SynchronousForestBuilds = true;
+                terrain.WarmIndividualForest(forest, new GraphicsSettings { Enhanced = false });
+                terrain.SynchronousForestBuilds = false;
             }
             SetBoundary();
             forest.Update(.6);
@@ -179,6 +187,9 @@ namespace ForesTycoon
                 published = terrain.ForestChunkRebuilds > 0;
             }
             Require(published, "Deferred forest build never published.");
+            terrain.SynchronousForestBuilds = true;
+            terrain.WarmIndividualForest(forest, new GraphicsSettings { Enhanced = false });
+            terrain.SynchronousForestBuilds = false;
             Draw(terrain, forest, 12);
             Require(terrain.ForestChunkRebuilds == 0, "Completed forest build did not settle.");
             SetBoundary(); forest.Update(.6); Draw(terrain, forest, 12);

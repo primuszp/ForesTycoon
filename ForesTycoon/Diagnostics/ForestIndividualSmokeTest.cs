@@ -27,6 +27,9 @@ namespace ForesTycoon
                 foreach (var (id, species) in new[] { (102, ForestSpecies.Oak), (105, ForestSpecies.Birch), (150, ForestSpecies.Spruce), (153, ForestSpecies.Beech) })
                     stands[id] = new(species, 3, 0.1f, 1);
                 var forest = new ForestSystem(new GrowthHabitat(terrain), stands);
+                // Isolate continuous growth from spring bud-burst transitions, which
+                // legitimately replace crown geometry between monthly ticks.
+                forest.Update(ForestSystem.DefaultSecondsPerYear * 0.25);
                 var graphics = new GraphicsSettings { Weather = false, Fog = false, Wildlife = false };
                 using var scene = new TerrainRenderer(terrain, new VehicleSystem(), new WorldEffectSystem(), forest, graphics);
                 Capture("01-young");

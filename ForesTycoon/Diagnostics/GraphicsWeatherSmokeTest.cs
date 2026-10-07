@@ -151,6 +151,14 @@ namespace ForesTycoon
                         Require(map.CachedGridHasAllTileBoundaries(),"Shore grid is incomplete.");
                         FramebufferCapture.SavePng(Path.Combine(output,textured?"grid-water-textured.png":"grid-water-plain.png"),1100,800);
                     }
+                    // A paused edit must invalidate node samples even when time is unchanged.
+                    foreach(var node in map.Map.Nodes) map.NodeWaterZ(node,1.25f);
+                    map.Map.EditElevationAtNode(8*17+8,1,1,2);
+                    using var fresh=new Terrain(map.Map);
+                    foreach(float sampleTime in new[]{1.25f,2.5f,1.25f})
+                        foreach(var node in map.Map.Nodes)
+                            Require(map.NodeWaterZ(node,sampleTime)==fresh.NodeWaterZ(node,sampleTime),
+                                "Cached water height differs after a paused edit or time change.");
                     } finally { map.Dispose(); }
                 }
 

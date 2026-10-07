@@ -69,6 +69,41 @@ namespace ForesTycoon
         // Két egymásra szuperponált hullám egy adott (x,y) pozícióra.
         // Amplitúdó szándékosan kicsi: Transport Tycoon-szerű, finoman remegő felszín.
         private const float WAVE_MAX = 0.36f;
+        private readonly record struct WaterNodeSample(float Wave, float SurfaceZ);
+        private WaterNodeSample[] waterNodeSamples;
+        private uint[] waterNodeSampleVersions;
+        private uint waterSampleVersion;
+        private float waterSampleTime = float.NaN;
+        private ulong waterSampleSurfaceVersion;
+
+        private WaterNodeSample SampleWaterNode(Node node, float t)
+        {
+            if (waterNodeSamples == null)
+            {
+                waterNodeSamples = new WaterNodeSample[nodes.Length];
+                waterNodeSampleVersions = new uint[nodes.Length];
+            }
+            if (t != waterSampleTime || waterSampleSurfaceVersion != map.SurfaceVersion)
+            {
+                waterSampleTime = t;
+                waterSampleSurfaceVersion = map.SurfaceVersion;
+                if (++waterSampleVersion == 0)
+                {
+                    Array.Clear(waterNodeSampleVersions);
+                    waterSampleVersion = 1;
+                }
+            }
+            if (waterNodeSampleVersions[node.Id] != waterSampleVersion)
+            {
+                float wave = WaveAt(node.xPos, node.yPos, t);
+                float depth = nodeWaterDepth[node.Id];
+                float z = depth < MinimumWaterDepth ? SeaLevel
+                    : ApplyClampedWave(node.xPos, node.yPos, node.zPos + depth, depth, t, wave);
+                waterNodeSamples[node.Id] = new WaterNodeSample(wave, z);
+                waterNodeSampleVersions[node.Id] = waterSampleVersion;
+            }
+            return waterNodeSamples[node.Id];
+        }
 
         private float WaveAt(float x, float y, float t)
         {
@@ -104,8 +139,10 @@ namespace ForesTycoon
         }
 
         private float ApplyClampedWave(float x, float y, float baseWaterZ, float localDepth, float t)
+            => ApplyClampedWave(x, y, baseWaterZ, localDepth, t, WaveAt(x, y, t));
+
+        private float ApplyClampedWave(float x, float y, float baseWaterZ, float localDepth, float t, float wave)
         {
-            float wave = WaveAt(x, y, t);
             float shore = GetShoreWaveFactor(localDepth);
             if (shore > 0f)
             {
@@ -118,7 +155,7 @@ namespace ForesTycoon
 
         private void WaterVertex(Node node, float wz, float t, Color baseColor)
         {
-            float wave = WaveAt(node.xPos, node.yPos, t);
+            float wave = SampleWaterNode(node, t).Wave;
             float n = Math.Max(-1f, Math.Min(1f, wave / WAVE_MAX));
             int shift = (int)(n * 20f);
             DynamicPrimitiveBatch.Color4(Color.FromArgb(baseColor.A,
@@ -129,11 +166,7 @@ namespace ForesTycoon
         }
 
         internal float NodeWaterZ(Node node, float t)
-        {
-            float depth = nodeWaterDepth[node.Id];
-            if (depth < MinimumWaterDepth) return SeaLevel;
-            return ApplyClampedWave(node.xPos, node.yPos, node.zPos + depth, depth, t);
-        }
+            => SampleWaterNode(node, t).SurfaceZ;
 
         private float GetPolygonPointDepth(Tile tile, Vector3 point)
         {
@@ -243,8 +276,9 @@ namespace ForesTycoon
             float dB = nodeWaterDepth[b.Id];
             if (dA < MinimumWaterDepth && dB < MinimumWaterDepth) return;
 
-            float wzA = dA >= MinimumWaterDepth ? a.zPos + dA + WaveAt(a.xPos, a.yPos, t) : a.zPos;
-            float wzB = dB >= MinimumWaterDepth ? b.zPos + dB + WaveAt(b.xPos, b.yPos, t) : b.zPos;
+            // Side faces must meet the same depth-clamped surface as the water top.
+            float wzA = dA >= MinimumWaterDepth ? NodeWaterZ(a, t) : a.zPos;
+            float wzB = dB >= MinimumWaterDepth ? NodeWaterZ(b, t) : b.zPos;
 
             if (wzA <= a.zPos + 0.02f && wzB <= b.zPos + 0.02f) return;
 

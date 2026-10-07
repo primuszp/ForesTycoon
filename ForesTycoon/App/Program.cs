@@ -10,6 +10,7 @@ namespace ForesTycoon
             if (Array.Exists(args, a => a == "--vegetation-benchmark")) { VegetationBenchmark.Run(Array.Exists(args, a => a == "--before") ? "before" : "after"); return; }
             if (Array.Exists(args, argument => argument == "--forest-tempo-benchmark")) { ForestTempoBenchmark.Run(); return; }
             if (Array.Exists(args, argument => argument == "--world-benchmark")) { WorldFrameBenchmark.Run(); return; }
+            if (Array.Exists(args, argument => argument == "--map-benchmark")) { TerrainMapBenchmark.Run(); return; }
             if (Array.Exists(args, argument => argument == "--simulation-benchmark")) { ForestSimulationBenchmark.Run(); return; }
             if (Array.Exists(args, argument => argument == "--plantation-smoke-test"))
             {
