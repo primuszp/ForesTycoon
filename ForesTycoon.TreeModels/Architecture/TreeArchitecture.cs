@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using DendroKit.Core.Params;
-using DendroKit.Core.Tree;
+using ForesTycoon.TreeModels.Generation.Dendro.Params;
+using ForesTycoon.TreeModels.Generation.Dendro.Tree;
 
 namespace ForesTycoon.TreeModels
 {

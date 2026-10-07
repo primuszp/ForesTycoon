@@ -234,10 +234,12 @@ namespace ForesTycoon.Rendering
             GL.Uniform1(GlProgram.Uniform(currentProgram, "forest_elapsed"), growthVbo != 0 ? ForestElapsedYears : 0);
             GL.Uniform1(GlProgram.Uniform(currentProgram, "forest_year"), ForestCurrentYear);
             GL.Uniform1(GlProgram.Uniform(currentProgram, "forest_dynamic"), ForestStateTexture != 0 ? 1 : 0);
+            // Even an inactive sampler must not share a unit with a different sampler
+            // type. macOS validates this for static preview trees as well.
+            GL.Uniform1(GlProgram.Uniform(currentProgram, "forest_state"), 7);
             if (ForestStateTexture == 0) return;
             GL.ActiveTexture(TextureUnit.Texture7);
             GL.BindTexture(TextureTarget.TextureBuffer, ForestStateTexture);
-            GL.Uniform1(GlProgram.Uniform(currentProgram, "forest_state"), 7);
             GL.ActiveTexture(TextureUnit.Texture0);
         }
 

@@ -1,6 +1,14 @@
+#nullable enable
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+
 using System.Xml.Linq;
 
-namespace DendroKit.Core.Params;
+namespace ForesTycoon.TreeModels.Generation.Dendro.Params;
 
 /// <summary>
 /// All tree generation parameters. Port of Java Params class.

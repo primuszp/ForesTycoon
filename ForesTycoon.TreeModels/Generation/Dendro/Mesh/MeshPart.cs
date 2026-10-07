@@ -1,7 +1,15 @@
-using DendroKit.Core.Geom;
-using DendroKit.Core.Tree;
+#nullable enable
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
-namespace DendroKit.Core.Mesh;
+using ForesTycoon.TreeModels.Generation.Dendro.Geom;
+using ForesTycoon.TreeModels.Generation.Dendro.Tree;
+
+namespace ForesTycoon.TreeModels.Generation.Dendro.Mesh;
 
 public sealed class MeshPart
 {

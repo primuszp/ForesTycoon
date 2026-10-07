@@ -26,8 +26,8 @@ public class ArchitectureTests
         Assert.Equal(new[] { "ForesTycoon.Engine", "OpenTK.Mathematics" }, References(Ecology).OrderBy(n => n));
 
     [Fact]
-    public void TreeModelsDependOnlyOnEcologyEngineAndTheGenerator() =>
-        Assert.Equal(new[] { "DendroKit.Core", "ForesTycoon.Ecology", "ForesTycoon.Engine", "OpenTK.Mathematics" },
+    public void TreeModelsContainTheGeneratorAndDependOnlyOnEcologyAndEngine() =>
+        Assert.Equal(new[] { "ForesTycoon.Ecology", "ForesTycoon.Engine", "OpenTK.Mathematics" },
             References(TreeModels).OrderBy(n => n));
 
     [Fact]

@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
-using DendroKit.Core.Tree;
+using ForesTycoon.TreeModels.Generation.Dendro.Tree;
 using OpenTK.Mathematics;
-using Vector3d = DendroKit.Core.Geom.Vector3d;
+using Vector3d = ForesTycoon.TreeModels.Generation.Dendro.Geom.Vector3d;
 
 namespace ForesTycoon.TreeModels
 {

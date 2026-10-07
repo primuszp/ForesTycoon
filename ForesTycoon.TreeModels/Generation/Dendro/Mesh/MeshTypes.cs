@@ -1,6 +1,14 @@
-using DendroKit.Core.Geom;
+#nullable enable
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
-namespace DendroKit.Core.Mesh;
+using ForesTycoon.TreeModels.Generation.Dendro.Geom;
+
+namespace ForesTycoon.TreeModels.Generation.Dendro.Mesh;
 
 public sealed class Vertex
 {

@@ -1,7 +1,15 @@
-using DendroKit.Core.Geom;
-using DendroKit.Core.Params;
+#nullable enable
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
-namespace DendroKit.Core.Tree;
+using ForesTycoon.TreeModels.Generation.Dendro.Geom;
+using ForesTycoon.TreeModels.Generation.Dendro.Params;
+
+namespace ForesTycoon.TreeModels.Generation.Dendro.Tree;
 
 internal sealed class StemImpl : IStem
 {

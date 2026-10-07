@@ -4,7 +4,8 @@
 
 Az alapértelmezett **Eljárásos fák (kor és fény)** mód a DendroKit.Core
 Weber–Penn generátort használja. A .NET 8 forrás, forrásmegjelölés és GPL v2
-licenc a `ThirdParty/DendroKit.Core` könyvtárban van. A játék buildjéhez nem
+licenc a `ForesTycoon.TreeModels/Generation/Dendro` könyvtárban van. A forrás közvetlenül a `ForesTycoon.TreeModels` részeként fordul;
+nincs külön DendroKit assembly vagy projektfüggőség. A játék buildjéhez nem
 kell a helyi DendroKit projekt vagy WPF.
 
 ## Levélpontokból tömör korona

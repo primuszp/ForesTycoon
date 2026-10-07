@@ -146,7 +146,7 @@ void main()
             }
 
             // Latin Extended-A contains Hungarian double acute glyphs: ő/Ő and ű/Ű.
-            ushort[] ranges = { 0x0020, 0x00FF, 0x0100, 0x017F, 0 };
+            ushort[] ranges = { 0x0020, 0x017F, 0x2000, 0x206F, 0 };
             glyphRangeHandle = GCHandle.Alloc(ranges, GCHandleType.Pinned);
             io.Fonts.AddFontFromFileTTF(fontPath, 16f, IntPtr.Zero, glyphRangeHandle.AddrOfPinnedObject());
         }
@@ -158,7 +158,12 @@ void main()
             {
                 Path.Combine(fonts, "segoeui.ttf"),
                 Path.Combine(fonts, "arial.ttf"),
-                Path.Combine(fonts, "tahoma.ttf")
+                Path.Combine(fonts, "tahoma.ttf"),
+                // macOS keeps its Latin fonts here, not in SpecialFolder.Fonts.
+                "/System/Library/Fonts/Supplemental/Arial.ttf",
+                "/Library/Fonts/Arial.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf"
             };
 
             foreach (string candidate in candidates)

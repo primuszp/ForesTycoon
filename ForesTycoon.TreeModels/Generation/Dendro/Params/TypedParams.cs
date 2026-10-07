@@ -1,4 +1,12 @@
-namespace DendroKit.Core.Params;
+#nullable enable
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace ForesTycoon.TreeModels.Generation.Dendro.Params;
 
 public class FloatParam : AbstractParam
 {

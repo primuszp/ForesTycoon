@@ -3,6 +3,8 @@
 ## DendroKit alapú procedurális fák
 
 Az alapértelmezett eljárásos famód az átemelt DendroKit ággenerátorát használja.
+A generátor forrása közvetlenül a `ForesTycoon.TreeModels/Generation/Dendro`
+könyvtárban, a TreeModels projekttel együtt fordul; nincs külön third-party projekt.
 A luc, nyír, tölgy és bükk egyedi seedje, kora és szimulált fényellátása eltérő,
 fajra jellemző ágstruktúrát (örvös luc, villás, terebélyes tölgy, lecsüngő nyír,
 kupolás bükk) és összefüggő poligonális koronát ad. A levélpontok egyetlen tömör
@@ -11,6 +13,14 @@ Nincs levélgeometria vagy alfa-kivágás. Cserjék: mogyoró és galagonya.
 Összehasonlító képek: `dotnet run --project ForesTycoon -- --dendro-tree-preview`.
 Részletek és forrásmegjelölés: [DendroKit integráció](docs/dendrokit-integration.md),
 [irodalmi áttekintés és fajmodellek](docs/tree-generation-literature.md).
+
+## Magyar UI-betűk macOS-en
+
+A UI macOS-en a rendszer Arial betűtípusát is keresi a
+`/System/Library/Fonts/Supplemental` könyvtárban. A fontatlasz a magyar
+ékezetekhez szükséges Latin Extended-A és az általános írásjelek tartományát is
+tartalmazza. Ellenőrzés: `dotnet run --project ForesTycoon -- --ui-font-smoke-test`;
+a renderelt ékezetminta az `artifacts/ui-font/hungarian.png` fájlba kerül.
 
 ## Egyedi fák és folytonos növekedés
 

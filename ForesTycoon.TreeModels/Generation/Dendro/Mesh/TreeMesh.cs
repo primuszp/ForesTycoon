@@ -1,6 +1,14 @@
-using DendroKit.Core.Tree;
+#nullable enable
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
-namespace DendroKit.Core.Mesh;
+using ForesTycoon.TreeModels.Generation.Dendro.Tree;
+
+namespace ForesTycoon.TreeModels.Generation.Dendro.Mesh;
 
 /// <summary>
 /// Collection of all mesh parts for a tree, organized by branch level.

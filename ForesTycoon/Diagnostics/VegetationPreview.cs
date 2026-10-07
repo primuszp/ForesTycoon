@@ -22,6 +22,7 @@ namespace ForesTycoon
                 ClientSize = new(width, height), NumberOfSamples = 4, API = ContextAPI.OpenGL,
                 APIVersion = new(3, 3), Profile = ContextProfile.Core });
             window.Context.MakeCurrent(); RenderDevice.Initialize();
+            Check("initialization");
             try
             {
                 GL.Viewport(0, 0, width, height); GL.Enable(EnableCap.DepthTest); GL.Enable(EnableCap.CullFace);
@@ -32,7 +33,9 @@ namespace ForesTycoon
                 using var visuals = new SurfaceVisualRenderer(new GraphicsSettings { Shadows = false, Weather = false,
                     Fog = false, Textures = true }, new WeatherVisualState());
                 RenderDevice.Visuals = visuals; visuals.BeginFrame();
+                Check("visuals");
                 using var material = new ForestMaterial();
+                Check("material");
                 using var wood = new VertexBuffer(PrimitiveType.Triangles);
                 using var crown = new VertexBuffer(PrimitiveType.Triangles);
                 var woodVertices = new List<Vertex>(); var crownVertices = new List<Vertex>();
@@ -81,8 +84,11 @@ namespace ForesTycoon
                     }
                 }
                 wood.SetData(woodVertices.ToArray()); crown.SetData(crownVertices.ToArray());
+                Check("buffers");
                 visuals.Kind = SurfaceKind.Wood; RenderDevice.UseGeometryShader(); wood.DrawArray(false);
+                Check("wood");
                 material.Use(); crown.DrawArray(false);
+                Check("crown");
                 if (GL.GetError() != ErrorCode.NoError) throw new InvalidOperationException("Vegetation preview GL error.");
                 string output = Path.GetFullPath("artifacts/vegetation-benchmark/vegetation.png");
                 Directory.CreateDirectory(Path.GetDirectoryName(output)); FramebufferCapture.SavePng(output, width, height);
@@ -92,6 +98,11 @@ namespace ForesTycoon
 
             static string Count(DendroTreeGenerator.Mesh mesh) =>
                 $"{mesh.Crown.Length / 3}+{(mesh.Trunk.Length + mesh.Branches.Length) / 3}";
+            static void Check(string stage)
+            {
+                var error = GL.GetError();
+                if (error != ErrorCode.NoError) throw new InvalidOperationException($"Vegetation preview {stage}: {error}");
+            }
         }
     }
 }
