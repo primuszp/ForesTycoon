@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace ForesTycoon
+namespace ForesTycoon.Engine
 {
     /// <summary>
     /// Executes CPU-only jobs away from the render thread and publishes results at a

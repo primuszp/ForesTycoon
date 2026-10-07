@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace ForesTycoon
+namespace ForesTycoon.Engine
 {
     /// <summary>Runs world systems in stable registration order without per-tick allocations.</summary>
     sealed class WorldSystemCollection

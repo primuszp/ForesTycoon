@@ -1,4 +1,4 @@
-namespace ForesTycoon
+namespace ForesTycoon.Engine
 {
     /// <summary>
     /// A deterministic simulation subsystem owned by <see cref="GameWorld"/>.

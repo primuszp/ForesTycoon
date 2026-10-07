@@ -17,10 +17,12 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Using Include="ForesTycoon.Engine" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\ForesTycoon\ForesTycoon.csproj" />
+    <ProjectReference Include="..\ForesTycoon.Engine\ForesTycoon.Engine.csproj" />
   </ItemGroup>
 
 </Project>

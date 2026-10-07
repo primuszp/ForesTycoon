@@ -12,6 +12,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Using Include="ForesTycoon.Engine" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../ForesTycoon.Engine/ForesTycoon.Engine.csproj" />
     <ProjectReference Include="../ThirdParty/DendroKit.Core/DendroKit.Core.csproj" />
     <Content Include="../ThirdParty/DendroKit.Core/LICENSE.txt" Link="Licenses/DendroKit-GPL-2.0.txt" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../ThirdParty/DendroKit.Core/NOTICE.md" Link="Licenses/DendroKit-NOTICE.md" CopyToOutputDirectory="PreserveNewest" />

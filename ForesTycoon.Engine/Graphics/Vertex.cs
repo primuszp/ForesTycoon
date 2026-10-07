@@ -1,7 +1,7 @@
 ﻿using System.Runtime.InteropServices;
 using OpenTK.Mathematics;
 
-namespace ForesTycoon
+namespace ForesTycoon.Engine
 {
     public struct Vertex
     {

@@ -1,7 +1,7 @@
 using System;
 using System.Diagnostics;
 
-namespace ForesTycoon
+namespace ForesTycoon.Engine
 {
     readonly record struct SimulationFrameResult(int Commands, int Ticks);
 

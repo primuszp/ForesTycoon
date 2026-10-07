@@ -1,6 +1,6 @@
 using System;
 
-namespace ForesTycoon
+namespace ForesTycoon.Engine
 {
     /// <summary>Accumulates render-frame time and emits deterministic simulation ticks.</summary>
     public sealed class FixedStepClock
