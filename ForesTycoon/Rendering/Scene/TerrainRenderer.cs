@@ -56,7 +56,7 @@ namespace ForesTycoon
             RenderPipeline.PassProbe?.Invoke("frame-preparation", true);
             try
             {
-                if (ownsWildlife) { wildlifeSimulation.Update(Math.Max(0, context.SimulationTimeSeconds-wildlifeTime), terrain, forest, environment); wildlifeTime=context.SimulationTimeSeconds; }
+                if (ownsWildlife) { wildlifeSimulation.Update(Math.Max(0, context.SimulationTimeSeconds-wildlifeTime), terrain.Map, forest, environment); wildlifeTime=context.SimulationTimeSeconds; }
                 terrain.UpdateVisibleTiles(context);
                 if(environment!=null && graphics.AutomaticWeather)weather.Update(environment,graphics,context.SimulationTimeSeconds);
                 else weather.Update(context.SimulationTimeSeconds, graphics);

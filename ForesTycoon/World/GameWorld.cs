@@ -119,7 +119,7 @@ namespace ForesTycoon
             long environmentUpdated = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
             Logistics?.Update(fixedDeltaSeconds);
             long logisticsUpdated = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
-            wildlife.Update(fixedDeltaSeconds, terrain, forest, Environment);
+            wildlife.Update(fixedDeltaSeconds, map, forest, Environment);
             long wildlifeUpdated = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
             systems.Update(fixedDeltaSeconds);
             worldTick++;

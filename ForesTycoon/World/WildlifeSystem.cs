@@ -26,10 +26,10 @@ namespace ForesTycoon
         private readonly List<WildlifeSpot> spots = new();
         private readonly List<int> forageTiles = new();
         private ulong revision = ulong.MaxValue, surfaceRevision = ulong.MaxValue;
-        internal void Update(double seconds, Terrain terrain, ForestSystem forest, EnvironmentSystem environment)
+        internal void Update(double seconds, TerrainMap terrain, ForestSystem forest, EnvironmentSystem environment)
         {
             if (!double.IsFinite(seconds) || seconds < 0) throw new ArgumentOutOfRangeException(nameof(seconds));
-            if (revision != forest.Revision || surfaceRevision != terrain.WeatherSurfaceRevision)
+            if (revision != forest.Revision || surfaceRevision != terrain.SurfaceVersion)
             {
                 // Existing animals only need to know whether any habitat remains. Ranked spawn
                 // positions are needed when populating an empty world, not at every forest month.
@@ -39,7 +39,7 @@ namespace ForesTycoon
                     foreach (var spot in spots) Animals.Add(new Animal { Id = spot.TileId, TileId = spot.TileId,
                         TargetTile = spot.TileId, Position = spot.Position, PreviousPosition = spot.Position, Target = spot.Position,
                         Seed = spot.Rank, Yaw = spot.Rank % 6283 * 0.001f });
-                revision = forest.Revision; surfaceRevision = terrain.WeatherSurfaceRevision;
+                revision = forest.Revision; surfaceRevision = terrain.SurfaceVersion;
             }
             float dt = (float)seconds;
             foreach (int id in forageTiles) forage[id] = Math.Max(0, forage[id] - dt * 0.005f);
@@ -92,7 +92,7 @@ namespace ForesTycoon
                 // Advance along the facing direction while turning, forming an actual broad arc.
                 float midpoint=(animal.Yaw+yaw)*0.5f;
                 Vector3 next = animal.Position + new Vector3(MathF.Cos(midpoint)*distance,MathF.Sin(midpoint)*distance,0);
-                if (terrain.CanWildlifeWalkAt(next.X,next.Y) && terrain.Map.TryGetSurfaceZ(next.X, next.Y, out float z)) {
+                if (terrain.CanWildlifeWalkAt(next.X,next.Y) && terrain.TryGetSurfaceZ(next.X, next.Y, out float z)) {
                     next.Z = z; animal.Position = next; animal.Yaw=yaw;
                     animal.WalkTime += distance / WalkingClipSpeed;
                     animal.WanderNeed = Math.Max(0,animal.WanderNeed-distance*0.012f);

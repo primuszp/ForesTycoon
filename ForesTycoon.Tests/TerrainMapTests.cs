@@ -82,4 +82,23 @@ public class TerrainMapTests
         Assert.All(assembly.GetTypes().Where(t => !t.FullName!.Contains('<')),
             t => Assert.StartsWith("ForesTycoon.Map", t.Namespace));
     }
+
+    [Fact]
+    public void HabitatQueriesForWildlifeFishAndWeatherLiveOnTheMap()
+    {
+        var map = Create();
+        var forest = new ForestSystem(map);
+        var spots = new List<WildlifeSpot>();
+        map.CollectWildlifeSpots(forest, spots);
+        Assert.All(spots, s => Assert.True(map.TryGetWildlifeDestination(s.TileId, out _)));
+
+        var fish = new List<FishHabitat>();
+        map.CollectFishHabitats(fish, node => map.Settings.SeaLevel);
+
+        var heights = new float[map.Settings.TileColumns * map.Settings.TileRows];
+        map.FillWeatherHeights(heights, forest);
+        Assert.All(heights, h => Assert.True(h >= map.Settings.SeaLevel));
+        map.GetWeatherBounds(out var min, out var max);
+        Assert.True(max.X > min.X && max.Z > min.Z);
+    }
 }

@@ -13,7 +13,7 @@ namespace ForesTycoon
         internal int FishCount=>habitats.Count;
         internal void DrawFish(Terrain terrain,GraphicsSettings settings,RenderContext context)
         {
-            if(fishRevision!=terrain.WeatherSurfaceRevision){terrain.CollectFishHabitats(habitats);fishRevision=terrain.WeatherSurfaceRevision;}
+            if(fishRevision!=terrain.WeatherSurfaceRevision){terrain.Map.CollectFishHabitats(habitats, node => terrain.NodeWaterZ(node, 0));fishRevision=terrain.WeatherSurfaceRevision;}
             if(habitats.Count==0)return;
             fish??=new ImportedSceneAsset("Assets/Wildlife/fish.glb",DioramaScale.FishLength,true);
             int index=0;

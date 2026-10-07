@@ -128,7 +128,7 @@ namespace ForesTycoon
             DynamicPrimitiveBatch.Vertex3(node.xPos, node.yPos, wz);
         }
 
-        private float NodeWaterZ(Node node, float t)
+        internal float NodeWaterZ(Node node, float t)
         {
             float depth = nodeWaterDepth[node.Id];
             if (depth < MinimumWaterDepth) return SeaLevel;

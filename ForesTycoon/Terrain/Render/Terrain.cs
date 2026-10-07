@@ -54,6 +54,8 @@ namespace ForesTycoon
         private float MinimumWaterDepth => settings.MinimumWaterDepth;
         private float RiverWaterHeight => settings.RiverWaterHeight;
         private float SeaLevel => settings.SeaLevel;
+        internal static void SurfacePoint(Tile tile, float u, float v, out float x, out float y, out float z) =>
+            TerrainMap.SurfacePoint(tile, u, v, out x, out y, out z);
         private Node getNodeByCoords(int u, int v) => map.GetNode(u, v);
         private Tile getTileByCoords(int u, int v) => map.GetTile(u, v);
         private bool checkNode(int u, int v) => data.CheckNode(u, v);

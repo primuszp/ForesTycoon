@@ -119,7 +119,7 @@ A terep két, egyértelműen elkülönített dolog, nem egy osztály:
 |---|---|---|
 | Szerepe | a talaj **ténye és szabálya** | a talaj **megjelenítése** |
 | Birtokolja | magasságrács (node/tile), hidrológia és nedvesség, úthálózat és a befagyasztott úttest-magasság, épületlábnyomok, a szerkesztő-kurzor, hover | csúcspont-pufferek, látható chunkok, víz-/út-/kellék-/erdő-/időjárás-rajzolás, útelőnézet |
-| Műveletek | generálás, domborzat-szerkesztés (atomi, út- és épület-ellenőrzéssel), útépítés/bontás, útelhelyezés-elemzés, felszín-osztályozás (`TileSurface`: fű / földmű), sugár- és képernyőpont-keresés, felszíni magasság | `UpdateVisibleTiles`, `Draw*`, GPU feltöltés |
+| Műveletek | generálás, domborzat-szerkesztés (atomi, út- és épület-ellenőrzéssel), útépítés/bontás, útelhelyezés-elemzés, felszín-osztályozás (`TileSurface`: fű / földmű), sugár- és képernyőpont-keresés, felszíni magasság, élőhely-lekérdezések (vadállomány-helyek, halélőhelyek), az időjárás magasságmezője és határai | `UpdateVisibleTiles`, `Draw*`, GPU feltöltés |
 | GL | **soha** (csak `OpenTK.Mathematics`) | igen |
 | Függ | Engine, Ecology (ő az `IForestHabitat`) | a `TerrainMap`-től, nem fordítva |
 
