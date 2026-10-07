@@ -16,14 +16,14 @@ namespace ForesTycoon
         private bool forestryPreviewRemoval;
         // Reused between frames: the preview is rebuilt every frame, and a Span cannot cross
         // into the batch callbacks the primitive batch is driven by.
-        private readonly int[] forestryPreviewTiles = new int[MaximumAreaTiles];
+        private readonly int[] forestryPreviewTiles = new int[TerrainMap.MaximumAreaTiles];
 
         public int ForestryPreviewCount
         {
             get
             {
                 if (forestryPreviewStart < 0 || forestryPreviewEnd < 0) return 0;
-                return GetTileRectangle(forestryPreviewStart, forestryPreviewEnd, forestryPreviewTiles);
+                return map.GetTileRectangle(forestryPreviewStart, forestryPreviewEnd, forestryPreviewTiles);
             }
         }
 
@@ -46,7 +46,7 @@ namespace ForesTycoon
             if (forestryPreviewStart < 0 || forestryPreviewEnd < 0) return;
 
             int[] tileIds = forestryPreviewTiles;
-            int count = GetTileRectangle(forestryPreviewStart, forestryPreviewEnd, tileIds);
+            int count = map.GetTileRectangle(forestryPreviewStart, forestryPreviewEnd, tileIds);
             if (count == 0) return;
 
             // Same palette as the road preview: white places, red removes.

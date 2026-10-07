@@ -12,6 +12,17 @@ namespace ForesTycoon
         public int Last => centers.Length - 1;
         public float TileLength { get; }
 
+        /// <summary>Captures the frozen road geometry of <paramref name="route"/> from the map.</summary>
+        internal static VehicleRoadRoute Create(TerrainMap map, int[] route)
+        {
+            var centers = new Vector3[route.Length];
+            var gradients = new Vector2[route.Length];
+            for (int i = 0; i < route.Length; i++)
+                if (!map.TryGetRoadSurface(route[i], out centers[i], out gradients[i]))
+                    throw new ArgumentException("Vehicle route contains a missing road tile.", nameof(route));
+            return new VehicleRoadRoute(centers, gradients);
+        }
+
         public VehicleRoadRoute(Vector3[] centers, Vector2[] gradients)
         {
             if (centers == null || centers.Length < 2 || gradients?.Length != centers.Length)

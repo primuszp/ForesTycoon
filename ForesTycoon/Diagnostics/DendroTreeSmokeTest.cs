@@ -95,7 +95,7 @@ namespace ForesTycoon
             var stands = new ForestStand[1024];
             int[] ids = { 34, 50, 546, 562 }; // One occupied tile in each of four chunks.
             foreach (int id in ids) stands[id] = new(ForestSpecies.Oak, 40, 0.5f, 1);
-            var forest = new ForestSystem(terrain, stands);
+            var forest = new ForestSystem(terrain.Map, stands);
             void Light(float light)
             {
                 foreach (int id in ids)

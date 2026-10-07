@@ -21,10 +21,10 @@ namespace ForesTycoon
             try
             {
                 terrain = new Terrain(TerrainSettings.Default.WithNodeSize(17, 20260913), ForestVisualFixture.Height);
-                terrain.BuildRoadTilePath(101, 165);
-                var forest = new ForestSystem(terrain, ForestVisualFixture.CreateStands());
+                terrain.Map.BuildRoadTilePath(101, 165);
+                var forest = new ForestSystem(terrain.Map, ForestVisualFixture.CreateStands());
                 var vehicles = new VehicleSystem();
-                int[] route = terrain.FindDemoRoadRoute();
+                int[] route = terrain.Map.FindDemoRoadRoute();
                 Require(route.Length >= 2, "Graphics fixture has no road.");
                 vehicles.Spawn(route);
                 Require(new GraphicsSettings().ShowGrid, "Grid is not enabled by default.");
@@ -141,7 +141,7 @@ namespace ForesTycoon
                     try {
                     var options=new GraphicsSettings { ShowGrid=true, Weather=false, Fog=false, Wildlife=false };
                     using var scene=new TerrainRenderer(map,new VehicleSystem(),new WorldEffectSystem(),
-                        new ForestSystem(map,new ForestStand[256]),options);
+                        new ForestSystem(map.Map,new ForestStand[256]),options);
                     foreach(bool textured in new[]{false,true}) {
                         options.Textures=textured;
                         GL.Clear(ClearBufferMask.ColorBufferBit|ClearBufferMask.DepthBufferBit);
@@ -159,12 +159,12 @@ namespace ForesTycoon
                     var map = new Terrain(TerrainSettings.Default.WithNodeSize(17,42), (_,_)=>4);
                     try
                     {
-                        map.BuildRoadTilePath(53,133);
+                        map.Map.BuildRoadTilePath(53,133);
                         var cargo = new TimberCargoSystem();
-                        var traffic = new VehicleSystem(cargo,map.CreateVehicleRoadRoute);
+                        var traffic = new VehicleSystem(cargo,route => VehicleRoadRoute.Create(map.Map, route));
                         var truck = traffic.Spawn(new[] {53,69,85,101,117,133});
                         using var scene = new TerrainRenderer(map,traffic,new WorldEffectSystem(),
-                            new ForestSystem(map,new ForestStand[256]),new GraphicsSettings {Fog=false,Weather=false});
+                            new ForestSystem(map.Map,new ForestStand[256]),new GraphicsSettings {Fog=false,Weather=false});
                         truck.RoadRoute.GetPose(0,out var position,out _,out _,out _);
                         Matrix4 view = Matrix4.CreateTranslation(-position)*Matrix4.CreateRotationZ(-MathF.PI/4)*
                             Matrix4.CreateRotationX(-MathF.PI/4)*Matrix4.CreateOrthographicOffCenter(-13,13,-9,11,-1000,1000);
@@ -191,12 +191,12 @@ namespace ForesTycoon
                 {
                     var map=new Terrain(TerrainSettings.Default.WithNodeSize(17,42),(_,_)=>4);
                     try{
-                        map.BuildRoadTilePath(53,133);map.BuildRoadTilePath(133,138);
+                        map.Map.BuildRoadTilePath(53,133);map.Map.BuildRoadTilePath(133,138);
                         var cargo=new TimberCargoSystem();cargo.AddHarvested(25);
-                        var traffic=new VehicleSystem(cargo,map.CreateVehicleRoadRoute) { UseCargoStops = false };
+                        var traffic=new VehicleSystem(cargo,route => VehicleRoadRoute.Create(map.Map, route)) { UseCargoStops = false };
                         var truck=traffic.Spawn(new[]{53,69,85,101,117,133,134,135,136,137,138});
                         var graphics=new GraphicsSettings{Fog=false,Weather=false};
-                        using var scene=new TerrainRenderer(map,traffic,new WorldEffectSystem(),new ForestSystem(map,new ForestStand[256]),graphics);
+                        using var scene=new TerrainRenderer(map,traffic,new WorldEffectSystem(),new ForestSystem(map.Map,new ForestStand[256]),graphics);
                         int frame=0;
                         foreach(double point in new[]{4.3,5.0,5.7}){
                             while(truck.RoutePosition<point && frame++<2000)traffic.Update(1.0/60);
@@ -238,7 +238,7 @@ namespace ForesTycoon
                         (_,_)=>4);
                     try
                     {
-                    var landscapeForest=new ForestSystem(landscape);
+                    var landscapeForest=new ForestSystem(landscape.Map);
                     var graphics=new GraphicsSettings { Fog=true, FogDensity=0.8f };
                     using var landscapeRenderer=new TerrainRenderer(landscape,new VehicleSystem(),new WorldEffectSystem(),landscapeForest,graphics);
                     GL.ClearColor(0.1725f,0.2078f,0.251f,1);

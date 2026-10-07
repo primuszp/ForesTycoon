@@ -13,6 +13,8 @@ namespace ForesTycoon
     sealed class GameWorld : IDisposable, IWorldCommandTarget, IWorldInteractionTarget
     {
         private Terrain terrain;
+        /// <summary>The ground model; the <see cref="Terrain"/> scene only draws it.</summary>
+        private TerrainMap map => terrain.Map;
         private WildlifeSystem wildlife = new WildlifeSystem();
         internal ForestryLogistics Logistics { get; private set; }
         private TerrainRenderer terrainRenderer;
@@ -41,18 +43,18 @@ namespace ForesTycoon
                 throw new ArgumentOutOfRangeException(nameof(forestYearSeconds));
             Graphics = graphics;
             terrain = new Terrain(settings ?? throw new ArgumentNullException(nameof(settings)));
-            ecosystem = new Ecosystem(terrain, forestYearSeconds);
+            ecosystem = new Ecosystem(map, forestYearSeconds);
             timberCargo = systems.Add(new TimberCargoSystem());
-            vehicles = systems.Add(new VehicleSystem(timberCargo, route => terrain.CreateVehicleRoadRoute(route)));
+            vehicles = systems.Add(new VehicleSystem(timberCargo, route => VehicleRoadRoute.Create(map, route)));
             effects = systems.Add(new WorldEffectSystem());
             InitializeLogistics();
             terrainRenderer = new TerrainRenderer(terrain, vehicles, effects, forest, Graphics, Environment, wildlife, Logistics);
         }
 
-        public Tile HoveredTile => terrain.HoveredTile;
-        public int HoveredTileId => terrain.HoveredTile?.Id ?? -1;
-        public int SelectedNodeId => terrain.SelectedNodeId;
-        public int RoadCount => terrain.RoadCount;
+        public Tile HoveredTile => map.HoveredTile;
+        public int HoveredTileId => map.HoveredTile?.Id ?? -1;
+        public int SelectedNodeId => map.SelectedNodeId;
+        public int RoadCount => map.RoadCount;
         public int RoadPreviewCount => terrain.RoadPreviewCount;
         public int VehicleCount => vehicles.Count;
         internal int FishCount=>terrainRenderer.FishCount;
@@ -97,7 +99,7 @@ namespace ForesTycoon
                     else if (du == 0 && forest.TryGetStand(id, out ForestStand stand))
                         forest.ExtractTimber(id, ForestSystem.TimberCubicMetres(stand) * 0.55f);
                 }
-            return terrain.TryGetTileCenter(bestU * rows + bestV, out centre);
+            return map.TryGetTileCenter(bestU * rows + bestV, out centre);
         }
         public int VisibleChunkCount => terrain.VisibleChunkCount;
         public int ForestChunkRebuilds => terrain.ForestChunkRebuilds;
@@ -117,7 +119,7 @@ namespace ForesTycoon
             long environmentUpdated = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
             Logistics?.Update(fixedDeltaSeconds);
             long logisticsUpdated = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
-            wildlife.Update(fixedDeltaSeconds, terrain, forest, Environment);
+            wildlife.Update(fixedDeltaSeconds, map, forest, Environment);
             long wildlifeUpdated = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
             systems.Update(fixedDeltaSeconds);
             worldTick++;
@@ -166,22 +168,22 @@ namespace ForesTycoon
 
         void IWorldCommandTarget.ExecuteElevationEdit(int nodeId, int delta, int radius, int strength)
         {
-            terrain.EditElevationAtNode(nodeId, delta, radius, strength);
+            map.EditElevationAtNode(nodeId, delta, radius, strength);
             forest.RefreshHabitat();
             Environment?.RefreshRouting();
-            if (terrain.TryGetNodePosition(nodeId, out Vector3 position))
+            if (map.TryGetNodePosition(nodeId, out Vector3 position))
                 effects.Spawn(WorldEffectKind.TerrainChanged, position);
         }
 
         void IWorldCommandTarget.ExecuteRoadPath(int startTileId, int endTileId, bool remove)
         {
-            if (remove) terrain.RemoveRoadTilePath(startTileId, endTileId);
-            else terrain.BuildRoadTilePath(startTileId, endTileId);
+            if (remove) map.RemoveRoadTilePath(startTileId, endTileId);
+            else map.BuildRoadTilePath(startTileId, endTileId);
             forest.RefreshHabitat();
             Environment?.RefreshRouting();
-            if (remove) vehicles.RemoveInvalidRoutes(terrain.IsRoadTile);
-            else vehicles.RefreshLogisticsRoutes(terrain.IsRoadTile);
-            if (terrain.TryGetRoadTileCenter(endTileId, out Vector3 position))
+            if (remove) vehicles.RemoveInvalidRoutes(map.IsRoadTile);
+            else vehicles.RefreshLogisticsRoutes(map.IsRoadTile);
+            if (map.TryGetRoadTileCenter(endTileId, out Vector3 position))
                 effects.Spawn(WorldEffectKind.RoadChanged, position);
         }
 
@@ -193,7 +195,7 @@ namespace ForesTycoon
         void IWorldCommandTarget.ExecutePlantForest(int tileId, ForestSpecies species)
         {
             lastForestryAction = forest.Plant(tileId, species);
-            if (terrain.TryGetTileCenter(tileId, out Vector3 position))
+            if (map.TryGetTileCenter(tileId, out Vector3 position))
                 effects.Spawn(lastForestryAction == ForestryActionResult.Planted
                     ? WorldEffectKind.TreePlanted
                     : WorldEffectKind.ForestryRejected, position);
@@ -206,8 +208,8 @@ namespace ForesTycoon
 
         void IWorldCommandTarget.ExecutePlantForestArea(int startTileId, int endTileId, ForestSpecies species)
         {
-            Span<int> tileIds = stackalloc int[Terrain.MaximumAreaTiles];
-            int count = terrain.GetTileRectangle(startTileId, endTileId, tileIds);
+            Span<int> tileIds = stackalloc int[TerrainMap.MaximumAreaTiles];
+            int count = map.GetTileRectangle(startTileId, endTileId, tileIds);
 
             int planted = 0;
             int areaId = forest.AllocatePlantationId();
@@ -234,9 +236,9 @@ namespace ForesTycoon
         /// </summary>
         private void SpawnAreaEffect(int startTileId, int endTileId, WorldEffectKind kind)
         {
-            if (terrain.TryGetTileCenter(startTileId, out Vector3 start))
+            if (map.TryGetTileCenter(startTileId, out Vector3 start))
                 effects.Spawn(kind, start);
-            if (endTileId != startTileId && terrain.TryGetTileCenter(endTileId, out Vector3 end))
+            if (endTileId != startTileId && map.TryGetTileCenter(endTileId, out Vector3 end))
                 effects.Spawn(kind, end);
         }
 
@@ -244,15 +246,15 @@ namespace ForesTycoon
         {
             terrainRenderer.Draw(context);
         }
-        public void GetWorldBounds(out Vector3 min, out Vector3 max) => terrain.GetWorldBounds(out min, out max);
-        public bool TryGetSurfaceZ(double x, double y, out float z) => terrain.TryGetSurfaceZ(x, y, out z);
+        public void GetWorldBounds(out Vector3 min, out Vector3 max) => map.GetWorldBounds(out min, out max);
+        public bool TryGetSurfaceZ(double x, double y, out float z) => map.TryGetSurfaceZ(x, y, out z);
         public bool TryRaycastTerrain(Vector3 rayNear, Vector3 rayFar, out Vector3 hit) =>
-            terrain.TryRaycast(rayNear, rayFar, out hit);
+            map.TryRaycast(rayNear, rayFar, out hit);
         public bool SearchScreenPoint(double x, double y, double radius, double[] model, double[] projection, int[] viewport) =>
-            terrain.SearchScreenPoint(x, y, radius, model, projection, viewport);
-        public bool SearchTile(double x, double y) => terrain.SearchTile(x, y);
-        public void ClearHover() => terrain.ClearHover();
-        public void ClearTileHover() => terrain.ClearTileHover();
+            map.SearchScreenPoint(x, y, radius, model, projection, viewport);
+        public bool SearchTile(double x, double y) => map.SearchTile(x, y);
+        public void ClearHover() => map.ClearHover();
+        public void ClearTileHover() => map.ClearTileHover();
         public void SetRoadPreview(int startTileId, int endTileId, bool remove) =>
             terrain.SetRoadPreview(startTileId, endTileId, remove);
         public void ClearRoadPreview() => terrain.ClearRoadPreview();
@@ -300,7 +302,7 @@ namespace ForesTycoon
             (systems, candidate.systems) = (candidate.systems, systems);
             (backgroundJobs, candidate.backgroundJobs) = (candidate.backgroundJobs, backgroundJobs);
             // Route creation must follow this world's terrain after the ownership transfer.
-            vehicles.RoadRouteFactory = route => terrain.CreateVehicleRoadRoute(route);
+            vehicles.RoadRouteFactory = route => VehicleRoadRoute.Create(map, route);
             commands.Clear();
             commandJournal.Clear();
             commandJournal.AddRange(save.Commands);
@@ -327,7 +329,7 @@ namespace ForesTycoon
             terrainRenderer.Dispose();
             terrain.Dispose();
             terrain = new Terrain(settings ?? throw new ArgumentNullException(nameof(settings)));
-            ecosystem.Reset(terrain, forestYearSeconds);
+            ecosystem.Reset(map, forestYearSeconds);
             wildlife = new WildlifeSystem();
             InitializeLogistics();
             terrainRenderer = new TerrainRenderer(terrain, vehicles, effects, forest, Graphics, Environment, wildlife, Logistics);
@@ -335,15 +337,15 @@ namespace ForesTycoon
 
         private void DesignateHarvest(int start,int end)
         {
-            Span<int> ids=stackalloc int[Terrain.MaximumAreaTiles];
-            int count=terrain.GetTileRectangle(start,end,ids);
+            Span<int> ids=stackalloc int[TerrainMap.MaximumAreaTiles];
+            int count=map.GetTileRectangle(start,end,ids);
             int applied=Logistics.Designate(ids[..count]);
             lastForestryAction=applied>0?ForestryActionResult.Designated:ForestryActionResult.NoForest;
             lastForestryArea=new ForestryAreaSummary(count,applied,Logistics.Remaining);
         }
         private void InitializeLogistics()
         {
-            Logistics=new ForestryLogistics(terrain,forest);
+            Logistics=new ForestryLogistics(map,forest);
             vehicles.SourceLoader = Logistics.Load;
             vehicles.DestinationReceiver = Logistics.Deliver;
             vehicles.RouteValidator = Logistics.RouteConnected;

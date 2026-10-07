@@ -32,7 +32,7 @@ namespace ForesTycoon
                         : ForestSpeciesProfile.For(species).MatureAgeYears;
                     var stands = new ForestStand[256];
                     foreach (int id in ids) stands[id] = new(species, age, 0.7f, 1);
-                    var forest = new ForestSystem(terrain, stands);
+                    var forest = new ForestSystem(terrain.Map, stands);
                     for (int i = 0; i < ids.Length; i++)
                     {
                         if (!forest.IndividualTrees.TryGet(ids[i], out var patch))

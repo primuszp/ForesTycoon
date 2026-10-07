@@ -34,15 +34,15 @@ namespace ForesTycoon
         private void DrawTileGrid(Tile tile, Color terrainLine)
         {
             // A grid consists of all four tile boundaries, independent of material or triangulation.
-            DrawTileEdgesByMaterial(tile, GetTileSurfaceVisual(tile), terrainLine);
+            DrawTileEdgesByMaterial(tile, GetTileSurface(tile), terrainLine);
         }
 
-        private static Color EdgeLineColor(TileRenderMaterial material, Color terrainLine)
+        private static Color EdgeLineColor(TileSurfaceMaterial material, Color terrainLine)
         {
-            return material == TileRenderMaterial.Foundation ? RoadFoundationLineColor : terrainLine;
+            return material == TileSurfaceMaterial.Foundation ? RoadFoundationLineColor : terrainLine;
         }
 
-        private static void DrawTileEdgesByMaterial(Tile tile, TileSurfaceVisual visual, Color terrainLine)
+        private static void DrawTileEdgesByMaterial(Tile tile, TileSurface visual, Color terrainLine)
         {
             DynamicPrimitiveBatch.Color4(EdgeLineColor(visual.EdgeWS, terrainLine));
             DynamicPrimitiveBatch.Vertex3(tile.W.xPos, tile.W.yPos, tile.W.zPos); DynamicPrimitiveBatch.Vertex3(tile.S.xPos, tile.S.yPos, tile.S.zPos);
@@ -57,7 +57,7 @@ namespace ForesTycoon
             DynamicPrimitiveBatch.Vertex3(tile.N.xPos, tile.N.yPos, tile.N.zPos); DynamicPrimitiveBatch.Vertex3(tile.W.xPos, tile.W.yPos, tile.W.zPos);
         }
 
-        private void DrawTileDiagonal(Tile tile, TileSurfaceVisual visual)
+        private void DrawTileDiagonal(Tile tile, TileSurface visual)
         {
             DynamicPrimitiveBatch.Color4(RoadFoundationLineColor);
             if (UseTileDiagonalWE(tile, visual))

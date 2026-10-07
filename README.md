@@ -127,10 +127,11 @@ Quicksaves are stored under the operating system's local application-data direct
 - [ForesTycoon.Models](ForesTycoon.Models): glTF/GLB model loading, animation and drawing
 - [ForesTycoon.Effects](ForesTycoon.Effects): weather, clouds, fog, lightning and action markers
 - [ForesTycoon/World](ForesTycoon/World): game world, commands, save/replay, vehicles and effects
-- [ForesTycoon/Terrain](ForesTycoon/Terrain): terrain data, generation, hydrology, roads and chunk updates
+- [ForesTycoon.Map](ForesTycoon.Map): the ground as data and rules (heights, generation, hydrology, roads, editing, picking), no drawing
+- [ForesTycoon/Terrain](ForesTycoon/Terrain): the terrain scene – draws a `TerrainMap` (surfaces, water, roads, props, forest)
 - [ForesTycoon/Rendering](ForesTycoon/Rendering): ordered render pipeline and GPU helpers
 
-The layering (Engine ← Ecology/Rendering ← TreeModels/Models/Effects ← game) is described in [docs/architecture.md](docs/architecture.md) and enforced by the architecture tests.
+The layering (Engine ← Ecology/Rendering ← TreeModels/Map/Models/Effects ← game) is described in [docs/architecture.md](docs/architecture.md) and enforced by the architecture tests.
 - [ForesTycoon/Diagnostics](ForesTycoon/Diagnostics): frame, simulation, allocation and draw-call metrics
 - [ForesTycoon/Camera](ForesTycoon/Camera): platform-independent isometric camera state
 - [Engine architecture](docs/engine-architecture.md): responsibility boundaries, performance policy and roadmap

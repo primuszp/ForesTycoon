@@ -32,7 +32,7 @@ namespace ForesTycoon
             RenderDevice.Initialize();
             GL.Enable(EnableCap.DepthTest);
             terrain = new Terrain(TerrainSettings.Default.WithNodeSize(17, 20260913), ForestVisualFixture.Height);
-            var forest = new ForestSystem(terrain, ForestVisualFixture.CreateStands());
+            var forest = new ForestSystem(terrain.Map, ForestVisualFixture.CreateStands());
             renderer = new TerrainRenderer(terrain, new VehicleSystem(), new WorldEffectSystem(), forest);
             if (captureDirectory != null) Directory.CreateDirectory(captureDirectory);
         }

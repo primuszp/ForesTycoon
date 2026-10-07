@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The terrain as data and rules, with no drawing: the node/tile height grid, procedural generation,
+    surface water and moisture, elevation editing, road placement and networks, building footprints and
+    ground queries (picking, surface height). It is the habitat the ecosystem grows on (IForestHabitat)
+    and the ground the renderer draws. Knows nothing about OpenGL, vehicles or the game world.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>ForesTycoon.Map</RootNamespace>
+    <AssemblyName>ForesTycoon.Map</AssemblyName>
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Using Include="ForesTycoon.Engine" />
+    <Using Include="ForesTycoon.Ecology" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../ForesTycoon.Engine/ForesTycoon.Engine.csproj" />
+    <ProjectReference Include="../ForesTycoon.Ecology/ForesTycoon.Ecology.csproj" />
+    <PackageReference Include="OpenTK.Mathematics" Version="4.9.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ForesTycoon" />
+    <InternalsVisibleTo Include="ForesTycoon.Tests" />
+  </ItemGroup>
+
+</Project>

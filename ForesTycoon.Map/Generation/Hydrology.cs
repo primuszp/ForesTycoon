@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace ForesTycoon
+namespace ForesTycoon.Map
 {
     /// <summary>
     /// Vízállapot számítása a terep magasságából: álló víz (tó/tenger) BFS-medencékkel,

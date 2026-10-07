@@ -1,14 +1,14 @@
 using System;
 using System.Collections.Generic;
 using OpenTK.Mathematics;
-namespace ForesTycoon
+namespace ForesTycoon.Map
 {
     internal readonly record struct WildlifeSpot(int TileId, Vector3 Position, uint Rank);
-    partial class Terrain
+    internal sealed partial class TerrainMap
     {
         internal bool CanWildlifeWalkAt(float x,float y) =>
             TryGetTileCoordinates(x,y,out int u,out int v,out _,out _) &&
-            TryGetWildlifeDestination(getTileByCoords(u,v).Id,out _);
+            TryGetWildlifeDestination(GetTile(u,v).Id,out _);
         internal bool TryGetWildlifeDestination(int id, out Vector3 position)
         {
             position = default;
@@ -17,7 +17,7 @@ namespace ForesTycoon
                 !((IForestHabitat)this).CanSupportForest(id)) return false;
             float low = Math.Min(Math.Min(tile.W.zPos, tile.S.zPos), Math.Min(tile.E.zPos, tile.N.zPos));
             float high = Math.Max(Math.Max(tile.W.zPos, tile.S.zPos), Math.Max(tile.E.zPos, tile.N.zPos));
-            if (high - low > Math.Min(tileSizeH, tileSizeV) * 0.4f) return false;
+            if (high - low > Math.Min(data.TileSizeH, data.TileSizeV) * 0.4f) return false;
             return TryGetTileCenter(id, out position);
         }
         internal void CollectWildlifeSpots(ForestSystem forest,List<WildlifeSpot> output,bool stopAfterFirst=false)
@@ -31,7 +31,7 @@ namespace ForesTycoon
                 if(roads.Has(tile.Id)||ShouldDrawStandingWater(tile)||CountRiverCorners(tile)>0||!((IForestHabitat)this).CanSupportForest(tile.Id))continue;
                 float low=Math.Min(Math.Min(tile.W.zPos,tile.S.zPos),Math.Min(tile.E.zPos,tile.N.zPos));
                 float high=Math.Max(Math.Max(tile.W.zPos,tile.S.zPos),Math.Max(tile.E.zPos,tile.N.zPos));
-                if(high-low>Math.Min(tileSizeH,tileSizeV)*0.4f)continue;
+                if(high-low>Math.Min(data.TileSizeH,data.TileSizeV)*0.4f)continue;
                 forest.TryGetStand(tile.Id,out var stand);
                 int forestNeighbours=0;bool nearRoad=false;
                 foreach(Tile adjacent in data.GetAdjacentTiles(tile)) {
@@ -52,7 +52,7 @@ namespace ForesTycoon
                 }
                 Vector2 best=center.Xy;float bestDistance=-1;
                 for(int x=-1;x<=1;x++)for(int y=-1;y<=1;y++) {
-                    Vector2 point=center.Xy+new Vector2(x*tileSizeH*0.2f,y*tileSizeV*0.2f);float distance=float.MaxValue;
+                    Vector2 point=center.Xy+new Vector2(x*data.TileSizeH*0.2f,y*data.TileSizeV*0.2f);float distance=float.MaxValue;
                     for(int j=0;j<count;j++)distance=Math.Min(distance,(point-stems[j]).LengthSquared);
                     if(distance>bestDistance){bestDistance=distance;best=point;}
                 }

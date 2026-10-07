@@ -69,14 +69,14 @@ namespace ForesTycoon
                 (u, v) => 2 + Math.Clamp(u - 3, 0, 3));
             try
             {
-                terrain.BuildRoadTilePath(36, 132);
-                int[] tiles = terrain.FindDemoRoadRoute();
+                terrain.Map.BuildRoadTilePath(36, 132);
+                int[] tiles = terrain.Map.FindDemoRoadRoute();
                 if (tiles.Length < 5) throw new InvalidOperationException("Slope road fixture failed to build.");
-                var road = terrain.CreateVehicleRoadRoute(tiles);
+                var road = VehicleRoadRoute.Create(terrain.Map, tiles);
                 bool slope = false;
                 for (int i = 0; i < tiles.Length; i++)
                 {
-                    terrain.TryGetRoadTileCenter(tiles[i], out var center);
+                    terrain.Map.TryGetRoadTileCenter(tiles[i], out var center);
                     if ((road.Sample(i) - center).Length > 0.001f)
                         throw new InvalidOperationException("Vehicle path left the road surface.");
                     road.GetPose(i, out _, out var forward, out _, out _);
@@ -84,12 +84,12 @@ namespace ForesTycoon
                 }
                 if (!slope) throw new InvalidOperationException("Slope fixture was flat.");
                 var frozen = road.Sample(2.25);
-                terrain.EditElevationAtNode(4 * 17 + 4, -1, 0, 1);
-                var rebuilt = terrain.CreateVehicleRoadRoute(tiles);
+                terrain.Map.EditElevationAtNode(4 * 17 + 4, -1, 0, 1);
+                var rebuilt = VehicleRoadRoute.Create(terrain.Map, tiles);
                 if ((rebuilt.Sample(2.25) - frozen).Length > 0.001f)
                     throw new InvalidOperationException("Terrain edit moved the frozen road driving surface.");
                 var cargo = new TimberCargoSystem(); cargo.AddHarvested(25);
-                var vehicles = new VehicleSystem(cargo, terrain.CreateVehicleRoadRoute);
+                var vehicles = new VehicleSystem(cargo, route => VehicleRoadRoute.Create(terrain.Map, route));
                 vehicles.Spawn(tiles);
                 vehicles.Update(1.0 / 30);
                 VehicleRenderer.Draw(vehicles, terrain, 1);

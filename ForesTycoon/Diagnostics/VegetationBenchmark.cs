@@ -40,7 +40,7 @@ namespace ForesTycoon
             {
                 GL.Viewport(0,0,960,640); GL.Enable(EnableCap.DepthTest);
                 using var terrain = new Terrain(TerrainSettings.Default.WithNodeSize(17, 42), ForestVisualFixture.Height);
-                var forest = new ForestSystem(terrain, ForestVisualFixture.CreateStands());
+                var forest = new ForestSystem(terrain.Map, ForestVisualFixture.CreateStands());
                 var settings = new GraphicsSettings { Weather = false, Fog = false, Wildlife = false, Diorama = false, StudioBackdrop = false };
                 var setup = Stopwatch.StartNew();
                 using var scene = new TerrainRenderer(terrain, new VehicleSystem(), new WorldEffectSystem(), forest, settings);

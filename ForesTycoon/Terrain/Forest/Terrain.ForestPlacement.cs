@@ -56,25 +56,6 @@ namespace ForesTycoon
             public float TrunkTop(in TreeModel model) => BaseZ + model.TrunkHeight * TrunkHeightScale;
         }
 
-        /// <summary>Point on the actual terrain triangles (forest tiles do not have road diagonal overrides).</summary>
-        internal static void SurfacePoint(Tile tile, float u, float v,
-            out float x, out float y, out float z)
-        {
-            float wW = (1f - u) * (1f - v);
-            float wS = u * (1f - v);
-            float wE = u * v;
-            float wN = (1f - u) * v;
-
-            x = tile.W.xPos * wW + tile.S.xPos * wS + tile.E.xPos * wE + tile.N.xPos * wN;
-            y = tile.W.yPos * wW + tile.S.yPos * wS + tile.E.yPos * wE + tile.N.yPos * wN;
-            bool diagonalWE = Math.Abs(tile.W.zPos - tile.E.zPos) <= Math.Abs(tile.N.zPos - tile.S.zPos);
-            z = diagonalWE
-                ? (u >= v ? tile.W.zPos * (1 - u) + tile.S.zPos * (u - v) + tile.E.zPos * v
-                          : tile.W.zPos * (1 - v) + tile.E.zPos * u + tile.N.zPos * (v - u))
-                : (u + v <= 1 ? tile.W.zPos * (1 - u - v) + tile.S.zPos * u + tile.N.zPos * v
-                              : tile.S.zPos * (1 - v) + tile.E.zPos * (u + v - 1) + tile.N.zPos * (1 - u));
-        }
-
         /// <summary>Detail band from the stem's crown radius in world units, not from its scale.</summary>
         private static byte DetailLevel(float crownRadius) =>
             crownRadius >= 0.85f ? (byte)2 : crownRadius >= 0.45f ? (byte)1 : (byte)0;

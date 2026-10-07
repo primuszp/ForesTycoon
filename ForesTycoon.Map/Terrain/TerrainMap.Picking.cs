@@ -2,10 +2,17 @@ using System;
 using System.Collections.Generic;
 using OpenTK.Mathematics;
 
-namespace ForesTycoon
+namespace ForesTycoon.Map
 {
-    partial class Terrain
+    internal sealed partial class TerrainMap
     {
+        private bool onpos;
+        private Tile hoveredTile;
+
+        public Tile HoveredTile => hoveredTile;
+        /// <summary>True while a node is within pick range of the cursor.</summary>
+        public bool HasHoveredNode => onpos;
+
         public bool TryRaycast(Vector3 rayNear, Vector3 rayFar, out Vector3 hit)
         {
             Vector3 direction = rayFar - rayNear;
@@ -160,13 +167,13 @@ namespace ForesTycoon
         {
             for (int u = 0; u < nodeCols; u++)
             {
-                yield return getNodeByCoords(u, 0);
-                yield return getNodeByCoords(u, nodeRows - 1);
+                yield return GetNode(u, 0);
+                yield return GetNode(u, nodeRows - 1);
             }
             for (int v = 1; v < nodeRows - 1; v++)
             {
-                yield return getNodeByCoords(0, v);
-                yield return getNodeByCoords(nodeCols - 1, v);
+                yield return GetNode(0, v);
+                yield return GetNode(nodeCols - 1, v);
             }
         }
 
@@ -174,7 +181,7 @@ namespace ForesTycoon
         {
             if (TryGetTileCoordinates(x, y, out int u, out int v, out _, out _))
             {
-                hoveredTile = getTileByCoords(u, v);
+                hoveredTile = GetTile(u, v);
                 return true;
             }
             hoveredTile = null;
@@ -189,7 +196,7 @@ namespace ForesTycoon
                 return false;
             }
 
-            Tile tile = getTileByCoords(u, v);
+            Tile tile = GetTile(u, v);
             float fx = (float)Math.Max(0.0, Math.Min(1.0, localX));
             float fy = (float)Math.Max(0.0, Math.Min(1.0, localY));
 
@@ -199,13 +206,13 @@ namespace ForesTycoon
             return true;
         }
 
-        private bool TryGetTileCoordinates(double x, double y, out int u, out int v, out double localX, out double localY)
+        internal bool TryGetTileCoordinates(double x, double y, out int u, out int v, out double localX, out double localY)
         {
             // Unprojection on sloped edge tiles can land a small fraction of a tile
             // beyond the mathematical boundary. Treat that as the edge tile itself.
             const double epsilon = 0.02;
-            double gridX = (x + offsetX) / tileSizeH;
-            double gridY = (y + offsetY) / tileSizeV;
+            double gridX = (x + data.OffsetX) / data.TileSizeH;
+            double gridY = (y + data.OffsetY) / data.TileSizeV;
             double maxX = nodeCols - 1;
             double maxY = nodeRows - 1;
 
@@ -226,7 +233,7 @@ namespace ForesTycoon
 
             localX = gridX - u;
             localY = gridY - v;
-            return checkTile(u, v);
+            return CheckTile(u, v);
         }
 
         public void GetWorldBounds(out Vector3 min, out Vector3 max)

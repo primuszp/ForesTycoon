@@ -14,7 +14,7 @@ namespace ForesTycoon
             Span<TreeInstance> neighboursBuffer=stackalloc TreeInstance[ForestTreeStore.PlantedTreesPerTile];
             foreach(Tile tile in tiles)
             {
-                if(roads.Has(tile.Id)||ShouldDrawStandingWater(tile)||CountRiverCorners(tile)>0||!((IForestHabitat)this).CanSupportForest(tile.Id))continue;
+                if(roads.Has(tile.Id)||ShouldDrawStandingWater(tile)||CountRiverCorners(tile)>0||!((IForestHabitat)map).CanSupportForest(tile.Id))continue;
                 float low=Math.Min(Math.Min(tile.W.zPos,tile.S.zPos),Math.Min(tile.E.zPos,tile.N.zPos));
                 float high=Math.Max(Math.Max(tile.W.zPos,tile.S.zPos),Math.Max(tile.E.zPos,tile.N.zPos));
                 if(high-low>Math.Min(tileSizeH,tileSizeV)*0.4f)continue;
@@ -44,7 +44,7 @@ namespace ForesTycoon
                     }
                     if(distance>bestDistance){bestDistance=distance;best=point;}
                 }
-                if(!TryGetSurfaceZ(best.X,best.Y,out float z))continue;
+                if(!map.TryGetSurfaceZ(best.X,best.Y,out float z))continue;
                 var spot=new WildlifeSpot(tile.Id,new Vector3(best.X,best.Y,z),rank);
                 int index=0;while(index<output.Count&&output[index].Rank<rank)index++;
                 output.Insert(index,spot);if(output.Count>16)output.RemoveAt(16);

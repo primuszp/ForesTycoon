@@ -1,6 +1,6 @@
 using System;
 
-namespace ForesTycoon
+namespace ForesTycoon.Map
 {
     enum LockedRoadSurfaceResult
     {

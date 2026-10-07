@@ -23,6 +23,7 @@
     <Using Include="ForesTycoon.Rendering" />
     <Using Include="ForesTycoon.Models" />
     <Using Include="ForesTycoon.Effects" />
+    <Using Include="ForesTycoon.Map" />
   </ItemGroup>
 
   <ItemGroup>
@@ -33,6 +34,7 @@
     <ProjectReference Include="..\ForesTycoon.Rendering\ForesTycoon.Rendering.csproj" />
     <ProjectReference Include="..\ForesTycoon.Models\ForesTycoon.Models.csproj" />
     <ProjectReference Include="..\ForesTycoon.Effects\ForesTycoon.Effects.csproj" />
+    <ProjectReference Include="..\ForesTycoon.Map\ForesTycoon.Map.csproj" />
   </ItemGroup>
 
 </Project>

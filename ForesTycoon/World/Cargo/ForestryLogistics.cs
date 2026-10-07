@@ -17,12 +17,12 @@ namespace ForesTycoon
     }
     internal sealed class ForestryLogistics
     {
-        private readonly Terrain terrain;
+        private readonly TerrainMap terrain;
         private readonly ForestSystem forest;
         internal readonly List<HarvestSite> Sites=new();
         internal readonly List<Sawmill> Mills=new();
         internal string Status="Jelölj ki kitermelési területet, és helyezz el egy fűrészmalmot.";
-        internal ForestryLogistics(Terrain terrain,ForestSystem forest){this.terrain=terrain;this.forest=forest;}
+        internal ForestryLogistics(TerrainMap terrain,ForestSystem forest){this.terrain=terrain;this.forest=forest;}
         internal float Volume(HarvestSite site){float result=0;foreach(int id in site.Tiles)result+=forest.AvailableTimber(id);return result;}
         internal float Remaining {get {float sum=0;foreach(var site in Sites)sum+=Volume(site);return sum;}}
         internal bool ContainsTile(int id){foreach(var site in Sites)if(Array.IndexOf(site.Tiles,id)>=0)return true;return false;}

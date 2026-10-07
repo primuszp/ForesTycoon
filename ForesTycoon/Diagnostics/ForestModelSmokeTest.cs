@@ -23,7 +23,7 @@ namespace ForesTycoon
                 int[] ids={102,105,150,153};
                 ForestSpecies[] species={ForestSpecies.Spruce,ForestSpecies.Oak,ForestSpecies.Birch,ForestSpecies.Beech};
                 for(int i=0;i<4;i++)stands[ids[i]]=new(species[i],40,.7f,1);
-                var forest=new ForestSystem(terrain,stands);
+                var forest=new ForestSystem(terrain.Map,stands);
                 foreach(var entry in forest.IndividualTrees.Patches) {
                     var patch=entry.Value;
                     while(patch.Count>1)forest.IndividualTrees.RemoveLiving(patch,patch.Count-1);

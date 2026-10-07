@@ -36,17 +36,17 @@ namespace ForesTycoon
                 float turn=MathF.Atan2(MathF.Sin(animal.Yaw-animal.PreviousYaw),MathF.Cos(animal.Yaw-animal.PreviousYaw));
                 float yaw=animal.PreviousYaw+turn*alpha;
                 Vector3 position=Vector3.Lerp(animal.PreviousPosition,animal.Position,alpha);
-                if(!terrain.TryGetSurfaceZ(position.X,position.Y,out float z))continue;position.Z=z+0.02f;
+                if(!terrain.Map.TryGetSurfaceZ(position.X,position.Y,out float z))continue;position.Z=z+0.02f;
                 if(RenderDevice.Visuals?.ShadowPass!=true&&!RenderVisibility.SphereVisible(position+new Vector3(0,0,1.5f),3.5f,RenderDevice.ViewProjection))continue;
                 if(!poses.TryGetValue(animal.Id,out var pose))poses.Add(animal.Id,pose=model.CreatePose());
                 // Cross-fade per-node TRS; rigid antlers follow their animated parent too.
                 pose.Evaluate("Stand_Eating_01",animal.Age+animal.Seed%100,
                     "WalkSlow",animal.WalkTime,animal.Blend,inPlaceRoot:motionRoot);
                 Vector3 forward=new(MathF.Cos(yaw),MathF.Sin(yaw),0),left=new(-MathF.Sin(yaw),MathF.Cos(yaw),0);
-                if(terrain.TryGetSurfaceZ(position.X+forward.X*0.8f,position.Y+forward.Y*0.8f,out float front)&&
-                    terrain.TryGetSurfaceZ(position.X-forward.X*0.8f,position.Y-forward.Y*0.8f,out float back))forward.Z=(front-back)/1.6f;
-                if(terrain.TryGetSurfaceZ(position.X+left.X*0.45f,position.Y+left.Y*0.45f,out float side)&&
-                    terrain.TryGetSurfaceZ(position.X-left.X*0.45f,position.Y-left.Y*0.45f,out float other))left.Z=(side-other)/0.9f;
+                if(terrain.Map.TryGetSurfaceZ(position.X+forward.X*0.8f,position.Y+forward.Y*0.8f,out float front)&&
+                    terrain.Map.TryGetSurfaceZ(position.X-forward.X*0.8f,position.Y-forward.Y*0.8f,out float back))forward.Z=(front-back)/1.6f;
+                if(terrain.Map.TryGetSurfaceZ(position.X+left.X*0.45f,position.Y+left.Y*0.45f,out float side)&&
+                    terrain.Map.TryGetSurfaceZ(position.X-left.X*0.45f,position.Y-left.Y*0.45f,out float other))left.Z=(side-other)/0.9f;
                 forward.Normalize();Vector3 up=Vector3.Cross(forward,left).Normalized();left=Vector3.Cross(up,forward).Normalized();
                 Matrix4 placement=new(new Vector4(forward,0),new Vector4(left,0),new Vector4(up,0),new Vector4(position,1));
                 Matrix4 transform=Axis*Matrix4.CreateScale(DioramaScale.Elk)*placement;

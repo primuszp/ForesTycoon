@@ -25,7 +25,7 @@ namespace ForesTycoon
                 int[] ids = { 7 * 16 + 7, 9 * 16 + 7, 7 * 16 + 9, 9 * 16 + 9 };
                 int[] ages = { 12, 30, 60, 95 };
                 for (int i = 0; i < ids.Length; i++) stands[ids[i]] = new(ForestSpecies.Spruce, ages[i], 0.8f, 1);
-                var forest = new ForestSystem(terrain, stands);
+                var forest = new ForestSystem(terrain.Map, stands);
                 foreach (var entry in forest.IndividualTrees.Patches)
                 {
                     var patch = entry.Value;
@@ -49,7 +49,7 @@ namespace ForesTycoon
                     if (GL.GetError() != ErrorCode.NoError) throw new InvalidOperationException("Spruce preview GL error.");
                     FramebufferCapture.SavePng(Path.Combine(output, $"spruce-yaw{yaw}.png"), 1200, 1000);
                 }
-                terrain.TryGetTileCenter(ids[3], out var focus);
+                terrain.Map.TryGetTileCenter(ids[3], out var focus);
                 RenderDevice.SetCamera(Matrix4.CreateTranslation(-focus)
                     * Matrix4.CreateRotationZ(-MathF.PI / 4) * Matrix4.CreateRotationX(-MathF.PI / 3)
                     * Matrix4.CreateOrthographicOffCenter(-6.6f, 6.6f, -1, 10, -1000, 1000));

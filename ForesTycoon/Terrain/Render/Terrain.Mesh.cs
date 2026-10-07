@@ -180,39 +180,35 @@ namespace ForesTycoon
                 makeBuffer(tile.Code, tile.Low);
         }
 
-        private void updateNodes(List<Node> nodes)
+        // The map re-derived its own data; here only the GPU copies follow the new heights.
+        private void OnNodesChanged(IReadOnlyList<Node> changed)
         {
-            InvalidateSurfaceVisuals();
             Tile[] nodeTiles = new Tile[4];
-            foreach (Node node in nodes)
+            foreach (Node node in changed)
             {
-                node.zPos = node.W * tileSizeM;
                 vertices[node.Id].Position.Z = node.zPos;
-
-                // Ha a terep emelkedett, a víz nem lebeghet a magasban; ha süllyedt, marad szárazon (majd folyik bele)
-                if (nodeWaterDepth != null)
-                    nodeWaterDepth[node.Id] = Math.Max(0f, nodeWaterDepth[node.Id]);
-
                 int nodeTileCount = data.GetTilesByNode(node, nodeTiles);
                 for (int i = 0; i < nodeTileCount; i++)
                 {
                     Tile tile = nodeTiles[i];
-                    chunkIndex.MarkTileDirty(tile.Id, ChunkDirtyFlags.All);
-                    // Crown contact shadows can cross into the neighbouring tile.
-                    chunkIndex.MarkTileAndNeighboursDirty(tile.Id, ChunkDirtyFlags.Props);
                     string code = tile.getCode();
-                    tile.LowPos = tile.Low * tileSizeM;
                     if (!vbos.ContainsKey(code + "_" + tile.Low))
                         makeBuffer(code, tile.Low);
-                    if (flippedDiagonalTiles.Contains(tile.Id) && !vbos.ContainsKey(code + "_" + tile.Low + "_f"))
+                    if (map.IsDiagonalFlipped(tile.Id) && !vbos.ContainsKey(code + "_" + tile.Low + "_f"))
                         makeBuffer(code, tile.Low, true);
                 }
             }
-
             editedEdgesPendingUpload = true;
-            if (!suppressHydrologyRebuild) UploadEditedEdges();
-            if (!suppressHydrologyRebuild)
-                RebuildHydrology();
+        }
+
+        private void OnRoadDiagonalsChanged()
+        {
+            foreach (int id in map.FlippedDiagonalTiles)
+            {
+                Tile inner = tiles[id];
+                if (!vbos.ContainsKey(inner.Code + "_" + inner.Low + "_f"))
+                    makeBuffer(inner.Code, inner.Low, true);
+            }
         }
 
         private void UploadEditedEdges()

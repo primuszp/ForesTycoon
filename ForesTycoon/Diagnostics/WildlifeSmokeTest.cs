@@ -47,22 +47,22 @@ namespace ForesTycoon
                 }
                 var terrain=new Terrain(TerrainSettings.Default.WithNodeSize(33,8127).WithForestPattern(ForestPattern.LargeMixed),(_,_)=>4);
                 try {
-                    var forest=new ForestSystem(terrain);var settings=new GraphicsSettings{Weather=false,Fog=false};
+                    var forest=new ForestSystem(terrain.Map);var settings=new GraphicsSettings{Weather=false,Fog=false};
                     using var scene=new TerrainRenderer(terrain,new VehicleSystem(),new WorldEffectSystem(),forest,settings);
-                    var spots=new System.Collections.Generic.List<WildlifeSpot>();terrain.CollectWildlifeSpots(forest,spots);
+                    var spots=new System.Collections.Generic.List<WildlifeSpot>();terrain.Map.CollectWildlifeSpots(forest,spots);
                     VerifyHabitat();
                     if(spots.Count==0)throw new InvalidOperationException("No deer habitat found.");
                     var animals=new WildlifeSystem();
-                    animals.Update(0,terrain,forest,null);
+                    animals.Update(0,terrain.Map,forest,null);
                     void VerifyHabitat()
                     {
                         var actual = new System.Collections.Generic.List<WildlifeSpot>();
                         var reference = new System.Collections.Generic.List<WildlifeSpot>();
-                        terrain.CollectWildlifeSpots(forest, actual);
+                        terrain.Map.CollectWildlifeSpots(forest, actual);
                         terrain.DiagnosticCollectWildlifeSpotsReference(forest, reference);
                         if (!System.Linq.Enumerable.SequenceEqual(actual, reference))
                             throw new InvalidOperationException("Optimized habitat differs from original ranked positions.");
-                        terrain.CollectWildlifeSpots(forest, actual, stopAfterFirst: true);
+                        terrain.Map.CollectWildlifeSpots(forest, actual, stopAfterFirst: true);
                         if ((actual.Count > 0) != (reference.Count > 0))
                             throw new InvalidOperationException("Early habitat existence check differs from full selection.");
                     }
@@ -71,7 +71,7 @@ namespace ForesTycoon
                     float travelled=0,maxDisplacement=0;
                     for(int tick=0;tick<5400;tick++) {
                         Vector3 previous=animals.Animals[0].Position;
-                        animals.Update(1.0/30,terrain,forest,null);
+                        animals.Update(1.0/30,terrain.Map,forest,null);
                         var animal=animals.Animals[0];
                         if((animal.Position-previous).Length>WildlifeSystem.WalkingSpeed/30+0.001f)throw new InvalidOperationException("Wildlife teleported.");
                         float step=(animal.Position-previous).Length;
@@ -87,7 +87,7 @@ namespace ForesTycoon
                     if(travelled<25||maxDisplacement<10)throw new InvalidOperationException($"Wildlife roamed too little: {travelled:F1} m, range {maxDisplacement:F1} m.");
                     Console.WriteLine($"Wildlife roaming: {travelled:F1} m travelled, {maxDisplacement:F1} m range; turning radius at least {WildlifeSystem.TurningRadius:F1} m.");
                     Vector3 paused=animals.Animals[0].Position;
-                    animals.Update(0,terrain,forest,null);
+                    animals.Update(0,terrain.Map,forest,null);
                     if(animals.Animals[0].Position!=paused)throw new InvalidOperationException("Paused wildlife moved.");
                     Vector3 target=spots[0].Position;
                     Matrix4 camera=Matrix4.CreateTranslation(-target-new Vector3(0,0,1))*Matrix4.CreateRotationZ(-MathF.PI/4)*
@@ -99,7 +99,7 @@ namespace ForesTycoon
                     var survivors=animals.Animals.ToArray();
                     forest.Update(5);
                     VerifyHabitat();
-                    animals.Update(0,terrain,forest,null);
+                    animals.Update(0,terrain.Map,forest,null);
                     if(!System.Linq.Enumerable.SequenceEqual(survivors,animals.Animals))
                         throw new InvalidOperationException("Forest month replaced existing wildlife.");
                     foreach(var spot in spots)forest.Harvest(spot.TileId,out _);
@@ -107,7 +107,7 @@ namespace ForesTycoon
                     forest.Clear();scene.Draw(new RenderContext(5,0,1,5,0,0,false,false,1,-45,-45,-100,-100,100,100,62.5f));
                     if(scene.WildlifeCount!=0)throw new InvalidOperationException("Deer remained after removing forest habitat.");
                     VerifyHabitat();
-                    animals.Update(0,terrain,forest,null);
+                    animals.Update(0,terrain.Map,forest,null);
                     if(animals.Animals.Count!=0)throw new InvalidOperationException("Wildlife habitat existence check missed an empty forest.");
                     forest.Plant(spots[0].TileId,ForestSpecies.Oak);
                     VerifyHabitat();

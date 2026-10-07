@@ -22,6 +22,7 @@
     <InternalsVisibleTo Include="ForesTycoon.Rendering" />
     <InternalsVisibleTo Include="ForesTycoon.Models" />
     <InternalsVisibleTo Include="ForesTycoon.Effects" />
+    <InternalsVisibleTo Include="ForesTycoon.Map" />
     <InternalsVisibleTo Include="ForesTycoon.Tests" />
   </ItemGroup>
 

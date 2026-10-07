@@ -13,7 +13,7 @@ namespace ForesTycoon
         internal int FishCount=>habitats.Count;
         internal void DrawFish(Terrain terrain,GraphicsSettings settings,RenderContext context)
         {
-            if(fishRevision!=terrain.WeatherSurfaceRevision){terrain.CollectFishHabitats(habitats);fishRevision=terrain.WeatherSurfaceRevision;}
+            if(fishRevision!=terrain.WeatherSurfaceRevision){terrain.Map.CollectFishHabitats(habitats, node => terrain.NodeWaterZ(node, 0));fishRevision=terrain.WeatherSurfaceRevision;}
             if(habitats.Count==0)return;
             fish??=new ImportedSceneAsset("Assets/Wildlife/fish.glb",DioramaScale.FishLength,true);
             int index=0;
@@ -37,13 +37,13 @@ namespace ForesTycoon
         }
         internal void DrawBuildingPreview(Terrain terrain,ForestSystem forest,ForestryLogistics logistics,bool enabled)
         {
-            if(!enabled||terrain.HoveredTile==null)return;
-            bool valid=terrain.TryGetSawmillFootprint(terrain.HoveredTile.Id,out int[] footprint,out _);
+            if(!enabled||terrain.Map.HoveredTile==null)return;
+            bool valid=terrain.Map.TryGetSawmillFootprint(terrain.Map.HoveredTile.Id,out int[] footprint,out _);
             foreach(int id in footprint)if(forest.TryGetStand(id,out _)||logistics?.ContainsTile(id)==true)valid=false;
             using var state=new RenderStateScope().AlphaBlend().DepthWrite(false);
             DynamicPrimitiveBatch.Draw(PrimitiveType.LineLoop,()=>{
                 DynamicPrimitiveBatch.Color4(valid?Color.FromArgb(120,245,120):Color.FromArgb(245,90,70));
-                var tile=terrain.HoveredTile;float width=terrain.TileWidth*2,height=terrain.TileHeight*2;
+                var tile=terrain.Map.HoveredTile;float width=terrain.TileWidth*2,height=terrain.TileHeight*2;
                 DynamicPrimitiveBatch.Vertex3(tile.W.xPos,tile.W.yPos,tile.W.zPos);
                 DynamicPrimitiveBatch.Vertex3(tile.W.xPos+width,tile.W.yPos,tile.W.zPos);
                 DynamicPrimitiveBatch.Vertex3(tile.W.xPos+width,tile.W.yPos+height,tile.W.zPos);

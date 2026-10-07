@@ -22,7 +22,7 @@ namespace ForesTycoon
             {
                 var terrain = fixture ? new Terrain(TerrainSettings.Default.WithNodeSize(17, 42), ForestVisualFixture.Height)
                     : new Terrain(TerrainSettings.Default);
-                var forest = fixture ? new ForestSystem(terrain, ForestVisualFixture.CreateStands()) : new ForestSystem(terrain);
+                var forest = fixture ? new ForestSystem(terrain.Map, ForestVisualFixture.CreateStands()) : new ForestSystem(terrain.Map);
                 using var renderer = new TerrainRenderer(terrain, new VehicleSystem(), new WorldEffectSystem(), forest, enhanced ? new GraphicsSettings { Preset = WeatherPreset.Sunny } : null);
                 try
                 {
