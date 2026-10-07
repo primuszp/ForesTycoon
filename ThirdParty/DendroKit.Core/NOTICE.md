@@ -14,3 +14,7 @@ Retain this notice, source headers and license when distributing this code.
 
 The integration and connected crown geometry are in the game's `Rendering`
 directory. `Leaves=0` disables individual leaf generation in the copied core.
+
+The Arbaro tree parameter files in `ThirdParty/ArbaroPresets` are copied unchanged from the Arbaro
+project (https://github.com/wdiestel/arbaro, GNU GPL v2, Wolfram Diestel). The species sets in
+`ForesTycoon/Assets/Trees` are derived from them and are distributed under the same license.

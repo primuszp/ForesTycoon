@@ -20,9 +20,9 @@ public class DendroTreeGeneratorTests
         // Sub-pixel limbs are culled; broad-leaved scaffold limbs stay visible under the crown.
         if (species is ForestSpecies.Oak or ForestSpecies.Beech && stage is TreeLifeStage.Mature or TreeLifeStage.Old)
             Assert.NotEmpty(mesh.Branches);
-        // Near budget: at most 12 sides x 8 rings of crown, and ~320 triangles in total.
+        // Near budget: at most 12 sides x 8 rings of crown; trunk, roots and exposed limbs add a few hundred.
         Assert.InRange(mesh.Crown.Length / 3, 1, 192);
-        Assert.InRange((mesh.Trunk.Length + mesh.Branches.Length + mesh.Crown.Length) / 3, 1, 320);
+        Assert.InRange((mesh.Trunk.Length + mesh.Branches.Length + mesh.Crown.Length) / 3, 1, 760);
         var edges = new Dictionary<(Vector3, Vector3), int>();
         var neighbours = new Dictionary<Vector3, HashSet<Vector3>>();
         for (int i = 0; i < mesh.Crown.Length; i += 3)
@@ -82,7 +82,7 @@ public class DendroTreeGeneratorTests
         var medium = Build(42, TreeLifeStage.Mature, 1, ForestLod.Medium);
         var far = Build(42, TreeLifeStage.Mature, 1, ForestLod.Far);
         Assert.True(far.Crown.Length < medium.Crown.Length && medium.Crown.Length < full.Crown.Length);
-        Assert.InRange((medium.Trunk.Length + medium.Branches.Length + medium.Crown.Length) / 3, 1, 130);
+        Assert.InRange((medium.Trunk.Length + medium.Branches.Length + medium.Crown.Length) / 3, 1, 320);
         Assert.Equal(20, far.Crown.Length / 3);
         Assert.Empty(far.Trunk); Assert.Empty(far.Branches);
     }

@@ -4,14 +4,32 @@ using OpenTK.Mathematics;
 
 namespace ForesTycoon
 {
-    internal enum CrownForm { Spruce, Oak, Birch, Beech, Hazel, Hawthorn }
+    internal enum CrownForm { Spruce, Oak, Birch, Beech, Hazel, Hawthorn, Maple, Ash, Pine, Juniper }
+
+    /// <summary>Season, vitality and site adjustments of the crown envelope.</summary>
+    /// <param name="Foliage">1 = full leaf, lower values shrink the crown (budding, leaf fall, thin foliage).</param>
+    /// <param name="Dieback">Share of the live crown lost: the envelope follows the surviving leaves more closely.</param>
+    /// <param name="TopLoss">Share of the crown height lost at the top (a dead leader).</param>
+    internal readonly record struct CrownShaping(float Foliage, float Dieback, float TopLoss, TreeDeformation Warp)
+    {
+        internal static CrownShaping Full => new(1, 0, 0, default);
+    }
 
     internal static class DendroCrownMesh
     {
-        internal static CrownForm For(ForestSpecies species) => species switch
+        internal static CrownForm For(ForestSpecies species, TreeLifePhase phase = TreeLifePhase.Mature) => species switch
         {
-            ForestSpecies.Spruce => CrownForm.Spruce, ForestSpecies.Oak => CrownForm.Oak,
-            ForestSpecies.Birch => CrownForm.Birch, _ => CrownForm.Beech
+            ForestSpecies.Spruce or ForestSpecies.Fir or ForestSpecies.Larch => CrownForm.Spruce,
+            // Young pines are tiered cones; the flat, high crown comes with age.
+            ForestSpecies.Pine => phase <= TreeLifePhase.Young ? CrownForm.Spruce : CrownForm.Pine,
+            ForestSpecies.Juniper => CrownForm.Juniper,
+            ForestSpecies.Oak or ForestSpecies.SessileOak or ForestSpecies.TurkeyOak => CrownForm.Oak,
+            ForestSpecies.Birch => CrownForm.Birch,
+            ForestSpecies.Maple => CrownForm.Maple,
+            ForestSpecies.Ash => CrownForm.Ash,
+            ForestSpecies.Hazel => CrownForm.Hazel,
+            ForestSpecies.Hawthorn or ForestSpecies.Blackthorn or ForestSpecies.Elder => CrownForm.Hawthorn,
+            _ => CrownForm.Beech
         };
 
         // Reference zoom (pixels per world unit) at the fine end of each LOD band.
@@ -43,11 +61,11 @@ namespace ForesTycoon
         private static Profile For(CrownForm form, TreeLifeStage stage) => form switch
         {
             // Open-grown oaks spread into a broad, irregular, flat-topped dome with age.
-            CrownForm.Oak => stage == TreeLifeStage.Old ? new(0.40f, 0.30f, 0.38f, 0.85f, 0.16f, 10)
-                : stage == TreeLifeStage.Mature ? new(0.42f, 0.35f, 0.50f, 0.82f, 0.12f, 9)
+            CrownForm.Oak => stage == TreeLifeStage.Old ? new(0.40f, 0.45f, 0.60f, 0.85f, 0.16f, 10)
+                : stage == TreeLifeStage.Mature ? new(0.42f, 0.45f, 0.62f, 0.82f, 0.12f, 9)
                 : new(0.45f, 0.55f, 0.75f, 0.60f, 0.06f, 5),
             // Beech: dense, smooth dome (Troll model sprays fill the envelope evenly).
-            CrownForm.Beech => stage == TreeLifeStage.Old ? new(0.38f, 0.30f, 0.55f, 0.55f, 0.14f, 4)
+            CrownForm.Beech => stage == TreeLifeStage.Old ? new(0.38f, 0.45f, 0.65f, 0.55f, 0.14f, 4)
                 : new(0.36f, 0.38f, 0.75f, 0.50f, 0.10f, 3),
             // Birch: narrow ovoid crown with a pointed top and hanging lower fringe.
             CrownForm.Birch => stage == TreeLifeStage.Old ? new(0.40f, 0.45f, 0.90f, 0.62f, 0.02f, 5)
@@ -56,6 +74,14 @@ namespace ForesTycoon
             CrownForm.Hazel => new(0.66f, 0.85f, 0.60f, 0.65f, 0.02f, 6),
             // Hawthorn: compact, dense, roughly hemispherical.
             CrownForm.Hawthorn => new(0.45f, 0.40f, 0.50f, 0.55f, 0.06f, 5),
+            // Sycamore maple: dense, rounded dome.
+            CrownForm.Maple => stage == TreeLifeStage.Old ? new(0.40f, 0.50f, 0.65f, 0.55f, 0.12f, 4) : new(0.40f, 0.55f, 0.75f, 0.50f, 0.08f, 3),
+            // Ash: open, oval, irregular crown that thins with age.
+            CrownForm.Ash => stage == TreeLifeStage.Old ? new(0.50f, 0.55f, 0.70f, 0.75f, 0.10f, 7) : new(0.48f, 0.60f, 0.80f, 0.70f, 0.06f, 6),
+            // Mature Scots pine: broad flat-topped, clumpy crown high on a clear bole.
+            CrownForm.Pine => new(0.50f, 0.50f, 0.70f, 0.85f, 0.08f, 6),
+            // Juniper: narrow, pointed, columnar.
+            CrownForm.Juniper => new(0.40f, 0.60f, 1.20f, 0.60f, 0.02f, 4),
             _ => new(0.10f, 0.40f, 0.95f, 0.40f, 0f, 3) // spruce: cone, shaped further by whorl tiers
         };
 
@@ -67,10 +93,14 @@ namespace ForesTycoon
         // into a species prior; spruce additionally gets stacked whorl tiers.
         internal static Vertex[] Build(CrownForm form, int seed, TreeLifeStage stage,
             float height, float radius, float fraction, float yaw, IReadOnlyList<Vector3> leaves,
-            uint color, ForestLod lod)
+            uint color, ForestLod lod, CrownShaping? shape = null)
         {
+            var shaping = shape ?? CrownShaping.Full;
             var profile = For(form, stage);
-            float bottom = height * (1 - fraction), crownHeight = height * fraction;
+            profile = profile with { LeafWeight = profile.LeafWeight + (0.97f - profile.LeafWeight) * Math.Min(1, shaping.Dieback * 1.6f) };
+            float minShare = 0.35f * (1 - 0.8f * shaping.Dieback);
+            float bottom = height * (1 - fraction), crownHeight = height * fraction * (1 - shaping.TopLoss);
+            float topZ = bottom + crownHeight;
             int sides = form == CrownForm.Spruce
                 ? Sides(radius, lod, lod == ForestLod.Far ? 4 : 5, lod == ForestLod.Far ? 5 : lod == ForestLod.Medium ? 6 : 8)
                 : Sides(radius, lod, lod == ForestLod.Far ? 4 : 5, lod == ForestLod.Far ? 5 : lod == ForestLod.Medium ? 9 : 12);
@@ -91,8 +121,9 @@ namespace ForesTycoon
             var support = new float[sides];
             float bulgeAmount = ForestTreeVariation.Range(seed, 711, 0.06f, 0.16f) * (form == CrownForm.Oak ? 1.4f : 1);
             int bulgeLobes = form == CrownForm.Oak || stage == TreeLifeStage.Old ? 3 : 5;
-            points[0] = new(0, 0, bottom + crownHeight * profile.Pole); points[^1] = new(0, 0, height);
+            points[0] = new(0, 0, bottom + crownHeight * profile.Pole); points[^1] = new(0, 0, topZ);
             float maxRadius = 0;
+            var ringRadius = new float[ringCount * sides];
             for (int ring = 0; ring < ringCount; ring++)
             {
                 var (t, scale) = rings[ring];
@@ -126,13 +157,36 @@ namespace ForesTycoon
                     float bulge = 1 + bulgeAmount * MathF.Sin(angle * bulgeLobes + t * 7 + seed % 17);
                     float lobe = smooth * (form == CrownForm.Spruce ? scale : 1);
                     float r = (prior * radius * (1 - profile.LeafWeight) + lobe * profile.LeafWeight) * bulge;
-                    r = Math.Max(r, prior * radius * 0.35f);
-                    maxRadius = Math.Max(maxRadius, r);
-                    points[1 + ring * sides + side] = new(MathF.Cos(angle) * r, MathF.Sin(angle) * r, bottom + t * crownHeight);
+                    r = Math.Max(r, prior * radius * minShare);
+                    ringRadius[ring * sides + side] = r;
                 }
             }
+            // Vertical [1 2 1] smoothing removes shelves and flat brims where a single far leaf sat in
+            // one ring; spruce keeps its tiers.
+            if (form != CrownForm.Spruce && ringCount > 2)
+            {
+                var smoothed = new float[ringRadius.Length];
+                for (int ring = 0; ring < ringCount; ring++)
+                    for (int side = 0; side < sides; side++)
+                    {
+                        float below = ringRadius[Math.Max(0, ring - 1) * sides + side], above = ringRadius[Math.Min(ringCount - 1, ring + 1) * sides + side];
+                        smoothed[ring * sides + side] = (below + 2 * ringRadius[ring * sides + side] + above) * 0.25f;
+                    }
+                ringRadius = smoothed;
+            }
+            for (int ring = 0; ring < ringCount; ring++)
+                for (int side = 0; side < sides; side++)
+                {
+                    float r = ringRadius[ring * sides + side], angle = yaw + MathF.Tau * side / sides;
+                    maxRadius = Math.Max(maxRadius, r);
+                    points[1 + ring * sides + side] = new(MathF.Cos(angle) * r, MathF.Sin(angle) * r, bottom + rings[ring].T * crownHeight);
+                }
             float width = radius / Math.Max(1e-6f, maxRadius);
-            for (int i = 1; i < points.Length - 1; i++) { points[i].X *= width; points[i].Y *= width; }
+            // Thin foliage (bud burst, leaf fall) shrinks the envelope sideways and a little downwards.
+            float thin = 0.72f + 0.28f * shaping.Foliage;
+            for (int i = 1; i < points.Length - 1; i++) { points[i].X *= width * thin; points[i].Y *= width * thin; }
+            if (!shaping.Warp.IsIdentity)
+                for (int i = 0; i < points.Length; i++) points[i] = shaping.Warp.Apply(points[i]);
 
             var indices = new List<int>(6 * sides * ringCount); var normals = new Vector3[points.Length];
             for (int side = 0; side < sides; side++) Triangle(0, At(0, side + 1), At(0, side));

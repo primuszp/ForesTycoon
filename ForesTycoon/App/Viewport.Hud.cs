@@ -263,6 +263,8 @@ namespace ForesTycoon
                     SpeciesButton(ForestSpecies.Oak, GameIcon.Oak, "Tölgy", "Lassú, hosszú életű, értékes faanyag. Szárazságtűrő.");
                     ImGui.SameLine();
                     SpeciesButton(ForestSpecies.Beech, GameIcon.Beech, "Bükk", "Árnyéktűrő, zárt lombkorona, közepes növekedés.");
+                    ImGui.SameLine();
+                    MoreSpeciesPicker();
                     break;
                 case TerrainEditTool.Raise:
                 case TerrainEditTool.Lower:
@@ -295,6 +297,34 @@ namespace ForesTycoon
         {
             if (HudTheme.LabeledIconButton(label, icon, interaction.PlantingSpecies == species, 30f, description))
                 interaction.PlantingSpecies = species;
+        }
+
+        // Maple, ash, further oaks, pines and shrubs live in a grouped drop-down beside the four classic buttons.
+        private void MoreSpeciesPicker()
+        {
+            var current = interaction.PlantingSpecies;
+            bool extra = Array.IndexOf(ForestSpeciesTraits.Playable, current) >= 4;
+            ImGui.PushItemWidth(200);
+            ImGui.AlignTextToFramePadding();
+            if (ImGui.BeginCombo("##species-more", extra ? ForestSpeciesTraits.For(current).Name : "További fajok"))
+            {
+                int group = -1;
+                foreach (var species in ForestSpeciesTraits.Playable)
+                {
+                    if (Array.IndexOf(ForestSpeciesTraits.Playable, species) < 4) continue;
+                    var traits = ForestSpeciesTraits.For(species);
+                    int kind = traits.Shrub ? 2 : traits.Conifer ? 1 : 0;
+                    if (kind != group)
+                    {
+                        group = kind;
+                        ImGui.TextDisabled(kind == 0 ? "Lombos fák" : kind == 1 ? "Fenyők" : "Cserjék");
+                    }
+                    if (ImGui.Selectable($"{traits.Name}##{(int)species}", species == current)) interaction.PlantingSpecies = species;
+                    if (ImGui.IsItemHovered()) ImGui.SetTooltip($"{traits.Latin}\n{traits.Description}");
+                }
+                ImGui.EndCombo();
+            }
+            ImGui.PopItemWidth();
         }
 
         private static GameIcon ToolIconFor(TerrainEditTool tool) => tool switch
@@ -444,10 +474,11 @@ namespace ForesTycoon
 
         private static GameIcon SpeciesIcon(ForestSpecies species) => species switch
         {
-            ForestSpecies.Spruce => GameIcon.Spruce,
             ForestSpecies.Birch => GameIcon.Birch,
-            ForestSpecies.Oak => GameIcon.Oak,
-            _ => GameIcon.Beech
+            ForestSpecies.Oak or ForestSpecies.SessileOak or ForestSpecies.TurkeyOak => GameIcon.Oak,
+            ForestSpecies.Beech or ForestSpecies.Maple or ForestSpecies.Ash => GameIcon.Beech,
+            _ => ForestSpeciesTraits.For(species).Conifer ? GameIcon.Spruce
+                : ForestSpeciesTraits.For(species).Shrub ? GameIcon.Birch : GameIcon.Beech
         };
 
         private static string Capitalize(string text) => string.IsNullOrEmpty(text) ? text : char.ToUpper(text[0]) + text[1..];
@@ -839,14 +870,8 @@ namespace ForesTycoon
             _ => "Vizsgálat"
         };
 
-        private static string ForestSpeciesName(ForestSpecies species) => species switch
-        {
-            ForestSpecies.Spruce => "lucfenyő",
-            ForestSpecies.Birch => "nyír",
-            ForestSpecies.Oak => "tölgy",
-            ForestSpecies.Beech => "bükk",
-            _ => "nincs"
-        };
+        private static string ForestSpeciesName(ForestSpecies species) =>
+            species == ForestSpecies.None ? "nincs" : ForestSpeciesTraits.For(species).Name.ToLowerInvariant();
 
         private static bool ForestryActionSucceeded(ForestryActionResult result) =>
             result == ForestryActionResult.Designated || result == ForestryActionResult.Planted || result == ForestryActionResult.Harvested;
