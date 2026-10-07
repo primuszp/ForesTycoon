@@ -137,7 +137,7 @@ namespace ForesTycoon.TreeModels
                 }
                 for (int side = 0; side < sides; side++)
                 {
-                    float angle = yaw + MathF.Tau * side / sides;
+                    float angle = RingAngle(side);
                     Vector2 direction = new(MathF.Cos(angle), MathF.Sin(angle));
                     float best = 0;
                     for (int sample = 0; sample < leaves.Count; sample++)
@@ -153,7 +153,7 @@ namespace ForesTycoon.TreeModels
                 {
                     // Circular [1 2 1] smoothing removes single-leaf spikes but keeps lobes.
                     float smooth = (support[(side + sides - 1) % sides] + 2 * support[side] + support[(side + 1) % sides]) * 0.25f;
-                    float angle = yaw + MathF.Tau * side / sides;
+                    float angle = RingAngle(side);
                     float bulge = 1 + bulgeAmount * MathF.Sin(angle * bulgeLobes + t * 7 + seed % 17);
                     float lobe = smooth * (form == CrownForm.Spruce ? scale : 1);
                     float r = (prior * radius * (1 - profile.LeafWeight) + lobe * profile.LeafWeight) * bulge;
@@ -177,17 +177,37 @@ namespace ForesTycoon.TreeModels
             for (int ring = 0; ring < ringCount; ring++)
                 for (int side = 0; side < sides; side++)
                 {
-                    float r = ringRadius[ring * sides + side], angle = yaw + MathF.Tau * side / sides;
+                    float t = rings[ring].T;
+                    float r = ringRadius[ring * sides + side], angle = RingAngle(side);
+                    // Break horizontal shelves without adding vertices. The displacement is
+                    // bounded by the neighbouring ring gaps, so rings cannot cross.
+                    float gap = Math.Min(t - (ring == 0 ? 0 : rings[ring - 1].T),
+                        (ring == ringCount - 1 ? 1 : rings[ring + 1].T) - t);
+                    float dz = gap * 0.12f * MathF.Sin(angle * 3 + t * 4 + seed % 23);
                     maxRadius = Math.Max(maxRadius, r);
-                    points[1 + ring * sides + side] = new(MathF.Cos(angle) * r, MathF.Sin(angle) * r, bottom + rings[ring].T * crownHeight);
+                    points[1 + ring * sides + side] = new(MathF.Cos(angle) * r, MathF.Sin(angle) * r, bottom + (t + dz) * crownHeight);
                 }
             // Coarser levels of detail must fill the same silhouette, or trees visibly shrink and grow as the
             // camera zooms: compensate the inscribed polygon (mean width n·sin(pi/n)/pi of a circle) and the
             // wider gaps between fewer rings, relative to the smooth envelope of the growth form.
             float width = radius / Math.Max(1e-6f, maxRadius) * FillCompensation(profile, form, rings, sides);
+            // The distant, high pine canopy also stands in for its omitted long bole.
+            // A small width allowance preserves filled area at the LOD transition.
+            if (form == CrownForm.Pine && lod == ForestLod.Far) width *= 1.025f;
             // Thin foliage (bud burst, leaf fall) shrinks the envelope sideways and a little downwards.
             float thin = 0.72f + 0.28f * shaping.Foliage;
             for (int i = 1; i < points.Length - 1; i++) { points[i].X *= width * thin; points[i].Y *= width * thin; }
+            // A cheap, object-space occlusion cue: dark interior/underside, lighter outer
+            // lobes. Bake RGB only; alpha carries the species code, not transparency.
+            var colors = new uint[points.Length];
+            for (int i = 0; i < points.Length; i++)
+            {
+                float t = Math.Clamp((points[i].Z - bottom) / crownHeight, 0, 1);
+                float angle = MathF.Atan2(points[i].Y, points[i].X);
+                float lobes = MathF.Sin(angle * bulgeLobes + t * 2 + seed % 17);
+                float shade = 0.76f + 0.27f * MathF.Sqrt(t) + 0.065f * lobes * MathF.Sin(t * MathF.PI);
+                colors[i] = Shade(color, shade);
+            }
             if (!shaping.Warp.IsIdentity)
                 for (int i = 0; i < points.Length; i++) points[i] = shaping.Warp.Apply(points[i]);
 
@@ -196,8 +216,12 @@ namespace ForesTycoon.TreeModels
             for (int ring = 0; ring < ringCount - 1; ring++)
                 for (int side = 0; side < sides; side++)
                 {
-                    Triangle(At(ring, side), At(ring, side + 1), At(ring + 1, side + 1));
-                    Triangle(At(ring, side), At(ring + 1, side + 1), At(ring + 1, side));
+                    int a = At(ring, side), b = At(ring, side + 1);
+                    int c = At(ring + 1, side + 1), d = At(ring + 1, side);
+                    // Shorter diagonals avoid skinny triangles across the lobe folds.
+                    if ((points[a] - points[c]).LengthSquared <= (points[b] - points[d]).LengthSquared)
+                    { Triangle(a, b, c); Triangle(a, c, d); }
+                    else { Triangle(a, b, d); Triangle(b, c, d); }
                 }
             for (int side = 0; side < sides; side++) Triangle(At(ringCount - 1, side), At(ringCount - 1, side + 1), points.Length - 1);
             for (int i = 0; i < normals.Length; i++) normals[i] = normals[i].Normalized();
@@ -206,10 +230,17 @@ namespace ForesTycoon.TreeModels
             {
                 Vector3 face = Vector3.Cross(points[indices[i + 1]] - points[indices[i]], points[indices[i + 2]] - points[indices[i]]).Normalized();
                 for (int j = 0; j < 3; j++)
-                    result[i + j] = new(points[indices[i + j]], (normals[indices[i + j]] * 0.65f + face * 0.35f).Normalized(), color);
+                {
+                    int vertex = indices[i + j];
+                    Vector3 normal = (normals[vertex] * 0.82f + face * 0.18f).Normalized();
+                    // Deep folds must never shade as if their outward face were reversed.
+                    if (Vector3.Dot(normal, face) < 0.15f) normal = face;
+                    result[i + j] = new(points[vertex], normal, colors[vertex]);
+                }
             }
             return result;
 
+            float RingAngle(int side) => yaw + MathF.Tau * side / sides;
             int At(int ring, int side) => 1 + ring * sides + side % sides;
             void Triangle(int a, int b, int c)
             {
@@ -217,6 +248,12 @@ namespace ForesTycoon.TreeModels
                 Vector3 n = Vector3.Cross(points[b] - points[a], points[c] - points[a]);
                 normals[a] += n; normals[b] += n; normals[c] += n;
             }
+        }
+
+        private static uint Shade(uint color, float shade)
+        {
+            uint Channel(int shift) => (uint)Math.Clamp((int)MathF.Round(((color >> shift) & 255) * shade), 0, 255);
+            return (color & 0xff000000) | Channel(0) | (Channel(8) << 8) | (Channel(16) << 16);
         }
 
         private static float FillCompensation(Profile profile, CrownForm form, List<(float T, float Scale)> rings, int sides)

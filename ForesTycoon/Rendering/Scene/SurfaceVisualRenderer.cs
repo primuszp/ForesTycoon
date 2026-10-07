@@ -257,7 +257,7 @@ void main() {
     vec3 face = cross(dFdx(world),dFdy(world));
     vec3 n = length(face)>0.000001 ? normalize(face) : vec3(0,0,1);
     if(!gl_FrontFacing) n = -n;
-    if((kind == 6 || kind == 4 || kind == 9 || kind == 10) && length(smooth_normal)>0.1) n = normalize(smooth_normal);
+    if((kind == 5 || kind == 6 || kind == 4 || kind == 9 || kind == 10) && length(smooth_normal)>0.1) n = normalize(smooth_normal);
     if(kind == 1 || kind == 3 || kind == 7 || kind == 8) { if(n.z<0) n=-n; }
     vec3 base = pow(max(tint.rgb,vec3(0)),vec3(2.2));
     int species_code = (kind == 5 || kind == 6) ? int(tint.a*255.0 + 0.5) - 246 : 0;

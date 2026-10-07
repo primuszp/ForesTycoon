@@ -125,7 +125,10 @@ namespace ForesTycoon.TreeModels
         {
             int max = shrub ? 4 : root ? (lod == ForestLod.Near ? 7 : lod == ForestLod.Medium ? 5 : 3)
                 : level == 0 ? (lod == ForestLod.Near ? 5 : 3) : level <= 1 ? (lod == ForestLod.Near ? 5 : 4) : 3;
-            return DendroCrownMesh.Sides(radius, lod, 3, max, 0.5f);
+            // Spend sides on the exposed bole, where a triangular silhouette remains
+            // visible even with smooth lighting. Thin branches keep their cheap tubes.
+            int min = root && !shrub ? (lod == ForestLod.Near ? 5 : lod == ForestLod.Medium ? 4 : 3) : 3;
+            return DendroCrownMesh.Sides(radius, lod, min, max, 0.5f);
         }
 
         /// <summary>Gathers world points and radii of one stem, cut at an arc fraction and at a height.</summary>

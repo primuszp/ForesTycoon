@@ -58,6 +58,38 @@ DendroKit fát nem tart meg, csak pozíciókat és ritka törzsszakaszokat.
 
 ## Mérés és ellenőrzés
 
+### Kevés csúcsból teltebb korona és kerekebb törzs
+
+A 2026-10-07-i látványjavítás a meglévő koronaháló csúcsszámát megtartja:
+
+- A gyűrűk csúcsai kis, determinisztikus magasságeltolást kapnak, így a lomb
+  kevésbé szabályos vízszintes sávokból áll. Az eltolás a szomszédos gyűrűk
+  távolságának legfeljebb 12%-a.
+- A négyszögsávokat a rövidebb átló mentén háromszögeljük. A normálokban a
+  simított rész súlya 82%, a lapnormálé 18%; a mély hajlatoknál külön védelem
+  akadályozza meg a kifelé néző lappal ellentétes megvilágítást.
+- A csúcsok RGB-színe sötétebb koronaaljat és finom lombtömeg-árnyalást ad.
+  Ez geometriai helyzetből becsült árnyalás, nem sugárkövetett AO. A fajkódot
+  hordozó alfaérték változatlan, a korona továbbra is tömör.
+- A faanyag shadere használja a csőháló simított normáljait. A főtörzs
+  közelről legalább öt-, közepes távolságból legalább négyoldalú; a vékony
+  ágak háromoldalú csövek maradhatnak. A sugárirányú normálok miatt a
+  megvilágítás hengeres felület benyomását kelti.
+
+A 25 fás/cserjés előnézeti mintában a közeli korona átlagosan 137,2
+háromszög maradt; a faanyag átlaga 170-ről 172,16-ra nőtt. A korona
+háromszögszáma mindhárom LOD-nál változatlan. Ez geometriai mérés, nem FPS-mérés.
+A LOD-tesztek a kitöltött sziluettet és a felülettel súlyozott évszakos
+átlagszínt ellenőrzik; az eltérő csúcssűrűség miatt az árnyalt színminták
+listája már nem lehet azonos.
+
+Az alkalmazott fogások szakmai háttere:
+[Blender: egyedi normálok low poly felületeken](https://docs.staging.blender.org/manual/en/latest/modeling/meshes/structure.html)
+és [Epic/SpeedTree: csúcsonkénti ambient occlusion és LOD](https://dev.epicgames.com/documentation/en-us/unreal-engine/creating-models-for-ue4?application_version=4.27).
+Az előbbi az árnyalás geometriától való részleges függetlenítését, az utóbbi
+a csúcsonként tárolt árnyékolási információ használatát támasztja alá;
+a fenti paraméterek a ForesTycoon saját megvalósításához tartoznak.
+
 ```powershell
 dotnet test ForesTycoon.sln
 dotnet run --project ForesTycoon -- --vegetation-preview

@@ -73,9 +73,29 @@ public class ForestLodConsistencyTests
         foreach (var leaves in new[] { LeafState.Budding, LeafState.Full, LeafState.Autumn, LeafState.Falling })
         {
             var spec = Spec(species, leaves);
+            // Vertex occlusion varies over the surface. Compare area-weighted colour,
+            // not the list of samples (different LODs place vertices differently).
             var colours = Enum.GetValues<ForestLod>()
-                .Select(lod => DendroTreeGenerator.Generate(spec, lod).Crown.Select(v => v.Color).Distinct().ToArray()).ToArray();
-            Assert.All(colours, c => Assert.Equal(colours[0], c));
+                .Select(lod => Average(DendroTreeGenerator.Generate(spec, lod).Crown)).ToArray();
+            foreach (var c in colours)
+                Assert.InRange((c - colours[0]).Length, 0, 0.04f);
+        }
+
+        static Vector3 Average(Vertex[] mesh)
+        {
+            Vector3 sum = Vector3.Zero; float area = 0;
+            for (int i = 0; i < mesh.Length; i += 3)
+            {
+                float weight = Vector3.Cross(mesh[i + 1].Position - mesh[i].Position,
+                    mesh[i + 2].Position - mesh[i].Position).Length;
+                for (int j = 0; j < 3; j++)
+                {
+                    uint c = mesh[i + j].Color;
+                    sum += new Vector3(c & 255, (c >> 8) & 255, (c >> 16) & 255) * (weight / (3 * 255));
+                }
+                area += weight;
+            }
+            return sum / area;
         }
     }
 }
