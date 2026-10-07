@@ -23,6 +23,10 @@ uniform float forest_elapsed;
 uniform float forest_year;
 uniform samplerBuffer forest_state;
 uniform int forest_dynamic;
+float forestLight(){
+    return forest_dynamic != 0 && forest_tree >= 0 && forest_rate.x > -1.5
+        ? clamp(texelFetch(forest_state,int(forest_tree)*2+1).w,0,1) : 1;
+}
 vec3 forestScale(){
     if(forest_rate.x < -1.5) return vec3(1);
     if(forest_dynamic != 0 && forest_tree >= 0 && forest_rate.x > -1.5) {

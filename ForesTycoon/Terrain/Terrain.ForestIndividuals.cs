@@ -10,7 +10,7 @@ namespace ForesTycoon
     {
         // A physical metre is intentionally compressed for the existing diorama proportions.
         internal const float TreeMetresToWorld = 0.32f;
-        private readonly record struct ForestGpuTree(int TileId, int Index, ulong Id, ForestTreeDimensions Size);
+        private readonly record struct ForestGpuTree(int TileId, int Index, ulong Id, ForestTreeDimensions Size, int LightBand);
         private sealed class IndividualForestChunk : IDisposable
         {
             internal readonly VertexBuffer Wood = new(PrimitiveType.Triangles);
@@ -25,6 +25,7 @@ namespace ForesTycoon
             internal double AnchorYear;
             internal double NextStageYear;
             internal bool Initialized;
+            internal bool LightShapeDirty;
             internal ForestModelStyle ModelStyle;
             internal bool ImportedBirch;
             internal IndividualForestChunk(int count) => TileRevisions = new ulong[count];
@@ -68,6 +69,7 @@ namespace ForesTycoon
                 || forest.ForestYear >= geometry.NextStageYear
                 || geometry.Generation != forest.IndividualTrees.Generation
                 || geometry.ModelStyle != graphics.ForestModels || geometry.ImportedBirch != graphics.ImportedBirch;
+            bool topologyChanged = changed;
             if (changed || geometry.ForestRevision != forest.Revision)
             {
                 for (int i = 0; i < chunk.TileIds.Length; i++)
@@ -75,13 +77,19 @@ namespace ForesTycoon
                     ulong revision = forest.IndividualTrees.TryGet(chunk.TileIds[i], out var patch) ? patch.TopologyRevision : 0;
                     changed |= geometry.TileRevisions[i] != revision;
                 }
+                topologyChanged = changed;
+                geometry.LightShapeDirty = false;
+                foreach (var cached in geometry.Trees)
+                    if (forest.IndividualTrees.TryGet(cached.TileId, out var patch) && cached.Index < patch.Count)
+                        geometry.LightShapeDirty |= DendroTreeGenerator.LightBand(patch.Trees[cached.Index].Resources.Light) != cached.LightBand;
             }
+            changed |= geometry.LightShapeDirty;
             if (changed)
             {
                 bool immediate = SynchronousForestBuilds || !geometry.Initialized
                     || geometry.TerrainVersion != chunk.PropVersion || geometry.Generation != forest.IndividualTrees.Generation
                     || geometry.ModelStyle != graphics.ForestModels || geometry.ImportedBirch != graphics.ImportedBirch
-                    || geometry.EditRevision != forest.EditRevision;
+                    || (geometry.EditRevision != forest.EditRevision && topologyChanged);
                 if (!immediate)
                 {
                     if (pendingForestBuild == null)
@@ -90,6 +98,14 @@ namespace ForesTycoon
                         pendingForestBuild = new ForestBuild { Chunk = chunk, Lod = lod, Geometry = replacement,
                             Work = BuildIndividualForestChunk(chunk, replacement, forest, graphics, lod).GetEnumerator() };
                         pendingForestBuild.Work.MoveNext(); // Capture a consistent tree snapshot before yielding.
+                    }
+                    if (!topologyChanged && geometry.ForestRevision != forest.Revision)
+                    {
+                        // Light-only rebuilds may wait behind other chunks. Publish the
+                        // continuous light/health/growth state immediately while keeping
+                        // LightShapeDirty set until the replacement topology is ready.
+                        UpdateIndividualForestState(geometry, forest);
+                        geometry.ForestRevision = forest.Revision;
                     }
                     SetIndividualForestElapsed(geometry, forest.ForestYear);
                     return geometry;
@@ -165,6 +181,7 @@ namespace ForesTycoon
         private static void UpdateIndividualForestState(IndividualForestChunk geometry, ForestSystem forest)
         {
             int count = geometry.Trees.Count * 2;
+            geometry.LightShapeDirty = false;
             if (geometry.State.Length != count) geometry.State = new Vector4[count];
             for (int i = 0; i < geometry.Trees.Count; i++)
             {
@@ -172,6 +189,7 @@ namespace ForesTycoon
                 if (!forest.IndividualTrees.TryGet(slot.TileId, out var patch) || patch.Trees[slot.Index].Id != slot.Id)
                     throw new InvalidOperationException("Forest topology changed without invalidating geometry.");
                 var tree = patch.Trees[slot.Index];
+                geometry.LightShapeDirty |= DendroTreeGenerator.LightBand(tree.Resources.Light) != slot.LightBand;
                 var state = ForestTreeRenderState.Create(tree, slot.Size, forest.ForestYear);
                 geometry.State[i * 2] = state.Scale;
                 geometry.State[i * 2 + 1] = state.Rate;
@@ -263,15 +281,17 @@ namespace ForesTycoon
                     if (!ImportedForestModels.UsesImported(tree.Species, graphics))
                     {
                         int slot = geometry.Trees.Count;
-                        geometry.Trees.Add(new(id, i, tree.Id, size));
-                        Vertex[] wood = lod == ForestLod.Far ? Array.Empty<Vertex>()
-                            : DynamicPrimitiveBatch.BuildGeometry(PrimitiveType.Quads, () => DrawTreeWood(stem));
-                        individualWood.AddRange(wood);
-                        Repeat(individualWoodGrowth, wood.Length, new(origin, new Vector3(radial, radial, vertical), slot));
-                        int start = individualCrowns.Count;
-                        AppendTreeCrown(individualCrowns, stem, lod);
+                        int lightBand = DendroTreeGenerator.LightBand(tree.Resources.Light);
+                        geometry.Trees.Add(new(id, i, tree.Id, size, lightBand));
+                        var mesh = DendroTreeGenerator.Generate(tree.Species, stem.Seed, stage,
+                            DendroTreeGenerator.BandLight(lightBand), size, stem.Yaw, lod);
+                        AppendAt(individualWood, mesh.Trunk, origin);
+                        Repeat(individualWoodGrowth, mesh.Trunk.Length, new(origin, new Vector3(radial, radial, vertical), slot));
+                        AppendAt(individualWood, mesh.Branches, origin);
+                        Repeat(individualWoodGrowth, mesh.Branches.Length, new(origin, new Vector3(-1, crown, vertical), slot));
+                        AppendAt(individualCrowns, mesh.Crown, origin);
                         // A negative rate component selects crown scaling instead of bole scaling.
-                        Repeat(individualCrownGrowth, individualCrowns.Count - start, new(origin, new Vector3(-1, crown, vertical), slot));
+                        Repeat(individualCrownGrowth, mesh.Crown.Length, new(origin, new Vector3(-1, crown, vertical), slot));
                     }
                     Vertex[] floor = lod == ForestLod.Far ? Array.Empty<Vertex>()
                         : DynamicPrimitiveBatch.BuildGeometry(PrimitiveType.Triangles, () => DrawForestFloor(stem));
@@ -283,7 +303,19 @@ namespace ForesTycoon
                     foreach (var dead in patch.DeadTrees)
                     {
                         var stem = IndividualStem(tile, dead.Tree, dead.DeathYear);
-                        Vertex[] wood = DynamicPrimitiveBatch.BuildGeometry(PrimitiveType.Quads, () => DrawTreeWood(stem));
+                        Vertex[] wood;
+                        if (!ImportedForestModels.UsesImported(dead.Tree.Species, graphics))
+                        {
+                            var mesh = DendroTreeGenerator.Generate(dead.Tree.Species, stem.Seed,
+                                ForestTreeAppearance.Stage(dead.Tree.Species, dead.Tree.Age(dead.DeathYear)),
+                                DendroTreeGenerator.BandLight(DendroTreeGenerator.LightBand(dead.Tree.Resources.Light)),
+                                dead.Tree.At(dead.DeathYear), stem.Yaw, ForestLod.Near, includeCrown: false);
+                            var deadWood = new List<Vertex>(mesh.Trunk.Length + mesh.Branches.Length);
+                            AppendAt(deadWood, mesh.Trunk, new(stem.X, stem.Y, stem.BaseZ));
+                            AppendAt(deadWood, mesh.Branches, new(stem.X, stem.Y, stem.BaseZ));
+                            wood = deadWood.ToArray();
+                        }
+                        else wood = DynamicPrimitiveBatch.BuildGeometry(PrimitiveType.Quads, () => DrawTreeWood(stem));
                         individualWood.AddRange(wood);
                         // Physical snag/fallen state follows the current year in every cached LOD,
                         // rather than waiting for each LOD to replace a differently aged mesh.
@@ -312,6 +344,11 @@ namespace ForesTycoon
             {
                 for (int i = 0; i < count; i++) target.Add(value);
             }
+            static void AppendAt(List<Vertex> target, Vertex[] source, Vector3 origin)
+            {
+                foreach (var vertex in source)
+                    target.Add(new Vertex(vertex.Position + origin, vertex.Normal, vertex.Color));
+            }
         }
 
         private void DrawIndividualTrees(ForestSystem forest, RenderContext context, GraphicsSettings graphics)
@@ -331,7 +368,19 @@ namespace ForesTycoon
             if (RenderDevice.Visuals != null) RenderDevice.Visuals.Kind = SurfaceKind.Wood;
             foreach (var chunk in visibleChunks) individualForestChunks[(chunk, lod)].Wood.DrawArray();
             forestMaterial.Use();
-            foreach (var chunk in visibleChunks) individualForestChunks[(chunk, lod)].Crowns.DrawArray(false);
+            // The texture represents the whole foliage mass. Rendering only the front
+            // shell lets its gaps expose branches instead of filling them with the back
+            // shell or a solid outline. Use identical coverage for shadow casters.
+            using (new RenderStateScope().Enable(EnableCap.CullFace))
+            {
+                GL.GetInteger(GetPName.CullFaceMode, out int oldCull);
+                try
+                {
+                    GL.CullFace(TriangleFace.Back);
+                    foreach (var chunk in visibleChunks) individualForestChunks[(chunk, lod)].Crowns.DrawArray(false);
+                }
+                finally { GL.CullFace((TriangleFace)oldCull); }
+            }
             foreach (var chunk in visibleChunks)
                 foreach (int id in chunk.TileIds)
                 {
@@ -351,18 +400,6 @@ namespace ForesTycoon
                     }
                 }
             forestMaterial.Use();
-            if (shadow) return;
-            using (new RenderStateScope().Enable(EnableCap.CullFace))
-            {
-                GL.GetInteger(GetPName.CullFaceMode, out int oldCull);
-                try
-                {
-                    GL.CullFace(TriangleFace.Front);
-                    forestMaterial.Use(0.75f / context.PixelsPerWorldUnit);
-                    foreach (var chunk in visibleChunks) individualForestChunks[(chunk, lod)].Crowns.DrawArray(false);
-                }
-                finally { GL.CullFace((TriangleFace)oldCull); forestMaterial.Use(); }
-            }
         }
 
         private void DisposeIndividualForest()

@@ -37,16 +37,19 @@ out vec4 tint;
 void main() {
     gl_Position = matrix * vec4(forestPoint(position) + forestNormal(normal) * outline_width, 1);
     tint = outline_width > 0 ? vec4(0.075, 0.12, 0.045, 1) : forestTint(color);
+    tint.a=color.a;
 }";
-            const string fragmentSource = @"#version 330 core
+            string fragmentSource = @"#version 330 core
 in vec4 tint;
 out vec4 output_color;
 uniform vec2 lod_range;
+
 void lodMask(){
     float rank=fract(52.9829189*fract(dot(floor(gl_FragCoord.xy),vec2(0.06711056,0.00583715))));
     if(rank<lod_range.x||rank>=lod_range.y)discard;
 }
-void main() { lodMask(); output_color = tint; }";
+void main() { lodMask();
+    output_color = vec4(tint.rgb,1); }";
             int vertex = 0, fragment = 0;
             try
             {

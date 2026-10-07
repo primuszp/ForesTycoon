@@ -1,5 +1,14 @@
 # ForesTycoon
 
+## DendroKit alapú procedurális fák
+
+Az alapértelmezett eljárásos famód az átemelt DendroKit ággenerátorát használja.
+A luc, nyír, tölgy és bükk egyedi seedje, kora és szimulált fényellátása eltérő
+ágstruktúrát és összefüggő poligonális koronát ad. A levélpontok egyetlen tömör, alacsony poligonszámú koronát formálnak;
+nincs levélgeometria vagy alfa-kivágás. A generátor többtörzsű cserjéket is tud készíteni.
+Összehasonlító képek: `dotnet run --project ForesTycoon -- --dendro-tree-preview`.
+Részletek és forrásmegjelölés: [DendroKit integráció](docs/dendrokit-integration.md).
+
 ## Egyedi fák és folytonos növekedés
 
 Az új világok fái saját azonosítót, kort, törzsátmérőt, magasságot és koronaméretet kapnak. Hónapon belül folyamatosan nőnek a GPU-n, háló-újraépítés nélkül; az érett fák tovább vastagodhatnak. A részrakodás egész fákat vág ki, a teherautó a helyi rönkdepóból vesz át, és a tönk az adott fa méretét őrzi. Az Erdészet ablak az egyedek számát és az előző évi növedéket is mutatja. Minden világ az egyedi famodellt használja; régi mentésekhez nincs kompatibilitási ág.

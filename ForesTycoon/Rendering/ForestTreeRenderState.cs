@@ -12,7 +12,7 @@ namespace ForesTycoon
             return new(new(size.Diameter / meshSize.Diameter, size.CrownRadius / meshSize.CrownRadius,
                     size.Height / meshSize.Height, tree.Health),
                 new(tree.AnnualGrowth.Diameter / meshSize.Diameter, tree.AnnualGrowth.CrownRadius / meshSize.CrownRadius,
-                    tree.AnnualGrowth.Height / meshSize.Height, 0));
+                    tree.AnnualGrowth.Height / meshSize.Height, tree.Resources.Light));
         }
     }
 }

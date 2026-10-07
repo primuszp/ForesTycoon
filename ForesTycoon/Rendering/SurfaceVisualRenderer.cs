@@ -93,8 +93,8 @@ namespace ForesTycoon
                 if (ShadowPass) { shadowCamera = camera; shadowCameraUploaded = true; }
                 else { mainCamera = camera; mainCameraUploaded = true; }
             }
-            if (ShadowPass) return;
             GL.Uniform1(GlProgram.Uniform(shader, "kind"), (int)Kind);
+            if (ShadowPass) return;
             GL.Uniform1(GlProgram.Uniform(shader, "outline_width"), outlineWidth);
             if (!globalsUploaded)
             {
@@ -164,7 +164,7 @@ void main() {
     tint = forestTint(color); light_position = light_matrix * p;
     gl_Position = camera * p;
 }";
-            const string fragment = @"#version 330 core
+            string fragment = @"#version 330 core
 in vec3 world, smooth_normal;
 in vec4 tint, light_position;
 out vec4 output_color;
@@ -183,6 +183,7 @@ uniform float outline_width, time, flash, storm;
 uniform int clouds;
 uniform vec3 sun;
 uniform vec4 climate;
+
 float shadow(vec3 n) {
     if(shadowed == 0) return 1;
     vec3 p = light_position.xyz / light_position.w * 0.5 + 0.5;
@@ -194,13 +195,13 @@ float shadow(vec3 n) {
     return s/9;
 }
 float hash2(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
-float noise2(vec2 p){
+float surfaceNoise2(vec2 p){
     vec2 i=floor(p), f=fract(p); f=f*f*(3-2*f);
     return mix(mix(hash2(i),hash2(i+vec2(1,0)),f.x),
         mix(hash2(i+vec2(0,1)),hash2(i+vec2(1)),f.x),f.y);
 }
 float hash3(vec3 p){return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453);}
-float noise3(vec3 p){
+float surfaceNoise3(vec3 p){
     vec3 i=floor(p), f=fract(p); f=f*f*(3-2*f);
     return mix(mix(mix(hash3(i),hash3(i+vec3(1,0,0)),f.x),mix(hash3(i+vec3(0,1,0)),hash3(i+vec3(1,1,0)),f.x),f.y),
         mix(mix(hash3(i+vec3(0,0,1)),hash3(i+vec3(1,0,1)),f.x),mix(hash3(i+vec3(0,1,1)),hash3(i+vec3(1,1,1)),f.x),f.y),f.z);
@@ -212,64 +213,46 @@ vec3 barkPattern(int code, vec3 c, vec3 w, vec3 n){
     vec2 b = vec2(w.x*0.6 + w.y*0.8 + atan(n.y, n.x)*0.12, w.z);
     if(code == 1) {
         // Fresh end grain: fine radial noise and faint growth bands.
-        float grain = noise2(w.xy*7.0)*0.6 + noise2(w.xy*24.0)*0.4;
-        float rings = 0.5 + 0.5*sin(noise2(w.xy*2.0)*18.0);
+        float grain = surfaceNoise2(w.xy*7.0)*0.6 + surfaceNoise2(w.xy*24.0)*0.4;
+        float rings = 0.5 + 0.5*sin(surfaceNoise2(w.xy*2.0)*18.0);
         return c * (0.84 + 0.18*grain + 0.06*rings);
     }
     if(code == 2) {
         // Spruce: reddish-brown, flaking in small rounded scales.
-        float scale = noise2(vec2(b.x*8.0, b.y*4.0));
+        float scale = surfaceNoise2(vec2(b.x*8.0, b.y*4.0));
         float seam = smoothstep(0.43,0.5,scale)*smoothstep(0.57,0.5,scale);
         return c * vec3(1.06,0.97,0.90) * (0.76 + 0.34*scale - 0.32*seam);
     }
     if(code == 3) {
         // Birch: chalk-white with dark horizontal lenticels and black patches.
-        float lenticel = smoothstep(0.78,0.86, noise2(vec2(b.x*2.5, b.y*26.0)));
-        float blotch = smoothstep(0.70,0.80, noise2(b*vec2(1.6,3.2)));
-        c *= 0.94 + 0.08*noise2(b*30.0);
+        float lenticel = smoothstep(0.78,0.86, surfaceNoise2(vec2(b.x*2.5, b.y*26.0)));
+        float blotch = smoothstep(0.70,0.80, surfaceNoise2(b*vec2(1.6,3.2)));
+        c *= 0.94 + 0.08*surfaceNoise2(b*30.0);
         return mix(c, vec3(0.05,0.045,0.04), clamp(lenticel*0.9 + blotch*0.75, 0.0, 1.0));
     }
     if(code == 4) {
         // Oak: deep vertical furrows between rough grey-brown ridges.
-        float warp = noise2(vec2(b.x*3.0, b.y*1.2));
+        float warp = surfaceNoise2(vec2(b.x*3.0, b.y*1.2));
         float ridge = smoothstep(0.15,0.65, abs(sin(b.x*16.0 + warp*5.0)));
-        return c * (0.50 + 0.62*ridge) * (0.94 + 0.12*noise2(b*vec2(20.0,6.0)));
+        return c * (0.50 + 0.62*ridge) * (0.94 + 0.12*surfaceNoise2(b*vec2(20.0,6.0)));
     }
     // Beech: smooth silver-grey, softly mottled, with green-grey lichen patches.
-    float mottle = noise2(b*2.5)*0.6 + noise2(b*9.0)*0.4;
+    float mottle = surfaceNoise2(b*2.5)*0.6 + surfaceNoise2(b*9.0)*0.4;
     c *= 0.90 + 0.18*mottle;
-    return mix(c, c*vec3(0.86,1.06,0.84), smoothstep(0.62,0.80, noise2(b*vec2(1.3,2.0)))*0.6);
+    return mix(c, c*vec3(0.86,1.06,0.84), smoothstep(0.62,0.80, surfaceNoise2(b*vec2(1.3,2.0)))*0.6);
 }
 vec3 foliagePattern(int code, vec3 c, vec3 w, vec3 n){
-    // Leaves on the underside of a crown sit in its own shade.
-    float under = 0.78 + 0.26*smoothstep(-0.5, 0.7, n.z);
-    if(code == 2) {
-        // Spruce: drooping needle sprays in whorled tiers, blue-green.
-        float tiers = smoothstep(0.15, 0.85, 0.5 + 0.5*sin(w.z*5.5 + noise3(w*1.5)*3.0));
-        float needles = noise3(vec3(w.xy*11.0, w.z*3.0));
-        return c * vec3(0.92,1.0,1.06) * (0.64 + 0.32*tiers + 0.22*needles) * under;
-    }
-    if(code == 3) {
-        // Birch: small, loose, light-catching leaves, yellow-green.
-        float leaves = noise3(w*7.5);
-        float glint = smoothstep(0.72,0.90, noise3(w*16.0));
-        return (c * vec3(1.05,1.03,0.90) * (0.80 + 0.30*leaves) + glint*vec3(0.05,0.06,0.015)) * under;
-    }
-    if(code == 4) {
-        // Oak: heavy lobed clumps with deep shadowed gaps.
-        float clump = noise3(w*1.9)*0.65 + noise3(w*4.2)*0.35;
-        return c * (0.56 + 0.56*smoothstep(0.28,0.72,clump) + 0.12*noise3(w*10.0)) * under;
-    }
-    // Beech: flat layered sprays, dense and smooth.
-    float layer = 0.5 + 0.5*sin(w.z*7.0 + noise3(w*vec3(1.2,1.2,0.6))*4.0);
-    return c * vec3(1.0,1.02,0.94) * (0.76 + 0.18*layer + 0.14*noise3(w*vec3(8.0,8.0,14.0))) * under;
+    // Opaque low-poly foliage: the mesh supplies the silhouette and facets.
+    float under = 0.82 + 0.20*smoothstep(-0.5, 0.7, n.z);
+    return c * under;
 }
 float cloudDensity(vec2 p){
     p=p/42.0-vec2(time*0.012,time*0.004);
-    return smoothstep(0.28,0.72,noise2(p)*0.65+noise2(p*2.03)*0.25+noise2(p*4.1)*0.1);
+    return smoothstep(0.28,0.72,surfaceNoise2(p)*0.65+surfaceNoise2(p*2.03)*0.25+surfaceNoise2(p*4.1)*0.1);
 }
 void main() {
     lodMask();
+
     if(kind == 0) { output_color = tint; return; }
     if(outline_width > 0 && (kind == 4 || kind == 9 || kind == 10)) { output_color = vec4(0.07,0.085,0.09,1); return; }
     if(outline_width > 0) { output_color = vec4(mix(vec3(0.075,0.12,0.045),vec3(0.27,0.32,0.33),climate.z),1); return; }
@@ -282,22 +265,23 @@ void main() {
     int species_code = (kind == 5 || kind == 6) ? int(tint.a*255.0 + 0.5) - 246 : 0;
     if(species_code < 1 || species_code > 5 || (kind == 6 && species_code == 1)) species_code = 0;
     float detail = 1;
-    float patch = texture(materials, vec3(world.xy/24.0,1)).r;
+    float materialPatch = texture(materials, vec3(world.xy/24.0,1)).r;
     if(textured != 0) {
         float layer = kind == 3 ? 2 : (kind == 5 ? 3 : (kind == 8 || kind == 2 ? 1 : 0));
         vec2 uv = kind == 5 || kind == 2 ? vec2(world.x+world.y,world.z)/4.0 : world.xy/5.0;
         detail = texture(materials,vec3(uv,layer)).r / 0.84;
-        detail *= 0.94 + patch * 0.1;
+        detail *= 0.94 + materialPatch * 0.1;
         if(kind == 6) detail = 0.94 + 0.1 * texture(materials,vec3(world.xy/2.5,0)).r;
         if(kind == 4 || kind == 9) detail = 1;
-        if(kind == 10) detail = 0.88 + 0.16*noise2(vec2(world.x+world.y,world.z)*12);
-        if(kind == 2) detail *= 0.92 + 0.08*sin(world.z*1.8 + patch*2);
+        if(kind == 10) detail = 0.88 + 0.16*surfaceNoise2(vec2(world.x+world.y,world.z)*12);
+        if(kind == 2) detail *= 0.92 + 0.08*sin(world.z*1.8 + materialPatch*2);
         if(species_code > 0) {
             detail = 1;
             base = kind == 5 ? barkPattern(species_code, base, world, n) : foliagePattern(species_code, base, world, n);
         }
     }
     base *= detail;
+
     vec4 local_environment=environment_active!=0?texture(environment_map,(world.xy-environment_bounds.xy)/environment_bounds.zw):vec4(0);
     float wetness=environment_active!=0?local_environment.r:climate.y;
     if(environment_active!=0&&kind==6)base=mix(base,base*vec3(1.22,0.83,0.52),local_environment.b*0.65);
@@ -305,7 +289,7 @@ void main() {
     float snow = 0;
     if(kind != 2 && kind != 5 && kind != 7) {
         float up = smoothstep(0.25,0.8,n.z);
-        snow = smoothstep(0.12,0.85,climate.z - (1-patch)*0.25) * up;
+        snow = smoothstep(0.12,0.85,climate.z - (1-materialPatch)*0.25) * up;
         if(kind == 8) snow *= 0.55;
         base = mix(base,vec3(0.83,0.88,0.93) * (textured != 0 ? texture(materials,vec3(world.xy/3,4)).r : 1),snow);
     }
@@ -344,7 +328,7 @@ void main() {
         base += climate.w * vec3(0.045,0.065,0.08) * rings;
     }
     if(kind == 3 || kind == 1) {
-        float wet=wetness*smoothstep(0.7,0.98,patch)*smoothstep(0.75,0.98,n.z);
+        float wet=wetness*smoothstep(0.7,0.98,materialPatch)*smoothstep(0.75,0.98,n.z);
         vec3 halfVector=normalize(sun+vec3(0,-0.7,0.7));
         base += wet * pow(max(dot(n,halfVector),0),48) * vec3(0.18,0.21,0.25);
     }
@@ -354,15 +338,22 @@ void main() {
             program = GlProgram.Create(vertex, fragment);
             depthProgram = GlProgram.Create(@"#version 330 core
 layout(location=0) in vec3 position;
+layout(location=1) in vec4 color;
+layout(location=2) in vec3 normal;
 uniform mat4 model, camera;
+out vec4 tint;
 " + ForestVertexGrowth.Shader + @"
-void main(){gl_Position=camera*model*vec4(forestPoint(position),1);}",
+void main(){gl_Position=camera*model*vec4(forestPoint(position),1);
+}",
                 "#version 330 core\n" + @"uniform vec2 lod_range;
+uniform int kind;
+in vec4 tint;
+
 void lodMask(){
     float rank=fract(52.9829189*fract(dot(floor(gl_FragCoord.xy),vec2(0.06711056,0.00583715))));
     if(rank<lod_range.x||rank>=lod_range.y)discard;
 }
-void main(){lodMask();}");
+void main(){lodMask(); }");
             textures = ProceduralSurfaceTextures.Upload();
             shadowTexture = GL.GenTexture();
             shadowSize = settings.ShadowResolution;

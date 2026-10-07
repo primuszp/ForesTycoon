@@ -51,6 +51,11 @@ namespace ForesTycoon
                 Draw(terrain, forest, 12);
                 Require(terrain.ForestChunkRebuilds == 0, "Stable frame rebuilt monthly geometry.");
                 Draw(terrain, forest, 1.5f);
+                // Resource refresh can queue crown-shape work independently of edits.
+                // Drain it before isolating the local harvest/terrain invalidation checks.
+                terrain.SynchronousForestBuilds = true;
+                Draw(terrain, forest, 1.5f);
+                terrain.SynchronousForestBuilds = false;
                 int tileId = 0;
                 while (!forest.TryGetStand(tileId, out _)) tileId++;
                 forest.Harvest(tileId, out _);

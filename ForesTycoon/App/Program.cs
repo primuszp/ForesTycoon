@@ -6,6 +6,8 @@ namespace ForesTycoon
     {
         static void Main(string[] args)
         {
+            if (Array.Exists(args, a => a == "--vegetation-preview")) { VegetationPreview.Run(); return; }
+            if (Array.Exists(args, a => a == "--vegetation-benchmark")) { VegetationBenchmark.Run(Array.Exists(args, a => a == "--before") ? "before" : "after"); return; }
             if (Array.Exists(args, argument => argument == "--forest-tempo-benchmark")) { ForestTempoBenchmark.Run(); return; }
             if (Array.Exists(args, argument => argument == "--world-benchmark")) { WorldFrameBenchmark.Run(); return; }
             if (Array.Exists(args, argument => argument == "--simulation-benchmark")) { ForestSimulationBenchmark.Run(); return; }
@@ -16,6 +18,8 @@ namespace ForesTycoon
                 return;
             }
             if (Array.Exists(args, argument => argument == "--procedural-tree-preview")) { ProceduralTreePreview.Run(); return; }
+            if (Array.Exists(args, argument => argument == "--dendro-tree-preview")) { ProceduralTreePreview.Run(true, true); return; }
+            if (Array.Exists(args, argument => argument == "--dendro-tree-smoke-test")) { DendroTreeSmokeTest.Run(); return; }
             if (Array.Exists(args, argument => argument == "--tree-life-stage-preview")) { ProceduralTreePreview.Run(true); return; }
             if (Array.Exists(args, argument => argument == "--forest-model-smoke-test")) { ForestModelSmokeTest.Run(); return; }
             int treePreview = Array.FindIndex(args, argument => argument == "--tree-asset-preview");
