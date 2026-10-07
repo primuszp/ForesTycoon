@@ -83,7 +83,7 @@ public class DendroTreeGeneratorTests
         var far = Build(42, TreeLifeStage.Mature, 1, ForestLod.Far);
         Assert.True(far.Crown.Length < medium.Crown.Length && medium.Crown.Length < full.Crown.Length);
         Assert.InRange((medium.Trunk.Length + medium.Branches.Length + medium.Crown.Length) / 3, 1, 320);
-        Assert.Equal(20, far.Crown.Length / 3);
+        Assert.Equal(species == ForestSpecies.Spruce ? 20 : 30, far.Crown.Length / 3);
         Assert.Empty(far.Trunk); Assert.Empty(far.Branches);
     }
 

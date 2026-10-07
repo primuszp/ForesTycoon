@@ -53,16 +53,44 @@ namespace ForesTycoon
         private ImportedPineAsset importedPine;
         private readonly ImportedForestModels importedForestModels = new();
         private ForestLod? generatedForestLod;
+        private readonly List<ForestLod> chunkLods = new();
+
+        /// <summary>
+        /// While the wanted level is current everywhere, builds the neighbouring levels one chunk at a
+        /// time in the background so a zoom change swaps to meshes that are already up to date.
+        /// </summary>
+        private void PrepareNeighbouringLods(ForestSystem forest, GraphicsSettings graphics, ForestLod lod)
+        {
+            if (pendingForestBuild != null) return;
+            foreach (var other in Enum.GetValues<ForestLod>())
+            {
+                if (Math.Abs((int)other - (int)lod) != 1) continue;
+                foreach (var chunk in visibleChunks)
+                {
+                    if (individualForestChunks.TryGetValue((chunk, other), out var cached) && IsFresh(cached, chunk, forest, graphics)) continue;
+                    GetIndividualForestChunk(chunk, forest, graphics, other, true, out _);
+                    if (pendingForestBuild != null) return;
+                }
+            }
+        }
         private readonly GraphicsSettings defaultPineGraphics = new() { Enhanced = false };
 
         internal void WarmIndividualForest(ForestSystem forest, GraphicsSettings graphics)
         {
             foreach (var chunk in chunkIndex.Chunks)
-                foreach (var lod in Enum.GetValues<ForestLod>()) GetIndividualForestChunk(chunk, forest, graphics, lod);
+                foreach (var lod in Enum.GetValues<ForestLod>()) GetIndividualForestChunk(chunk, forest, graphics, lod, false, out _);
         }
 
-        private IndividualForestChunk GetIndividualForestChunk(TerrainChunk chunk, ForestSystem forest, GraphicsSettings graphics, ForestLod lod)
+        /// <summary>
+        /// Brings the cached geometry of <paramref name="lod"/> up to date. <paramref name="current"/> is false
+        /// when only a stale copy is available yet (its replacement is being built in the background);
+        /// with <paramref name="deferIfStale"/> a stale or missing copy never blocks the frame, because
+        /// the caller keeps drawing another level of detail that is current.
+        /// </summary>
+        private IndividualForestChunk GetIndividualForestChunk(TerrainChunk chunk, ForestSystem forest, GraphicsSettings graphics,
+            ForestLod lod, bool deferIfStale, out bool current)
         {
+            current = true;
             if (!individualForestChunks.TryGetValue((chunk, lod), out var geometry))
                 individualForestChunks.Add((chunk, lod), geometry = new(chunk.TileIds.Length));
             bool changed = !geometry.Initialized || geometry.TerrainVersion != chunk.PropVersion
@@ -86,10 +114,10 @@ namespace ForesTycoon
             changed |= geometry.LightShapeDirty;
             if (changed)
             {
-                bool immediate = SynchronousForestBuilds || !geometry.Initialized
+                bool immediate = SynchronousForestBuilds || (!deferIfStale && (!geometry.Initialized
                     || geometry.TerrainVersion != chunk.PropVersion || geometry.Generation != forest.IndividualTrees.Generation
                     || geometry.ModelStyle != graphics.ForestModels || geometry.ImportedBirch != graphics.ImportedBirch
-                    || (geometry.EditRevision != forest.EditRevision && topologyChanged);
+                    || (geometry.EditRevision != forest.EditRevision && topologyChanged)));
                 if (!immediate)
                 {
                     if (pendingForestBuild == null)
@@ -108,6 +136,7 @@ namespace ForesTycoon
                         geometry.ForestRevision = forest.Revision;
                     }
                     SetIndividualForestElapsed(geometry, forest.ForestYear);
+                    current = false;
                     return geometry;
                 }
                 CancelForestBuild();
@@ -129,6 +158,53 @@ namespace ForesTycoon
             geometry.EditRevision = forest.EditRevision;
             SetIndividualForestElapsed(geometry, forest.ForestYear);
             return geometry;
+        }
+
+        /// <summary>
+        /// True when the cached geometry already shows the present forest (shape, season, light bands),
+        /// refreshing its cheap continuous state on the way. Never starts a rebuild.
+        /// </summary>
+        private bool IsFresh(IndividualForestChunk geometry, TerrainChunk chunk, ForestSystem forest, GraphicsSettings graphics)
+        {
+            if (!geometry.Initialized || geometry.TerrainVersion != chunk.PropVersion
+                || forest.ForestYear >= geometry.NextStageYear || geometry.Generation != forest.IndividualTrees.Generation
+                || geometry.ModelStyle != graphics.ForestModels || geometry.ImportedBirch != graphics.ImportedBirch) return false;
+            if (geometry.ForestRevision != forest.Revision)
+            {
+                for (int i = 0; i < chunk.TileIds.Length; i++)
+                {
+                    ulong revision = forest.IndividualTrees.TryGet(chunk.TileIds[i], out var patch) ? patch.TopologyRevision : 0;
+                    if (geometry.TileRevisions[i] != revision) return false;
+                }
+                UpdateIndividualForestState(geometry, forest);
+                geometry.ForestRevision = forest.Revision;
+                geometry.EditRevision = forest.EditRevision;
+            }
+            return !geometry.LightShapeDirty;
+        }
+
+        /// <summary>
+        /// The level of detail to draw for one chunk. A level that is not current yet is never shown in
+        /// place of a current one: trees would pop to an old season, size or stand while the new mesh
+        /// is built, so the chunk keeps its current level until the wanted one is ready.
+        /// </summary>
+        private ForestLod ResolveForestLod(TerrainChunk chunk, ForestSystem forest, GraphicsSettings graphics, ForestLod target)
+        {
+            if (individualForestChunks.TryGetValue((chunk, target), out var wanted) && IsFresh(wanted, chunk, forest, graphics))
+            {
+                GetIndividualForestChunk(chunk, forest, graphics, target, false, out _);
+                return target;
+            }
+            ForestLod? fallback = null;
+            int bestDistance = int.MaxValue;
+            foreach (var lod in Enum.GetValues<ForestLod>())
+            {
+                if (lod == target || !individualForestChunks.TryGetValue((chunk, lod), out var other)) continue;
+                int distance = Math.Abs((int)lod - (int)target);
+                if (distance < bestDistance && IsFresh(other, chunk, forest, graphics)) { fallback = lod; bestDistance = distance; }
+            }
+            GetIndividualForestChunk(chunk, forest, graphics, target, fallback.HasValue, out bool current);
+            return current || fallback is null ? target : fallback.Value;
         }
 
         private static void SetIndividualForestElapsed(IndividualForestChunk geometry, double year)
@@ -360,19 +436,22 @@ namespace ForesTycoon
         private void DrawIndividualTrees(ForestSystem forest, RenderContext context, GraphicsSettings graphics)
         {
             graphics ??= defaultPineGraphics;
-            if (RenderDevice.Visuals?.ShadowPass != true) AdvanceForestBuild(forest, graphics);
+            bool shadow0 = RenderDevice.Visuals?.ShadowPass == true;
+            if (!shadow0) AdvanceForestBuild(forest, graphics);
             generatedForestLod = ForestLodPolicy.Select(context.PixelsPerWorldUnit, generatedForestLod);
             ForestLod lod = generatedForestLod.Value;
-            foreach (var chunk in visibleChunks) GetIndividualForestChunk(chunk, forest, graphics, lod);
+            chunkLods.Clear();
+            foreach (var chunk in visibleChunks) chunkLods.Add(ResolveForestLod(chunk, forest, graphics, lod));
+            if (!shadow0) PrepareNeighbouringLods(forest, graphics, lod);
             bool shadow = RenderDevice.Visuals?.ShadowPass == true;
             if (!shadow)
             {
                 if (RenderDevice.Visuals != null) RenderDevice.Visuals.Kind = SurfaceKind.ForestFloor;
                 using (new RenderStateScope().AlphaBlend().DepthWrite(false).PolygonOffset(-1, -1))
-                    foreach (var chunk in visibleChunks) individualForestChunks[(chunk, lod)].Floor.DrawArray();
+                    for (int c = 0; c < visibleChunks.Count; c++) individualForestChunks[(visibleChunks[c], chunkLods[c])].Floor.DrawArray();
             }
             if (RenderDevice.Visuals != null) RenderDevice.Visuals.Kind = SurfaceKind.Wood;
-            foreach (var chunk in visibleChunks) individualForestChunks[(chunk, lod)].Wood.DrawArray();
+            for (int c = 0; c < visibleChunks.Count; c++) individualForestChunks[(visibleChunks[c], chunkLods[c])].Wood.DrawArray();
             forestMaterial.Use();
             // The texture represents the whole foliage mass. Rendering only the front
             // shell lets its gaps expose branches instead of filling them with the back
@@ -383,7 +462,7 @@ namespace ForesTycoon
                 try
                 {
                     GL.CullFace(TriangleFace.Back);
-                    foreach (var chunk in visibleChunks) individualForestChunks[(chunk, lod)].Crowns.DrawArray(false);
+                    for (int c = 0; c < visibleChunks.Count; c++) individualForestChunks[(visibleChunks[c], chunkLods[c])].Crowns.DrawArray(false);
                 }
                 finally { GL.CullFace((TriangleFace)oldCull); }
             }

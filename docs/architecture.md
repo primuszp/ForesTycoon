@@ -150,3 +150,11 @@ egy lekérdezést vagy eseményt – a térkép sosem hív rajzolót.
 * A parancs- és mentésréteg (`World/Commands`, `World/Persistence`) ugyanígy kivehető.
 * A `GlbTruckModel` és a fa-GPU állapot (`Rendering/Forest`) általánosítható és a `Models`-be vihető.
 * Az `Ecosystem` mentés-pillanatképe (ellenőrzött snapshot + naplórészlet) a hosszú játékokhoz.
+
+## Erdő-LOD: egyenletes megjelenés zoomolás közben
+* Minden LOD ugyanazt a sziluettet tölti ki (`ForestLodConsistencyTests`): a durvább szintek a sokszög- és
+  gyűrűhézag-veszteséget kompenzálják (`DendroCrownMesh.FillCompensation`), a Far szint 3 gyűrűt kap.
+* A chunk-geometria szintenként gyorsítótárazott. Egy szint **soha nem látszik elavultan** egy friss helyett:
+  `Terrain.ResolveForestLod` addig a chunk friss szintjét rajzolja, amíg a kívánt szint (évszak, méret,
+  állomány) háttérben el nem készül, így nincs ugrás régi évszínre vagy régi fákra. Üresjáratban a szomszédos
+  szinteket is előkészíti (`PrepareNeighbouringLods`).
