@@ -4,67 +4,145 @@ using OpenTK.Mathematics;
 
 namespace ForesTycoon
 {
+    internal enum CrownForm { Spruce, Oak, Birch, Beech, Hazel, Hawthorn }
+
     internal static class DendroCrownMesh
     {
-        // A radial envelope avoids intersecting/disconnected leaf cards and lobe shells.
-        // Leaf positions supply directional bulges to a single closed manifold grid.
-        // This regularized envelope preserves the species silhouette without tiny leaf detail.
-        internal static Vertex[] Build(ForestSpecies species, int seed, TreeLifeStage stage,
+        internal static CrownForm For(ForestSpecies species) => species switch
+        {
+            ForestSpecies.Spruce => CrownForm.Spruce, ForestSpecies.Oak => CrownForm.Oak,
+            ForestSpecies.Birch => CrownForm.Birch, _ => CrownForm.Beech
+        };
+
+        // Reference zoom (pixels per world unit) at the fine end of each LOD band.
+        // Tessellation is chosen so the silhouette chord error stays below one pixel there.
+        internal static float ReferencePixels(ForestLod lod) =>
+            lod == ForestLod.Near ? 24 : lod == ForestLod.Medium ? 9 : 3.5f;
+
+        // Fewest polygon sides whose chord error r(1-cos(pi/n)) stays within the tolerance.
+        internal static int Sides(float radiusWorld, ForestLod lod, int min, int max, float tolerancePixels = 1)
+        {
+            float pixels = radiusWorld * ReferencePixels(lod);
+            if (pixels <= tolerancePixels * 2) return min;
+            int sides = (int)MathF.Ceiling(MathF.PI / MathF.Acos(1 - tolerancePixels / pixels));
+            return Math.Clamp(sides, min, max);
+        }
+
+        // Silhouette prior per growth form, t=0 at the crown base and t=1 at the apex.
+        // peak = relative height of the widest point; exponents < 1 give broad, flat
+        // bases/tops, > 1 tapering ones. Leaf weight says how much of the final radius
+        // follows the DendroKit leaf distribution instead of the prior.
+        // Window = exponent of the cos(angle) kernel; larger means narrower, deeper lobes.
+        private readonly record struct Profile(float Peak, float Bottom, float Top, float LeafWeight, float Pole, int Window = 4);
+        private static float Pow(float value, int exponent)
+        {
+            float result = 1;
+            for (int i = 0; i < exponent; i++) result *= value;
+            return result;
+        }
+        private static Profile For(CrownForm form, TreeLifeStage stage) => form switch
+        {
+            // Open-grown oaks spread into a broad, irregular, flat-topped dome with age.
+            CrownForm.Oak => stage == TreeLifeStage.Old ? new(0.40f, 0.30f, 0.38f, 0.85f, 0.16f, 10)
+                : stage == TreeLifeStage.Mature ? new(0.42f, 0.35f, 0.50f, 0.82f, 0.12f, 9)
+                : new(0.45f, 0.55f, 0.75f, 0.60f, 0.06f, 5),
+            // Beech: dense, smooth dome (Troll model sprays fill the envelope evenly).
+            CrownForm.Beech => stage == TreeLifeStage.Old ? new(0.38f, 0.30f, 0.55f, 0.55f, 0.14f, 4)
+                : new(0.36f, 0.38f, 0.75f, 0.50f, 0.10f, 3),
+            // Birch: narrow ovoid crown with a pointed top and hanging lower fringe.
+            CrownForm.Birch => stage == TreeLifeStage.Old ? new(0.40f, 0.45f, 0.90f, 0.62f, 0.02f, 5)
+                : new(0.32f, 0.55f, 1.25f, 0.55f, 0f, 4),
+            // Hazel: many ascending stems open into a vase, widest high up.
+            CrownForm.Hazel => new(0.66f, 0.85f, 0.60f, 0.65f, 0.02f, 6),
+            // Hawthorn: compact, dense, roughly hemispherical.
+            CrownForm.Hawthorn => new(0.45f, 0.40f, 0.50f, 0.55f, 0.06f, 5),
+            _ => new(0.10f, 0.40f, 0.95f, 0.40f, 0f, 3) // spruce: cone, shaped further by whorl tiers
+        };
+
+        private static float Envelope(Profile p, float t) => t < p.Peak
+            ? MathF.Pow(MathF.Sin(MathF.PI * 0.5f * t / p.Peak), p.Bottom)
+            : MathF.Pow(MathF.Cos(MathF.PI * 0.5f * (t - p.Peak) / (1 - p.Peak)), p.Top);
+
+        // One closed, regular-topology manifold. Leaf positions push directional bulges
+        // into a species prior; spruce additionally gets stacked whorl tiers.
+        internal static Vertex[] Build(CrownForm form, int seed, TreeLifeStage stage,
             float height, float radius, float fraction, float yaw, IReadOnlyList<Vector3> leaves,
             uint color, ForestLod lod)
         {
-            int sides = lod == ForestLod.Near ? 10 : lod == ForestLod.Medium ? 8 : 5;
-            int rings = lod == ForestLod.Near ? 7 : lod == ForestLod.Medium ? 5 : 3;
+            var profile = For(form, stage);
             float bottom = height * (1 - fraction), crownHeight = height * fraction;
-            var points = new Vector3[2 + (rings - 1) * sides];
-            var weightedLeaves = new Vector2[leaves.Count];
-            points[0] = new(0, 0, bottom); points[^1] = new(0, 0, height);
-            float maxRadius = 0;
-            for (int ring = 1; ring < rings; ring++)
+            int sides = form == CrownForm.Spruce
+                ? Sides(radius, lod, lod == ForestLod.Far ? 4 : 5, lod == ForestLod.Far ? 5 : lod == ForestLod.Medium ? 6 : 8)
+                : Sides(radius, lod, lod == ForestLod.Far ? 4 : 5, lod == ForestLod.Far ? 5 : lod == ForestLod.Medium ? 9 : 12);
+            var rings = Rings(form, sides, crownHeight, radius, lod);
+            int ringCount = rings.Count;
+            var points = new Vector3[2 + ringCount * sides];
+            // Leaves in polar form. A directional max of projections would give the convex
+            // hull; an angular window keeps the gaps between scaffold limbs as lobes.
+            var leafDirection = new Vector2[leaves.Count];
+            var leafRadius = new float[leaves.Count];
+            var leafWeight = new float[leaves.Count];
+            for (int i = 0; i < leaves.Count; i++)
             {
-                float t = ring / (float)rings;
-                float envelope = species == ForestSpecies.Spruce
-                    ? MathF.Pow(1 - t, 0.85f) * MathF.Sin(MathF.PI * 0.5f * Math.Min(1, t * 4))
-                    : MathF.Pow(MathF.Sin(MathF.PI * t), species == ForestSpecies.Oak ? 0.48f : 0.72f);
-                if (species == ForestSpecies.Birch) envelope *= 1.10f - 0.32f * t;
-                if (species == ForestSpecies.Beech) envelope *= 0.78f + 0.30f * t;
-                if (species == ForestSpecies.Spruce && lod != ForestLod.Far)
-                    envelope *= 0.96f - 0.12f * MathF.Cos(t * MathF.PI * 7);
-                // The axial weight is independent of azimuth. Evaluate its exponential
-                // once per leaf/ring, rather than once for every grid vertex.
+                leafRadius[i] = leaves[i].Xy.Length;
+                leafDirection[i] = leafRadius[i] > 1e-6f ? leaves[i].Xy / leafRadius[i] : Vector2.Zero;
+            }
+            int window = profile.Window;
+            var support = new float[sides];
+            float bulgeAmount = ForestTreeVariation.Range(seed, 711, 0.06f, 0.16f) * (form == CrownForm.Oak ? 1.4f : 1);
+            int bulgeLobes = form == CrownForm.Oak || stage == TreeLifeStage.Old ? 3 : 5;
+            points[0] = new(0, 0, bottom + crownHeight * profile.Pole); points[^1] = new(0, 0, height);
+            float maxRadius = 0;
+            for (int ring = 0; ring < ringCount; ring++)
+            {
+                var (t, scale) = rings[ring];
+                float prior = Envelope(profile, t) * scale;
+                // The axial weight is independent of azimuth: evaluate it once per leaf/ring.
+                float sharpness = form == CrownForm.Spruce ? 40 : form == CrownForm.Oak ? 34 : 22;
                 for (int sample = 0; sample < leaves.Count; sample++)
                 {
-                    var leaf = leaves[sample];
-                    float dz = (leaf.Z - bottom) / crownHeight - t;
-                    weightedLeaves[sample] = leaf.Xy * MathF.Exp(-dz * dz * 28);
+                    float dz = (leaves[sample].Z - bottom) / crownHeight - t;
+                    leafWeight[sample] = leafRadius[sample] * MathF.Exp(-dz * dz * sharpness);
                 }
                 for (int side = 0; side < sides; side++)
                 {
                     float angle = yaw + MathF.Tau * side / sides;
                     Vector2 direction = new(MathF.Cos(angle), MathF.Sin(angle));
-                    float support = 0;
-                    foreach (var leaf in weightedLeaves)
+                    float best = 0;
+                    for (int sample = 0; sample < leaves.Count; sample++)
                     {
-                        support = Math.Max(support, Vector2.Dot(leaf, direction));
+                        if (leafWeight[sample] <= best) continue;
+                        float c = Vector2.Dot(leafDirection[sample], direction);
+                        if (c <= 0) continue;
+                        best = Math.Max(best, leafWeight[sample] * Pow(c, window));
                     }
-                    float bulge = 1 + ForestTreeVariation.Range(seed, 711, 0.10f, 0.22f)
-                        * MathF.Sin(angle * (stage == TreeLifeStage.Old ? 3 : 5) + t * 8 + seed % 17);
-                    float r = envelope * (radius * 0.65f + support * 0.45f) * bulge;
+                    support[side] = best;
+                }
+                for (int side = 0; side < sides; side++)
+                {
+                    // Circular [1 2 1] smoothing removes single-leaf spikes but keeps lobes.
+                    float smooth = (support[(side + sides - 1) % sides] + 2 * support[side] + support[(side + 1) % sides]) * 0.25f;
+                    float angle = yaw + MathF.Tau * side / sides;
+                    float bulge = 1 + bulgeAmount * MathF.Sin(angle * bulgeLobes + t * 7 + seed % 17);
+                    float lobe = smooth * (form == CrownForm.Spruce ? scale : 1);
+                    float r = (prior * radius * (1 - profile.LeafWeight) + lobe * profile.LeafWeight) * bulge;
+                    r = Math.Max(r, prior * radius * 0.35f);
                     maxRadius = Math.Max(maxRadius, r);
-                    points[1 + (ring - 1) * sides + side] = new(direction.X * r, direction.Y * r, bottom + t * crownHeight);
+                    points[1 + ring * sides + side] = new(MathF.Cos(angle) * r, MathF.Sin(angle) * r, bottom + t * crownHeight);
                 }
             }
-            float width = radius / maxRadius;
+            float width = radius / Math.Max(1e-6f, maxRadius);
             for (int i = 1; i < points.Length - 1; i++) { points[i].X *= width; points[i].Y *= width; }
-            var indices = new List<int>(); var normals = new Vector3[points.Length];
-            for (int side = 0; side < sides; side++) Triangle(0, At(1, side + 1), At(1, side));
-            for (int ring = 1; ring < rings - 1; ring++)
+
+            var indices = new List<int>(6 * sides * ringCount); var normals = new Vector3[points.Length];
+            for (int side = 0; side < sides; side++) Triangle(0, At(0, side + 1), At(0, side));
+            for (int ring = 0; ring < ringCount - 1; ring++)
                 for (int side = 0; side < sides; side++)
                 {
                     Triangle(At(ring, side), At(ring, side + 1), At(ring + 1, side + 1));
                     Triangle(At(ring, side), At(ring + 1, side + 1), At(ring + 1, side));
                 }
-            for (int side = 0; side < sides; side++) Triangle(At(rings - 1, side), At(rings - 1, side + 1), points.Length - 1);
+            for (int side = 0; side < sides; side++) Triangle(At(ringCount - 1, side), At(ringCount - 1, side + 1), points.Length - 1);
             for (int i = 0; i < normals.Length; i++) normals[i] = normals[i].Normalized();
             var result = new Vertex[indices.Count];
             for (int i = 0; i < result.Length; i += 3)
@@ -75,13 +153,44 @@ namespace ForesTycoon
             }
             return result;
 
-            int At(int ring, int side) => 1 + (ring - 1) * sides + side % sides;
+            int At(int ring, int side) => 1 + ring * sides + side % sides;
             void Triangle(int a, int b, int c)
             {
                 indices.Add(a); indices.Add(b); indices.Add(c);
                 Vector3 n = Vector3.Cross(points[b] - points[a], points[c] - points[a]);
                 normals[a] += n; normals[b] += n; normals[c] += n;
             }
+        }
+
+        // Ring heights and per-ring radius multipliers. Deciduous crowns use evenly
+        // spaced rings whose count follows the profile's vertical chord error; spruce
+        // uses pairs of rings per whorl tier: a wide skirt edge and a narrow shoulder.
+        private static List<(float T, float Scale)> Rings(CrownForm form, int sides, float crownHeight, float radius, ForestLod lod)
+        {
+            var rings = new List<(float, float)>();
+            float aspect = Math.Clamp(crownHeight / Math.Max(1e-4f, 2 * radius), 0.5f, 3f);
+            if (form == CrownForm.Spruce)
+            {
+                // Show a tier only when it is at least ~5 px tall at the LOD reference zoom.
+                int tiers = Math.Clamp((int)(crownHeight * ReferencePixels(lod) / 5), 0, lod == ForestLod.Near ? 5 : lod == ForestLod.Medium ? 3 : 0);
+                if (tiers < 2)
+                {
+                    rings.Add((0.08f, 1)); rings.Add((0.45f, 1));
+                    if (lod != ForestLod.Far) rings.Add((0.75f, 1));
+                    return rings;
+                }
+                rings.Add((0.04f, 0.92f));
+                for (int k = 0; k < tiers; k++)
+                {
+                    float start = 0.04f + 0.86f * k / tiers, span = 0.86f / tiers;
+                    rings.Add((start + span * 0.18f, 1.00f));  // skirt: drooping branch tips
+                    rings.Add((start + span * 0.92f, 0.64f));  // shoulder: next whorl insertion
+                }
+                return rings;
+            }
+            int count = lod == ForestLod.Far ? 2 : Math.Clamp((int)MathF.Round(sides * 0.42f * aspect), 3, lod == ForestLod.Near ? 8 : 6);
+            for (int i = 1; i <= count; i++) rings.Add((i / (float)(count + 1), 1));
+            return rings;
         }
     }
 }

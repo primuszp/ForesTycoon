@@ -3,11 +3,14 @@
 ## DendroKit alapú procedurális fák
 
 Az alapértelmezett eljárásos famód az átemelt DendroKit ággenerátorát használja.
-A luc, nyír, tölgy és bükk egyedi seedje, kora és szimulált fényellátása eltérő
-ágstruktúrát és összefüggő poligonális koronát ad. A levélpontok egyetlen tömör, alacsony poligonszámú koronát formálnak;
-nincs levélgeometria vagy alfa-kivágás. A generátor többtörzsű cserjéket is tud készíteni.
+A luc, nyír, tölgy és bükk egyedi seedje, kora és szimulált fényellátása eltérő,
+fajra jellemző ágstruktúrát (örvös luc, villás, terebélyes tölgy, lecsüngő nyír,
+kupolás bükk) és összefüggő poligonális koronát ad. A levélpontok egyetlen tömör
+koronát formálnak; a poligonszám a képernyőn látható sziluetthibából adódik.
+Nincs levélgeometria vagy alfa-kivágás. Cserjék: mogyoró és galagonya.
 Összehasonlító képek: `dotnet run --project ForesTycoon -- --dendro-tree-preview`.
-Részletek és forrásmegjelölés: [DendroKit integráció](docs/dendrokit-integration.md).
+Részletek és forrásmegjelölés: [DendroKit integráció](docs/dendrokit-integration.md),
+[irodalmi áttekintés és fajmodellek](docs/tree-generation-literature.md).
 
 ## Egyedi fák és folytonos növekedés
 

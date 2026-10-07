@@ -8,29 +8,29 @@ kell a helyi DendroKit projekt vagy WPF.
 ## Levélpontokból tömör korona
 
 1. A DendroKit elkészíti a fajra, életfázisra és fénysávra jellemző ágrendszert
-   és a levelek helyét (`Leaves=8`, `LeafBend=0`). Levélháló nem készül.
-2. A levélpontok magasság és irány szerinti támaszértékei alakítják a korona
-   sugarát. A fajprofil megőrzi a lombos vagy kúpos sziluettet; a fenyőnél
-   enyhe emeletek, a lombosoknál eltérő dudorok jelennek meg.
-3. Egyetlen zárt, összefüggő, szabályos topológiájú koronaháló készül.
-   Ez simított alakillesztés, nem minden levélpontot szigorúan tartalmazó
-   konvex burok. Így nem követ apró, drága levélrészleteket.
-4. A törzs kevés oldalú csövekből épül. Legfeljebb hat főág rövid, látható
-   elágazása marad meg; a belső gallyak hálója teljesen elmarad.
+   és a levelek helyét. A fajparaméterek botanikai hátterét a
+   [fagenerálási irodalmi áttekintés](tree-generation-literature.md) írja le.
+   Levélháló nem készül; legfeljebb 160 levélpont marad mintának.
+2. Gyűrűnként és irányonként a levélpontok **szögablakos radiális támasza** adja a
+   sugarat. (A vetületek maximuma a konvex burkot adná; a szögablak a vázágak közti
+   hézagokat karéjként megtartja.) A fajprofil (legszélesebb pont helye, alj és
+   tető laposága) súlyozottan keveredik ezzel: a tölgy mélyen karéjos, a bükk sima.
+3. Egyetlen zárt, összefüggő, szabályos topológiájú koronaháló készül. A lucnál
+   gyűrűpárok (lelógó szoknya + keskeny váll) adják az örvemeleteket.
+4. A törzs kevés oldalú csövekből épül; a látható vázágak száma fajfüggő, a
+   képernyőn 0,6 px-nél vékonyabb ágak elmaradnak.
 
 A lomb teljesen tömör, a szín- és árnyékpasszban sincs alfa-kivágás vagy
-lombtextúra-mintavétel. Az egyed színe, a részben simított lapnormálok és a
-megvilágítás adják a felület változatosságát. A LOD-váltás meglévő képernyőtérbeli
-átmenete továbbra is működik; ez nem a korona anyagának áttetszősége.
+lombtextúra-mintavétel.
 
-| Részletesség | Korona háromszögei | Élő fa maximuma |
+A korona oldalszáma a képernyőtérbeli sziluetthibából adódik (≤ 1 px a LOD finom
+végén), ezért a kis fák kevesebb, a nagyok több háromszöget kapnak:
+
+| Részletesség | Korona háromszögei | Érett élő fa összesen |
 |---|---:|---:|
-| Közel | 120 | 196 |
-| Közepes | 64 | 98 |
-| Távol | 20 | 20 |
-
-Távol csak a korona rajzolódik. Az elhalt fák megtartják a ritka ágvázat;
-ugyanazt a geometriát használják minden LOD-ban a dőlési animációhoz.
+| Közel | 30–192 | ≤ 320 |
+| Közepes | 30–108 | ≤ 130 |
+| Távol | 16–20 | 16–20 |
 
 ## Fajok, kor, fény és cserjék
 
@@ -41,13 +41,13 @@ kevés fényben a korona keskenyebb és magasabban kezdődik. Ez alakmodell,
 nem irányfüggő fototropizmus. A havi növekedés továbbra is GPU-skálázás,
 a fény- és életfázisváltás meglévő, időkeretes geometriacserét használ.
 
-A `DendroTreeGenerator.GenerateShrub` külön háromtörzsű, alacsonyan kezdődő
-koronájú cserjeprofilt készít, legfeljebb 276 közeli háromszöggel. A hívó
-alacsony magasságot és nagyobb szélesség/magasság arányt ad meg. A cserje
+A `DendroTreeGenerator.GenerateShrub` két cserjeformát ismer (`ShrubForm`):
+a mogyoró 5–8 tőhajtásos, felfelé szélesedő váza, a galagonya rövid, villás
+törzsű, sűrű, gömbölyded bokor. Közelről legfeljebb ~170 háromszög. A cserje
 jelenleg generátor- és előnézeti funkció, nem új ültethető szimulációs faj.
 
-A normalizált ágvázak és levélpontok legfeljebb 256 bejegyzéses, szálbiztos
-FIFO cache-ben vannak. Faj/életfázis/fénysáv/növekedési forma kombinációnként
+A normalizált ágvázak és levélpontok szálbiztos cache-ben vannak, amely minden
+lehetséges kulcsot (fák és cserjék, 1728 bejegyzés, egyenként ~5 KB) megtart. Faj/életfázis/fénysáv/növekedési forma kombinációnként
 32 seedváltozat használható; minden LOD ugyanabból az ágvázból készül.
 Az egyed teljes seedje továbbra is módosítja a koronadudorokat és színt,
 mérete és elfordulása különbözhet. A cache sem GL-erőforrást, sem teljes
@@ -64,8 +64,10 @@ dotnet run --project ForesTycoon -- --dendro-tree-smoke-test
 dotnet run --project ForesTycoon -- --forest-smoke-test
 ```
 
-A `vegetation-preview` balról jobbra tölgyet, lucot és cserjét mutat az
-`artifacts/vegetation-benchmark/vegetation.png` képen. A `dendro-tree-preview`
+A `vegetation-preview` az `artifacts/vegetation-benchmark/vegetation.png`
+kontaktlapon soronként lucot, tölgyet, nyírt, bükköt és cserjéket mutat
+(csemete, fiatal, érett, idős, érett árnyékban), és kiírja LOD-onként a
+háromszögszámokat. A `dendro-tree-preview`
 négy faj × négy életfázis képeit készíti el azonos méretben, képenként 12%,
 48% és 100% fényellátással.
 

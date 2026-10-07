@@ -16,9 +16,13 @@ public class DendroTreeGeneratorTests
         var size = ForestTreeGrowth.Initial(species, stage == TreeLifeStage.Seedling ? 0.1f : 40, 1);
         var mesh = DendroTreeGenerator.Generate(species, seed, stage, 0.8f, size, 0.7f, ForestLod.Near);
         Assert.True(mesh.StemCount > 1); Assert.True(mesh.LeafCount > 0);
-        Assert.NotEmpty(mesh.Trunk); Assert.NotEmpty(mesh.Branches);
-        Assert.InRange(mesh.Crown.Length, 1, 360);
-        Assert.InRange(mesh.Trunk.Length + mesh.Branches.Length, 1, 228);
+        Assert.NotEmpty(mesh.Trunk);
+        // Sub-pixel limbs are culled; broad-leaved scaffold limbs stay visible under the crown.
+        if (species is ForestSpecies.Oak or ForestSpecies.Beech && stage is TreeLifeStage.Mature or TreeLifeStage.Old)
+            Assert.NotEmpty(mesh.Branches);
+        // Near budget: at most 12 sides x 8 rings of crown, and ~320 triangles in total.
+        Assert.InRange(mesh.Crown.Length / 3, 1, 192);
+        Assert.InRange((mesh.Trunk.Length + mesh.Branches.Length + mesh.Crown.Length) / 3, 1, 320);
         var edges = new Dictionary<(Vector3, Vector3), int>();
         var neighbours = new Dictionary<Vector3, HashSet<Vector3>>();
         for (int i = 0; i < mesh.Crown.Length; i += 3)
@@ -78,7 +82,7 @@ public class DendroTreeGeneratorTests
         var medium = Build(42, TreeLifeStage.Mature, 1, ForestLod.Medium);
         var far = Build(42, TreeLifeStage.Mature, 1, ForestLod.Far);
         Assert.True(far.Crown.Length < medium.Crown.Length && medium.Crown.Length < full.Crown.Length);
-        Assert.InRange((medium.Trunk.Length + medium.Branches.Length + medium.Crown.Length) / 3, 1, 98);
+        Assert.InRange((medium.Trunk.Length + medium.Branches.Length + medium.Crown.Length) / 3, 1, 130);
         Assert.Equal(20, far.Crown.Length / 3);
         Assert.Empty(far.Trunk); Assert.Empty(far.Branches);
     }
@@ -99,11 +103,10 @@ public class DendroTreeGeneratorTests
     [Fact]
     public void CrownFollowsLeafPositionsWithoutChangingTopologyBudget()
     {
-        Vertex[] Build(Vector3 leaf) => DendroCrownMesh.Build(ForestSpecies.Oak, 42,
+        Vertex[] Build(Vector3 leaf) => DendroCrownMesh.Build(CrownForm.Oak, 42,
             TreeLifeStage.Mature, 6, 2, 0.7f, 0, new[] { leaf }, 0xffffffff, ForestLod.Near);
         var east = Build(new(1.5f, 0, 4));
         var west = Build(new(-1.5f, 0, 4));
-        Assert.Equal(360, east.Length);
         Assert.Equal(east.Length, west.Length);
         Assert.False(east.SequenceEqual(west));
         Assert.True(east.Max(v => v.Position.X) > west.Max(v => v.Position.X));
@@ -117,9 +120,75 @@ public class DendroTreeGeneratorTests
         Assert.True(mesh.LeafCount > 0);
         Assert.True(mesh.StemCount > 3);
         Assert.NotEmpty(mesh.Trunk);
-        Assert.True(mesh.Crown.Min(v => v.Position.Z) < size.Height * Terrain.TreeMetresToWorld * 0.1f);
+        Assert.True(mesh.Crown.Min(v => v.Position.Z) < size.Height * Terrain.TreeMetresToWorld * 0.15f);
         Assert.True(mesh.Crown.Max(v => v.Position.Xy.Length) * 2 > mesh.Crown.Max(v => v.Position.Z));
         Assert.InRange((mesh.Trunk.Length + mesh.Branches.Length + mesh.Crown.Length) / 3, 1, 280);
         Assert.Equal(mesh.Crown, DendroTreeGenerator.GenerateShrub(42, TreeLifeStage.Mature, 1, size, 0, ForestLod.Near).Crown);
+    }
+
+    [Theory]
+    [InlineData(0.5f, 1)]
+    [InlineData(2f, 1)]
+    [InlineData(6f, 1)]
+    [InlineData(1f, 0.5f)]
+    public void SidesKeepSilhouetteChordErrorWithinTolerance(float radius, float tolerance)
+    {
+        foreach (var lod in Enum.GetValues<ForestLod>())
+        {
+            int sides = DendroCrownMesh.Sides(radius, lod, 3, 64, tolerance);
+            float pixels = radius * DendroCrownMesh.ReferencePixels(lod);
+            Assert.True(sides == 3 || pixels * (1 - MathF.Cos(MathF.PI / sides)) <= tolerance + 1e-4f);
+            // Minimal: one side fewer would exceed the tolerance.
+            if (sides > 3) Assert.True(pixels * (1 - MathF.Cos(MathF.PI / (sides - 1))) > tolerance);
+        }
+    }
+
+    [Theory]
+    [InlineData(ForestSpecies.Spruce)]
+    [InlineData(ForestSpecies.Oak)]
+    [InlineData(ForestSpecies.Birch)]
+    [InlineData(ForestSpecies.Beech)]
+    internal void SmallTreesSpendFewerTrianglesThanLargeOnesInTheSameLod(ForestSpecies species)
+    {
+        int Triangles(float age) => DendroTreeGenerator.Generate(species, 42, TreeLifeStage.Mature, 0.85f,
+            ForestTreeGrowth.Initial(species, age, 1), 0, ForestLod.Near).Crown.Length / 3;
+        Assert.True(Triangles(2) < Triangles(80));
+    }
+
+    [Fact]
+    public void SpruceCrownIsTieredAndWidestNearItsBase()
+    {
+        var size = ForestTreeGrowth.Initial(ForestSpecies.Spruce, 60, 1);
+        var crown = DendroTreeGenerator.Generate(ForestSpecies.Spruce, 42, TreeLifeStage.Mature, 0.85f, size, 0, ForestLod.Near).Crown;
+        var rings = crown.GroupBy(v => MathF.Round(v.Position.Z, 4)).OrderBy(g => g.Key)
+            .Select(g => (Z: g.Key, Radius: g.Max(v => v.Position.Xy.Length))).Where(r => r.Radius > 1e-4f).ToArray();
+        int tiers = 0;
+        for (int i = 1; i < rings.Length; i++) if (rings[i].Radius > rings[i - 1].Radius * 1.1f) tiers++;
+        Assert.True(tiers >= 3, $"only {tiers} whorl tiers");
+        float bottom = rings[0].Z, top = crown.Max(v => v.Position.Z);
+        var widest = rings.MaxBy(r => r.Radius);
+        Assert.True((widest.Z - bottom) / (top - bottom) < 0.35f);
+    }
+
+    [Fact]
+    public void ShrubFormsDifferAndAreDeterministic()
+    {
+        var size = new ForestTreeDimensions(0.06f, 3f, 1.8f);
+        DendroTreeGenerator.Mesh Build(ShrubForm form) =>
+            DendroTreeGenerator.GenerateShrub(7, TreeLifeStage.Mature, 0.85f, size, 0, ForestLod.Near, form);
+        var hazel = Build(ShrubForm.Hazel);
+        var hawthorn = Build(ShrubForm.Hawthorn);
+        Assert.Equal(hazel.Crown, Build(ShrubForm.Hazel).Crown);
+        Assert.False(hazel.Crown.SequenceEqual(hawthorn.Crown));
+        // Hazel: open vase, widest high up. Hawthorn: rounder, widest lower.
+        static float WidestAt(Vertex[] crown)
+        {
+            float top = crown.Max(v => v.Position.Z), bottom = crown.Min(v => v.Position.Z);
+            return (crown.MaxBy(v => v.Position.Xy.Length).Position.Z - bottom) / (top - bottom);
+        }
+        Assert.True(WidestAt(hazel.Crown) > WidestAt(hawthorn.Crown));
+        Assert.True(hazel.StemCount > hawthorn.StemCount / 4);
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            DendroTreeGenerator.GenerateShrub(7, TreeLifeStage.Mature, 1, size, 0, ForestLod.Near, (ShrubForm)9));
     }
 }
