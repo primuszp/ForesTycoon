@@ -1,7 +1,7 @@
 using System;
 using System.Drawing;
 
-namespace ForesTycoon
+namespace ForesTycoon.Ecology
 {
     /// <summary>Growth form of a species in the forest simulation and the generator.</summary>
     internal enum ForestGrowthForm : byte { Tree, Shrub }

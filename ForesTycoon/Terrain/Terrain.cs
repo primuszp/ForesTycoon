@@ -168,6 +168,8 @@ namespace ForesTycoon
         }
 
         float IForestHabitat.GetMoisture(int tileId) => tileMoisture[tileId];
+        ForestPattern IForestHabitat.ForestPattern => settings.ForestPattern;
+        (int Columns, int Rows) IForestHabitat.TileGrid => (settings.TileColumns, settings.TileRows);
         ForestTileGeometry IForestHabitat.GetForestTileGeometry(int tileId) => new(
             tiles[tileId].W.xPos / TreeMetresToWorld, tiles[tileId].W.yPos / TreeMetresToWorld,
             tileSizeH / TreeMetresToWorld, tileSizeV / TreeMetresToWorld);

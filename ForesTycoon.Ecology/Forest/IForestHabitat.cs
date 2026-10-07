@@ -1,6 +1,6 @@
 using System;
 
-namespace ForesTycoon
+namespace ForesTycoon.Ecology
 {
     /// <summary>
     /// Read-only terrain boundary used by the forest simulation. Keeping this interface
@@ -19,5 +19,9 @@ namespace ForesTycoon
         bool IsWaterOutlet(int tileId) => false;
         float GetNormalizedElevation(int tileId);
         int GetAdjacentTileIds(int tileId, Span<int> destination);
+        /// <summary>How the initial forest should be laid out; <see cref="ForestPattern.Natural"/> follows site suitability.</summary>
+        ForestPattern ForestPattern => ForestPattern.Natural;
+        /// <summary>Tile grid size, needed only by the large patterned initial forests.</summary>
+        (int Columns, int Rows) TileGrid => (0, 0);
     }
 }

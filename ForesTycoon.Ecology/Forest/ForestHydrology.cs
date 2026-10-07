@@ -1,6 +1,6 @@
 using System;
 
-namespace ForesTycoon
+namespace ForesTycoon.Ecology
 {
     internal readonly record struct ForestHydrologyInputs(double Cover, double InterceptionCapacity, double LeafAreaIndex);
 

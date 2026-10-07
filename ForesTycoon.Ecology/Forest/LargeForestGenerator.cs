@@ -1,5 +1,5 @@
 using System;
-namespace ForesTycoon
+namespace ForesTycoon.Ecology
 {
     internal static class LargeForestGenerator
     {

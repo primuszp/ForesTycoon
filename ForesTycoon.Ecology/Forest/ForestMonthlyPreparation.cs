@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace ForesTycoon
+namespace ForesTycoon.Ecology
 {
     // Predict only geometry at the next monthly boundary. Water and radiation are applied
     // at that boundary from the completed environmental integrals, never predicted here.
@@ -84,7 +84,7 @@ namespace ForesTycoon
             }
             LastStepSnapshotPatches = LastStepResourcePatches = 0;
             int remaining = patches.Count * 2 - cursor + snapshotRepairs.Count + resourceRepairs.Count;
-            int steps = Math.Max(1, (int)Math.Ceiling(secondsUntilMonth / EnvironmentSystem.StepSeconds));
+            int steps = Math.Max(1, (int)Math.Ceiling(secondsUntilMonth / EcologyTime.StepSeconds));
             int work = (int)Math.Ceiling((double)remaining / steps);
             for (int i = 0; i < work; i++)
             {

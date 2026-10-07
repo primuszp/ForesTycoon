@@ -1,6 +1,6 @@
 using System;
 
-namespace ForesTycoon
+namespace ForesTycoon.Ecology
 {
     // Stores and thresholds are mm per unit ground area; fluxes are mm/environment hour.
     internal readonly record struct SoilProperties(double Saturation, double FieldCapacity, double WiltingPoint,

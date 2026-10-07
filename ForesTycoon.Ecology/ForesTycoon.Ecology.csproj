@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The ecosystem simulation: weather, soil, water balance, species ecology and growth, forest stands
+    and individual trees. Deterministic, headless, and independent of terrain meshes, rendering and
+    OpenGL. The world plugs in through IForestHabitat; models consume TreeShapeSpec.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>ForesTycoon.Ecology</RootNamespace>
+    <AssemblyName>ForesTycoon.Ecology</AssemblyName>
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Using Include="ForesTycoon.Engine" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../ForesTycoon.Engine/ForesTycoon.Engine.csproj" />
+    <PackageReference Include="OpenTK.Mathematics" Version="4.9.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ForesTycoon" />
+    <InternalsVisibleTo Include="ForesTycoon.TreeModels" />
+    <InternalsVisibleTo Include="ForesTycoon.Tests" />
+  </ItemGroup>
+
+</Project>

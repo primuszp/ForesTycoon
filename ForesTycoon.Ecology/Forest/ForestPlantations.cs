@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace ForesTycoon
+namespace ForesTycoon.Ecology
 {
     internal readonly record struct ForestPlantation(int AreaId, ForestSpecies Species, double PlantedYear, int InitialTrees);
     internal readonly record struct PlantationStatus(ForestPlantation Plantation, int Living, int Dead, ForestResources Resources);

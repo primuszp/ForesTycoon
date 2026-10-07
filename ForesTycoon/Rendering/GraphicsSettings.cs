@@ -1,7 +1,6 @@
 namespace ForesTycoon
 {
     internal enum GraphicsQuality { Low, Medium, High }
-    internal enum WeatherPreset { Sunny, Cloudy, Rain, Snow, Storm }
     internal enum ForestModelStyle { Imported, OriginalPine, Procedural, Generated }
 
     // Display options never change forestry, transport, or replay state.

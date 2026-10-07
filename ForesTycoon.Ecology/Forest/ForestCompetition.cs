@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace ForesTycoon
+namespace ForesTycoon.Ecology
 {
     internal readonly record struct ForestTileGeometry(float X, float Y, float Width, float Height);
     internal readonly record struct ForestResources(float Light, float Water, float Space)

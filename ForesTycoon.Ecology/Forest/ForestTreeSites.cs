@@ -1,6 +1,6 @@
 using System;
 
-namespace ForesTycoon
+namespace ForesTycoon.Ecology
 {
     /// <summary>Derives the long-lived site of a tree (gap direction, wind exposure) from its surroundings.</summary>
     internal static class ForestTreeSites

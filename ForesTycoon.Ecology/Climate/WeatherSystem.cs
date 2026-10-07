@@ -1,6 +1,6 @@
 using System;
 
-namespace ForesTycoon
+namespace ForesTycoon.Ecology
 {
     internal readonly record struct WeatherForcing(double Radiation, double Temperature, double Humidity, double Wind)
     {

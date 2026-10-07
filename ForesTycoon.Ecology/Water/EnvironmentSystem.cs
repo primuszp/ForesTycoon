@@ -1,21 +1,20 @@
 using System;
 
-namespace ForesTycoon
+namespace ForesTycoon.Ecology
 {
     internal readonly record struct EnvironmentCell(double Canopy, double Surface, double Soil, double Deep,
         double Drought, double Waterlogging, double GrowthFactor, double Capacity, double UptakePerHour, double DemandPerHour);
 
     // Bounded bucket hydrology with conserved, vegetation-driven uptake. Water stores are mm per cell.
-    internal sealed class EnvironmentSystem
+    internal sealed class EnvironmentSystem : IForestEnvironment
     {
-        internal const double SecondsPerForestYear = 1200;
-        internal const double DefaultGameSecondsPerYear = 120;
-        internal static bool IsValidForestYearSeconds(double seconds) => double.IsFinite(seconds)
-            && seconds >= DefaultGameSecondsPerYear && seconds <= SecondsPerForestYear;
-        internal const double HoursPerSecond = 1.0 / 60;
-        internal const double StepSeconds = 0.5;
+        internal const double SecondsPerForestYear = EcologyTime.SecondsPerForestYear;
+        internal const double DefaultGameSecondsPerYear = EcologyTime.DefaultGameSecondsPerYear;
+        internal static bool IsValidForestYearSeconds(double seconds) => EcologyTime.IsValidForestYearSeconds(seconds);
+        internal const double HoursPerSecond = EcologyTime.HoursPerSecond;
+        internal const double StepSeconds = EcologyTime.StepSeconds;
         private readonly IForestHabitat habitat;
-        private readonly ForestSystem forest;
+        private readonly IForestCanopy forest;
         private readonly double[] canopy, surface, soil, deep, drought, wet, wetIntegral, transfer;
         private readonly double[] demandIntegral, uptakeIntegral, uptakeRate, demandRate;
         private readonly SoilProperties[] soils;
@@ -60,7 +59,12 @@ namespace ForesTycoon
         }
         internal double BalanceError => StoredWater - (InitialWater + TotalRain * CellCount - Evaporated - Transpired - Outflow);
 
-        internal EnvironmentSystem(IForestHabitat habitat, ForestSystem forest, double forestYearSeconds = SecondsPerForestYear)
+        double IForestEnvironment.Radiation => Radiation;
+        double IForestEnvironment.PeriodRadiation => PeriodRadiation;
+        double IForestEnvironment.GrowthFactor(int tileId, ForestSpecies species) => GrowthFactor(tileId, species);
+        double IForestEnvironment.CurrentWaterFactor(int tileId, ForestSpecies species) => CurrentWaterFactor(tileId, species);
+
+        internal EnvironmentSystem(IForestHabitat habitat, IForestCanopy forest, double forestYearSeconds = SecondsPerForestYear)
         {
             this.habitat = habitat ?? throw new ArgumentNullException(nameof(habitat));
             this.forest = forest;
@@ -226,7 +230,7 @@ namespace ForesTycoon
 
         internal EnvironmentCell Cell(int id)
         {
-            var species = forest != null && forest.TryGetStand(id, out var stand) ? stand.Species : ForestSpecies.Beech;
+            var species = forest != null && forest.TryGetSpecies(id, out var stand) ? stand : ForestSpecies.Beech;
             return new(canopy[id], surface[id], soil[id], deep[id], drought[id], wet[id],
                 GrowthFactor(id, species), soils[id].Saturation, uptakeRate[id], demandRate[id]);
         }

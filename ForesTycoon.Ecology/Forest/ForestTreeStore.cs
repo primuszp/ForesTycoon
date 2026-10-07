@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace ForesTycoon
+namespace ForesTycoon.Ecology
 {
     /// <summary>Sparse per-tile arrays; no managed object per tree. Growth reuses occupied arrays.</summary>
     internal sealed class ForestTreeStore

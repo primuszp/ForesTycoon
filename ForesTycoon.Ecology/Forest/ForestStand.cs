@@ -1,4 +1,4 @@
-namespace ForesTycoon
+namespace ForesTycoon.Ecology
 {
     /// <summary>Aggregated view of the living individuals on one terrain tile.</summary>
     readonly record struct ForestStand(

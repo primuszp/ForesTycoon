@@ -1,6 +1,6 @@
 using System;
 
-namespace ForesTycoon
+namespace ForesTycoon.Ecology
 {
     // Explicit multi-rate ordering: water/radiation interval, forest month, then clear interval budgets.
     // Environment never advances forestry, and forestry never clears environmental integrals.

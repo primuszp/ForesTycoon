@@ -1,6 +1,6 @@
 using System;
 
-namespace ForesTycoon
+namespace ForesTycoon.Ecology
 {
     // Dimensions are physical metres. Rendering maps these to the diorama independently.
     internal readonly record struct ForestTreeDimensions(float Diameter, float Height, float CrownRadius);

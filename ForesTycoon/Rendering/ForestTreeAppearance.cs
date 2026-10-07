@@ -3,36 +3,13 @@ using OpenTK.Mathematics;
 
 namespace ForesTycoon
 {
-    internal enum TreeLifeStage { Seedling, Young, Mature, Old }
-
-    // Visual ages are gameplay art thresholds, not a biological mortality model.
+    // Legacy lobe-based crowns (glTF-free fallbacks); life-stage rules live in Ecology.
     internal static class ForestTreeAppearance
     {
         internal static int Variant(int seed) => (int)((uint)seed % 3);
-        internal static float NextStageAge(ForestSpecies species, TreeLifeStage stage) => stage switch
-        {
-            TreeLifeStage.Seedling => species == ForestSpecies.Birch ? 2 : 3,
-            TreeLifeStage.Young => ForestSpeciesProfile.For(species).MatureAgeYears * 0.75f,
-            TreeLifeStage.Mature => ForestSpeciesProfile.For(species).MaximumAgeYears * 0.65f,
-            _ => float.PositiveInfinity
-        };
-        internal static TreeLifeStage Stage(ForestSpecies species, float age)
-        {
-            float seedling = species == ForestSpecies.Birch ? 2 : 3;
-            var profile = ForestSpeciesProfile.For(species);
-            return age < seedling ? TreeLifeStage.Seedling
-                : age < profile.MatureAgeYears * 0.75f ? TreeLifeStage.Young
-                : age < profile.MaximumAgeYears * 0.65f ? TreeLifeStage.Mature : TreeLifeStage.Old;
-        }
-
-        internal static float CrownFraction(ForestSpecies species, TreeLifeStage stage) => stage switch
-        {
-            TreeLifeStage.Seedling => 0.90f,
-            TreeLifeStage.Young => species == ForestSpecies.Spruce ? 0.94f : 0.80f,
-            TreeLifeStage.Old => species == ForestSpecies.Spruce ? 0.66f : 0.53f,
-            _ => species == ForestSpecies.Spruce ? 0.86f : species == ForestSpecies.Oak ? 0.70f
-                : species == ForestSpecies.Birch ? 0.65f : 0.72f
-        };
+        internal static float NextStageAge(ForestSpecies species, TreeLifeStage stage) => TreeLifeStages.NextAge(species, stage);
+        internal static TreeLifeStage Stage(ForestSpecies species, float age) => TreeLifeStages.Of(species, age);
+        internal static float CrownFraction(ForestSpecies species, TreeLifeStage stage) => TreeLifeStages.CrownFraction(species, stage);
 
         internal readonly record struct CrownLobe(Vector3 Origin, float Radius, float Height);
 

@@ -1,12 +1,12 @@
 using System;
 
-namespace ForesTycoon
+namespace ForesTycoon.Ecology
 {
     /// <summary>
     /// Deterministic individual-tree growth model. Simulation work is performed
     /// monthly rather than every render frame, so cost scales predictably with map size.
     /// </summary>
-    sealed partial class ForestSystem : IWorldSystem
+    sealed partial class ForestSystem : IWorldSystem, IForestCanopy
     {
         internal const double DefaultSecondsPerYear = 30.0;
         private const int MonthsPerYear = 12;
@@ -21,8 +21,8 @@ namespace ForesTycoon
         private int[] seedCandidateTiles = Array.Empty<int>();
         private int seedCandidateCount;
         private double secondsPerYear;
-        internal EnvironmentSystem Environment { get; set; }
-        internal void UseEnvironmentTempo(double forestYearSeconds = EnvironmentSystem.SecondsPerForestYear) => secondsPerYear = forestYearSeconds;
+        internal IForestEnvironment Environment { get; set; }
+        internal void UseEnvironmentTempo(double forestYearSeconds = EcologyTime.SecondsPerForestYear) => secondsPerYear = forestYearSeconds;
         private double accumulatedSeconds;
         internal double SecondsUntilMonth => secondsPerYear/MonthsPerYear-accumulatedSeconds;
         private ulong month;
@@ -64,6 +64,15 @@ namespace ForesTycoon
 
         public ForestStatistics Statistics => new ForestStatistics(
             standCount, matureCount, totalBiomass, standCount == 0 ? 0f : totalHealth / standCount);
+
+        ForestHydrologyInputs IForestCanopy.HydrologyInputs(int tileId) => HydrologyInputs(tileId);
+
+        bool IForestCanopy.TryGetSpecies(int tileId, out ForestSpecies species)
+        {
+            bool found = TryGetStand(tileId, out var stand);
+            species = stand.Species;
+            return found;
+        }
 
         public bool TryGetStand(int tileId, out ForestStand stand)
         {
@@ -200,9 +209,9 @@ namespace ForesTycoon
 
         private void GenerateInitialForest()
         {
-            if(habitat is Terrain terrain && terrain.Settings.ForestPattern != ForestPattern.Natural)
+            if(habitat.ForestPattern != ForestPattern.Natural && habitat.TileGrid.Columns > 0)
             {
-                var generated=LargeForestGenerator.Create(habitat,terrain.Settings.TileColumns,terrain.Settings.TileRows,terrain.Settings.ForestPattern);
+                var generated=LargeForestGenerator.Create(habitat,habitat.TileGrid.Columns,habitat.TileGrid.Rows,habitat.ForestPattern);
                 generated.CopyTo(stands,0);
                 return;
             }

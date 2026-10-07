@@ -1,4 +1,4 @@
-namespace ForesTycoon
+namespace ForesTycoon.Ecology
 {
     enum ForestSpecies : byte
     {
