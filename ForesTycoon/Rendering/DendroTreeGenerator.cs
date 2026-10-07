@@ -29,7 +29,7 @@ namespace ForesTycoon
             Generate(new TreeShapeSpec(ForestSpecies.Beech, seed, TreeLifePhases.From(stage), size, 1,
                 new TreeSite(light), LeafState.Full, yaw, false, (byte)form), lod);
 
-        internal static Mesh Generate(in TreeShapeSpec spec, ForestLod lod) => Build(new TreeForm(spec), lod);
+        internal static Mesh Generate(in TreeShapeSpec spec, ForestLod lod, TreeSkeleton skeleton = null) => Build(new TreeForm(spec, skeleton), lod);
 
         internal static Mesh Build(TreeForm form, ForestLod lod)
         {

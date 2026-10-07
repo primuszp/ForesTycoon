@@ -66,11 +66,14 @@ namespace ForesTycoon
                     int level = sk.Stems[i].Level;
                     if (level == 0 || full[i]) fraction[i] = 1;
                 }
+                int shown = 0;
                 foreach (int i in order1)
                 {
-                    // Skip limbs thinner than ~0.6 px at the LOD reference zoom: invisible, not free.
-                    if (form.RadiusOf(sk.Flow[sk.Stems[i].Start]) * refPixels < 0.4f || limbBudget-- <= 0) continue;
-                    fraction[i] = exposure;
+                    // Skip limbs thinner than ~0.4 px at the LOD reference zoom: invisible, not free. The
+                    // thickest few always show, so even a dense crown has visible forks beneath it.
+                    if (limbBudget-- <= 0) break;
+                    if (form.RadiusOf(sk.Flow[sk.Stems[i].Start]) * refPixels < 0.4f && shown >= 3) continue;
+                    fraction[i] = exposure; shown++;
                 }
             }
             else
@@ -90,7 +93,7 @@ namespace ForesTycoon
 
             float crownLimit = leafed ? form.Height * (1 - form.CrownFraction * 0.45f) : float.MaxValue;
             float limbLimit = leafed ? form.Height * (1 - form.CrownFraction * 0.15f) : float.MaxValue;
-            int used = 0;
+            int used = 0, forks = 0;
             var points = new List<Vector3>(); var radii = new List<float>(); var pins = new List<bool>();
             foreach (int i in order)
             {
@@ -98,16 +101,18 @@ namespace ForesTycoon
                 bool root = stem.Parent < 0;
                 float limit = full[i] ? float.MaxValue : stem.Level == 0 ? crownLimit : limbLimit;
                 if (!Collect(form, i, fraction[i], limit, minRadius, keep, points, radii, pins)) continue;
-                var kept = Simplify(points, radii, pins, (lod == ForestLod.Near ? 0.30f : lod == ForestLod.Medium ? 0.5f : 0.8f) * (stem.Level == 0 ? 2f : 1f));
+                var kept = Simplify(points, radii, pins, (lod == ForestLod.Near ? 0.30f : lod == ForestLod.Medium ? 0.5f : 0.8f) * (stem.Level == 0 ? 3f : 1f));
                 float maxRadius = 0;
                 foreach (float r in radii) maxRadius = Math.Max(maxRadius, r);
-                int sides = Sides(root, stem.Level, maxRadius, lod, form.Shrub);
+                int sides = Sides(root && i == 0, stem.Level, maxRadius, lod, form.Shrub);
                 int cost = (kept.Count - 1) * sides * 2 + sides;
+                if (stem.Level == 0 && i != 0 && !form.Shrub && forks++ >= 4) continue; // the first few forks of the trunk
                 if (i != 0 && !(stem.Level == 0 && !form.Shrub))
                 {
                     if (used + cost > budget) break; // thickest first: everything left is thinner
                     used += cost;
                 }
+                if (Environment.GetEnvironmentVariable("TREE_DEBUG") != null) Console.WriteLine($"stem {i} L{stem.Level} kept {kept.Count} sides {sides} cost {cost} r {maxRadius}");
                 uint color = form.Dead[i] && !root ? form.DeadColor : form.WoodColor;
                 // Taper tips to a point on thin stems; trunks keep their open top inside the crown.
                 Tube(points, radii, kept, sides, color, stem.Level == 0 ? trunk : branches, !(root && leafed));
@@ -118,7 +123,7 @@ namespace ForesTycoon
         private static int Sides(bool root, int level, float radius, ForestLod lod, bool shrub)
         {
             int max = shrub ? 4 : root ? (lod == ForestLod.Near ? 7 : lod == ForestLod.Medium ? 5 : 3)
-                : level <= 1 ? (lod == ForestLod.Near ? 5 : 4) : 3;
+                : level == 0 ? (lod == ForestLod.Near ? 5 : 3) : level <= 1 ? (lod == ForestLod.Near ? 5 : 4) : 3;
             return DendroCrownMesh.Sides(radius, lod, 3, max, 0.5f);
         }
 

@@ -64,7 +64,7 @@ namespace ForesTycoon
         internal readonly uint WoodColor, DeadColor, CrownColor;
         private readonly float cos, sin;
 
-        internal TreeForm(in TreeShapeSpec spec)
+        internal TreeForm(in TreeShapeSpec spec, TreeSkeleton skeleton = null)
         {
             var size = spec.Size;
             if (spec.Species == ForestSpecies.None || !float.IsFinite(spec.Yaw)
@@ -73,7 +73,7 @@ namespace ForesTycoon
                 || (spec.Form != 0 && !Enum.IsDefined((ShrubForm)spec.Form)))
                 throw new ArgumentOutOfRangeException(nameof(spec));
             Spec = spec; Bands = spec.Bands; Shrub = spec.Form != 0;
-            Skeleton = TreeArchitecture.Skeleton(spec.Species, spec.Seed, spec.Phase, Bands.Light, spec.Form);
+            Skeleton = skeleton ?? TreeArchitecture.Skeleton(spec.Species, spec.Seed, spec.Phase, Bands.Light, spec.Form);
             float light = Bands.Light01;
             float response = TreeArchitecture.LightResponse(spec.Species, light);
             CrownFraction = TreeArchitecture.CrownFraction(spec.Species, spec.Phase, Bands.Light, spec.Form);

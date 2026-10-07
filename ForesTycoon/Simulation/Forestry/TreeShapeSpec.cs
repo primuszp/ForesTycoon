@@ -76,7 +76,11 @@ namespace ForesTycoon
         {
             TreeLifePhase.Sapling => 0.5f * (ForestTreeAppearance.CrownFraction(species, TreeLifeStage.Seedling)
                 + ForestTreeAppearance.CrownFraction(species, TreeLifeStage.Young)),
-            TreeLifePhase.Senescent => ForestTreeAppearance.CrownFraction(species, TreeLifeStage.Old) - 0.05f,
+            // Old broadleaves keep a broad low crown; they lose a little from the base and a lot from the top.
+            TreeLifePhase.Old => species == ForestSpecies.Spruce ? ForestTreeAppearance.CrownFraction(species, TreeLifeStage.Old)
+                : ForestTreeAppearance.CrownFraction(species, TreeLifeStage.Mature) - 0.04f,
+            TreeLifePhase.Senescent => species == ForestSpecies.Spruce ? ForestTreeAppearance.CrownFraction(species, TreeLifeStage.Old) - 0.05f
+                : ForestTreeAppearance.CrownFraction(species, TreeLifeStage.Mature) - 0.10f,
             _ => ForestTreeAppearance.CrownFraction(species, Coarse(phase))
         };
     }

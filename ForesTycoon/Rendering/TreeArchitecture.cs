@@ -14,10 +14,10 @@ namespace ForesTycoon
     /// </summary>
     internal static class TreeArchitecture
     {
-        internal const int Variants = 32;
+        internal const int Variants = 16;
         // Leaf positions only shape the crown; more than this adds cost, not silhouette.
         internal const int MaxLeafSamples = 160;
-        // Every tree key (4 species x 6 phases x 3 light bands x 32 variants) plus both shrub forms.
+        // Every tree key (4 species x 6 phases x 3 light bands x 16 variants) plus both shrub forms.
         private const int Capacity = 4 * 6 * 3 * Variants + 2 * 6 * 3 * Variants;
 
         private readonly record struct Key(ForestSpecies Species, int Variant, TreeLifePhase Phase, int Light, int Form);
@@ -37,6 +37,17 @@ namespace ForesTycoon
                 Cache.Add(key, skeleton); Order.Enqueue(key);
                 return skeleton;
             }
+        }
+
+        /// <summary>Skeleton of an arbitrary Arbaro parameter file (reference and tooling use; not cached).</summary>
+        internal static TreeSkeleton SkeletonFromXml(string xml, int variant, double baseSize = -1)
+        {
+            var p = new TreeParams();
+            using (var stream = new System.IO.MemoryStream(System.Text.Encoding.UTF8.GetBytes(xml))) p.ReadFromXml(stream);
+            if (baseSize >= 0) p.SetParam("BaseSize", baseSize.ToString(CultureInfo.InvariantCulture));
+            var tree = new TreeImpl(variant, p);
+            tree.Make();
+            return TreeSkeleton.From(tree, variant, MaxLeafSamples);
         }
 
         /// <summary>Crown fraction of the height for the species at the light of the band.</summary>
@@ -59,7 +70,86 @@ namespace ForesTycoon
         internal static float LightResponse(ForestSpecies species, float light) =>
             MathF.Pow(Math.Clamp(light, 0, 1), 1 - ForestSpeciesProfile.For(species).ShadeTolerance * 0.65f);
 
-        private static TreeParams Parameters(Key key)
+        private static readonly Dictionary<ForestSpecies, Dictionary<string, double>> Presets = new();
+
+        /// <summary>The Arbaro-format parameter file of a species, embedded in the assembly (Assets/Trees).</summary>
+        internal static string PresetName(ForestSpecies species) => species switch
+        {
+            ForestSpecies.Spruce => "picea_abies", ForestSpecies.Oak => "quercus_robur",
+            ForestSpecies.Birch => "betula_pendula", _ => "fagus_sylvatica"
+        };
+
+        private static Dictionary<string, double> Preset(ForestSpecies species)
+        {
+            lock (Presets)
+            {
+                if (Presets.TryGetValue(species, out var values)) return values;
+                using var stream = typeof(TreeArchitecture).Assembly.GetManifestResourceStream("Trees." + PresetName(species) + ".xml")
+                    ?? throw new InvalidOperationException("Missing tree preset " + PresetName(species));
+                values = new(StringComparer.Ordinal);
+                foreach (var el in System.Xml.Linq.XDocument.Load(stream).Descendants("param"))
+                    if (double.TryParse((string)el.Attribute("value"), NumberStyles.Float, CultureInfo.InvariantCulture, out double v))
+                        values[(string)el.Attribute("name")] = v;
+                return Presets[species] = values;
+            }
+        }
+
+        private static TreeParams Parameters(Key key) => key.Form != 0 ? ShrubParameters(key) : PresetParameters(key);
+
+        /// <summary>
+        /// The species' Arbaro parameter set (mature, well lit) adapted to life phase and light:
+        /// fewer, shorter limbs and a single-level seedling; steeper, sparser limbs in shade;
+        /// forking and coarser limbs with age.
+        /// </summary>
+        private static TreeParams PresetParameters(Key key)
+        {
+            var v = new Dictionary<string, double>(Preset(key.Species), StringComparer.Ordinal);
+            var phase = key.Phase;
+            float m = Math.Min(1, TreeLifePhases.Maturity(phase));
+            bool juvenile = phase <= TreeLifePhase.Young, old = phase >= TreeLifePhase.Old, senescent = phase == TreeLifePhase.Senescent;
+            float light = TreeShapeBands.BandLight(key.Light), shade = 1 - light;
+            double count = phase switch { TreeLifePhase.Seedling => 0.5, TreeLifePhase.Sapling => 0.7, TreeLifePhase.Young => 0.85, TreeLifePhase.Senescent => 0.8, _ => 1 };
+            v["BaseSize"] = 1 - CrownFraction(key.Species, phase, key.Light, 0);
+            v["Levels"] = phase == TreeLifePhase.Seedling ? 2 : 3;
+            v["1Branches"] = Math.Max(4, Math.Round(v["1Branches"] * count * (0.7 + 0.3 * light)));
+            v["2Branches"] = Math.Max(3, Math.Round(v["2Branches"] * (juvenile ? 0.8 : 1)));
+            switch (key.Species)
+            {
+                case ForestSpecies.Spruce:
+                    // Massart model; shade-tolerant: in shade branches flatten, with age they droop.
+                    v["AttractionUp"] = -0.3 - 0.3 * m;
+                    v["1DownAngle"] += 8 * shade;
+                    break;
+                case ForestSpecies.Oak:
+                    // Light-demanding: in shade few, short, steep limbs. Old oaks fork and thicken.
+                    if (juvenile) { v["Shape"] = TreeParams.Spherical; v["0SegSplits"] = 0; v["0CurveV"] = 15; v["1SegSplits"] = 0; v["1Length"] = 0.62; v["1DownAngle"] = 48; }
+                    v["AttractionUp"] += 0.7 * shade;
+                    v["1DownAngle"] -= 16 * shade;
+                    v["1Length"] *= 0.75 + 0.25 * light;
+                    if (old) { v["0SegSplits"] = senescent ? 0.65 : 0.55; v["0SplitAngle"] = senescent ? 30 : 26; }
+                    if (senescent) { v["1CurveV"] += 30; v["2Branches"] = Math.Max(3, Math.Round(v["2Branches"] * 0.7)); }
+                    break;
+                case ForestSpecies.Birch:
+                    // Pioneer: shade gives a short, high, narrow crown; old trees carry longer pendulous shoots.
+                    v["AttractionUp"] += 0.8 * shade;
+                    v["1DownAngle"] -= 8 * shade;
+                    v["1Length"] *= 0.75 + 0.25 * light;
+                    if (old) v["2Length"] = 0.70;
+                    break;
+                default:
+                    // Troll model; very shade-tolerant: shade yields a flatter, wider monolayer.
+                    if (juvenile) v["Shape"] = TreeParams.TendFlame;
+                    v["AttractionUp"] -= 0.5 * shade;
+                    v["1DownAngle"] += 22 * shade;
+                    if (old) { v["0SegSplits"] = senescent ? 0.45 : 0.35; v["0SplitAngle"] = senescent ? 20 : 16; }
+                    break;
+            }
+            var p = new TreeParams();
+            foreach (var pair in v) p.SetParam(pair.Key, pair.Value.ToString(CultureInfo.InvariantCulture));
+            return p;
+        }
+
+        private static TreeParams ShrubParameters(Key key)
         {
             var p = new TreeParams();
             void Set(string name, double value) => p.SetParam(name, value.ToString(CultureInfo.InvariantCulture));

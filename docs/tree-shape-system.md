@@ -20,7 +20,7 @@ fázis- és lombváltás időpontját a `NextStageYear` ütemezi.
 
 ## Váz és topológia (`TreeSkeleton`)
 
-A DendroKit Weber–Penn fájából teljes ágváz készül (törzs, vázágak, gallyak,
+A DendroKit Weber–Penn fájából (fajonként Arbaro-formátumú készlettel, lásd [arbaro-parameter-sets.md](arbaro-parameter-sets.md)) teljes ágváz készül (törzs, vázágak, gallyak,
 villásodások). Garantált (és `Validate()` ellenőrzi, tesztelve minden faj×fázis×fény×seed
 kombinációra):
 

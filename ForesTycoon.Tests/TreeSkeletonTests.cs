@@ -41,3 +41,48 @@ public class TreeSkeletonTests
             }
     }
 }
+
+public class ArbaroPresetTests
+{
+    private static string Root()
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
+            if (Directory.Exists(Path.Combine(dir.FullName, "ThirdParty", "ArbaroPresets"))) return dir.FullName;
+        throw new DirectoryNotFoundException("ThirdParty/ArbaroPresets");
+    }
+
+    public static IEnumerable<object[]> Files()
+    {
+        string root = Root();
+        foreach (string file in Directory.GetFiles(Path.Combine(root, "ThirdParty", "ArbaroPresets"), "*.xml").Concat(
+            Directory.GetFiles(Path.Combine(root, "ForesTycoon", "Assets", "Trees"), "*.xml")))
+            yield return new object[] { Path.GetRelativePath(root, file) };
+    }
+
+    [Theory]
+    [MemberData(nameof(Files))]
+    public void EveryArbaroParameterFileBuildsAValidSkeleton(string relative)
+    {
+        string xml = File.ReadAllText(Path.Combine(Root(), relative));
+        foreach (int variant in new[] { 1, 2 })
+        {
+            var skeleton = TreeArchitecture.SkeletonFromXml(xml, variant);
+            Assert.Empty(skeleton.Validate());
+            Assert.InRange(skeleton.StemCount, 8, 700);
+            Assert.True(skeleton.Leaves.Length > 10);
+        }
+    }
+
+    [Theory]
+    [InlineData(ForestSpecies.Spruce)]
+    [InlineData(ForestSpecies.Oak)]
+    [InlineData(ForestSpecies.Birch)]
+    [InlineData(ForestSpecies.Beech)]
+    internal void ShippedSpeciesSetsMatchTheEmbeddedResources(ForestSpecies species)
+    {
+        string file = Path.Combine(Root(), "ForesTycoon", "Assets", "Trees", TreeArchitecture.PresetName(species) + ".xml");
+        using var stream = typeof(TreeArchitecture).Assembly.GetManifestResourceStream("Trees." + TreeArchitecture.PresetName(species) + ".xml");
+        Assert.NotNull(stream);
+        Assert.Equal(File.ReadAllText(file).Replace("\r\n", "\n"), new StreamReader(stream).ReadToEnd().Replace("\r\n", "\n"));
+    }
+}

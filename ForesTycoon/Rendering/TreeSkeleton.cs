@@ -180,11 +180,11 @@ namespace ForesTycoon
         }
 
         /// <summary>Builds the skeleton of a generated DendroKit tree; <paramref name="maxLeaves"/> thins the leaf samples.</summary>
-        internal static TreeSkeleton From(TreeImpl tree, int variant, int maxLeaves)
+        internal static TreeSkeleton From(TreeImpl tree, int variant, int maxLeaves, int maxLimbs = 70, int maxTwigs = 200)
         {
             var collector = new Collector();
             tree.TraverseTree(collector);
-            var raw = collector.Raw;
+            var raw = Prune(collector, maxLimbs, maxTwigs);
             int count = raw.Count;
             // 1. Give every parent a vertex exactly where each child leaves it.
             var attach = new int[count];
@@ -231,6 +231,27 @@ namespace ForesTycoon
                 foreach (int child in children) raw[child].Points[0] = rebuilt[attach[child]];
             }
 
+            // 1b. Rich parameter sets carry far more vertices than a low-poly mesh can show: keep the
+            // vertices that bend the axis by more than a sliver and every vertex a child leaves from.
+            float tolerance = 0.012f * Math.Max(collector.Height, 1e-4f);
+            for (int i = 0; i < count; i++)
+            {
+                var source = points[i];
+                var pinned = new bool[source.Count];
+                foreach (int child in raw[i].Children) pinned[attach[child]] = true;
+                var kept = SimplifyAxis(source, pinned, tolerance);
+                if (kept.Count == source.Count) continue;
+                var remap = new int[source.Count];
+                var shorter = new List<Vector3>(kept.Count);
+                for (int k = 0, next = 0; k < source.Count; k++)
+                {
+                    if (next < kept.Count && kept[next] == k) { remap[k] = shorter.Count; shorter.Add(source[k]); next++; }
+                    else remap[k] = shorter.Count - 1;
+                }
+                points[i] = shorter;
+                foreach (int child in raw[i].Children) attach[child] = remap[attach[child]];
+            }
+
             // 2. Flatten.
             int total = 0;
             for (int i = 0; i < count; i++) total += points[i].Count;
@@ -259,13 +280,19 @@ namespace ForesTycoon
             int leafTotal = collector.Leaves.Count;
             int keep = Math.Min(leafTotal, maxLeaves);
             var leaves = new Vector3[keep]; var owners = new int[keep];
-            float leafRadius = 0;
             for (int i = 0; i < keep; i++)
             {
                 int source = keep == leafTotal ? i : (int)((long)i * leafTotal / keep);
                 leaves[i] = collector.Leaves[source]; owners[i] = collector.LeafOwner[source];
-                leafRadius = Math.Max(leafRadius, leaves[i].Xy.Length);
             }
+            // The outer reach is the mean of the farthest tenth of the leaves: one stray shoot must not
+            // shrink the rest of the crown when the tree is scaled to its simulated crown radius.
+            var reach = new float[keep];
+            for (int i = 0; i < keep; i++) reach[i] = leaves[i].Xy.Length;
+            Array.Sort(reach);
+            int top = Math.Max(1, keep / 10);
+            float leafRadius = 0;
+            for (int i = keep - top; i < keep; i++) leafRadius += reach[i] / top;
             float height = Math.Max(collector.Height, 1e-4f);
             // 5. Dieback ranking: the upper, outer and (randomly) unlucky branches go first.
             var stems = new Stem[count];
@@ -279,6 +306,87 @@ namespace ForesTycoon
                 stems[i] = new(r.Parent, r.Parent >= 0 ? attach[i] : 0, r.Level, r.Fork, starts[i], points[i].Count, rank);
             }
             return new TreeSkeleton(stems, flatPoints, flow, leaves, owners, height, leafRadius, leafTotal);
+        }
+
+        /// <summary>Indices to keep so that no dropped vertex is farther than the tolerance from the axis.</summary>
+        private static List<int> SimplifyAxis(List<Vector3> p, bool[] pinned, float tolerance)
+        {
+            int n = p.Count;
+            var flag = new bool[n]; flag[0] = flag[n - 1] = true;
+            for (int i = 0; i < n; i++) if (pinned[i]) flag[i] = true;
+            var work = new Stack<(int, int)>(); work.Push((0, n - 1));
+            while (work.Count > 0)
+            {
+                var (a, b) = work.Pop();
+                int worst = -1; float worstDistance = tolerance;
+                Vector3 ab = p[b] - p[a]; float length = ab.LengthSquared;
+                for (int k = a + 1; k < b; k++)
+                {
+                    float t = length > 1e-14f ? Math.Clamp(Vector3.Dot(p[k] - p[a], ab) / length, 0, 1) : 0;
+                    float d = (p[a] + ab * t - p[k]).Length;
+                    if (d > worstDistance) { worstDistance = d; worst = k; }
+                }
+                if (worst < 0) continue;
+                flag[worst] = true; work.Push((a, worst)); work.Push((worst, b));
+            }
+            var kept = new List<int>();
+            for (int i = 0; i < n; i++) if (flag[i]) kept.Add(i);
+            return kept;
+        }
+
+        /// <summary>
+        /// Drops stems beyond the third order and thins limbs and twigs evenly (by generation order) down to
+        /// a budget. Leaves of dropped stems are reassigned to the nearest surviving ancestor.
+        /// </summary>
+        private static List<RawStem> Prune(Collector collector, int maxLimbs, int maxTwigs)
+        {
+            var raw = collector.Raw; int n = raw.Count;
+            var keep = new bool[n];
+            int limbs = 0, twigs = 0;
+            foreach (var r in raw) { if (r.Level == 1) limbs++; }
+            int limbSeen = 0, limbKept = 0;
+            for (int i = 0; i < n; i++)
+                if (raw[i].Level <= 1 && (raw[i].Level == 0 || raw[i].Fork || KeepEvery(limbSeen++, limbs, maxLimbs, ref limbKept)))
+                    keep[i] = raw[i].Parent < 0 || keep[raw[i].Parent];
+            // Forks of limbs (same level) follow their original.
+            for (int i = 0; i < n; i++)
+                if (raw[i].Level == 2 && raw[i].Parent >= 0 && keep[raw[i].Parent]) twigs++;
+            int twigSeen = 0, twigKept = 0;
+            for (int i = 0; i < n; i++)
+                if (raw[i].Level == 2 && raw[i].Parent >= 0 && keep[raw[i].Parent] && KeepEvery(twigSeen++, twigs, maxTwigs, ref twigKept))
+                    keep[i] = true;
+            // Forked limbs/twigs (same level as parent) survive with their parent.
+            for (int i = 0; i < n; i++)
+                if (!keep[i] && raw[i].Fork && raw[i].Level >= 1 && raw[i].Level <= 2 && raw[i].Parent >= 0 && keep[raw[i].Parent]) keep[i] = true;
+            if (limbs <= maxLimbs && twigs <= maxTwigs)
+                for (int i = 0; i < n; i++) keep[i] = raw[i].Level <= 2;
+            var map = new int[n]; var result = new List<RawStem>(n); var ancestor = new int[n];
+            for (int i = 0; i < n; i++)
+            {
+                if (keep[i]) { map[i] = result.Count; ancestor[i] = i; result.Add(raw[i]); }
+                else ancestor[i] = raw[i].Parent >= 0 ? ancestor[raw[i].Parent] : -1;
+            }
+            foreach (var r in result)
+            {
+                r.Parent = r.Parent >= 0 ? map[r.Parent] : -1;
+                r.Children = new List<int>();
+            }
+            for (int i = 0; i < result.Count; i++) if (result[i].Parent >= 0) result[result[i].Parent].Children.Add(i);
+            for (int i = 0; i < collector.LeafOwner.Count; i++)
+            {
+                int owner = collector.LeafOwner[i];
+                int a = ancestor[owner];
+                collector.LeafOwner[i] = a >= 0 ? map[a] : 0;
+            }
+            return result;
+
+            static bool KeepEvery(int index, int total, int budget, ref int kept)
+            {
+                if (total <= budget) return true;
+                bool take = (long)(index + 1) * budget / total > kept;
+                if (take) kept++;
+                return take;
+            }
         }
 
         private static void NearestOnPolyline(List<Vector3> polyline, Vector3 p, out int segment, out float t)

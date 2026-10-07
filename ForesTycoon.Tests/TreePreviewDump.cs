@@ -101,4 +101,33 @@ public class TreePreviewDump
             Write(Path.Combine(dir, $"sp-{light}.json"), "spruce", trees.ToArray());
         }
     }
+
+    // Renders any Arbaro-format parameter files: ARBARO_DIR holds <name>.xml, ARBARO_SET is "name:Species,...".
+    [Fact]
+    public void DumpArbaroReference()
+    {
+        string dir = Environment.GetEnvironmentVariable("TREE_PREVIEW_DIR");
+        string src = Environment.GetEnvironmentVariable("ARBARO_DIR");
+        string set = Environment.GetEnvironmentVariable("ARBARO_SET");
+        if (string.IsNullOrEmpty(dir) || string.IsNullOrEmpty(src) || string.IsNullOrEmpty(set)) return;
+        foreach (var entry in set.Split(','))
+        {
+            var parts = entry.Split(':');
+            string name = parts[0]; var species = Enum.Parse<ForestSpecies>(parts[1]);
+            string xml = File.ReadAllText(Path.Combine(src, name + ".xml"));
+            var trees = new List<(DendroTreeGenerator.Mesh, float)>(); int i = 0;
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            foreach (var leaves in new[] { LeafState.Full, LeafState.Bare })
+            foreach (int variant in new[] { 1, 2 })
+            {
+                var sk = TreeArchitecture.SkeletonFromXml(xml, variant, 0.25);
+                var size = ForestTreeGrowth.Initial(species, ForestSpeciesProfile.For(species).MatureAgeYears * 1.5f, 1);
+                var spec = new TreeShapeSpec(species, variant, TreeLifePhase.Mature, size, 1, new TreeSite(0.85f), leaves, 0.3f);
+                Assert.Empty(sk.Validate());
+                trees.Add((DendroTreeGenerator.Generate(spec, ForestLod.Near, sk), i++ * 14f));
+            }
+            Console.WriteLine($"{name}: {watch.ElapsedMilliseconds / 4} ms per tree, stems {TreeArchitecture.SkeletonFromXml(xml, 1).StemCount}");
+            Write(Path.Combine(dir, $"ref-{name}.json"), name, trees.ToArray());
+        }
+    }
 }
