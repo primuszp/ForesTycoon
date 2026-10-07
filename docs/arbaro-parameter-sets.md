@@ -27,7 +27,7 @@ háromszegmenses görbület szabályos, merev vázat adott.
 
 ## Megvalósítás
 
-* `ForesTycoon/Assets/Trees/*.xml`: négy faj saját készlete **Arbaro-formátumban** (beágyazott
+* `ForesTycoon.TreeModels/Architecture/Presets/*.xml`: négy faj saját készlete **Arbaro-formátumban** (beágyazott
   erőforrás), a megfelelő Arbaro-fából levezetve:
   `picea_abies` ← `tamarack`/`european_larch`, `quercus_robur` ← `ca_black_oak`,
   `betula_pendula` ← `quaking_aspen`, `fagus_sylvatica` ← `black_tupelo`. Az Arbaróban
@@ -57,8 +57,8 @@ háromszegmenses görbület szabályos, merev vázat adott.
 Az Arbaro-repó `trees/` mappájában **16 fájl** van, ebből csak ~10 fa (a többi pálma, gabona, zsurló,
 sivatagi bokor), és nincs köztük juhar, kőris, erdeifenyő vagy cserje. A hiányzó fajok
 készleteit ezért a legközelebbi Arbaro-preset és a fajok botanikai jellemzői alapján, azonos XML-formátumban
-készítettem el (`ForesTycoon/Assets/Trees/`). Minden faj egy sora a `ForestSpeciesTraits` katalógusnak
-(`ForestSpeciesCatalog.cs`: név, méretek, koronaarány, növekedési ráták, tűlevelű/örökzöld/cserje jelleg,
+készítettem el (`ForesTycoon.TreeModels/Architecture/Presets/`). Minden faj egy sora a `ForestSpeciesTraits` katalógusnak
+(`ForesTycoon.Ecology/Species/ForestSpeciesCatalog.cs`: név, méretek, koronaarány, növekedési ráták, tűlevelű/örökzöld/cserje jelleg,
 kéreg- és lombszín, shader-mintacsalád, leírás); az ökológiát a `ForestSpeciesProfile` adja.
 
 | Faj | Alap Arbaro-preset | Jellemző |
