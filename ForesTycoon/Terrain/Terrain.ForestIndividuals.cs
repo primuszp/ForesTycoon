@@ -10,7 +10,7 @@ namespace ForesTycoon
     {
         // A physical metre is intentionally compressed for the existing diorama proportions.
         internal const float TreeMetresToWorld = 0.32f;
-        private readonly record struct ForestGpuTree(int TileId, int Index, ulong Id, ForestTreeDimensions Size, int LightBand);
+        private readonly record struct ForestGpuTree(int TileId, int Index, ulong Id, ForestTreeDimensions Size, int ShapeKey, TreeSite Site);
         private sealed class IndividualForestChunk : IDisposable
         {
             internal readonly VertexBuffer Wood = new(PrimitiveType.Triangles);
@@ -81,7 +81,7 @@ namespace ForesTycoon
                 geometry.LightShapeDirty = false;
                 foreach (var cached in geometry.Trees)
                     if (forest.IndividualTrees.TryGet(cached.TileId, out var patch) && cached.Index < patch.Count)
-                        geometry.LightShapeDirty |= DendroTreeGenerator.LightBand(patch.Trees[cached.Index].Resources.Light) != cached.LightBand;
+                        geometry.LightShapeDirty |= ShapeKeyOf(patch.Trees[cached.Index], forest.ForestYear, cached.Site) != cached.ShapeKey;
             }
             changed |= geometry.LightShapeDirty;
             if (changed)
@@ -189,7 +189,7 @@ namespace ForesTycoon
                 if (!forest.IndividualTrees.TryGet(slot.TileId, out var patch) || patch.Trees[slot.Index].Id != slot.Id)
                     throw new InvalidOperationException("Forest topology changed without invalidating geometry.");
                 var tree = patch.Trees[slot.Index];
-                geometry.LightShapeDirty |= DendroTreeGenerator.LightBand(tree.Resources.Light) != slot.LightBand;
+                geometry.LightShapeDirty |= ShapeKeyOf(tree, forest.ForestYear, slot.Site) != slot.ShapeKey;
                 var state = ForestTreeRenderState.Create(tree, slot.Size, forest.ForestYear);
                 geometry.State[i * 2] = state.Scale;
                 geometry.State[i * 2 + 1] = state.Rate;
@@ -206,6 +206,9 @@ namespace ForesTycoon
             GL.ActiveTexture(TextureUnit.Texture0);
             geometry.Wood.ForestStateTexture = geometry.Crowns.ForestStateTexture = geometry.StateTexture;
         }
+
+        private static int ShapeKeyOf(in ForestTree tree, double year, in TreeSite site) =>
+            TreeShapeSpec.From(tree, year, site, 0).ShapeKey;
 
         private static int CollectIndividualStems(ForestSystem forest, Tile tile, Span<TreeInstance> output)
         {
@@ -269,8 +272,10 @@ namespace ForesTycoon
                 {
                     ForestTree tree = patch.Trees[i];
                     var stage = ForestTreeAppearance.Stage(tree.Species, tree.Age(geometry.AnchorYear));
+                    var phase = TreeLifePhases.Of(tree.Species, tree.Age(geometry.AnchorYear));
                     geometry.NextStageYear = Math.Min(geometry.NextStageYear,
-                        tree.BirthYear + ForestTreeAppearance.NextStageAge(tree.Species, stage));
+                        tree.BirthYear + Math.Min(TreeLifePhases.NextAge(tree.Species, phase),
+                            ForestTreeAppearance.NextStageAge(tree.Species, stage)));
                     // Health is applied from the small per-tree GPU state, not baked into the mesh.
                     TreeInstance stem = IndividualStem(tile, tree with { Health = 1 }, geometry.AnchorYear);
                     var size = tree.At(geometry.AnchorYear);
@@ -281,10 +286,13 @@ namespace ForesTycoon
                     if (!ImportedForestModels.UsesImported(tree.Species, graphics))
                     {
                         int slot = geometry.Trees.Count;
-                        int lightBand = DendroTreeGenerator.LightBand(tree.Resources.Light);
-                        geometry.Trees.Add(new(id, i, tree.Id, size, lightBand));
-                        var mesh = DendroTreeGenerator.Generate(tree.Species, stem.Seed, stage,
-                            DendroTreeGenerator.BandLight(lightBand), size, stem.Yaw, lod);
+                        var site = ForestTreeSites.Gap(patch.Trees, patch.Count, i, tileSizeH / TreeMetresToWorld,
+                            tileSizeV / TreeMetresToWorld, geometry.AnchorYear, ((IForestHabitat)this).GetNormalizedElevation(id));
+                        var spec = TreeShapeSpec.From(tree, geometry.AnchorYear, site, stem.Yaw);
+                        geometry.NextStageYear = Math.Min(geometry.NextStageYear,
+                            TreePhenology.NextChange(tree.Species, tree.Seed, geometry.AnchorYear));
+                        geometry.Trees.Add(new(id, i, tree.Id, size, spec.ShapeKey, site));
+                        var mesh = DendroTreeGenerator.Generate(spec, lod);
                         AppendAt(individualWood, mesh.Trunk, origin);
                         Repeat(individualWoodGrowth, mesh.Trunk.Length, new(origin, new Vector3(radial, radial, vertical), slot));
                         AppendAt(individualWood, mesh.Branches, origin);
@@ -306,10 +314,8 @@ namespace ForesTycoon
                         Vertex[] wood;
                         if (!ImportedForestModels.UsesImported(dead.Tree.Species, graphics))
                         {
-                            var mesh = DendroTreeGenerator.Generate(dead.Tree.Species, stem.Seed,
-                                ForestTreeAppearance.Stage(dead.Tree.Species, dead.Tree.Age(dead.DeathYear)),
-                                DendroTreeGenerator.BandLight(DendroTreeGenerator.LightBand(dead.Tree.Resources.Light)),
-                                dead.Tree.At(dead.DeathYear), stem.Yaw, ForestLod.Near, includeCrown: false);
+                            var deadSpec = TreeShapeSpec.From(dead.Tree, dead.DeathYear, TreeSite.Open, stem.Yaw, dead: true);
+                            var mesh = DendroTreeGenerator.Generate(deadSpec, ForestLod.Near);
                             var deadWood = new List<Vertex>(mesh.Trunk.Length + mesh.Branches.Length);
                             AppendAt(deadWood, mesh.Trunk, new(stem.X, stem.Y, stem.BaseZ));
                             AppendAt(deadWood, mesh.Branches, new(stem.X, stem.Y, stem.BaseZ));

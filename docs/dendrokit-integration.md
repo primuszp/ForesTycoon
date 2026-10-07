@@ -1,5 +1,7 @@
 # DendroKit alapú, kis poligonszámú növényzet
 
+> A váz, életfázisok, lombhullás, életerő és környezet leírása: [tree-shape-system.md](tree-shape-system.md). Az alábbi szöveg a korábbi állapotot írja le részleteiben.
+
 Az alapértelmezett **Eljárásos fák (kor és fény)** mód a DendroKit.Core
 Weber–Penn generátort használja. A .NET 8 forrás, forrásmegjelölés és GPL v2
 licenc a `ThirdParty/DendroKit.Core` könyvtárban van. A játék buildjéhez nem

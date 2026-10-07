@@ -6,6 +6,15 @@ namespace ForesTycoon
 {
     internal enum CrownForm { Spruce, Oak, Birch, Beech, Hazel, Hawthorn }
 
+    /// <summary>Season, vitality and site adjustments of the crown envelope.</summary>
+    /// <param name="Foliage">1 = full leaf, lower values shrink the crown (budding, leaf fall, thin foliage).</param>
+    /// <param name="Dieback">Share of the live crown lost: the envelope follows the surviving leaves more closely.</param>
+    /// <param name="TopLoss">Share of the crown height lost at the top (a dead leader).</param>
+    internal readonly record struct CrownShaping(float Foliage, float Dieback, float TopLoss, TreeDeformation Warp)
+    {
+        internal static CrownShaping Full => new(1, 0, 0, default);
+    }
+
     internal static class DendroCrownMesh
     {
         internal static CrownForm For(ForestSpecies species) => species switch
@@ -67,10 +76,14 @@ namespace ForesTycoon
         // into a species prior; spruce additionally gets stacked whorl tiers.
         internal static Vertex[] Build(CrownForm form, int seed, TreeLifeStage stage,
             float height, float radius, float fraction, float yaw, IReadOnlyList<Vector3> leaves,
-            uint color, ForestLod lod)
+            uint color, ForestLod lod, CrownShaping? shape = null)
         {
+            var shaping = shape ?? CrownShaping.Full;
             var profile = For(form, stage);
-            float bottom = height * (1 - fraction), crownHeight = height * fraction;
+            profile = profile with { LeafWeight = profile.LeafWeight + (0.97f - profile.LeafWeight) * Math.Min(1, shaping.Dieback * 1.6f) };
+            float minShare = 0.35f * (1 - 0.8f * shaping.Dieback);
+            float bottom = height * (1 - fraction), crownHeight = height * fraction * (1 - shaping.TopLoss);
+            float topZ = bottom + crownHeight;
             int sides = form == CrownForm.Spruce
                 ? Sides(radius, lod, lod == ForestLod.Far ? 4 : 5, lod == ForestLod.Far ? 5 : lod == ForestLod.Medium ? 6 : 8)
                 : Sides(radius, lod, lod == ForestLod.Far ? 4 : 5, lod == ForestLod.Far ? 5 : lod == ForestLod.Medium ? 9 : 12);
@@ -91,7 +104,7 @@ namespace ForesTycoon
             var support = new float[sides];
             float bulgeAmount = ForestTreeVariation.Range(seed, 711, 0.06f, 0.16f) * (form == CrownForm.Oak ? 1.4f : 1);
             int bulgeLobes = form == CrownForm.Oak || stage == TreeLifeStage.Old ? 3 : 5;
-            points[0] = new(0, 0, bottom + crownHeight * profile.Pole); points[^1] = new(0, 0, height);
+            points[0] = new(0, 0, bottom + crownHeight * profile.Pole); points[^1] = new(0, 0, topZ);
             float maxRadius = 0;
             for (int ring = 0; ring < ringCount; ring++)
             {
@@ -126,13 +139,17 @@ namespace ForesTycoon
                     float bulge = 1 + bulgeAmount * MathF.Sin(angle * bulgeLobes + t * 7 + seed % 17);
                     float lobe = smooth * (form == CrownForm.Spruce ? scale : 1);
                     float r = (prior * radius * (1 - profile.LeafWeight) + lobe * profile.LeafWeight) * bulge;
-                    r = Math.Max(r, prior * radius * 0.35f);
+                    r = Math.Max(r, prior * radius * minShare);
                     maxRadius = Math.Max(maxRadius, r);
                     points[1 + ring * sides + side] = new(MathF.Cos(angle) * r, MathF.Sin(angle) * r, bottom + t * crownHeight);
                 }
             }
             float width = radius / Math.Max(1e-6f, maxRadius);
-            for (int i = 1; i < points.Length - 1; i++) { points[i].X *= width; points[i].Y *= width; }
+            // Thin foliage (bud burst, leaf fall) shrinks the envelope sideways and a little downwards.
+            float thin = 0.72f + 0.28f * shaping.Foliage;
+            for (int i = 1; i < points.Length - 1; i++) { points[i].X *= width * thin; points[i].Y *= width * thin; }
+            if (!shaping.Warp.IsIdentity)
+                for (int i = 0; i < points.Length; i++) points[i] = shaping.Warp.Apply(points[i]);
 
             var indices = new List<int>(6 * sides * ringCount); var normals = new Vector3[points.Length];
             for (int side = 0; side < sides; side++) Triangle(0, At(0, side + 1), At(0, side));
