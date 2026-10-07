@@ -2,8 +2,6 @@ using System;
 
 namespace ForesTycoon
 {
-    internal enum ForestLod { Far, Medium, Near }
-
     internal static class ForestLodPolicy
     {
         internal static (ForestLod Low,ForestLod High,float Blend) Transition(float pixels)

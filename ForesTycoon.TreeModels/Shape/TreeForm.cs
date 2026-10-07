@@ -2,7 +2,7 @@ using System;
 using System.Drawing;
 using OpenTK.Mathematics;
 
-namespace ForesTycoon
+namespace ForesTycoon.TreeModels
 {
     /// <summary>
     /// Smooth, continuous warp of the ground plane applied to every point of a tree (skeleton, crown
@@ -77,8 +77,8 @@ namespace ForesTycoon
             float light = Bands.Light01;
             float response = TreeArchitecture.LightResponse(spec.Species, light);
             CrownFraction = TreeArchitecture.CrownFraction(spec.Species, spec.Phase, Bands.Light);
-            Height = size.Height * Terrain.TreeMetresToWorld;
-            CrownRadius = size.CrownRadius * Terrain.TreeMetresToWorld * (0.74f + 0.26f * response);
+            Height = size.Height * TreeScale.MetresToWorld;
+            CrownRadius = size.CrownRadius * TreeScale.MetresToWorld * (0.74f + 0.26f * response);
             CrownBase = Height * (1 - CrownFraction);
             ZScale = Height / Skeleton.Height;
             XyScale = CrownRadius * 0.88f / Math.Max(0.001f, Skeleton.LeafRadius);
@@ -91,8 +91,8 @@ namespace ForesTycoon
             Warp = TreeDeformation.From(Bands, Height).WithWind(spec.Site.WindAngle, Bands.WindBias);
 
             // Breast-height radius pins the trunk to the simulated diameter.
-            BreastRadius = size.Diameter * 0.5f * Terrain.TreeMetresToWorld;
-            BreastHeight = Math.Min(1.3f * Terrain.TreeMetresToWorld, 0.2f * Height);
+            BreastRadius = size.Diameter * 0.5f * TreeScale.MetresToWorld;
+            BreastHeight = Math.Min(1.3f * TreeScale.MetresToWorld, 0.2f * Height);
             float k = spec.Species switch
             {
                 ForestSpecies.Beech => 0.65f, ForestSpecies.Oak or ForestSpecies.SessileOak => 0.55f, ForestSpecies.TurkeyOak => 0.5f,
@@ -159,7 +159,7 @@ namespace ForesTycoon
             (int)(a.R + (b.R - a.R) * t), (int)(a.G + (b.G - a.G) * t), (int)(a.B + (b.B - a.B) * t));
 
         internal static uint Pack(Color color, ForestSpecies species, float shade) =>
-            (uint)Terrain.SurfaceSpeciesCode(species) << 24 | (uint)Math.Clamp((int)(color.R * shade), 0, 255)
+            (uint)TreeScale.SurfaceSpeciesCode(species) << 24 | (uint)Math.Clamp((int)(color.R * shade), 0, 255)
             | (uint)Math.Clamp((int)(color.G * shade), 0, 255) << 8 | (uint)Math.Clamp((int)(color.B * shade), 0, 255) << 16;
     }
 }

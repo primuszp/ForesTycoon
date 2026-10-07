@@ -4,7 +4,7 @@ using DendroKit.Core.Tree;
 using OpenTK.Mathematics;
 using Vector3d = DendroKit.Core.Geom.Vector3d;
 
-namespace ForesTycoon
+namespace ForesTycoon.TreeModels
 {
     /// <summary>
     /// The complete woody structure of one tree architecture: trunk, limbs and twigs as a rooted

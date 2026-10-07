@@ -1,7 +1,7 @@
 using System;
 using OpenTK.Mathematics;
 
-namespace ForesTycoon
+namespace ForesTycoon.TreeModels
 {
     /// <summary>
     /// Answers the simulation's questions about the shape the generator would give a tree, without
@@ -15,7 +15,7 @@ namespace ForesTycoon
         internal static TreeShapeMetrics Measure(TreeForm f)
         {
             var sk = f.Skeleton; var spec = f.Spec;
-            float toMetres = 1 / Terrain.TreeMetresToWorld;
+            float toMetres = 1 / TreeScale.MetresToWorld;
             double trunk = 0, wood = 0;
             int limbs = 0;
             float crownBase = f.Height;

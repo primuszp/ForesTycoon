@@ -4,7 +4,7 @@ using System.Globalization;
 using DendroKit.Core.Params;
 using DendroKit.Core.Tree;
 
-namespace ForesTycoon
+namespace ForesTycoon.TreeModels
 {
     /// <summary>
     /// Species architecture as Weber-Penn parameters (see docs/tree-generation-literature.md) and a

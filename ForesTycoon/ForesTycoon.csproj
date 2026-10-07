@@ -14,11 +14,13 @@
   <ItemGroup>
     <Using Include="ForesTycoon.Engine" />
     <Using Include="ForesTycoon.Ecology" />
+    <Using Include="ForesTycoon.TreeModels" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="../ForesTycoon.Engine/ForesTycoon.Engine.csproj" />
     <ProjectReference Include="../ForesTycoon.Ecology/ForesTycoon.Ecology.csproj" />
+    <ProjectReference Include="../ForesTycoon.TreeModels/ForesTycoon.TreeModels.csproj" />
     <ProjectReference Include="../ThirdParty/DendroKit.Core/DendroKit.Core.csproj" />
     <Content Include="../ThirdParty/DendroKit.Core/LICENSE.txt" Link="Licenses/DendroKit-GPL-2.0.txt" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../ThirdParty/DendroKit.Core/NOTICE.md" Link="Licenses/DendroKit-NOTICE.md" CopyToOutputDirectory="PreserveNewest" />
@@ -33,7 +35,6 @@
     <Content Include="Assets/Buildings/sawmill.glb" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets/Wildlife/elk.glb" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets/Vehicles/log-truck.glb" CopyToOutputDirectory="PreserveNewest" />
-    <EmbeddedResource Include="Assets/Trees/*.xml" LogicalName="Trees.%(Filename)%(Extension)" />
     <PackageReference Include="OpenTK" Version="4.9.4" />
     <PackageReference Include="ImGui.NET" Version="1.91.6.1" />
   </ItemGroup>

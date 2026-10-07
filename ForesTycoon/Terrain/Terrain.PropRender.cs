@@ -194,7 +194,7 @@ namespace ForesTycoon
         /// shader decodes it (alpha − 246) to pick the species' bark and foliage pattern;
         /// 247 marks fresh-cut end grain. Plain geometry keeps alpha 255.
         /// </summary>
-        internal static int SurfaceSpeciesCode(ForestSpecies species) => 246 + ForestSpeciesTraits.For(species).Pattern;
+        internal static int SurfaceSpeciesCode(ForestSpecies species) => TreeScale.SurfaceSpeciesCode(species);
         internal const int CutWoodCode = 247;
 
         /// <summary>

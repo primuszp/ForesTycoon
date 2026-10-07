@@ -55,7 +55,7 @@ public class ArbaroPresetTests
     {
         string root = Root();
         foreach (string file in Directory.GetFiles(Path.Combine(root, "ThirdParty", "ArbaroPresets"), "*.xml").Concat(
-            Directory.GetFiles(Path.Combine(root, "ForesTycoon", "Assets", "Trees"), "*.xml")))
+            Directory.GetFiles(Path.Combine(root, "ForesTycoon.TreeModels", "Architecture", "Presets"), "*.xml")))
             yield return new object[] { Path.GetRelativePath(root, file) };
     }
 
@@ -80,7 +80,7 @@ public class ArbaroPresetTests
     [InlineData(ForestSpecies.Beech)]
     internal void ShippedSpeciesSetsMatchTheEmbeddedResources(ForestSpecies species)
     {
-        string file = Path.Combine(Root(), "ForesTycoon", "Assets", "Trees", TreeArchitecture.PresetName(species) + ".xml");
+        string file = Path.Combine(Root(), "ForesTycoon.TreeModels", "Architecture", "Presets", TreeArchitecture.PresetName(species) + ".xml");
         using var stream = typeof(TreeArchitecture).Assembly.GetManifestResourceStream("Trees." + TreeArchitecture.PresetName(species) + ".xml");
         Assert.NotNull(stream);
         Assert.Equal(File.ReadAllText(file).Replace("\r\n", "\n"), new StreamReader(stream).ReadToEnd().Replace("\r\n", "\n"));

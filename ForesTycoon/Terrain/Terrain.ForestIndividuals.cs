@@ -9,7 +9,7 @@ namespace ForesTycoon
     partial class Terrain
     {
         // A physical metre is intentionally compressed for the existing diorama proportions.
-        internal const float TreeMetresToWorld = 0.32f;
+        internal const float TreeMetresToWorld = TreeScale.MetresToWorld;
         private readonly record struct ForestGpuTree(int TileId, int Index, ulong Id, ForestTreeDimensions Size, int ShapeKey, TreeSite Site);
         private sealed class IndividualForestChunk : IDisposable
         {

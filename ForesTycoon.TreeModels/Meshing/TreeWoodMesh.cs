@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using OpenTK.Mathematics;
 
-namespace ForesTycoon
+namespace ForesTycoon.TreeModels
 {
     /// <summary>
     /// Turns the skeleton of a <see cref="TreeForm"/> into smooth-shaded low-poly tubes: trunk with

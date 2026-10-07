@@ -1,6 +1,6 @@
 using System;
 
-namespace ForesTycoon
+namespace ForesTycoon.TreeModels
 {
     // Independent hash channels keep morphology stable across growth, reloads and LODs.
     // Adding a trait never shifts the random sequence of existing traits.
