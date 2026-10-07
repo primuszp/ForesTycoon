@@ -43,6 +43,14 @@ namespace ForesTycoon
         internal static float CrownFraction(ForestSpecies species, TreeLifePhase phase, int lightBand, int form)
         {
             float light = TreeShapeBands.BandLight(lightBand);
+            if (species == ForestSpecies.Spruce && form == 0)
+            {
+                // Spruce keeps its lower whorls and is branched to the ground in the open and while young;
+                // only old trees in shade self-prune and become lanky with a high crown base.
+                float age = phase switch { TreeLifePhase.Young => 0.25f, TreeLifePhase.Mature => 0.6f,
+                    TreeLifePhase.Old or TreeLifePhase.Senescent => 1f, _ => 0f };
+                return 0.98f - 0.55f * (1 - light) * age;
+            }
             float fraction = form == (int)ShrubForm.Hazel ? 0.90f : form == (int)ShrubForm.Hawthorn ? 0.80f
                 : TreeLifePhases.CrownFraction(species, phase);
             return Math.Clamp(fraction * (0.72f + 0.28f * LightResponse(species, light)), 0.2f, 0.95f);

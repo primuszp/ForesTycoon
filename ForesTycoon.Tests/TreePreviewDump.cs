@@ -82,4 +82,23 @@ public class TreePreviewDump
             Write(Path.Combine(dir, $"st-{species}.json"), "states", specs.Select((sp, i) => (DendroTreeGenerator.Generate(sp, ForestLod.Near), i * 14f)).ToArray());
         }
     }
+
+    [Fact]
+    public void DumpSpruceStands()
+    {
+        string dir = Environment.GetEnvironmentVariable("TREE_PREVIEW_DIR");
+        if (string.IsNullOrEmpty(dir)) return;
+        var profile = ForestSpeciesProfile.For(ForestSpecies.Spruce);
+        foreach (float light in new[] { 1f, 0.1f })
+        {
+            var trees = new List<(DendroTreeGenerator.Mesh, float)>(); int i = 0;
+            foreach (var phase in new[] { TreeLifePhase.Young, TreeLifePhase.Mature, TreeLifePhase.Old, TreeLifePhase.Senescent })
+            {
+                float age = phase switch { TreeLifePhase.Young => 12f, TreeLifePhase.Mature => 70f, TreeLifePhase.Old => 150f, _ => 175f };
+                var spec = new TreeShapeSpec(ForestSpecies.Spruce, 42, phase, ForestTreeGrowth.Initial(ForestSpecies.Spruce, age, 1), 1, new TreeSite(light), LeafState.Full, 0.3f);
+                trees.Add((DendroTreeGenerator.Generate(spec, ForestLod.Near), i++ * 14f));
+            }
+            Write(Path.Combine(dir, $"sp-{light}.json"), "spruce", trees.ToArray());
+        }
+    }
 }
