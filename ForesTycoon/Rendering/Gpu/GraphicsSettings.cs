@@ -1,10 +1,9 @@
 namespace ForesTycoon
 {
-    internal enum GraphicsQuality { Low, Medium, High }
     internal enum ForestModelStyle { Imported, OriginalPine, Procedural, Generated }
 
     // Display options never change forestry, transport, or replay state.
-    internal sealed class GraphicsSettings
+    internal sealed class GraphicsSettings : IPostProcessSettings, IShadingSettings, IWeatherSettings
     {
         internal GraphicsQuality Quality = GraphicsQuality.High;
         internal int ShadowResolution => Quality == GraphicsQuality.Low ? 512 : Quality == GraphicsQuality.Medium ? 1024 : 2048;
@@ -47,5 +46,31 @@ namespace ForesTycoon
         internal bool StudioBackdrop = true;
         internal int TiltShiftTaps => Quality == GraphicsQuality.Low ? 8 : Quality == GraphicsQuality.Medium ? 12 : 20;
         internal int OcclusionPairs => Quality == GraphicsQuality.Low ? 0 : Quality == GraphicsQuality.Medium ? 4 : 8;
+
+        bool IWeatherSettings.Weather => Weather;
+        bool IWeatherSettings.Lightning => Lightning;
+        int IWeatherSettings.LightningRequest => LightningRequest;
+        bool IWeatherSettings.AutomaticWeather => AutomaticWeather;
+        WeatherPreset IWeatherSettings.Preset => Preset;
+        bool IWeatherSettings.ExperimentalSnow => ExperimentalSnow;
+        int IWeatherSettings.RainBudget => RainBudget;
+        int IWeatherSettings.CloudSteps => CloudSteps;
+        bool IPostProcessSettings.Enhanced => Enhanced;
+        bool IShadingSettings.Enhanced => Enhanced;
+        bool IShadingSettings.Lighting => Lighting;
+        bool IShadingSettings.Textures => Textures;
+        bool IShadingSettings.ModelOutlines => WildlifeOutlines;
+        float IShadingSettings.SunAzimuth => SunAzimuth;
+        float IShadingSettings.SunElevation => SunElevation;
+        bool IPostProcessSettings.Diorama => Diorama;
+        bool IPostProcessSettings.StudioBackdrop => StudioBackdrop;
+        bool IPostProcessSettings.AmbientOcclusion => AmbientOcclusion;
+        float IPostProcessSettings.AmbientOcclusionStrength => AmbientOcclusionStrength;
+        int IPostProcessSettings.OcclusionPairs => OcclusionPairs;
+        bool IPostProcessSettings.ColorGrading => ColorGrading;
+        bool IPostProcessSettings.TiltShift => TiltShift;
+        float IPostProcessSettings.TiltShiftStrength => TiltShiftStrength;
+        int IPostProcessSettings.TiltShiftTaps => TiltShiftTaps;
+        bool IPostProcessSettings.Vignette => Vignette;
     }
 }

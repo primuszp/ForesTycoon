@@ -30,6 +30,7 @@ namespace ForesTycoon
         internal int WildlifeCount => graphics.Wildlife ? wildlife.Count : 0;
         internal bool TryGetWildlifePosition(out OpenTK.Mathematics.Vector3 position) => wildlife.TryGetPosition(out position);
         private readonly WeatherRenderer precipitation = new WeatherRenderer();
+        private readonly TerrainWeatherSurface weatherSurface;
 
         public TerrainRenderer(Terrain terrain, VehicleSystem vehicles, WorldEffectSystem effects, ForestSystem forest, GraphicsSettings graphics = null,EnvironmentSystem environment=null, WildlifeSystem wildlifeSystem=null,ForestryLogistics logistics=null)
         {
@@ -43,6 +44,7 @@ namespace ForesTycoon
             this.effects = effects ?? throw new ArgumentNullException(nameof(effects));
             this.forest = forest ?? throw new ArgumentNullException(nameof(forest));
             this.graphics = graphics ?? new GraphicsSettings { Enhanced = false };
+            weatherSurface = new TerrainWeatherSurface(terrain, forest);
             surfaces = new SurfaceVisualRenderer(this.graphics, weather,environment,terrain);
             terrain.WarmStaticGeometry();
             terrain.WarmIndividualForest(forest, this.graphics);
@@ -93,7 +95,7 @@ namespace ForesTycoon
                 RenderPipeline.PassProbe?.Invoke("clouds", true);
                 try
                 {
-                    if(graphics.Enhanced && graphics.Weather && graphics.Clouds) clouds.Draw(terrain, weather, graphics);
+                    if(graphics.Enhanced && graphics.Weather && graphics.Clouds) clouds.Draw(weatherSurface, weather, graphics);
                 }
                 finally { RenderPipeline.PassProbe?.Invoke("clouds", false); }
                 pipeline.Render(context);
@@ -136,7 +138,7 @@ namespace ForesTycoon
                 if (graphics.Enhanced && graphics.Weather)
                 {
                     forestWeather.Draw(terrain, forest, weather, graphics, context,environment);
-                    precipitation.Draw(terrain, forest, weather, context, graphics);
+                    precipitation.Draw(weatherSurface, weather, context, graphics);
                 }
             });
             pipeline.Add(RenderLayer.DebugOverlay, "debug-overlay", context =>

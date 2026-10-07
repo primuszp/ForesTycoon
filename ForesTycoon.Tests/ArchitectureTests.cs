@@ -9,6 +9,9 @@ public class ArchitectureTests
     private static readonly Assembly Engine = typeof(FixedStepClock).Assembly;
     private static readonly Assembly Ecology = typeof(Ecosystem).Assembly;
     private static readonly Assembly TreeModels = typeof(TreeScale).Assembly;
+    private static readonly Assembly Renderer = typeof(RenderDevice).Assembly;
+    private static readonly Assembly Models = typeof(AnimatedGlbModel).Assembly;
+    private static readonly Assembly Effects = typeof(WeatherVisualState).Assembly;
     private static readonly Assembly Game = typeof(GameWorld).Assembly;
 
     private static IEnumerable<string> References(Assembly assembly) =>
@@ -28,12 +31,48 @@ public class ArchitectureTests
             References(TreeModels).OrderBy(n => n));
 
     [Fact]
+    public void TheGpuCoreDependsOnlyOnTheEngineAndOpenTk() =>
+        Assert.Equal(new[] { "ForesTycoon.Engine", "OpenTK" }, References(Renderer).Where(n => !n.StartsWith("OpenTK.")).Append("OpenTK").Distinct().OrderBy(n => n).ToArray());
+
+    [Fact]
+    public void ModelLoadingBuildsOnTheGpuCoreAloneAndEffectsAddOnlyTheEcosystemWeather()
+    {
+        static void OnlyDependsOn(Assembly assembly, params string[] allowed) =>
+            Assert.All(References(assembly).Where(n => n.StartsWith("ForesTycoon")), n => Assert.Contains(n, allowed));
+        OnlyDependsOn(Models, "ForesTycoon.Engine", "ForesTycoon.Rendering");
+        OnlyDependsOn(Effects, "ForesTycoon.Engine", "ForesTycoon.Rendering", "ForesTycoon.Ecology");
+        Assert.Contains("ForesTycoon.Rendering", References(Models));
+        Assert.Contains("ForesTycoon.Ecology", References(Effects));
+        foreach (var assembly in new[] { Renderer, Models, Effects })
+            Assert.DoesNotContain(References(assembly), n => n is "ForesTycoon" or "ForesTycoon.TreeModels" or "ImGui.NET");
+    }
+
+    [Fact]
     public void TheGameIsTheOnlyLayerThatSeesAllOthers()
     {
         var names = References(Game).ToHashSet();
         Assert.Contains("ForesTycoon.Engine", names);
         Assert.Contains("ForesTycoon.Ecology", names);
         Assert.Contains("ForesTycoon.TreeModels", names);
+        Assert.Contains("ForesTycoon.Rendering", names);
+        Assert.Contains("ForesTycoon.Models", names);
+        Assert.Contains("ForesTycoon.Effects", names);
+    }
+
+    [Theory]
+    [InlineData("ForesTycoon.Rendering")]
+    [InlineData("ForesTycoon.Models")]
+    [InlineData("ForesTycoon.Effects")]
+    public void RendererModulesNeverUseWindowingOrUi(string project)
+    {
+        string dir = Path.Combine(RepositoryRoot(), project);
+        foreach (string file in Directory.EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories)
+                     .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")))
+        {
+            string text = File.ReadAllText(file);
+            foreach (string word in new[] { "OpenTK.Windowing", "ImGuiNET", "System.Windows" })
+                Assert.False(text.Contains(word), $"{file} uses {word}");
+        }
     }
 
     [Theory]
@@ -74,6 +113,40 @@ public class ArchitectureTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new Ecosystem(habitat, 5));
         ecosystem.Reset(habitat, EcologyTime.SecondsPerForestYear);
         Assert.Equal(EcologyTime.SecondsPerForestYear, ecosystem.ForestYearSeconds);
+    }
+
+    private sealed class Settings : IWeatherSettings
+    {
+        public bool Weather => true;
+        public bool Lightning => false;
+        public int LightningRequest => 0;
+        public bool AutomaticWeather => false;
+        public WeatherPreset Preset { get; init; }
+        public bool ExperimentalSnow => false;
+        public int RainBudget => 1000;
+        public int CloudSteps => 8;
+    }
+
+    [Fact]
+    public void WeatherEffectsRunWithoutAGraphicsContext()
+    {
+        var state = new WeatherVisualState();
+        var rain = new Settings { Preset = WeatherPreset.Rain };
+        for (double t = 0; t < 10; t += 0.1) state.Update(t, rain);
+        Assert.True(state.Rain > 0.9f && state.Cloud > 0.9f);
+        var clear = new Settings { Preset = WeatherPreset.Sunny };
+        for (double t = 10; t < 40; t += 0.1) state.Update(t, clear);
+        Assert.True(state.Rain < 0.1f);
+    }
+
+    [Fact]
+    public void WorldEffectsExpireOnTheEngineClock()
+    {
+        var effects = new WorldEffectSystem();
+        effects.Spawn(WorldEffectKind.TreePlanted, new OpenTK.Mathematics.Vector3(1, 2, 3));
+        Assert.Equal(1, effects.Count);
+        for (int i = 0; i < 400; i++) effects.Update(1.0 / 30);
+        Assert.Equal(0, effects.Count);
     }
 
     private static string RepositoryRoot()

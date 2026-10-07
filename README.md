@@ -123,11 +123,14 @@ Quicksaves are stored under the operating system's local application-data direct
 - [ForesTycoon.Engine](ForesTycoon.Engine): game-agnostic runtime kit (fixed-step time, systems, jobs, animation timing)
 - [ForesTycoon.Ecology](ForesTycoon.Ecology): the ecosystem simulation - weather, soil, water, species and forest; headless and deterministic
 - [ForesTycoon.TreeModels](ForesTycoon.TreeModels): species-level procedural tree and shrub models (Arbaro-format presets)
+- [ForesTycoon.Rendering](ForesTycoon.Rendering): GPU core of the renderer (device, shaders, pipeline, buffers, post-processing)
+- [ForesTycoon.Models](ForesTycoon.Models): glTF/GLB model loading, animation and drawing
+- [ForesTycoon.Effects](ForesTycoon.Effects): weather, clouds, fog, lightning and action markers
 - [ForesTycoon/World](ForesTycoon/World): game world, commands, save/replay, vehicles and effects
 - [ForesTycoon/Terrain](ForesTycoon/Terrain): terrain data, generation, hydrology, roads and chunk updates
 - [ForesTycoon/Rendering](ForesTycoon/Rendering): ordered render pipeline and GPU helpers
 
-The layering (Engine ← Ecology ← TreeModels ← game) is described in [docs/architecture.md](docs/architecture.md) and enforced by the architecture tests.
+The layering (Engine ← Ecology/Rendering ← TreeModels/Models/Effects ← game) is described in [docs/architecture.md](docs/architecture.md) and enforced by the architecture tests.
 - [ForesTycoon/Diagnostics](ForesTycoon/Diagnostics): frame, simulation, allocation and draw-call metrics
 - [ForesTycoon/Camera](ForesTycoon/Camera): platform-independent isometric camera state
 - [Engine architecture](docs/engine-architecture.md): responsibility boundaries, performance policy and roadmap

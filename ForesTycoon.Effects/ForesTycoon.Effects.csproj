@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Visual effects: rain and snow particles, clouds, fog habitat rules, lightning, and the timed
+    world-effect markers that give action feedback. Built on the GPU core; it reads the weather state
+    of the ecosystem and an abstract weather surface, never the terrain or forest directly.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>ForesTycoon.Effects</RootNamespace>
+    <AssemblyName>ForesTycoon.Effects</AssemblyName>
+    <RollForward>Major</RollForward>
+    <NoWarn>NU1701</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Using Include="ForesTycoon.Engine" />
+    <Using Include="ForesTycoon.Rendering" />
+    <Using Include="ForesTycoon.Ecology" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../ForesTycoon.Engine/ForesTycoon.Engine.csproj" />
+    <ProjectReference Include="../ForesTycoon.Rendering/ForesTycoon.Rendering.csproj" />
+    <ProjectReference Include="../ForesTycoon.Ecology/ForesTycoon.Ecology.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ForesTycoon" />
+    <InternalsVisibleTo Include="ForesTycoon.Tests" />
+  </ItemGroup>
+
+</Project>
