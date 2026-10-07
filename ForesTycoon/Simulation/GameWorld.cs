@@ -22,29 +22,26 @@ namespace ForesTycoon
         private readonly List<WorldCommandRecord> commandJournal = new List<WorldCommandRecord>();
         private VehicleSystem vehicles;
         private WorldEffectSystem effects;
-        private ForestSystem forest;
+        private Ecosystem ecosystem;
+        private ForestSystem forest => ecosystem.Forest;
         private TimberCargoSystem timberCargo;
         private ulong worldTick;
-        internal EnvironmentSystem Environment { get; private set; }
-        private ForestEnvironmentCoordinator forestEnvironment;
+        internal EnvironmentSystem Environment => ecosystem.Environment;
         private ForestryActionResult lastForestryAction;
         private ForestryAreaSummary lastForestryArea;
         internal GraphicsSettings Graphics { get; }
 
-        private double forestYearSeconds;
-        public GameWorld(TerrainSettings settings, double forestYearSeconds = EnvironmentSystem.DefaultGameSecondsPerYear)
+        public GameWorld(TerrainSettings settings, double forestYearSeconds = EcologyTime.DefaultGameSecondsPerYear)
             : this(settings, new GraphicsSettings { AutomaticWeather = true }, forestYearSeconds) { }
 
         private GameWorld(TerrainSettings settings, GraphicsSettings graphics, double forestYearSeconds)
         {
             // Validate before allocating terrain/GPU resources, including direct diagnostic callers.
-            if (!EnvironmentSystem.IsValidForestYearSeconds(forestYearSeconds))
+            if (!EcologyTime.IsValidForestYearSeconds(forestYearSeconds))
                 throw new ArgumentOutOfRangeException(nameof(forestYearSeconds));
-            this.forestYearSeconds = forestYearSeconds;
             Graphics = graphics;
             terrain = new Terrain(settings ?? throw new ArgumentNullException(nameof(settings)));
-            forest = new ForestSystem(terrain);
-            InitializeEnvironment();
+            ecosystem = new Ecosystem(terrain, forestYearSeconds);
             timberCargo = systems.Add(new TimberCargoSystem());
             vehicles = systems.Add(new VehicleSystem(timberCargo, route => terrain.CreateVehicleRoadRoute(route)));
             effects = systems.Add(new WorldEffectSystem());
@@ -116,7 +113,7 @@ namespace ForesTycoon
         public void Update(double fixedDeltaSeconds)
         {
             long start = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
-            forestEnvironment.Update(fixedDeltaSeconds);
+            ecosystem.Update(fixedDeltaSeconds);
             long environmentUpdated = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
             Logistics?.Update(fixedDeltaSeconds);
             long logisticsUpdated = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
@@ -262,14 +259,13 @@ namespace ForesTycoon
 
         public void Regenerate(TerrainSettings settings)
         {
-            forestYearSeconds = EnvironmentSystem.DefaultGameSecondsPerYear;
             vehicles.UseRoadPhysics = true; vehicles.UseCargoStops = true;
             commands.Clear();
             commandJournal.Clear();
             systems.Clear();
             worldTick = 0;
             lastForestryAction = ForestryActionResult.None;
-            ReplaceTerrain(settings);
+            ReplaceTerrain(settings, EcologyTime.DefaultGameSecondsPerYear);
         }
 
         public void Save(Stream destination, double tickRate = 30.0)
@@ -277,7 +273,7 @@ namespace ForesTycoon
             WorldSaveSerializer.Write(destination, new WorldSaveData
             {
                 TickRate = tickRate,
-                ForestYearSeconds = forestYearSeconds,
+                ForestYearSeconds = ecosystem.ForestYearSeconds,
                 Tick = worldTick,
                 Terrain = TerrainSettingsData.From(terrain.Settings),
                 Commands = new List<WorldCommandRecord>(commandJournal)
@@ -295,10 +291,7 @@ namespace ForesTycoon
 
             (terrain, candidate.terrain) = (candidate.terrain, terrain);
             (terrainRenderer, candidate.terrainRenderer) = (candidate.terrainRenderer, terrainRenderer);
-            (forest, candidate.forest) = (candidate.forest, forest);
-            (Environment, candidate.Environment) = (candidate.Environment, Environment);
-            (forestEnvironment, candidate.forestEnvironment) = (candidate.forestEnvironment, forestEnvironment);
-            (forestYearSeconds, candidate.forestYearSeconds) = (candidate.forestYearSeconds, forestYearSeconds);
+            (ecosystem, candidate.ecosystem) = (candidate.ecosystem, ecosystem);
             (wildlife, candidate.wildlife) = (candidate.wildlife, wildlife);
             (Logistics, candidate.Logistics) = (candidate.Logistics, Logistics);
             (vehicles, candidate.vehicles) = (candidate.vehicles, vehicles);
@@ -329,14 +322,12 @@ namespace ForesTycoon
                 Update(fixedDelta);
             }
         }
-        private void ReplaceTerrain(TerrainSettings settings)
+        private void ReplaceTerrain(TerrainSettings settings, double forestYearSeconds)
         {
             terrainRenderer.Dispose();
             terrain.Dispose();
             terrain = new Terrain(settings ?? throw new ArgumentNullException(nameof(settings)));
-            forest.Environment = null;
-            forest.Reset(terrain);
-            InitializeEnvironment();
+            ecosystem.Reset(terrain, forestYearSeconds);
             wildlife = new WildlifeSystem();
             InitializeLogistics();
             terrainRenderer = new TerrainRenderer(terrain, vehicles, effects, forest, Graphics, Environment, wildlife, Logistics);
@@ -356,14 +347,6 @@ namespace ForesTycoon
             vehicles.SourceLoader = Logistics.Load;
             vehicles.DestinationReceiver = Logistics.Deliver;
             vehicles.RouteValidator = Logistics.RouteConnected;
-        }
-
-        private void InitializeEnvironment()
-        {
-            forest.Environment=null;
-            forest.UseEnvironmentTempo(forestYearSeconds);
-            Environment=new EnvironmentSystem(terrain,forest,forestYearSeconds);
-            forestEnvironment = new ForestEnvironmentCoordinator(forest, Environment);
         }
 
         public void Dispose()
