@@ -181,7 +181,10 @@ namespace ForesTycoon.TreeModels
                     maxRadius = Math.Max(maxRadius, r);
                     points[1 + ring * sides + side] = new(MathF.Cos(angle) * r, MathF.Sin(angle) * r, bottom + rings[ring].T * crownHeight);
                 }
-            float width = radius / Math.Max(1e-6f, maxRadius);
+            // Coarser levels of detail must fill the same silhouette, or trees visibly shrink and grow as the
+            // camera zooms: compensate the inscribed polygon (mean width n·sin(pi/n)/pi of a circle) and the
+            // wider gaps between fewer rings, relative to the smooth envelope of the growth form.
+            float width = radius / Math.Max(1e-6f, maxRadius) * FillCompensation(profile, form, rings, sides);
             // Thin foliage (bud burst, leaf fall) shrinks the envelope sideways and a little downwards.
             float thin = 0.72f + 0.28f * shaping.Foliage;
             for (int i = 1; i < points.Length - 1; i++) { points[i].X *= width * thin; points[i].Y *= width * thin; }
@@ -216,6 +219,28 @@ namespace ForesTycoon.TreeModels
             }
         }
 
+        private static float FillCompensation(Profile profile, CrownForm form, List<(float T, float Scale)> rings, int sides)
+        {
+            const int Steps = 48;
+            float ideal = 0;
+            for (int i = 0; i < Steps; i++) ideal += Envelope(profile, (i + 0.5f) / Steps) / Steps;
+            if (form == CrownForm.Spruce) ideal *= SpruceTierFill;
+            // Area under the piecewise-linear outline through the ring radii, closed at both poles.
+            float piece = 0, previousT = 0, previous = 0;
+            foreach (var (t, scale) in rings)
+            {
+                float value = Envelope(profile, t) * scale;
+                piece += (t - previousT) * (previous + value) * 0.5f;
+                previousT = t; previous = value;
+            }
+            piece += (1 - previousT) * previous * 0.5f;
+            float polygon = sides * MathF.Sin(MathF.PI / sides) / MathF.PI;
+            return Math.Clamp(ideal / Math.Max(1e-4f, piece), 0.85f, 1.25f) / MathF.Sqrt(polygon);
+        }
+
+        // Share of the smooth spruce cone that the stacked whorl tiers fill (skirt wide, shoulder narrow).
+        private const float SpruceTierFill = 0.84f;
+
         // Ring heights and per-ring radius multipliers. Deciduous crowns use evenly
         // spaced rings whose count follows the profile's vertical chord error; spruce
         // uses pairs of rings per whorl tier: a wide skirt edge and a narrow shoulder.
@@ -242,7 +267,7 @@ namespace ForesTycoon.TreeModels
                 }
                 return rings;
             }
-            int count = lod == ForestLod.Far ? 2 : Math.Clamp((int)MathF.Round(sides * 0.42f * aspect), 3, lod == ForestLod.Near ? 8 : 6);
+            int count = lod == ForestLod.Far ? 3 : Math.Clamp((int)MathF.Round(sides * 0.42f * aspect), 3, lod == ForestLod.Near ? 8 : 6);
             for (int i = 1; i <= count; i++) rings.Add((i / (float)(count + 1), 1));
             return rings;
         }
