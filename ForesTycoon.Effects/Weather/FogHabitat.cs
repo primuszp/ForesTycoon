@@ -1,6 +1,6 @@
 using System;
 using OpenTK.Mathematics;
-namespace ForesTycoon
+namespace ForesTycoon.Effects
 {
     internal readonly record struct FogSource(Vector4 Position,float Forest,float Water,float Valley,float Moisture);
     internal static class FogHabitat

@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using OpenTK.Mathematics;
 
-namespace ForesTycoon
+namespace ForesTycoon.Effects
 {
     sealed class WorldEffectSystem : IWorldSystem
     {

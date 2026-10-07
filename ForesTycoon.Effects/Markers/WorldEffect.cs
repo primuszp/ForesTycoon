@@ -1,7 +1,7 @@
 using System;
 using OpenTK.Mathematics;
 
-namespace ForesTycoon
+namespace ForesTycoon.Effects
 {
     enum WorldEffectKind
     {

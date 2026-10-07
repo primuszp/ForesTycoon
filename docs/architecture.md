@@ -1,36 +1,49 @@
-# Architektúra: négy réteg, egyirányú függőség
+# Architektúra: rétegek és modulok, egyirányú függőség
 
 ```
- ┌───────────────────────────────────────────────────────────────────────────┐
- │ ForesTycoon  (a játék)                                                    │
- │   App · UI · Interaction · Camera │ World (GameWorld, parancsok, mentés,  │
- │   járművek, rönkszállítás) │ Terrain │ Rendering (GL, pass-ok, shaderek)  │
- └───────────────┬──────────────────────┬─────────────────────┬──────────────┘
-                 │                      │                     │
- ┌───────────────▼────────────┐ ┌───────▼───────────────┐     │
- │ ForesTycoon.TreeModels     │ │ ForesTycoon.Ecology   │     │
- │ fajszintű modellgenerálás: │ │ víz · talaj · időjárás│     │
- │ Arbaro-készletek → váz →   │ │ · fafajok · erdő      │     │
- │ törzs/ág/korona háló, LOD  │ │ egyedek, versengés    │     │
- └───────────────┬────────────┘ └───────┬───────────────┘     │
-        TreeShapeSpec ◄────────────────┘ (szerződés)         │
-                 │                      │                     │
- ┌───────────────▼──────────────────────▼─────────────────────▼──────────────┐
- │ ForesTycoon.Engine: fix lépéses idő, rendszerek, háttérmunkák, animáció-idő,│
- │ csúcspont-formátum. Nem tud erdőről, terepről, OpenGL-ről.                 │
- └────────────────────────────────────────────────────────────────────────────┘
+ ┌────────────────────────────────────────────────────────────────────────────────────┐
+ │ ForesTycoon  (a játék)                                                             │
+ │  App · UI · Interaction · Camera │ World (GameWorld, parancsok, mentés, járművek)  │
+ │  Terrain │ Rendering/* (jelenet, erdő-GPU, terep-rajzolás, ragasztó a modulokhoz)  │
+ └──┬────────────┬───────────────┬──────────────┬───────────────┬─────────────────────┘
+    │            │               │              │               │
+ ┌──▼──────────┐ │ ┌─────────────▼───┐ ┌────────▼──────────┐ ┌──▼──────────────────┐
+ │ TreeModels  │ │ │ Effects         │ │ Models            │ │ (a játék közvetlenül│
+ │ fajszintű   │ │ │ eső, hó, felhő, │ │ glTF/GLB betöltés,│ │  is használja)      │
+ │ modell-     │ │ │ köd, villám,    │ │ animáció, kép-    │ └─────────────────────┘
+ │ generálás   │ │ │ akciójelzők     │ │ és jelenet-eszköz │
+ └──┬──────────┘ │ └──┬──────┬───────┘ └────────┬──────────┘
+    │            │    │      │                  │
+ ┌──▼────────────▼─┐  │   ┌──▼──────────────────▼────────────┐
+ │ Ecology         │  │   │ Rendering (GPU-mag)              │
+ │ víz · talaj ·   │◄─┘   │ eszköz, shader, pass-ok, puffer, │
+ │ időjárás · fajok│      │ batch, utófeldolgozás, mérők     │
+ │ · erdő          │      └──┬───────────────────────────────┘
+ └──┬──────────────┘         │
+ ┌──▼────────────────────────▼───────────────────────────────────────────────────────┐
+ │ Engine: fix lépéses idő, rendszerek, háttérmunkák, animáció-idő, csúcspont-formátum│
+ └────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 A függőség csak lefelé mehet. Ezt a fordító (projekthivatkozások) és az `ArchitectureTests` is
-kikényszeríti: a három könyvtár nem hivatkozhat a játékra, a grafikai/ablakozó/UI csomagokra, és forrásaikban
-nem szerepelhet `OpenTK.Graphics`, `OpenTK.Windowing`, `ImGuiNET`.
+kikényszeríti: a szimulációs és modellezési könyvtárak (Engine, Ecology, TreeModels) nem használhatnak
+grafikai, ablakozó vagy UI csomagot; a render-modulok (Rendering, Models, Effects) GL-t igen, ablakot és
+UI-t nem, és nem hivatkozhatnak a játékra vagy egymás fölötti rétegre.
 
 | Szerelvény | Névtér | Felelőssége | Nem tudhat |
 |---|---|---|---|
 | `ForesTycoon.Engine` | `ForesTycoon.Engine` | `FixedStepClock`, `SimulationFrameRunner`, `IWorldSystem`/`WorldSystemCollection`, `BackgroundJobScheduler`, `AnimationTimeline`, `Vertex` | erdő, terep, GL |
 | `ForesTycoon.Ecology` | `ForesTycoon.Ecology` | a természeti rendszer: időjárás, talaj, vízmérleg, fajok, erdőállomány és egyedek | terepháló, render, a játékvilág |
 | `ForesTycoon.TreeModels` | `ForesTycoon.TreeModels` | fa- és cserjemodellek fajszinten: Arbaro-készlet → váz → háló | a világ, a render, a GL |
-| `ForesTycoon` | `ForesTycoon` | játékvilág, terep, megjelenítés, felület, diagnosztika | – |
+| `ForesTycoon.Rendering` | `ForesTycoon.Rendering` | a render GPU-magja: `RenderDevice`, `GlProgram`, `RenderPipeline`/pass-ok, `VertexBuffer`, `DynamicPrimitiveBatch`, `DioramaPostProcess`, `RenderMetrics`, `ISurfaceVisuals` | erdő, terep, modellek, effektek |
+| `ForesTycoon.Models` | `ForesTycoon.Models` | modellbetöltés és -rajzolás: `AnimatedGlbModel` (glTF/GLB), `AnimatedModelRenderer`, `ImportedSceneAsset` | járművek, erdő, terep |
+| `ForesTycoon.Effects` | `ForesTycoon.Effects` | vizuális effektek: `WeatherRenderer`, `CloudRenderer`, `FogHabitat`, `WeatherVisualState`, `WorldEffectSystem` + `EffectRenderer` | terep, erdő (csak `IWeatherSurface`-en át látja a talajt) |
+| `ForesTycoon` | `ForesTycoon` | játékvilág, terep, jelenet-ragasztó, felület, diagnosztika | – |
+
+A render-modulok a játékkal **interfészeken** csatlakoznak, amelyeket a játék valósít meg:
+`IShadingSettings` / `IPostProcessSettings` / `IWeatherSettings` (a `GraphicsSettings` mindhármat),
+`IWeatherSurface` (a `TerrainWeatherSurface` adja a terep- és lombkorona-magasságmezőt), `ISurfaceVisuals`
+(a `SurfaceVisualRenderer`). Új modul így a játék ismerete nélkül tesztelhető.
 
 ## 1. Ecology – a szimulációs egység
 
@@ -75,14 +88,25 @@ Bemenet: `TreeShapeSpec` (faj, mag, életfázis, méret, életerő, termőhely, 
 * `TreeScale` az egyetlen hely, ahol a méter→világegység arány és a shader-anyagcsalád kódja él.
 Részletek: [tree-shape-system.md](tree-shape-system.md), [arbaro-parameter-sets.md](arbaro-parameter-sets.md).
 
-## 3. A játék – világ és megjelenítés
+## 3. Rendering, Models, Effects – a render három modulja
+
+* **Rendering (GPU-mag):** egyetlen helyen él a GL-állapot, a shaderfordítás, a kamera/modellmátrix, a pass-sorrend
+  (`RenderLayer`, `RenderPipeline`), a puffer- és batch-kezelés és a kép utófeldolgozása. Más modul ide épít, ide nem ér vissza.
+* **Models:** csak azt tudja, hogyan lesz fájlból rajzolható modell: glTF/GLB elemzés, csontváz-animáció mintavétel,
+  anyag- és alfa-mód, árnyék- és kontúr-rajzolás. Az eszközkiválasztás (melyik fához melyik modell) a játék dolga.
+* **Effects:** minden, ami „időjárás és visszajelzés”: eső/hó részecskék, felhő, köd-szabályok, villám, és az
+  akciójelző körök (`WorldEffectSystem`, az Engine `IWorldSystem`-je). Az időjárás állapotát az Ecology-ból olvassa
+  (`WeatherPreset`, `EnvironmentSystem`), a talajt az `IWeatherSurface`-en át.
+Új effekt: egy új osztály az `Effects`-ben, a beállításai egy kis interfészen át; a játék köti be egy `RenderLayer`-re.
+
+## 4. A játék – világ és megjelenítés
 
 * `World/`: `GameWorld` (a játékállapot határa), parancsok és visszajátszható mentés, járművek, rönkszállítás,
   hatások, vadállomány. Itt vannak azok a szabályok, amelyek a terepet és a járműveket is ismerik.
 * `Terrain/World` (adat, generálás, hidrológia, utak, az `IForestHabitat` illesztése), `Terrain/Forest` (erdő-
   és telepítésmegjelenítés), `Terrain/Render` (felületek, víz, út, kellékek).
-* `Rendering/Gpu` (eszköz, pass-ok, puffer), `Rendering/Forest` (fa-GPU állapot, LOD, régi/importált modellek),
-  `Rendering/Weather`, `Rendering/Models`, `Rendering/Scene`.
+* `Rendering/Gpu` (beállítások, ImGui-vezérlő), `Rendering/Forest` (fa-GPU állapot, LOD, régi/importált fa-modellek),
+  `Rendering/Models` (jármű-modell), `Rendering/Scene` (jelenet-rajzolók, amelyek a modulokat összekötik).
 * A render csak olvas: `ForestSystem`-ből egyedeket, `TreeShapeSpec`-et épít (`TreeShapeSpec.From`), kéri a modellt, és
   feltölti. Soha nem módosítja a szimulációt. A fa újraépítése sávhatárhoz (`ShapeKey`) és fázis-/lombváltáshoz kötött.
 
@@ -99,7 +123,8 @@ Részletek: [tree-shape-system.md](tree-shape-system.md), [arbaro-parameter-sets
 
 ## Következő lépések
 * A `Terrain` osztály még adatot és GL-rajzolást is tartalmaz (partial fájlokban). A rajzoló részek
-  (`Terrain/Render`, `Terrain/Forest`) külön `ForesTycoon.Rendering` szerelvénybe vihetők, ha a
-  `Terrain` egy GL-mentes `ForesTycoon.World` szerelvényre és egy rajzoló-adapterre válik szét.
-* A parancs- és mentésréteg (`World/Commands`, `World/Persistence`) ugyanígy kivehető `ForesTycoon.World`-be.
+  (`Terrain/Render`, `Terrain/Forest`, `Rendering/Scene`) külön `ForesTycoon.World`/`ForesTycoon.Scene`
+  szerelvényekbe vihetők, ha a `Terrain` egy GL-mentes világszerelvényre és egy rajzoló-adapterre válik szét.
+* A parancs- és mentésréteg (`World/Commands`, `World/Persistence`) ugyanígy kivehető.
+* A `GlbTruckModel` és a fa-GPU állapot (`Rendering/Forest`) általánosítható és a `Models`-be vihető.
 * Az `Ecosystem` mentés-pillanatképe (ellenőrzött snapshot + naplórészlet) a hosszú játékokhoz.

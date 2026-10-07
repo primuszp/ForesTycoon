@@ -2,32 +2,32 @@ using System;
 using OpenTK.Graphics.OpenGL;
 using OpenTK.Mathematics;
 
-namespace ForesTycoon
+namespace ForesTycoon.Effects
 {
     internal sealed class WeatherRenderer : IDisposable
     {
         private int program, vao, heightTexture;
         private float[] heights;
-        private ulong terrainRevision = ulong.MaxValue, forestRevision = ulong.MaxValue;
+        private ulong surfaceRevision = ulong.MaxValue;
 
-        internal void Draw(Terrain terrain, ForestSystem forest, WeatherVisualState weather, RenderContext context, GraphicsSettings settings)
+        internal void Draw(IWeatherSurface surface, WeatherVisualState weather, RenderContext context, IWeatherSettings settings)
         {
             float intensity = Math.Max(weather.Rain, weather.Snowfall);
             if (intensity < 0.01f) return;
-            terrain.GetVisibleWeatherBounds(out Vector2 visibleMin, out Vector2 visibleMax);
+            surface.GetVisibleBounds(out Vector2 visibleMin, out Vector2 visibleMax);
             if (visibleMax.X <= visibleMin.X || visibleMax.Y <= visibleMin.Y) return;
             if (program == 0) Initialize();
-            if (heights == null || terrainRevision != terrain.WeatherSurfaceRevision || forestRevision != forest.Revision)
+            if (heights == null || surfaceRevision != surface.Revision)
             {
-                heights ??= new float[terrain.Settings.TileColumns * terrain.Settings.TileRows];
-                terrain.FillWeatherHeights(heights, forest);
+                heights ??= new float[surface.Columns * surface.Rows];
+                surface.FillHeights(heights);
                 GL.ActiveTexture(TextureUnit.Texture2);
                 GL.BindTexture(TextureTarget.Texture2D, heightTexture);
                 GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.R32f,
-                    terrain.Settings.TileColumns, terrain.Settings.TileRows, 0, PixelFormat.Red, PixelType.Float, heights);
-                terrainRevision = terrain.WeatherSurfaceRevision; forestRevision = forest.Revision;
+                    surface.Columns, surface.Rows, 0, PixelFormat.Red, PixelType.Float, heights);
+                surfaceRevision = surface.Revision;
             }
-            terrain.GetWeatherBounds(out Vector3 min, out Vector3 max);
+            surface.GetBounds(out Vector3 min, out Vector3 max);
             float snow = weather.Snowfall > weather.Rain ? 1 : 0;
             float zoom = Math.Max(1, context.PixelsPerWorldUnit);
             // World cells keep drops anchored while the camera pans.

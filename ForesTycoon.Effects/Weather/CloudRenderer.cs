@@ -2,17 +2,17 @@ using System;
 using OpenTK.Graphics.OpenGL;
 using OpenTK.Mathematics;
 
-namespace ForesTycoon
+namespace ForesTycoon.Effects
 {
     // A bounded low-cost volume above the diorama; no geometry-cache mutations.
     internal sealed class CloudRenderer : IDisposable
     {
         private int program, vao;
-        internal void Draw(Terrain terrain, WeatherVisualState weather, GraphicsSettings settings)
+        internal void Draw(IWeatherSurface surface, WeatherVisualState weather, IWeatherSettings settings)
         {
             if(weather.Cloud < 0.01f) return;
             if(program == 0) Initialize();
-            terrain.GetWeatherBounds(out Vector3 min, out Vector3 max);
+            surface.GetBounds(out Vector3 min, out Vector3 max);
             Matrix4 inverse = RenderDevice.ViewProjection.Inverted();
             GL.UseProgram(program);
             GL.Uniform1(GlProgram.Uniform(program,"steps"),settings.CloudSteps);

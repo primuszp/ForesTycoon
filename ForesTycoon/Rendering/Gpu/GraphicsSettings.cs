@@ -3,7 +3,7 @@ namespace ForesTycoon
     internal enum ForestModelStyle { Imported, OriginalPine, Procedural, Generated }
 
     // Display options never change forestry, transport, or replay state.
-    internal sealed class GraphicsSettings : IPostProcessSettings, IShadingSettings
+    internal sealed class GraphicsSettings : IPostProcessSettings, IShadingSettings, IWeatherSettings
     {
         internal GraphicsQuality Quality = GraphicsQuality.High;
         internal int ShadowResolution => Quality == GraphicsQuality.Low ? 512 : Quality == GraphicsQuality.Medium ? 1024 : 2048;
@@ -47,6 +47,14 @@ namespace ForesTycoon
         internal int TiltShiftTaps => Quality == GraphicsQuality.Low ? 8 : Quality == GraphicsQuality.Medium ? 12 : 20;
         internal int OcclusionPairs => Quality == GraphicsQuality.Low ? 0 : Quality == GraphicsQuality.Medium ? 4 : 8;
 
+        bool IWeatherSettings.Weather => Weather;
+        bool IWeatherSettings.Lightning => Lightning;
+        int IWeatherSettings.LightningRequest => LightningRequest;
+        bool IWeatherSettings.AutomaticWeather => AutomaticWeather;
+        WeatherPreset IWeatherSettings.Preset => Preset;
+        bool IWeatherSettings.ExperimentalSnow => ExperimentalSnow;
+        int IWeatherSettings.RainBudget => RainBudget;
+        int IWeatherSettings.CloudSteps => CloudSteps;
         bool IPostProcessSettings.Enhanced => Enhanced;
         bool IShadingSettings.Enhanced => Enhanced;
         bool IShadingSettings.Lighting => Lighting;

@@ -1,6 +1,6 @@
 using System;
 
-namespace ForesTycoon
+namespace ForesTycoon.Effects
 {
     // A visual weather timeline, deliberately independent from the 30-second forestry year.
     // Driven by simulation time so pause and quickload have predictable behaviour.
@@ -27,7 +27,7 @@ namespace ForesTycoon
         private double previousTime;
         private bool started;
 
-        internal void Update(EnvironmentSystem environment,GraphicsSettings settings,double? visualTime=null)
+        internal void Update(EnvironmentSystem environment,IWeatherSettings settings,double? visualTime=null)
         {
             // Existing lightning/particle clocks remain driven by simulation time.
             Update(visualTime??environment.Time,settings);
@@ -41,7 +41,7 @@ namespace ForesTycoon
                 ? (manualLightning?1:Storm)*0.22f*(MathF.Exp(-(float)age*12)+(age>=0.15?0.35f*MathF.Exp(-(float)(age-0.15)*18):0)):0;
         }
 
-        internal void Update(double simulationTime, GraphicsSettings settings)
+        internal void Update(double simulationTime, IWeatherSettings settings)
         {
             if (!double.IsFinite(simulationTime) || simulationTime < 0) throw new ArgumentOutOfRangeException(nameof(simulationTime));
             double elapsed = started ? Math.Clamp(simulationTime - previousTime, 0, 1) : 0;

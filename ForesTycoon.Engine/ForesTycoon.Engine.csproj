@@ -19,6 +19,9 @@
     <InternalsVisibleTo Include="ForesTycoon" />
     <InternalsVisibleTo Include="ForesTycoon.Ecology" />
     <InternalsVisibleTo Include="ForesTycoon.TreeModels" />
+    <InternalsVisibleTo Include="ForesTycoon.Rendering" />
+    <InternalsVisibleTo Include="ForesTycoon.Models" />
+    <InternalsVisibleTo Include="ForesTycoon.Effects" />
     <InternalsVisibleTo Include="ForesTycoon.Tests" />
   </ItemGroup>
 

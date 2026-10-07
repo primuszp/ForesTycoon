@@ -3,7 +3,7 @@ using System.Drawing;
 using OpenTK.Graphics.OpenGL;
 using OpenTK.Mathematics;
 
-namespace ForesTycoon
+namespace ForesTycoon.Effects
 {
     static class EffectRenderer
     {

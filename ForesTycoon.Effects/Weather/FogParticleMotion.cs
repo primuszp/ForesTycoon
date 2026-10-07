@@ -1,6 +1,6 @@
 using System;
 using OpenTK.Mathematics;
-namespace ForesTycoon
+namespace ForesTycoon.Effects
 {
     internal static class FogParticleMotion
     {

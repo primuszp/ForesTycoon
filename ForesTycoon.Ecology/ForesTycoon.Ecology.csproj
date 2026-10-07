@@ -24,6 +24,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="ForesTycoon" />
     <InternalsVisibleTo Include="ForesTycoon.TreeModels" />
+    <InternalsVisibleTo Include="ForesTycoon.Effects" />
     <InternalsVisibleTo Include="ForesTycoon.Tests" />
   </ItemGroup>
 
