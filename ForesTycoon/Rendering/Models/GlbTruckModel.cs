@@ -7,7 +7,7 @@ namespace ForesTycoon
 {
     // Restricted GLB 2.0 loader for the selected, flattened, vertex-colour vehicle asset.
     // No external URIs, scripts, skins, or extension execution.
-    internal sealed class GlbTruckModel : IDisposable
+    internal sealed class GlbTruckModel : ITruckModel
     {
         internal sealed class Part
         {
@@ -40,10 +40,10 @@ namespace ForesTycoon
                 drawParts.Add(new Part { Name = first.Name, Category = first.Category, Pivot = first.Pivot, Vertices = vertices });
             }
         }
-        internal float Radius { get; private set; }
-        internal float Width { get; private set; }
-        internal float Wheelbase { get; private set; }
-        internal float AxleMidpoint { get; private set; }
+        public float Radius { get; private set; }
+        public float Width { get; private set; }
+        public float Wheelbase { get; private set; }
+        public float AxleMidpoint { get; private set; }
         internal static GlbTruckModel Load(string path)
         {
             byte[] data=File.ReadAllBytes(path);
@@ -126,7 +126,7 @@ namespace ForesTycoon
             model.BuildDrawGroups();
             return model;
         }
-        internal void Draw(Matrix4 transform,float cargoFill,float wheelAngle,float curvature=0,float scale=1,Matrix4? suspension=null,float outlineWidth=0)
+        public void Draw(Matrix4 transform,float cargoFill,float wheelAngle,float curvature=0,float scale=1,Matrix4? suspension=null,float outlineWidth=0)
         {
             
             int visibleCargo=(int)MathF.Ceiling(Math.Clamp(cargoFill,0,1)*cargoCount),cargoIndex=0;

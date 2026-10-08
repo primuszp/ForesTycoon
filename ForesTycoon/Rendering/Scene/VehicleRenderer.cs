@@ -10,6 +10,7 @@ namespace ForesTycoon
         internal static void BeginFrame(RenderContext context, GraphicsSettings settings)
         {
             outlinePixelsPerUnit = context.PixelsPerWorldUnit;
+            TexturedTruckModel.Settings = settings;
             outlineBudget = settings.Enhanced && settings.VehicleOutlines && context.PixelsPerWorldUnit >= 7 ?
                 settings.Quality == GraphicsQuality.High ? 8 : settings.Quality == GraphicsQuality.Medium ? 4 : 0 : 0;
         }
@@ -71,11 +72,12 @@ namespace ForesTycoon
             }
         }
 
-        private static GlbTruckModel importedModel;
+        private static ITruckModel importedModel;
         private static void EnsureModel()
         {
             if (importedModel != null) return;
-            importedModel = GlbTruckModel.Load(ModelPath());
+            string path = ModelPath();
+            importedModel = path.EndsWith("-textured.glb", StringComparison.Ordinal) ? new TexturedTruckModel(path) : GlbTruckModel.Load(path);
             RenderDevice.Disposing += DisposeImportedModel;
         }
 
@@ -85,7 +87,7 @@ namespace ForesTycoon
         /// </summary>
         internal static string ModelPath()
         {
-            string licensed = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "Licensed", "log-truck.glb");
+            string licensed = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "Licensed", "log-truck-textured.glb");
             return System.IO.File.Exists(licensed) ? licensed : System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "Vehicles", "log-truck.glb");
         }
         internal static void DisposeImportedModel(){importedModel?.Dispose(); importedModel=null;}
