@@ -39,6 +39,7 @@ public class WorldSaveSerializerTests
     {
         WorldSaveData expected = new WorldSaveData
         {
+            SoilModel = SoilModelData.From(SoilLandscapeDefinition.Default),
             Tick = 12,
             TickRate = 30,
             Terrain = TerrainSettingsData.From(TerrainSettings.Default.WithSeed(1234)),

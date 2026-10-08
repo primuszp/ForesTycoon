@@ -1,10 +1,13 @@
 using System;
+using System.Text.Json.Serialization;
 
 namespace ForesTycoon.Ecology
 {
     // Stores and thresholds are mm per unit ground area; fluxes are mm/environment hour.
-    internal readonly record struct SoilProperties(double Saturation, double FieldCapacity, double WiltingPoint,
-        double InfiltrationPerHour, double DrainagePerHour, float Fertility)
+    internal readonly record struct SoilProperties(
+        [property: JsonRequired] double Saturation, [property: JsonRequired] double FieldCapacity,
+        [property: JsonRequired] double WiltingPoint, [property: JsonRequired] double InfiltrationPerHour,
+        [property: JsonRequired] double DrainagePerHour, [property: JsonRequired] float Fertility)
     {
         internal static SoilProperties Standard => new(180, 130, 25, 12, 2, 1);
 

@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "profiles": [
+    { "id": "sand", "name": "Homokos talaj", "color": "#DCC98B", "preferredMoisture": 0.25, "preferredTexture": 0.1,
+      "properties": { "saturation": 100, "fieldCapacity": 55, "wiltingPoint": 10, "infiltrationPerHour": 28, "drainagePerHour": 7, "fertility": 0.65 } },
+    { "id": "loam", "name": "Vályogtalaj", "color": "#A98A62", "preferredMoisture": 0.5, "preferredTexture": 0.5,
+      "properties": { "saturation": 180, "fieldCapacity": 130, "wiltingPoint": 25, "infiltrationPerHour": 12, "drainagePerHour": 2, "fertility": 1 } },
+    { "id": "clay", "name": "Agyagos talaj", "color": "#A7614B", "preferredMoisture": 0.6, "preferredTexture": 0.9,
+      "properties": { "saturation": 240, "fieldCapacity": 180, "wiltingPoint": 70, "infiltrationPerHour": 4, "drainagePerHour": 0.5, "fertility": 0.85 } },
+    { "id": "organic", "name": "Szerves, nedves talaj", "color": "#51453D", "preferredMoisture": 0.95, "preferredTexture": 0.5,
+      "properties": { "saturation": 320, "fieldCapacity": 220, "wiltingPoint": 40, "infiltrationPerHour": 8, "drainagePerHour": 0.3, "fertility": 0.8 } }
+  ]
+}

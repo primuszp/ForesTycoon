@@ -39,6 +39,7 @@ namespace ForesTycoon
 
             if (Array.Exists(args, argument => argument == "--logistics-smoke-test")) { ForestryLogisticsSmokeTest.Run(); return; }
             if (Array.Exists(args, argument => argument == "--environment-smoke-test")) { EnvironmentSmokeTest.Run(); return; }
+            if (Array.Exists(args, argument => argument == "--soil-raster-smoke-test")) { SoilRasterSmokeTest.Run(); return; }
             if (Array.Exists(args, argument => argument == "--wildlife-smoke-test")) { WildlifeSmokeTest.Run(); return; }
             if (Array.Exists(args, argument => argument == "--graphics-smoke-test")) { GraphicsWeatherSmokeTest.Run(); return; }
 

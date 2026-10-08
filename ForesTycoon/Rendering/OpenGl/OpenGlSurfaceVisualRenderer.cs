@@ -134,7 +134,7 @@ namespace ForesTycoon.OpenGl
                 for(int id=0;id<environment.CellCount;id++){
                     var cell=environment.Cell(id);int offset=((id%rows)*columns+id/rows)*4;
                     environmentPixels[offset]=(float)Math.Clamp(cell.Surface/2+cell.Canopy/4,0,1);
-                    environmentPixels[offset+1]=(float)(cell.Soil/180);
+                    environmentPixels[offset+1]=(float)(cell.Soil/cell.Capacity);
                     environmentPixels[offset+2]=(float)cell.Drought;
                     environmentPixels[offset+3]=(float)cell.Waterlogging;
                 }

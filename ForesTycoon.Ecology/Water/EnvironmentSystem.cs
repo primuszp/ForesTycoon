@@ -171,34 +171,34 @@ namespace ForesTycoon.Ecology
                 canopy[id] += held; surface[id] += rain - held;
                 // Lost crown cover transfers intercepted water to the ground, preserving the balance.
                 double drip = Math.Max(0, canopy[id] - trees.InterceptionCapacity);
-                canopy[id] -= drip; surface[id] += drip;
+                StockFlows.Transfer(ref canopy[id], ref surface[id], drip);
                 bool sealedSurface = habitat.IsImpervious(id);
                 double infiltration = Math.Min(surface[id], Math.Min(
                     (sealedSurface ? 0.5 : profile.InfiltrationPerHour) * hours, Math.Max(0, profile.Saturation - soil[id])));
-                surface[id] -= infiltration; soil[id] += infiltration;
+                StockFlows.Transfer(ref surface[id], ref soil[id], infiltration);
 
                 double budget = potential;
-                double loss = Math.Min(canopy[id], budget);
-                canopy[id] -= loss; budget -= loss; Evaporated += loss;
-                loss = Math.Min(surface[id], budget);
-                surface[id] -= loss; budget -= loss; Evaporated += loss;
+                double loss = StockFlows.Withdraw(ref canopy[id], budget);
+                budget -= loss; Evaporated += loss;
+                loss = StockFlows.Withdraw(ref surface[id], budget);
+                budget -= loss; Evaporated += loss;
                 double available = Math.Max(0, soil[id] - profile.WiltingPoint);
                 loss = Math.Min(available, budget * profile.Availability(soil[id]) * (1 - trees.Cover) * 0.65);
-                soil[id] -= loss; Evaporated += loss;
+                StockFlows.Withdraw(ref soil[id], loss); Evaporated += loss;
 
                 // Allocate the shared root-zone budget proportionally to living leaf-area demand.
                 // Every tree in this cell gets the same fulfilled-demand fraction; no second root-load penalty.
                 double requested = sealedSurface ? 0 : potential * trees.LeafAreaIndex * 0.8;
                 available = Math.Max(0, soil[id] - profile.WiltingPoint);
                 double uptake = Math.Min(available, requested * profile.Availability(soil[id]));
-                soil[id] -= uptake; Transpired += uptake;
+                StockFlows.Withdraw(ref soil[id], uptake); Transpired += uptake;
                 demandIntegral[id] += requested; uptakeIntegral[id] += uptake;
                 demandRate[id] = requested / hours; uptakeRate[id] = uptake / hours;
 
                 double drainage = Math.Min(Math.Max(0, soil[id] - profile.FieldCapacity), profile.DrainagePerHour * hours);
-                soil[id] -= drainage; deep[id] += drainage;
-                double baseflow = Math.Min(deep[id], 0.15 * hours);
-                deep[id] -= baseflow; Outflow += baseflow;
+                StockFlows.Transfer(ref soil[id], ref deep[id], drainage);
+                double baseflow = StockFlows.Withdraw(ref deep[id], 0.15 * hours);
+                Outflow += baseflow;
                 double dry = 1 - profile.Availability(soil[id]), waterlogged = profile.Waterlogging(soil[id]);
                 double blend = 1 - Math.Exp(-dt / 90);
                 drought[id] += (dry - drought[id]) * blend; wet[id] += (waterlogged - wet[id]) * blend;

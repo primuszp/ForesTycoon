@@ -61,10 +61,13 @@ namespace ForesTycoon
 
     sealed class WorldSaveData
     {
-        public const int CurrentVersion = 6;
+        public const int CurrentVersion = 7;
         public int Version { get; init; } = CurrentVersion;
         public double TickRate { get; init; } = 30.0;
         public double ForestYearSeconds { get; init; } = EnvironmentSystem.SecondsPerForestYear;
+        public SoilModelData SoilModel { get; init; }
+        internal SoilLandscapeDefinition ReplaySoilModel => Version < 7 ? SoilLandscapeDefinition.Legacy :
+            (SoilModel ?? throw new InvalidOperationException("Save has no soil model.")).ToDefinition();
         internal double ReplayForestYearSeconds => Version == 4 ? EnvironmentSystem.SecondsPerForestYear : ForestYearSeconds;
         internal bool ReplayLegacyTerrainEdits => Version < 6;
         // In v6 the previously unused elevation Flag identifies historical v4/v5 edit semantics.
@@ -76,7 +79,7 @@ namespace ForesTycoon
 
         public void Validate()
         {
-            if (Version != 4 && Version != 5 && Version != CurrentVersion)
+            if (Version != 4 && Version != 5 && Version != 6 && Version != CurrentVersion)
                 throw new NotSupportedException($"Save version {Version} is not supported; expected {CurrentVersion}.");
             if (!EnvironmentSystem.IsValidForestYearSeconds(ReplayForestYearSeconds))
                 throw new InvalidOperationException("Save forest year duration must be between 120 and 1200 seconds.");
@@ -84,6 +87,7 @@ namespace ForesTycoon
                 throw new InvalidOperationException("Save tick rate must be positive.");
             if (Terrain == null) throw new InvalidOperationException("Save has no terrain settings.");
             if (Commands == null) throw new InvalidOperationException("Save has no command journal.");
+            _ = ReplaySoilModel;
         }
 
         internal void ValidateReplay()

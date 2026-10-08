@@ -126,7 +126,7 @@ namespace ForesTycoon
                 using var upgraded = new MemoryStream();
                 world.Save(upgraded); upgraded.Position = 0;
                 var upgradedData = WorldSaveSerializer.Read(upgraded);
-                Require(upgradedData.Version == 6 && upgradedData.Commands.Exists(c => c.Kind == WorldCommandKind.EditElevation && c.Flag),
+                Require(upgradedData.Version == WorldSaveData.CurrentVersion && upgradedData.Commands.Exists(c => c.Kind == WorldCommandKind.EditElevation && c.Flag),
                     "Legacy journal lost its historical terrain rule during upgrade.");
                 upgraded.Position = 0; world.Load(upgraded);
                 for (int id = 0; id < editedStands.Length; id++)
@@ -150,6 +150,7 @@ namespace ForesTycoon
                 world.Update(1.0 / 30);
                 using var intact = new MemoryStream(); world.Save(intact);
                 var brokenSave = new WorldSaveData {
+                    SoilModel = SoilModelData.From(SoilLandscapeDefinition.Default),
                     Terrain = TerrainSettingsData.From(TerrainSettings.Default.WithNodeSize(17, 42)),
                     Tick = 1, Commands = new() { new SpawnVehicleCommand().ToRecord(2) }
                 };

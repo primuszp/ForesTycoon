@@ -21,6 +21,7 @@ namespace ForesTycoon
     {
         private bool showVehicles, showForestry, showGraphics, showDeveloper, showHelp;
         private bool showEnvironment;
+        private int ecologyRasterLayer, ecologyRasterSelection = -1;
         private int environmentPreset, environmentIntensity = 12, environmentDuration = 90;
         private float toolbarBottom = 60f;
         private const float StatusBarHeight = 34f;
@@ -140,7 +141,7 @@ namespace ForesTycoon
                 "Erdőállomány, kitermelés, fűrészmalmok és faanyagmérleg.");
             ImGui.SameLine();
             WindowToggle("environment", GameIcon.Environment, ref showEnvironment, size, "Környezet", "E",
-                "Időjárás, csapadék, talajvíz és vízstressz csempénként.");
+                "Időjárás, talajtérkép, gyökérzónavíz és vízstressz csempénként.");
 
             HudTheme.GroupDivider(size);
             // View & development
@@ -582,12 +583,15 @@ namespace ForesTycoon
             HudTheme.Meter("Gyökérzóna átlagos víztelítettsége", (float)environment.MeanSoil, $"{environment.MeanSoil * 100:0}%",
                 new NVec4(0.36f, 0.62f, 0.86f, 1f));
             ImGui.TextDisabled("1 erdőév = 20 perc · 1 játékperc = 1 vízóra");
+            if (world.Soils != null && ImGui.CollapsingHeader("Talaj és víz térképe"))
+                EcologyRasterView.Draw(world.Soils, environment, ref ecologyRasterLayer, ref ecologyRasterSelection);
 
             int id = world.HoveredTileId;
             if (id >= 0 && id < environment.CellCount)
             {
                 var cell = environment.Cell(id);
                 ImGui.SeparatorText($"Csempe {id}");
+                if (world.Soils != null) HudTheme.KeyValue("Talaj", world.Soils.Profile(id).Name);
                 HudTheme.Meter("Gyökérzóna", (float)(cell.Soil / cell.Capacity), $"{cell.Soil:0.0} / {cell.Capacity:0} mm", new NVec4(0.36f, 0.62f, 0.86f, 1f));
                 HudTheme.KeyValue("Felszíni víz", $"{cell.Surface:0.00} mm");
                 HudTheme.KeyValue("Koronavíz", $"{cell.Canopy:0.00} mm");
