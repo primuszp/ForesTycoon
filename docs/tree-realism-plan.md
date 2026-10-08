@@ -174,3 +174,19 @@ a korona méretére nyújtva), és a rács konvex-burok háromszögelése adja a
 - Metaball-esés (1 − (r/1,3)²)², a küszöb úgy választva, hogy egy magányos lebeny felülete a saját sugarán legyen.
 - Sima normálok (20% facetta-fény), lebenyenkénti tónus a legerősebben ható lebenyből, enyhe (≈3%) tüskésség.
 - A vázágak az ívhossz 65%-áig futnak, hogy ne döfjék át a zárt felületet.
+
+### 2026-10-08 – koronaplaszticitás (a koronák kitöltik a teret)
+
+Zárt állományban a koronák felülnézetben kitöltik a rendelkezésre álló teret, csak a szegélyfák
+terebélyesednek (Pretzsch 2009: crown plasticity). Megvalósítás, csak a megjelenítésben (a
+szimuláció koronaméretei nem változnak):
+
+- `CrownSpace` (Ecology): 8 irányszektor, szektoronként 8 szint (0,55–1,9 × szimulált koronasugár).
+  A mérés a saját és a 8 szomszédos csempe fáiból dolgozik: két korona a törzsek közti távolságot
+  sugaraik arányában osztja meg (12% összefonódással, hogy ne maradjon rés), a 60%-nál alacsonyabb
+  fák nem préselnek. Szomszéd nélküli irányban a korona 1,6×-ig terül szét (szegélyfa).
+- A szint felfelé kerekít: a korona elérje a rá jutó teret, ne álljon meg előtte.
+- A tér a `TreeSite`-on és a `ShapeKey`-en (most `long`) keresztül jut a fa-hálóhoz; a `TreeDeformation`
+  a koronaalap fölött irányonként skáláz (a törzs érintetlen, a vázágak a koronával mozognak),
+  tűlevelűeknél fele erősséggel. Ismert térnél a régi egyirányú „rés felé nyújtás” kikapcsol, a dőlés marad.
+- Tesztek: `CrownSpaceTests`.

@@ -9,7 +9,7 @@ namespace ForesTycoon
     {
         // A physical metre is intentionally compressed for the existing diorama proportions.
         internal const float TreeMetresToWorld = TreeScale.MetresToWorld;
-        private readonly record struct ForestGpuTree(int TileId, int Index, ulong Id, ForestTreeDimensions Size, int ShapeKey, TreeSite Site);
+        private readonly record struct ForestGpuTree(int TileId, int Index, ulong Id, ForestTreeDimensions Size, long ShapeKey, TreeSite Site);
         private sealed class IndividualForestChunk : IDisposable
         {
             internal readonly VertexBuffer Wood = new(PrimitiveTopology.Triangles);
@@ -318,7 +318,7 @@ namespace ForesTycoon
             geometry.Wood.ForestState = geometry.Crowns.ForestState = geometry.StateResource;
         }
 
-        private static int ShapeKeyOf(in ForestTree tree, double year, in TreeSite site) =>
+        private static long ShapeKeyOf(in ForestTree tree, double year, in TreeSite site) =>
             TreeShapeSpec.From(tree, year, site, 0).ShapeKey;
 
         private static int CollectIndividualStems(ForestSystem forest, Tile tile, Span<TreeInstance> output)
@@ -327,6 +327,40 @@ namespace ForesTycoon
             int count = Math.Min(patch.Count, output.Length);
             for (int i = 0; i < count; i++) output[i] = IndividualStem(tile, patch.Trees[i], forest.ForestYear);
             return count;
+        }
+
+        private readonly List<(OpenTK.Mathematics.Vector2, float, float)> crownNeighbours = new();
+
+        /// <summary>
+        /// Room for one crown among the crowns on its own and the eight surrounding tiles (frozen chunk
+        /// snapshot where available, so every LOD shapes the same way). World units.
+        /// </summary>
+        private CrownSpace CrownSpaceOf(Tile tile, in ForestTree tree, ForestSystem forest,
+            Dictionary<int, ForestTreeStore.Patch> snapshots, double year)
+        {
+            crownNeighbours.Clear();
+            var size = tree.At(year);
+            SurfacePoint(tile, tree.U, tree.V, out float x, out float y, out _);
+            int column = Math.Clamp((int)MathF.Floor((x + offsetX) / tileSizeH), 0, settings.TileColumns - 1);
+            int row = Math.Clamp((int)MathF.Floor((y + offsetY) / tileSizeV), 0, settings.TileRows - 1);
+            for (int du = -1; du <= 1; du++)
+                for (int dv = -1; dv <= 1; dv++)
+                {
+                    int u = column + du, v = row + dv;
+                    if (u < 0 || v < 0 || u >= settings.TileColumns || v >= settings.TileRows) continue;
+                    Tile other = getTileByCoords(u, v);
+                    if (!snapshots.TryGetValue(other.Id, out var patch) && !forest.IndividualTrees.TryGet(other.Id, out patch)) continue;
+                    for (int j = 0; j < patch.Count; j++)
+                    {
+                        var neighbour = patch.Trees[j];
+                        if (neighbour.Id == tree.Id) continue;
+                        var dimensions = neighbour.At(year);
+                        SurfacePoint(other, neighbour.U, neighbour.V, out float nx, out float ny, out _);
+                        crownNeighbours.Add((new(nx, ny), dimensions.CrownRadius * TreeMetresToWorld, dimensions.Height));
+                    }
+                }
+            return CrownSpace.Measure(new(x, y), size.CrownRadius * TreeMetresToWorld, size.Height,
+                System.Runtime.InteropServices.CollectionsMarshal.AsSpan(crownNeighbours));
         }
 
         internal static TreeInstance IndividualStem(Tile tile, in ForestTree tree, double year)
@@ -408,7 +442,8 @@ namespace ForesTycoon
                     {
                         int slot = geometry.Trees.Count;
                         var site = ForestTreeSites.Gap(patch.Trees, patch.Count, i, tileSizeH / TreeMetresToWorld,
-                            tileSizeV / TreeMetresToWorld, geometry.AnchorYear, ((IForestHabitat)map).GetNormalizedElevation(id));
+                            tileSizeV / TreeMetresToWorld, geometry.AnchorYear, ((IForestHabitat)map).GetNormalizedElevation(id))
+                            with { Space = CrownSpaceOf(tile, tree, forest, snapshots, geometry.AnchorYear) };
                         var spec = TreeShapeSpec.From(tree, geometry.AnchorYear, site, stem.Yaw);
                         geometry.NextStageYear = Math.Min(geometry.NextStageYear,
                             TreePhenology.NextChange(tree.Species, tree.Seed, geometry.AnchorYear));

@@ -9,16 +9,21 @@ namespace ForesTycoon.TreeModels
     /// and roots alike), so the topology is untouched: a competitor-driven lean towards the nearest
     /// gap, and a crown skew that stretches towards open space or downwind.
     /// </summary>
-    internal readonly record struct TreeDeformation(Vector2 Lean, Vector2 Skew, float Height)
+    /// <param name="Space">Crown plasticity towards the neighbours; applied above the crown base only.</param>
+    /// <param name="Plasticity">How strongly the crown follows <paramref name="Space"/> (conifers less).</param>
+    internal readonly record struct TreeDeformation(Vector2 Lean, Vector2 Skew, float Height,
+        CrownSpace Space = default, float CrownBase = 0, float Plasticity = 1)
     {
-        internal bool IsIdentity => Lean == Vector2.Zero && Skew == Vector2.Zero;
+        internal bool IsIdentity => Lean == Vector2.Zero && Skew == Vector2.Zero && Space.IsUniform;
 
-        internal static TreeDeformation From(in TreeShapeBands bands, float height)
+        internal static TreeDeformation From(in TreeShapeBands bands, float height, float crownBase = 0, float plasticity = 1)
         {
             var gap = new Vector2(MathF.Cos(bands.GapAngle), MathF.Sin(bands.GapAngle)) * bands.GapBias;
             // The wind blows towards WindAngle, which is not part of the bands: it is only known
-            // as a strength here, the direction is applied by TreeForm.
-            return new(gap * (0.05f * (1 - 0.5f * bands.Light01)), gap * 0.40f, height);
+            // as a strength here, the direction is applied by TreeForm. A known crown space replaces the
+            // single-direction gap stretch; the stem still leans towards the gap.
+            var skew = bands.Space.IsUniform ? gap * 0.40f : Vector2.Zero;
+            return new(gap * (0.05f * (1 - 0.5f * bands.Light01)), skew, height, bands.Space, crownBase, plasticity);
         }
 
         internal TreeDeformation WithWind(float angle, float bias)
@@ -36,6 +41,12 @@ namespace ForesTycoon.TreeModels
             Vector2 rel = p.Xy;
             float r = rel.Length;
             if (r > 1e-7f) rel *= Math.Clamp(1 + Vector2.Dot(Skew, rel / r), 0.55f, 1.6f);
+            if (r > 1e-7f && !Space.IsUniform && CrownBase > 0)
+            {
+                // Fades in below the crown base, so limbs bend smoothly out of an unchanged bole.
+                float w = Math.Clamp((p.Z - 0.6f * CrownBase) / (0.4f * CrownBase), 0, 1);
+                rel *= 1 + (Space.Factor(MathF.Atan2(rel.Y, rel.X)) - 1) * Plasticity * w;
+            }
             rel += Lean * Height * t * t;
             return new(rel.X, rel.Y, p.Z);
         }
@@ -88,7 +99,9 @@ namespace ForesTycoon.TreeModels
             Dead = Skeleton.DeadMask(spec.Dead ? 1 : Dieback);
             float leaves = spec.Leaves switch { LeafState.Bare => 0f, LeafState.Budding => 0.55f, LeafState.Falling => 0.6f, _ => 1f };
             Foliage = leaves * (1 - 0.35f * Dieback);
-            Warp = TreeDeformation.From(Bands, Height).WithWind(spec.Site.WindAngle, Bands.WindBias);
+            // Broadleaves are the most plastic; whorled conifers keep their form more.
+            Warp = TreeDeformation.From(Bands, Height, CrownBase, traits.Conifer ? 0.5f : 1)
+                .WithWind(spec.Site.WindAngle, Bands.WindBias);
 
             // Breast-height radius pins the trunk to the simulated diameter.
             BreastRadius = size.Diameter * 0.5f * TreeScale.MetresToWorld;

@@ -15,13 +15,14 @@ namespace ForesTycoon.Ecology
     /// <param name="WindAngle">Direction the wind blows towards, radians in the ground plane.</param>
     /// <param name="GapAngle">Direction of the nearest canopy gap, radians in the ground plane.</param>
     /// <param name="GapStrength">0 = evenly surrounded, 1 = neighbours all on one side.</param>
+    /// <param name="Space">Room for the crown in each direction, set by the neighbouring crowns.</param>
     internal readonly record struct TreeSite(float Light = 1, float Water = 1, float Wind = 0,
-        float WindAngle = 0, float GapAngle = 0, float GapStrength = 0)
+        float WindAngle = 0, float GapAngle = 0, float GapStrength = 0, CrownSpace Space = default)
     {
         internal static TreeSite Open => new();
 
         internal TreeSite Sanitized() => new(Clamp01(Light, 1), Clamp01(Water, 1), Clamp01(Wind, 0),
-            Finite(WindAngle), Finite(GapAngle), Clamp01(GapStrength, 0));
+            Finite(WindAngle), Finite(GapAngle), Clamp01(GapStrength, 0), Space);
         private static float Clamp01(float v, float fallback) => float.IsFinite(v) ? Math.Clamp(v, 0, 1) : fallback;
         private static float Finite(float v) => float.IsFinite(v) ? v : 0;
     }
@@ -45,12 +46,12 @@ namespace ForesTycoon.Ecology
         internal TreeShapeBands Bands => TreeShapeBands.Of(this);
 
         /// <summary>Equal keys mean equal geometry: changes only when a band boundary or the phase changes.</summary>
-        internal int ShapeKey => Bands.Pack() | (int)Phase << 17;
+        internal long ShapeKey => Bands.Pack() | (long)Phase << 17 | (long)Bands.Space.Code << 20;
     }
 
     /// <summary>Quantised shape inputs. Equal bands always produce an identical model.</summary>
     internal readonly record struct TreeShapeBands(int Light, TreeVigorBand Vigor, int Water, int Wind,
-        int GapDirection, int GapStrength, LeafState Leaves, bool Dead)
+        int GapDirection, int GapStrength, LeafState Leaves, bool Dead, CrownSpace Space = default)
     {
         internal const int GapSectors = 8;
         internal static float BandLight(int band) => band == 0 ? 0.15f : band == 1 ? 0.48f : 0.85f;
@@ -66,7 +67,7 @@ namespace ForesTycoon.Ecology
             int sector = strength == 0 ? 0 : (int)MathF.Round(Wrap(site.GapAngle) / MathF.Tau * GapSectors) % GapSectors;
             return new(LightBand(site.Light), spec.Dead ? TreeVigorBand.Dying : VigorBand(float.IsFinite(spec.Vigor) ? spec.Vigor : 1),
                 site.Water < 0.3f ? 0 : site.Water < 0.6f ? 1 : 2, site.Wind < 0.3f ? 0 : site.Wind < 0.65f ? 1 : 2,
-                sector, strength, spec.Leaves, spec.Dead);
+                sector, strength, spec.Leaves, spec.Dead, site.Space);
         }
 
         internal float Light01 => BandLight(Light);
@@ -90,6 +91,82 @@ namespace ForesTycoon.Ecology
             | GapStrength << 11 | (int)Leaves << 13 | (Dead ? 1 : 0) << 16;
 
         private static float Wrap(float angle) { angle %= MathF.Tau; return angle < 0 ? angle + MathF.Tau : angle; }
+    }
+
+    /// <summary>
+    /// Crown plasticity: how far a crown may reach in each of eight ground-plane directions. In a closed
+    /// stand crowns fill the space between them, pressed back towards neighbours and reaching into gaps;
+    /// only trees at a stand edge spread wide on their open side. Quantised to eight levels per sector,
+    /// so it can take part in the shape key. default = no neighbours known: the plain crown.
+    /// </summary>
+    internal readonly record struct CrownSpace(uint Code)
+    {
+        internal const int Sectors = 8;
+        internal const int Plain = 3, Open = 6;
+        /// <summary>Crown reach per level, relative to the simulated crown radius.</summary>
+        private static readonly float[] Reach = { 0.55f, 0.7f, 0.85f, 1f, 1.15f, 1.35f, 1.6f, 1.9f };
+        // Stored XOR level 3 in every sector, so default (all bits 0) reads as the unshaped crown.
+        private const uint Neutral = 0b011_011_011_011_011_011_011_011;
+        // Neighbouring crowns interlock a little at their rims, which keeps a closed canopy free of gaps.
+        private const float Interlock = 1.12f;
+
+        internal bool IsUniform => Code == 0;
+        internal int Level(int sector) => (int)((Code ^ Neutral) >> (3 * sector)) & 7;
+
+        internal static CrownSpace From(ReadOnlySpan<int> levels)
+        {
+            uint code = 0;
+            for (int k = 0; k < Sectors; k++) code |= (uint)Math.Clamp(levels[k], 0, 7) << (3 * k);
+            return new(code ^ Neutral);
+        }
+
+        /// <summary>Relative crown reach towards a ground-plane angle, interpolated between sectors.</summary>
+        internal float Factor(float angle)
+        {
+            if (IsUniform) return 1;
+            float sector = angle / MathF.Tau * Sectors;
+            sector -= MathF.Floor(sector / Sectors) * Sectors;
+            int a = (int)sector % Sectors, b = (a + 1) % Sectors;
+            float t = sector - MathF.Floor(sector);
+            return Reach[Level(a)] + (Reach[Level(b)] - Reach[Level(a)]) * t;
+        }
+
+        /// <summary>
+        /// Room around a crown of the given radius and height at a stem position, among neighbouring
+        /// crowns. Two crowns share the gap between their stems in proportion to their radii; crowns well
+        /// below this tree do not press it. With no neighbour in a direction the crown spreads to the open
+        /// level; between neighbours it fills its share of the gap. Any consistent length unit.
+        /// </summary>
+        internal static CrownSpace Measure(Vector2 self, float radius, float height,
+            ReadOnlySpan<(Vector2 Position, float Radius, float Height)> others)
+        {
+            Span<int> levels = stackalloc int[Sectors];
+            for (int k = 0; k < Sectors; k++)
+            {
+                float angle = MathF.Tau * k / Sectors;
+                var direction = new Vector2(MathF.Cos(angle), MathF.Sin(angle));
+                float reach = float.MaxValue;
+                foreach (var other in others)
+                {
+                    if (other.Height < 0.6f * height) continue;
+                    var offset = other.Position - self;
+                    float distance = offset.Length;
+                    if (distance < 1e-4f) continue;
+                    float facing = Vector2.Dot(offset / distance, direction);
+                    if (facing < 0.35f) continue;
+                    // The boundary is perpendicular to the line between the stems.
+                    float boundary = Interlock * distance * radius / Math.Max(1e-4f, radius + other.Radius);
+                    reach = Math.Min(reach, boundary / facing);
+                }
+                if (reach == float.MaxValue) { levels[k] = Open; continue; }
+                // Round up to the next level: a crown should reach its share of the space, not stop short.
+                float ratio = reach / Math.Max(1e-4f, radius);
+                int level = 0;
+                while (level < Reach.Length - 1 && Reach[level] < ratio - 0.02f) level++;
+                levels[k] = level;
+            }
+            return From(levels);
+        }
     }
 
     /// <summary>Physical shape facts the generator reports back to the simulation (metres).</summary>
