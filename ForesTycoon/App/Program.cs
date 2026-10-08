@@ -33,7 +33,6 @@ namespace ForesTycoon
             if (Array.Exists(args, argument => argument == "--dendro-tree-preview")) { ProceduralTreePreview.Run(true, true); return; }
             if (Array.Exists(args, argument => argument == "--dendro-tree-smoke-test")) { DendroTreeSmokeTest.Run(); return; }
             if (Array.Exists(args, argument => argument == "--tree-life-stage-preview")) { ProceduralTreePreview.Run(true); return; }
-            if (Array.Exists(args, argument => argument == "--forest-model-smoke-test")) { ForestModelSmokeTest.Run(); return; }
             int treePreview = Array.FindIndex(args, argument => argument == "--tree-asset-preview");
             if (treePreview >= 0) {
                 if (treePreview + 1 >= args.Length) throw new ArgumentException("--tree-asset-preview requires a GLB path.");

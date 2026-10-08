@@ -546,18 +546,6 @@ namespace ForesTycoon
             ImGui.SliderFloat("Nap magassága", ref g.SunElevation, 15, 80, "%.0f°");
 
             ImGui.SeparatorText("Részletek");
-            int forestModels = (int)g.ForestModels;
-            if (ImGui.Combo("Fa modellek", ref forestModels, "Importált modellek\0Importált lombos fák + eredeti fenyő\0Eljárásos fák (kor és fény)\0Generált fák (EZ-Tree)\0"))
-                g.ForestModels = (ForestModelStyle)forestModels;
-            if (g.ForestModels == ForestModelStyle.Procedural)
-                ImGui.TextDisabled("Kevés poligon, kor- és fényfüggő tömör lombkorona.");
-            if (g.ForestModels == ForestModelStyle.OriginalPine)
-                ImGui.TextDisabled("Az eredeti fenyő részletes, de lassabb.");
-            if (g.ForestModels != ForestModelStyle.Procedural)
-            {
-                ImGui.Checkbox("Importált nyírmodell", ref g.ImportedBirch);
-                if (g.ImportedBirch) ImGui.TextDisabled("CC BY-NC: nem kereskedelmi felhasználás.");
-            }
             ImGui.Checkbox("Textúrák", ref g.Textures);
             ImGui.SameLine(170);
             ImGui.Checkbox("Csemperács", ref g.ShowGrid);

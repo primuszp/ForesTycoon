@@ -31,13 +31,6 @@
     <ProjectReference Include="../ForesTycoon.Map/ForesTycoon.Map.csproj" />
     <Content Include="../ForesTycoon.TreeModels/Generation/Dendro/LICENSE.txt" Link="Licenses/DendroKit-GPL-2.0.txt" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../ForesTycoon.TreeModels/Generation/Dendro/NOTICE.md" Link="Licenses/DendroKit-NOTICE.md" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="Assets/Forest/pine-tree-original.glb" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="Assets/Forest/trees-low-poly-original.glb" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="Assets/Forest/oak-trees-original.glb" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="Assets/Forest/forest-pack-original.glb" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="Assets/Forest/birch-original.glb" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="Assets/Forest/Generated/*.glb" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="Assets/Forest/Generated/EZ-TREE-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets/Wildlife/fish.glb" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets/Buildings/sawmill.glb" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets/Wildlife/elk.glb" CopyToOutputDirectory="PreserveNewest" />

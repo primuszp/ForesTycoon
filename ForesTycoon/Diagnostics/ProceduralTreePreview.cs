@@ -45,7 +45,7 @@ namespace ForesTycoon
                     }
                     forest.NotifyIndividualVisualEdit();
                     using var renderer = new TerrainRenderer(terrain, new VehicleSystem(), new WorldEffectSystem(), forest,
-                        new GraphicsSettings { ForestModels = ForestModelStyle.Procedural, Weather = false, Fog = false,
+                        new GraphicsSettings { Weather = false, Fog = false,
                             Wildlife = false, Shadows = false, Diorama = false, StudioBackdrop = false, ShowGrid = !compareLight });
                     RenderDevice.SetCamera(Matrix4.CreateRotationX(-MathF.PI / 3)
                         * Matrix4.CreateOrthographicOffCenter(-24, 24, compareLight ? 1 : -10, compareLight ? 20.2f : 26, -1000, 1000));
