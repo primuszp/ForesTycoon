@@ -151,4 +151,13 @@ Megvalósítva a 2.1–2.4 pont és a fajprofilok (2.5) első köre:
 emeletenkénti elfordulás, egyenetlen és lecsüngő szoknyák (az alsó emeleteken erősebben),
 keskeny csúcshajtás. A luc mellett a fiatal erdeifenyő, a vörös- és a jegenyefenyő is ezt kapja.
 
-Hátravan: 2.3 (ágak bevezetése a lebenyekbe), 2.7 (arányhangolás), a mogyoró csúcsának finomítása.
+2.3 kész: lebenyes koronában az elsőrendű vázágak az ívhossz ~80%-áig futnak, a korona aljánál
+nem vágódnak le, így a lebenyek közti résekben látszanak (keret: Near 200, Medium 80 △; cserjéknél
+változatlan).
+
+2.7 (arányok): a törzsvastagság szándékosan a szimulált átmérő (teszt őrzi), a valós karcsúság
+megmarad. A lebenyes korona legkülső pontja igazodik a koronasugárhoz, így az átlagos körvonala
+~18%-kal keskenyebb volt a szimulált koronánál; egy egységes 1,12-es teltségi szorzó ezt pótolja
+(minden LOD-on azonos, a sziluett-egyezés megmarad). A szimuláció koronaméretei nem változtak.
+
+Hátravan: a mogyoró csúcsának finomítása; fajonkénti arány-ellenőrzés referenciafotókkal.

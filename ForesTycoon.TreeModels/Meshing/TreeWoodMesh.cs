@@ -13,21 +13,23 @@ namespace ForesTycoon.TreeModels
     internal static class TreeWoodMesh
     {
         /// <summary>Triangle budget of the limbs and twigs of one tree; the main stem is always drawn.</summary>
-        internal static int Budget(ForestLod lod, bool leafless) => lod switch
+        internal static int Budget(ForestLod lod, bool leafless, bool lobed = false) => lod switch
         {
-            ForestLod.Near => leafless ? 1400 : 150,
-            ForestLod.Medium => leafless ? 330 : 50,
+            // Lobed crowns have sky gaps between their masses, where the limbs carrying them show.
+            ForestLod.Near => leafless ? 1400 : lobed ? 200 : 150,
+            ForestLod.Medium => leafless ? 330 : lobed ? 80 : 50,
             _ => leafless ? 90 : 0
         };
 
         /// <param name="leafed">A crown is drawn: only the trunk, the exposed limb roots and dead limbs are needed.</param>
         internal static void Build(TreeForm form, ForestLod lod, bool leafed, List<Vertex> trunk, List<Vertex> branches)
         {
-            int budget = Budget(lod, !leafed);
+            var spec = form.Spec;
+            bool lobed = leafed && !form.Shrub && LobeCrownMesh.Applies(spec.Species, spec.Phase);
+            int budget = Budget(lod, !leafed, lobed);
             if (budget == 0) return;
             var sk = form.Skeleton;
             int n = sk.StemCount;
-            var spec = form.Spec;
             float refPixels = DendroCrownMesh.ReferencePixels(lod);
             float minRadius = 0.45f / refPixels;
             float exposure = form.Shrub ? 0.6f : spec.Species switch
@@ -35,8 +37,10 @@ namespace ForesTycoon.TreeModels
                 // Fraction of a first-order limb shown below/inside the crown surface.
                 ForestSpecies.Oak => 0.50f, ForestSpecies.Beech => 0.45f, ForestSpecies.Birch => 0.35f, _ => 0.25f
             };
+            // In a lobed crown the limbs run on into the foliage masses they carry.
+            if (lobed) exposure = Math.Max(exposure, 0.8f);
             if (leafed && form.Foliage < 1) exposure = Math.Min(1, exposure * 1.7f);
-            int limbBudget = lod == ForestLod.Near ? (spec.Species == ForestSpecies.Oak || form.Shrub ? 8 : 6) : 3;
+            int limbBudget = lod == ForestLod.Near ? (spec.Species == ForestSpecies.Oak || form.Shrub ? 8 : 6) + (lobed ? 2 : 0) : 3;
 
             // Stems with a significant child keep that vertex so thick forks stay exact.
             var keep = new bool[sk.Points.Length];
@@ -93,7 +97,7 @@ namespace ForesTycoon.TreeModels
             });
 
             float crownLimit = leafed ? form.Height * (1 - form.CrownFraction * 0.45f) : float.MaxValue;
-            float limbLimit = leafed ? form.Height * (1 - form.CrownFraction * 0.15f) : float.MaxValue;
+            float limbLimit = leafed && !lobed ? form.Height * (1 - form.CrownFraction * 0.15f) : float.MaxValue;
             int used = 0, forks = 0;
             var points = new List<Vector3>(); var radii = new List<float>(); var pins = new List<bool>();
             foreach (int i in order)

@@ -251,7 +251,10 @@ namespace ForesTycoon.TreeModels
                     return reach;
                 }
             }
-            float thin = 0.72f + 0.28f * form.Foliage;
+            // Masses are scaled so their outermost point meets the crown radius; their average outline then
+            // falls short of it. Lift it towards the simulated crown size (uniformly, so every LOD agrees).
+            const float Fullness = 1.12f;
+            float thin = (0.72f + 0.28f * form.Foliage) * Fullness;
             float topLoss = form.Dieback > 0.45f && spec.Phase >= TreeLifePhase.Old
                 ? Math.Min(0.25f, (form.Dieback - 0.3f) * 0.5f) : 0;
             // Compensate the coarser inscribed outline, without adding lobe geometry.
