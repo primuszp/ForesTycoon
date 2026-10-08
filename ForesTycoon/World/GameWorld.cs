@@ -74,6 +74,12 @@ namespace ForesTycoon
         public ForestryAreaSummary LastForestryArea => lastForestryArea;
         public bool TryGetForestStand(int tileId, out ForestStand stand) => forest.TryGetStand(tileId, out stand);
         internal bool TryGetPlantationStatus(int tileId, out PlantationStatus status) => forest.TryGetPlantationStatus(tileId, out status);
+        /// <summary>Changes whenever the forest publishes a new state; the management view rebuilds on it.</summary>
+        internal ulong ForestRevision => forest.Revision;
+        internal ForestTileSurvey[] BuildManagementSurvey() => ForestManagementSurvey.Build(forest, Environment, Soils);
+        internal (ForestSpecies Species, float Suitability)[] RecommendSpecies(int tileId) =>
+            ForestManagementSurvey.Recommend(forest.Habitat, tileId);
+        internal bool TryGetTileCenter(int tileId, out Vector3 centre) => map.TryGetTileCenter(tileId, out centre);
 
         /// <summary>
         /// Review-capture helper: finds the densest 5×5 block of forest, clears its western half

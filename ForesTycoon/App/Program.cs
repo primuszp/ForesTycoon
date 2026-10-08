@@ -8,6 +8,13 @@ namespace ForesTycoon
         {
             RenderBackendSelection.UseOpenGl();
             if (Array.Exists(args, a => a == "--oak-study-preview")) { OakStudyPreview.Run(Array.Exists(args, a => a == "--before")); return; }
+            int gallery = Array.FindIndex(args, a => a == "--tree-gallery");
+            if (gallery >= 0)
+            {
+                string name = gallery + 1 < args.Length && !args[gallery + 1].StartsWith("--") ? args[gallery + 1] : "current";
+                foreach (var lod in Enum.GetValues<ForestLod>()) TreeGalleryPreview.Run(name, lod);
+                return;
+            }
             if (Array.Exists(args, a => a == "--ui-font-smoke-test")) { UiFontSmokeTest.Run(); return; }
             if (Array.Exists(args, a => a == "--vegetation-preview")) { VegetationPreview.Run(); return; }
             if (Array.Exists(args, a => a == "--vegetation-benchmark")) { VegetationBenchmark.Run(Array.Exists(args, a => a == "--before") ? "before" : "after"); return; }
@@ -40,6 +47,7 @@ namespace ForesTycoon
             if (Array.Exists(args, argument => argument == "--logistics-smoke-test")) { ForestryLogisticsSmokeTest.Run(); return; }
             if (Array.Exists(args, argument => argument == "--environment-smoke-test")) { EnvironmentSmokeTest.Run(); return; }
             if (Array.Exists(args, argument => argument == "--soil-raster-smoke-test")) { SoilRasterSmokeTest.Run(); return; }
+            if (Array.Exists(args, argument => argument == "--management-smoke-test")) { ManagementViewSmokeTest.Run(); return; }
             if (Array.Exists(args, argument => argument == "--checkpoint-smoke-test")) { WorldCheckpointSmokeTest.Run(); return; }
             if (Array.Exists(args, argument => argument == "--wildlife-smoke-test")) { WildlifeSmokeTest.Run(); return; }
             if (Array.Exists(args, argument => argument == "--graphics-smoke-test")) { GraphicsWeatherSmokeTest.Run(); return; }

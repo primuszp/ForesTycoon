@@ -42,8 +42,8 @@ namespace ForesTycoon.TreeModels
             var trunk = new List<Vertex>(); var branches = new List<Vertex>();
             TreeWoodMesh.Build(form, lod, crowned, trunk, branches);
             Vertex[] crown = Array.Empty<Vertex>();
-            if (crowned && spec.Species == ForestSpecies.Oak && spec.Phase >= TreeLifePhase.Mature)
-                crown = OakCrownMesh.Build(form, lod);
+            if (crowned && LobeCrownMesh.Applies(spec.Species, spec.Phase))
+                crown = LobeCrownMesh.Build(form, lod);
             else if (crowned)
             {
                 // Only living leaves shape the crown, so dieback opens it up where limbs died.

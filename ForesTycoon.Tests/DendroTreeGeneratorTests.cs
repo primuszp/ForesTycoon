@@ -37,8 +37,8 @@ public class DendroTreeGeneratorTests
         var reached = new HashSet<Vector3>(); var work = new Stack<Vector3>();
         work.Push(neighbours.Keys.First());
         while (work.TryPop(out var p)) if (reached.Add(p)) foreach (var n in neighbours[p]) work.Push(n);
-        if (species == ForestSpecies.Oak && stage >= TreeLifeStage.Mature)
-            AssertOverlappingOakMasses(mesh.Crown);
+        if (LobeCrownMesh.Applies(species, TreeLifePhases.From(stage)) && reached.Count != neighbours.Count)
+            AssertOverlappingMasses(mesh.Crown);
         else
             Assert.Equal(neighbours.Count, reached.Count);
         Assert.Equal(size.Height * Terrain.TreeMetresToWorld, mesh.Crown.Max(v => v.Position.Z), 5);
@@ -61,9 +61,9 @@ public class DendroTreeGeneratorTests
         }
     }
 
-    // Close oak foliage consists of closed convex masses rather than one shell.
+    // Close broad-leaved foliage consists of closed masses rather than one shell.
     // A connected intersection graph proves there are no floating foliage balls.
-    private static void AssertOverlappingOakMasses(Vertex[] crown)
+    private static void AssertOverlappingMasses(Vertex[] crown)
     {
         Assert.Equal(0, crown.Length % 60); // 20 triangles per closed icosahedron
         var masses = crown.Chunk(60).ToArray();
@@ -79,7 +79,7 @@ public class DendroTreeGeneratorTests
             {
                 if (!reached.Contains(a) || reached.Contains(b)) continue;
                 Vector3 delta = centres[b] - centres[a]; float distance = delta.Length;
-                if (distance > 1e-7f)
+                if (distance > 1e-7f && !Inside(a, b) && !Inside(b, a))
                 {
                     var direction = delta / distance;
                     if (Reach(a, direction) + Reach(b, -direction) < distance) continue;
@@ -88,6 +88,24 @@ public class DendroTreeGeneratorTests
             }
         } while (changed);
         Assert.Equal(masses.Length, reached.Count);
+
+        // Some vertex of one mass lies within all face planes of the other (masses are near-convex).
+        bool Inside(int outer, int inner)
+        {
+            var faces = masses[outer];
+            foreach (var vertex in masses[inner])
+            {
+                bool inside = true;
+                for (int i = 0; i < faces.Length && inside; i += 3)
+                {
+                    Vector3 a = faces[i].Position;
+                    Vector3 normal = Vector3.Cross(faces[i + 1].Position - a, faces[i + 2].Position - a);
+                    inside = Vector3.Dot(normal, vertex.Position - a) < 0;
+                }
+                if (inside) return true;
+            }
+            return false;
+        }
 
         float Reach(int mass, Vector3 direction)
         {

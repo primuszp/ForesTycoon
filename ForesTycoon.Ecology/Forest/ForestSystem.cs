@@ -14,6 +14,7 @@ namespace ForesTycoon.Ecology
         private const int MaximumNeighbours = 4;
 
         private IForestHabitat habitat;
+        internal IForestHabitat Habitat => habitat;
         private ForestStand[] stands = Array.Empty<ForestStand>();
         // Empty tiles that border a seeding stand. Rebuilt every month so that the
         // regeneration pass never has to probe the whole map through the habitat interface.

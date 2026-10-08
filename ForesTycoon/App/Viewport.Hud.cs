@@ -20,7 +20,8 @@ namespace ForesTycoon
     sealed partial class Viewport
     {
         private bool showVehicles, showForestry, showGraphics, showDeveloper, showHelp;
-        private bool showEnvironment;
+        private bool showEnvironment, showManagement;
+        private readonly ManagementView management = new();
         private int ecologyRasterLayer, ecologyRasterSelection = -1;
         private int environmentPreset, environmentIntensity = 12, environmentDuration = 90;
         private float toolbarBottom = 60f;
@@ -59,6 +60,7 @@ namespace ForesTycoon
             DrawVehiclesWindow();
             DrawForestryWindow();
             DrawEnvironmentWindow();
+            DrawManagementWindow();
             DrawGraphicsWindow();
             DrawDeveloperWindow();
             DrawHelpWindow();
@@ -73,8 +75,8 @@ namespace ForesTycoon
         // ── Top toolbar ──────────────────────────────────────────────────────
         private void DrawTopToolbar()
         {
-            // 21 buttons and 7 dividers; shrink the icons on narrow windows rather than wrap.
-            const int buttons = 21, dividers = 7;
+            // 22 buttons and 7 dividers; shrink the icons on narrow windows rather than wrap.
+            const int buttons = 22, dividers = 7;
             float size = Math.Clamp((Width - 40f - dividers * 15f) / buttons - 5f, 24f, 38f);
 
             ImGui.SetNextWindowPos(new NVec2(Width * 0.5f, 6), ImGuiCond.Always, new NVec2(0.5f, 0f));
@@ -142,6 +144,9 @@ namespace ForesTycoon
             ImGui.SameLine();
             WindowToggle("environment", GameIcon.Environment, ref showEnvironment, size, "Környezet", "E",
                 "Időjárás, talajtérkép, gyökérzónavíz és vízstressz csempénként.");
+            ImGui.SameLine();
+            WindowToggle("management", GameIcon.Calendar, ref showManagement, size, "Erdőgazdálkodás", "M",
+                "Víz, talaj, erdőegészség és állomány térképe; hol és milyen beavatkozás kell.");
 
             HudTheme.GroupDivider(size);
             // View & development
@@ -607,6 +612,28 @@ namespace ForesTycoon
             ImGui.End();
         }
 
+        private void DrawManagementWindow()
+        {
+            if (!BeginGameWindow("Erdőgazdálkodás", ref showManagement, new NVec2(20, toolbarBottom + 10), 640)) return;
+            var request = management.Draw(world);
+            ImGui.End();
+            if (request.Kind == ManagementRequestKind.None) return;
+            if (world.TryGetTileCenter(request.TileId, out var centre)) FocusOn(centre, Math.Max(zoom, 30));
+            switch (request.Kind)
+            {
+                case ManagementRequestKind.Plant:
+                    interaction.PlantingSpecies = request.Species;
+                    SelectTool(TerrainEditTool.PlantForest);
+                    ShowToast($"Erdőtelepítés: {ForestSpeciesName(request.Species)}. Húzással jelöld ki a területet.", HudTheme.Info);
+                    break;
+                case ManagementRequestKind.Harvest:
+                    SelectTool(TerrainEditTool.HarvestForest);
+                    ShowToast("Kitermelés: húzással jelöld ki a vágásterületet.", HudTheme.Info);
+                    break;
+            }
+            RequestFrame();
+        }
+
         private void DrawGraphicsWindow()
         {
             if (!BeginGameWindow("Grafika", ref showGraphics, new NVec2(Width * 0.5f - 180, toolbarBottom + 60), 360)) return;
@@ -786,7 +813,7 @@ namespace ForesTycoon
             HudTheme.KeyValue("Esc", "vissza a Vizsgálat eszközhöz");
             HudTheme.KeyValue("Space", "szünet");
             HudTheme.KeyValue("T", "rönkszállító indítása");
-            HudTheme.KeyValue("V / F / E / G", "járművek / erdészet / környezet / grafika");
+            HudTheme.KeyValue("V / F / E / M / G", "járművek / erdészet / környezet / erdőgazdálkodás / grafika");
             HudTheme.KeyValue("F12", "fejlesztői eszközök");
             HudTheme.KeyValue("Ctrl+S / Ctrl+L", "gyorsmentés / gyorsbetöltés");
             ImGui.End();
@@ -820,6 +847,7 @@ namespace ForesTycoon
                 case Keys.V: showVehicles = !showVehicles; return true;
                 case Keys.F: showForestry = !showForestry; return true;
                 case Keys.E: showEnvironment = !showEnvironment; return true;
+                case Keys.M: showManagement = !showManagement; return true;
                 case Keys.G: showGraphics = !showGraphics; return true;
                 case Keys.F12: showDeveloper = !showDeveloper; return true;
                 case Keys.F1: showHelp = !showHelp; return true;
