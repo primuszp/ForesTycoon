@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using OpenTK.Graphics.OpenGL;
 using OpenTK.Mathematics;
 
@@ -8,14 +7,14 @@ namespace ForesTycoon.Rendering
     /// <summary>Shared core-profile geometry shader and explicit camera/model state.</summary>
     static class RenderDevice
     {
-        private static readonly Stack<Matrix4> modelStack = new Stack<Matrix4>();
+        private static readonly RenderTransformState transforms = new RenderTransformState();
         private static int shader;
         private static int viewProjectionLocation;
         private static int modelLocation;
         private static bool initialized;
 
-        public static Matrix4 ViewProjection { get; private set; } = Matrix4.Identity;
-        public static Matrix4 Model { get; private set; } = Matrix4.Identity;
+        public static Matrix4 ViewProjection => transforms.ViewProjection;
+        public static Matrix4 Model => transforms.Model;
         internal static Vector2 LodRange = new Vector2(0,1);
         internal static ISurfaceVisuals Visuals { get; set; }
         /// <summary>Raised once when the device shuts down, so owners of GPU resources can release them first.</summary>
@@ -50,17 +49,7 @@ void main()
     output_color = vertex_color;
 }";
 
-            int vertex = Compile(ShaderType.VertexShader, vertexSource);
-            int fragment = Compile(ShaderType.FragmentShader, fragmentSource);
-            shader = GL.CreateProgram();
-            GL.AttachShader(shader, vertex);
-            GL.AttachShader(shader, fragment);
-            GL.LinkProgram(shader);
-            GL.GetProgram(shader, GetProgramParameterName.LinkStatus, out int linked);
-            string log = GL.GetProgramInfoLog(shader);
-            GL.DeleteShader(vertex);
-            GL.DeleteShader(fragment);
-            if (linked == 0) throw new InvalidOperationException("Geometry shader link failed: " + log);
+            shader = GlProgram.Create(vertexSource, fragmentSource);
 
             viewProjectionLocation = GlProgram.Uniform(shader, "view_projection");
             modelLocation = GlProgram.Uniform(shader, "model");
@@ -70,13 +59,11 @@ void main()
         public static void SetCamera(Matrix4 viewProjection)
         {
             EnsureInitialized();
-            ViewProjection = viewProjection;
-            Model = Matrix4.Identity;
-            modelStack.Clear();
+            transforms.SetCamera(viewProjection);
         }
 
         /// <summary>Replaces only the camera matrix; the model stack is left untouched.</summary>
-        internal static void SetViewProjection(Matrix4 viewProjection) => ViewProjection = viewProjection;
+        internal static void SetViewProjection(Matrix4 viewProjection) => transforms.SetViewProjection(viewProjection);
 
         public static void UseGeometryShader()
         {
@@ -90,18 +77,14 @@ void main()
             GL.UniformMatrix4(modelLocation, false, ref model);
         }
 
-        public static void PushModel() => modelStack.Push(Model);
+        public static void PushModel() => transforms.PushModel();
 
-        public static void PopModel()
-        {
-            if (modelStack.Count == 0) throw new InvalidOperationException("Render model stack underflow.");
-            Model = modelStack.Pop();
-        }
+        public static void PopModel() => transforms.PopModel();
 
-        internal static void SetModel(Matrix4 matrix) => Model = matrix;
+        internal static void SetModel(Matrix4 matrix) => transforms.SetModel(matrix);
 
         public static void Translate(float x, float y, float z) =>
-            Model = Matrix4.CreateTranslation(x, y, z) * Model;
+            transforms.Translate(x, y, z);
 
         public static void Dispose()
         {
@@ -112,23 +95,8 @@ void main()
             GlProgram.Delete(shader);
             shader = 0;
             initialized = false;
-            modelStack.Clear();
+            transforms.Reset();
             Visuals = null;
-        }
-
-        private static int Compile(ShaderType type, string source)
-        {
-            int handle = GL.CreateShader(type);
-            GL.ShaderSource(handle, source);
-            GL.CompileShader(handle);
-            GL.GetShader(handle, ShaderParameter.CompileStatus, out int compiled);
-            if (compiled == 0)
-            {
-                string log = GL.GetShaderInfoLog(handle);
-                GL.DeleteShader(handle);
-                throw new InvalidOperationException($"Geometry {type} compilation failed: {log}");
-            }
-            return handle;
         }
 
         private static void EnsureInitialized()

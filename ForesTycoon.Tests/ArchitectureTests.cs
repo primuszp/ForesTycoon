@@ -103,6 +103,18 @@ public class ArchitectureTests
     }
 
     [Fact]
+    public void ModelCpuContractsDoNotDependOnNativeGraphics()
+    {
+        string directory = Path.Combine(RepositoryRoot(), "ForesTycoon.Models");
+        foreach (string file in Directory.EnumerateFiles(directory, "*.cs", SearchOption.TopDirectoryOnly))
+        {
+            string source = File.ReadAllText(file);
+            foreach (string forbidden in new[] { "OpenTK.Graphics", "GL.", "RenderStateScope", "#version" })
+                Assert.False(source.Contains(forbidden), $"{file} leaks backend detail: {forbidden}");
+        }
+    }
+
+    [Fact]
     public void EcosystemRunsHeadlessWithoutTerrainOrRendering()
     {
         var habitat = new ForestSystemTests.TestHabitat(64, seed: 5);

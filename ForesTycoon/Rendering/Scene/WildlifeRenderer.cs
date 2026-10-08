@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using OpenTK.Graphics.OpenGL;
 using OpenTK.Mathematics;
 namespace ForesTycoon
 {
@@ -31,7 +30,7 @@ namespace ForesTycoon
             renderer??=new AnimatedModelRenderer(model);
             int outlineBudget=settings.Enhanced&&settings.WildlifeOutlines&&context.PixelsPerWorldUnit>=7&&RenderDevice.Visuals?.ShadowPass!=true
                 ? settings.Quality==GraphicsQuality.High?8:settings.Quality==GraphicsQuality.Medium?4:0 :0;
-            using var state=new RenderStateScope().Enable(EnableCap.DepthTest).Disable(EnableCap.CullFace);
+            using var state=renderer.BeginBatch();
             float alpha=(float)Math.Clamp(context.InterpolationAlpha,0,1);
             foreach(var animal in simulation.Animals)
             {

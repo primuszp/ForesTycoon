@@ -376,7 +376,7 @@ Remove-Item Env:DOTNET_TieredCompilation
    támogatás előtt jelenetszintű transparent queue és animált bounds, vagy igazolt OIT megoldás kell.
 
 A Metalhoz szükséges backend- és shaderleválasztás terve az
-[engine architektúrában](engine-architecture.md#render-and-animation-consolidation-metal-direction-2026-10-08)
+[engine architektúrában](engine-architecture.md#opengl-first-rendering-and-replaceable-backend-boundaries-2026-10-08)
 található. A programban még nincs Metal backend.
 
 ### Ellenőrzés és jelenlegi mérés
@@ -400,3 +400,26 @@ A mérés a GPU-befejezést is megvárja, UI/input/swap és diorama-kompozitál�
 Az eredmények jelenlegi referenciaértékek; azonos körülmények között mért korábbi változat nélkül
 nem állítunk százalékos gyorsulást, és a nagy pályák indulási/memóriaköltségét ez nem méri.
 A helyi minták: `artifacts/world-benchmark/sunny.json` és `storm.json`.
+
+### OpenGL marad az elsődleges backend
+
+A modellrenderelő CPU-oldali előkészítése és OpenGL-erőforráskezelése külön modulban található.
+Az `IModelRenderBackend` interfész pózt, példánytranszformációt, explicit `ModelRenderFrame` értéket
+és rajzolási sorrendet kap. A backend szerzi be a közös batch-keretet is; a halak, épületek és
+szarvasok ehhez már nem hoznak létre közvetlen GL-scope-ot. Az alapértelmezett megvalósítás
+az `OpenGl/OpenGlModelRenderer`; a GLSL források külön `OpenGlModelShaders` fájlban vannak.
+
+Az Engine `RenderTransformState` osztálya a kamera/modell állapotát natív kontextus nélkül kezeli.
+A `RenderDevice` saját shaderfordító/linkelő duplikációja megszűnt; a modellekhez hasonlóan
+`GlProgram.Create` végzi ezt a műveletet. A forest material és ImGui saját útja még különálló.
+A CPU-s modellparancs előkészítése ismételt híváskor nem foglal memóriát.
+Az architektúrateszt tiltja a natív grafikai típusokat és GLSL-t a modellek CPU/contract forrásaiban.
+
+Ez működő modellbackend-határ, nem kész Metal vagy teljes renderelőcsere. A terep, időjárás,
+post-process és UI backendhatárának fokozatos kialakítása még hátravan. Az előző táblázat
+a backendhatár szétválasztása előtti állapot mérése; a refaktorhoz nem állítunk további gyorsulást.
+
+Ellenőrzés a backendhatár kialakítása után: 1334/1334 Release-teszt sikeres. A material-alpha,
+wildlife, graphics és forest GL-próba sikeres. Az új tesztek GL-kontextus nélkül ellenőrzik a
+beadott backend használatát, frame/póz/transzformáció átadását, kamera- és anyagváltás rendezését,
+árnyékmenetet, erőforrás-életciklust, nulla per-draw CPU-memóriafoglalást és külön transform state-eket.

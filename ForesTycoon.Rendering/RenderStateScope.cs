@@ -3,7 +3,7 @@ using OpenTK.Graphics.OpenGL;
 
 namespace ForesTycoon.Rendering
 {
-    internal sealed class RenderStateScope : IDisposable
+    internal class RenderStateScope : IDisposable
     {
         private readonly bool depthTest;
         private readonly bool blend;
@@ -17,6 +17,7 @@ namespace ForesTycoon.Rendering
         private bool polygonOffsetCaptured;
         private float polygonOffsetFactor, polygonOffsetUnits;
         private bool disposed;
+        internal bool IsDisposed => disposed;
 
         public RenderStateScope()
         {

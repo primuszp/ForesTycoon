@@ -78,7 +78,7 @@ namespace ForesTycoon
                 renderer.Draw(pose,Matrix4.Identity,settings,sourceMaterial:true);
                 byte[] separate=Pixel(48);
                 Clear(); GL.Disable(EnableCap.Blend); GL.DepthMask(false);
-                using(var batch=new RenderStateScope().Enable(EnableCap.DepthTest).Disable(EnableCap.CullFace))
+                using(var batch=renderer.BeginBatch())
                 {
                     renderer.Draw(pose,Matrix4.Identity,settings,sourceMaterial:true,sharedState:batch);
                     renderer.Draw(pose,Matrix4.Identity,settings,sourceMaterial:true,sharedState:batch);

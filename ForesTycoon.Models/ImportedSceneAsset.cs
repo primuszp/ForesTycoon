@@ -64,7 +64,8 @@ namespace ForesTycoon.Models
             Normalization=axis*Matrix4.CreateTranslation(-center)*Matrix4.CreateScale(scale);
             if(centerHeight&&max.Y-min.Y>max.X-min.X)Normalization*=Matrix4.CreateRotationZ(-MathF.PI/2);
         }
-        internal void Draw(Matrix4 placement,IShadingSettings settings,RenderStateScope sharedState=null)
+        internal IModelRenderBatch BeginBatch()=>renderer.BeginBatch();
+        internal void Draw(Matrix4 placement,IShadingSettings settings,IModelRenderBatch sharedState=null)
             =>renderer.Draw(Pose,Normalization*placement,settings,sharedState:sharedState);
         public void Dispose()=>renderer.Dispose();
     }

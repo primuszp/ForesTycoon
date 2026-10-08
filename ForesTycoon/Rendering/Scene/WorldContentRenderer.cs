@@ -18,7 +18,7 @@ namespace ForesTycoon
             fish??=new ImportedSceneAsset("Assets/Wildlife/fish.glb",DioramaScale.FishLength,true);
             // All fish share one asset and draw consecutively: capture/restore GL state
             // once for the pass instead of querying it again for every instance.
-            using var state=new RenderStateScope().Enable(EnableCap.DepthTest).Disable(EnableCap.CullFace);
+            using var state=fish.BeginBatch();
             int index=0;
             foreach(var habitat in habitats){
                 double phase=context.SimulationTimeSeconds*0.22+habitat.Seed%628*0.01;
@@ -34,7 +34,7 @@ namespace ForesTycoon
             if(logistics==null||logistics.Mills.Count==0)return;
             mill??=new ImportedSceneAsset("Assets/Buildings/sawmill.glb",DioramaScale.SawmillWidth(terrain.TileWidth,terrain.TileHeight),
                 footprint:DioramaScale.SawmillFootprint(terrain.TileWidth,terrain.TileHeight));
-              using var state=new RenderStateScope().Enable(EnableCap.DepthTest).Disable(EnableCap.CullFace);
+            using var state=mill.BeginBatch();
             foreach(var building in logistics.Mills){
                   mill.Draw(Matrix4.CreateTranslation(building.Position),settings,state);
             }

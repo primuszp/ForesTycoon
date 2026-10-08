@@ -137,7 +137,7 @@ Replay save version is now 4. Earlier versions are rejected because the changed 
 
 The same preparation also owns projected boundary dimensions, volume increments, geometry-only growth-curve terms and pre-update stand totals. `ForestGrowthShape.Apply` preserves the original arithmetic order; final environmental response, health changes and annual increment accounting still occur at the month boundary. Optional `ForestMonthProfile` diagnostics separate monthly phases. The simulation benchmark now includes coupled 30 Hz weather/water/forestry measurements against the synchronous reference, in addition to isolated forest timings.
 
-## Render and animation consolidation; Metal direction (2026-10-08)
+## OpenGL-first rendering and replaceable backend boundaries (2026-10-08)
 
 The runtime animation implementation now lives in `AnimatedGlbModel.Animation.cs`, apart from GLB parsing.
 `AnimationPath` and `AnimationInterpolation` replace numeric path IDs and runtime string comparisons.
@@ -152,28 +152,48 @@ for quantities where ambiguity affects correctness, and verb names for state-cha
 argument was ignored. Optional GL state is captured only when a scope changes it, and nested polygon
 offsets restore their actual parent values. Consecutive wildlife and mill instances share a state scope.
 
-The current executable still has **only an OpenGL backend**. A Metal implementation cannot be added
-by switching a window flag: `RenderDevice`, buffer types, effects, post-processing, ImGui and scene
-renderers issue direct GL calls, and shaders are GLSL strings. CPU animation separation is useful for
-portability, but does not by itself make the renderer backend-independent.
+**OpenGL remains the primary and default backend.** The goal is to keep future replacement localized,
+not to replace OpenGL now or select a new graphics library prematurely.
 
-The proposed cross-platform route is SDL3 GPU, whose official API supports Metal, Vulkan and D3D12.
-SDL shadercross can produce backend shader formats from HLSL or SPIR-V. This is an architectural
-proposal, not an installed dependency or a working Metal renderer. Sources:
+The model path now has a working boundary:
+
+- `AnimatedGlbModel` owns CPU asset data, `Pose` animation, and `ModelDrawOrder` reusable CPU ordering.
+- `AnimatedModelRenderer` prepares `ModelRenderFrame` values and submits to `IModelRenderBackend`.
+  Its constructor owns an injected implementation, defaulting to `OpenGlModelRenderer`. The explicit
+  frame overload needs no global device or native context; tests exercise it with another implementation.
+- `ModelRenderContracts.cs` uses only CPU values and a backend-owned `IModelRenderBatch`. No GL enums,
+  native handles, state scopes or GLSL cross that boundary. Backend calls consume the borrowed order span
+  synchronously; they must copy it if they retain submissions beyond the call.
+- `OpenGl/` owns model buffers, textures, shader programs, native batching and shader sources. Wildlife,
+  fish and mills request batches from their renderer rather than constructing GL state scopes.
+- `RenderTransformState` owns camera/model state in Engine with no graphics dependency. The current
+  `RenderDevice` delegates to it. Another device can own an independent instance with the same CPU
+  transform convention. Shader compilation/linking is consolidated in `GlProgram.Create`.
+
+The facade's shading-settings overload remains an adapter to the existing global scene state.
+The OpenGL implementation uses the scene's existing shadow-texture binding; a future backend must
+provide its own matching shadow resources. This is not yet a complete renderer-wide device abstraction:
+terrain buffers/growth textures, effects, post-processing, ImGui and window/swapchain integration still
+contain GL-specific operations. Port these by resource/pass ownership, using the model boundary as
+the first implemented example. Avoid adding speculative interfaces for every GL call.
+
+SDL3 GPU is one possible future route, whose official API supports Metal, Vulkan and D3D12.
+SDL shadercross can produce backend shader formats from HLSL or SPIR-V. No replacement library is
+selected or installed, and there is no working Metal renderer. Sources:
 [SDL GPU API](https://wiki.libsdl.org/SDL3/CategoryGPU),
 [GPU device creation](https://wiki.libsdl.org/SDL3/SDL_CreateGPUDevice),
 [Apple OpenGL migration](https://developer.apple.com/documentation/metal/migrating-opengl-code-to-metal).
 
 Migration should proceed through working, testable increments:
 
-1. Separate CPU mesh/material/pose data and scene submissions from native resource handles.
-   Extract shader sources and explicit vertex/binding layouts. Preserve the current OpenGL path
-   as the reference implementation; avoid wrapping every individual GL call in an interface.
+1. Continue the model path's CPU/native separation across terrain and effects. Extract shader
+   sources and explicit vertex/binding layouts. Preserve OpenGL as the default implementation.
 2. Introduce a device boundary for buffer/texture creation, shader pipelines, render targets,
    resource lifetime and pass submission. Use application-owned descriptors and handles at that
-   boundary, without OpenGL enums. Confirm contracts with one real SDL GPU implementation before
-   extending the abstraction across all effects.
-3. Render one imported mesh and one animated animal through the new backend, then implement
+   boundary, without OpenGL enums. Implement each contract through the existing OpenGL path and
+   verify native-free submission tests before expanding it. A second backend should confirm the
+   contracts when an actual replacement is requested.
+3. If replacement is requested, render one imported mesh and one animated animal through it, then implement
    terrain, forest growth/state buffers, shadow maps, weather, post-processing and the UI.
    Resolve window/swapchain ownership explicitly rather than assuming an OpenTK GL context can
    serve as a Metal surface.

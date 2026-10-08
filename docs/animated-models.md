@@ -17,6 +17,11 @@ csak a BLEND primitíveket rendezi hátulról előre. Az árnyékmenet nem rende
 hívás frissíti, ezért futásidejű anyagváltáskor is helyes. A rendezés továbbra is példányon belüli;
 egymást metsző átlátszó példányokhoz jelenetszintű megoldás szükséges.
 
+A sorrendet most a backendfüggetlen `ModelDrawOrder` készíti. Az `AnimatedModelRenderer` facade
+az `IModelRenderBackend` felé explicit frame-adatot küld; az OpenGL a default megvalósítás az
+`OpenGl/` alkönyvtárban. Új backend a CPU-assetek és animáció módosítása nélkül injektálható.
+A batch állapotot a backend kezeli, a GLSL az `OpenGlModelShaders` forrásban található.
+
 
 A felhasználó `realistic_animated_elk_3d_model.glb` fájlja változatlan másolatként bekerült az `Assets/Wildlife/elk.glb` állományba. Az eredeti Downloads-beli fájl érintetlen maradt.
 
