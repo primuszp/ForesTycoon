@@ -174,6 +174,7 @@ namespace ForesTycoon.TreeModels
                     }
                 ringRadius = smoothed;
             }
+            bool tiered = form == CrownForm.Spruce && ringCount > 3;
             for (int ring = 0; ring < ringCount; ring++)
                 for (int side = 0; side < sides; side++)
                 {
@@ -184,6 +185,19 @@ namespace ForesTycoon.TreeModels
                     float gap = Math.Min(t - (ring == 0 ? 0 : rings[ring - 1].T),
                         (ring == ringCount - 1 ? 1 : rings[ring + 1].T) - t);
                     float dz = gap * 0.12f * MathF.Sin(angle * 3 + t * 4 + seed % 23);
+                    if (tiered)
+                    {
+                        // Whorls are not stacked copies: each ring turns a little, the branch tips of a
+                        // skirt reach unevenly and droop (more on the lower, heavier whorls), and the top
+                        // shoulder narrows into a slim leader.
+                        angle += 0.25f * (2 * ForestTreeVariation.Unit(seed, 820 + ring) - 1);
+                        if (rings[ring].Scale >= 1 && ring > 0)
+                        {
+                            r *= 1 + 0.1f * (2 * ForestTreeVariation.Unit(seed, 840 + ring * 16 + side) - 1);
+                            dz -= gap * 0.3f * (1 - t);
+                        }
+                        if (ring == ringCount - 1) r *= 0.7f;
+                    }
                     maxRadius = Math.Max(maxRadius, r);
                     points[1 + ring * sides + side] = new(MathF.Cos(angle) * r, MathF.Sin(angle) * r, bottom + (t + dz) * crownHeight);
                 }

@@ -147,5 +147,8 @@ Megvalósítva a 2.1–2.4 pont és a fajprofilok (2.5) első köre:
 - Új diagnosztika: `dotnet run --project ForesTycoon -- --tree-gallery <név>` →
   `artifacts/tree-gallery/<név>-{near,medium,far}.png` (8 faj × 3 életfázis).
 
-Hátravan: 2.3 (ágak bevezetése a lebenyekbe), 2.6 (luc aszimmetria, lecsüngés, csúcshajtás),
-2.7 (arányhangolás), a mogyoró csúcsának finomítása.
+2.6 (tűlevelűek) is kész a `DendroCrownMesh` örvemeleteiben, változatlan háromszögkerettel:
+emeletenkénti elfordulás, egyenetlen és lecsüngő szoknyák (az alsó emeleteken erősebben),
+keskeny csúcshajtás. A luc mellett a fiatal erdeifenyő, a vörös- és a jegenyefenyő is ezt kapja.
+
+Hátravan: 2.3 (ágak bevezetése a lebenyekbe), 2.7 (arányhangolás), a mogyoró csúcsának finomítása.
