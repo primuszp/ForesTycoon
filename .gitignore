@@ -24,3 +24,6 @@ images/current_state.gif
 
 # Dear ImGui runtime layout
 imgui.ini
+
+# Purchased model packs (licence forbids redistribution; repo is public)
+ForesTycoon/Assets/Licensed/

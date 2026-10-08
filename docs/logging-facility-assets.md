@@ -41,9 +41,11 @@ beágyazott szerzői/licencadat nélkül). Áttekintés: 2026-10-08. Áttekintő
 5. **Holtfa és vizes élőhely kellékek** a pusztulás és a pangóvíz megjelenítéséhez (a kezelőnézet diagnózisával összhangban).
 6. Később: iparvasút.
 
-## Licenc – a repóba kerülés előtt tisztázandó
+## Licenc – döntés: nem kerül a repóba
 
 A GitHub-repó **nyilvános**. A csomagban nincs licencfájl; a legtöbb megvásárolt modellcsomag licence megengedi a
 felhasználást egy kiadott játékban, de **a forrásfájlok nyilvános továbbterjesztését nem**. Amíg ez nincs
 tisztázva, a modelleket nem tesszük a repóba: a játék a helyi könyvtárból (vagy egy nem verziókezelt
 `Assets/Licensed/` mappából) töltheti be őket, hiányuk esetén a mostani modellekre esik vissza.
+
+**Döntés (2026-10-08):** a modellek nem kerülnek a repóba. Helyük a git által figyelmen kívül hagyott `ForesTycoon/Assets/Licensed/` mappa; a játék onnan tölti be őket, hiányukban a mostani modelleket használja.
