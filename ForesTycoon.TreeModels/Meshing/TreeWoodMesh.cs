@@ -37,8 +37,8 @@ namespace ForesTycoon.TreeModels
                 // Fraction of a first-order limb shown below/inside the crown surface.
                 ForestSpecies.Oak => 0.50f, ForestSpecies.Beech => 0.45f, ForestSpecies.Birch => 0.35f, _ => 0.25f
             };
-            // In a lobed crown the limbs run on into the foliage masses they carry.
-            if (lobed) exposure = Math.Max(exposure, 0.8f);
+            // In a lobed crown the limbs run on into the foliage masses they carry, stopping short of the surface.
+            if (lobed) exposure = Math.Max(exposure, 0.65f);
             if (leafed && form.Foliage < 1) exposure = Math.Min(1, exposure * 1.7f);
             int limbBudget = lod == ForestLod.Near ? (spec.Species == ForestSpecies.Oak || form.Shrub ? 8 : 6) + (lobed ? 2 : 0) : 3;
 

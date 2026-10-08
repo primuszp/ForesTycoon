@@ -129,7 +129,7 @@ public class DendroTreeGeneratorTests
         Vertex[] Build(float yaw) => DendroTreeGenerator.Generate(ForestSpecies.Oak, 42,
             TreeLifeStage.Mature, 1, size, yaw, ForestLod.Near).Crown;
         var source = Build(0); var rotated = Build(1.2f);
-        Assert.Equal(160 * 3, source.Length);
+        Assert.Equal((2 * 96 - 4) * 3, source.Length); // one closed 96-point lattice
         Assert.Equal(source.Length, rotated.Length);
         float c = MathF.Cos(1.2f), s = MathF.Sin(1.2f);
         for (int i = 0; i < source.Length; i++)

@@ -161,3 +161,16 @@ megmarad. A lebenyes korona legkülső pontja igazodik a koronasugárhoz, így a
 (minden LOD-on azonos, a sziluett-egyezés megmarad). A szimuláció koronaméretei nem változtak.
 
 Hátravan: a mogyoró csúcsának finomítása; fajonkénti arány-ellenőrzés referenciafotókkal.
+
+### 2026-10-08 – gömbölyű, egybefüggő korona (Tree3D „geometric” mód mintájára)
+
+A külön ikoszaéder-lebenyek túl szögletesek voltak. A lebenyek most **metaballok**: sima uniójuk
+szintfelületét egy **Fibonacci-gömbrács** sugarai mentén mintavételezzük (a korona középpontjából,
+a korona méretére nyújtva), és a rács konvex-burok háromszögelése adja az egyetlen zárt felületet
+(Tree3D: Fibonacci Lattice + Delaunay/Convex Hull, a csomósságot a lebenyek adják).
+
+- Rácsméret: Near 96 pont (188 △), Medium 40 (76 △), Far 17 (pontosan 30 △); kis koronák és cserjék kisebb rácsot kapnak.
+  A háromszögelés rácsméretenként egyszer készül és gyorsítótárban marad.
+- Metaball-esés (1 − (r/1,3)²)², a küszöb úgy választva, hogy egy magányos lebeny felülete a saját sugarán legyen.
+- Sima normálok (20% facetta-fény), lebenyenkénti tónus a legerősebben ható lebenyből, enyhe (≈3%) tüskésség.
+- A vázágak az ívhossz 65%-áig futnak, hogy ne döfjék át a zárt felületet.

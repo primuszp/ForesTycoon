@@ -33,15 +33,15 @@ namespace ForesTycoon.TreeModels
         internal static Profile? For(CrownForm form) => form switch
         {
             // Open-grown oaks: few, large, irregular masses, flat cloud base, rough outline.
-            CrownForm.Oak => new(5, 7, 8, 0.26f, 0.42f, 0.56f, 0.80f, 0.75f, 0.24f, 0.80f, 0.52f, 0.12f),
+            CrownForm.Oak => new(5, 7, 8, 0.26f, 0.42f, 0.56f, 0.80f, 0.75f, 0.24f, 0.88f, 0.52f, 0.12f),
             // Beech: flat, layered sprays filling a smooth dome.
-            CrownForm.Beech => new(5, 7, 8, 0.32f, 0.44f, 0.56f, 0.68f, 0.70f, 0.20f, 0.84f, 0.48f, 0.07f, 3),
+            CrownForm.Beech => new(5, 7, 8, 0.32f, 0.44f, 0.56f, 0.68f, 0.70f, 0.20f, 0.90f, 0.48f, 0.07f, 3),
             // Birch: narrow, loose crown; lower masses hang (weeping fringe).
             CrownForm.Birch => new(4, 6, 7, 0.24f, 0.36f, 0.48f, 1.00f, 1.40f, 0.20f, 0.82f, 0.46f, 0.08f),
             // Sycamore: dense, rounded masses.
-            CrownForm.Maple => new(5, 7, 7, 0.28f, 0.42f, 0.56f, 0.90f, 0.80f, 0.22f, 0.80f, 0.46f, 0.08f),
+            CrownForm.Maple => new(5, 7, 7, 0.28f, 0.42f, 0.56f, 0.90f, 0.80f, 0.22f, 0.88f, 0.46f, 0.08f),
             // Ash: open, sparse crown with smaller, more separated masses.
-            CrownForm.Ash => new(5, 6, 7, 0.22f, 0.36f, 0.48f, 0.85f, 0.78f, 0.22f, 0.82f, 0.54f, 0.12f),
+            CrownForm.Ash => new(5, 6, 7, 0.22f, 0.36f, 0.48f, 0.85f, 0.78f, 0.22f, 0.88f, 0.54f, 0.12f),
             // Mature Scots pine: flat cushions high on the bole.
             CrownForm.Pine => new(4, 5, 6, 0.30f, 0.40f, 0.50f, 0.62f, 0.70f, 0.34f, 0.82f, 0.46f, 0.07f),
             // Shrubs: hazel opens into a vase (masses high and wide), hawthorn is a low, dense dome.
@@ -76,201 +76,50 @@ namespace ForesTycoon.TreeModels
             // vertical/horizontal ratio into the normalised frame.
             float aspect = form.CrownRadius / crownHeight;
             var lobes = Cluster(leaves, requested, profile, spec.Seed, aspect);
-            int sides = DendroCrownMesh.Sides(form.CrownRadius, lod, lod == ForestLod.Far ? 5 : 6,
-                lod == ForestLod.Near ? 12 : lod == ForestLod.Medium ? 9 : 5);
-            int rings = lod == ForestLod.Near ? 6 : lod == ForestLod.Medium ? 4 : 3;
-            // Every LOD derives from the same closed masses: icosahedra fitted to each lobe. Near draws
-            // them, Medium draws octahedra of the same masses, Far samples their outer envelope.
-            var (plain, jittered) = Masses(lobes, Ico, 1, 1);
-            // Bounds ignore the facet noise, so every LOD maps the same masses onto the crown size.
-            float minZ = float.MaxValue, maxZ = float.MinValue, maxR = 0, noisyR = 0;
-            foreach (var p in plain) { minZ = Math.Min(minZ, p.Z); maxZ = Math.Max(maxZ, p.Z); maxR = Math.Max(maxR, p.Xy.Length); }
-            foreach (var p in jittered) noisyR = Math.Max(noisyR, p.Xy.Length);
-            Vector3[] points;
-            float[] tints;
-            var indices = new List<int>();
-            // Masses only pay off where they span a few pixels; tiny crowns use the envelope.
-            bool massive = DendroCrownMesh.Sides(form.CrownRadius, ForestLod.Near, 6, 12) >= 8;
-            bool faceted = massive && lod != ForestLod.Far;
-            float fill = 1;
-            if (lod == ForestLod.Far)
-            {
-                // Three coarse masses (ten-triangle bipyramids) merged from the close ones keep the
-                // lumpy outline down to a few pixels.
-                var merged = Merge(lobes, 3);
-                (_, points) = Masses(merged, Bipyramid, 1.21f, 1);
-                minZ = float.MaxValue; maxZ = float.MinValue;
-                foreach (var p in points) { minZ = Math.Min(minZ, p.Z); maxZ = Math.Max(maxZ, p.Z); }
-                maxR = noisyR;
-                tints = new float[points.Length];
-                for (int l = 0; l < merged.Count; l++)
-                    foreach (int index in BipyramidFaces) indices.Add(l * Bipyramid.Length + index);
-                faceted = true;
-            }
-            else if (faceted)
-            {
-                // The close model retains individual, overlapping closed foliage masses.
-                // Twenty triangles per mass reveal the valleys which a single shell hides; the medium
-                // model keeps the same masses with eight. An inscribed octahedron covers less than an
-                // icosahedron, so it is drawn a little larger.
-                var shape = lod == ForestLod.Near ? Ico : Octa;
-                var faces = lod == ForestLod.Near ? IcoFaces : OctaFaces;
-                if (lod != ForestLod.Near)
-                {
-                    (_, points) = Masses(lobes, Octa, 1.2f, 1.08f);
-                    // Grown octahedra may pass the icosahedra's height range; keep them inside the crown.
-                    minZ = float.MaxValue; maxZ = float.MinValue;
-                    foreach (var p in points) { minZ = Math.Min(minZ, p.Z); maxZ = Math.Max(maxZ, p.Z); }
-                }
-                else points = jittered;
-                // The noisy outline of the close masses, not the smooth one, reaches the crown radius.
-                maxR = noisyR;
-                tints = new float[points.Length];
-                for (int l = 0; l < lobes.Count; l++)
-                {
-                    for (int v = 0; v < shape.Length; v++) tints[l * shape.Length + v] = lobes[l].Tint;
-                    foreach (int index in faces) indices.Add(l * shape.Length + index);
-                }
-            }
-            else
-            {
-                // Outer envelope of the same masses, sampled ring by ring: a horizontal ray from the
-                // stem axis at each ring height. Tall, narrow crowns keep their outline, which a
-                // single radial origin cannot do.
-                int perLobe = IcoFaces.Length / 3;
-                var planes = new Vector4[lobes.Count * perLobe];
-                for (int f = 0; f < planes.Length; f++)
-                {
-                    int l = f / perLobe, face = f % perLobe * 3;
-                    Vector3 a = plain[l * Ico.Length + IcoFaces[face]], b = plain[l * Ico.Length + IcoFaces[face + 1]],
-                        c = plain[l * Ico.Length + IcoFaces[face + 2]];
-                    Vector3 n = Vector3.Cross(b - a, c - a).Normalized();
-                    planes[f] = new(n, Vector3.Dot(n, a));
-                }
-                float bottomZ = minZ, topZ = maxZ;
-                points = new Vector3[2 + sides * rings];
-                points[0] = new(0, 0, bottomZ); points[^1] = new(0, 0, topZ);
-                // Sphere-like ring spacing: denser near the base and the top, giving rounded caps.
-                float RingZ(int ring) => ring < 0 ? bottomZ : ring >= rings ? topZ
-                    : bottomZ + (topZ - bottomZ) * (1 - MathF.Cos(MathF.PI * (ring + 1) / (rings + 1))) * 0.5f;
-                for (int ring = 0; ring < rings; ring++)
-                {
-                    float z = RingZ(ring);
-                    // A ring stands for the band half-way to its neighbours: take the outline over the
-                    // whole band, so a ring that falls between two tiers of masses does not pinch the crown.
-                    float low = (RingZ(ring - 1) + z) * 0.5f, high = (z + RingZ(ring + 1)) * 0.5f;
-                    for (int side = 0; side < sides; side++)
-                    {
-                        float angle = spec.Yaw + MathF.Tau * side / sides;
-                        var direction = new Vector2(MathF.Cos(angle), MathF.Sin(angle));
-                        float reach = 0;
-                        const int Band = 5;
-                        // Power mean: close to the band maximum without letting one mass dominate.
-                        for (int b = 0; b < Band; b++) reach = Math.Max(reach, Reach(low + (high - low) * (b + 0.5f) / Band, direction));
 
-                        var p = direction * reach;
-                        points[At(ring, side)] = new(p.X, p.Y, z);
-                    }
-                    // Seen from any side, the close masses stand all round the stem: pull each ring half-way
-                    // towards its widest radius, so the outline does not narrow between two ring vertices.
-                    float widest = 0;
-                    for (int side = 0; side < sides; side++) widest = Math.Max(widest, points[At(ring, side)].Xy.Length);
-                    for (int side = 0; side < sides; side++)
-                    {
-                        var p = points[At(ring, side)];
-                        float r = p.Xy.Length, rounded = r + (widest - r) * 0.5f;
-                        if (r > 1e-6f) points[At(ring, side)] = new(p.X * rounded / r, p.Y * rounded / r, p.Z);
-                    }
-                }
-                tints = new float[points.Length];
-                // Few rings cut the corners of the true outline: match the side-view area of a finely
-                // sampled profile, so distant trees neither shrink nor swell at the LOD switch. The
-                // side-view width of a slice, averaged over view directions, is its perimeter / pi.
-                float coarse = 0, previousZ = bottomZ, previousW = 0;
-                var ringPoints = new Vector2[sides];
-                for (int ring = 0; ring <= rings; ring++)
-                {
-                    float z = ring < rings ? points[At(ring, 0)].Z : topZ, w = 0;
-                    if (ring < rings)
-                    {
-                        for (int side = 0; side < sides; side++) ringPoints[side] = points[At(ring, side)].Xy;
-                        w = Perimeter(ringPoints) / MathF.PI;
-                    }
-                    coarse += (w + previousW) * 0.5f * (z - previousZ);
-                    previousZ = z; previousW = w;
-                }
-                float fine = 0;
-                const int Samples = 24, Directions = 16;
-                var slice = new Vector2[Directions];
-                for (int i = 0; i < Samples; i++)
-                {
-                    float z = bottomZ + (topZ - bottomZ) * (i + 0.5f) / Samples;
-                    for (int j = 0; j < Directions; j++)
-                    {
-                        var direction = new Vector2(MathF.Cos(MathF.Tau * j / Directions), MathF.Sin(MathF.Tau * j / Directions));
-                        slice[j] = direction * Reach(z, direction);
-                    }
-                    fine += Perimeter(slice) / MathF.PI * (topZ - bottomZ) / Samples;
-                }
-                static float Perimeter(Vector2[] polygon)
-                {
-                    float length = 0;
-                    for (int i = 0; i < polygon.Length; i++) length += (polygon[(i + 1) % polygon.Length] - polygon[i]).Length;
-                    return length;
-                }
-                fill = coarse > 0 ? Math.Clamp(fine / coarse, 0.7f, 1.6f) : 1;
-                for (int side = 0; side < sides; side++) Face(0, At(0, side + 1), At(0, side));
-                for (int ring = 0; ring < rings - 1; ring++)
-                for (int side = 0; side < sides; side++)
-                {
-                    int a = At(ring, side), b = At(ring, side + 1), c = At(ring + 1, side + 1), d = At(ring + 1, side);
-                    if ((points[a] - points[c]).LengthSquared <= (points[b] - points[d]).LengthSquared)
-                    { Face(a, b, c); Face(a, c, d); }
-                    else { Face(a, b, d); Face(b, c, d); }
-                }
-                for (int side = 0; side < sides; side++) Face(At(rings - 1, side), At(rings - 1, side + 1), points.Length - 1);
-
-                // Farthest exit of a horizontal ray from the stem axis at height z through any mass.
-                float Reach(float z, Vector2 direction)
-                {
-                    float reach = 0.02f;
-                    for (int l = 0; l < lobes.Count; l++)
-                    {
-                        float enter = float.MinValue, exit = float.MaxValue;
-                        for (int f = l * perLobe; f < (l + 1) * perLobe && enter <= exit; f++)
-                        {
-                            var plane = planes[f];
-                            float facing = plane.X * direction.X + plane.Y * direction.Y;
-                            float room = plane.W - plane.Z * z;
-                            if (MathF.Abs(facing) < 1e-7f) { if (room < 0) exit = float.MinValue; continue; }
-                            float t = room / facing;
-                            if (facing > 0) exit = Math.Min(exit, t); else enter = Math.Max(enter, t);
-                        }
-                        if (enter <= exit && exit > 0) reach = Math.Max(reach, exit);
-                    }
-                    return reach;
-                }
+            // One continuous, rounded canopy (Tree3D-style "geometric" crown): the lobes are metaballs
+            // whose smooth union is sampled along the rays of a Fibonacci sphere lattice, and the
+            // lattice's convex-hull triangulation becomes the crown surface. Every LOD samples the same
+            // field, only with fewer rays, so silhouettes agree.
+            int count = Lattice(form.CrownRadius, lod, form.Shrub);
+            var (directions, triangles) = Sphere(count);
+            // Work in an isotropic frame (z in crown radii), so the metaballs blend like round masses.
+            var iso = new Vector3(1, 1, 1 / aspect);
+            var centres = new Vector3[lobes.Count]; var radii = new Vector3[lobes.Count];
+            Vector3 middle = Vector3.Zero; float weight = 0;
+            for (int l = 0; l < lobes.Count; l++)
+            {
+                centres[l] = lobes[l].Centre * iso; radii[l] = lobes[l].Radius * iso;
+                float w = radii[l].X * radii[l].Y * radii[l].Z; middle += centres[l] * w; weight += w;
             }
-            // Masses are scaled so their outermost point meets the crown radius; their average outline then
-            // falls short of it. Lift it towards the simulated crown size (uniformly, so every LOD agrees).
-            const float Fullness = 1.12f;
-            float thin = (0.72f + 0.28f * form.Foliage) * Fullness;
+            middle /= weight;
+            var stretch = new Vector3(1, 1, 0.5f / aspect);
+            float cos = MathF.Cos(spec.Yaw), sin = MathF.Sin(spec.Yaw);
+            var points = new Vector3[count]; var tints = new float[count];
+            for (int i = 0; i < count; i++)
+            {
+                // The lattice turns with the tree, so its facets differ from tree to tree and the crown
+                // rotates exactly with its skeleton.
+                var d = directions[i];
+                d = new(d.X * cos - d.Y * sin, d.X * sin + d.Y * cos, d.Z);
+                var ray = d * stretch;
+                float t = Surface(ray, out int owner);
+                // A touch of spikiness keeps the low-poly character without breaking the round mass.
+                t *= 1 + profile.Jitter * 0.3f * (2 * ForestTreeVariation.Unit(spec.Seed, 9100 + i) - 1);
+                var q = middle + ray * t;
+                points[i] = new(q.X, q.Y, q.Z * aspect);
+                tints[i] = lobes[owner].Tint;
+            }
+
+            float minZ = float.MaxValue, maxZ = float.MinValue, maxR = 0;
+            foreach (var p in points) { minZ = Math.Min(minZ, p.Z); maxZ = Math.Max(maxZ, p.Z); maxR = Math.Max(maxR, p.Xy.Length); }
+            float thin = 0.72f + 0.28f * form.Foliage;
             float topLoss = form.Dieback > 0.45f && spec.Phase >= TreeLifePhase.Old
                 ? Math.Min(0.25f, (form.Dieback - 0.3f) * 0.5f) : 0;
-            // Compensate the coarser inscribed outline, without adding lobe geometry.
-            float inscribed = faceted ? 1 : MathF.Sqrt(sides * MathF.Sin(MathF.PI / sides) / MathF.PI);
-            float xy = form.CrownRadius * thin / maxR / inscribed;
-            if (!faceted)
-            {
-                // The lumpy close crown is wider for its area than any smooth envelope. Blend (weighted
-                // geometric mean) between matching its width and matching its side-view area, so
-                // neither visibly jumps at the LOD switch; the outline width is the more visible cue.
-                float envelope = 0;
-                foreach (var p in points) envelope = Math.Max(envelope, p.Xy.Length);
-                xy = form.CrownRadius * thin * MathF.Pow(1 / (envelope * inscribed), 0.5f) * MathF.Pow(fill / maxR, 0.5f);
-            }
-            var shades = new float[points.Length];
-            for (int i = 0; i < points.Length; i++)
+            // An inscribed lattice polytope covers less than the smooth surface; coarser lattices more so.
+            float xy = form.CrownRadius * thin / maxR * Coverage(count);
+            var shades = new float[count];
+            for (int i = 0; i < count; i++)
             {
                 float t = Math.Clamp((points[i].Z - minZ) / (maxZ - minZ), 0, 1);
                 float exposure = Math.Clamp(points[i].Xy.Length / maxR, 0, 1);
@@ -279,24 +128,23 @@ namespace ForesTycoon.TreeModels
                 points[i] = form.Warp.Apply(new(points[i].X * xy, points[i].Y * xy,
                     form.CrownBase + t * crownHeight * (1 - topLoss)));
             }
-            var normals = new Vector3[points.Length];
-            for (int i = 0; i < indices.Count; i += 3)
+            var normals = new Vector3[count];
+            for (int i = 0; i < triangles.Length; i += 3)
             {
-                int a = indices[i], b = indices[i + 1], c = indices[i + 2];
+                int a = triangles[i], b = triangles[i + 1], c = triangles[i + 2];
                 Vector3 n = Vector3.Cross(points[b] - points[a], points[c] - points[a]);
                 normals[a] += n; normals[b] += n; normals[c] += n;
             }
-            for (int i = 0; i < normals.Length; i++) normals[i] = normals[i].Normalized();
-            // Faceted masses keep part of the face normal, so each facet catches the light on its own.
-            float facet = faceted ? 0.35f : 0.08f;
-            var result = new Vertex[indices.Count];
+            for (int i = 0; i < count; i++) normals[i] = normals[i].Normalized();
+            var result = new Vertex[triangles.Length];
             for (int i = 0; i < result.Length; i += 3)
             {
-                Vector3 face = Vector3.Cross(points[indices[i + 1]] - points[indices[i]], points[indices[i + 2]] - points[indices[i]]).Normalized();
+                Vector3 face = Vector3.Cross(points[triangles[i + 1]] - points[triangles[i]], points[triangles[i + 2]] - points[triangles[i]]).Normalized();
                 for (int j = 0; j < 3; j++)
                 {
-                    int v = indices[i + j];
-                    var normal = ((1 - facet) * normals[v] + facet * face).Normalized();
+                    int v = triangles[i + j];
+                    // Mostly smooth shading: a rounded mass, with only a hint of its facets.
+                    var normal = (0.8f * normals[v] + 0.2f * face).Normalized();
                     if (Vector3.Dot(normal, face) < 0.15f) normal = face;
                     // Sky light from above, shadowed undersides. Zero mean over a closed surface,
                     // so the area-weighted crown colour stays the same at every LOD.
@@ -305,109 +153,95 @@ namespace ForesTycoon.TreeModels
             }
             return result;
 
-            (Vector3[] Plain, Vector3[] Jittered) Masses(List<Lobe> lobes, Vector3[] shape, float grow, float growZ)
+            // Outermost crossing of the metaball iso-surface along a ray from the crown's centre.
+            float Surface(Vector3 ray, out int owner)
             {
-                var smooth = new Vector3[lobes.Count * shape.Length];
-                var noisy = new Vector3[smooth.Length];
-                float cos = MathF.Cos(spec.Yaw), sin = MathF.Sin(spec.Yaw);
-                float tiltCos = MathF.Cos(0.37f), tiltSin = MathF.Sin(0.37f);
-                for (int l = 0; l < lobes.Count; l++)
+                const float Far = 3f, Step = 0.06f;
+                owner = 0;
+                float t = Far;
+                while (t > 0 && Field(middle + ray * t, out _) < Threshold) t -= Step;
+                if (t <= 0) { Field(middle, out owner); return 0.05f; }
+                float inside = t, outside = Math.Min(Far, t + Step);
+                for (int k = 0; k < 10; k++)
                 {
-                    var lobe = lobes[l];
-                    // Different orientations avoid repeated horizontal polygon edges.
-                    float turn = l * 12 * 0.137f;
-                    float ct = MathF.Cos(turn), st = MathF.Sin(turn);
-                    for (int v = 0; v < shape.Length; v++)
-                    {
-                        Vector3 d = shape[v];
-                        d = new(d.X, d.Y * tiltCos - d.Z * tiltSin, d.Y * tiltSin + d.Z * tiltCos);
-                        d = new(d.X * ct - d.Y * st, d.X * st + d.Y * ct, d.Z);
-                        d = new(d.X * cos - d.Y * sin, d.X * sin + d.Y * cos, d.Z);
-                        var r = lobe.Radius * new Vector3(grow, grow, growZ);
-                        if (d.Z < 0) r.Z *= lobe.Bottom;
-                        // Faceted low-poly character: a little horizontal noise per vertex. Heights stay
-                        // exact, so the crown top still meets the simulated tree height.
-                        float noise = 1 + profile.Jitter * (2 * ForestTreeVariation.Unit(spec.Seed, 9100 + l * 16 + v) - 1);
-                        smooth[l * shape.Length + v] = lobe.Centre + d * r;
-                        noisy[l * shape.Length + v] = lobe.Centre + d * r * new Vector3(noise, noise, 1);
-                    }
+                    float m = (inside + outside) * 0.5f;
+                    if (Field(middle + ray * m, out _) >= Threshold) inside = m; else outside = m;
                 }
-                return (smooth, noisy);
+                Field(middle + ray * inside, out owner);
+                return inside;
             }
-            int At(int ring, int side) => 1 + ring * sides + side % sides;
-            void Face(int a, int b, int c)
+
+            float Field(Vector3 p, out int strongest)
             {
-                indices.Add(a); indices.Add(b); indices.Add(c);
+                float sum = 0, best = 0; strongest = 0;
+                for (int l = 0; l < centres.Length; l++)
+                {
+                    var q = (p - centres[l]) / radii[l];
+                    if (q.Z < 0) q.Z /= lobes[l].Bottom;
+                    float r2 = q.LengthSquared / (Influence * Influence);
+                    if (r2 >= 1) continue;
+                    float f = (1 - r2) * (1 - r2);
+                    sum += f;
+                    if (f > best) { best = f; strongest = l; }
+                }
+                return sum;
             }
         }
 
-        private static readonly Vector3[] Ico = BuildIco();
-        private static readonly int[] IcoFaces = { 0,11,5, 0,5,1, 0,1,7, 0,7,10, 0,10,11, 1,5,9, 5,11,4, 11,10,2,
-            10,7,6, 7,1,8, 3,9,4, 3,4,2, 3,2,6, 3,6,8, 3,8,9, 4,9,5, 2,4,11, 6,2,10, 8,6,7, 9,8,1 };
+        // Metaball falloff (1 - (r/R)^2)^2 with influence R = 1.3 lobe radii; a lone lobe's surface
+        // then sits exactly on its own radius, and neighbouring lobes merge smoothly.
+        private const float Influence = 1.3f;
+        private static readonly float Threshold = (1 - 1 / (Influence * Influence)) * (1 - 1 / (Influence * Influence));
 
-        private static readonly Vector3[] Bipyramid =
+        /// <summary>Lattice points per LOD; a closed lattice of n points has 2n - 4 triangles (Far: exactly 30).</summary>
+        internal static int Lattice(float crownRadius, ForestLod lod, bool shrub = false)
         {
-            new(1, 0, 0), new(MathF.Cos(MathF.Tau / 5), MathF.Sin(MathF.Tau / 5), 0), new(MathF.Cos(2 * MathF.Tau / 5), MathF.Sin(2 * MathF.Tau / 5), 0),
-            new(MathF.Cos(3 * MathF.Tau / 5), MathF.Sin(3 * MathF.Tau / 5), 0), new(MathF.Cos(4 * MathF.Tau / 5), MathF.Sin(4 * MathF.Tau / 5), 0),
-            new(0, 0, 1), new(0, 0, -1)
-        };
-        private static readonly int[] BipyramidFaces = { 0,1,5, 1,2,5, 2,3,5, 3,4,5, 4,0,5, 1,0,6, 2,1,6, 3,2,6, 4,3,6, 0,4,6 };
-
-        // Deterministic merge of the masses into a few larger ones: farthest-point seeds, nearest
-        // assignment, and an enclosing (not bounding) ellipsoid per group.
-        private static List<Lobe> Merge(List<Lobe> lobes, int count)
-        {
-            count = Math.Min(count, lobes.Count);
-            var seeds = new List<Vector3> { lobes[0].Centre };
-            while (seeds.Count < count)
+            // Crowns only a few pixels wide do not need the full lattice; shrubs stay cheap.
+            bool large = !shrub && DendroCrownMesh.Sides(crownRadius, ForestLod.Near, 6, 12) >= 8;
+            return lod switch
             {
-                Vector3 best = default; float far = -1;
-                foreach (var lobe in lobes)
-                {
-                    float nearest = float.MaxValue;
-                    foreach (var seed in seeds) nearest = Math.Min(nearest, (lobe.Centre - seed).LengthSquared);
-                    if (nearest > far) { far = nearest; best = lobe.Centre; }
-                }
-                seeds.Add(best);
-            }
-            var groups = new List<Lobe>[count];
-            for (int g = 0; g < count; g++) groups[g] = new();
-            foreach (var lobe in lobes)
-            {
-                int winner = 0;
-                for (int g = 1; g < count; g++)
-                    if ((lobe.Centre - seeds[g]).LengthSquared < (lobe.Centre - seeds[winner]).LengthSquared) winner = g;
-                groups[winner].Add(lobe);
-            }
-            var merged = new List<Lobe>(count);
-            foreach (var group in groups)
-            {
-                if (group.Count == 0) continue;
-                Vector3 centre = Vector3.Zero; float weight = 0;
-                foreach (var lobe in group) { float w = lobe.Radius.X * lobe.Radius.Y * lobe.Radius.Z; centre += lobe.Centre * w; weight += w; }
-                centre /= weight;
-                float horizontal = 0, top = centre.Z, bottom = centre.Z;
-                foreach (var lobe in group)
-                {
-                    horizontal = Math.Max(horizontal, (lobe.Centre.Xy - centre.Xy).Length * 0.6f + lobe.Radius.X);
-                    top = Math.Max(top, lobe.Centre.Z + lobe.Radius.Z);
-                    bottom = Math.Min(bottom, lobe.Centre.Z - lobe.Radius.Z * lobe.Bottom);
-                }
-                merged.Add(new(new(centre.X, centre.Y, (top + bottom) * 0.5f), new(horizontal, horizontal, (top - bottom) * 0.5f), 1, 0));
-            }
-            return merged;
+                ForestLod.Near => large ? 96 : shrub ? 48 : 40,
+                ForestLod.Medium => large ? 40 : 24,
+                _ => 17
+            };
         }
 
-        private static readonly Vector3[] Octa = { new(1, 0, 0), new(-1, 0, 0), new(0, 1, 0), new(0, -1, 0), new(0, 0, 1), new(0, 0, -1) };
-        private static readonly int[] OctaFaces = { 0,2,4, 2,1,4, 1,3,4, 3,0,4, 2,0,5, 1,2,5, 3,1,5, 0,3,5 };
+        private static float Coverage(int count) => count >= 96 ? 1.0f : count >= 40 ? 1.03f : count >= 24 ? 1.05f : 1.08f; // 48 → 1.03
 
-        private static Vector3[] BuildIco()
+        private static readonly Dictionary<int, (Vector3[], int[])> Spheres = new();
+
+        /// <summary>Fibonacci sphere lattice and its convex-hull triangulation (outward winding), cached per size.</summary>
+        internal static (Vector3[] Directions, int[] Triangles) Sphere(int count)
         {
-            float g = (1 + MathF.Sqrt(5)) / 2;
-            Vector3[] ico = { new(-1,g,0), new(1,g,0), new(-1,-g,0), new(1,-g,0), new(0,-1,g), new(0,1,g),
-                new(0,-1,-g), new(0,1,-g), new(g,0,-1), new(g,0,1), new(-g,0,-1), new(-g,0,1) };
-            for (int i = 0; i < ico.Length; i++) ico[i] = ico[i].Normalized();
-            return ico;
+            lock (Spheres)
+            {
+                if (Spheres.TryGetValue(count, out var cached)) return cached;
+                var d = new Vector3[count];
+                float golden = MathF.PI * (3 - MathF.Sqrt(5));
+                for (int i = 0; i < count; i++)
+                {
+                    float z = 1 - (2 * i + 1f) / count, r = MathF.Sqrt(Math.Max(0, 1 - z * z));
+                    d[i] = new(MathF.Cos(i * golden) * r, MathF.Sin(i * golden) * r, z);
+                }
+                // Points on a sphere: their convex hull is their spherical Delaunay triangulation. Brute
+                // force is fine for under a hundred points, once per lattice size.
+                var faces = new List<int>();
+                for (int a = 0; a < count; a++)
+                    for (int b = a + 1; b < count; b++)
+                        for (int c = b + 1; c < count; c++)
+                        {
+                            var n = Vector3.Cross(d[b] - d[a], d[c] - d[a]);
+                            if (Vector3.Dot(n, d[a]) < 0) n = -n;
+                            bool hull = true;
+                            for (int k = 0; k < count && hull; k++)
+                                if (k != a && k != b && k != c && Vector3.Dot(n, d[k] - d[a]) > 1e-7f) hull = false;
+                            if (!hull) continue;
+                            if (Vector3.Dot(Vector3.Cross(d[b] - d[a], d[c] - d[a]), d[a]) >= 0) { faces.Add(a); faces.Add(b); faces.Add(c); }
+                            else { faces.Add(a); faces.Add(c); faces.Add(b); }
+                        }
+                if (faces.Count != 3 * (2 * count - 4)) throw new InvalidOperationException("Degenerate crown lattice.");
+                return Spheres[count] = (d, faces.ToArray());
+            }
         }
 
         // Farthest-point seeds + a fixed Lloyd iteration count: deterministic spatial
