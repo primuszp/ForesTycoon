@@ -6,6 +6,7 @@ namespace ForesTycoon.Map
     internal sealed partial class TerrainMap
     {
         private Node actualNode;
+        private HashSet<int> elevationEditTiles;
 
         /// <summary>The node under the editing cursor, or -1.</summary>
         public int SelectedNodeId => actualNode?.Id ?? -1;
@@ -20,9 +21,9 @@ namespace ForesTycoon.Map
         /// terület, sugár = radius (0 = csak a középpont), erősség = ismétlésszám.
         /// A hidrológiát csak egyszer, a végén építi újra.
         /// </summary>
-        public void EditElevation(int delta, int radius, int strength)
+        public int[] EditElevation(int delta, int radius, int strength)
         {
-            if (actualNode == null || delta == 0 || radius < 0 || strength <= 0) return;
+            if (actualNode == null || delta == 0 || radius < 0 || strength <= 0) return Array.Empty<int>();
 
             Node center = actualNode;
             int cu = center.U, cv = center.V;
@@ -31,6 +32,8 @@ namespace ForesTycoon.Map
             // eltérés) → a terep mindig érvényes. Az út alatt is alakítható a terep: a
             // befagyasztott vezetőfelület (roadSurfaceW) a helyén marad, a rést a foundation
             // tölti ki — ezért itt NINCS út-freeze.
+            var changedTiles = new HashSet<int>();
+            elevationEditTiles = changedTiles;
             suppressHydrologyRebuild = true;
             try
             {
@@ -48,18 +51,24 @@ namespace ForesTycoon.Map
             finally
             {
                 suppressHydrologyRebuild = false;
-                EditsFlushed?.Invoke();
+                elevationEditTiles = null;
+                if (changedTiles.Count > 0) EditsFlushed?.Invoke();
             }
 
             actualNode = center;
+            if (changedTiles.Count == 0) return Array.Empty<int>();
             RebuildHydrology();
+            int[] result = new int[changedTiles.Count];
+            changedTiles.CopyTo(result);
+            Array.Sort(result);
+            return result;
         }
 
-        public void EditElevationAtNode(int nodeId, int delta, int radius, int strength)
+        public int[] EditElevationAtNode(int nodeId, int delta, int radius, int strength)
         {
-            if (nodeId < 0 || nodeId >= nodes.Length) return;
+            if (nodeId < 0 || nodeId >= nodes.Length) return Array.Empty<int>();
             actualNode = nodes[nodeId];
-            EditElevation(delta, radius, strength);
+            return EditElevation(delta, radius, strength);
         }
 
         private void RaiseOrLowerSelected(int delta)
@@ -82,6 +91,7 @@ namespace ForesTycoon.Map
             foreach (KeyValuePair<int, int> kv in pending)
             {
                 Node nd = data.Nodes[kv.Key];
+                if (nd.W == kv.Value) continue;
                 nd.W = kv.Value;
                 nd.zPos = nd.W * tileSizeM;   // zPos szinkron a hidrológiához
                 changed?.Add(nd);

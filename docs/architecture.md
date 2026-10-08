@@ -123,9 +123,11 @@ A terep két, egyértelműen elkülönített dolog, nem egy osztály:
 | GL | **soha** (csak `OpenTK.Mathematics`) | igen |
 | Függ | Engine, Ecology (ő az `IForestHabitat`) | a `TerrainMap`-től, nem fordítva |
 
-A térképet a render **követi**, nem módosítja: `NodesChanged` (magasságok változtak), `EditsFlushed` (egy
-szerkesztés-köteg kész → GPU feltöltés), `RoadDiagonalsChanged` (új kanyar-átlók), és a `SurfaceVersion`
-(gyorsítótárak érvénytelenítése). A játéklogika (`GameWorld`, `ForestryLogistics`, `VehicleRoadRoute.Create`,
+A térképet a render **követi**, nem módosítja: `NodesChanged` (magasságok változtak),
+`RoadDiagonalsChanged` (új kanyar-átlók), chunkonkénti `SurfaceVersion` (terep/rács), és `PropVersion`
+(erdő/kellékek). A térkép globális `SurfaceVersion` értéke a felszín-osztályozás belső cache-ét kezeli,
+nem érvényteleníti az összes GPU chunkot. Az `EditsFlushed` köteghatár-esemény megmaradt,
+a korábbi teljes rácsbuffer-feltöltés megszűnt. A játéklogika (`GameWorld`, `ForestryLogistics`, `VehicleRoadRoute.Create`,
 `Ecosystem`) a `TerrainMap`-et kapja; `Terrain.Map` adja a jelenet mögötti talajt. Így a terep szabályai
 fejleszthetők és tesztelhetők (`TerrainMapTests`) kijelző nélkül, és a renderer cserélhető.
 

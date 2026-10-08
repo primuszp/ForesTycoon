@@ -2,7 +2,6 @@ using System;
 using System.Drawing;
 using System.IO;
 using OpenTK.Mathematics;
-using OpenTK.Graphics.OpenGL;
 using OpenTK.Windowing.Common;
 using OpenTK.Windowing.Desktop;
 using OpenTK.Windowing.GraphicsLibraryFramework;
@@ -217,19 +216,7 @@ namespace ForesTycoon
             {
                 UpdateFrequency = 0
             },
-            new NativeWindowSettings
-            {
-                Title = "ForesTycoon",
-                ClientSize = new Vector2i(1280, 720),
-                // Asking GLFW for the primary monitor during construction can return
-                // null on macOS background launches. Start windowed; users can maximize safely.
-                WindowState = WindowState.Normal,
-                API = ContextAPI.OpenGL,
-                APIVersion = new Version(3, 3),
-                NumberOfSamples = 4,
-                Profile = ContextProfile.Core,
-                Flags = ContextFlags.ForwardCompatible
-            })
+            RenderBackendSelection.Window.CreateSettings("ForesTycoon", new Vector2i(1280,720), true))
         {
             this.smokeTestFrameLimit = smokeTestFrameLimit;
             this.captureDirectory = captureDirectory;
@@ -241,14 +228,11 @@ namespace ForesTycoon
 
             try
             {
-                Context.MakeCurrent();
-                Context.SwapInterval = 0;   // vsync ki (OpenTK 3 VSync=false megfelelője)
+                RenderBackendSelection.Window.MakeCurrent(this);
+                RenderBackendSelection.Window.SetSwapInterval(this, 0);   // vsync ki (OpenTK 3 VSync=false megfelelője)
 
-                // OpenGL alapbeállítások
-                GL.Enable(EnableCap.DepthTest);
-                GL.Disable(EnableCap.CullFace);         // Mindkét oldal látszódjon (skirt)
-                GL.LineWidth(1.0f);
                 RenderDevice.Initialize();
+                RenderDevice.InitializeFrameState();
 
                 world = new GameWorld(TerrainSettings.Default);
                 interaction = new WorldInteractionController(world);
@@ -277,7 +261,7 @@ namespace ForesTycoon
             float hc = (Height - 1.0f) / zoom;
             float pc = 0.5f / zoom;
 
-            GL.Viewport(0, 0, fbWidth, fbHeight);
+            RenderDevice.SetViewport(fbWidth, fbHeight);
             projection = Matrix4.CreateOrthographicOffCenter(
                 (float)(screenX - pc), (float)(screenX + wc + pc),
                 (float)(screenY - pc), (float)(screenY + hc + pc),
@@ -288,8 +272,7 @@ namespace ForesTycoon
         private void Render()
         {
             bool diorama = postProcess.Begin(world.Graphics, FramebufferWidth, FramebufferHeight);
-            GL.ClearColor(BG_COLOR);
-            GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
+            RenderDevice.Clear(new Vector4(BG_COLOR.R/255f, BG_COLOR.G/255f, BG_COLOR.B/255f, BG_COLOR.A/255f));
             if (diorama)
                 postProcess.DrawBackdrop(world.Graphics, new Vector3(BG_COLOR.R / 255f, BG_COLOR.G / 255f, BG_COLOR.B / 255f));
 
@@ -334,7 +317,7 @@ namespace ForesTycoon
             if (captureDirectory != null)
                 RunCaptureScript();
 
-            SwapBuffers();
+            RenderBackendSelection.Window.Present(this);
         }
 
         private void ValidateSmokeFramebuffer()
@@ -342,8 +325,8 @@ namespace ForesTycoon
             int width = Math.Min(64, FramebufferWidth);
             int height = Math.Min(64, FramebufferHeight);
             byte[] pixels = new byte[width * height * 4];
-            GL.ReadPixels((FramebufferWidth - width) / 2, (FramebufferHeight - height) / 2,
-                width, height, PixelFormat.Rgba, PixelType.UnsignedByte, pixels);
+            RenderDevice.ReadPixels((FramebufferWidth - width) / 2, (FramebufferHeight - height) / 2,
+                width, height, pixels);
 
             for (int i = 0; i < pixels.Length; i += 4)
             {
@@ -370,7 +353,7 @@ namespace ForesTycoon
             try
             {
                 performance.BeginFrame();
-                Context.MakeCurrent();
+                RenderBackendSelection.Window.MakeCurrent(this);
                 frameClock.Tick();
                 RefreshPointerHover();
                 UpdateCameraFrame();
@@ -591,9 +574,7 @@ namespace ForesTycoon
             RunFrame();
             if (smokeTestFrameLimit.HasValue)
             {
-                OpenTK.Graphics.OpenGL.ErrorCode error = GL.GetError();
-                if (error != OpenTK.Graphics.OpenGL.ErrorCode.NoError)
-                    throw new InvalidOperationException($"OpenGL core smoke test failed with {error} at frame {frameIndex}.");
+                RenderDevice.CheckErrors($"Game smoke test at frame {frameIndex}");
                 if (frameIndex >= smokeTestFrameLimit.Value)
                 {
                     Console.WriteLine($"Game smoke: smoothed full frame={performance.FrameMilliseconds:F2}ms, render={performance.RenderMilliseconds:F2}ms, simulation={performance.SimulationMilliseconds:F2}ms");
@@ -617,7 +598,7 @@ namespace ForesTycoon
 
             try
             {
-                Context.MakeCurrent();
+                RenderBackendSelection.Window.MakeCurrent(this);
 
                 imgui?.Dispose();
                 postProcess.Dispose();

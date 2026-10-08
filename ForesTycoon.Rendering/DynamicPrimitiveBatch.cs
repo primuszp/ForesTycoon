@@ -2,37 +2,19 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Runtime.InteropServices;
-using OpenTK.Graphics.OpenGL;
 using OpenTK.Mathematics;
 
 namespace ForesTycoon.Rendering
 {
     internal static class DynamicPrimitiveBatch
     {
-        [StructLayout(LayoutKind.Sequential)]
-        private readonly struct BatchVertex
-        {
-            public const int Stride = 4 * sizeof(float);
-            public readonly Vector3 Position;
-            public readonly uint Color;
-
-            public BatchVertex(Vector3 position, uint color)
-            {
-                Position = position;
-                Color = color;
-            }
-        }
-
-        private static readonly List<BatchVertex> source = new List<BatchVertex>(4096);
-        private static readonly List<BatchVertex> expanded = new List<BatchVertex>(6144);
+        private static readonly List<ColoredVertex> source = new List<ColoredVertex>(4096);
+        private static readonly List<ColoredVertex> expanded = new List<ColoredVertex>(6144);
         private static uint currentColor = 0xffffffff;
-        private static BatchVertex[] uploadBuffer = Array.Empty<BatchVertex>();
-        private static int vao;
-        private static int vbo;
         private static bool drawing;
 
         // Capture the existing procedural emitters without a GL context or a draw call.
-        internal static Vertex[] BuildGeometry(PrimitiveType primitiveType, Action draw)
+        internal static Vertex[] BuildGeometry(PrimitiveTopology primitiveType, Action draw)
         {
             if (draw == null) throw new ArgumentNullException(nameof(draw));
             if (drawing) throw new InvalidOperationException("Primitive batches cannot be nested.");
@@ -55,7 +37,7 @@ namespace ForesTycoon.Rendering
             }
         }
 
-        public static void Draw(PrimitiveType primitiveType, Action draw)
+        public static void Draw(PrimitiveTopology primitiveType, Action draw)
         {
             if (draw == null) throw new ArgumentNullException(nameof(draw));
             if (drawing) throw new InvalidOperationException("DynamicPrimitiveBatch.Draw cannot be nested.");
@@ -70,26 +52,12 @@ namespace ForesTycoon.Rendering
                 Expand(primitiveType);
                 if (expanded.Count == 0) return;
 
-                EnsureDeviceResources();
-                RenderDevice.UseGeometryShader();
-                GL.GetInteger(GetPName.CurrentProgram, out int activeProgram);
-                GL.Uniform1(GlProgram.Uniform(activeProgram, "forest_dynamic"), 0);
-                GL.Uniform1(GlProgram.Uniform(activeProgram, "forest_elapsed"), 0f);
-                GL.BindVertexArray(vao);
-                GL.BindBuffer(BufferTarget.ArrayBuffer, vbo);
-                EnsureUploadCapacity(expanded.Count);
-                expanded.CopyTo(uploadBuffer, 0);
-                GL.BufferData(BufferTarget.ArrayBuffer,
-                    expanded.Count * BatchVertex.Stride, uploadBuffer, BufferUsageHint.StreamDraw);
-                PrimitiveType corePrimitive = primitiveType == PrimitiveType.Lines || primitiveType == PrimitiveType.LineLoop
-                    ? PrimitiveType.Lines
-                    : PrimitiveType.Triangles;
-                GL.DrawArrays(corePrimitive, 0, expanded.Count);
-                RenderMetrics.RecordDraw(expanded.Count);
+                var topology = primitiveType == PrimitiveTopology.Lines || primitiveType == PrimitiveTopology.LineLoop
+                    ? PrimitiveTopology.Lines : PrimitiveTopology.Triangles;
+                RenderDevice.Backend.DrawPrimitives(topology, CollectionsMarshal.AsSpan(expanded));
             }
             finally
             {
-                GL.BindVertexArray(0);
                 drawing = false;
             }
         }
@@ -101,20 +69,12 @@ namespace ForesTycoon.Rendering
         public static void Vertex3(Vector3 position)
         {
             if (!drawing) throw new InvalidOperationException("Vertices can only be submitted inside Draw.");
-            source.Add(new BatchVertex(position, currentColor));
+            source.Add(new ColoredVertex(position, currentColor));
         }
 
-        internal static void DisposeDeviceResources()
+        private static void Expand(PrimitiveTopology primitiveType)
         {
-            if (vbo != 0) GL.DeleteBuffer(vbo);
-            if (vao != 0) GL.DeleteVertexArray(vao);
-            vbo = vao = 0;
-            uploadBuffer = Array.Empty<BatchVertex>();
-        }
-
-        private static void Expand(PrimitiveType primitiveType)
-        {
-            if (primitiveType == PrimitiveType.Quads)
+            if (primitiveType == PrimitiveTopology.Quads)
             {
                 if (source.Count % 4 != 0) throw new InvalidOperationException("Quad batches require four vertices per quad.");
                 for (int i = 0; i < source.Count; i += 4)
@@ -125,7 +85,7 @@ namespace ForesTycoon.Rendering
                 return;
             }
 
-            if (primitiveType == PrimitiveType.LineLoop)
+            if (primitiveType == PrimitiveTopology.LineLoop)
             {
                 for (int i = 0; i < source.Count; i++)
                 {
@@ -135,31 +95,9 @@ namespace ForesTycoon.Rendering
                 return;
             }
 
-            if (primitiveType != PrimitiveType.Triangles && primitiveType != PrimitiveType.Lines)
+            if (primitiveType != PrimitiveTopology.Triangles && primitiveType != PrimitiveTopology.Lines)
                 throw new NotSupportedException($"Primitive type {primitiveType} is not supported by the core batcher.");
             expanded.AddRange(source);
-        }
-
-        private static void EnsureDeviceResources()
-        {
-            if (vao != 0) return;
-            vao = GL.GenVertexArray();
-            vbo = GL.GenBuffer();
-            GL.BindVertexArray(vao);
-            GL.BindBuffer(BufferTarget.ArrayBuffer, vbo);
-            GL.EnableVertexAttribArray(0);
-            GL.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, BatchVertex.Stride, 0);
-            GL.EnableVertexAttribArray(1);
-            GL.VertexAttribPointer(1, 4, VertexAttribPointerType.UnsignedByte, true, BatchVertex.Stride, 3 * sizeof(float));
-            GL.BindVertexArray(0);
-        }
-
-        private static void EnsureUploadCapacity(int required)
-        {
-            if (uploadBuffer.Length >= required) return;
-            int capacity = Math.Max(256, uploadBuffer.Length);
-            while (capacity < required) capacity *= 2;
-            uploadBuffer = new BatchVertex[capacity];
         }
 
         private static uint Pack(Color color) =>

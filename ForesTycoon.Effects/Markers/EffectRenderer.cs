@@ -1,6 +1,5 @@
 using System;
 using System.Drawing;
-using OpenTK.Graphics.OpenGL;
 using OpenTK.Mathematics;
 
 namespace ForesTycoon.Effects
@@ -11,9 +10,9 @@ namespace ForesTycoon.Effects
         {
             if (effects.Count == 0) return;
 
-            using (new RenderStateScope().AlphaBlend().DepthWrite(false))
+            using (RenderDevice.CreateStateScope().AlphaBlend().DepthWrite(false))
             {
-                DynamicPrimitiveBatch.Draw(PrimitiveType.Lines, () =>
+                DynamicPrimitiveBatch.Draw(PrimitiveTopology.Lines, () =>
                 {
                     foreach (WorldEffect effect in effects.Active)
                         DrawPulse(effect, interpolationAlpha);

@@ -6,7 +6,7 @@ namespace ForesTycoon
     {
         public static IWorldCommand Create(WorldCommandRecord record) => record.Kind switch
         {
-            WorldCommandKind.EditElevation => new EditElevationCommand(record.A, record.B, record.C, record.D),
+            WorldCommandKind.EditElevation => new EditElevationCommand(record.A, record.B, record.C, record.D, record.Flag),
             WorldCommandKind.RoadPath => new RoadPathCommand(record.A, record.B, record.Flag),
             WorldCommandKind.PlaceSawmill => new PlaceSawmillCommand(record.A),
             WorldCommandKind.SpawnVehicle => new SpawnVehicleCommand(),

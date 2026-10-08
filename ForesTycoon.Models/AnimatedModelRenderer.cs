@@ -1,6 +1,5 @@
 using System;
 using OpenTK.Mathematics;
-using ForesTycoon.Models.OpenGl;
 
 namespace ForesTycoon.Models
 {
@@ -16,7 +15,7 @@ namespace ForesTycoon.Models
         {
             ArgumentNullException.ThrowIfNull(model);
             drawOrder = new ModelDrawOrder(model);
-            this.backend = backend ?? new OpenGlModelRenderer(model);
+            this.backend = backend ?? ModelRenderBackends.Create(model);
         }
 
         internal IModelRenderBatch BeginBatch()

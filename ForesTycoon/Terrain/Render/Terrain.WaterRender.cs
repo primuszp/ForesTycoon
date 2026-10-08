@@ -1,6 +1,5 @@
 using System;
 using System.Drawing;
-using OpenTK.Graphics.OpenGL;
 using OpenTK.Mathematics;
 
 namespace ForesTycoon
@@ -16,9 +15,9 @@ namespace ForesTycoon
             Color riverGrid = Color.FromArgb(160, 105, 185, 238);
             float t = (float)(context.TotalTimeSeconds % 628.318);
 
-            using (new RenderStateScope().AlphaBlend())
+            using (RenderDevice.CreateStateScope().AlphaBlend())
             {
-                DynamicPrimitiveBatch.Draw(PrimitiveType.Quads, () =>
+                DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () =>
                 {
                     foreach (Tile tile in visibleTiles)
                     {
@@ -38,7 +37,7 @@ namespace ForesTycoon
                     }
                 });
 
-                DynamicPrimitiveBatch.Draw(PrimitiveType.Lines, () =>
+                DynamicPrimitiveBatch.Draw(PrimitiveTopology.Lines, () =>
                 {
                     foreach (Tile tile in visibleTiles)
                     {
@@ -191,9 +190,9 @@ namespace ForesTycoon
             Color waterGrid = Color.FromArgb(150, 110, 180, 235);
             float t = (float)(context.TotalTimeSeconds % 628.318);
 
-            using (new RenderStateScope().AlphaBlend())
+            using (RenderDevice.CreateStateScope().AlphaBlend())
             {
-                DynamicPrimitiveBatch.Draw(PrimitiveType.Quads, () =>
+                DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () =>
                 {
                     foreach (Tile tile in visibleTiles)
                     {
@@ -219,9 +218,9 @@ namespace ForesTycoon
                 });
             }
 
-            using (new RenderStateScope().AlphaBlend())
+            using (RenderDevice.CreateStateScope().AlphaBlend())
             {
-                DynamicPrimitiveBatch.Draw(PrimitiveType.Lines, () =>
+                DynamicPrimitiveBatch.Draw(PrimitiveTopology.Lines, () =>
                 {
                     foreach (Tile tile in visibleTiles)
                     {
@@ -250,9 +249,9 @@ namespace ForesTycoon
 
             float t = (float)(context.TotalTimeSeconds % 628.318);
 
-            using (new RenderStateScope().AlphaBlend())
+            using (RenderDevice.CreateStateScope().AlphaBlend())
             {
-                DynamicPrimitiveBatch.Draw(PrimitiveType.Quads, () =>
+                DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () =>
                 {
                     foreach (Tile tile in visibleTiles)
                     {

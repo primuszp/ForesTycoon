@@ -1,5 +1,4 @@
 using System;
-using OpenTK.Graphics.OpenGL;
 using OpenTK.Mathematics;
 
 namespace ForesTycoon
@@ -64,7 +63,7 @@ namespace ForesTycoon
                 new Vector4(transform.Apply(0,1,0)-transform.Apply(0,0,0),0),
                 new Vector4(transform.Apply(0,0,1)-transform.Apply(0,0,0),0),
                 new Vector4(transform.Apply(0,0,0),1));
-            using(new RenderStateScope().Disable(EnableCap.CullFace))
+            using(RenderDevice.CreateStateScope().Disable(RenderCapability.CullFace))
                 {
                 float outline = RenderDevice.Visuals?.ShadowPass != true && outlineBudget > 0 ? 0.7f / outlinePixelsPerUnit / scale : 0;
                 if (outline > 0) outlineBudget--;
@@ -84,7 +83,7 @@ namespace ForesTycoon
         internal static void DrawPreview(float cargoFill)
         {
             EnsureModel();
-            using(new RenderStateScope().Disable(EnableCap.CullFace))
+            using(RenderDevice.CreateStateScope().Disable(RenderCapability.CullFace))
                 importedModel.Draw(Matrix4.Identity,cargoFill,0);
         }
 

@@ -151,7 +151,7 @@ namespace ForesTycoon
         private void BeginDecals()
         {
             decalState?.Dispose();
-            decalState = new RenderStateScope().Disable(OpenTK.Graphics.OpenGL.EnableCap.DepthTest).DepthWrite(false);
+            decalState = RenderDevice.CreateStateScope().Disable(RenderCapability.DepthTest).DepthWrite(false);
         }
 
         private void EndDecals()

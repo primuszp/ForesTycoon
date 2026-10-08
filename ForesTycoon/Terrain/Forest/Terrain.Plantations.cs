@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using OpenTK.Graphics.OpenGL;
 using OpenTK.Mathematics;
 
 namespace ForesTycoon
@@ -10,8 +9,8 @@ namespace ForesTycoon
     {
         private sealed class PlantationGeometry : IDisposable
         {
-            internal readonly VertexBuffer Fill = new(PrimitiveType.Triangles);
-            internal readonly VertexBuffer Lines = new(PrimitiveType.Lines);
+            internal readonly VertexBuffer Fill = new(PrimitiveTopology.Triangles);
+            internal readonly VertexBuffer Lines = new(PrimitiveTopology.Lines);
             internal ulong DesignationVersion, TerrainVersion;
             internal bool Ready;
             public void Dispose() { Fill.Dispose(); Lines.Dispose(); }
@@ -24,7 +23,7 @@ namespace ForesTycoon
         {
             PlantationMeshRebuilds = 0;
             if (!graphics.ShowPlantations) return;
-            using var state = new RenderStateScope().AlphaBlend().DepthWrite(false).PolygonOffset(-2, -2).ThinLines();
+            using var state = RenderDevice.CreateStateScope().AlphaBlend().DepthWrite(false).PolygonOffset(-2, -2).ThinLines();
             foreach (var chunk in visibleChunks)
             {
                 if (!plantationGeometry.TryGetValue(chunk, out var mesh))

@@ -1,14 +1,14 @@
 using System;
-using OpenTK.Graphics.OpenGL;
+using ForesTycoon.Rendering.OpenGl;
 
 namespace ForesTycoon.Models.OpenGl
 {
-    internal sealed class OpenGlModelRenderBatch : RenderStateScope, IModelRenderBatch
+    internal sealed class OpenGlModelRenderBatch : OpenGlRenderStateScope, IModelRenderBatch
     {
         internal OpenGlModelRenderBatch()
         {
-            Enable(EnableCap.DepthTest);
-            Disable(EnableCap.CullFace);
+            Enable(RenderCapability.DepthTest);
+            Disable(RenderCapability.CullFace);
         }
 
         internal void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(IsDisposed, this);

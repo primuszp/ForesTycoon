@@ -18,11 +18,11 @@ namespace ForesTycoon
             try {
                 // Nested scopes must restore the caller's bias, including enabled state.
                 GL.Enable(EnableCap.PolygonOffsetFill);GL.PolygonOffset(3,7);
-                using (new RenderStateScope().PolygonOffset(2,4))
+                using (RenderDevice.CreateStateScope().PolygonOffset(2,4))
                 {
-                    using (new RenderStateScope().PolygonOffset(-1,-1)) { }
+                    using (RenderDevice.CreateStateScope().PolygonOffset(-1,-1)) { }
                     RequirePolygonOffset(2,4);
-                    using (new RenderStateScope()) { }
+                    using (RenderDevice.CreateStateScope()) { }
                     RequirePolygonOffset(2,4);
                 }
                 RequirePolygonOffset(3,7);

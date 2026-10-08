@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using OpenTK.Graphics.OpenGL;
 using OpenTK.Mathematics;
 
 namespace ForesTycoon
@@ -13,13 +12,13 @@ namespace ForesTycoon
         private readonly record struct ForestGpuTree(int TileId, int Index, ulong Id, ForestTreeDimensions Size, int ShapeKey, TreeSite Site);
         private sealed class IndividualForestChunk : IDisposable
         {
-            internal readonly VertexBuffer Wood = new(PrimitiveType.Triangles);
-            internal readonly VertexBuffer Crowns = new(PrimitiveType.Triangles);
-            internal readonly VertexBuffer Floor = new(PrimitiveType.Triangles);
+            internal readonly VertexBuffer Wood = new(PrimitiveTopology.Triangles);
+            internal readonly VertexBuffer Crowns = new(PrimitiveTopology.Triangles);
+            internal readonly VertexBuffer Floor = new(PrimitiveTopology.Triangles);
             internal readonly ulong[] TileRevisions;
             internal readonly List<ForestGpuTree> Trees = new();
             internal Vector4[] State = Array.Empty<Vector4>();
-            internal int StateBuffer, StateTexture;
+            internal IForestStateBuffer StateResource;
             internal double GrowthYear;
             internal ulong TerrainVersion, Generation, ForestRevision, EditRevision;
             internal double AnchorYear;
@@ -31,8 +30,7 @@ namespace ForesTycoon
             internal IndividualForestChunk(int count) => TileRevisions = new ulong[count];
             public void Dispose() {
                 Wood.Dispose(); Crowns.Dispose(); Floor.Dispose();
-                if (StateTexture != 0) GL.DeleteTexture(StateTexture);
-                if (StateBuffer != 0) GL.DeleteBuffer(StateBuffer);
+                StateResource?.Dispose();
             }
         }
 
@@ -272,15 +270,9 @@ namespace ForesTycoon
             }
             geometry.GrowthYear = forest.ForestYear;
             if (count == 0) return;
-            if (geometry.StateBuffer == 0) geometry.StateBuffer = GL.GenBuffer();
-            if (geometry.StateTexture == 0) geometry.StateTexture = GL.GenTexture();
-            GL.BindBuffer(BufferTarget.TextureBuffer, geometry.StateBuffer);
-            GL.BufferData(BufferTarget.TextureBuffer, count * 4 * sizeof(float), geometry.State, BufferUsageHint.DynamicDraw);
-            GL.ActiveTexture(TextureUnit.Texture7);
-            GL.BindTexture(TextureTarget.TextureBuffer, geometry.StateTexture);
-            GL.TexBuffer(TextureBufferTarget.TextureBuffer, SizedInternalFormat.Rgba32f, geometry.StateBuffer);
-            GL.ActiveTexture(TextureUnit.Texture0);
-            geometry.Wood.ForestStateTexture = geometry.Crowns.ForestStateTexture = geometry.StateTexture;
+            geometry.StateResource ??= RenderDevice.CreateForestStateBuffer();
+            geometry.StateResource.SetData(geometry.State, count);
+            geometry.Wood.ForestState = geometry.Crowns.ForestState = geometry.StateResource;
         }
 
         private static int ShapeKeyOf(in ForestTree tree, double year, in TreeSite site) =>
@@ -378,7 +370,7 @@ namespace ForesTycoon
                         Repeat(individualCrownGrowth, mesh.Crown.Length, new(origin, new Vector3(-1, crown, vertical), slot));
                     }
                     Vertex[] floor = lod == ForestLod.Far ? Array.Empty<Vertex>()
-                        : DynamicPrimitiveBatch.BuildGeometry(PrimitiveType.Triangles, () => DrawForestFloor(stem));
+                        : DynamicPrimitiveBatch.BuildGeometry(PrimitiveTopology.Triangles, () => DrawForestFloor(stem));
                     individualFloor.AddRange(floor);
                     Repeat(individualFloorGrowth, floor.Length, default); // Decals stay on the sampled terrain.
                     yield return true;
@@ -397,7 +389,7 @@ namespace ForesTycoon
                             AppendAt(deadWood, mesh.Branches, new(stem.X, stem.Y, stem.BaseZ));
                             wood = deadWood.ToArray();
                         }
-                        else wood = DynamicPrimitiveBatch.BuildGeometry(PrimitiveType.Quads, () => DrawTreeWood(stem));
+                        else wood = DynamicPrimitiveBatch.BuildGeometry(PrimitiveTopology.Quads, () => DrawTreeWood(stem));
                         individualWood.AddRange(wood);
                         // Physical snag/fallen state follows the current year in every cached LOD,
                         // rather than waiting for each LOD to replace a differently aged mesh.
@@ -411,7 +403,7 @@ namespace ForesTycoon
                 {
                     geometry.NextStageYear = Math.Min(geometry.NextStageYear, geometry.AnchorYear + 1.0 / 12);
                     TreeInstance stem = IndividualStem(tile, stump.Felled, stump.FelledYear);
-                    Vertex[] wood = DynamicPrimitiveBatch.BuildGeometry(PrimitiveType.Quads,
+                    Vertex[] wood = DynamicPrimitiveBatch.BuildGeometry(PrimitiveTopology.Quads,
                         () => DrawStump(stem, stump.Decay(geometry.AnchorYear)));
                     individualWood.AddRange(wood);
                     Repeat(individualWoodGrowth, wood.Length, new(Vector3.Zero, Vector3.Zero));
@@ -447,7 +439,7 @@ namespace ForesTycoon
             if (!shadow)
             {
                 if (RenderDevice.Visuals != null) RenderDevice.Visuals.Kind = SurfaceKind.ForestFloor;
-                using (new RenderStateScope().AlphaBlend().DepthWrite(false).PolygonOffset(-1, -1))
+                using (RenderDevice.CreateStateScope().AlphaBlend().DepthWrite(false).PolygonOffset(-1, -1))
                     for (int c = 0; c < visibleChunks.Count; c++) individualForestChunks[(visibleChunks[c], chunkLods[c])].Floor.DrawArray();
             }
             if (RenderDevice.Visuals != null) RenderDevice.Visuals.Kind = SurfaceKind.Wood;
@@ -456,15 +448,9 @@ namespace ForesTycoon
             // The texture represents the whole foliage mass. Rendering only the front
             // shell lets its gaps expose branches instead of filling them with the back
             // shell or a solid outline. Use identical coverage for shadow casters.
-            using (new RenderStateScope().Enable(EnableCap.CullFace))
+            using (RenderDevice.CreateStateScope().Cull(RenderCullFace.Back))
             {
-                GL.GetInteger(GetPName.CullFaceMode, out int oldCull);
-                try
-                {
-                    GL.CullFace(TriangleFace.Back);
-                    for (int c = 0; c < visibleChunks.Count; c++) individualForestChunks[(visibleChunks[c], chunkLods[c])].Crowns.DrawArray(false);
-                }
-                finally { GL.CullFace((TriangleFace)oldCull); }
+                for (int c = 0; c < visibleChunks.Count; c++) individualForestChunks[(visibleChunks[c], chunkLods[c])].Crowns.DrawArray(false);
             }
             foreach (var chunk in visibleChunks)
                 foreach (int id in chunk.TileIds)

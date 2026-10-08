@@ -288,7 +288,12 @@ A teherautó a kijelölt forrásnál rakodik, a malomnál fokozatosan lerakodik,
 
 A megadott `sawmill_paropank.glb` és `animated_low_poly_fish.glb` modellek kerültek be. A vízben a halak csontvázas animációval úsznak; nagy, térképszélhez csatlakozó tengerekben 8–120 hal, kis belső vizekben 1–2 hal jelenik meg, a kellően mély részeken. A víz saját finom rácsa megmarad.
 
-A mentés visszajátssza a kijelölési, építési és teherautó-indítási parancsokat. Az 5-ös formátumverzió az erdőév hosszát is tárolja. A 4-es mentések továbbra is betölthetők, eredeti 1200 másodperces évhosszal.
+A mentés visszajátssza a kijelölési, építési és teherautó-indítási parancsokat. A jelenlegi 6-os formátumverzió megőrzi az erdőév hosszát és a történeti terepszerkesztési szabályt. A 4/5-ös mentések továbbra is betölthetők; régi parancsaik az eredeti szabállyal futnak vissza, az új szerkesztések már helyiek. A 4-es mentések eredeti 1200 másodperces évhossza megmarad.
+
+Terepszerkesztéskor csak a valóban megváltozott csempék növényzete vész el, kitermelt készlet nélkül.
+A többi fa állapota és a szimuláció ideje változatlan; a terep/rács geometriája chunkonként frissül.
+A térképi vízmedencék számítása még teljes rasztert jár be. A talaj-, víz-, fafaj-, klíma-, vad- és
+károsítórétegek következő fejlesztési terve: [térbeli ökoszisztéma](docs/ecosystem-simulation-design.md).
 
 Ellenőrzés: `dotnet run --project ForesTycoon -- --logistics-smoke-test`. A próba a fokozatos 60 m³-es kitermelést, útkapcsolatot, lerakott malmot, készletmérleget, mentés/visszajátszást és a tengeri/tavi halpopulációt ellenőrzi; képek az `artifacts/forestry-logistics` mappában.
 

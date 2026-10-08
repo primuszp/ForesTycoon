@@ -36,8 +36,8 @@ namespace ForesTycoon
                 Check("visuals");
                 using var material = new ForestMaterial();
                 Check("material");
-                using var wood = new VertexBuffer(PrimitiveType.Triangles);
-                using var crown = new VertexBuffer(PrimitiveType.Triangles);
+                using var wood = new VertexBuffer(PrimitiveTopology.Triangles);
+                using var crown = new VertexBuffer(PrimitiveTopology.Triangles);
                 var woodVertices = new List<Vertex>(); var crownVertices = new List<Vertex>();
                 var species = new[] { ForestSpecies.Spruce, ForestSpecies.Oak, ForestSpecies.Birch, ForestSpecies.Beech };
                 Console.WriteLine("triangles near/medium/far (crown+wood)");

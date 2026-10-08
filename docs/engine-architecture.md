@@ -4,6 +4,10 @@
 
 The engine is organized around one rule: simulation state is deterministic and independent from the window and renderer.
 
+The current raster/ecosystem plan and local terrain-edit semantics are documented in
+[ecosystem-simulation-design.md](ecosystem-simulation-design.md). Terrain edits preserve unmodified
+trees and environmental water stores; terrain/grid resource caches use per-chunk surface revisions.
+
 ## Runtime flow
 
 1. The cross-platform OpenTK `GameWindow` host collects platform input.
@@ -152,58 +156,62 @@ for quantities where ambiguity affects correctness, and verb names for state-cha
 argument was ignored. Optional GL state is captured only when a scope changes it, and nested polygon
 offsets restore their actual parent values. Consecutive wildlife and mill instances share a state scope.
 
-**OpenGL remains the primary and default backend.** The goal is to keep future replacement localized,
-not to replace OpenGL now or select a new graphics library prematurely.
+**OpenGL remains the primary and default backend.** Production native graphics operations and
+GLSL now live exclusively inside `OpenGl/` implementation directories. CPU animation, geometry
+emitters, terrain/forest ownership, scene pass orchestration and UI input use backend contracts.
+Diagnostic programs intentionally retain native operations to verify the OpenGL implementation.
 
-The model path now has a working boundary:
+| Responsibility | Boundary | OpenGL implementation |
+| --- | --- | --- |
+| Geometry resources, frame operations and primitive submission | `IGraphicsBackend`, `IGeometryBufferBackend`, `RenderStateScope` | `ForesTycoon.Rendering/OpenGl/` |
+| Forest instance growth/state uploads | `IForestStateBuffer`, geometry resource contract | `OpenGlForestStateBuffer`, `OpenGlVertexBuffer` |
+| Imported/animated models and batching | `IModelRenderBackend`, `IModelRenderBatch`, `ModelRenderFrame` | `ForesTycoon.Models/OpenGl/` |
+| Clouds and precipitation | effect backend contracts/factory | `ForesTycoon.Effects/OpenGl/` |
+| Surface materials and shadow passes | `ISurfaceRenderBackend` | game `OpenGlSurfaceVisualRenderer` |
+| Forest materials, fog and lightning | `IForestMaterialBackend`, `IForestWeatherBackend` | game `OpenGlForestMaterial`, `OpenGlForestWeatherRenderer` |
+| Diorama render targets and composition | `IPostProcessBackend` | `OpenGlPostProcess` |
+| ImGui font upload and draw data | `IUiRenderBackend` | `OpenGlImGuiRenderer` |
+| Graphics window settings, context activation and presentation | `IRenderWindowPlatform` | `OpenGlWindowPlatform` |
 
-- `AnimatedGlbModel` owns CPU asset data, `Pose` animation, and `ModelDrawOrder` reusable CPU ordering.
-- `AnimatedModelRenderer` prepares `ModelRenderFrame` values and submits to `IModelRenderBackend`.
-  Its constructor owns an injected implementation, defaulting to `OpenGlModelRenderer`. The explicit
-  frame overload needs no global device or native context; tests exercise it with another implementation.
-- `ModelRenderContracts.cs` uses only CPU values and a backend-owned `IModelRenderBatch`. No GL enums,
-  native handles, state scopes or GLSL cross that boundary. Backend calls consume the borrowed order span
-  synchronously; they must copy it if they retain submissions beyond the call.
-- `OpenGl/` owns model buffers, textures, shader programs, native batching and shader sources. Wildlife,
-  fish and mills request batches from their renderer rather than constructing GL state scopes.
-- `RenderTransformState` owns camera/model state in Engine with no graphics dependency. The current
-  `RenderDevice` delegates to it. Another device can own an independent instance with the same CPU
-  transform convention. Shader compilation/linking is consolidated in `GlProgram.Create`.
+`Program` selects `RenderBackendSelection.UseOpenGl()` before constructing windows or render resources.
+An alternative backend supplies one coherent `RenderBackendBundle` and installs it with `Configure`.
+This changes core resources, model creation, effects, scene/UI factories and the window platform together.
+Configuration is rejected after initialization or first resource acquisition, before any other factory
+changes. This is a startup choice. Dispose render resources while their backend/context is alive,
+then dispose `RenderDevice`; only after shutdown can another bundle be installed. Resource acquisition
+also locks selection before shader initialization, and disposal releases that lock.
 
-The facade's shading-settings overload remains an adapter to the existing global scene state.
-The OpenGL implementation uses the scene's existing shadow-texture binding; a future backend must
-provide its own matching shadow resources. This is not yet a complete renderer-wide device abstraction:
-terrain buffers/growth textures, effects, post-processing, ImGui and window/swapchain integration still
-contain GL-specific operations. Port these by resource/pass ownership, using the model boundary as
-the first implemented example. Avoid adding speculative interfaces for every GL call.
+The contracts group resource and pass ownership rather than translating every native function.
+`VertexBuffer`, `DioramaPostProcess`, material/effect facades and `ImGuiController` delegate to owned
+implementations. No native buffer/texture identifiers or graphics enums cross their boundaries.
+ImGui texture IDs are opaque tokens interpreted by the UI backend. Renderer capability flags also
+belong to that implementation. The controller owns and releases its ImGui context and pinned font ranges.
+Shader compilation/linking and uniform lookup are consolidated in the OpenGL `GlProgram` helper.
 
-SDL3 GPU is one possible future route, whose official API supports Metal, Vulkan and D3D12.
-SDL shadercross can produce backend shader formats from HLSL or SPIR-V. No replacement library is
-selected or installed, and there is no working Metal renderer. Sources:
-[SDL GPU API](https://wiki.libsdl.org/SDL3/CategoryGPU),
-[GPU device creation](https://wiki.libsdl.org/SDL3/SDL_CreateGPUDevice),
-[Apple OpenGL migration](https://developer.apple.com/documentation/metal/migrating-opengl-code-to-metal).
+`AnimatedGlbModel` and `Pose` remain CPU data/sampling. `ModelDrawOrder` prepares reusable ordering,
+and `AnimatedModelRenderer` submits explicit frame values and borrowed spans to its backend.
+`DynamicPrimitiveBatch` expands quads/line loops on the CPU and submits packed coloured vertices.
+Borrowed spans must be consumed or copied before the backend call returns. `RenderTransformState`
+keeps camera/model state in Engine, independently of native contexts.
 
-Migration should proceed through working, testable increments:
+A replacement must preserve or adapt the existing CPU transform conventions, winding, clip-space depth,
+texture orientation, colour space and shadow-depth comparisons. Framebuffer readback is packed RGBA8
+with rows starting at the bottom left. Forest growth/state layout and static/paged upload completion
+must preserve publication semantics. Model, surface and geometry implementations in a bundle must
+share compatible shadow/material resources; OpenGL currently shares its shadow texture binding.
 
-1. Continue the model path's CPU/native separation across terrain and effects. Extract shader
-   sources and explicit vertex/binding layouts. Preserve OpenGL as the default implementation.
-2. Introduce a device boundary for buffer/texture creation, shader pipelines, render targets,
-   resource lifetime and pass submission. Use application-owned descriptors and handles at that
-   boundary, without OpenGL enums. Implement each contract through the existing OpenGL path and
-   verify native-free submission tests before expanding it. A second backend should confirm the
-   contracts when an actual replacement is requested.
-3. If replacement is requested, render one imported mesh and one animated animal through it, then implement
-   terrain, forest growth/state buffers, shadow maps, weather, post-processing and the UI.
-   Resolve window/swapchain ownership explicitly rather than assuming an OpenTK GL context can
-   serve as a Metal surface.
-4. Define matrix storage/multiplication, clip-space depth, winding, texture orientation, colour
-   space and depth sampling conventions. Existing code uses OpenTK row-vector CPU transforms;
-   SDL documents a left-handed GPU convention. Validate the adapter with asymmetric fixtures,
-   mask/blend materials, instance transforms and shadow depth.
-5. Require macOS hardware validation for Metal, Windows/Linux validation for other enabled
-   backends, image regressions, resize/resource disposal checks and completed-frame benchmarks.
+The host still uses OpenTK's window/event toolkit. Graphics settings and context/presentation policy
+are isolated in the window platform, but a Metal implementation must provide an appropriate native
+surface and presentation path, potentially adapting the host bridge. GLSL programs also need equivalent
+Metal shaders and pipeline state. **No Metal backend is implemented or hardware-validated.**
 
-The next performance priorities remain bounded forest LOD residency and correct chunk-local terrain
-invalidation. These need explicit dependency tracking and continuity guarantees, not only interface
-renaming. Current findings and validation are recorded in [engine-performance.md](engine-performance.md).
+Architecture tests prevent native graphics imports, calls, shaders and enums outside production backend
+directories. Headless tests exercise primitive/frame/resource submission, startup selection and rejected
+live reconfiguration, plus the UI controller through injected implementations. Native smoke tests cover
+forest upload/growth, materials, shadows, weather, animated wildlife, UI glyphs and the complete window.
+
+For another backend, first validate an asymmetric mesh, animation, mask/blend materials and shadows,
+then terrain/forest state, effects, composition and UI. Require native resize/disposal checks, image
+regressions and completed-frame benchmarks on each enabled platform. The next performance priorities
+remain bounded forest LOD residency and correct chunk-local terrain invalidation, with explicit dependency
+tracking and continuity guarantees. Current measurements are in [engine-performance.md](engine-performance.md).

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using OpenTK.Graphics.OpenGL;
 using OpenTK.Mathematics;
 
 namespace ForesTycoon
@@ -30,7 +29,7 @@ namespace ForesTycoon
             // Átlós felezés: amelyik átló végpontjai közelebb vannak egymáshoz
             // (laposabb átló), azt választjuk – simább felszín, kevesebb "tető-él"
             List<Vertex> data = new List<Vertex>();
-            VertexBuffer vbo  = new VertexBuffer(PrimitiveType.Triangles);
+            VertexBuffer vbo  = new VertexBuffer(PrimitiveTopology.Triangles);
 
             bool useWE = Math.Abs(wZ - eZ) <= Math.Abs(nZ - sZ);
             if (flip) useWE = !useWE;
@@ -143,37 +142,6 @@ namespace ForesTycoon
             return vertex;
         }
 
-        private void makeQuads()
-        {
-            vertices = new Vertex[nodes.Length];
-
-            // Rácsvonalak: halvány, visszafogott zöld
-            uint gridColor = ColorToUInt(Color.FromArgb(82, 115, 38));
-
-            for (int i = 0; i < nodes.Length; i++)
-            {
-                vertices[i] = new Vertex(
-                    new Vector3(nodes[i].xPos, nodes[i].yPos, nodes[i].zPos),
-                    Vector3.Zero,
-                    gridColor);
-            }
-
-            foreach (Tile tile in tiles)
-            {
-                indices.Add((uint)tile.W.Id);
-                indices.Add((uint)tile.S.Id);
-                indices.Add((uint)tile.S.Id);
-                indices.Add((uint)tile.E.Id);
-                indices.Add((uint)tile.E.Id);
-                indices.Add((uint)tile.N.Id);
-                indices.Add((uint)tile.N.Id);
-                indices.Add((uint)tile.W.Id);
-            }
-
-            edges.SetData(vertices);
-            edges.SetElements(indices.ToArray());
-        }
-
         private void makeTiles()
         {
             foreach (Tile tile in tiles)
@@ -186,7 +154,6 @@ namespace ForesTycoon
             Tile[] nodeTiles = new Tile[4];
             foreach (Node node in changed)
             {
-                vertices[node.Id].Position.Z = node.zPos;
                 int nodeTileCount = data.GetTilesByNode(node, nodeTiles);
                 for (int i = 0; i < nodeTileCount; i++)
                 {
@@ -198,7 +165,6 @@ namespace ForesTycoon
                         makeBuffer(code, tile.Low, true);
                 }
             }
-            editedEdgesPendingUpload = true;
         }
 
         private void OnRoadDiagonalsChanged()
@@ -209,14 +175,6 @@ namespace ForesTycoon
                 if (!vbos.ContainsKey(inner.Code + "_" + inner.Low + "_f"))
                     makeBuffer(inner.Code, inner.Low, true);
             }
-        }
-
-        private void UploadEditedEdges()
-        {
-            if (!editedEdgesPendingUpload) return;
-            edges.SetData(vertices);
-            editedEdgesPendingUpload = false;
-            TerrainEdgeUploads++;
         }
 
         private uint ColorToUInt(Color color)

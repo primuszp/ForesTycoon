@@ -127,6 +127,9 @@ namespace ForesTycoon.Map
 
         private void RebuildHydrology()
         {
+            var previousWater = new bool[tiles.Length];
+            for (int id = 0; id < tiles.Length; id++)
+                previousWater[id] = ShouldDrawStandingWater(tiles[id]);
             // A hidrológia node.zPos-t használ; mielőtt fut, MINDEN node zPos-át a friss
             // magasságból állítjuk be, hogy se betöltéskor, se szerkesztés után ne a régi
             // (stale) érték alapján higgyen vizet a magas terepre.
@@ -134,6 +137,9 @@ namespace ForesTycoon.Map
                 node.zPos = node.W * tileSizeM;
 
             hydro.Rebuild();
+            for (int id = 0; id < tiles.Length; id++)
+                if (previousWater[id] != ShouldDrawStandingWater(tiles[id]))
+                    chunkIndex.MarkTileDirty(id, ChunkDirtyFlags.Water);
             InvalidateSurface();
         }
 
@@ -155,6 +161,7 @@ namespace ForesTycoon.Map
                 for (int i = 0; i < nodeTileCount; i++)
                 {
                     Tile tile = nodeTiles[i];
+                    elevationEditTiles?.Add(tile.Id);
                     chunkIndex.MarkTileDirty(tile.Id, ChunkDirtyFlags.All);
                     // Crown contact shadows can cross into the neighbouring tile.
                     chunkIndex.MarkTileAndNeighboursDirty(tile.Id, ChunkDirtyFlags.Props);

@@ -19,7 +19,7 @@ public class ForestStemGeometryTests
             var tree = new Terrain.TreeInstance(stand, 42, 2, 3, 4, scale, 0.7f, 0, 1, 1, 2);
             var model = Terrain.TreeModel.For(species);
             var profile = new ForestTrunkProfile(model.TrunkHeight * scale, model.TrunkRadius * scale);
-            var vertices = DynamicPrimitiveBatch.BuildGeometry(PrimitiveType.Quads, () => Terrain.DrawStump(tree, 0));
+            var vertices = DynamicPrimitiveBatch.BuildGeometry(PrimitiveTopology.Quads, () => Terrain.DrawStump(tree, 0));
             var barkRim = new HashSet<Vector3>();
             var cutRim = new HashSet<Vector3>();
             for (int i = 0; i < vertices.Length; i += 3)

@@ -85,6 +85,7 @@ namespace ForesTycoon
                 Require(Draw(terrain, forest, 1.5f) == 0, "Cleared forest left stale GPU geometry.");
                 Require(GL.GetError() == ErrorCode.NoError, "OpenGL reported an error.");
                 CheckStaticTerrainCache();
+                CheckTerraformForestStability();
                 CheckDeferredForestBuild();
                 CheckPagedForestUpload();
                 CheckDeadTreeLodState();
@@ -114,7 +115,7 @@ namespace ForesTycoon
 
         private static void CheckStaticTerrainCache()
         {
-            var terrain = new Terrain(TerrainSettings.Default.WithNodeSize(17, 42), ForestVisualFixture.Height);
+            var terrain = new Terrain(TerrainSettings.Default.WithNodeSize(33, 42), (_, _) => 4);
             try
             {
                 var context = new RenderContext(0, 0, 0, 0, 0, 0, false, false, 1, -60, -45,
@@ -135,12 +136,12 @@ namespace ForesTycoon
                 Require(terrain.Map.RoadCount > 0, "Road cache test did not build a road.");
                 Check(true);
                 Check(false);
-                terrain.Map.EditElevationAtNode(3 * 17 + 3, 1, 0, 1);
+                terrain.Map.EditElevationAtNode(5 * 33 + 5, 1, 0, 1);
                 Check(true);
-                int uploads = terrain.TerrainEdgeUploads;
-                terrain.Map.EditElevationAtNode(10 * 17 + 10, 1, 2, 2);
-                Require(terrain.TerrainEdgeUploads == uploads + 1, "Brush uploaded the entire terrain grid more than once.");
+                Require(terrain.StaticTerrainRebuilds == 1, "Single-node edit rebuilt unrelated terrain chunks.");
+                terrain.Map.EditElevationAtNode(10 * 33 + 10, 1, 2, 2);
                 Check(true);
+                Require(terrain.StaticTerrainRebuilds < terrain.VisibleChunkCount, "Brush rebuilt the whole terrain.");
                 terrain.Map.RemoveRoadTilePath(34, 37);
                 Check(true);
                 Require(GL.GetError() == ErrorCode.NoError, "Static terrain cache GL error.");
@@ -155,6 +156,58 @@ namespace ForesTycoon
                 }
             }
             finally { terrain.Dispose(); }
+        }
+
+        private static void CheckTerraformForestStability()
+        {
+            using var terrain = new Terrain(TerrainSettings.Default.WithNodeSize(33, 42), (_, _) => 4);
+            terrain.SynchronousForestBuilds = true;
+            var stands = new ForestStand[32 * 32];
+            stands[132] = new(ForestSpecies.Oak, 40, .6f, 1);
+            stands[792] = new(ForestSpecies.Birch, 40, .6f, 1);
+            var forest = new ForestSystem(terrain.Map, stands);
+            forest.UseEnvironmentTempo(1200);
+            var environment = new EnvironmentSystem(terrain.Map, forest);
+            new ForestEnvironmentCoordinator(forest, environment).Update(21.5);
+            terrain.Map.TryGetTileCenter(792, out var center);
+            var previousCamera = RenderDevice.ViewProjection;
+            try
+            {
+                RenderDevice.SetCamera(Matrix4.CreateTranslation(-center) * Matrix4.CreateRotationX(-1f)
+                    * Matrix4.CreateOrthographic(12, 12, -100, 100));
+                byte[] before = Capture();
+                int coloured = 0;
+                for (int i = 0; i < before.Length; i += 4)
+                    if (before[i] != 0 || before[i + 1] != 0 || before[i + 2] != 0) coloured++;
+                Require(coloured > 20, "Unedited forest fixture was not visible.");
+                double year = forest.ForestYear;
+                int[] changed = terrain.Map.EditElevationAtNode(5 * 33 + 5, 1, 0, 1);
+                forest.ClearTerrainTiles(changed);
+                environment.RefreshRouting(changed);
+                Require(!forest.TryGetStand(132, out _), "Terraforming left trees on changed ground.");
+                Require(forest.ForestYear == year, "Terraforming advanced forest time.");
+                Require(SamePixels(before, Capture()), "Local edit changed unedited forest pixels.");
+                terrain.Map.Chunks.GetByTile(792).MarkDirty(ChunkDirtyFlags.Props);
+                Require(SamePixels(before, Capture()), "Rebuilding the same forest changed its pixels.");
+                Console.WriteLine("Terraform forest: unedited pixels stable after local clearing and forced rebuild (1/255 tolerance).");
+            }
+            finally { RenderDevice.SetCamera(previousCamera); }
+
+            byte[] Capture()
+            {
+                RenderDevice.SetViewport(256, 256);
+                RenderDevice.Clear(new Vector4(0, 0, 0, 1));
+                Draw(terrain, forest, 12);
+                GL.Finish();
+                var pixels = new byte[256 * 256 * 4];
+                RenderDevice.ReadPixels(0, 0, 256, 256, pixels);
+                return pixels;
+            }
+            static bool SamePixels(byte[] a, byte[] b)
+            {
+                for (int i = 0; i < a.Length; i++) if (Math.Abs(a[i] - b[i]) > 1) return false;
+                return true;
+            }
         }
 
         private static void CheckDeferredForestBuild()
@@ -257,8 +310,8 @@ namespace ForesTycoon
                     vertices.Add(new Vertex(origin + corner, Vector3.UnitZ, 0xff0077aau + (uint)(triangle % 64)));
                     growth.Add(new(origin, new Vector3(.15f, .1f, .05f)));
                 }
-                using var direct = new VertexBuffer(PrimitiveType.Triangles);
-                using var paged = new VertexBuffer(PrimitiveType.Triangles);
+                using var direct = new VertexBuffer(PrimitiveTopology.Triangles);
+                using var paged = new VertexBuffer(PrimitiveTopology.Triangles);
                 direct.SetData(vertices.ToArray(), false); direct.SetForestGrowth(growth.ToArray());
                 using var work = paged.UploadForestPages(vertices, growth).GetEnumerator();
                 int steps = 0;
@@ -270,8 +323,7 @@ namespace ForesTycoon
                 }
                 if (count > 16384) Require(steps >= 6, "Large mesh upload did not yield between pages.");
                 var readback = new Vertex[count];
-                GL.BindBuffer(BufferTarget.ArrayBuffer, paged.VboId);
-                if (count > 0) GL.GetBufferSubData(BufferTarget.ArrayBuffer, IntPtr.Zero, count * Vertex.Stride, readback);
+                paged.ReadVertices(readback);
                 Require(System.Runtime.InteropServices.MemoryMarshal.AsBytes(vertices.ToArray().AsSpan()).SequenceEqual(
                     System.Runtime.InteropServices.MemoryMarshal.AsBytes(readback.AsSpan())), "Paged vertex bytes differ from source.");
                 foreach (float elapsed in new[] { 0f, .7f, 1.5f })

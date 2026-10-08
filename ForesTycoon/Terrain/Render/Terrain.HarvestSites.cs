@@ -1,5 +1,4 @@
 using System.Drawing;
-using OpenTK.Graphics.OpenGL;
 
 namespace ForesTycoon
 {
@@ -9,13 +8,13 @@ namespace ForesTycoon
         internal void DrawHarvestSites(ForestryLogistics logistics)
         {
             if (logistics == null) return;
-            using var state = new RenderStateScope().AlphaBlend().DepthWrite(false);
-            DynamicPrimitiveBatch.Draw(PrimitiveType.Quads, () =>
+            using var state = RenderDevice.CreateStateScope().AlphaBlend().DepthWrite(false);
+            DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () =>
             {
                 DynamicPrimitiveBatch.Color4(Color.FromArgb(35, 255, 177, 50));
                 foreach (var site in logistics.Sites) { if (logistics.Volume(site) <= 0.001f) continue; foreach (int id in site.Tiles) TileQuad(tiles[id]); }
             });
-            DynamicPrimitiveBatch.Draw(PrimitiveType.Lines, () =>
+            DynamicPrimitiveBatch.Draw(PrimitiveTopology.Lines, () =>
             {
                 DynamicPrimitiveBatch.Color4(Color.FromArgb(235, 255, 180, 55));
                 foreach (var site in logistics.Sites)

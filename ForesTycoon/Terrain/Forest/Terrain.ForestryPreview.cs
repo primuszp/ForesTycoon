@@ -1,6 +1,5 @@
 using System;
 using System.Drawing;
-using OpenTK.Graphics.OpenGL;
 
 namespace ForesTycoon
 {
@@ -57,21 +56,21 @@ namespace ForesTycoon
                 ? Color.FromArgb(245, 248, 80, 80)
                 : Color.FromArgb(235, 255, 255, 255);
 
-            using (new RenderStateScope().AlphaBlend())
+            using (RenderDevice.CreateStateScope().AlphaBlend())
             {
-                DynamicPrimitiveBatch.Draw(PrimitiveType.Quads, () =>
+                DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () =>
                 {
                     DynamicPrimitiveBatch.Color4(fill);
                     for (int i = 0; i < count; i++) TileQuad(tiles[tileIds[i]]);
                 });
 
-                using (new RenderStateScope().ThinLines())
+                using (RenderDevice.CreateStateScope().ThinLines())
                 {
                     DynamicPrimitiveBatch.Color4(line);
                     for (int i = 0; i < count; i++)
                     {
                         Tile tile = tiles[tileIds[i]];
-                        DynamicPrimitiveBatch.Draw(PrimitiveType.LineLoop, () =>
+                        DynamicPrimitiveBatch.Draw(PrimitiveTopology.LineLoop, () =>
                         {
                             DynamicPrimitiveBatch.Vertex3(tile.W.xPos, tile.W.yPos, tile.W.zPos);
                             DynamicPrimitiveBatch.Vertex3(tile.S.xPos, tile.S.yPos, tile.S.zPos);

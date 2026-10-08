@@ -99,7 +99,7 @@ namespace ForesTycoon.Models.OpenGl
                 GL.BindVertexArray(vaos[i]);GL.DrawElements(PrimitiveType.Triangles,mesh.Indices.Length,DrawElementsType.UnsignedInt,IntPtr.Zero);
                 RenderMetrics.RecordDraw(mesh.Indices.Length);
                 if(outline&&!blend) {
-                    using var contourState=new RenderStateScope().Enable(EnableCap.CullFace);
+                    using var contourState=RenderDevice.CreateStateScope().Enable(RenderCapability.CullFace);
                     GL.GetInteger(GetPName.CullFaceMode,out int previousCull);
                     try {
                         GL.CullFace(TriangleFace.Front);

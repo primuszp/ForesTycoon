@@ -51,5 +51,11 @@ namespace ForesTycoon.Ecology
 
         /// <summary>Advances weather, water and forest by fixed-step game time.</summary>
         internal void Update(double fixedDeltaSeconds) => coordinator.Update(fixedDeltaSeconds);
+
+        internal void ApplyTerrainEdit(ReadOnlySpan<int> changedTiles)
+        {
+            Forest.ClearTerrainTiles(changedTiles);
+            Environment.RefreshRouting(changedTiles);
+        }
     }
 }

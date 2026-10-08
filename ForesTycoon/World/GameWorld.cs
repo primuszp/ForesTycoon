@@ -168,11 +168,20 @@ namespace ForesTycoon
 
         void IWorldCommandTarget.ExecuteElevationEdit(int nodeId, int delta, int radius, int strength)
         {
-            map.EditElevationAtNode(nodeId, delta, radius, strength);
-            forest.RefreshHabitat();
-            Environment?.RefreshRouting();
+            int[] changedTiles = map.EditElevationAtNode(nodeId, delta, radius, strength);
+            if (changedTiles.Length == 0) return;
+            ecosystem.ApplyTerrainEdit(changedTiles);
             if (map.TryGetNodePosition(nodeId, out Vector3 position))
                 effects.Spawn(WorldEffectKind.TerrainChanged, position);
+        }
+
+        void IWorldCommandTarget.ExecuteLegacyElevationEdit(int nodeId, int delta, int radius, int strength)
+        {
+            // Only historical commands use the old rule; new edits in loaded worlds use the fixed rule.
+            map.EditElevationAtNode(nodeId, delta, radius, strength);
+            forest.RefreshHabitat();
+            Environment.RefreshRouting();
+            if (map.TryGetNodePosition(nodeId, out Vector3 position)) effects.Spawn(WorldEffectKind.TerrainChanged, position);
         }
 
         void IWorldCommandTarget.ExecuteRoadPath(int startTileId, int endTileId, bool remove)
@@ -305,7 +314,7 @@ namespace ForesTycoon
             vehicles.RoadRouteFactory = route => VehicleRoadRoute.Create(map, route);
             commands.Clear();
             commandJournal.Clear();
-            commandJournal.AddRange(save.Commands);
+            foreach (var record in save.Commands) commandJournal.Add(save.ReplayCommand(record));
             worldTick = candidate.worldTick;
             lastForestryAction = candidate.lastForestryAction;
             lastForestryArea = candidate.lastForestryArea;
@@ -318,7 +327,7 @@ namespace ForesTycoon
             for (ulong tick = 0; ; tick++)
             {
                 while (commandIndex < save.Commands.Count && save.Commands[commandIndex].Tick == tick)
-                    commands.Enqueue(WorldCommandFactory.Create(save.Commands[commandIndex++]));
+                    commands.Enqueue(WorldCommandFactory.Create(save.ReplayCommand(save.Commands[commandIndex++])));
                 commands.ExecutePending(this);
                 if (tick == save.Tick) break;
                 Update(fixedDelta);

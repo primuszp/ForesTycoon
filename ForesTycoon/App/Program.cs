@@ -6,6 +6,7 @@ namespace ForesTycoon
     {
         static void Main(string[] args)
         {
+            RenderBackendSelection.UseOpenGl();
             if (Array.Exists(args, a => a == "--oak-study-preview")) { OakStudyPreview.Run(Array.Exists(args, a => a == "--before")); return; }
             if (Array.Exists(args, a => a == "--ui-font-smoke-test")) { UiFontSmokeTest.Run(); return; }
             if (Array.Exists(args, a => a == "--vegetation-preview")) { VegetationPreview.Run(); return; }

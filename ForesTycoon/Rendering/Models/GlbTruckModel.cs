@@ -2,7 +2,6 @@ using System;
 using System.IO;
 using System.Collections.Generic;
 using System.Text.Json;
-using OpenTK.Graphics.OpenGL;
 using OpenTK.Mathematics;
 namespace ForesTycoon
 {
@@ -133,7 +132,7 @@ namespace ForesTycoon
             int visibleCargo=(int)MathF.Ceiling(Math.Clamp(cargoFill,0,1)*cargoCount),cargoIndex=0;
             foreach(var part in drawParts){
                 if(part.Category=="cargo" && cargoIndex++>=visibleCargo)continue;
-                if(part.Buffer==null){part.Buffer=new VertexBuffer(PrimitiveType.Triangles);part.Buffer.SetData(part.Vertices,false);}
+                if(part.Buffer==null){part.Buffer=new VertexBuffer(PrimitiveTopology.Triangles);part.Buffer.SetData(part.Vertices,false);}
                 RenderDevice.PushModel();
                 try{
                     float steer=part.Category=="wheel" && part.Name.Contains("Front")?
@@ -149,11 +148,9 @@ namespace ForesTycoon
                         part.Buffer.DrawArray();
                         if (outlineWidth > 0 && visuals?.Active == true && !visuals.ShadowPass)
                         {
-                            using (new RenderStateScope().Enable(EnableCap.CullFace))
+                            using (RenderDevice.CreateStateScope().Cull(RenderCullFace.Front))
                             {
-                                GL.GetInteger(GetPName.CullFaceMode, out int oldCull);
-                                try { GL.CullFace(TriangleFace.Front); visuals.Use(outlineWidth); part.Buffer.DrawArray(false); }
-                                finally { GL.CullFace((TriangleFace)oldCull); }
+                                visuals.Use(outlineWidth); part.Buffer.DrawArray(false);
                             }
                         }
                     } finally { if (visuals != null) visuals.Kind = previousKind; }

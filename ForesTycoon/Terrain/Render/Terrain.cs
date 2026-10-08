@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using OpenTK.Mathematics;
-using OpenTK.Graphics.OpenGL;
 
 namespace ForesTycoon
 {
@@ -17,19 +16,14 @@ namespace ForesTycoon
     {
         private readonly TerrainMap map;
         private readonly Dictionary<string, VertexBuffer> vbos = new Dictionary<string, VertexBuffer>();
-        private readonly VertexBuffer edges = new VertexBuffer(PrimitiveType.Lines, BufferUsageHint.DynamicDraw);
         private readonly List<Tile> visibleTiles = new List<Tile>();
         private readonly List<TerrainChunk> visibleChunks = new List<TerrainChunk>();
         private int visibleChunkCount;
-        private bool editedEdgesPendingUpload;
-        internal int TerrainEdgeUploads { get; private set; }
 
         private static readonly Color RoadFoundationColor = Color.FromArgb(154, 120, 72);
         private static readonly Color RoadFoundationSlopeColor = Color.FromArgb(126, 88, 48);
         private static readonly Color RoadFoundationLineColor = Color.FromArgb(74, 43, 20);
         private static readonly Color TerrainTopColor = Color.FromArgb(141, 184, 75);  // fű (terep tető)
-        private readonly List<uint> indices = new List<uint>();
-        private Vertex[] vertices = null;
 
         // The map's facts, under the short names the render partials grew up with.
         private TerrainSettings settings => map.Settings;
@@ -96,9 +90,7 @@ namespace ForesTycoon
         {
             this.map = map ?? throw new ArgumentNullException(nameof(map));
             makeTiles();
-            makeQuads();
             map.NodesChanged += OnNodesChanged;
-            map.EditsFlushed += UploadEditedEdges;
             map.RoadDiagonalsChanged += OnRoadDiagonalsChanged;
         }
 
@@ -166,11 +158,9 @@ namespace ForesTycoon
         public void Dispose()
         {
             map.NodesChanged -= OnNodesChanged;
-            map.EditsFlushed -= UploadEditedEdges;
             map.RoadDiagonalsChanged -= OnRoadDiagonalsChanged;
             foreach (VertexBuffer vbo in vbos.Values) vbo.Dispose();
             vbos.Clear();
-            edges.Dispose();
             DisposeForestGeometry();
             DisposeStaticTerrain();
         }

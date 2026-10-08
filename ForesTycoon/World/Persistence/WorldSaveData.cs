@@ -61,18 +61,22 @@ namespace ForesTycoon
 
     sealed class WorldSaveData
     {
-        public const int CurrentVersion = 5;
+        public const int CurrentVersion = 6;
         public int Version { get; init; } = CurrentVersion;
         public double TickRate { get; init; } = 30.0;
         public double ForestYearSeconds { get; init; } = EnvironmentSystem.SecondsPerForestYear;
         internal double ReplayForestYearSeconds => Version == 4 ? EnvironmentSystem.SecondsPerForestYear : ForestYearSeconds;
+        internal bool ReplayLegacyTerrainEdits => Version < 6;
+        // In v6 the previously unused elevation Flag identifies historical v4/v5 edit semantics.
+        internal WorldCommandRecord ReplayCommand(WorldCommandRecord record) =>
+            ReplayLegacyTerrainEdits && record.Kind == WorldCommandKind.EditElevation ? record with { Flag = true } : record;
         public ulong Tick { get; init; }
         public TerrainSettingsData Terrain { get; init; } = new TerrainSettingsData();
         public List<WorldCommandRecord> Commands { get; init; } = new List<WorldCommandRecord>();
 
         public void Validate()
         {
-            if (Version != 4 && Version != CurrentVersion)
+            if (Version != 4 && Version != 5 && Version != CurrentVersion)
                 throw new NotSupportedException($"Save version {Version} is not supported; expected {CurrentVersion}.");
             if (!EnvironmentSystem.IsValidForestYearSeconds(ReplayForestYearSeconds))
                 throw new InvalidOperationException("Save forest year duration must be between 120 and 1200 seconds.");

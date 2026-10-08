@@ -1,5 +1,9 @@
 # Víz, időjárás és erdő: szimulációs terv
 
+A teljes raszteres ökoszisztéma következő fejlesztési terve, a helyi terepszerkesztési javítás és
+a szakirodalmi/.NET keretrendszer-értékelés: [ecosystem-simulation-design.md](ecosystem-simulation-design.md).
+Az alábbi dokumentum a víz–időjárás modell korábbi tervezési előzményeit és megvalósult részeit őrzi.
+
 Állapot: az első 1.0 játékmodell megvalósult; a részletes terv további szakaszokat is tartalmaz. A dokumentum végén szerepel a ténylegesen elkészült hatókör. A cél egy terepasztalon olvasható, determinisztikus erdőgazdálkodási szimuláció. Az eső a helyi vízkészletet változtatja; az erdő ezt felveszi, árnyékolja a talajt és módosítja a lefolyást. A grafikai kapcsolók kizárólag a megjelenítést vezérlik.
 
 ## 1. Kiindulópont a kódban

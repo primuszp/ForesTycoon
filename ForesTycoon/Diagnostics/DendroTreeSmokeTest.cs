@@ -23,7 +23,7 @@ namespace ForesTycoon
                 GL.Disable(EnableCap.Blend); GL.Disable(EnableCap.CullFace);
                 RenderDevice.SetCamera(Matrix4.Identity);
                 uint green = (uint)Terrain.SurfaceSpeciesCode(ForestSpecies.Oak) << 24 | 0x0040c020;
-                using var quad = new VertexBuffer(PrimitiveType.Triangles);
+                using var quad = new VertexBuffer(PrimitiveTopology.Triangles);
                 quad.SetData(new[] {
                     V(-1,-1), V(1,-1), V(1,1), V(-1,-1), V(1,1), V(-1,1) });
                 var settings = new GraphicsSettings { Enhanced = true, Textures = true,

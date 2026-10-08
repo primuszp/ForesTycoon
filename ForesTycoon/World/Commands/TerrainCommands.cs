@@ -6,18 +6,24 @@ namespace ForesTycoon
         private readonly int delta;
         private readonly int radius;
         private readonly int strength;
+        private readonly bool legacy;
 
-        public EditElevationCommand(int nodeId, int delta, int radius, int strength)
+        public EditElevationCommand(int nodeId, int delta, int radius, int strength, bool legacy = false)
         {
             this.nodeId = nodeId;
             this.delta = delta;
             this.radius = radius;
             this.strength = strength;
+            this.legacy = legacy;
         }
 
-        public void Execute(IWorldCommandTarget world) => world.ExecuteElevationEdit(nodeId, delta, radius, strength);
+        public void Execute(IWorldCommandTarget world)
+        {
+            if (legacy) world.ExecuteLegacyElevationEdit(nodeId, delta, radius, strength);
+            else world.ExecuteElevationEdit(nodeId, delta, radius, strength);
+        }
         public WorldCommandRecord ToRecord(ulong tick) =>
-            new WorldCommandRecord(tick, WorldCommandKind.EditElevation, nodeId, delta, radius, strength, false);
+            new WorldCommandRecord(tick, WorldCommandKind.EditElevation, nodeId, delta, radius, strength, legacy);
     }
 
     sealed class RoadPathCommand : IWorldCommand

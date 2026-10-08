@@ -94,14 +94,50 @@ namespace ForesTycoon
                 Require(source < 256, "No new-world forest.");
                 world.QueueHarvestForest(source); world.ExecutePendingCommands();
                 for (int i = 0; i < 3300; i++) world.Update(1.0 / 30);
-                world.TryGetForestStand(source, out var before);
-                float stock = world.Logistics.Remaining;
+                double editTime = world.Environment.Time;
+                ulong editTick = world.SimulationTick;
+                world.QueueElevationEdit(5 * 17 + 5, 1, 0, 1);
+                world.ExecutePendingCommands();
+                Require(world.Environment.Time == editTime && world.SimulationTick == editTick,
+                    "Terrain command advanced simulation time.");
+                var editedStands = new ForestStand[256];
+                for (int id = 0; id < editedStands.Length; id++) world.TryGetForestStand(id, out editedStands[id]);
+                float editedStock = world.Logistics.Remaining;
                 using var save = new MemoryStream();
                 world.Save(save); save.Position = 0;
                 Require(WorldSaveSerializer.Read(save).Version == WorldSaveData.CurrentVersion, "Save format version mismatch.");
                 save.Position = 0; world.Load(save);
-                world.TryGetForestStand(source, out var after);
-                Require(before == after && stock == world.Logistics.Remaining, "Save replay changed individual growth/stock.");
+                for (int id = 0; id < editedStands.Length; id++)
+                {
+                    world.TryGetForestStand(id, out var replayed);
+                    Require(editedStands[id] == replayed, "Terrain edit replay changed forest state.");
+                }
+                Require(editedStock == world.Logistics.Remaining, "Save replay changed timber stock.");
+                // Old journals retain historical edit semantics when upgraded, while newly queued
+                // commands immediately use the corrected local rule in the loaded world.
+                save.Position = 0;
+                var currentSave = WorldSaveSerializer.Read(save);
+                using var legacySave = new MemoryStream();
+                WorldSaveSerializer.Write(legacySave, new WorldSaveData { Version = 5,
+                    TickRate = currentSave.TickRate, ForestYearSeconds = currentSave.ForestYearSeconds,
+                    Tick = currentSave.Tick, Terrain = currentSave.Terrain, Commands = currentSave.Commands });
+                legacySave.Position = 0; world.Load(legacySave);
+                for (int id = 0; id < editedStands.Length; id++) world.TryGetForestStand(id, out editedStands[id]);
+                using var upgraded = new MemoryStream();
+                world.Save(upgraded); upgraded.Position = 0;
+                var upgradedData = WorldSaveSerializer.Read(upgraded);
+                Require(upgradedData.Version == 6 && upgradedData.Commands.Exists(c => c.Kind == WorldCommandKind.EditElevation && c.Flag),
+                    "Legacy journal lost its historical terrain rule during upgrade.");
+                upgraded.Position = 0; world.Load(upgraded);
+                for (int id = 0; id < editedStands.Length; id++)
+                {
+                    world.TryGetForestStand(id, out var replayed);
+                    Require(editedStands[id] == replayed, "Upgraded legacy replay changed forest state.");
+                }
+                world.QueueElevationEdit(6 * 17 + 6, 1, 0, 1); world.ExecutePendingCommands();
+                using var continued = new MemoryStream(); world.Save(continued); continued.Position = 0;
+                var continuedData = WorldSaveSerializer.Read(continued);
+                Require(!continuedData.Commands[^1].Flag, "New edit in a loaded legacy world retained the old rule.");
 
                 world.Regenerate(TerrainSettings.Default.WithNodeSize(17, 42));
                 int count = world.ForestTreeCount;

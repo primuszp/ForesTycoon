@@ -1,6 +1,5 @@
 using System;
 using System.Drawing;
-using OpenTK.Graphics.OpenGL;
 using OpenTK.Mathematics;
 
 namespace ForesTycoon
@@ -13,9 +12,9 @@ namespace ForesTycoon
             if (roads.Count == 0) return;
             int tpc = nodeRows - 1;
 
-            using (new RenderStateScope().PolygonOffset(-1.0f, -1.0f))
+            using (RenderDevice.CreateStateScope().PolygonOffset(-1.0f, -1.0f))
             {
-                DynamicPrimitiveBatch.Draw(PrimitiveType.Quads, () =>
+                DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () =>
                 {
                     foreach (Tile t in visibleTiles)
                     {
@@ -31,10 +30,10 @@ namespace ForesTycoon
                 });
             }
 
-            using (new RenderStateScope().DepthWrite(false))
+            using (RenderDevice.CreateStateScope().DepthWrite(false))
             {
                 DynamicPrimitiveBatch.Color4(RoadFoundationLineColor);
-                DynamicPrimitiveBatch.Draw(PrimitiveType.Lines, () =>
+                DynamicPrimitiveBatch.Draw(PrimitiveTopology.Lines, () =>
                 {
                     foreach (Tile tile in visibleTiles)
                     {
@@ -50,7 +49,7 @@ namespace ForesTycoon
         private void DrawFoundationTerrainSurfaces()
         {
             if (roads.Count == 0) return;
-            DynamicPrimitiveBatch.Draw(PrimitiveType.Quads, () =>
+            DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () =>
             {
                 foreach (Tile tile in visibleTiles)
                 {
@@ -63,7 +62,7 @@ namespace ForesTycoon
                 }
             });
 
-            DynamicPrimitiveBatch.Draw(PrimitiveType.Triangles, () =>
+            DynamicPrimitiveBatch.Draw(PrimitiveTopology.Triangles, () =>
             {
                 foreach (Tile tile in visibleTiles)
                 {

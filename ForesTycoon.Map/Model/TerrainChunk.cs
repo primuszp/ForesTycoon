@@ -35,9 +35,12 @@ namespace ForesTycoon.Map
         public ChunkDirtyFlags DirtyFlags { get; private set; } = ChunkDirtyFlags.All;
         // Monotonic revisions survive another renderer clearing the dirty flags.
         public ulong PropVersion { get; private set; }
+        public ulong SurfaceVersion { get; private set; } = 1;
         public void MarkDirty(ChunkDirtyFlags flags)
         {
             DirtyFlags |= flags;
+            if ((flags & (ChunkDirtyFlags.Terrain | ChunkDirtyFlags.Water | ChunkDirtyFlags.Roads | ChunkDirtyFlags.Foundations)) != 0)
+                SurfaceVersion++;
             if ((flags & (ChunkDirtyFlags.Terrain | ChunkDirtyFlags.Props | ChunkDirtyFlags.Roads | ChunkDirtyFlags.Foundations)) != 0)
                 PropVersion++;
         }

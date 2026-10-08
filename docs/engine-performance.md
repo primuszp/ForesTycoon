@@ -317,7 +317,7 @@ A Debug grafikus próba normál beállításokkal sikeres. A Release próba tier
 
 Fennmaradó review-megállapítások:
 
-- **P2, globális statikus terepérvénytelenítés:** a `Terrain.StaticGeometry.DrawCachedTerrain` továbbra is a teljes `SurfaceVersion` alapján épít újra, így egy helyi szerkesztés minden látható statikus chunkot érinthet. Szűkítéshez a távoli vízmedencékre és szomszédos útalapokra gyakorolt hatást is követni kell; egyszerű helyi dirty flag használata hibás cache-t eredményezhet.
+- **Javítva, globális statikus terepérvénytelenítés:** a terrain/grid cache chunkonkénti `SurfaceVersion` értéket használ. A valóban változó vízborítás külön vízverziót kap; a távoli, változatlan chunk megmarad. A hidrológiai medenceszámítás futásideje még teljes térképes. Részletek: [ökológiai terv és terepedit](ecosystem-simulation-design.md).
 - **P2, teljes erdő-előtöltés:** a `TerrainRenderer` konstruktorában a `WarmIndividualForest` minden chunk mindhárom LOD-ját felépíti. Nagy pályáknál ez továbbra is indulási és memóriaköltség. Korlátos cache csak a jelenlegi szezon-/méretfolytonosság és a hideg LOD-ok helyes helyettesítésének megőrzésével vezethető be.
 
 Újrafuttatás:
@@ -403,23 +403,31 @@ A helyi minták: `artifacts/world-benchmark/sunny.json` és `storm.json`.
 
 ### OpenGL marad az elsődleges backend
 
-A modellrenderelő CPU-oldali előkészítése és OpenGL-erőforráskezelése külön modulban található.
-Az `IModelRenderBackend` interfész pózt, példánytranszformációt, explicit `ModelRenderFrame` értéket
-és rajzolási sorrendet kap. A backend szerzi be a közös batch-keretet is; a halak, épületek és
-szarvasok ehhez már nem hoznak létre közvetlen GL-scope-ot. Az alapértelmezett megvalósítás
-az `OpenGl/OpenGlModelRenderer`; a GLSL források külön `OpenGlModelShaders` fájlban vannak.
+A backendhatár most a teljes alkalmazás renderelését lefedi: geometria és erdőállapot-buffer,
+modellek/animáció, felületek/árnyék, csapadék/felhő/köd/villám, diorama post-process, ImGui,
+valamint a grafikai ablakbeállítások és a képkocka megjelenítése. A natív grafikai hívások és GLSL
+kizárólag az `OpenGl/` megvalósításokban találhatók; ezt architektúrateszt védi.
+A diagnosztikai OpenGL-próbák szándékosan továbbra is használnak natív hívásokat.
 
-Az Engine `RenderTransformState` osztálya a kamera/modell állapotát natív kontextus nélkül kezeli.
-A `RenderDevice` saját shaderfordító/linkelő duplikációja megszűnt; a modellekhez hasonlóan
-`GlProgram.Create` végzi ezt a műveletet. A forest material és ImGui saját útja még különálló.
-A CPU-s modellparancs előkészítése ismételt híváskor nem foglal memóriát.
-Az architektúrateszt tiltja a natív grafikai típusokat és GLSL-t a modellek CPU/contract forrásaiban.
+A `RenderBackendSelection` egyetlen koherens backendcsomagot állít be induláskor. Az interfészek
+erőforrásokat és teljes meneteket kezelnek, nem egyenként tükrözik a GL-hívásokat. A dinamikus
+primitívek CPU-oldalon készülnek, az erdőállapot tulajdonosa natív azonosítók nélkül végzi a
+feltöltést, az ImGui vezérlője csak kontextust, betűket és inputot kezel. A shaderfordítás és
+linkelés közös `GlProgram` segédet használ az erdőanyag és az UI esetében is.
 
-Ez működő modellbackend-határ, nem kész Metal vagy teljes renderelőcsere. A terep, időjárás,
-post-process és UI backendhatárának fokozatos kialakítása még hátravan. Az előző táblázat
-a backendhatár szétválasztása előtti állapot mérése; a refaktorhoz nem állítunk további gyorsulást.
+Az új határokhoz kontextus nélküli tesztek ellenőrzik a rajzolási/képkocka-parancsokat, buffer-
+létrehozást, az induláskori konfigurációt, az élő renderer átállításának visszautasítását és az UI
+backend használatát. A modellparancs előkészítése továbbra sem foglal memóriát ismételt híváskor.
+A részletes szerződések és a platformkorlátok: [engine-architecture.md](engine-architecture.md).
 
-Ellenőrzés a backendhatár kialakítása után: 1334/1334 Release-teszt sikeres. A material-alpha,
-wildlife, graphics és forest GL-próba sikeres. Az új tesztek GL-kontextus nélkül ellenőrzik a
-beadott backend használatát, frame/póz/transzformáció átadását, kamera- és anyagváltás rendezését,
-árnyékmenetet, erőforrás-életciklust, nulla per-draw CPU-memóriafoglalást és külön transform state-eket.
+Az OpenGL az alapértelmezett megvalósítás. Metalhoz még külön erőforrás-, shader-, pass- és
+prezentációs megvalósítás szükséges, macOS hardveres ellenőrzéssel. A host ablakeseményei
+jelenleg az OpenTK toolkithez kötődnek. Ez a refaktor nem jelent új Metal-renderelőt.
+Az előző teljesítménytáblázat a leválasztás előtti referencia; további gyorsulást nem állítunk.
+
+Végső ellenőrzés: 1344/1344 Release-teszt sikeres. A material-alpha, forest, wildlife, truck, graphics,
+UI-font és teljes játékablak OpenGL-próba sikeres. A graphics próba a korábban dokumentált
+`DOTNET_TieredCompilation=0` beállítást használta, változatlan képtoleranciával.
+A teljes játékablak próbájában a simított frame 7,20 ms volt; ez rövid működési próba,
+nem kontrollált előtte/utána teljesítménymérés. A `TreePreviewDump` korábbi nullable
+figyelmeztetései megmaradtak.

@@ -25,6 +25,8 @@ namespace ForesTycoon
                 GL.Viewport(0, 0, 960, 640);
                 string output = Path.GetFullPath("artifacts/truck-preview");
                 Directory.CreateDirectory(output);
+                // Vehicle scaling follows the terrain's lane width, including isolated road fixtures.
+                using var previewTerrain = new Terrain(TerrainSettings.Default.WithNodeSize(17, 42), (u, v) => 2);
                 foreach (var (name, grade, load) in new[] { ("loaded-uphill", 0.25f, 25f), ("loaded-downhill", -0.25f, 25f), ("empty-flat", 0f, 0f) })
                 {
                     var road = new VehicleRoadRoute(new[] { new Vector3(-10, 0, -10 * grade), Vector3.Zero, new Vector3(10, 0, 10 * grade) },
@@ -39,7 +41,7 @@ namespace ForesTycoon
                         Matrix4.CreateOrthographic(5.8f, 3.87f, -100, 100));
                     GL.ClearColor(0.39f, 0.46f, 0.29f, 1);
                     GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
-                    DynamicPrimitiveBatch.Draw(PrimitiveType.Quads, () => {
+                    DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () => {
                         DynamicPrimitiveBatch.Color3(System.Drawing.Color.FromArgb(104, 107, 107));
                         DynamicPrimitiveBatch.Vertex3(-20, -1, -20 * grade);
                         DynamicPrimitiveBatch.Vertex3(20, -1, 20 * grade);
@@ -47,7 +49,7 @@ namespace ForesTycoon
                         DynamicPrimitiveBatch.Vertex3(-20, 1, -20 * grade);
                     });
                     RenderMetrics.BeginFrame();
-                    VehicleRenderer.Draw(system, null, 1);
+                    VehicleRenderer.Draw(system, previewTerrain, 1);
                     GL.Finish();
                     if (RenderMetrics.SubmittedVertices == 0 || GL.GetError() != ErrorCode.NoError)
                         throw new InvalidOperationException("Truck rendering failed.");
@@ -55,7 +57,7 @@ namespace ForesTycoon
                     Console.WriteLine($"{name}: vertices={RenderMetrics.SubmittedVertices}, draws={RenderMetrics.DrawCalls}");
                     // Isolated model submission cost; excludes terrain, GUI and presentation.
                     long start = Stopwatch.GetTimestamp();
-                    for (int i = 0; i < 120; i++) { VehicleRenderer.Draw(system, null, 1); GL.Finish(); }
+                    for (int i = 0; i < 120; i++) { VehicleRenderer.Draw(system, previewTerrain, 1); GL.Finish(); }
                     Console.WriteLine($"Truck render average: {Stopwatch.GetElapsedTime(start).TotalMilliseconds / 120:F3} ms");
                 }
                 Console.WriteLine($"Truck render smoke passed. Captures: {output}");

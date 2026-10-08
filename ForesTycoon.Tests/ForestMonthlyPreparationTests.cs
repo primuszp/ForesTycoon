@@ -158,6 +158,21 @@ public class ForestMonthlyPreparationTests
         Equal(prepared, reference);
     }
 
+    [Fact]
+    public void TerraformRemovalRepairsPreparedMonthWithoutChangingUneditedTrees()
+    {
+        var prepared = Create(true, side: 32);
+        var reference = Create(false, side: 32);
+        prepared.Clock.Update(99.5); reference.Clock.Update(99.5);
+        int id = prepared.Forest.IndividualTrees.Patches.First().Key;
+        prepared.Forest.ClearTerrainTiles(new[] { id });
+        reference.Forest.ClearTerrainTiles(new[] { id });
+        prepared.Clock.Update(.5); reference.Clock.Update(.5);
+        Equal(prepared, reference);
+        prepared.Clock.Update(150); reference.Clock.Update(150);
+        Equal(prepared, reference);
+    }
+
     private static void Equal(
         (ForestSystem Forest, EnvironmentSystem Water, ForestEnvironmentCoordinator Clock) a,
         (ForestSystem Forest, EnvironmentSystem Water, ForestEnvironmentCoordinator Clock) b)

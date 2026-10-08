@@ -9,6 +9,8 @@ namespace ForesTycoon
     interface IWorldCommandTarget
     {
         void ExecuteElevationEdit(int nodeId, int delta, int radius, int strength);
+        void ExecuteLegacyElevationEdit(int nodeId, int delta, int radius, int strength) =>
+            ExecuteElevationEdit(nodeId, delta, radius, strength);
         void ExecuteRoadPath(int startTileId, int endTileId, bool remove);
         void ExecuteSpawnVehicle();
         void ExecutePlaceSawmill(int tileId) => throw new System.NotSupportedException();

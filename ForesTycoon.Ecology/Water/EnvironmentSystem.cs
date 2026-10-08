@@ -116,16 +116,34 @@ namespace ForesTycoon.Ecology
         {
             Span<int> neighbours = stackalloc int[4];
             for (int i = 0; i < CellCount; i++)
+                RefreshRoute(i, neighbours);
+        }
+
+        // Only these cells and direct neighbours can acquire a different downhill destination.
+        // Re-routing never changes water stores, forcing, integrals or simulation time.
+        internal void RefreshRouting(ReadOnlySpan<int> changedTiles)
+        {
+            foreach (int id in changedTiles)
+                if ((uint)id >= (uint)CellCount) throw new ArgumentOutOfRangeException(nameof(changedTiles));
+            Span<int> neighbours = stackalloc int[4], adjacent = stackalloc int[4];
+            foreach (int id in changedTiles)
             {
-                destinations[i] = -1;
-                float low = habitat.GetNormalizedElevation(i);
-                int n = habitat.GetAdjacentTileIds(i, neighbours);
-                for (int j = 0; j < n; j++)
-                {
-                    int id = neighbours[j];
-                    float height = habitat.GetNormalizedElevation(id);
-                    if (height < low) { low = height; destinations[i] = id; }
-                }
+                RefreshRoute(id, neighbours);
+                int count = habitat.GetAdjacentTileIds(id, adjacent);
+                for (int j = 0; j < count; j++) RefreshRoute(adjacent[j], neighbours);
+            }
+        }
+
+        private void RefreshRoute(int id, Span<int> neighbours)
+        {
+            destinations[id] = -1;
+            float low = habitat.GetNormalizedElevation(id);
+            int count = habitat.GetAdjacentTileIds(id, neighbours);
+            for (int j = 0; j < count; j++)
+            {
+                int next = neighbours[j];
+                float height = habitat.GetNormalizedElevation(next);
+                if (height < low) { low = height; destinations[id] = next; }
             }
         }
         private void RefreshVegetation()

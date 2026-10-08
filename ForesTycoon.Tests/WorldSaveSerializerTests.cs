@@ -10,15 +10,23 @@ public class WorldSaveSerializerTests
         Assert.Equal(1200, WorldSaveSerializer.Read(stream).ReplayForestYearSeconds);
     }
 
-    [Fact]
-    public void VersionFivePreservesRetunedCalendar()
+    [Theory]
+    [InlineData(5, true)]
+    [InlineData(6, false)]
+    public void SaveVersionPreservesCalendarAndTerrainEditRules(int version, bool legacyEdits)
     {
         using var stream = new MemoryStream();
-        WorldSaveSerializer.Write(stream, new WorldSaveData { ForestYearSeconds = 120 });
+        WorldSaveSerializer.Write(stream, new WorldSaveData { Version = version, ForestYearSeconds = 120 });
         stream.Position = 0;
         var loaded = WorldSaveSerializer.Read(stream);
-        Assert.Equal(5, loaded.Version);
+        Assert.Equal(version, loaded.Version);
+        Assert.Equal(legacyEdits, loaded.ReplayLegacyTerrainEdits);
         Assert.Equal(120, loaded.ReplayForestYearSeconds);
+        var edit = new WorldCommandRecord(1, WorldCommandKind.EditElevation, 7, 1, 0, 1, false);
+        var historical = loaded.ReplayCommand(edit);
+        Assert.Equal(legacyEdits, historical.Flag);
+        Assert.Equal(historical, WorldCommandFactory.Create(historical).ToRecord(1));
+        Assert.False(new EditElevationCommand(7, 1, 0, 1).ToRecord(1).Flag);
     }
 
     [Theory]

@@ -1,6 +1,5 @@
 using System;
 using System.Drawing;
-using OpenTK.Graphics.OpenGL;
 using OpenTK.Mathematics;
 
 namespace ForesTycoon
@@ -16,8 +15,8 @@ namespace ForesTycoon
             RenderDevice.PushModel();
             {
                 RenderDevice.Translate(node.xPos, node.yPos, node.zPos);
-                using (new RenderStateScope()
-                    .Disable(EnableCap.DepthTest)
+                using (RenderDevice.CreateStateScope()
+                    .Disable(RenderCapability.DepthTest)
                     .DepthWrite(false)
                     )
                 {
@@ -31,9 +30,9 @@ namespace ForesTycoon
         {
             if (tile == null) return;
 
-            using (new RenderStateScope().AlphaBlend())
+            using (RenderDevice.CreateStateScope().AlphaBlend())
             {
-                DynamicPrimitiveBatch.Draw(PrimitiveType.Triangles, () =>
+                DynamicPrimitiveBatch.Draw(PrimitiveTopology.Triangles, () =>
                 {
                     DynamicPrimitiveBatch.Color4(Color.FromArgb(90, 255, 235, 60));
                     if (Math.Abs(tile.W.zPos - tile.E.zPos) <= Math.Abs(tile.N.zPos - tile.S.zPos))
@@ -56,9 +55,9 @@ namespace ForesTycoon
                     }
                 });
 
-                using (new RenderStateScope().ThinLines())
+                using (RenderDevice.CreateStateScope().ThinLines())
                 {
-                    DynamicPrimitiveBatch.Draw(PrimitiveType.LineLoop, () =>
+                    DynamicPrimitiveBatch.Draw(PrimitiveTopology.LineLoop, () =>
                     {
                         DynamicPrimitiveBatch.Color4(Color.FromArgb(245, 255, 240, 80));
                         DynamicPrimitiveBatch.Vertex3(tile.W.xPos, tile.W.yPos, tile.W.zPos);
@@ -75,7 +74,7 @@ namespace ForesTycoon
             Vector3 lightDir = new Vector3(0.5f, -0.5f, 1.0f);
             lightDir.Normalize();
 
-            DynamicPrimitiveBatch.Draw(PrimitiveType.Quads, () =>
+            DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () =>
             {
                 for (int i = 0; i < rings; i++)
                 {

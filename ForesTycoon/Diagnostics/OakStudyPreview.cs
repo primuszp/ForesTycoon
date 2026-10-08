@@ -31,8 +31,8 @@ namespace ForesTycoon
                     Shadows = false, Weather = false, Fog = false, Textures = true }, new WeatherVisualState());
                 RenderDevice.Visuals = visuals; visuals.BeginFrame();
                 using var material = new ForestMaterial();
-                using var wood = new VertexBuffer(PrimitiveType.Triangles);
-                using var crown = new VertexBuffer(PrimitiveType.Triangles);
+                using var wood = new VertexBuffer(PrimitiveTopology.Triangles);
+                using var crown = new VertexBuffer(PrimitiveTopology.Triangles);
                 var woodVertices = new List<Vertex>(); var crownVertices = new List<Vertex>();
                 var size = new ForestTreeDimensions(0.85f, 18, 8);
                 for (int row = 0; row < 2; row++)

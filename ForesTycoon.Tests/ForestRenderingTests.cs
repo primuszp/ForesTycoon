@@ -43,7 +43,7 @@ public class ForestRenderingTests
     [Fact]
     public void GeometryCapture_TriangulatesAndRecoversAfterFailureWithoutGL()
     {
-        Vertex[] mesh = DynamicPrimitiveBatch.BuildGeometry(PrimitiveType.Quads, () =>
+        Vertex[] mesh = DynamicPrimitiveBatch.BuildGeometry(PrimitiveTopology.Quads, () =>
         {
             DynamicPrimitiveBatch.Color4(Color.FromArgb(128, 20, 40, 60));
             DynamicPrimitiveBatch.Vertex3(0, 0, 0);
@@ -56,8 +56,8 @@ public class ForestRenderingTests
         Assert.Equal(new Vector3(0, 1, 0), mesh[5].Position);
         Assert.All(mesh, vertex => Assert.Equal(0x803c2814u, vertex.Color));
         Assert.Throws<InvalidOperationException>(() => DynamicPrimitiveBatch.BuildGeometry(
-            PrimitiveType.Quads, () => DynamicPrimitiveBatch.Vertex3(0, 0, 0)));
-        Assert.Empty(DynamicPrimitiveBatch.BuildGeometry(PrimitiveType.Triangles, () => { }));
+            PrimitiveTopology.Quads, () => DynamicPrimitiveBatch.Vertex3(0, 0, 0)));
+        Assert.Empty(DynamicPrimitiveBatch.BuildGeometry(PrimitiveTopology.Triangles, () => { }));
     }
 
     [Fact]

@@ -114,6 +114,27 @@ public class ArchitectureTests
         }
     }
 
+    [Theory]
+    [InlineData("ForesTycoon.Rendering")]
+    [InlineData("ForesTycoon.Models")]
+    [InlineData("ForesTycoon.Effects")]
+    [InlineData("ForesTycoon/App")]
+    [InlineData("ForesTycoon/Terrain")]
+    [InlineData("ForesTycoon/Rendering")]
+    public void NativeGraphicsStayInsideBackendImplementations(string sourceDirectory)
+    {
+        string directory = Path.Combine(RepositoryRoot(), sourceDirectory);
+        foreach (string file in Directory.EnumerateFiles(directory, "*.cs", SearchOption.AllDirectories))
+        {
+            string[] segments = Path.GetRelativePath(directory, file).Split(Path.DirectorySeparatorChar);
+            if (segments.Any(segment => segment is "OpenGl" or "obj" or "bin")) continue;
+            string source = File.ReadAllText(file);
+            foreach (string forbidden in new[] { "OpenTK.Graphics", "GL.", "#version", "PrimitiveType.",
+                         "BufferUsageHint.", "ContextAPI.OpenGL", "ContextProfile.Core" })
+                Assert.False(source.Contains(forbidden), $"{file} leaks backend detail: {forbidden}");
+        }
+    }
+
     [Fact]
     public void EcosystemRunsHeadlessWithoutTerrainOrRendering()
     {

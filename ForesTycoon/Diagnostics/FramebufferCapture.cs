@@ -3,7 +3,6 @@ using System.Buffers.Binary;
 using System.IO;
 using System.IO.Compression;
 using System.Text;
-using OpenTK.Graphics.OpenGL;
 
 namespace ForesTycoon
 {
@@ -12,7 +11,7 @@ namespace ForesTycoon
         internal static void SavePng(string path, int width, int height)
         {
             var pixels = new byte[checked(width * height * 4)];
-            GL.ReadPixels(0, 0, width, height, PixelFormat.Rgba, PixelType.UnsignedByte, pixels);
+            RenderDevice.ReadPixels(0, 0, width, height, pixels);
             // The review image is opaque, even where scene effects blended into framebuffer alpha.
             for (int i = 3; i < pixels.Length; i += 4) pixels[i] = 255;
             using var output = File.Create(path);

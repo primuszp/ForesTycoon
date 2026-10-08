@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using OpenTK.Graphics.OpenGL;
 using OpenTK.Mathematics;
 
 namespace ForesTycoon
@@ -10,8 +9,8 @@ namespace ForesTycoon
     {
         private sealed class StaticTerrainGeometry : IDisposable
         {
-            internal readonly VertexBuffer Land = new VertexBuffer(PrimitiveType.Triangles);
-            internal readonly VertexBuffer Grid = new VertexBuffer(PrimitiveType.Lines);
+            internal readonly VertexBuffer Land = new VertexBuffer(PrimitiveTopology.Triangles);
+            internal readonly VertexBuffer Grid = new VertexBuffer(PrimitiveTopology.Lines);
             internal ulong Version;
             public void Dispose() { Land.Dispose(); Grid.Dispose(); }
         }
@@ -30,10 +29,10 @@ namespace ForesTycoon
                     geometry = new StaticTerrainGeometry();
                     staticTerrain.Add(chunk, geometry);
                 }
-                if (geometry.Version != map.SurfaceVersion)
+                if (geometry.Version != chunk.SurfaceVersion)
                 {
                     staticTerrainScratch.Clear();
-                    staticTerrainScratch.AddRange(DynamicPrimitiveBatch.BuildGeometry(PrimitiveType.Quads, () => {
+                    staticTerrainScratch.AddRange(DynamicPrimitiveBatch.BuildGeometry(PrimitiveTopology.Quads, () => {
                         foreach (int id in chunk.TileIds)
                         {
                             Tile tile = tiles[id];
@@ -52,11 +51,11 @@ namespace ForesTycoon
                             staticTerrainScratch.Add(new Vertex(vertex.Position + offset, vertex.Normal, vertex.Color));
                     }
                     geometry.Land.SetData(staticTerrainScratch.ToArray(), retainCpuCopy: false);
-                    geometry.Grid.SetData(DynamicPrimitiveBatch.BuildGeometry(PrimitiveType.Lines, () => {
+                    geometry.Grid.SetData(DynamicPrimitiveBatch.BuildGeometry(PrimitiveTopology.Lines, () => {
                         foreach (int id in chunk.TileIds)
                             if (!roads.Has(id) && !ShouldDrawStandingWater(tiles[id]) && !CanRenderFallbackRiver(tiles[id])) DrawTileGrid(tiles[id], GridLineColor);
                     }));
-                    geometry.Version = map.SurfaceVersion;
+                    geometry.Version = chunk.SurfaceVersion;
                     StaticTerrainRebuilds++;
                 }
                 if (draw) geometry.Land.DrawArray();
@@ -71,7 +70,7 @@ namespace ForesTycoon
         /// </summary>
         private void DrawCachedGrid()
         {
-            using var state = new RenderStateScope().AlphaBlend().ThinLines();
+            using var state = RenderDevice.CreateStateScope().AlphaBlend().ThinLines();
             foreach (TerrainChunk chunk in visibleChunks) staticTerrain[chunk].Grid.DrawArray();
         }
         internal bool CachedGridHasAllTileBoundaries()

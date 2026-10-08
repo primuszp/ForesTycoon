@@ -1,5 +1,4 @@
 using System.Drawing;
-using OpenTK.Graphics.OpenGL;
 using OpenTK.Mathematics;
 
 namespace ForesTycoon
@@ -81,7 +80,7 @@ namespace ForesTycoon
             Color colorBottom = Color.FromArgb(130, 100,  65);
             Color colorRim    = Color.FromArgb( 68,  48,  25);
 
-            DynamicPrimitiveBatch.Draw(PrimitiveType.Quads, () =>
+            DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () =>
             {
 
             // ── South edge (v = 0) ────────────────────────────────────────────

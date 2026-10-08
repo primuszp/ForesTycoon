@@ -43,7 +43,11 @@ namespace ForesTycoon.Map
             if (!placement.IsValid) return false;
 
             bool added = roads.Add(t.Id, edges);
-            if (added) { CaptureRoadSurface(t, placement); InvalidateSurface(); }
+            if (added)
+            {
+                CaptureRoadSurface(t, placement); InvalidateSurface();
+                chunkIndex.MarkTileAndNeighboursDirty(t.Id, ChunkDirtyFlags.Roads | ChunkDirtyFlags.Foundations);
+            }
             return added;
         }
 

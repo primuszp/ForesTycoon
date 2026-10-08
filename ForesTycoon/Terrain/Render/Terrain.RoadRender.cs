@@ -1,6 +1,5 @@
 using System;
 using System.Drawing;
-using OpenTK.Graphics.OpenGL;
 using OpenTK.Mathematics;
 
 namespace ForesTycoon
@@ -17,7 +16,7 @@ namespace ForesTycoon
 
             if (roads.Count > 0)
             {
-                DynamicPrimitiveBatch.Draw(PrimitiveType.Quads, () =>
+                DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () =>
                 {
                     foreach (Tile tile in visibleTiles)
                     {
@@ -27,14 +26,14 @@ namespace ForesTycoon
                 });
 
                 // A continuous border follows bends and junctions without tile seams.
-                DynamicPrimitiveBatch.Draw(PrimitiveType.Quads, () => {
+                DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () => {
                     foreach(Tile tile in visibleTiles) {
                         if(!roads.Has(tile.Id))continue;
                         RoadSurface(tile,roads.GetEdges(tile.Id),RoadSurfaceWidthFactor*1.025f,Color.FromArgb(65,67,69));
                     }
                 });
 
-                DynamicPrimitiveBatch.Draw(PrimitiveType.Quads, () =>
+                DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () =>
                 {
                     foreach (Tile tile in visibleTiles)
                     {
@@ -50,9 +49,9 @@ namespace ForesTycoon
                 Color foundationFill = Color.FromArgb(85, 245, 225, 140), foundationLine = Color.FromArgb(245, 245, 225, 140);
                 Color badFill = Color.FromArgb(90, 235, 70, 70), badLine = Color.FromArgb(245, 248, 80, 80);
 
-                using (new RenderStateScope().AlphaBlend())
+                using (RenderDevice.CreateStateScope().AlphaBlend())
                 {
-                    DynamicPrimitiveBatch.Draw(PrimitiveType.Quads, () =>
+                    DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () =>
                     {
                         foreach (TerrainMap.RoadPlanStep step in previewTiles)
                         {
@@ -65,7 +64,7 @@ namespace ForesTycoon
                         }
                     });
 
-                    using (new RenderStateScope().ThinLines())
+                    using (RenderDevice.CreateStateScope().ThinLines())
                     {
                         foreach (TerrainMap.RoadPlanStep step in previewTiles)
                         {
@@ -74,7 +73,7 @@ namespace ForesTycoon
                             bool bad = previewRemove || !placement.IsValid;
                             bool foundation = !bad && placement.Kind == RoadPlacementKind.FoundationSurface;
                             DynamicPrimitiveBatch.Color4(bad ? badLine : (foundation ? foundationLine : okLine));
-                            DynamicPrimitiveBatch.Draw(PrimitiveType.LineLoop, () =>
+                            DynamicPrimitiveBatch.Draw(PrimitiveTopology.LineLoop, () =>
                             {
                                 DynamicPrimitiveBatch.Vertex3(t.W.xPos, t.W.yPos, t.W.zPos);
                                 DynamicPrimitiveBatch.Vertex3(t.S.xPos, t.S.yPos, t.S.zPos);
