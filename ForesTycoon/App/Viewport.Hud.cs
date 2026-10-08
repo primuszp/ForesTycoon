@@ -614,6 +614,10 @@ namespace ForesTycoon
 
         private void DrawManagementWindow()
         {
+            bool projecting = showManagement && management.Project;
+            world.SetManagementOverlay(projecting ? management.OverlayColours(world) : null);
+            world.Graphics.HideTrees = projecting && management.ModelTrees;
+            if (projecting && management.Current == ManagementView.Lens.Todo) DrawManagementMarkers();
             if (!BeginGameWindow("Erdőgazdálkodás", ref showManagement, new NVec2(20, toolbarBottom + 10), 640)) return;
             var request = management.Draw(world);
             ImGui.End();
@@ -632,6 +636,38 @@ namespace ForesTycoon
                     break;
             }
             RequestFrame();
+        }
+
+        // To-do markers above the tiles in the 3D view, thinned so they stay at least ~18 px apart.
+        private void DrawManagementMarkers()
+        {
+            var survey = management.Survey;
+            var grid = world.Soils?.Grid;
+            if (survey == null || grid == null || survey.Length != grid.Count) return;
+            float tilePixels = Math.Max(1f, Math.Min(world.TileWidth, world.TileHeight) * (float)zoom);
+            int stride = Math.Max(1, (int)MathF.Ceiling(18f / tilePixels));
+            float size = Math.Clamp(tilePixels * stride * 0.6f, 12f, 26f);
+            var draw = ImGui.GetBackgroundDrawList();
+            for (int column = 0; column < grid.Columns; column += stride)
+                for (int row = 0; row < grid.Rows; row += stride)
+                {
+                    int best = -1;
+                    for (int dx = 0; dx < stride && column + dx < grid.Columns; dx++)
+                        for (int dy = 0; dy < stride && row + dy < grid.Rows; dy++)
+                        {
+                            int id = grid.TileId(column + dx, row + dy);
+                            if (survey[id].Issue != ManagementIssue.None && (best < 0 || survey[id].Severity > survey[best].Severity)) best = id;
+                        }
+                    if (best < 0 || !world.TryGetTileCenter(best, out var centre)) continue;
+                    Vector3 view = WorldToView(centre + new Vector3(0, 0, 0.5f), rotx, roty);
+                    var screen = new NVec2((float)((view.X - screenX) * zoom), (float)(Height - (view.Y - screenY) * zoom));
+                    if (screen.X < -size || screen.Y < -size || screen.X > Width + size || screen.Y > Height + size) continue;
+                    var issue = survey[best].Issue;
+                    float marker = size * (issue == ManagementIssue.Harvestable ? 0.75f : 0.85f + 0.08f * survey[best].Severity);
+                    draw.AddCircleFilled(screen, marker * 0.55f, ImGui.ColorConvertFloat4ToU32(ManagementView.IssueColor(issue) with { W = 0.9f }));
+                    draw.AddCircle(screen, marker * 0.55f, 0xc0ffffff, 0, 1.5f);
+                    GameIcons.Draw(draw, ManagementView.Icon(issue), screen - new NVec2(marker * 0.38f), marker * 0.76f, 0xffffffff);
+                }
         }
 
         private void DrawGraphicsWindow()

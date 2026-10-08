@@ -495,6 +495,7 @@ namespace ForesTycoon
                 using (RenderDevice.CreateStateScope().AlphaBlend().DepthWrite(false).PolygonOffset(-1, -1))
                     for (int c = 0; c < visibleChunks.Count; c++) individualForestChunks[(visibleChunks[c], chunkLods[c])].Floor.DrawArray();
             }
+            if (graphics.HideTrees) return;
             if (RenderDevice.Visuals != null) RenderDevice.Visuals.Kind = SurfaceKind.Wood;
             for (int c = 0; c < visibleChunks.Count; c++) individualForestChunks[(visibleChunks[c], chunkLods[c])].Wood.DrawArray();
             forestMaterial.Use();

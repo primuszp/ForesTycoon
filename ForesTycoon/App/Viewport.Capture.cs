@@ -48,7 +48,21 @@ namespace ForesTycoon
                     simulationClock.IsPaused = false;
                     break;
                 case 285: Save("07-fast-forward-menu"); break;
-                case 286: Close(); break;
+                case 286:
+                    simulationClock.Speed = 1;
+                    simulationClock.IsPaused = true;
+                    ResetCamera();
+                    showManagement = true;
+                    management.Select(ManagementView.Lens.Todo);
+                    break;
+                case 320: Save("08-management-todo"); break;
+                case 321: management.Select(ManagementView.Lens.Water); break;
+                case 350: Save("09-management-water"); break;
+                case 351: management.Select(ManagementView.Lens.Health); break;
+                case 380: Save("10-management-health"); break;
+                case 381: showManagement = false; break;
+                case 400: Save("11-management-closed"); break;
+                case 401: Close(); break;
             }
         }
     }

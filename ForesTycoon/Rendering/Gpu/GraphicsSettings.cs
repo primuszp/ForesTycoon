@@ -22,6 +22,8 @@ namespace ForesTycoon
         internal bool Lighting = true;
         internal bool Shadows = true;
         internal bool SawmillPreview;
+        // Transient map view of the management lenses: trees hidden (their floor patch stays), so the tinted tiles show.
+        internal bool HideTrees;
         internal bool ShowGrid = true;
         internal bool Weather = true;
         internal bool AutomaticWeather;

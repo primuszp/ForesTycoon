@@ -121,6 +121,7 @@ namespace ForesTycoon
                 if (context.ShowTileHighlight) terrain.DrawHoveredTile();
             });
             pipeline.Add(RenderLayer.ForestryPreview, "forestry-preview", _ => DrawSurface(SurfaceKind.Plain,()=> {
+                terrain.DrawManagementOverlay();
                 terrain.DrawPlantations(forest,graphics);
                 terrain.DrawHarvestSites(logistics);terrain.DrawForestryPreview();
                 content.DrawBuildingPreview(terrain,forest,logistics,graphics.SawmillPreview);

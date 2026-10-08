@@ -42,7 +42,7 @@ Minden lencsének 2–4 **alréteg**e van (lenyíló vagy `Tab`):
 
 - **Folytonos skálák** perceptuálisan egyenletes, színvak-barát palettákkal:
   víz = barna → homok → kék (divergáló, közép = optimális szabadföldi vízkapacitás);
-  egészség = piros → sárga → zöld helyett **bíbor → szürke → zöld** (deuteranóp-biztos);
+  egészség = piros → sárga → zöld helyett **bíbor → krém → zöld** (deuteranóp-biztos, a füvön is kiválik);
   kor = világos → sötét zöld egyetlen árnyalatsorban.
 - **Kategorikus** (talajtípus, fafaj): rögzített, fajonként azonos szín, mint a
   3D modellek koronaszíne, hogy a térkép és a világ összeolvasható legyen.
@@ -200,4 +200,13 @@ csak a tarvágás fizet.
 - Tesztek: `ForestManagementSurveyTests`; füstpróba: `--management-smoke-test`
   (`artifacts/management-view/`, 9 lencsekép, ellenőrzi, hogy a nézet nem módosítja a szimulációt).
 
-Következő: M2 (vetítés a 3D terepre, makett-fa mód), a szabályok JSON-ba szervezése.
+**M2 kész** (vetítés a terepre):
+
+- Az aktív lencse csempénkénti áttetsző színként a 3D terepre kerül (`Terrain.DrawManagementOverlay`,
+  csak a látható csempéken, a matrica-menetben). Ablakbezárásra eltűnik.
+- „Fák elrejtése” (alapértelmezett): a fák helyén csak az erdőtalaj-folt marad, így a színezés olvasható.
+  A csak-törzs változatot elvetettük, mert kiszáradt erdőnek hatott, és a pusztulással volt összekeverhető.
+- A Teendők lencse ikonjai a 3D nézetben is megjelennek a csempék fölött, zoomtól függően ritkítva.
+- Képernyőképek: `--capture-frame <könyvtár>` 08–11. kép.
+
+Következő: M3/M4 új beavatkozások (gyérítés, egészségügyi termelés, árok), a szabályok JSON-ba szervezése.

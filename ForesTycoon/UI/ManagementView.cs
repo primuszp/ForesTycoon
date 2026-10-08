@@ -28,9 +28,9 @@ namespace ForesTycoon
             new[] { "Javasolt beavatkozás" }
         };
         private static readonly string[] LensNames = { "Víz", "Talaj", "Egészség", "Állomány", "Teendők" };
-        // Colour-blind safe ramps: purple–grey–green for vitality, brown–sand–blue for water.
+        // Colour-blind safe ramps: purple–cream–green for vitality, brown–sand–blue for water.
         private static readonly NVec4[] WaterRamp = { new(.59f, .35f, .18f, 1), new(.88f, .80f, .59f, 1), new(.24f, .55f, .84f, 1), new(.10f, .27f, .63f, 1) };
-        private static readonly NVec4[] VitalityRamp = { new(.59f, .24f, .63f, 1), new(.67f, .67f, .65f, 1), new(.24f, .59f, .27f, 1) };
+        private static readonly NVec4[] VitalityRamp = { new(.55f, .16f, .62f, 1), new(.96f, .91f, .74f, 1), new(.13f, .48f, .27f, 1) };
         private static readonly NVec4[] SequentialRamp = { new(.93f, .93f, .84f, 1), new(.55f, .73f, .40f, 1), new(.13f, .33f, .18f, 1) };
         private static readonly NVec4 NoData = new(.32f, .34f, .33f, 1), Land = new(.80f, .79f, .74f, 1);
 
@@ -40,6 +40,14 @@ namespace ForesTycoon
         private ForestTileSurvey[] survey;
         private ulong surveyRevision = ulong.MaxValue;
         private readonly Stopwatch age = new();
+        private uint[] overlay;
+        private (Lens, int, ForestTileSurvey[]) overlayKey;
+
+        /// <summary>Tint the 3D terrain with the active lens.</summary>
+        internal bool Project = true;
+        /// <summary>Hide the trees while projecting, so the tinted ground stays readable.</summary>
+        internal bool ModelTrees = true;
+        internal ForestTileSurvey[] Survey => survey;
 
         internal Lens Current => lens;
         internal void Select(Lens value, int sublayer = 0) { lens = value; layer = sublayer; }
@@ -69,6 +77,8 @@ namespace ForesTycoon
                 ImGui.Combo("Réteg", ref layer, string.Join('\0', names) + '\0');
             }
             if (lens == Lens.Todo) DrawTodoSummary();
+            ImGui.Checkbox("Vetítés a terepre", ref Project);
+            if (Project) { ImGui.SameLine(); ImGui.Checkbox("Fák elrejtése", ref ModelTrees); }
 
             const float MapSize = 380;
             ImGui.BeginGroup();
@@ -93,6 +103,31 @@ namespace ForesTycoon
             surveyRevision = world.ForestRevision;
             age.Restart();
         }
+
+        /// <summary>Per-tile RGBA of the active lens for the terrain overlay. Open land stays untinted on the forest lenses.</summary>
+        internal uint[] OverlayColours(GameWorld world)
+        {
+            if (survey == null || world.Soils == null) return null;
+            var key = (lens, layer, survey);
+            if (overlay != null && overlayKey == key) return overlay;
+            overlay = new uint[survey.Length];
+            for (int id = 0; id < survey.Length; id++)
+            {
+                var s = survey[id];
+                bool forestLens = lens is Lens.Health or Lens.Stand or Lens.Todo;
+                if (!s.Forestable && lens != Lens.Soil) continue;
+                if (forestLens && !s.IsForest && s.Issue == ManagementIssue.None) continue;
+                var colour = lens == Lens.Todo
+                    ? (s.Issue == ManagementIssue.None ? new NVec4(.85f, .90f, .80f, .45f) : IssueColor(s.Issue) with { W = 0.55f + 0.12f * s.Severity })
+                    : Colour(world, id) with { W = 0.82f };
+                overlay[id] = ImGui.ColorConvertFloat4ToU32(colour);
+            }
+            overlayKey = key;
+            return overlay;
+        }
+
+        /// <summary>Icon for a to-do issue, shared with the 3D markers.</summary>
+        internal static GameIcon Icon(ManagementIssue issue) => IssueIcon(issue);
 
         private void DrawTodoSummary()
         {
@@ -235,7 +270,7 @@ namespace ForesTycoon
                 Lens.Soil => "Világos: alacsony · sötétzöld: magas",
                 Lens.Health => layer switch
                 {
-                    0 => "Bíbor: pusztuló · szürke: stresszes · zöld: vitális",
+                    0 => "Bíbor: pusztuló · krém: stresszes · zöld: vitális",
                     1 => null,
                     _ => "Zöld: nincs elhalt fa · bíbor: 25% fölött"
                 },

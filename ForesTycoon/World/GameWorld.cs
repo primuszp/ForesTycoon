@@ -80,6 +80,8 @@ namespace ForesTycoon
         internal (ForestSpecies Species, float Suitability)[] RecommendSpecies(int tileId) =>
             ForestManagementSurvey.Recommend(forest.Habitat, tileId);
         internal bool TryGetTileCenter(int tileId, out Vector3 centre) => map.TryGetTileCenter(tileId, out centre);
+        /// <summary>Per-tile RGBA tint of the active management lens drawn onto the terrain; null clears it.</summary>
+        internal void SetManagementOverlay(uint[] colours) => terrain.SetManagementOverlay(colours);
 
         /// <summary>
         /// Review-capture helper: finds the densest 5×5 block of forest, clears its western half
