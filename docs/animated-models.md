@@ -1,5 +1,23 @@
 # Animált GLB modellek és erdei szarvasok
 
+## Animációs runtime konszolidáció (2026-10-08)
+
+A GLB-betöltés és a futásidejű mintavétel külön forrásban található:
+`AnimatedGlbModel.cs`, illetve `AnimatedGlbModel.Animation.cs`. A típus és az assetadatok közösek;
+a szétválasztás nem új formátum vagy kompatibilitási ág. Az `AnimationPath` és
+`AnimationInterpolation` enum a szöveges GLB-értékek fordítása után egyértelmű runtime típust ad.
+
+Nulla/egy crossfade súlynál csak az aktív klipet mintavételezzük; köztes súlynál a meglévő TRS-blend
+marad. Az in-place gyökércsatornát egyszer, a kezdőidőnél olvassuk. Érvénytelen idő, blend vagy
+gyökérindex kivételt ad, mielőtt nem véges transzformáció kerülhetne a GPU-ra. A póz tömbjeit
+újrahasználjuk; a regressziós teszt ismételt crossfade-nél nulla szálankénti memóriafoglalást ellenőriz.
+
+Az `AnimatedModelRenderer` először asset-sorrendben rajzolja a tömör/kivágott felületeket, utána
+csak a BLEND primitíveket rendezi hátulról előre. Az árnyékmenet nem rendez. A sorrendet minden
+hívás frissíti, ezért futásidejű anyagváltáskor is helyes. A rendezés továbbra is példányon belüli;
+egymást metsző átlátszó példányokhoz jelenetszintű megoldás szükséges.
+
+
 A felhasználó `realistic_animated_elk_3d_model.glb` fájlja változatlan másolatként bekerült az `Assets/Wildlife/elk.glb` állományba. Az eredeti Downloads-beli fájl érintetlen maradt.
 
 ## Használat

@@ -59,17 +59,7 @@ namespace ForesTycoon.Models
             int uploadedSkin=-2;
             // Solid/cutout surfaces first, then blended primitives back to front.
             // Sorting is per model instance; intersecting instances need a scene queue.
-            for(int i=0;i<model.Meshes.Length;i++) {
-                drawOrder[i]=i;
-                var mesh=model.Meshes[i];
-                drawDepth[i]=float.NegativeInfinity;
-                if(mesh.Alpha==AnimatedGlbModel.AlphaMode.Blend&&!shadow)
-                {
-                    Vector4 projected=Vector4.TransformRow(new Vector4(mesh.Center,1),pose.World[mesh.Node]*transform*camera);
-                    drawDepth[i]=-(MathF.Abs(projected.W)>0.000001f?projected.Z/projected.W:projected.Z);
-                }
-            }
-            Array.Sort(drawDepth,drawOrder);
+            PrepareDrawOrder(pose, transform, camera, shadow);
             using var ownedState=sharedState==null?new RenderStateScope().Enable(EnableCap.DepthTest).Disable(EnableCap.CullFace):null;
             var drawState=sharedState??ownedState;
             for(int draw=0;draw<drawOrder.Length;draw++)
@@ -125,6 +115,29 @@ namespace ForesTycoon.Models
             }
             GL.BindVertexArray(0);GL.ActiveTexture(TextureUnit.Texture0);
         }
+        // Rebuild the partition because diagnostic/editor code can change material alpha.
+        // Only transparent surfaces need sorting; solid surfaces keep asset order.
+        private void PrepareDrawOrder(AnimatedGlbModel.Pose pose, Matrix4 transform, Matrix4 camera, bool shadow)
+        {
+            int solidCount = 0;
+            for (int i = 0; i < model.Meshes.Length; i++)
+                if (shadow || model.Meshes[i].Alpha != AnimatedGlbModel.AlphaMode.Blend)
+                    drawOrder[solidCount++] = i;
+            if (solidCount == drawOrder.Length) return;
+
+            Matrix4 instanceCamera = transform * camera;
+            int next = solidCount;
+            for (int i = 0; i < model.Meshes.Length; i++)
+            {
+                var mesh = model.Meshes[i];
+                if (mesh.Alpha != AnimatedGlbModel.AlphaMode.Blend) continue;
+                Vector4 projected = Vector4.TransformRow(new Vector4(mesh.Center, 1), pose.World[mesh.Node] * instanceCamera);
+                drawOrder[next] = i;
+                drawDepth[next++] = -(MathF.Abs(projected.W) > 0.000001f ? projected.Z / projected.W : projected.Z);
+            }
+            Array.Sort(drawDepth, drawOrder, solidCount, next - solidCount);
+        }
+
         private void Initialize()
         {
             program=GlProgram.Create(@"#version 330 core

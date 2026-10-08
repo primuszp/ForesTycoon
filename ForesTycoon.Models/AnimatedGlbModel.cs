@@ -6,7 +6,7 @@ using OpenTK.Mathematics;
 namespace ForesTycoon.Models
 {
     // CPU asset/pose layer. GPU buffers are shared by all instances in AnimatedModelRenderer.
-    internal sealed class AnimatedGlbModel
+    internal sealed partial class AnimatedGlbModel
     {
         internal enum AlphaMode { Opaque, Mask, Blend }
         internal sealed class Node {
@@ -28,31 +28,6 @@ namespace ForesTycoon.Models
             internal Vector3? FlatColor;
         }
         internal sealed class Skin { internal int[] Joints; internal Matrix4[] InverseBind; }
-        internal sealed class Channel {
-            internal int Node, Path, Arity;
-            internal string Interpolation;
-            internal float[] Times, Values;
-            internal Vector4 Sample(float time) {
-                int index=Array.BinarySearch(Times,time); if(index<0) index=Math.Max(0,~index-1);
-                int next=Math.Min(index+1,Times.Length-1);
-                float span=Times[next]-Times[index],t=span>0?Math.Clamp((time-Times[index])/span,0,1):0;
-                int stride=Interpolation=="CUBICSPLINE"?3:1;
-                Vector4 Read(int frame,int slot=0) {
-                    int offset=(frame*stride+slot)*Arity;
-                    return new Vector4(Values[offset],Arity>1?Values[offset+1]:0,Arity>2?Values[offset+2]:0,Arity>3?Values[offset+3]:0);
-                }
-                Vector4 a=Read(index,stride==3?1:0),b=Read(next,stride==3?1:0);
-                if(Interpolation=="STEP"||index==next)return a;
-                if(stride==3) {
-                    float t2=t*t,t3=t2*t;
-                    Vector4 result=(2*t3-3*t2+1)*a+(t3-2*t2+t)*span*Read(index,2)+(-2*t3+3*t2)*b+(t3-t2)*span*Read(next);
-                    return Path==1?QuaternionVector(new Quaternion(result.X,result.Y,result.Z,result.W).Normalized()):result;
-                }
-                if(Path==1)return QuaternionVector(Quaternion.Slerp(new Quaternion(a.X,a.Y,a.Z,a.W).Normalized(),
-                    new Quaternion(b.X,b.Y,b.Z,b.W).Normalized(),t));
-                return Vector4.Lerp(a,b,t);
-            }
-        }
         internal sealed class Clip { internal string Name; internal float Duration; internal Channel[] Channels; }
         internal Node[] Nodes;
         internal Skin[] Skins;
@@ -61,48 +36,6 @@ namespace ForesTycoon.Models
         internal readonly Dictionary<string,Clip> Clips=new(StringComparer.Ordinal);
         internal int[] Order;
         internal static Vector4 QuaternionVector(Quaternion q)=>new(q.X,q.Y,q.Z,q.W);
-        internal sealed class Pose
-        {
-            internal readonly Matrix4[] World;
-            private readonly Vector3[] translations,scales,otherTranslations,otherScales;
-            private readonly Quaternion[] rotations,otherRotations;
-            private readonly AnimatedGlbModel model;
-            internal Pose(AnimatedGlbModel model) {
-                this.model=model;int n=model.Nodes.Length;World=new Matrix4[n];
-                translations=new Vector3[n];scales=new Vector3[n];rotations=new Quaternion[n];
-                otherTranslations=new Vector3[n];otherScales=new Vector3[n];otherRotations=new Quaternion[n];
-            }
-            internal void Evaluate(string clip,double time,string other=null,double otherTime=0,float blend=0,int inPlaceRoot=-1) {
-                Sample(clip,time,translations,scales,rotations,inPlaceRoot);
-                if(other!=null&&blend>0) {
-                    Sample(other,otherTime,otherTranslations,otherScales,otherRotations,inPlaceRoot);
-                    for(int i=0;i<World.Length;i++) {
-                        translations[i]=Vector3.Lerp(translations[i],otherTranslations[i],blend);
-                        scales[i]=Vector3.Lerp(scales[i],otherScales[i],blend);
-                        rotations[i]=Quaternion.Slerp(rotations[i],otherRotations[i],blend);
-                    }
-                }
-                foreach(int i in model.Order) {
-                    Matrix4 local=model.Nodes[i].Matrix??Matrix4.CreateScale(scales[i])*Matrix4.CreateFromQuaternion(rotations[i])*Matrix4.CreateTranslation(translations[i]);
-                    World[i]=model.Nodes[i].Parent<0?local:local*World[model.Nodes[i].Parent];
-                }
-            }
-            private void Sample(string name,double time,Vector3[] t,Vector3[] s,Quaternion[] r,int inPlaceRoot) {
-                for(int i=0;i<World.Length;i++){t[i]=model.Nodes[i].Translation;s[i]=model.Nodes[i].Scale;r[i]=model.Nodes[i].Rotation;}
-                if(name==null)return;
-                if(!model.Clips.TryGetValue(name,out var clip))throw new ArgumentException("Unknown animation: "+name);
-                float wrapped=clip.Duration>0?(float)((time%clip.Duration+clip.Duration)%clip.Duration):0;
-                foreach(var channel in clip.Channels) {
-                    Vector4 v=channel.Sample(wrapped);
-                    // Freeze only locomotion translation before blending. Limb motion and
-                    // pelvis bob remain animated; world movement belongs to the simulation.
-                    if(channel.Path==0)t[channel.Node]=channel.Node==inPlaceRoot?channel.Sample(0).Xyz:v.Xyz;
-                    else if(channel.Path==1)r[channel.Node]=new Quaternion(v.X,v.Y,v.Z,v.W).Normalized();
-                    else s[channel.Node]=v.Xyz;
-                }
-            }
-            internal Matrix4 JointMatrix(int skin,int joint)=>model.Skins[skin].InverseBind[joint]*World[model.Skins[skin].Joints[joint]];
-        }
         internal Pose CreatePose()=>new(this);
         internal static AnimatedGlbModel Load(string path)
         {
@@ -214,11 +147,18 @@ namespace ForesTycoon.Models
                 var channels=new List<Channel>();float duration=0;var samplers=animation.GetProperty("samplers");
                 foreach(var channel in animation.GetProperty("channels").EnumerateArray()) {
                     var sampler=samplers[channel.GetProperty("sampler").GetInt32()];var target=channel.GetProperty("target");
-                    int node=target.GetProperty("node").GetInt32(),pathId=target.GetProperty("path").GetString() switch {"translation"=>0,"rotation"=>1,"scale"=>2,_=>throw new NotSupportedException("Morph animation not supported.")};
+                    int node=target.GetProperty("node").GetInt32();
+                    AnimationPath pathId=target.GetProperty("path").GetString() switch {
+                        "translation"=>AnimationPath.Translation,"rotation"=>AnimationPath.Rotation,
+                        "scale"=>AnimationPath.Scale,_=>throw new NotSupportedException("Morph animation not supported.")};
                     if(node<0||node>=model.Nodes.Length||model.Nodes[node].Matrix.HasValue)throw new InvalidDataException("Animated node must use TRS.");
-                    var c=new Channel{Node=node,Path=pathId,Arity=pathId==1?4:3,Interpolation=sampler.TryGetProperty("interpolation",out var v)?v.GetString():"LINEAR",Times=Read(sampler.GetProperty("input").GetInt32()),Values=Read(sampler.GetProperty("output").GetInt32())};
-                    if(c.Interpolation!="LINEAR"&&c.Interpolation!="STEP"&&c.Interpolation!="CUBICSPLINE")throw new NotSupportedException("Animation interpolation.");
-                    if(c.Values.Length!=c.Times.Length*c.Arity*(c.Interpolation=="CUBICSPLINE"?3:1))throw new InvalidDataException("Animation values.");
+                    string interpolation=sampler.TryGetProperty("interpolation",out var v)?v.GetString():"LINEAR";
+                    var c=new Channel{Node=node,Path=pathId,Arity=pathId==AnimationPath.Rotation?4:3,
+                        Interpolation=interpolation switch {
+                            "LINEAR"=>AnimationInterpolation.Linear,"STEP"=>AnimationInterpolation.Step,
+                            "CUBICSPLINE"=>AnimationInterpolation.CubicSpline,_=>throw new NotSupportedException("Animation interpolation.")},
+                        Times=Read(sampler.GetProperty("input").GetInt32()),Values=Read(sampler.GetProperty("output").GetInt32())};
+                    if(c.Values.Length!=c.Times.Length*c.Arity*(c.Interpolation==AnimationInterpolation.CubicSpline?3:1))throw new InvalidDataException("Animation values.");
                     for(int j=0;j<c.Times.Length;j++)if(c.Times[j]<0||(j>0&&c.Times[j]<=c.Times[j-1]))throw new InvalidDataException("Animation times.");
                     duration=Math.Max(duration,c.Times[^1]);channels.Add(c);
                 }

@@ -56,7 +56,7 @@ namespace ForesTycoon
                     }
                 });
 
-                using (new RenderStateScope().LineWidth(4.0f))
+                using (new RenderStateScope().ThinLines())
                 {
                     DynamicPrimitiveBatch.Draw(PrimitiveType.LineLoop, () =>
                     {

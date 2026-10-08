@@ -8,7 +8,7 @@ public class AnimatedGlbTests
         var model=AnimatedGlbModel.Load(Path.Combine(AppContext.BaseDirectory,"Assets","Wildlife","elk.glb"));
         int root=Array.FindIndex(model.Nodes,node=>node.Name=="RigRoot_01");
         var clip=model.Clips["WalkSlow"];
-        var channel=Assert.Single(clip.Channels,c=>c.Node==root&&c.Path==0);
+        var channel=Assert.Single(clip.Channels,c=>c.Node==root&&c.Path==AnimatedGlbModel.AnimationPath.Translation);
         var pose=model.CreatePose();pose.Evaluate("WalkSlow",0);
         Vector3 local=channel.Sample(clip.Duration).Xyz-channel.Sample(0).Xyz;
         Vector3 world=Vector3.TransformVector(local,pose.World[model.Nodes[root].Parent]);

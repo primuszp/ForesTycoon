@@ -24,7 +24,7 @@ namespace ForesTycoon
         {
             PlantationMeshRebuilds = 0;
             if (!graphics.ShowPlantations) return;
-            using var state = new RenderStateScope().AlphaBlend().DepthWrite(false).PolygonOffset(-2, -2).LineWidth(2);
+            using var state = new RenderStateScope().AlphaBlend().DepthWrite(false).PolygonOffset(-2, -2).ThinLines();
             foreach (var chunk in visibleChunks)
             {
                 if (!plantationGeometry.TryGetValue(chunk, out var mesh))

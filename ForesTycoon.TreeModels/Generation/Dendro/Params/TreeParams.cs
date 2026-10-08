@@ -73,8 +73,6 @@ public class TreeParams
 
     public double LeavesErrorValue;
 
-    public event EventHandler? Changed;
-
     public TreeParams()
     {
         for (int l = 0; l < 4; l++)

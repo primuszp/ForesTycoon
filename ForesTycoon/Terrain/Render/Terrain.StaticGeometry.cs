@@ -51,7 +51,7 @@ namespace ForesTycoon
                         foreach (Vertex vertex in mesh.CpuVertices)
                             staticTerrainScratch.Add(new Vertex(vertex.Position + offset, vertex.Normal, vertex.Color));
                     }
-                    geometry.Land.SetData(staticTerrainScratch.ToArray());
+                    geometry.Land.SetData(staticTerrainScratch.ToArray(), retainCpuCopy: false);
                     geometry.Grid.SetData(DynamicPrimitiveBatch.BuildGeometry(PrimitiveType.Lines, () => {
                         foreach (int id in chunk.TileIds)
                             if (!roads.Has(id) && !ShouldDrawStandingWater(tiles[id]) && !CanRenderFallbackRiver(tiles[id])) DrawTileGrid(tiles[id], GridLineColor);
@@ -71,7 +71,7 @@ namespace ForesTycoon
         /// </summary>
         private void DrawCachedGrid()
         {
-            using var state = new RenderStateScope().AlphaBlend().LineWidth(1);
+            using var state = new RenderStateScope().AlphaBlend().ThinLines();
             foreach (TerrainChunk chunk in visibleChunks) staticTerrain[chunk].Grid.DrawArray();
         }
         internal bool CachedGridHasAllTileBoundaries()

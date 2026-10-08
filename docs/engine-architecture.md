@@ -136,3 +136,54 @@ Replay save version is now 4. Earlier versions are rejected because the changed 
 `ForestMonthlyPreparation` now computes next-month geometric competition in deterministic batches across environmental steps. It owns separate reusable snapshot/result buffers and publishes no partial tree state. Water and radiation are applied only when the actual month closes. Known local edits enqueue deduplicated snapshot and observer-resource repairs; global or untracked revision changes restart preparation. A missing result uses the synchronous calculation. The completed competition snapshot transfers to forestry through a buffer exchange, preserving seedling evaluation order. See [local repairs and remaining limits](engine-performance.md#helyi-változások-javítási-sorai).
 
 The same preparation also owns projected boundary dimensions, volume increments, geometry-only growth-curve terms and pre-update stand totals. `ForestGrowthShape.Apply` preserves the original arithmetic order; final environmental response, health changes and annual increment accounting still occur at the month boundary. Optional `ForestMonthProfile` diagnostics separate monthly phases. The simulation benchmark now includes coupled 30 Hz weather/water/forestry measurements against the synchronous reference, in addition to isolated forest timings.
+
+## Render and animation consolidation; Metal direction (2026-10-08)
+
+The runtime animation implementation now lives in `AnimatedGlbModel.Animation.cs`, apart from GLB parsing.
+`AnimationPath` and `AnimationInterpolation` replace numeric path IDs and runtime string comparisons.
+Sampling remains CPU-only, binary-searches sorted keyframes, uses shortest-arc quaternion interpolation
+and interval-scaled cubic Hermite tangents, and reuses pose arrays. Crossfade endpoints evaluate one clip.
+The loader owns format validation; the pose owns sampling and hierarchy transforms; the renderer owns
+GPU resources, materials and submissions. Keep these responsibilities when adding animation features.
+
+Names should expose meaning and units: use enum values for closed choices, `Seconds`/`Years`/`WorldWidth`
+for quantities where ambiguity affects correctness, and verb names for state-changing operations.
+`RenderStateScope.ThinLines()` explicitly requests the supported one-pixel lines; the former width
+argument was ignored. Optional GL state is captured only when a scope changes it, and nested polygon
+offsets restore their actual parent values. Consecutive wildlife and mill instances share a state scope.
+
+The current executable still has **only an OpenGL backend**. A Metal implementation cannot be added
+by switching a window flag: `RenderDevice`, buffer types, effects, post-processing, ImGui and scene
+renderers issue direct GL calls, and shaders are GLSL strings. CPU animation separation is useful for
+portability, but does not by itself make the renderer backend-independent.
+
+The proposed cross-platform route is SDL3 GPU, whose official API supports Metal, Vulkan and D3D12.
+SDL shadercross can produce backend shader formats from HLSL or SPIR-V. This is an architectural
+proposal, not an installed dependency or a working Metal renderer. Sources:
+[SDL GPU API](https://wiki.libsdl.org/SDL3/CategoryGPU),
+[GPU device creation](https://wiki.libsdl.org/SDL3/SDL_CreateGPUDevice),
+[Apple OpenGL migration](https://developer.apple.com/documentation/metal/migrating-opengl-code-to-metal).
+
+Migration should proceed through working, testable increments:
+
+1. Separate CPU mesh/material/pose data and scene submissions from native resource handles.
+   Extract shader sources and explicit vertex/binding layouts. Preserve the current OpenGL path
+   as the reference implementation; avoid wrapping every individual GL call in an interface.
+2. Introduce a device boundary for buffer/texture creation, shader pipelines, render targets,
+   resource lifetime and pass submission. Use application-owned descriptors and handles at that
+   boundary, without OpenGL enums. Confirm contracts with one real SDL GPU implementation before
+   extending the abstraction across all effects.
+3. Render one imported mesh and one animated animal through the new backend, then implement
+   terrain, forest growth/state buffers, shadow maps, weather, post-processing and the UI.
+   Resolve window/swapchain ownership explicitly rather than assuming an OpenTK GL context can
+   serve as a Metal surface.
+4. Define matrix storage/multiplication, clip-space depth, winding, texture orientation, colour
+   space and depth sampling conventions. Existing code uses OpenTK row-vector CPU transforms;
+   SDL documents a left-handed GPU convention. Validate the adapter with asymmetric fixtures,
+   mask/blend materials, instance transforms and shadow depth.
+5. Require macOS hardware validation for Metal, Windows/Linux validation for other enabled
+   backends, image regressions, resize/resource disposal checks and completed-frame benchmarks.
+
+The next performance priorities remain bounded forest LOD residency and correct chunk-local terrain
+invalidation. These need explicit dependency tracking and continuity guarantees, not only interface
+renaming. Current findings and validation are recorded in [engine-performance.md](engine-performance.md).

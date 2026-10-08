@@ -14,7 +14,7 @@ namespace ForesTycoon.Rendering
         internal float ForestCurrentYear { get; set; }
         internal int ForestStateTexture { get; set; }
         private bool disposed;
-        private uint[] indices;
+        private int indexCount;
         private Vertex[] vertices;
         private int vertexCount;
 
@@ -99,12 +99,12 @@ namespace ForesTycoon.Rendering
             if (data == null) throw new ArgumentNullException(nameof(data));
             else
             {
-                this.indices = data;
+                indexCount = data.Length;
                 GL.BindVertexArray(VaoId);
                 GL.BindBuffer(BufferTarget.ElementArrayBuffer, EboId);
-                GL.BufferData(BufferTarget.ElementArrayBuffer, new IntPtr(indices.Length * sizeof(uint)), indices, BufferUsageHint.StaticDraw);
+                GL.BufferData(BufferTarget.ElementArrayBuffer, new IntPtr(data.Length * sizeof(uint)), data, BufferUsageHint.StaticDraw);
                 GL.GetBufferParameter(BufferTarget.ElementArrayBuffer, BufferParameterName.BufferSize, out size);
-                if (indices.Length * sizeof(uint) != size)
+                if (data.Length * sizeof(uint) != size)
                     throw new ApplicationException("Element data not uploaded correctly");
                 GL.BindVertexArray(0);
             }
@@ -208,13 +208,13 @@ namespace ForesTycoon.Rendering
         public void DrawElements()
         {
             ThrowIfDisposed();
-            if (vertexCount == 0 || indices == null || indices.Length == 0) return;
+            if (vertexCount == 0 || indexCount == 0) return;
 
             RenderDevice.UseGeometryShader();
             ApplyForestState();
             GL.BindVertexArray(VaoId);
-            GL.DrawElements(mode, indices.Length, DrawElementsType.UnsignedInt, IntPtr.Zero);
-            RenderMetrics.RecordDraw(indices.Length);
+            GL.DrawElements(mode, indexCount, DrawElementsType.UnsignedInt, IntPtr.Zero);
+            RenderMetrics.RecordDraw(indexCount);
             GL.BindVertexArray(0);
         }
 
@@ -226,6 +226,8 @@ namespace ForesTycoon.Rendering
             if (eboId != 0) { GL.DeleteBuffers(1, ref eboId); eboId = 0; }
             if (vaoId != 0) { GL.DeleteVertexArray(vaoId); vaoId = 0; }
             if (growthVbo != 0) { GL.DeleteBuffers(1, ref growthVbo); growthVbo = 0; }
+            vertices = null;
+            vertexCount = indexCount = 0;
         }
 
         private void ApplyForestState()

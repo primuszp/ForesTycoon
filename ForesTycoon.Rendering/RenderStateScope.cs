@@ -10,9 +10,12 @@ namespace ForesTycoon.Rendering
         private readonly bool cullFace;
         private readonly bool polygonOffsetFill;
         private readonly bool depthMask;
-        private readonly float lineWidth;
+        private float lineWidth;
+        private bool lineWidthCaptured;
         private int blendSourceRgb,blendDestinationRgb,blendSourceAlpha,blendDestinationAlpha,blendEquationRgb,blendEquationAlpha;
         private bool blendFunctionCaptured;
+        private bool polygonOffsetCaptured;
+        private float polygonOffsetFactor, polygonOffsetUnits;
         private bool disposed;
 
         public RenderStateScope()
@@ -22,7 +25,6 @@ namespace ForesTycoon.Rendering
             cullFace = GL.IsEnabled(EnableCap.CullFace);
             polygonOffsetFill = GL.IsEnabled(EnableCap.PolygonOffsetFill);
             GL.GetBoolean(GetPName.DepthWritemask, out depthMask);
-            GL.GetFloat(GetPName.LineWidth, out lineWidth);
         }
 
         public RenderStateScope Enable(EnableCap cap)
@@ -62,16 +64,27 @@ namespace ForesTycoon.Rendering
             return this;
         }
 
-        public RenderStateScope LineWidth(float width)
+        public RenderStateScope ThinLines()
         {
             // Apple core profiles commonly expose only 1px hardware lines.
             // Wide outlines must be represented as geometry, not driver state.
+            if (!lineWidthCaptured)
+            {
+                GL.GetFloat(GetPName.LineWidth, out lineWidth);
+                lineWidthCaptured = true;
+            }
             GL.LineWidth(1.0f);
             return this;
         }
 
         public RenderStateScope PolygonOffset(float factor, float units)
         {
+            if (!polygonOffsetCaptured)
+            {
+                GL.GetFloat(GetPName.PolygonOffsetFactor, out polygonOffsetFactor);
+                GL.GetFloat(GetPName.PolygonOffsetUnits, out polygonOffsetUnits);
+                polygonOffsetCaptured = true;
+            }
             GL.Enable(EnableCap.PolygonOffsetFill);
             GL.PolygonOffset(factor, units);
             return this;
@@ -92,8 +105,8 @@ namespace ForesTycoon.Rendering
                     (BlendingFactorSrc)blendSourceAlpha,(BlendingFactorDest)blendDestinationAlpha);
                 GL.BlendEquationSeparate((BlendEquationMode)blendEquationRgb,(BlendEquationMode)blendEquationAlpha);
             }
-            GL.LineWidth(lineWidth);
-            GL.PolygonOffset(0.0f, 0.0f);
+            if (lineWidthCaptured) GL.LineWidth(lineWidth);
+            if (polygonOffsetCaptured) GL.PolygonOffset(polygonOffsetFactor, polygonOffsetUnits);
         }
 
         private static void Restore(EnableCap cap, bool enabled)

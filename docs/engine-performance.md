@@ -333,3 +333,70 @@ $env:DOTNET_TieredCompilation = '0'
 dotnet run --project ForesTycoon -c Release -- --graphics-smoke-test
 Remove-Item Env:DOTNET_TieredCompilation
 ```
+
+## Render és animáció code review (2026-10-08)
+
+### Elvégzett változtatások
+
+- **P2, egymásba ágyazott GL-állapot elvesztése:** a `RenderStateScope.Dispose` korábban
+  mindig nullázta a polygon offsetet. Egy belső, akár offsetet nem módosító scope ezért
+  elrontotta a külső árnyék/decal biasát. Most csak a módosított opcionális állapotot mentjük
+  és állítjuk vissza, az eredeti factor/units értékekkel. A grafikus teszt beágyazott és
+  érintetlen scope-pal is ellenőrzi. A vonalvastagság lekérdezése/visszaállítása is csak akkor
+  történik, ha használjuk; az ignorált szélességparaméter helyett `ThinLines()` jelzi a viselkedést.
+- **P2, felesleges példányonkénti driver-lekérdezések:** a szarvasok és fűrészmalmok egymást
+  követő rajzolásai közös állapotkeretet használnak a halak korábbi megoldásához hasonlóan.
+  A kontúrok saját cull-kerete és a példányonkénti póz/transzformáció megmarad.
+- **P2, fölösleges tömörfelület-rendezés:** a modellrenderelő O(n) lépésben particionál;
+  csak a b darab BLEND primitívre fut O(b log b) rendezés. Tömör és árnyékjelenetnél nincs
+  mélységszámítás/rendezés. A tömör felületek asset-sorrendje megmarad, a futásidejű alpha-váltás
+  minden hívásnál látszik. Az alpha-próba vegyes tömör/átlátszó felületekkel ellenőrzi a kompozitot.
+- **P2, fölösleges animációs munka:** a teljesen egyik klipre állított crossfade egyetlen
+  klipet értékel. Az in-place gyökérnél nincs dupla csatornamintavétel. A fájlbetöltés és a CPU
+  animáció külön forrásban található, a mágikus útazonosítók és interpolációs sztringek enumok.
+  A bemeneti végesérték- és tartományellenőrzés megelőzi a hibás GPU-transzformációkat.
+- **Memória és használatlan kód:** a `VertexBuffer` az indexekből csak a darabszámot tartja
+  meg. A statikus terep Land buffere sem őriz használatlan CPU-vertex másolatot; a prototípusok
+  és a diagnosztikához olvasott Grid adatai megmaradnak. Dispose felszabadítja a megőrzött CPU
+  hivatkozást is. Törölve a sehol nem feliratkozott, soha nem kiváltott `TreeParams.Changed` event.
+
+### Fennmaradó megállapítások, prioritás szerint
+
+1. **P2 — nagy pályák indulása és GPU-memóriája:** `TerrainRenderer` továbbra is teljes
+   erdő-LOD előtöltést indít. Korlátos, kamera alapján prioritizált cache és megtartott helyettesítő
+   LOD kell, a havi növekedés és sziluettfolytonosság megőrzésével. Az előtöltés egyszerű törlése
+   visszahozná a kamera mozgásakor jelentkező hálóépítési akadásokat.
+2. **P2 — szerkesztés utáni túl széles invalidáció:** `DrawCachedTerrain` a globális
+   `SurfaceVersion` értékét figyeli. Egy helyi szerkesztés minden látható statikus chunkot
+   újraépíthet. A chunk-verziót a hidrológia és útalapok tényleges függőségeiből kell képezni;
+   csak a közvetlenül szerkesztett csempe megjelölése nem biztosít helyes képet.
+3. **P2 — átlátszó modellek általánosíthatósága:** a BLEND rendezés modellen belüli,
+   és a mélység a merev node-transzformációval számolt assetközéppontból származik. Átfedő
+   példányoknál vagy erősen deformált áttetsző mesh-nél hibás kompozit lehetséges. Bővebb asset-
+   támogatás előtt jelenetszintű transparent queue és animált bounds, vagy igazolt OIT megoldás kell.
+
+A Metalhoz szükséges backend- és shaderleválasztás terve az
+[engine architektúrában](engine-architecture.md#render-and-animation-consolidation-metal-direction-2026-10-08)
+található. A programban még nincs Metal backend.
+
+### Ellenőrzés és jelenlegi mérés
+
+1326/1326 Release-egységteszt sikeres. Új lefedettség: LINEAR/STEP mintavétel, intervallumhoz
+skálázott CUBICSPLINE, legrövidebb quaternion-ív, crossfade végpontok, negatív idő, in-place
+hierarchia, hibás bemenetek és a render-szálon nulla memóriafoglalás ismételt crossfade-nél.
+A material-alpha, wildlife és graphics GL-próba sikeres. A graphics próba a korábban dokumentált
+`DOTNET_TieredCompilation=0` futtatási beállítást használta; a képtolerancia változatlan.
+A teljes tesztfordításban megmaradnak a `TreePreviewDump` korábbi nullable figyelmeztetései.
+
+A végleges kód önálló `--world-benchmark` futása: RTX 5060, 1280×720, MSAA4, magas minőség,
+64×64 csempe, 2001 fa, 0 jármű, 600 mért képkocka és egy hónaphatár esetenként.
+
+| Jelenet | Medián | p95 | Maximum | Hónaphatár |
+| --- | ---: | ---: | ---: | ---: |
+| Napsütés | 6,51 ms | 7,97 ms | 25,08 ms | 14,39 ms |
+| Vihar | 7,43 ms | 11,72 ms | 16,56 ms | 9,77 ms |
+
+A mérés a GPU-befejezést is megvárja, UI/input/swap és diorama-kompozitálás nélkül.
+Az eredmények jelenlegi referenciaértékek; azonos körülmények között mért korábbi változat nélkül
+nem állítunk százalékos gyorsulást, és a nagy pályák indulási/memóriaköltségét ez nem méri.
+A helyi minták: `artifacts/world-benchmark/sunny.json` és `storm.json`.

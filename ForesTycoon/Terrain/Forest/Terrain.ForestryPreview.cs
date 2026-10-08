@@ -65,7 +65,7 @@ namespace ForesTycoon
                     for (int i = 0; i < count; i++) TileQuad(tiles[tileIds[i]]);
                 });
 
-                using (new RenderStateScope().LineWidth(2.5f))
+                using (new RenderStateScope().ThinLines())
                 {
                     DynamicPrimitiveBatch.Color4(line);
                     for (int i = 0; i < count; i++)

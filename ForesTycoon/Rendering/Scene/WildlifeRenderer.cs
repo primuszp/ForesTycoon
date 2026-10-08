@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using OpenTK.Graphics.OpenGL;
 using OpenTK.Mathematics;
 namespace ForesTycoon
 {
@@ -30,9 +31,10 @@ namespace ForesTycoon
             renderer??=new AnimatedModelRenderer(model);
             int outlineBudget=settings.Enhanced&&settings.WildlifeOutlines&&context.PixelsPerWorldUnit>=7&&RenderDevice.Visuals?.ShadowPass!=true
                 ? settings.Quality==GraphicsQuality.High?8:settings.Quality==GraphicsQuality.Medium?4:0 :0;
+            using var state=new RenderStateScope().Enable(EnableCap.DepthTest).Disable(EnableCap.CullFace);
+            float alpha=(float)Math.Clamp(context.InterpolationAlpha,0,1);
             foreach(var animal in simulation.Animals)
             {
-                float alpha=(float)Math.Clamp(context.InterpolationAlpha,0,1);
                 float turn=MathF.Atan2(MathF.Sin(animal.Yaw-animal.PreviousYaw),MathF.Cos(animal.Yaw-animal.PreviousYaw));
                 float yaw=animal.PreviousYaw+turn*alpha;
                 Vector3 position=Vector3.Lerp(animal.PreviousPosition,animal.Position,alpha);
@@ -50,7 +52,7 @@ namespace ForesTycoon
                 forward.Normalize();Vector3 up=Vector3.Cross(forward,left).Normalized();left=Vector3.Cross(up,forward).Normalized();
                 Matrix4 placement=new(new Vector4(forward,0),new Vector4(left,0),new Vector4(up,0),new Vector4(position,1));
                 Matrix4 transform=Axis*Matrix4.CreateScale(DioramaScale.Elk)*placement;
-                renderer.Draw(pose,transform,settings,outlineBudget>0?0.7f/context.PixelsPerWorldUnit:0);
+                renderer.Draw(pose,transform,settings,outlineBudget>0?0.7f/context.PixelsPerWorldUnit:0,sharedState:state);
                 if(outlineBudget>0)outlineBudget--;
             }
         }

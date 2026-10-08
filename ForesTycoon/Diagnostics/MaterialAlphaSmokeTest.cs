@@ -16,6 +16,17 @@ namespace ForesTycoon
                 APIVersion=new Version(3,3),Profile=ContextProfile.Core });
             window.Context.MakeCurrent();RenderDevice.Initialize();GL.Viewport(0,0,64,64);
             try {
+                // Nested scopes must restore the caller's bias, including enabled state.
+                GL.Enable(EnableCap.PolygonOffsetFill);GL.PolygonOffset(3,7);
+                using (new RenderStateScope().PolygonOffset(2,4))
+                {
+                    using (new RenderStateScope().PolygonOffset(-1,-1)) { }
+                    RequirePolygonOffset(2,4);
+                    using (new RenderStateScope()) { }
+                    RequirePolygonOffset(2,4);
+                }
+                RequirePolygonOffset(3,7);
+                GL.Disable(EnableCap.PolygonOffsetFill);GL.PolygonOffset(0,0);
                 var mesh=new AnimatedGlbModel.Mesh { Node=0,Image=0,Color=new Vector4(0,1,0,1),
                     Alpha=AnimatedGlbModel.AlphaMode.Mask,Indices=new uint[] {0,1,2,0,2,3},
                     Vertices=new float[64] };
@@ -77,14 +88,17 @@ namespace ForesTycoon
                 Require(!writes&&!GL.IsEnabled(EnableCap.Blend),"Shared model state was not restored");
                 // Intentionally list the near blue surface before the far green one.
                 // Correct compositing is far green first, then near blue.
-                float[] nearVertices=(float[])mesh.Vertices.Clone(),farVertices=(float[])mesh.Vertices.Clone();
-                for(int i=2;i<64;i+=16) {nearVertices[i]=-.3f;farVertices[i]=.3f;}
+                float[] nearVertices=(float[])mesh.Vertices.Clone(),farVertices=(float[])mesh.Vertices.Clone(),solidVertices=(float[])mesh.Vertices.Clone();
+                for(int i=2;i<64;i+=16) {nearVertices[i]=-.3f;farVertices[i]=.3f;solidVertices[i]=.8f;}
                 var layered=new AnimatedGlbModel {Nodes=model.Nodes,Order=model.Order,Skins=model.Skins,Images=model.Images,
                     Meshes=new[] {
                         new AnimatedGlbModel.Mesh {Node=0,Image=0,Alpha=AnimatedGlbModel.AlphaMode.Blend,Color=new Vector4(0,0,1,.5f),
                             Center=new Vector3(0,0,-.3f),Vertices=nearVertices,Indices=mesh.Indices},
                         new AnimatedGlbModel.Mesh {Node=0,Image=0,Alpha=AnimatedGlbModel.AlphaMode.Blend,Color=new Vector4(0,1,0,.5f),
-                            Center=new Vector3(0,0,.3f),Vertices=farVertices,Indices=mesh.Indices} } };
+                            Center=new Vector3(0,0,.3f),Vertices=farVertices,Indices=mesh.Indices},
+                        // Listed last, but must be rendered before both transparent surfaces.
+                        new AnimatedGlbModel.Mesh {Node=0,Alpha=AnimatedGlbModel.AlphaMode.Opaque,Color=new Vector4(1,0,0,1),
+                            Center=new Vector3(0,0,.8f),Vertices=solidVertices,Indices=mesh.Indices} } };
                 var layeredPose=layered.CreatePose();layeredPose.Evaluate(null,0);
                 using(var layers=new AnimatedModelRenderer(layered)) {
                     Clear();layers.Draw(layeredPose,Matrix4.Identity,settings,sourceMaterial:true);
@@ -114,6 +128,13 @@ namespace ForesTycoon
             } finally {RenderDevice.Dispose();}
         }
         private static void Clear() { GL.DepthMask(true);GL.ClearColor(1,0,0,1);GL.Clear(ClearBufferMask.ColorBufferBit|ClearBufferMask.DepthBufferBit); }
+        private static void RequirePolygonOffset(float factor, float units)
+        {
+            GL.GetFloat(GetPName.PolygonOffsetFactor,out float actualFactor);
+            GL.GetFloat(GetPName.PolygonOffsetUnits,out float actualUnits);
+            Require(GL.IsEnabled(EnableCap.PolygonOffsetFill)&&actualFactor==factor&&actualUnits==units,
+                "Nested GL scopes must restore polygon offset without changing untouched state");
+        }
         private static byte[] Pixel(int x) {byte[] p=new byte[4];GL.ReadPixels(x,32,1,1,PixelFormat.Rgba,PixelType.UnsignedByte,p);return p;}
         private static void Require(bool ok,string message) {if(!ok)throw new InvalidOperationException(message);}
     }

@@ -65,7 +65,7 @@ namespace ForesTycoon
                         }
                     });
 
-                    using (new RenderStateScope().LineWidth(2.5f))
+                    using (new RenderStateScope().ThinLines())
                     {
                         foreach (TerrainMap.RoadPlanStep step in previewTiles)
                         {

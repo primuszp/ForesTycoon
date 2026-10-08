@@ -34,8 +34,9 @@ namespace ForesTycoon
             if(logistics==null||logistics.Mills.Count==0)return;
             mill??=new ImportedSceneAsset("Assets/Buildings/sawmill.glb",DioramaScale.SawmillWidth(terrain.TileWidth,terrain.TileHeight),
                 footprint:DioramaScale.SawmillFootprint(terrain.TileWidth,terrain.TileHeight));
+              using var state=new RenderStateScope().Enable(EnableCap.DepthTest).Disable(EnableCap.CullFace);
             foreach(var building in logistics.Mills){
-                mill.Draw(Matrix4.CreateTranslation(building.Position),settings);
+                  mill.Draw(Matrix4.CreateTranslation(building.Position),settings,state);
             }
         }
         internal void DrawBuildingPreview(Terrain terrain,ForestSystem forest,ForestryLogistics logistics,bool enabled)
