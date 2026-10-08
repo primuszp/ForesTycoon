@@ -10,12 +10,9 @@ using NVec4 = System.Numerics.Vector4;
 namespace ForesTycoon
 {
     /// <summary>
-    /// Game HUD, laid out after Transport Tycoon:
-    ///   • one icon toolbar along the top, grouped by job (game · time · terrain · roads ·
-    ///     forestry · industry · information · view/dev);
-    ///   • a contextual sub-bar under it that only appears when the active tool has options;
-    ///   • a status bar along the bottom (tool, calendar, weather, timber, vehicles);
-    ///   • closable information windows, and every developer function in one window.
+    /// Game HUD: the calm edge panels of Viewport.Lodge.cs (estate card, ledger, journal, tempo,
+    /// verb dock, minimap, season card), the hover inspector, and closable information windows;
+    /// every developer function sits in one window behind F12.
     /// </summary>
     sealed partial class Viewport
     {
@@ -25,23 +22,15 @@ namespace ForesTycoon
         private int ecologyRasterLayer, ecologyRasterSelection = -1;
         private int environmentPreset, environmentIntensity = 12, environmentDuration = 90;
         private float toolbarBottom = 60f;
-        private const float StatusBarHeight = 34f;
+        // Room kept free above the bottom edge for the tempo panel, verb dock and minimap.
+        private const float StatusBarHeight = 150f;
 
-        private readonly struct Toast
-        {
-            internal Toast(string text, NVec4 color, double born) { Text = text; Color = color; Born = born; }
-            internal readonly string Text;
-            internal readonly NVec4 Color;
-            internal readonly double Born;
-        }
-        private readonly List<Toast> toasts = new();
         private const double ToastSeconds = 4.5;
         private (ForestryActionResult Action, int Applied, int Tiles) lastForestryToast;
 
         private void ShowToast(string text, NVec4 color)
         {
-            toasts.Add(new Toast(text, color, frameClock.TotalTimeSeconds));
-            if (toasts.Count > 4) toasts.RemoveAt(0);
+            AddJournal(text, color);
         }
 
         private void DrawImGui()
@@ -52,10 +41,13 @@ namespace ForesTycoon
             imgui.Update(Width, Height, FramebufferWidth, FramebufferHeight, new NVec2(scale, scale), frameClock.DeltaTimeSeconds);
 
             TrackForestryResult();
-            DrawTopToolbar();
-            DrawToolOptionsBar();
-            DrawStatusBar();
-            DrawToasts();
+            TrackSeason();
+            DrawEstateCard();
+            DrawLedger();
+            DrawJournal();
+            DrawTimeControl();
+            DrawVerbDock();
+            DrawMinimap();
             DrawHoverInspector();
             DrawVehiclesWindow();
             DrawForestryWindow();
@@ -64,6 +56,7 @@ namespace ForesTycoon
             DrawGraphicsWindow();
             DrawDeveloperWindow();
             DrawHelpWindow();
+            DrawSeasonCard();
 
             imgui.Render();
         }
@@ -71,100 +64,6 @@ namespace ForesTycoon
         private const ImGuiWindowFlags BarFlags = ImGuiWindowFlags.NoDecoration | ImGuiWindowFlags.NoMove
             | ImGuiWindowFlags.NoSavedSettings | ImGuiWindowFlags.NoFocusOnAppearing | ImGuiWindowFlags.NoNav
             | ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoBringToFrontOnFocus;
-
-        // ── Top toolbar ──────────────────────────────────────────────────────
-        private void DrawTopToolbar()
-        {
-            // 22 buttons and 7 dividers; shrink the icons on narrow windows rather than wrap.
-            const int buttons = 22, dividers = 7;
-            float size = Math.Clamp((Width - 40f - dividers * 15f) / buttons - 5f, 24f, 38f);
-
-            ImGui.SetNextWindowPos(new NVec2(Width * 0.5f, 6), ImGuiCond.Always, new NVec2(0.5f, 0f));
-            ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new NVec2(8, 6));
-            ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new NVec2(5, 4));
-            ImGui.Begin("##toolbar", BarFlags);
-
-            // Game
-            if (HudTheme.IconButton("game", GameIcon.GameMenu, size, ImGui.IsPopupOpen("game-menu"), "Játék menü",
-                    null, "Új térkép, térképméret, mentés, betöltés és kilépés."))
-                ImGui.OpenPopup("game-menu");
-            DrawGameMenuPopup();
-
-            HudTheme.GroupDivider(size);
-            // Time
-            if (HudTheme.IconButton("pause", GameIcon.Pause, size, simulationClock.IsPaused, "Szünet", "Space",
-                    "Megállítja a szimulációt, a járműveket és az időjárást. A kamera és az építés működik."))
-                simulationClock.IsPaused = !simulationClock.IsPaused;
-            ImGui.SameLine();
-            SpeedButton("speed1", GameIcon.Play, 1.0, size, "Normál sebesség");
-            ImGui.SameLine();
-            SpeedButton("speed2", GameIcon.Fast, 2.0, size, "Gyorsítás 2×");
-            ImGui.SameLine();
-            DrawFastSpeedButton(size);
-
-            HudTheme.GroupDivider(size);
-            // Terrain
-            ToolIcon(GameIcon.Inspect, TerrainEditTool.Inspect, size, "Vizsgálat", "1",
-                "Csempe- és állományadatok egérrel. Bal húzás: kamera forgatása.");
-            ImGui.SameLine();
-            ToolIcon(GameIcon.Raise, TerrainEditTool.Raise, size, "Terep emelése", "2", "Kattintással emeli a terepet az ecset méretében.");
-            ImGui.SameLine();
-            ToolIcon(GameIcon.Lower, TerrainEditTool.Lower, size, "Terep süllyesztése", "3", "Kattintással süllyeszti a terepet.");
-
-            HudTheme.GroupDivider(size);
-            // Roads
-            ToolIcon(GameIcon.Road, TerrainEditTool.Road, size, "Útépítés", "4",
-                "Húzd az egeret a nyomvonalon. Az utak kötik össze a kitermelést a fűrészmalommal.");
-            ImGui.SameLine();
-            ToolIcon(GameIcon.RoadRemove, TerrainEditTool.RoadRemove, size, "Útbontás", "5", "Húzással eltávolítja az útszakaszt.");
-
-            HudTheme.GroupDivider(size);
-            // Forestry
-            ToolIcon(GameIcon.Plant, TerrainEditTool.PlantForest, size, "Erdőtelepítés", "6",
-                $"Csemeték ültetése húzással. Kiválasztott fafaj: {ForestSpeciesName(interaction.PlantingSpecies)}.");
-            ImGui.SameLine();
-            ToolIcon(GameIcon.Harvest, TerrainEditTool.HarvestForest, size, "Kitermelési terület", "7",
-                "Húzással jelöld ki az erdőt. A fák csak rakodás közben, fokozatosan fogynak.");
-
-            HudTheme.GroupDivider(size);
-            // Industry & transport
-            ToolIcon(GameIcon.Sawmill, TerrainEditTool.PlaceSawmill, size, "Fűrészmalom építése", "8",
-                "2×2 sík, üres, száraz csempére. A malom mellé út szükséges.");
-            ImGui.SameLine();
-            if (HudTheme.IconButton("truck", GameIcon.TruckAdd, size, false, "Rönkszállító indítása", "T",
-                    "Új teherautó a kitermelési terület és a fűrészmalom közötti úton."))
-                SpawnTruck();
-
-            HudTheme.GroupDivider(size);
-            // Information windows
-            WindowToggle("vehicles", GameIcon.Vehicles, ref showVehicles, size, "Járművek", "V", "Teherautók állapota és rakománya.");
-            ImGui.SameLine();
-            WindowToggle("forestry", GameIcon.Forestry, ref showForestry, size, "Erdészet", "F",
-                "Erdőállomány, kitermelés, fűrészmalmok és faanyagmérleg.");
-            ImGui.SameLine();
-            WindowToggle("environment", GameIcon.Environment, ref showEnvironment, size, "Környezet", "E",
-                "Időjárás, talajtérkép, gyökérzónavíz és vízstressz csempénként.");
-            ImGui.SameLine();
-            WindowToggle("management", GameIcon.Calendar, ref showManagement, size, "Erdőgazdálkodás", "M",
-                "Víz, talaj, erdőegészség és állomány térképe; hol és milyen beavatkozás kell.");
-
-            HudTheme.GroupDivider(size);
-            // View & development
-            if (HudTheme.IconButton("camera", GameIcon.Camera, size, false, "Kamera alaphelyzet", "Home", "Visszaállítja a nézetet a teljes térképre."))
-                ResetCamera();
-            ImGui.SameLine();
-            WindowToggle("graphics", GameIcon.Graphics, ref showGraphics, size, "Grafika", "G",
-                "Diorama hatások, fény, árnyék, időjárás látványa és minőség.");
-            ImGui.SameLine();
-            WindowToggle("developer", GameIcon.Developer, ref showDeveloper, size, "Fejlesztői eszközök", "F12",
-                "Teljesítménymérés, időjárás-teszt, stresszteszt térkép és hibakereső kapcsolók.");
-            ImGui.SameLine();
-            WindowToggle("help", GameIcon.Help, ref showHelp, size, "Súgó", "F1", "Irányítás, gyorsbillentyűk és az első lépések.");
-
-            toolbarBottom = ImGui.GetWindowPos().Y + ImGui.GetWindowSize().Y;
-            ImGui.End();
-            ImGui.PopStyleVar(2);
-        }
 
         private void DrawGameMenuPopup()
         {
@@ -246,19 +145,10 @@ namespace ForesTycoon
             if (HudTheme.IconButton(id, icon, size, open, title, shortcut, description)) open = !open;
         }
 
-        // ── Contextual tool options ──────────────────────────────────────────
-        private void DrawToolOptionsBar()
+        // ── Contextual tool options (shown in the verb strip) ────────────────
+        private void DrawToolOptions(TerrainEditTool tool)
         {
-            TerrainEditTool tool = interaction.ActiveTool;
-            if (tool == TerrainEditTool.Inspect) return;
-
-            ImGui.SetNextWindowPos(new NVec2(Width * 0.5f, toolbarBottom + 6), ImGuiCond.Always, new NVec2(0.5f, 0f));
-            ImGui.SetNextWindowBgAlpha(0.90f);
-            ImGui.Begin("##tool-options", BarFlags);
-
-            HudTheme.IconText(ToolIconFor(tool), ToolName(tool), HudTheme.AmberAccent);
-            ImGui.SameLine(0, 18);
-
+            ImGui.SameLine();
             switch (tool)
             {
                 case TerrainEditTool.PlantForest:
@@ -296,7 +186,6 @@ namespace ForesTycoon
                     ImGui.TextDisabled("Zöld keret: építhető. 2×2 sík, üres, száraz csempe; mellé út kell.");
                     break;
             }
-            ImGui.End();
         }
 
         private void SpeciesButton(ForestSpecies species, GameIcon icon, string label, string description)
@@ -345,45 +234,6 @@ namespace ForesTycoon
             _ => GameIcon.Inspect
         };
 
-        // ── Bottom status bar ────────────────────────────────────────────────
-        private void DrawStatusBar()
-        {
-            ImGui.SetNextWindowPos(new NVec2(0, Height - StatusBarHeight), ImGuiCond.Always);
-            ImGui.SetNextWindowSize(new NVec2(Width, StatusBarHeight), ImGuiCond.Always);
-            ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, 0f);
-            ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new NVec2(12, 7));
-            ImGui.Begin("##status", BarFlags & ~ImGuiWindowFlags.AlwaysAutoResize);
-
-            HudTheme.IconText(ToolIconFor(interaction.ActiveTool), ToolName(interaction.ActiveTool));
-
-            var environment = world.Environment;
-            if (environment != null)
-            {
-                ImGui.SameLine(0, 28);
-                double year = environment.Time / environment.ForestYearSeconds;
-                HudTheme.IconText(GameIcon.Calendar, $"{1 + (int)year}. erdőév · {SeasonName(year - Math.Floor(year))}");
-                ImGui.SameLine(0, 22);
-                HudTheme.IconText(WeatherIcon(environment.Preset), $"{WeatherName(environment.Preset)} · {environment.Temperature:0} °C");
-            }
-
-            ImGui.SameLine(0, 22);
-            HudTheme.IconText(GameIcon.Speedometer, simulationClock.IsPaused ? "Szünet" : $"{simulationClock.Speed:0}×",
-                simulationClock.IsPaused ? HudTheme.AmberAccent : null);
-
-            // Right-aligned economy readout.
-            string timber = $"{world.DeliveredTimber:F0} m³ leszállítva · {world.TimberStockpile:F0} m³ készlet";
-            string vehicles = $"{world.VehicleCount} jármű";
-            float iconWidth = ImGui.GetTextLineHeight() + 8f;
-            float right = ImGui.CalcTextSize(timber).X + ImGui.CalcTextSize(vehicles).X + iconWidth * 2 + 34f;
-            ImGui.SameLine(Math.Max(ImGui.GetCursorPosX() + 20f, Width - right));
-            HudTheme.IconText(GameIcon.Timber, timber);
-            ImGui.SameLine(0, 18);
-            HudTheme.IconText(GameIcon.Truck, vehicles);
-
-            ImGui.End();
-            ImGui.PopStyleVar(2);
-        }
-
         private static string SeasonName(double fraction) => fraction switch
         {
             < 0.25 => "tavasz",
@@ -423,23 +273,6 @@ namespace ForesTycoon
             if (!area.IsEmpty)
                 text += $"  ({area.Applied}/{area.TileCount} csempe" + (area.TimberVolume > 0f ? $", {area.TimberVolume:F1} m³)" : ")");
             ShowToast(text, ForestryActionSucceeded(world.LastForestryAction) ? HudTheme.Good : HudTheme.Bad);
-        }
-
-        private void DrawToasts()
-        {
-            double now = frameClock.TotalTimeSeconds;
-            toasts.RemoveAll(t => now - t.Born > ToastSeconds);
-            if (toasts.Count == 0) return;
-
-            ImGui.SetNextWindowPos(new NVec2(Width * 0.5f, Height - StatusBarHeight - 10), ImGuiCond.Always, new NVec2(0.5f, 1f));
-            ImGui.SetNextWindowBgAlpha(0.88f);
-            ImGui.Begin("##toasts", BarFlags | ImGuiWindowFlags.NoInputs);
-            foreach (var toast in toasts)
-            {
-                float fade = (float)Math.Clamp((ToastSeconds - (now - toast.Born)) / 0.6, 0, 1);
-                ImGui.TextColored(toast.Color with { W = fade }, toast.Text);
-            }
-            ImGui.End();
         }
 
         // ── Hover inspector ──────────────────────────────────────────────────
@@ -845,11 +678,12 @@ namespace ForesTycoon
             HudTheme.KeyValue("Home", "alaphelyzet");
 
             ImGui.SeparatorText("Gyorsbillentyűk");
-            HudTheme.KeyValue("1 – 8", "eszközök (a felső sor sorrendjében)");
+            HudTheme.KeyValue("Q / W / E / R", "Megfigyel / Gondoz / Termel / Formál");
+            HudTheme.KeyValue("1 – 8", "eszközök közvetlenül");
             HudTheme.KeyValue("Esc", "vissza a Vizsgálat eszközhöz");
             HudTheme.KeyValue("Space", "szünet");
             HudTheme.KeyValue("T", "rönkszállító indítása");
-            HudTheme.KeyValue("V / F / E / M / G", "járművek / erdészet / környezet / erdőgazdálkodás / grafika");
+            HudTheme.KeyValue("V / F / K / M / G", "járművek / erdészet / környezet / erdőgazdálkodás / grafika");
             HudTheme.KeyValue("F12", "fejlesztői eszközök");
             HudTheme.KeyValue("Ctrl+S / Ctrl+L", "gyorsmentés / gyorsbetöltés");
             ImGui.End();
@@ -870,7 +704,10 @@ namespace ForesTycoon
             switch (e.Key)
             {
                 case Keys.Space: simulationClock.IsPaused = !simulationClock.IsPaused; return true;
-                case Keys.Escape: SelectTool(TerrainEditTool.Inspect); return true;
+                case Keys.Escape: verb = Verb.None; SelectTool(TerrainEditTool.Inspect); return true;
+                case Keys.Q: ChooseVerb(Verb.Observe); return true;
+                case Keys.W: ChooseVerb(Verb.Tend); return true;
+                case Keys.R: ChooseVerb(Verb.Shape); return true;
                 case Keys.D1: SelectTool(TerrainEditTool.Inspect); return true;
                 case Keys.D2: SelectTool(TerrainEditTool.Raise); return true;
                 case Keys.D3: SelectTool(TerrainEditTool.Lower); return true;
@@ -882,7 +719,8 @@ namespace ForesTycoon
                 case Keys.T: SpawnTruck(); return true;
                 case Keys.V: showVehicles = !showVehicles; return true;
                 case Keys.F: showForestry = !showForestry; return true;
-                case Keys.E: showEnvironment = !showEnvironment; return true;
+                case Keys.E: ChooseVerb(Verb.Produce); return true;
+                case Keys.K: showEnvironment = !showEnvironment; return true;
                 case Keys.M: showManagement = !showManagement; return true;
                 case Keys.G: showGraphics = !showGraphics; return true;
                 case Keys.F12: showDeveloper = !showDeveloper; return true;

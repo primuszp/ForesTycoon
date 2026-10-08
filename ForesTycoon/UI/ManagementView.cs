@@ -94,6 +94,21 @@ namespace ForesTycoon
             return request;
         }
 
+        /// <summary>Keeps the survey current for views outside this window (the estate minimap).</summary>
+        internal void EnsureSurvey(GameWorld world)
+        {
+            if (world.Soils != null) Refresh(world);
+        }
+
+        /// <summary>Minimap colour of one tile: the to-do lens, muted so the issues stand out.</summary>
+        internal NVec4 MiniColour(int id)
+        {
+            var s = survey[id];
+            if (s.Issue != ManagementIssue.None && s.Issue != ManagementIssue.Harvestable) return IssueColor(s.Issue);
+            if (!s.IsForest) return s.Forestable ? new NVec4(.36f, .43f, .30f, 1) : new NVec4(.20f, .27f, .33f, 1);
+            return NVec4.Lerp(new NVec4(.30f, .45f, .25f, 1), new NVec4(.18f, .30f, .17f, 1), Math.Clamp(s.Maturity, 0, 1));
+        }
+
         private void Refresh(GameWorld world)
         {
             // Monthly forest state drives the survey; water changes continuously, so refresh it at

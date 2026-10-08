@@ -48,6 +48,34 @@ namespace ForesTycoon
             ushort[] ranges = { 0x0020, 0x017F, 0x2000, 0x206F, 0 };
             glyphRangeHandle = GCHandle.Alloc(ranges, GCHandleType.Pinned);
             io.Fonts.AddFontFromFileTTF(fontPath, 16f, IntPtr.Zero, glyphRangeHandle.AddrOfPinnedObject());
+            // A serif face for estate names, seasons and panel titles (the HUD's calm "voice").
+            string title = FindTitleFont() ?? fontPath;
+            TitleFont = io.Fonts.AddFontFromFileTTF(title, 22f, IntPtr.Zero, glyphRangeHandle.AddrOfPinnedObject());
+            LargeTitleFont = io.Fonts.AddFontFromFileTTF(title, 34f, IntPtr.Zero, glyphRangeHandle.AddrOfPinnedObject());
+            HasTitleFonts = true;
+        }
+
+        internal static bool HasTitleFonts { get; private set; }
+
+        /// <summary>Serif title fonts; null pointers when only ImGui's default font is available.</summary>
+        internal static ImFontPtr TitleFont { get; private set; }
+        internal static ImFontPtr LargeTitleFont { get; private set; }
+
+        private static string FindTitleFont()
+        {
+            string fonts = Environment.GetFolderPath(Environment.SpecialFolder.Fonts);
+            string[] candidates =
+            {
+                Path.Combine(fonts, "georgiab.ttf"),
+                Path.Combine(fonts, "georgia.ttf"),
+                Path.Combine(fonts, "cambriab.ttf"),
+                "/System/Library/Fonts/Supplemental/Georgia Bold.ttf",
+                "/System/Library/Fonts/Supplemental/Georgia.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf"
+            };
+            foreach (string candidate in candidates)
+                if (File.Exists(candidate)) return candidate;
+            return null;
         }
 
         private static string FindUIFont()

@@ -90,3 +90,17 @@ Beállítások), Környezet-ablak (tartalma a Térképasztal Víz/Talaj lencséj
 Feltétel a teljes tervhez: **gazdasági modul** (egyenleg, költségek, árak) – a táblákon szögletes
 zárójeles helyőrzők jelölik ([EGYENLEG], [KÖLTSÉG], [BEVÉTEL]); és **erdőrészletek** (csempék
 csoportosítása elnevezett egységekbe), amelyre a napló, a térkép és a panel épít.
+
+## 7. Állapot (2026-10-08)
+
+Beépítve a játékba (`ForesTycoon/App/Viewport.Lodge.cs`), az erdészház-színekkel:
+
+- Birtokkártya évszakkerékkel (az aktuális évszak íve erős, a jelölő az év pontos helyén), dátum és időjárás; mögötte a játékmenü.
+- Mérlegsáv: élőfakészlet, leszállított faanyag, erdőállapot-gyűrű; alatta az ablakgombok (járművek, erdészet, környezet, grafika, kamera, súgó). A fejlesztői eszközök csak F12-re.
+- Erdőnapló a bal oldalon (a toastok helyett): az új bejegyzés röviden borostyánban dereng, aztán a naplóban marad; összecsukható.
+- Tempó bal lent: szünet, 1×, 2×, gyorsítómenü és az évszak haladása.
+- Igedokk: Megfigyel (Q), Gondoz (W), Termel (E), Formál (R); fölötte az ige eszközei és az aktív eszköz beállításai (pl. fafajválasztó). A dokk a két alsó sarokpanel között középen ül.
+- Birtoktérkép jobb lent (Teendők lencse kicsiben), kattintásra kamerarepülés.
+- Évszakkártya évszakváltáskor: az elmúlt évszak (készletváltozás, leszállított faanyag, erdőállapot) és évszakos tanács; megállítja az időt, kikapcsolható; nagy gyorsításnál, felvételnél és füstpróbán nem jelenik meg.
+- Talpas címbetű (Georgia, ha elérhető) a birtok, a napló és az évszakkártya címeihez.
+- Gyorsbillentyű-változás: a Környezet ablak K-ra került (E most a Termel ige).
