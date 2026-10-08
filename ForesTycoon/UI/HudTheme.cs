@@ -12,32 +12,34 @@ namespace ForesTycoon
     /// </summary>
     internal static class HudTheme
     {
-        internal static readonly NVec4 Panel = new(0.085f, 0.110f, 0.095f, 0.94f);
-        internal static readonly NVec4 PanelLight = new(0.135f, 0.170f, 0.140f, 0.96f);
-        internal static readonly NVec4 Moss = new(0.36f, 0.50f, 0.27f, 1f);
-        internal static readonly NVec4 MossBright = new(0.47f, 0.63f, 0.34f, 1f);
-        internal static readonly NVec4 AmberAccent = new(0.94f, 0.73f, 0.31f, 1f);
-        internal static readonly NVec4 Parchment = new(0.92f, 0.90f, 0.82f, 1f);
-        internal static readonly NVec4 Muted = new(0.62f, 0.66f, 0.58f, 1f);
-        internal static readonly NVec4 Good = new(0.55f, 0.90f, 0.45f, 1f);
-        internal static readonly NVec4 Bad = new(1.00f, 0.45f, 0.36f, 1f);
-        internal static readonly NVec4 Info = new(0.60f, 0.80f, 1.00f, 1f);
+        // Fine-tuned "forest lodge" palette (docs/ui-ux-design.md): slightly deeper, warmer panels that
+        // let the diorama show through, softer parchment, honey amber and calmer signal colours.
+        internal static readonly NVec4 Panel = new(0.078f, 0.102f, 0.086f, 0.90f);      // #141A16
+        internal static readonly NVec4 PanelLight = new(0.114f, 0.149f, 0.125f, 0.96f); // #1D2620
+        internal static readonly NVec4 Moss = new(0.36f, 0.50f, 0.27f, 1f);             // #5C8045
+        internal static readonly NVec4 MossBright = new(0.49f, 0.643f, 0.357f, 1f);     // #7DA45B
+        internal static readonly NVec4 AmberAccent = new(0.902f, 0.702f, 0.353f, 1f);  // #E6B35A
+        internal static readonly NVec4 Parchment = new(0.918f, 0.894f, 0.812f, 1f);     // #EAE4CF
+        internal static readonly NVec4 Muted = new(0.639f, 0.667f, 0.588f, 1f);         // #A3AA96
+        internal static readonly NVec4 Good = new(0.58f, 0.81f, 0.486f, 1f);            // #94CF7C
+        internal static readonly NVec4 Bad = new(0.886f, 0.514f, 0.42f, 1f);            // #E2836B
+        internal static readonly NVec4 Info = new(0.58f, 0.753f, 0.878f, 1f);           // #94C0E0
 
         internal static void Apply()
         {
             ImGuiStylePtr style = ImGui.GetStyle();
-            style.WindowRounding = 8f;
+            style.WindowRounding = 10f;
             style.ChildRounding = 6f;
-            style.FrameRounding = 5f;
+            style.FrameRounding = 6f;
             style.PopupRounding = 6f;
             style.GrabRounding = 5f;
             style.TabRounding = 5f;
             style.ScrollbarRounding = 6f;
             style.WindowBorderSize = 1f;
             style.FrameBorderSize = 0f;
-            style.WindowPadding = new NVec2(12, 10);
+            style.WindowPadding = new NVec2(14, 12);
             style.FramePadding = new NVec2(8, 5);
-            style.ItemSpacing = new NVec2(8, 6);
+            style.ItemSpacing = new NVec2(8, 7);
             style.ItemInnerSpacing = new NVec2(6, 5);
             style.WindowTitleAlign = new NVec2(0.02f, 0.5f);
             style.SeparatorTextBorderSize = 2f;
@@ -48,13 +50,13 @@ namespace ForesTycoon
             colors[(int)ImGuiCol.WindowBg] = Panel;
             colors[(int)ImGuiCol.ChildBg] = new NVec4(0, 0, 0, 0.12f);
             colors[(int)ImGuiCol.PopupBg] = new NVec4(0.075f, 0.098f, 0.085f, 0.97f);
-            colors[(int)ImGuiCol.Border] = new NVec4(0.32f, 0.38f, 0.28f, 0.55f);
+            colors[(int)ImGuiCol.Border] = new NVec4(0.36f, 0.50f, 0.27f, 0.35f);
             colors[(int)ImGuiCol.BorderShadow] = new NVec4(0, 0, 0, 0);
-            colors[(int)ImGuiCol.FrameBg] = new NVec4(0.17f, 0.21f, 0.17f, 0.90f);
+            colors[(int)ImGuiCol.FrameBg] = new NVec4(0.145f, 0.184f, 0.153f, 0.90f);
             colors[(int)ImGuiCol.FrameBgHovered] = new NVec4(0.24f, 0.30f, 0.22f, 0.95f);
             colors[(int)ImGuiCol.FrameBgActive] = new NVec4(0.29f, 0.37f, 0.25f, 1f);
-            colors[(int)ImGuiCol.TitleBg] = new NVec4(0.11f, 0.15f, 0.11f, 1f);
-            colors[(int)ImGuiCol.TitleBgActive] = new NVec4(0.19f, 0.27f, 0.16f, 1f);
+            colors[(int)ImGuiCol.TitleBg] = new NVec4(0.098f, 0.125f, 0.102f, 1f);
+            colors[(int)ImGuiCol.TitleBgActive] = new NVec4(0.129f, 0.173f, 0.118f, 1f);
             colors[(int)ImGuiCol.TitleBgCollapsed] = new NVec4(0.10f, 0.13f, 0.10f, 0.85f);
             colors[(int)ImGuiCol.MenuBarBg] = PanelLight;
             colors[(int)ImGuiCol.ScrollbarBg] = new NVec4(0, 0, 0, 0.15f);
@@ -64,7 +66,7 @@ namespace ForesTycoon
             colors[(int)ImGuiCol.CheckMark] = AmberAccent;
             colors[(int)ImGuiCol.SliderGrab] = MossBright;
             colors[(int)ImGuiCol.SliderGrabActive] = AmberAccent;
-            colors[(int)ImGuiCol.Button] = new NVec4(0.20f, 0.26f, 0.18f, 1f);
+            colors[(int)ImGuiCol.Button] = new NVec4(0.18f, 0.235f, 0.17f, 1f);
             colors[(int)ImGuiCol.ButtonHovered] = new NVec4(0.30f, 0.40f, 0.25f, 1f);
             colors[(int)ImGuiCol.ButtonActive] = Moss;
             colors[(int)ImGuiCol.Header] = new NVec4(0.22f, 0.29f, 0.19f, 1f);
@@ -102,10 +104,10 @@ namespace ForesTycoon
             bool held = ImGui.IsItemActive();
             if (!enabled) ImGui.EndDisabled();
 
-            NVec4 fill = active ? new NVec4(0.30f, 0.40f, 0.22f, 1f)
-                : held ? new NVec4(0.26f, 0.34f, 0.21f, 1f)
-                : hovered ? new NVec4(0.22f, 0.28f, 0.19f, 1f)
-                : new NVec4(0.14f, 0.18f, 0.14f, 1f);
+            NVec4 fill = active ? new NVec4(0.204f, 0.271f, 0.176f, 1f)
+                : held ? new NVec4(0.18f, 0.24f, 0.16f, 1f)
+                : hovered ? new NVec4(0.161f, 0.204f, 0.165f, 1f)
+                : new NVec4(0.118f, 0.149f, 0.122f, 1f);
             dl.AddRectFilled(min, max, GameIcons.Color(fill), 6f);
             // A faint top bevel gives the buttons the slightly raised, physical feel of a model kit.
             dl.AddLine(min + new NVec2(5, 1), new NVec2(max.X - 5, min.Y + 1), GameIcons.Color(new NVec4(1, 1, 1, active ? 0.18f : 0.07f)), 1f);
@@ -131,8 +133,8 @@ namespace ForesTycoon
             NVec2 min = ImGui.GetCursorScreenPos();
             bool clicked = ImGui.InvisibleButton("##" + label, size);
             bool hovered = ImGui.IsItemHovered();
-            NVec4 fill = active ? new NVec4(0.30f, 0.40f, 0.22f, 1f)
-                : hovered ? new NVec4(0.22f, 0.28f, 0.19f, 1f) : new NVec4(0.15f, 0.19f, 0.15f, 1f);
+            NVec4 fill = active ? new NVec4(0.204f, 0.271f, 0.176f, 1f)
+                : hovered ? new NVec4(0.161f, 0.204f, 0.165f, 1f) : new NVec4(0.118f, 0.149f, 0.122f, 1f);
             dl.AddRectFilled(min, min + size, GameIcons.Color(fill), 5f);
             if (active) dl.AddRect(min, min + size, GameIcons.Color(AmberAccent), 5f, ImDrawFlags.None, 1.6f);
             GameIcons.Draw(dl, icon, min + new NVec2(5, 4), iconSize, GameIcons.Color(Parchment));

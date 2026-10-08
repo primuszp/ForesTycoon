@@ -60,18 +60,22 @@ Beállítások), Környezet-ablak (tartalma a Térképasztal Víz/Talaj lencséj
 
 ## 5. Vizuális nyelv
 
-- **Paletta:** nyírpapír #F3EFE4, erdőtinta #23302A, mélymoha #2F4F33 (elsődleges), moha #4F7A4A,
-  borostyán #C98A2E (figyelem), patakvíz #4C86A8, kéreg #7A5A3E, agyag #B4553F (veszteség).
-  Évszakos kiemelőszín: tavasz #8DB45A, nyár #3F7A3A, ősz #C7782F, tél #7F9DB0.
+- **Paletta – „erdészház”, a mostani menüszínvilág finomhangolva** (`HudTheme`):
+  panel #141A16 (90% fedés, a dioráma átdereng; előtte #161C18 94%), világos panel #1D2620,
+  pergamen szöveg #EAE4CF, halvány szöveg #A3AA96, moha #5C8045 (marad), világos moha #7DA45B,
+  mézborostyán #E6B35A az aktív eszközre és a figyelemre (előtte a neonosabb #F0BA4F), halk címsor
+  #212C1E (előtte #304529), jó #94CF7C, veszteség agyagszínű #E2836B (előtte #FF735C), info/víz #94C0E0.
+  A Térképasztal sötét „íróasztal” (#0F1411) világos pergamen térképpel.
+  Évszakos kiemelőszín (évszakkerék, évszakkártya): tavasz #8DB45A, nyár #3F7A3A, ősz #C7782F, tél #7F9DB0.
 - **Betűk:** Fraunces (címek, helynevek, elbeszélő dőlt mondatok), Figtree (adat, gomb, szám).
   Magyar ékezetek: mindkettő tartalmazza a Latin Extended-A tartományt.
-- **Panelek:** áttetsző (≈90%) papírszín, 18 px sarok, lágy árnyék, 10 px háttérelmosás.
+- **Panelek:** sötét lucfenyő, 90% fedés, 10 px sarok, 1 px moha hajszálkeret, aktív elem mézborostyán belső kerettel.
 - **Mozgás:** 240 ms kiúszás, rugózás nélkül; 2 s évszakos fényátmenet; csillapított kamerarepülés.
 - **Hang:** évszak- és időjárásfüggő háttérhang (szél, madár, eső); halk fakoppanás kattintásra.
 
 ## 6. Megvalósítás a mostani motorban (ImGui)
 
-1. **Téma:** `HudTheme` átszínezése a fenti palettára (világos panelek, sötét tinta), Fraunces és
+1. **Téma:** a `HudTheme` finomhangolása kész (2026-10-08); hátravan a Fraunces és
    Figtree TTF betöltése az ImGui fontatlaszba (a meglévő magyar glifkészlettel).
 2. **Igedokk:** a 22 ikonos eszköztár helyett 4 ige + alfunkció-sor; a fejlesztői és grafikai
    gombok a játékmenübe/F12 mögé.
