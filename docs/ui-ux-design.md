@@ -99,8 +99,8 @@ Beépítve a játékba (`ForesTycoon/App/Viewport.Lodge.cs`), az erdészház-sz�
 - Mérlegsáv: élőfakészlet, leszállított faanyag, erdőállapot-gyűrű; alatta az ablakgombok (járművek, erdészet, környezet, grafika, kamera, súgó). A fejlesztői eszközök csak F12-re.
 - Erdőnapló a bal oldalon (a toastok helyett): az új bejegyzés röviden borostyánban dereng, aztán a naplóban marad; összecsukható.
 - Tempó bal lent: szünet, 1×, 2×, gyorsítómenü és az évszak haladása.
-- Igedokk: Megfigyel (Q), Gondoz (W), Termel (E), Formál (R); fölötte az ige eszközei és az aktív eszköz beállításai (pl. fafajválasztó). A dokk a két alsó sarokpanel között középen ül.
+- Igedokk: Megfigyel (Q), Gondoz (W), Termel (E), Épít (R), Szállít (T); fölötte az ige eszközei és az aktív eszköz beállításai (pl. fafajválasztó). Az út közös infrastruktúra – az ültetést, az ápolást, a kitermelést és a szállítást egyaránt szolgálja –, ezért az Épít igéhez tartozik a fűrészmalommal és a terepformálással együtt; a Szállít a rönkszállítókat és a járműveket fogja össze. A dokk a két alsó sarokpanel között középen ül.
 - Birtoktérkép jobb lent (Teendők lencse kicsiben), kattintásra kamerarepülés.
 - Évszakkártya évszakváltáskor: az elmúlt évszak (készletváltozás, leszállított faanyag, erdőállapot) és évszakos tanács; megállítja az időt, kikapcsolható; nagy gyorsításnál, felvételnél és füstpróbán nem jelenik meg.
 - Talpas címbetű (Georgia, ha elérhető) a birtok, a napló és az évszakkártya címeihez.
-- Gyorsbillentyű-változás: a Környezet ablak K-ra került (E most a Termel ige).
+- Gyorsbillentyű-változás: a Környezet ablak K-ra került (E most a Termel ige); a T a Szállít igét nyitja (rönkszállító indítása onnan).

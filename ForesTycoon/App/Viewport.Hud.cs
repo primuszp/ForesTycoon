@@ -678,11 +678,10 @@ namespace ForesTycoon
             HudTheme.KeyValue("Home", "alaphelyzet");
 
             ImGui.SeparatorText("Gyorsbillentyűk");
-            HudTheme.KeyValue("Q / W / E / R", "Megfigyel / Gondoz / Termel / Formál");
+            HudTheme.KeyValue("Q / W / E / R / T", "Megfigyel / Gondoz / Termel / Épít / Szállít");
             HudTheme.KeyValue("1 – 8", "eszközök közvetlenül");
             HudTheme.KeyValue("Esc", "vissza a Vizsgálat eszközhöz");
             HudTheme.KeyValue("Space", "szünet");
-            HudTheme.KeyValue("T", "rönkszállító indítása");
             HudTheme.KeyValue("V / F / K / M / G", "járművek / erdészet / környezet / erdőgazdálkodás / grafika");
             HudTheme.KeyValue("F12", "fejlesztői eszközök");
             HudTheme.KeyValue("Ctrl+S / Ctrl+L", "gyorsmentés / gyorsbetöltés");
@@ -707,7 +706,7 @@ namespace ForesTycoon
                 case Keys.Escape: verb = Verb.None; SelectTool(TerrainEditTool.Inspect); return true;
                 case Keys.Q: ChooseVerb(Verb.Observe); return true;
                 case Keys.W: ChooseVerb(Verb.Tend); return true;
-                case Keys.R: ChooseVerb(Verb.Shape); return true;
+                case Keys.R: ChooseVerb(Verb.Build); return true;
                 case Keys.D1: SelectTool(TerrainEditTool.Inspect); return true;
                 case Keys.D2: SelectTool(TerrainEditTool.Raise); return true;
                 case Keys.D3: SelectTool(TerrainEditTool.Lower); return true;
@@ -716,7 +715,7 @@ namespace ForesTycoon
                 case Keys.D6: SelectTool(TerrainEditTool.PlantForest); return true;
                 case Keys.D7: SelectTool(TerrainEditTool.HarvestForest); return true;
                 case Keys.D8: SelectTool(TerrainEditTool.PlaceSawmill); return true;
-                case Keys.T: SpawnTruck(); return true;
+                case Keys.T: ChooseVerb(Verb.Transport); return true;
                 case Keys.V: showVehicles = !showVehicles; return true;
                 case Keys.F: showForestry = !showForestry; return true;
                 case Keys.E: ChooseVerb(Verb.Produce); return true;

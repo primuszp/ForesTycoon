@@ -9,12 +9,13 @@ namespace ForesTycoon
     /// <summary>
     /// "Erdei csend" HUD (docs/ui-ux-design.md): the diorama stays the subject and the interface lives at
     /// its edges in calm forest-lodge panels — estate card with season wheel (top left), ledger (top
-    /// right), forest journal (left), tempo (bottom left), the four verbs Observe · Tend · Produce · Shape
-    /// as a dock (bottom centre), the estate minimap (bottom right) and a quiet season summary.
+    /// right), forest journal (left), tempo (bottom left), the five verbs Observe · Tend · Produce · Build ·
+    /// Transport as a dock (bottom centre), the estate minimap (bottom right) and a quiet season summary.
+    /// Roads belong to Build: they serve tending, harvesting and transport alike.
     /// </summary>
     sealed partial class Viewport
     {
-        private enum Verb { None, Observe, Tend, Produce, Shape }
+        private enum Verb { None, Observe, Tend, Produce, Build, Transport }
 
         private Verb verb;
         private bool journalOpen = true, seasonCards = true;
@@ -270,9 +271,11 @@ namespace ForesTycoon
             verb = tool switch
             {
                 TerrainEditTool.PlantForest => Verb.Tend,
-                TerrainEditTool.HarvestForest or TerrainEditTool.Road or TerrainEditTool.RoadRemove or TerrainEditTool.PlaceSawmill => Verb.Produce,
-                TerrainEditTool.Raise or TerrainEditTool.Lower => Verb.Shape,
-                _ => verb == Verb.Observe || showManagement ? Verb.Observe : Verb.None
+                TerrainEditTool.HarvestForest => Verb.Produce,
+                TerrainEditTool.Road or TerrainEditTool.RoadRemove or TerrainEditTool.PlaceSawmill
+                    or TerrainEditTool.Raise or TerrainEditTool.Lower => Verb.Build,
+                // Observe and Transport work with the inspect tool and keep their own state.
+                _ => verb == Verb.Transport ? Verb.Transport : verb == Verb.Observe || showManagement ? Verb.Observe : Verb.None
             };
         }
 
@@ -281,6 +284,7 @@ namespace ForesTycoon
             if (verb == chosen)
             {
                 if (chosen == Verb.Observe) showManagement = false;
+                if (chosen == Verb.Transport) showVehicles = false;
                 verb = Verb.None;
                 SelectTool(TerrainEditTool.Inspect);
                 return;
@@ -291,7 +295,8 @@ namespace ForesTycoon
                 case Verb.Observe: SelectTool(TerrainEditTool.Inspect); showManagement = true; break;
                 case Verb.Tend: SelectTool(TerrainEditTool.PlantForest); break;
                 case Verb.Produce: SelectTool(TerrainEditTool.HarvestForest); break;
-                case Verb.Shape: SelectTool(TerrainEditTool.Raise); break;
+                case Verb.Build: SelectTool(TerrainEditTool.Road); break;
+                case Verb.Transport: SelectTool(TerrainEditTool.Inspect); showVehicles = true; break;
             }
         }
 
@@ -305,9 +310,11 @@ namespace ForesTycoon
             ImGui.SameLine();
             VerbButton(Verb.Tend, GameIcon.Plant, "Gondoz", "ültetés · W");
             ImGui.SameLine();
-            VerbButton(Verb.Produce, GameIcon.Harvest, "Termel", "vágás, út, malom · E");
+            VerbButton(Verb.Produce, GameIcon.Harvest, "Termel", "kitermelés · E");
             ImGui.SameLine();
-            VerbButton(Verb.Shape, GameIcon.Raise, "Formál", "terep · R");
+            VerbButton(Verb.Build, GameIcon.Road, "Épít", "út, malom, terep · R");
+            ImGui.SameLine();
+            VerbButton(Verb.Transport, GameIcon.Truck, "Szállít", "rönkszállítók · T");
             float dockTop = ImGui.GetWindowPos().Y;
             dockCentre = ImGui.GetWindowPos().X + ImGui.GetWindowSize().X * 0.5f;
             EndPanel();
@@ -319,7 +326,7 @@ namespace ForesTycoon
         private void VerbButton(Verb which, GameIcon icon, string label, string hint)
         {
             bool active = verb == which;
-            var size = new NVec2(Width < 1500 ? 136 : 168, 52);
+            var size = new NVec2(Width < 1500 ? 124 : 160, 52);
             var p = ImGui.GetCursorScreenPos();
             bool clicked = ImGui.InvisibleButton("verb" + (int)which, size);
             bool hovered = ImGui.IsItemHovered();
@@ -353,23 +360,36 @@ namespace ForesTycoon
                     break;
                 case Verb.Produce:
                     ToolIcon(GameIcon.Harvest, TerrainEditTool.HarvestForest, Size, "Kitermelés", "7", "Húzással jelöld ki a vágásterületet.");
-                    ImGui.SameLine();
-                    ToolIcon(GameIcon.Road, TerrainEditTool.Road, Size, "Útépítés", "4", "Az utak kötik össze a vágást a malommal.");
+                    break;
+                case Verb.Build:
+                    ToolIcon(GameIcon.Road, TerrainEditTool.Road, Size, "Útépítés", "4",
+                        "Az erdei út minden munkát szolgál: ültetést, ápolást, kitermelést és szállítást.");
                     ImGui.SameLine();
                     ToolIcon(GameIcon.RoadRemove, TerrainEditTool.RoadRemove, Size, "Útbontás", "5", "Húzással eltávolítja az utat.");
                     ImGui.SameLine();
                     ToolIcon(GameIcon.Sawmill, TerrainEditTool.PlaceSawmill, Size, "Fűrészmalom", "8", "2×2 sík, száraz csempére, út mellé.");
+                    ImGui.SameLine(0, 14);
+                    HudTheme.GroupDivider(Size);
                     ImGui.SameLine();
-                    if (HudTheme.IconButton("truck", GameIcon.TruckAdd, Size, false, "Rönkszállító indítása", "T",
-                            "Új teherautó a vágás és a malom közötti úton.")) SpawnTruck();
-                    break;
-                case Verb.Shape:
                     ToolIcon(GameIcon.Raise, TerrainEditTool.Raise, Size, "Terep emelése", "2", "Kattintással emeli a terepet.");
                     ImGui.SameLine();
                     ToolIcon(GameIcon.Lower, TerrainEditTool.Lower, Size, "Terep süllyesztése", "3", "Kattintással süllyeszti a terepet.");
                     break;
+                case Verb.Transport:
+                    if (HudTheme.LabeledIconButton("Rönkszállító indítása", GameIcon.TruckAdd, false, Size,
+                            "Új teherautó a kitermelés és a fűrészmalom közötti úton.")) SpawnTruck();
+                    ImGui.SameLine();
+                    if (HudTheme.LabeledIconButton("Járművek", GameIcon.Vehicles, showVehicles, Size,
+                            "Teherautók állapota és rakománya (V).")) showVehicles = !showVehicles;
+                    if (world.Logistics != null)
+                    {
+                        ImGui.SameLine(0, 14);
+                        ImGui.AlignTextToFramePadding();
+                        ImGui.TextColored(HudTheme.Muted, world.Logistics.Status);
+                    }
+                    break;
             }
-            if (verb != Verb.Observe && interaction.ActiveTool != TerrainEditTool.Inspect)
+            if (verb is Verb.Tend or Verb.Produce or Verb.Build && interaction.ActiveTool != TerrainEditTool.Inspect)
             {
                 ImGui.SameLine(0, 14);
                 HudTheme.GroupDivider(Size);

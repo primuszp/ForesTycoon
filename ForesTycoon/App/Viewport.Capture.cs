@@ -62,7 +62,11 @@ namespace ForesTycoon
                 case 380: Save("10-management-health"); break;
                 case 381: showManagement = false; break;
                 case 400: Save("11-management-closed"); break;
-                case 401: Close(); break;
+                case 401: ChooseVerb(Verb.Build); break;
+                case 420: Save("12-verb-build"); break;
+                case 421: ChooseVerb(Verb.Transport); break;
+                case 440: Save("13-verb-transport"); break;
+                case 441: Close(); break;
             }
         }
     }
