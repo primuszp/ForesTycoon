@@ -175,6 +175,33 @@ a korona méretére nyújtva), és a rács konvex-burok háromszögelése adja a
 - Sima normálok (20% facetta-fény), lebenyenkénti tónus a legerősebben ható lebenyből, enyhe (≈3%) tüskésség.
 - A vázágak az ívhossz 65%-áig futnak, hogy ne döfjék át a zárt felületet.
 
+### 2026-10-08 – kerekebb lombos koronák és állományárnyalás
+
+A levélmintákból és metaballokból számított egyetlen zárt héjat fajonként eltérő mértékben
+egy kerek ellipszoidos burkolathoz közelítjük. A bükk folytonosabb, simább tömeget kap,
+a tölgy megtartja a nagyobb szabálytalanságokat; a nyír és kőris kisebb simítást kap.
+A közelítés minden LOD-ban ugyanazt a függvényt használja, a korona teteje az eredeti
+famagasságon marad. A lap- és csúcsnormálok keverése megőrzi a low-poly karaktert.
+
+Az oldalirányú égbolt-kitettség a koronatérből készül: a szomszéd felőli oldal és a koronaalj
+sötétebb, az állományszél szabad oldala teltebb és világosabb. Ez előre számolt vizuális
+árnyalás, nem új fizikai fényszimuláció. Érett lombos fáknál a zárt állomány rövidebb,
+magasabban kezdődő lombos koronát ad; a szabadon álló fa megtartja a teljes koronamélységet.
+A bükk mélyebb árnyéktűrő koronát tart meg, és erősebben alakot vált a szomszédok hatására:
+vizuális plaszticitás 1,0, a tölgyfajoknál 0,7. Ezek megjelenítési hangolóértékek.
+
+A `CrownSpace` egy jelzőbittel megkülönbözteti a mért semleges koronateret a hiányzó adattól.
+Korábban mindkettő nulla kódot adott, ezért egy minden oldalról szomszédos fa megkaphatta
+a hiányzó adat nyitottabb megvilágítását. Az `IsUnspecified` név ezt a különbséget jelzi.
+A szimulált méret, egészség, faanyag és óra változatlan; a megjelenítés használja a koronateret.
+
+Összehasonlító kép: `--broadleaf-canopy-preview` (tölgy/bükk; szabad fa, zárt állomány és
+állományszél), `artifacts/broadleaf-canopy/after.png`. Az előtte–utána mintában egyaránt
+7144 lombháromszög szerepel. A koronabüdzsé továbbra is legfeljebb 188 háromszög Near és
+30 Far szinten; új levélkártya vagy renderpassz nem került be. Regressziók:
+`BroadleafCanopyTests`, a meglévő zárt háló/normál/évszak/LOD tesztek, natív
+`--forest-smoke-test` és `--tree-growth-smoke-test`.
+
 ### 2026-10-08 – koronaplaszticitás (a koronák kitöltik a teret)
 
 Zárt állományban a koronák felülnézetben kitöltik a rendelkezésre álló teret, csak a szegélyfák

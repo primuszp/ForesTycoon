@@ -6,9 +6,9 @@ namespace ForesTycoon.TreeModels
 {
     /// <summary>
     /// Overlapping, closed foliage masses ("lobes") from live leaf clusters of the skeleton, for every
-    /// broad-leaved growth form. Near LOD keeps individual faceted masses with valleys and sky gaps
-    /// between them; coarser LODs sample the outer envelope of the same masses, so the silhouette is
-    /// LOD-stable. Clusters are deterministic and independent of tessellation.
+    /// broad-leaved growth form. Every LOD samples one continuous rounded union of the same masses;
+    /// near views retain more of its low-poly contour. Clusters and canopy exposure are deterministic
+    /// and independent of tessellation.
     /// See docs/tree-realism-plan.md (Livny et al. 2011 texture-lobes, low-poly variant).
     /// </summary>
     internal static class LobeCrownMesh
@@ -24,24 +24,25 @@ namespace ForesTycoon.TreeModels
         /// <param name="Jitter">Radial vertex noise of the faceted masses.</param>
         /// <param name="Layers">Above 1, mass centres are pulled towards this many horizontal tiers (beech sprays).</param>
         /// <param name="Vase">Above 0, higher masses grow larger and reach further out (an opening vase).</param>
+        /// <param name="Roundness">Blend towards a rounded continuous envelope; beech smooths more than oak.</param>
         internal readonly record struct Profile(int Young, int Mature, int Old, float CoreRadius,
             float MinRadius, float MaxRadius, float Flatten, float Bottom, float MinZ, float MaxZ, float Reach,
-            float Jitter, int Layers = 0, float Vase = 0);
+            float Jitter, int Layers = 0, float Vase = 0, float Roundness = 0);
 
         private readonly record struct Lobe(Vector3 Centre, Vector3 Radius, float Bottom, float Tint);
 
         internal static Profile? For(CrownForm form) => form switch
         {
             // Open-grown oaks: few, large, irregular masses, flat cloud base, rough outline.
-            CrownForm.Oak => new(5, 7, 8, 0.26f, 0.42f, 0.56f, 0.80f, 0.75f, 0.24f, 0.88f, 0.52f, 0.12f),
+            CrownForm.Oak => new(5, 7, 8, 0.26f, 0.42f, 0.56f, 0.80f, 0.75f, 0.24f, 0.88f, 0.52f, 0.12f, Roundness: .45f),
             // Beech: flat, layered sprays filling a smooth dome.
-            CrownForm.Beech => new(5, 7, 8, 0.32f, 0.44f, 0.56f, 0.68f, 0.70f, 0.20f, 0.90f, 0.48f, 0.07f, 3),
+            CrownForm.Beech => new(5, 7, 8, 0.32f, 0.44f, 0.56f, 0.68f, 0.70f, 0.20f, 0.90f, 0.48f, 0.07f, 3, Roundness: .72f),
             // Birch: narrow, loose crown; lower masses hang (weeping fringe).
-            CrownForm.Birch => new(4, 6, 7, 0.24f, 0.36f, 0.48f, 1.00f, 1.40f, 0.20f, 0.82f, 0.46f, 0.08f),
+            CrownForm.Birch => new(4, 6, 7, 0.24f, 0.36f, 0.48f, 1.00f, 1.40f, 0.20f, 0.82f, 0.46f, 0.08f, Roundness: .25f),
             // Sycamore: dense, rounded masses.
-            CrownForm.Maple => new(5, 7, 7, 0.28f, 0.42f, 0.56f, 0.90f, 0.80f, 0.22f, 0.88f, 0.46f, 0.08f),
+            CrownForm.Maple => new(5, 7, 7, 0.28f, 0.42f, 0.56f, 0.90f, 0.80f, 0.22f, 0.88f, 0.46f, 0.08f, Roundness: .65f),
             // Ash: open, sparse crown with smaller, more separated masses.
-            CrownForm.Ash => new(5, 6, 7, 0.22f, 0.36f, 0.48f, 0.85f, 0.78f, 0.22f, 0.88f, 0.54f, 0.12f),
+            CrownForm.Ash => new(5, 6, 7, 0.22f, 0.36f, 0.48f, 0.85f, 0.78f, 0.22f, 0.88f, 0.54f, 0.12f, Roundness: .3f),
             // Mature Scots pine: flat cushions high on the bole.
             CrownForm.Pine => new(4, 5, 6, 0.30f, 0.40f, 0.50f, 0.62f, 0.70f, 0.34f, 0.82f, 0.46f, 0.07f),
             // Shrubs: hazel opens into a vase (masses high and wide), hawthorn is a low, dense dome.
@@ -114,6 +115,21 @@ namespace ForesTycoon.TreeModels
             float minZ = float.MaxValue, maxZ = float.MinValue, maxR = 0;
             foreach (var p in points) { minZ = Math.Min(minZ, p.Z); maxZ = Math.Max(maxZ, p.Z); maxR = Math.Max(maxR, p.Xy.Length); }
             float thin = 0.72f + 0.28f * form.Foliage;
+            if (profile.Roundness > 0)
+            {
+                // Blend the irregular leaf-supported shell towards an ellipsoid, not separate balls.
+                // The species-specific outline remains, while broadleaves read as one rounded mass.
+                for (int i = 0; i < count; i++)
+                {
+                    var d = directions[i];
+                    d = new(d.X * cos - d.Y * sin, d.X * sin + d.Y * cos, d.Z);
+                    var p = points[i];
+                    var normalized = new Vector3(p.X / maxR, p.Y / maxR, (p.Z - minZ) / (maxZ - minZ));
+                    points[i] = Vector3.Lerp(normalized, new(d.X, d.Y, .5f * (d.Z + 1)), profile.Roundness);
+                }
+                minZ = float.MaxValue; maxZ = float.MinValue; maxR = 0;
+                foreach (var p in points) { minZ = Math.Min(minZ, p.Z); maxZ = Math.Max(maxZ, p.Z); maxR = Math.Max(maxR, p.Xy.Length); }
+            }
             float topLoss = form.Dieback > 0.45f && spec.Phase >= TreeLifePhase.Old
                 ? Math.Min(0.25f, (form.Dieback - 0.3f) * 0.5f) : 0;
             // An inscribed lattice polytope covers less than the smooth surface; coarser lattices more so.
@@ -123,9 +139,14 @@ namespace ForesTycoon.TreeModels
             {
                 float t = Math.Clamp((points[i].Z - minZ) / (maxZ - minZ), 0, 1);
                 float exposure = Math.Clamp(points[i].Xy.Length / maxR, 0, 1);
-                // Darker crown interior and base, lighter sunlit outer masses.
-                shades[i] = 0.72f + 0.20f * t + 0.12f * exposure + tints[i];
-                points[i] = form.Warp.Apply(new(points[i].X * xy, points[i].Y * xy,
+                float sideLight = form.SideExposure(MathF.Atan2(points[i].Y, points[i].X));
+                // A closed stand lights the upper canopy; lateral/low foliage is shaded. At an
+                // edge, only the open direction keeps a full, bright skirt. This is baked once.
+                float skirt = profile.Roundness > 0 ? 1 - .18f * (1 - sideLight) * Math.Clamp((.55f - t) / .55f, 0, 1) : 1;
+                shades[i] = profile.Roundness > 0
+                    ? .68f + .27f * t + .13f * sideLight * exposure + tints[i] * .4f - .06f * (1 - sideLight) * (1 - t)
+                    : .72f + .20f * t + .12f * exposure + tints[i];
+                points[i] = form.Warp.Apply(new(points[i].X * xy * skirt, points[i].Y * xy * skirt,
                     form.CrownBase + t * crownHeight * (1 - topLoss)));
             }
             var normals = new Vector3[count];
@@ -137,6 +158,7 @@ namespace ForesTycoon.TreeModels
             }
             for (int i = 0; i < count; i++) normals[i] = normals[i].Normalized();
             var result = new Vertex[triangles.Length];
+            float smooth = profile.Roundness > 0 ? .55f + .35f * profile.Roundness : .8f;
             for (int i = 0; i < result.Length; i += 3)
             {
                 Vector3 face = Vector3.Cross(points[triangles[i + 1]] - points[triangles[i]], points[triangles[i + 2]] - points[triangles[i]]).Normalized();
@@ -144,7 +166,7 @@ namespace ForesTycoon.TreeModels
                 {
                     int v = triangles[i + j];
                     // Mostly smooth shading: a rounded mass, with only a hint of its facets.
-                    var normal = (0.8f * normals[v] + 0.2f * face).Normalized();
+                    var normal = (smooth * normals[v] + (1 - smooth) * face).Normalized();
                     if (Vector3.Dot(normal, face) < 0.15f) normal = face;
                     // Sky light from above, shadowed undersides. Zero mean over a closed surface,
                     // so the area-weighted crown colour stays the same at every LOD.

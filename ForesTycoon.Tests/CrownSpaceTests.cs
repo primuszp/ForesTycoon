@@ -46,14 +46,14 @@ public class CrownSpaceTests
         var small = Measure((new(5, 0), 6, 20));
         var equal = Measure((new(5, 0), 3, 20));
         Assert.True(small.Level(0) < equal.Level(0));
-        Assert.True(Measure((new(4, 0), 3, 8)).IsUniform == false);
+        Assert.True(Measure((new(4, 0), 3, 8)).IsUnspecified == false);
         Assert.Equal(CrownSpace.Open, Measure((new(4, 0), 3, 8)).Level(0)); // a 8 m tree under a 20 m crown
     }
 
     [Fact]
     public void DefaultIsTheUnshapedCrownAndTakesPartInTheShapeKey()
     {
-        Assert.True(default(CrownSpace).IsUniform);
+        Assert.True(default(CrownSpace).IsUnspecified);
         Assert.Equal(1, default(CrownSpace).Factor(2));
         var spec = new TreeShapeSpec(ForestSpecies.Beech, 1, TreeLifePhase.Mature, new(0.5f, 25, 5), 1, new TreeSite(0.9f), LeafState.Full, 0);
         var edge = spec with { Site = spec.Site with { Space = Measure((new(-3.5f, 0), 3, 20), (new(-2.8f, 2.8f), 3, 20), (new(-2.8f, -2.8f), 3, 20)) } };

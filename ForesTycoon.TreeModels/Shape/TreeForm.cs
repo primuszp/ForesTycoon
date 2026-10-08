@@ -14,7 +14,7 @@ namespace ForesTycoon.TreeModels
     internal readonly record struct TreeDeformation(Vector2 Lean, Vector2 Skew, float Height,
         CrownSpace Space = default, float CrownBase = 0, float Plasticity = 1)
     {
-        internal bool IsIdentity => Lean == Vector2.Zero && Skew == Vector2.Zero && Space.IsUniform;
+        internal bool IsIdentity => Lean == Vector2.Zero && Skew == Vector2.Zero && Space.IsUnspecified;
 
         internal static TreeDeformation From(in TreeShapeBands bands, float height, float crownBase = 0, float plasticity = 1)
         {
@@ -22,7 +22,7 @@ namespace ForesTycoon.TreeModels
             // The wind blows towards WindAngle, which is not part of the bands: it is only known
             // as a strength here, the direction is applied by TreeForm. A known crown space replaces the
             // single-direction gap stretch; the stem still leans towards the gap.
-            var skew = bands.Space.IsUniform ? gap * 0.40f : Vector2.Zero;
+            var skew = bands.Space.IsUnspecified ? gap * 0.40f : Vector2.Zero;
             return new(gap * (0.05f * (1 - 0.5f * bands.Light01)), skew, height, bands.Space, crownBase, plasticity);
         }
 
@@ -41,7 +41,7 @@ namespace ForesTycoon.TreeModels
             Vector2 rel = p.Xy;
             float r = rel.Length;
             if (r > 1e-7f) rel *= Math.Clamp(1 + Vector2.Dot(Skew, rel / r), 0.55f, 1.6f);
-            if (r > 1e-7f && !Space.IsUniform && CrownBase > 0)
+            if (r > 1e-7f && !Space.IsUnspecified && CrownBase > 0)
             {
                 // Fades in below the crown base, so limbs bend smoothly out of an unchanged bole.
                 float w = Math.Clamp((p.Z - 0.6f * CrownBase) / (0.4f * CrownBase), 0, 1);
@@ -88,6 +88,16 @@ namespace ForesTycoon.TreeModels
             float light = Bands.Light01;
             float response = TreeArchitecture.LightResponse(spec.Species, light);
             CrownFraction = TreeArchitecture.CrownFraction(spec.Species, spec.Phase, Bands.Light);
+            if (!traits.Conifer && !traits.Shrub && spec.Phase >= TreeLifePhase.Mature && !Bands.Space.IsUnspecified)
+            {
+                float lateralLight = 0;
+                for (int sector = 0; sector < CrownSpace.Sectors; sector++) lateralLight += SideExposure(sector * MathF.Tau / CrownSpace.Sectors);
+                lateralLight /= CrownSpace.Sectors;
+                // Closed-canopy broadleaves carry their leaf mass high. Beech retains a deeper
+                // shaded crown; open-grown trees keep the full architectural crown depth.
+                float retainedDepth = spec.Species == ForestSpecies.Beech ? .74f : .64f;
+                CrownFraction *= retainedDepth + (1 - retainedDepth) * lateralLight;
+            }
             Height = size.Height * TreeScale.MetresToWorld;
             CrownRadius = size.CrownRadius * TreeScale.MetresToWorld * (0.74f + 0.26f * response);
             CrownBase = Height * (1 - CrownFraction);
@@ -100,7 +110,7 @@ namespace ForesTycoon.TreeModels
             float leaves = spec.Leaves switch { LeafState.Bare => 0f, LeafState.Budding => 0.55f, LeafState.Falling => 0.6f, _ => 1f };
             Foliage = leaves * (1 - 0.35f * Dieback);
             // Broadleaves are the most plastic; whorled conifers keep their form more.
-            Warp = TreeDeformation.From(Bands, Height, CrownBase, traits.Conifer ? 0.5f : 1)
+            Warp = TreeDeformation.From(Bands, Height, CrownBase, CrownPlasticity(spec.Species))
                 .WithWind(spec.Site.WindAngle, Bands.WindBias);
 
             // Breast-height radius pins the trunk to the simulated diameter.
@@ -130,6 +140,25 @@ namespace ForesTycoon.TreeModels
 
         /// <summary>Generator-unit point to the world frame of the tree base.</summary>
         internal Vector3 ToWorld(Vector3 p) => Warp.Apply(ToFrame(p));
+
+        // Visual response of a crown to available neighbour space; independent of physical growth.
+        internal static float CrownPlasticity(ForestSpecies species) => species switch
+        {
+            ForestSpecies.Beech => 1,
+            ForestSpecies.Oak or ForestSpecies.SessileOak or ForestSpecies.TurkeyOak => .7f,
+            ForestSpecies.Birch => .75f,
+            ForestSpecies.Maple => .9f,
+            ForestSpecies.Ash => .8f,
+            _ => ForestSpeciesTraits.For(species).Conifer ? .5f : 1
+        };
+
+        /// <summary>Artistic proxy for lateral skylight, from the same directional space as the crown warp.</summary>
+        internal float SideExposure(float angle)
+        {
+            // Missing neighbour data uses the existing light band, never assumes dense shade.
+            if (Bands.Space.IsUnspecified) return Bands.Light01;
+            return Math.Clamp((Bands.Space.Factor(angle) - 1) / .6f, 0, 1);
+        }
 
         /// <summary>Rotation and scale only, before the environmental warp.</summary>
         internal Vector3 ToFrame(Vector3 p) =>

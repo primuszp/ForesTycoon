@@ -46,7 +46,7 @@ namespace ForesTycoon.Ecology
         internal TreeShapeBands Bands => TreeShapeBands.Of(this);
 
         /// <summary>Equal keys mean equal geometry: changes only when a band boundary or the phase changes.</summary>
-        internal long ShapeKey => Bands.Pack() | (long)Phase << 17 | (long)Bands.Space.Code << 20;
+        internal long ShapeKey => (long)(uint)Bands.Pack() | (long)(uint)Phase << 17 | (long)Bands.Space.Code << 20;
     }
 
     /// <summary>Quantised shape inputs. Equal bands always produce an identical model.</summary>
@@ -107,23 +107,26 @@ namespace ForesTycoon.Ecology
         private static readonly float[] Reach = { 0.55f, 0.7f, 0.85f, 1f, 1.15f, 1.35f, 1.6f, 1.9f };
         // Stored XOR level 3 in every sector, so default (all bits 0) reads as the unshaped crown.
         private const uint Neutral = 0b011_011_011_011_011_011_011_011;
+        // A measured closed crown can have neutral reach in all sectors. Keep it distinct from
+        // missing neighbour data, so canopy lighting does not mistake a closed stand for open sky.
+        private const uint Measured = 1u << 24;
         // Neighbouring crowns interlock a little at their rims, which keeps a closed canopy free of gaps.
         private const float Interlock = 1.12f;
 
-        internal bool IsUniform => Code == 0;
+        internal bool IsUnspecified => Code == 0;
         internal int Level(int sector) => (int)((Code ^ Neutral) >> (3 * sector)) & 7;
 
         internal static CrownSpace From(ReadOnlySpan<int> levels)
         {
             uint code = 0;
             for (int k = 0; k < Sectors; k++) code |= (uint)Math.Clamp(levels[k], 0, 7) << (3 * k);
-            return new(code ^ Neutral);
+            return new((code ^ Neutral) | Measured);
         }
 
         /// <summary>Relative crown reach towards a ground-plane angle, interpolated between sectors.</summary>
         internal float Factor(float angle)
         {
-            if (IsUniform) return 1;
+            if (IsUnspecified) return 1;
             float sector = angle / MathF.Tau * Sectors;
             sector -= MathF.Floor(sector / Sectors) * Sectors;
             int a = (int)sector % Sectors, b = (a + 1) % Sectors;
