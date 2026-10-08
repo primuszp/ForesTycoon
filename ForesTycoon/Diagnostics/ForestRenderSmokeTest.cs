@@ -85,6 +85,8 @@ namespace ForesTycoon
                 Require(Draw(terrain, forest, 1.5f) == 0, "Cleared forest left stale GPU geometry.");
                 Require(GL.GetError() == ErrorCode.NoError, "OpenGL reported an error.");
                 CheckStaticTerrainCache();
+                CheckScreenLineWidth();
+                CheckLocalRoadEdit();
                 CheckTerraformForestStability();
                 CheckDeferredForestBuild();
                 CheckPagedForestUpload();
@@ -320,6 +322,59 @@ namespace ForesTycoon
                 GL.ReadPixels(0,0,256,256,PixelFormat.Rgba,PixelType.UnsignedByte,pixels);
                 return pixels;
             }
+        }
+
+        private static void CheckScreenLineWidth()
+        {
+            using var line = new VertexBuffer(PrimitiveTopology.Lines);
+            line.SetData(new[] { new Vertex(new Vector3(0, -100, 0), Vector3.UnitZ, 0xff000000),
+                new Vertex(new Vector3(0, 100, 0), Vector3.UnitZ, 0xff000000) });
+            GL.Viewport(0, 0, 256, 256);
+            var widths = new double[3];
+            int i = 0;
+            foreach (float zoom in new[] { .5f, 1f, 4f })
+            {
+                RenderDevice.SetCamera(Matrix4.CreateScale(zoom));
+                GL.ClearColor(1, 1, 1, 1);
+                GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
+                using (RenderDevice.CreateStateScope().AlphaBlend().DepthWrite(false))
+                {
+                    RenderDevice.UseScreenLineShader(1.6f);
+                    line.DrawArray(false);
+                }
+                var pixels = new byte[256 * 4];
+                GL.ReadPixels(0, 128, 256, 1, PixelFormat.Rgba, PixelType.UnsignedByte, pixels);
+                double width = 0;
+                for (int x = 0; x < 256; x++) width += 1 - pixels[x * 4] / 255.0;
+                Require(width > 1.4 && width < 2.3, "Grid line coverage is too thin or thick.");
+                widths[i++] = width;
+            }
+            Require(Math.Abs(widths[0] - widths[2]) < .02, "Grid line width changed with zoom.");
+            Require(GL.GetError() == ErrorCode.NoError, "Screen line GL error.");
+            Console.WriteLine($"Grid pixel coverage: {widths[0]:F2}/{widths[1]:F2}/{widths[2]:F2} at 0.5/1/4 zoom; stable antialiased width passed.");
+        }
+
+        private static void CheckLocalRoadEdit()
+        {
+            var map = new TerrainMap(TerrainSettings.Default.WithNodeSize(65, 42));
+            var ecosystem = new Ecosystem(map);
+            var forest = ecosystem.Forest;
+            int trees = forest.IndividualTreeCount;
+            // Compare the old whole-world refresh to the new CPU edit path, excluding scene uploads.
+            var timer = System.Diagnostics.Stopwatch.StartNew();
+            forest.RefreshHabitat(); ecosystem.Environment.RefreshRouting();
+            timer.Stop();
+            double globalMs = timer.Elapsed.TotalMilliseconds;
+            timer.Restart();
+            int[] changed = map.BuildRoadTilePath(20 * 64 + 20, 20 * 64 + 24);
+            forest.RefreshHabitat(changed); ecosystem.Environment.RefreshRouting(changed);
+            timer.Stop();
+            Require(changed.Length > 0 && trees > 0, "Road benchmark needs forest and a valid road segment.");
+            ulong revision = forest.Revision;
+            Require(map.BuildRoadTilePath(20 * 64 + 20, 20 * 64 + 24).Length == 0, "Repeated road edit was not a no-op.");
+            forest.RefreshHabitat(Array.Empty<int>());
+            Require(forest.Revision == revision, "Empty road edit refreshed the forest.");
+            Console.WriteLine($"Road CPU edit ({trees} trees, {changed.Length} cells): old global refresh {globalMs:F1} ms, local build + refresh {timer.Elapsed.TotalMilliseconds:F1} ms; repeated placement no-op passed.");
         }
 
         private static void CheckPagedForestUpload()

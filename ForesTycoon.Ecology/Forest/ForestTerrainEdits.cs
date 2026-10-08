@@ -5,6 +5,17 @@ namespace ForesTycoon.Ecology
 {
     sealed partial class ForestSystem
     {
+        /// <summary>Road edits only remove forest on cells that actually became unavailable.</summary>
+        internal void RefreshHabitat(ReadOnlySpan<int> changedTiles)
+        {
+            foreach (int id in changedTiles)
+                if ((uint)id >= (uint)stands.Length) throw new ArgumentOutOfRangeException(nameof(changedTiles));
+            List<int> unavailable = new();
+            foreach (int id in changedTiles)
+                if (!habitat.CanSupportForest(id)) unavailable.Add(id);
+            ClearTerrainTiles(unavailable.ToArray());
+        }
+
         /// <summary>Terraforming destroys vegetation on changed cells without harvesting or advancing growth.</summary>
         internal void ClearTerrainTiles(ReadOnlySpan<int> changedTiles)
         {

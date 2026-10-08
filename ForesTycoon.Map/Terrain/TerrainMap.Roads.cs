@@ -192,47 +192,52 @@ namespace ForesTycoon.Map
                 && level - terrainW <= 1 && level - terrainS <= 1 && level - terrainE <= 1 && level - terrainN <= 1;
         }
 
-        public void BuildRoadTilePath(Tile a, Tile b)
+        public int[] BuildRoadTilePath(Tile a, Tile b)
         {
+            List<int> changed = new();
             foreach (RoadPlanStep step in BuildRoadPlan(a, b))
             {
                 Tile tile = tiles[step.TileId];
                 RoadPlacement placement = AnalyzeRoadPlacement(tile, step.Edges);
-                if (placement.IsValid)
+                if (placement.IsValid && roads.Add(step.TileId, step.Edges))
                 {
-                    roads.Add(step.TileId, step.Edges);
+                    changed.Add(step.TileId);
                     CaptureRoadSurface(tile, placement);
                     InvalidateSurface();
                     chunkIndex.MarkTileAndNeighboursDirty(step.TileId, ChunkDirtyFlags.Roads | ChunkDirtyFlags.Foundations);
                 }
             }
-            RebuildFlippedDiagonalTiles();
+            if (changed.Count > 0) RebuildFlippedDiagonalTiles();
+            return changed.ToArray();
         }
 
-        public void BuildRoadTilePath(int startTileId, int endTileId)
+        public int[] BuildRoadTilePath(int startTileId, int endTileId)
         {
-            if (!IsValidTileId(startTileId) || !IsValidTileId(endTileId)) return;
-            BuildRoadTilePath(tiles[startTileId], tiles[endTileId]);
+            if (!IsValidTileId(startTileId) || !IsValidTileId(endTileId)) return Array.Empty<int>();
+            return BuildRoadTilePath(tiles[startTileId], tiles[endTileId]);
         }
 
-        public void RemoveRoadTilePath(Tile a, Tile b)
+        public int[] RemoveRoadTilePath(Tile a, Tile b)
         {
+            List<int> changed = new();
             foreach (RoadPlanStep step in BuildRoadPlan(a, b))
             {
                 if (roads.Remove(step.TileId, step.Edges))
                 {
+                    changed.Add(step.TileId);
                     ReleaseRoadSurface(tiles[step.TileId]);
                     InvalidateSurface();
                     chunkIndex.MarkTileAndNeighboursDirty(step.TileId, ChunkDirtyFlags.Roads | ChunkDirtyFlags.Foundations);
                 }
             }
-            RebuildFlippedDiagonalTiles();
+            if (changed.Count > 0) RebuildFlippedDiagonalTiles();
+            return changed.ToArray();
         }
 
-        public void RemoveRoadTilePath(int startTileId, int endTileId)
+        public int[] RemoveRoadTilePath(int startTileId, int endTileId)
         {
-            if (!IsValidTileId(startTileId) || !IsValidTileId(endTileId)) return;
-            RemoveRoadTilePath(tiles[startTileId], tiles[endTileId]);
+            if (!IsValidTileId(startTileId) || !IsValidTileId(endTileId)) return Array.Empty<int>();
+            return RemoveRoadTilePath(tiles[startTileId], tiles[endTileId]);
         }
 
                 // Teljes újraépítés minden road módosítás után: sorrendfüggetlen, univerzális.

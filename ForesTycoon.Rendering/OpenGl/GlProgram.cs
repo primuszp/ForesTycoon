@@ -22,22 +22,23 @@ namespace ForesTycoon.Rendering
             foreach (var key in keys) uniforms.Remove(key);
             GL.DeleteProgram(program);
         }
-        internal static int Create(string vertexSource, string fragmentSource)
+        internal static int Create(string vertexSource, string fragmentSource, string geometrySource = null)
         {
-            int vertex = 0, fragment = 0, program = 0;
+            int vertex = 0, fragment = 0, geometry = 0, program = 0;
             try
             {
                 vertex = Compile(ShaderType.VertexShader, vertexSource);
                 fragment = Compile(ShaderType.FragmentShader, fragmentSource);
                 program = GL.CreateProgram();
                 GL.AttachShader(program, vertex); GL.AttachShader(program, fragment);
+                if (geometrySource != null) { geometry = Compile(ShaderType.GeometryShader, geometrySource); GL.AttachShader(program, geometry); }
                 GL.LinkProgram(program);
                 GL.GetProgram(program, GetProgramParameterName.LinkStatus, out int linked);
                 if (linked == 0) throw new InvalidOperationException(GL.GetProgramInfoLog(program));
                 return program;
             }
             catch { if (program != 0) GL.DeleteProgram(program); throw; }
-            finally { if (vertex != 0) GL.DeleteShader(vertex); if (fragment != 0) GL.DeleteShader(fragment); }
+            finally { if (geometry != 0) GL.DeleteShader(geometry); if (vertex != 0) GL.DeleteShader(vertex); if (fragment != 0) GL.DeleteShader(fragment); }
         }
 
         private static int Compile(ShaderType type, string source)

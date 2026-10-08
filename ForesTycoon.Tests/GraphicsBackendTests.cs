@@ -128,6 +128,7 @@ public sealed class GraphicsBackendTests
         internal (PrimitiveTopology, GeometryBufferUsage) BufferRequest;
         public void Initialize() { }
         public void UseGeometryShader() { }
+        public void UseScreenLineShader(float widthPixels) { }
         public void InitializeFrameState() { }
         public void SetViewport(int width, int height) => Viewport = new(width, height);
         public void Clear(Vector4 color) => ClearColor = color;

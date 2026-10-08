@@ -2,6 +2,38 @@ namespace ForesTycoon.Tests;
 
 public class TerrainEditSimulationTests
 {
+    [Fact]
+    public void RoadEditIsLocalAndRepeatingTheSamePathDoesNothing()
+    {
+        var map = Map();
+        var ecosystem = EcosystemFor(map);
+        ecosystem.Update(21.5);
+        var forest = ecosystem.Forest;
+        var before = forest.IndividualTrees.Patches.ToDictionary(p => p.Key,
+            p => p.Value.Trees.Take(p.Value.Count).ToArray());
+        double year = forest.ForestYear, time = ecosystem.Environment.Time;
+        int[] changed = map.BuildRoadTilePath(132, 134);
+        Assert.Equal(new[] { 132, 133, 134 }, changed);
+        forest.RefreshHabitat(changed);
+        ecosystem.Environment.RefreshRouting(changed);
+        foreach (var entry in before)
+            if (changed.Contains(entry.Key)) Assert.False(forest.IndividualTrees.TryGet(entry.Key, out _));
+            else
+            {
+                Assert.True(forest.IndividualTrees.TryGet(entry.Key, out var patch));
+                Assert.Equal(entry.Value, patch.Trees.Take(patch.Count));
+            }
+        Assert.Equal(year, forest.ForestYear);
+        Assert.Equal(time, ecosystem.Environment.Time);
+        ulong revision = forest.Revision, surface = map.SurfaceVersion;
+        Assert.Empty(map.BuildRoadTilePath(132, 134));
+        forest.RefreshHabitat(Array.Empty<int>());
+        Assert.Equal(revision, forest.Revision);
+        Assert.Equal(surface, map.SurfaceVersion);
+        Assert.Equal(changed, map.RemoveRoadTilePath(132, 134));
+        Assert.Empty(map.RemoveRoadTilePath(132, 134));
+    }
+
     [Theory]
     [InlineData(0, 1)]
     [InlineData(2, 3)]

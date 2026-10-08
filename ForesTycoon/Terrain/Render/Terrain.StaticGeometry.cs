@@ -65,13 +65,14 @@ namespace ForesTycoon
         private static readonly Color GridLineColor = Color.FromArgb(115, 34, 52, 18);
 
         /// <summary>
-        /// One native 1-pixel pass, independent of camera zoom. Multisampling provides
-        /// edge coverage without widening the lines or offsetting the camera.
+        /// Screen-space ribbons keep a 1.6-pixel core at every zoom and camera angle.
+        /// The shader supplies a soft coverage fringe and a small depth bias.
         /// </summary>
         private void DrawCachedGrid()
         {
-            using var state = RenderDevice.CreateStateScope().AlphaBlend().ThinLines();
-            foreach (TerrainChunk chunk in visibleChunks) staticTerrain[chunk].Grid.DrawArray();
+            using var state = RenderDevice.CreateStateScope().AlphaBlend().DepthWrite(false);
+            RenderDevice.UseScreenLineShader(1.6f);
+            foreach (TerrainChunk chunk in visibleChunks) staticTerrain[chunk].Grid.DrawArray(useGeometryShader: false);
         }
         internal bool CachedGridHasAllTileBoundaries()
         {

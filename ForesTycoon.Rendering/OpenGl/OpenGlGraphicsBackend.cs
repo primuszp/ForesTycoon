@@ -7,11 +7,13 @@ namespace ForesTycoon.Rendering.OpenGl
     internal sealed class OpenGlGraphicsBackend : IGraphicsBackend
     {
         private readonly OpenGlGeometryProgram geometry = new();
+        private readonly OpenGlScreenLineProgram screenLines = new();
         private ColoredVertex[] upload = Array.Empty<ColoredVertex>();
         private int vao, buffer;
 
         public void Initialize() => geometry.Initialize();
         public void UseGeometryShader() => geometry.Use();
+        public void UseScreenLineShader(float widthPixels) => screenLines.Use(widthPixels);
         public IGeometryBufferBackend CreateGeometryBuffer(PrimitiveTopology topology, GeometryBufferUsage usage)
             => new OpenGlVertexBuffer(topology, usage);
         public IForestStateBuffer CreateForestStateBuffer() => new OpenGlForestStateBuffer();
@@ -63,6 +65,7 @@ namespace ForesTycoon.Rendering.OpenGl
             if (buffer != 0) GL.DeleteBuffer(buffer);
             if (vao != 0) GL.DeleteVertexArray(vao);
             vao = buffer = 0; upload = Array.Empty<ColoredVertex>();
+            screenLines.Dispose();
             geometry.Dispose();
         }
     }

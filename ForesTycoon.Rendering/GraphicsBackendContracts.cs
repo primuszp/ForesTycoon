@@ -44,6 +44,7 @@ namespace ForesTycoon.Rendering
     {
         void Initialize();
         void UseGeometryShader();
+        void UseScreenLineShader(float widthPixels);
         IGeometryBufferBackend CreateGeometryBuffer(PrimitiveTopology topology, GeometryBufferUsage usage);
         IForestStateBuffer CreateForestStateBuffer();
         RenderStateScope CreateStateScope();

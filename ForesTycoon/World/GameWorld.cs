@@ -199,10 +199,11 @@ namespace ForesTycoon
 
         void IWorldCommandTarget.ExecuteRoadPath(int startTileId, int endTileId, bool remove)
         {
-            if (remove) map.RemoveRoadTilePath(startTileId, endTileId);
-            else map.BuildRoadTilePath(startTileId, endTileId);
-            forest.RefreshHabitat();
-            Environment?.RefreshRouting();
+            int[] changed = remove ? map.RemoveRoadTilePath(startTileId, endTileId)
+                : map.BuildRoadTilePath(startTileId, endTileId);
+            if (changed.Length == 0) return;
+            forest.RefreshHabitat(changed);
+            Environment?.RefreshRouting(changed);
             if (remove) vehicles.RemoveInvalidRoutes(map.IsRoadTile);
             else vehicles.RefreshLogisticsRoutes(map.IsRoadTile);
             if (map.TryGetRoadTileCenter(endTileId, out Vector3 position))
