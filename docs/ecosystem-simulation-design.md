@@ -109,6 +109,24 @@ mentés esetén az aktív világ megőrzését. A formátum jelenleg tömöríte
 tesztvilágban a checkpoint betöltése lassabb volt a 901 tick visszajátszásánál. Nagy világra
 és hosszú játékra külön teljesítménymérés szükséges.
 
+## Megvalósult: elkülönített lokális felszíni vízfluxus
+
+A `SurfaceWaterFlux` a vízrendszerből kiemelt, renderfüggetlen, előre lefoglalt munkatömbökkel
+futó csempefolyamat. Csempénként egy lefelé irányuló fluxust ütemez; a bejövő víz csak a közös
+commit után válik elérhetővé. Egy lépés így legfeljebb egy szomszédba viszi a vizet, és a bejárás
+iránya nem gyorsítja fel a lefolyást. Zárt mélyedés megtartja a vizet; kizárólag megjelölt
+kifolyó exportálhat készletet. Egyenlő területű csempék mm-készleteinek összege adja a mérleget.
+
+A `SurfaceRunoffLaw` elválasztja a visszatartott víz és a kiáramlási ráta paramétereit a
+fluxuskezeléstől. Az éles rendszer a történeti 2 mm / 6 h⁻¹ paramétereket használja;
+az exponenciális időtényező intervallumonként egyszer készül el. Hibás célcsempe, ismételt
+forrás és a tervezettnél kisebb készlet elutasításra kerül; a commit előbb az egész rasztert
+ellenőrzi. A regresszió pontosan összeveti az eredményt a korábbi algoritmussal, külön
+próbálja a konvergáló áramlást, anyagmérleget, zárt mélyedést és feldolgozási sorrendet.
+
+Ez a meglévő egyirányú felszíni lefolyás moduláris alapja. A regionális klíma, több szomszéd
+közötti hidraulikus fluxus és talajvízáramlás továbbra is külön következő fejlesztés.
+
 ## Döntés és tudományos minták
 
 Térbeli hibrid modellt építünk: a csempékhez folytonos készletek és fluxusok, a fákhoz egyedi
@@ -340,7 +358,9 @@ Pontos ms-cél csak rögzített hardverprofil és reprezentatív fasűrűség ut
    Két talajhorizont és dinamikus/chunkos raszterpublikálás később.
 3. **Elkészült alap:** típusos folyamatfuttató a meglévő víz/erdő adapterével, változatlan
    referenciakimenet; teljes dinamikus checkpoint és naplórészlet, modellvalidálás és migráció.
-4. Regionális klíma és konzervatív lokális vízfluxus; inkrementális vízgyűjtő/topológia frissítés.
+4. **Első lépcső elkészült:** elkülönített konzervatív felszíni vízfluxus és paraméterezett
+   lefolyási törvény, változatlan történeti eredménnyel. Regionális klíma, többirányú vízfluxus
+   és inkrementális vízgyűjtő/topológia frissítés következik.
 5. Fajkatalógus, fény/tápanyag/egészség folyamatok, vegyes fajaggregátumok és alkalmassági UI.
 6. Károsító/gazda modellek és valós rágási visszacsatolás; térképi magyarázat és emergens próbák.
 

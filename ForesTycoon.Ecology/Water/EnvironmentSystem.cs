@@ -15,7 +15,8 @@ namespace ForesTycoon.Ecology
         internal const double StepSeconds = EcologyTime.StepSeconds;
         private readonly IForestHabitat habitat;
         private readonly IForestCanopy forest;
-        private readonly double[] canopy, surface, soil, deep, drought, wet, wetIntegral, transfer;
+        private readonly double[] canopy, surface, soil, deep, drought, wet, wetIntegral;
+        private readonly SurfaceWaterFlux surfaceFlux;
         private readonly double[] demandIntegral, uptakeIntegral, uptakeRate, demandRate;
         private readonly SoilProperties[] soils;
         private readonly ForestHydrologyInputs[] vegetation;
@@ -71,7 +72,7 @@ namespace ForesTycoon.Ecology
             weather = new WeatherSystem(habitat.Seed, forestYearSeconds);
             int n = habitat.TileCount;
             canopy = new double[n]; surface = new double[n]; soil = new double[n]; deep = new double[n];
-            drought = new double[n]; wet = new double[n]; wetIntegral = new double[n]; transfer = new double[n];
+            drought = new double[n]; wet = new double[n]; wetIntegral = new double[n]; surfaceFlux = new SurfaceWaterFlux(n);
             destinations = new int[n];
             demandIntegral = new double[n]; uptakeIntegral = new double[n];
             uptakeRate = new double[n]; demandRate = new double[n];
@@ -158,11 +159,12 @@ namespace ForesTycoon.Ecology
             double dt = interval.Seconds, rain = interval.Rain;
             RefreshVegetation();
             double hours = dt * weather.HoursPerSecond;
+            var runoffStep = SurfaceRunoffLaw.Legacy.Prepare(hours);
             // Shared atmospheric forcing drives both soil evaporation and leaf-water demand.
             double potential = interval.Forcing.PotentialEvaporationPerHour * hours;
             monthSeconds += dt;
             radiationIntegral += interval.Forcing.Radiation * dt;
-            Array.Clear(transfer);
+            surfaceFlux.BeginStep();
             for (int id = 0; id < CellCount; id++)
             {
                 var profile = soils[id];
@@ -203,12 +205,12 @@ namespace ForesTycoon.Ecology
                 double blend = 1 - Math.Exp(-dt / 90);
                 drought[id] += (dry - drought[id]) * blend; wet[id] += (waterlogged - wet[id]) * blend;
                 wetIntegral[id] += wet[id] * dt;
-                double runoff = Math.Min(surface[id], Math.Max(0, surface[id] - 2) * (1 - Math.Exp(-hours * 6)));
                 int to = destinations[id];
-                if (to >= 0) { transfer[id] -= runoff; transfer[to] += runoff; }
-                else if (habitat.IsWaterOutlet(id)) { transfer[id] -= runoff; Outflow += runoff; }
+                double exported = surfaceFlux.Schedule(id, to, to < 0 && habitat.IsWaterOutlet(id),
+                    surface[id], runoffStep);
+                if (exported != 0) Outflow += exported;
             }
-            for (int id = 0; id < CellCount; id++) surface[id] += transfer[id];
+            surfaceFlux.Commit(surface);
         }
 
         private void Summarize()

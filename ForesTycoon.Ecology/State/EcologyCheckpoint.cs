@@ -60,7 +60,7 @@ namespace ForesTycoon.Ecology
             remainder = state.Remainder; monthSeconds = state.MonthSeconds; radiationIntegral = state.RadiationIntegral;
             Evaporated = state.Evaporated; Transpired = state.Transpired; Outflow = state.Outflow; Revision = state.Revision;
             state.Vegetation.CopyTo(vegetation, 0); vegetationRevision = state.VegetationRevision;
-            Array.Clear(transfer); RefreshRouting(); Summarize();
+            surfaceFlux.Cancel(); RefreshRouting(); Summarize();
             double scale = Math.Max(1, InitialWater + TotalRain * CellCount);
             CheckpointGuard.Require(Math.Abs(BalanceError) <= scale * 1e-9, "water balance");
         }
