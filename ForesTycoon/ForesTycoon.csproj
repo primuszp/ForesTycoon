@@ -35,6 +35,8 @@
     <Content Include="Assets/Buildings/sawmill.glb" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets/Wildlife/elk.glb" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets/Vehicles/log-truck.glb" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Locally installed purchased models (git-ignored); optional, the game falls back without them. -->
+    <Content Include="Assets/Licensed/**" CopyToOutputDirectory="PreserveNewest" Condition="Exists('Assets/Licensed')" />
     <PackageReference Include="OpenTK" Version="4.9.4" />
     <PackageReference Include="ImGui.NET" Version="1.91.6.1" />
   </ItemGroup>

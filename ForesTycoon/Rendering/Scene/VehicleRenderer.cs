@@ -75,8 +75,18 @@ namespace ForesTycoon
         private static void EnsureModel()
         {
             if (importedModel != null) return;
-            importedModel = GlbTruckModel.Load(System.IO.Path.Combine(AppContext.BaseDirectory,"Assets","Vehicles","log-truck.glb"));
+            importedModel = GlbTruckModel.Load(ModelPath());
             RenderDevice.Disposing += DisposeImportedModel;
+        }
+
+        /// <summary>
+        /// The purchased truck (tools/convert_licensed_truck.py, kept out of git: its licence forbids redistribution)
+        /// when it is installed locally; otherwise the repository's own log truck.
+        /// </summary>
+        internal static string ModelPath()
+        {
+            string licensed = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "Licensed", "log-truck.glb");
+            return System.IO.File.Exists(licensed) ? licensed : System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "Vehicles", "log-truck.glb");
         }
         internal static void DisposeImportedModel(){importedModel?.Dispose(); importedModel=null;}
 
