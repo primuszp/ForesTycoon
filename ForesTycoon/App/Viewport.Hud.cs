@@ -355,6 +355,11 @@ namespace ForesTycoon
                 ImGui.PushStyleColor(ImGuiCol.PlotHistogram, new NVec4(0.67f, 0.47f, 0.26f, 1f));
                 ImGui.ProgressBar(fill, new NVec2(-1, 14), $"{vehicle.CargoAmount:F1} / {vehicle.CargoCapacity:F0} m³");
                 ImGui.PopStyleColor();
+                if (vehicle.RoadRoute != null)
+                {
+                    string fuel = vehicle.FuelPer100Km > 0 ? $"{vehicle.FuelPer100Km:F0} l/100 km" : "–";
+                    ImGui.TextDisabled($"{vehicle.CurrentSpeed * vehicle.MetresPerTile * 3.6:F0} km/h · {vehicle.Mass / 1000:F1} t · {fuel}");
+                }
             }
             ImGui.End();
         }

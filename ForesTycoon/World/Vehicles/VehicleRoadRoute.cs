@@ -11,6 +11,8 @@ namespace ForesTycoon
         private readonly Vector2[] gradients;
         public int Last => centers.Length - 1;
         public float TileLength { get; }
+        /// <summary>Forest roads are gravel until road building offers surface types.</summary>
+        internal RoadSurface Surface { get; init; } = RoadSurface.Gravel;
 
         /// <summary>Captures the frozen road geometry of <paramref name="route"/> from the map.</summary>
         internal static VehicleRoadRoute Create(TerrainMap map, int[] route)
@@ -137,12 +139,23 @@ namespace ForesTycoon
             return Math.Clamp(bend*1.4f+gradientChange*0.6f,0,1);
         }
 
+        /// <summary>Road grade along the direction of travel (rise/run, positive uphill).</summary>
+        internal float Grade(double position)
+        {
+            double d = Directed(position, Last, out int sign);
+            Vector3 tangent = Sample(Math.Clamp(d + sign * 0.02, 0, Last)) - Sample(Math.Clamp(d - sign * 0.02, 0, Last));
+            return tangent.Z / Math.Max(0.001f, tangent.Xy.Length) * (tangent.Xy.Length > 0 ? 1 : 0);
+        }
+
+        /// <summary>
+        /// Speed the driver aims for: cruise, slower in corners and when descending (more so when loaded).
+        /// Climbing speed is not chosen here: the vehicle dynamics decide how fast the engine can pull.
+        /// </summary>
         public double TargetSpeed(double position, double cruise, float load)
         {
             double d = Directed(position, Last, out int sign);
-            Vector3 tangent = Sample(d + sign * 0.02) - Sample(d - sign * 0.02);
-            double grade = tangent.Z / Math.Max(0.001, tangent.Xy.Length);
-            double target = cruise * Math.Clamp(1 - grade * (1.4 + load), 0.3, 1.12);
+            double grade = Grade(position);
+            double target = grade < 0 ? cruise * Math.Clamp(1 + grade * (1.2 + load), 0.45, 1) : cruise;
             int tile = (int)Math.Floor(d + 0.5);
             if (IsCorner(tile) || IsCorner(tile + sign)) target = Math.Min(target, cruise * 0.48);
             return target;

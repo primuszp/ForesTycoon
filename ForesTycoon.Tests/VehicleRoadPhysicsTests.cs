@@ -42,8 +42,10 @@ public class VehicleRoadPhysicsTests
     public void GradeAndLoad_AffectSpeedWithoutRunawayDownhill()
     {
         var road = Straight(0.25f);
-        Assert.True(road.TargetSpeed(0.5, 1.5, 1) < road.TargetSpeed(0.5, 1.5, 0));
-        Assert.InRange(road.TargetSpeed(3.5, 1.5, 1), 1.5, 1.680001);
+        // Climbing speed comes from the dynamics; descending, the loaded driver holds back.
+        Assert.True(road.Grade(0.5) > 0);
+        Assert.InRange(road.TargetSpeed(3.5, 1.5, 1), 0.6, 1.5);
+        Assert.True(road.TargetSpeed(3.5, 1.5, 1) < road.TargetSpeed(3.5, 1.5, 0));
         var empty = new Vehicle(1, new[] { 0, 1, 2 }, 1.5, roadRoute: road);
         var loaded = new Vehicle(2, new[] { 0, 1, 2 }, 1.5, roadRoute: road);
         loaded.Load(25);

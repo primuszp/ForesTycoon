@@ -25,6 +25,17 @@ namespace ForesTycoon
         private readonly bool useRoadPhysics;
         public VehicleRoadRoute RoadRoute { get; }
         public double CurrentSpeed { get; private set; }
+        internal TruckSpec Spec { get; } = TruckSpec.Default;
+        /// <summary>Diesel burnt so far, litres.</summary>
+        public double FuelUsed { get; private set; }
+        /// <summary>Distance driven so far, metres.</summary>
+        public double Distance { get; private set; }
+        /// <summary>Gross mass: truck plus timber, kg.</summary>
+        internal float Mass => VehicleDynamics.Mass(Spec, CargoAmount);
+        /// <summary>Average consumption, litres per 100 km (0 before the first kilometre).</summary>
+        public double FuelPer100Km => Distance > 1000 ? FuelUsed / Distance * 100000 : 0;
+        /// <summary>Metres of road per tile of route position.</summary>
+        internal double MetresPerTile => RoadRoute == null ? 1 : RoadRoute.TileLength / Engine.WorldScale.MetresToWorld;
 
         public int Id { get; }
         public int[] Route { get; }
@@ -99,13 +110,18 @@ namespace ForesTycoon
                 double last = Route.Length - 1;
                 double boundary = (Math.Floor(RoutePosition / last) + 1) * last;
                 double remaining = boundary - RoutePosition;
-                const double braking = 2.4;
+                // Physical dynamics in metres: tractive force against rolling, grade and air resistance.
+                double metres = MetresPerTile;
+                double braking = Spec.Braking / metres;
                 double target = Math.Min(RoadRoute.TargetSpeed(RoutePosition, SpeedTilesPerSecond, CargoFill),
                     Math.Sqrt(2 * braking * remaining));
-                double acceleration = target < CurrentSpeed ? braking : 0.8 / (1 + CargoFill * 0.65);
                 double before = CurrentSpeed;
-                CurrentSpeed += Math.Clamp(target - CurrentSpeed, -acceleration * dt, acceleration * dt);
+                var (speed, fuel) = VehicleDynamics.Step(Spec, Mass, (float)(CurrentSpeed * metres), (float)(target * metres),
+                    RoadRoute.Grade(RoutePosition), RoadRoute.Surface, RoadRoute.Roughness(RoutePosition, 1f), (float)dt);
+                CurrentSpeed = speed / metres;
+                FuelUsed += fuel;
                 double travel = (before + CurrentSpeed) * 0.5 * dt;
+                Distance += Math.Min(travel, remaining) * metres;
                 if (travel >= remaining || remaining < 0.001)
                 {
                     RoutePosition = boundary;
