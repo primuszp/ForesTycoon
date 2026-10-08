@@ -6,7 +6,7 @@ namespace ForesTycoon.Ecology
         double Drought, double Waterlogging, double GrowthFactor, double Capacity, double UptakePerHour, double DemandPerHour);
 
     // Bounded bucket hydrology with conserved, vegetation-driven uptake. Water stores are mm per cell.
-    internal sealed class EnvironmentSystem : IForestEnvironment
+    internal sealed partial class EnvironmentSystem : IForestEnvironment
     {
         internal const double SecondsPerForestYear = EcologyTime.SecondsPerForestYear;
         internal const double DefaultGameSecondsPerYear = EcologyTime.DefaultGameSecondsPerYear;

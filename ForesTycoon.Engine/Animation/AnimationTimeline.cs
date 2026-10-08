@@ -34,6 +34,12 @@ namespace ForesTycoon.Engine
         }
 
         public double DurationSeconds { get; }
+        internal static AnimationTimeline Restore(double duration, double previous, double elapsed)
+        {
+            CheckpointGuard.Require(double.IsFinite(previous) && previous >= 0 && double.IsFinite(elapsed) &&
+                elapsed >= previous && elapsed <= duration, "animation clock");
+            return new AnimationTimeline(duration, AnimationPlayback.Once, previous, elapsed);
+        }
         public AnimationPlayback Playback { get; }
         public double PreviousElapsedSeconds { get; }
         public double ElapsedSeconds { get; }

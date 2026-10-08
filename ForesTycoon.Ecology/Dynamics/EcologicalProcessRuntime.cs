@@ -65,6 +65,21 @@ namespace ForesTycoon.Ecology
         internal double TimeSeconds { get; private set; }
         internal double PendingSeconds => remainder;
         internal bool IsFaulted => faulted;
+        internal RuntimeCheckpoint Capture()
+        {
+            if (running || faulted) throw new InvalidOperationException("Cannot snapshot an executing or faulted runtime.");
+            return new(TimeSeconds, remainder, CompletedSteps);
+        }
+        internal void Restore(RuntimeCheckpoint state)
+        {
+            ArgumentNullException.ThrowIfNull(state);
+            if (running || faulted) throw new InvalidOperationException("Cannot restore an executing or faulted runtime.");
+            CheckpointGuard.NonNegative(state.Time, "runtime time");
+            CheckpointGuard.Require(double.IsFinite(state.PendingSeconds) && state.PendingSeconds >= -1e-9 &&
+                state.PendingSeconds < StepSeconds, "runtime remainder");
+            CheckpointGuard.Require(Math.Abs(state.Time - state.CompletedSteps * StepSeconds) <= Math.Max(1, state.Time) * 1e-9, "runtime step count");
+            TimeSeconds = state.Time; remainder = state.PendingSeconds; CompletedSteps = state.CompletedSteps;
+        }
 
         internal EcologicalProcessRuntime(double stepSeconds, IEcologicalProcess[] processes, params string[] initialFields)
         {

@@ -32,7 +32,7 @@ namespace ForesTycoon.Effects
 
         public WorldEffect Advance(double deltaSeconds) => new WorldEffect(Kind, Position, Timeline.Advance(deltaSeconds));
 
-        private WorldEffect(WorldEffectKind kind, Vector3 position, AnimationTimeline timeline)
+        internal WorldEffect(WorldEffectKind kind, Vector3 position, AnimationTimeline timeline)
         {
             Kind = kind;
             Position = position;

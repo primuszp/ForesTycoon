@@ -10,6 +10,22 @@ namespace ForesTycoon.Effects
 
         public IReadOnlyList<WorldEffect> Active => active;
         public int Count => active.Count;
+        internal EffectCheckpoint[] Capture() {
+            var result = new EffectCheckpoint[active.Count];
+            for (int i = 0; i < result.Length; i++) { var e = active[i]; result[i] = new(e.Kind, new(e.Position), e.LifetimeSeconds, e.AgeSeconds, e.Timeline.PreviousElapsedSeconds); }
+            return result;
+        }
+        internal void Restore(EffectCheckpoint[] state) {
+            if (state == null) throw new ArgumentNullException(nameof(state));
+            var replacement = new List<WorldEffect>();
+            foreach (var e in state) {
+                CheckpointGuard.Require(e != null && Enum.IsDefined(e.Kind) && double.IsFinite(e.Lifetime) && e.Lifetime > 0 &&
+                    double.IsFinite(e.Age) && e.Age >= 0 && e.Age < e.Lifetime, "effect timeline");
+                e.Position.Validate(); replacement.Add(new WorldEffect(e.Kind, e.Position.Vector,
+                    AnimationTimeline.Restore(e.Lifetime, e.PreviousAge, e.Age)));
+            }
+            active.Clear(); active.AddRange(replacement);
+        }
 
         public void Spawn(WorldEffectKind kind, Vector3 position, double lifetimeSeconds = 0.65) =>
             active.Add(new WorldEffect(kind, position, lifetimeSeconds));

@@ -3,7 +3,7 @@ using System;
 namespace ForesTycoon
 {
     /// <summary>Authoritative timber inventory shared by forestry and transport systems.</summary>
-    sealed class TimberCargoSystem : IWorldSystem
+    sealed partial class TimberCargoSystem : IWorldSystem
     {
         public float Available { get; private set; }
         public float Delivered { get; private set; }

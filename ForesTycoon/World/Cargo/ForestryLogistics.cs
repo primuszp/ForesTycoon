@@ -15,7 +15,7 @@ namespace ForesTycoon
         internal Vector3 Position;
         internal float Received,Stock,Processed;
     }
-    internal sealed class ForestryLogistics
+    internal sealed partial class ForestryLogistics
     {
         private readonly TerrainMap terrain;
         private readonly ForestSystem forest;

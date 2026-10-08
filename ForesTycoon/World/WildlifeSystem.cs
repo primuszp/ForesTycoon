@@ -5,7 +5,7 @@ using OpenTK.Mathematics;
 namespace ForesTycoon
 {
     // Local food depletion, hunger and shelter preference drive movement; no activity timeline.
-    internal sealed class WildlifeSystem
+    internal sealed partial class WildlifeSystem
     {
         // Gait and turning follow the drawn body size, so the stride cadence stays natural.
         internal const float WalkingSpeed = 1.5f * DioramaScale.Elk / 1.3f;

@@ -61,11 +61,12 @@ namespace ForesTycoon
 
     sealed class WorldSaveData
     {
-        public const int CurrentVersion = 7;
+        public const int CurrentVersion = 8;
         public int Version { get; init; } = CurrentVersion;
         public double TickRate { get; init; } = 30.0;
         public double ForestYearSeconds { get; init; } = EnvironmentSystem.SecondsPerForestYear;
         public SoilModelData SoilModel { get; init; }
+        public WorldCheckpointData Checkpoint { get; init; }
         internal SoilLandscapeDefinition ReplaySoilModel => Version < 7 ? SoilLandscapeDefinition.Legacy :
             (SoilModel ?? throw new InvalidOperationException("Save has no soil model.")).ToDefinition();
         internal double ReplayForestYearSeconds => Version == 4 ? EnvironmentSystem.SecondsPerForestYear : ForestYearSeconds;
@@ -79,7 +80,7 @@ namespace ForesTycoon
 
         public void Validate()
         {
-            if (Version != 4 && Version != 5 && Version != 6 && Version != CurrentVersion)
+            if (Version != 4 && Version != 5 && Version != 6 && Version != 7 && Version != CurrentVersion)
                 throw new NotSupportedException($"Save version {Version} is not supported; expected {CurrentVersion}.");
             if (!EnvironmentSystem.IsValidForestYearSeconds(ReplayForestYearSeconds))
                 throw new InvalidOperationException("Save forest year duration must be between 120 and 1200 seconds.");
@@ -88,6 +89,13 @@ namespace ForesTycoon
             if (Terrain == null) throw new InvalidOperationException("Save has no terrain settings.");
             if (Commands == null) throw new InvalidOperationException("Save has no command journal.");
             _ = ReplaySoilModel;
+            if (Checkpoint != null) {
+                CheckpointGuard.Require(Version >= 8 && Checkpoint.Version == 1, "world snapshot version");
+                CheckpointGuard.Require(Checkpoint.Tick <= Tick && Checkpoint.CommandCursor >= 0 && Checkpoint.PendingCommands >= 0 &&
+                    (long)Checkpoint.CommandCursor + Checkpoint.PendingCommands <= Commands.Count, "world snapshot cursor");
+                CheckpointGuard.Require(Checkpoint.Terrain != null && Checkpoint.Ecology != null && Checkpoint.Wildlife != null &&
+                    Checkpoint.Logistics != null && Checkpoint.Vehicles != null && Checkpoint.Effects != null, "world snapshot systems");
+            }
         }
 
         internal void ValidateReplay()

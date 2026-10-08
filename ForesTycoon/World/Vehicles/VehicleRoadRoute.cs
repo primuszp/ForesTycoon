@@ -5,7 +5,7 @@ namespace ForesTycoon
 {
     // Immutable road geometry, captured at spawn. Road foundations keep their heights
     // after terrain edits; deleting a route tile removes its vehicles.
-    sealed class VehicleRoadRoute
+    sealed partial class VehicleRoadRoute
     {
         private readonly Vector3[] centers;
         private readonly Vector2[] gradients;

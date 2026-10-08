@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace ForesTycoon.Ecology
 {
     /// <summary>Sparse per-tile arrays; no managed object per tree. Growth reuses occupied arrays.</summary>
-    internal sealed class ForestTreeStore
+    internal sealed partial class ForestTreeStore
     {
         internal const int PlantingRows = 6;
         internal const int PlantedTreesPerTile = PlantingRows * PlantingRows;
@@ -21,6 +21,10 @@ namespace ForesTycoon.Ecology
         }
 
         private readonly Dictionary<int, Patch> patches = new();
+        // Retain free-slot ordering for exact iteration after a checkpoint and future insertions.
+        private readonly List<int> slots = new();
+        private readonly Dictionary<int, int> slotOf = new();
+        private readonly Stack<int> freeSlots = new();
         internal IEnumerable<KeyValuePair<int, Patch>> Patches => patches;
         private ulong nextId = 1;
         private ulong topologyRevision;
@@ -31,6 +35,7 @@ namespace ForesTycoon.Ecology
         internal void Clear()
         {
             patches.Clear();
+            slots.Clear(); slotOf.Clear(); freeSlots.Clear();
             Generation++;
             nextId = 1;
             TreeCount = 0;
@@ -40,7 +45,12 @@ namespace ForesTycoon.Ecology
         {
             if (stand.IsEmpty) return;
             if (!patches.TryGetValue(tileId, out Patch patch))
+            {
                 patches.Add(tileId, patch = new Patch(16));
+                int slot = freeSlots.Count > 0 ? freeSlots.Pop() : slots.Count;
+                if (slot == slots.Count) slots.Add(tileId); else slots[slot] = tileId;
+                slotOf.Add(tileId, slot);
+            }
             if (patch.Count != 0) throw new InvalidOperationException("Tile already has living trees.");
             if (planted && patch.Trees.Length < PlantedTreesPerTile) Array.Resize(ref patch.Trees, PlantedTreesPerTile);
             int capacity = ForestTreeGrowth.Capacity(stand.Species);
@@ -95,6 +105,7 @@ namespace ForesTycoon.Ecology
         internal void RemoveTile(int id)
         {
             if (!patches.Remove(id, out var patch)) return;
+            int slot = slotOf[id]; slotOf.Remove(id); slots[slot] = -1; freeSlots.Push(slot);
             TreeCount -= patch.Count;
         }
 

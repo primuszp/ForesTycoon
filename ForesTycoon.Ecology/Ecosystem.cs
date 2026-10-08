@@ -63,6 +63,24 @@ namespace ForesTycoon.Ecology
         /// <summary>Advances weather, water and forest by fixed-step game time.</summary>
         internal void Update(double fixedDeltaSeconds) => coordinator.Update(fixedDeltaSeconds);
 
+        internal EcologyCheckpoint Capture() => new(1, ForestYearSeconds, Soils?.Definition.Catalog.Hash,
+            Soils?.ProfileIndices.ToArray(), coordinator.Runtime.Capture(), Forest.Capture(), Environment.Capture());
+
+        // Caller restores an isolated ecosystem; failure must never publish partially restored state.
+        internal void Restore(EcologyCheckpoint state)
+        {
+            ArgumentNullException.ThrowIfNull(state);
+            CheckpointGuard.Require(state.Version == 1 && state.ForestYearSeconds == ForestYearSeconds &&
+                state.SoilHash == Soils?.Definition.Catalog.Hash, "ecology model");
+            if (Soils != null) CheckpointGuard.Require(state.SoilProfiles != null &&
+                Soils.ProfileIndices.SequenceEqual(state.SoilProfiles), "soil raster");
+            Forest.Restore(state.Forest); Environment.Restore(state.Environment); coordinator.Runtime.Restore(state.Clock);
+            CheckpointGuard.Require(Math.Abs(Environment.Time - state.Clock.Time) <= Math.Max(1, Environment.Time) * 1e-9,
+                "weather/runtime clock agreement");
+            CheckpointGuard.Require(Math.Abs(Forest.ForestYear * ForestYearSeconds - Environment.Time) <=
+                Math.Max(1, Environment.Time) * 1e-9, "forest/weather calendar agreement");
+        }
+
         internal void ApplyTerrainEdit(ReadOnlySpan<int> changedTiles)
         {
             Forest.ClearTerrainTiles(changedTiles);

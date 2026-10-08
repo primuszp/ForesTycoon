@@ -74,16 +74,40 @@ mintacella rajzolódik; nagy térképnél a szín középponti minta, nem kateg�
 **Mentés:** a 7-es formátum a teljes kanonikus talajkatalógust, SHA-256 hashét és a generátor
 verzióját rögzíti. Betöltéskor a mentett katalógust használja, nem a mai alapértelmezést.
 Hiányos, hibás vagy ismeretlen modell a világcsere előtt elutasításra kerül. A 4/5/6-os világ
-az eredeti `SoilProperties.Standard` profillal fut; 7-es újramentéskor ez a 0-s generátor és a
+az eredeti `SoilProperties.Standard` profillal fut; újramentéskor ez a 0-s generátor és a
 rögzített standard katalógus megmarad. Új térkép generálása már az új alapmodellt választja.
 Az állandó talajtípus-raszter az eredeti térképből, a mentett katalógussal és generátorral regenerálható;
-a magasságmódosításokat ezután játsszuk vissza. A dinamikus készletek továbbra is parancsnaplóból
-állnak helyre. Ez még nem teljes ökológiai checkpoint.
+a magasságmódosítások a 8-as mentés tereppillanatképéből állnak helyre.
 
 Ellenőrzések: determinisztikus és seedfüggő raszter, méret/indexelés és tömbtulajdon,
 profilfüggő víz/fanövekedés, terraform-állandóság, katalógus- és hashvalidálás, történeti talajmodell
 megőrzése. `--soil-raster-smoke-test`: valódi UI és GL, két réteg, szünetben azonos kép,
 változatlan szimuláció és talaj-visszajátszás; képek az `artifacts/soil-raster` könyvtárban.
+
+## Megvalósult: teljes dinamikus checkpoint
+
+A 8-as mentés az egyes állapottulajdonosok saját pillanatképeit használja: terepmagasság és
+hidrológiai publikáció, utak és épületek; egyedi fák, tönkök, holtfa, ültetvények és éves
+növekedési mérleg; vízkészletek és havi integrálok; időjárási esemény és véletlengenerátor;
+vadak és táplálék; kitermelési helyek, fűrészüzemek, járművek, rakomány és rakodási állapot;
+effektusok és interpolációs idő. A részlépés maradékideje és a még végrehajtatlan parancsok is megmaradnak.
+
+A havi versengés előkészítése és a revízióhoz kötött növényzeti vízigény szintén mentett adat:
+ezek újraszámítása eltérő időpontban apró növekedési eltérést okozhatna. A fák tárolóhely- és
+szabadhely-sorrendje megőrzi a későbbi beillesztések számítási sorrendjét. A blokkolt teherautó
+korábbi útgeometriája akkor is helyreáll, ha az út egy részét már eltávolították.
+
+Betöltés külön jelölt világban validálja a modellazonosságot, tömbméreteket, készleteket,
+azonosítókat és órákat; csak siker után cseréli le az aktív világot. A GPU-erőforrások újraépülnek.
+A teljes parancsnapló egyelőre megmarad, de csak a checkpoint utáni rész fut le. A 4–7-es
+naplómentések egyszeri visszajátszással migrálnak; a naplóalapú 8-as import is támogatott.
+
+Az ellenőrzés JSON-körutazás után pontos állapotegyezést vizsgál több hónapon, időjárási
+váltásokon, szerkesztésen és újratelepítésen át. A natív `--checkpoint-smoke-test` teljes
+világon ellenőrzi a régi formátum migrációját, 31 tick naplórészletét, függő bemenetet és hibás
+mentés esetén az aktív világ megőrzését. A formátum jelenleg tömörítetlen JSON; a kis 17×17
+tesztvilágban a checkpoint betöltése lassabb volt a 901 tick visszajátszásánál. Nagy világra
+és hosszú játékra külön teljesítménymérés szükséges.
 
 ## Döntés és tudományos minták
 
@@ -314,9 +338,8 @@ Pontos ms-cél csak rögzített hardverprofil és reprezentatív fasűrűség ut
 2. **Elkészült első lépcső:** JSON talajprofil-katalógus és talajtípus-raszter, közös olvasói
    mezőmetaadatok, talaj/víz felülnézet; mentett modell és történeti kompatibilitás.
    Két talajhorizont és dinamikus/chunkos raszterpublikálás később.
-3. **Részben kész:** típusos folyamatfuttató a meglévő víz/erdő adapterével, változatlan
-   referenciakimenet. Teljes dinamikus checkpoint + naplórészlet még hátravan;
-   ez következik az új dinamikus klíma, fertőzés és rágási modulok előtt.
+3. **Elkészült alap:** típusos folyamatfuttató a meglévő víz/erdő adapterével, változatlan
+   referenciakimenet; teljes dinamikus checkpoint és naplórészlet, modellvalidálás és migráció.
 4. Regionális klíma és konzervatív lokális vízfluxus; inkrementális vízgyűjtő/topológia frissítés.
 5. Fajkatalógus, fény/tápanyag/egészség folyamatok, vegyes fajaggregátumok és alkalmassági UI.
 6. Károsító/gazda modellek és valós rágási visszacsatolás; térképi magyarázat és emergens próbák.

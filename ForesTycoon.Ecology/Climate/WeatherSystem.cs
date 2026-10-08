@@ -12,7 +12,7 @@ namespace ForesTycoon.Ecology
     internal readonly record struct WeatherInterval(double Seconds, double Rain, WeatherForcing Forcing);
 
     // Seeded event timeline and atmospheric forcing; independent of soil, forest and rendering.
-    internal sealed class WeatherSystem
+    internal sealed partial class WeatherSystem
     {
         private uint random;
         private readonly double timeScale;

@@ -13,9 +13,9 @@ namespace ForesTycoon.Ecology
 
     // FORMIND-inspired mechanisms, with local crown/root overlap rather than a
     // calibrated carbon balance. Snapshot all trees before updating any of them.
-    internal sealed class ForestCompetition
+    internal sealed partial class ForestCompetition
     {
-        private readonly record struct Sample(ulong Id, float X, float Y, ForestTreeDimensions Size, float Health);
+        internal readonly record struct Sample(ulong Id, float X, float Y, ForestTreeDimensions Size, float Health);
         private sealed class Cell
         {
             internal Sample[] Trees = Array.Empty<Sample>();

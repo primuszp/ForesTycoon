@@ -4,7 +4,7 @@ namespace ForesTycoon
 {
     enum VehicleTransportState { Waiting, Loading, Hauling, Unloading, Returning }
 
-    sealed class Vehicle
+    sealed partial class Vehicle
     {
         public Vehicle(int id, int[] route, double speedTilesPerSecond, float cargoCapacity = 25f,
             VehicleRoadRoute roadRoute = null, bool roadPhysics = true)

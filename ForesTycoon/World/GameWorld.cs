@@ -10,7 +10,7 @@ namespace ForesTycoon
     /// Owns game-state lifetime and is the boundary used by input, simulation and rendering.
     /// Viewport code must not own or replace individual world systems directly.
     /// </summary>
-    sealed class GameWorld : IDisposable, IWorldCommandTarget, IWorldInteractionTarget
+    sealed partial class GameWorld : IDisposable, IWorldCommandTarget, IWorldInteractionTarget
     {
         private Terrain terrain;
         /// <summary>The ground model; the <see cref="Terrain"/> scene only draws it.</summary>
@@ -111,6 +111,7 @@ namespace ForesTycoon
         public int MapTileColumns => terrain.Settings.TileColumns;
         public ForestPattern InitialForestPattern => terrain.Settings.ForestPattern;
         public ulong SimulationTick => worldTick;
+        internal ulong LastLoadReplayedTicks { get; private set; }
         internal bool ProfileUpdates { get; set; }
         internal WorldUpdateProfile LastUpdateProfile { get; private set; }
 
@@ -290,7 +291,8 @@ namespace ForesTycoon
                 SoilModel = SoilModelData.From(Soils.Definition),
                 Tick = worldTick,
                 Terrain = TerrainSettingsData.From(terrain.Settings),
-                Commands = new List<WorldCommandRecord>(commandJournal)
+                Commands = new List<WorldCommandRecord>(commandJournal),
+                Checkpoint = CaptureCheckpoint()
             });
         }
 
@@ -301,7 +303,9 @@ namespace ForesTycoon
             var settings = save.Terrain.ToSettings();
             // Replay into an isolated world. Failure leaves the live world and queued commands intact.
             using var candidate = new GameWorld(settings, Graphics, save.ReplayForestYearSeconds, save.ReplaySoilModel);
-            candidate.Replay(save);
+            ulong startTick = save.Checkpoint?.Tick ?? 0;
+            if (save.Checkpoint == null) candidate.Replay(save);
+            else { candidate.RestoreCheckpoint(save.Checkpoint); candidate.ReplayTail(save); }
 
             (terrain, candidate.terrain) = (candidate.terrain, terrain);
             (terrainRenderer, candidate.terrainRenderer) = (candidate.terrainRenderer, terrainRenderer);
@@ -316,11 +320,13 @@ namespace ForesTycoon
             // Route creation must follow this world's terrain after the ownership transfer.
             vehicles.RoadRouteFactory = route => VehicleRoadRoute.Create(map, route);
             commands.Clear();
+            foreach (var pending in candidate.commands.Snapshot()) commands.Enqueue(pending);
             commandJournal.Clear();
             foreach (var record in save.Commands) commandJournal.Add(save.ReplayCommand(record));
             worldTick = candidate.worldTick;
             lastForestryAction = candidate.lastForestryAction;
             lastForestryArea = candidate.lastForestryArea;
+            LastLoadReplayedTicks = candidate.worldTick - startTick;
         }
 
         private void Replay(WorldSaveData save)

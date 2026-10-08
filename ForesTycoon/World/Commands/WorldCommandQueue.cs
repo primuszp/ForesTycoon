@@ -9,6 +9,7 @@ namespace ForesTycoon
         private bool isExecuting;
 
         public int Count => pending.Count;
+        internal IWorldCommand[] Snapshot() => pending.ToArray();
 
         public void Enqueue(IWorldCommand command) =>
             pending.Enqueue(command ?? throw new ArgumentNullException(nameof(command)));

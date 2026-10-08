@@ -64,7 +64,7 @@ The current foundation has deterministic ticking, command batching, chunk cullin
 1. Dynamic terrain overlays, water and roads use streamed core-profile batches. Promote stable chunk geometry to persistent dirty-chunk VBOs when profiling shows upload bandwidth is the bottleneck.
 2. Picking still reads OpenGL matrices and refreshes hover continuously. Keep matrices CPU-side and recompute only when pointer, camera or terrain changes.
 3. Hydrology and road planning are synchronous. The background scheduler is ready, but dirty-chunk calculation still needs immutable job payloads.
-4. Replay currently rebuilds from tick zero. Add periodic validated checkpoints for long-running worlds.
+4. Version 8 saves restore validated dynamic checkpoints and replay only the subsequent journal. Periodic checkpoint retention, compression and large-world loading benchmarks remain future work.
 5. Split ImGui panel composition out of `Viewport` as the tool count grows.
 
 Recommended delivery order: placeable depots and route assignment, immutable hydrology jobs, economy/cargo graph, dirty-chunk GPU caches, then replay checkpoints.

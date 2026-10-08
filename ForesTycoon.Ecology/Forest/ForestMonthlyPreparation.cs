@@ -6,7 +6,7 @@ namespace ForesTycoon.Ecology
     // Predict only geometry at the next monthly boundary. Water and radiation are applied
     // at that boundary from the completed environmental integrals, never predicted here.
     // Work is partitioned by simulation steps, not wall time, preserving deterministic replay.
-    internal sealed class ForestMonthlyPreparation
+    internal sealed partial class ForestMonthlyPreparation
     {
         private sealed class PreparedPatch
         {
