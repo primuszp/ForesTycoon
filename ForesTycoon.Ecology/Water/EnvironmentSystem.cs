@@ -24,6 +24,10 @@ namespace ForesTycoon.Ecology
         private readonly int[] destinations;
         private double remainder, monthSeconds, radiationIntegral;
         private readonly WeatherSystem weather;
+        private double regionalRainReceived;
+        internal RegionalClimate Climate { get; }
+        internal double RainReceived => Climate.Uniform ? TotalRain * CellCount : regionalRainReceived;
+        internal ClimateCell ClimateAt(int id) => Climate.Cell(id, new(Radiation, Temperature, RelativeHumidity, WindSpeed));
         internal double ForestYearSeconds => weather.ForestYearSeconds;
         
         internal double Time => weather.Time;
@@ -58,17 +62,19 @@ namespace ForesTycoon.Ecology
                 return total;
             }
         }
-        internal double BalanceError => StoredWater - (InitialWater + TotalRain * CellCount - Evaporated - Transpired - Outflow);
+        internal double BalanceError => StoredWater - (InitialWater + RainReceived - Evaporated - Transpired - Outflow);
 
         double IForestEnvironment.Radiation => Radiation;
         double IForestEnvironment.PeriodRadiation => PeriodRadiation;
         double IForestEnvironment.GrowthFactor(int tileId, ForestSpecies species) => GrowthFactor(tileId, species);
         double IForestEnvironment.CurrentWaterFactor(int tileId, ForestSpecies species) => CurrentWaterFactor(tileId, species);
 
-        internal EnvironmentSystem(IForestHabitat habitat, IForestCanopy forest, double forestYearSeconds = SecondsPerForestYear)
+        internal EnvironmentSystem(IForestHabitat habitat, IForestCanopy forest, double forestYearSeconds = SecondsPerForestYear,
+            ClimateDefinition climate = null)
         {
             this.habitat = habitat ?? throw new ArgumentNullException(nameof(habitat));
             this.forest = forest;
+            Climate = new RegionalClimate(habitat, climate ?? ClimateDefinition.Legacy);
             weather = new WeatherSystem(habitat.Seed, forestYearSeconds);
             int n = habitat.TileCount;
             canopy = new double[n]; surface = new double[n]; soil = new double[n]; deep = new double[n];
@@ -156,17 +162,21 @@ namespace ForesTycoon.Ecology
 
         private void WaterStep(WeatherInterval interval)
         {
-            double dt = interval.Seconds, rain = interval.Rain;
+            double dt = interval.Seconds;
             RefreshVegetation();
             double hours = dt * weather.HoursPerSecond;
             var runoffStep = SurfaceRunoffLaw.Legacy.Prepare(hours);
             // Shared atmospheric forcing drives both soil evaporation and leaf-water demand.
-            double potential = interval.Forcing.PotentialEvaporationPerHour * hours;
+            double uniformPotential = interval.Forcing.PotentialEvaporationPerHour * hours;
             monthSeconds += dt;
             radiationIntegral += interval.Forcing.Radiation * dt;
             surfaceFlux.BeginStep();
             for (int id = 0; id < CellCount; id++)
             {
+                var local = Climate.Cell(id, interval.Forcing);
+                double rain = interval.Rain * local.RainMultiplier;
+                double potential = Climate.Uniform ? uniformPotential : local.Forcing.PotentialEvaporationPerHour * hours;
+                if (!Climate.Uniform) regionalRainReceived += rain;
                 var profile = soils[id];
                 var trees = vegetation[id];
                 double held = Math.Min(rain, Math.Max(0, trees.InterceptionCapacity - canopy[id]));

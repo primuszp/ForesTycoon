@@ -128,11 +128,11 @@ public class SoilLandscapeTests
     [InlineData(4)] [InlineData(5)] [InlineData(6)]
     public void OldSavesPinTheStandardSoilEvenAfterUpgrade(int version)
     {
-        var old = new WorldSaveData { Version = version };
+        var old = new WorldSaveData { Climate = ClimateDefinition.Legacy, Version = version };
         var definition = old.ReplaySoilModel;
         Assert.Equal(0, definition.GeneratorVersion);
         Assert.Equal(SoilProperties.Standard, definition.Catalog[0].Properties);
-        var upgraded = new WorldSaveData { SoilModel = SoilModelData.From(definition) };
+        var upgraded = new WorldSaveData { Climate = ClimateDefinition.Legacy, SoilModel = SoilModelData.From(definition) };
         using var stream = new MemoryStream(); WorldSaveSerializer.Write(stream, upgraded); stream.Position = 0;
         var loaded = WorldSaveSerializer.Read(stream);
         Assert.Equal(0, loaded.ReplaySoilModel.GeneratorVersion);
@@ -147,7 +147,7 @@ public class SoilLandscapeTests
     public void SavePreservesCustomCatalogAndRejectsMissingOrTamperedModel()
     {
         var definition = Only(2);
-        var save = new WorldSaveData { SoilModel = SoilModelData.From(definition) };
+        var save = new WorldSaveData { Climate = ClimateDefinition.Legacy, SoilModel = SoilModelData.From(definition) };
         using var stream = new MemoryStream(); WorldSaveSerializer.Write(stream, save); stream.Position = 0;
         var loaded = WorldSaveSerializer.Read(stream);
         Assert.Equal(definition.Catalog.Hash, loaded.ReplaySoilModel.Catalog.Hash);

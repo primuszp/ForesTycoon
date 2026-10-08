@@ -33,7 +33,7 @@ namespace ForesTycoon
                     {
                         ui.Update(width, height, width, height, Vector2.One, 1f / 60);
                         ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(400, 760));
-                        ImGui.Begin("Talaj és víz térképe", ImGuiWindowFlags.NoSavedSettings);
+                        ImGui.Begin("Talaj, víz és klíma térképe", ImGuiWindowFlags.NoSavedSettings);
                         EcologyRasterView.Draw(world.Soils, world.Environment, ref layer, ref selected);
                         ImGui.End();
                         GL.Viewport(0, 0, width, height); GL.ClearColor(.08f, .1f, .12f, 1);
@@ -50,12 +50,20 @@ namespace ForesTycoon
                 if (!first.AsSpan().SequenceEqual(paused)) throw new InvalidOperationException("Paused soil view changed.");
                 layer = 1; byte[] water = Capture("root-water");
                 if (first.AsSpan().SequenceEqual(water)) throw new InvalidOperationException("Raster layer switch had no effect.");
+                foreach (var entry in new[] { (2, "temperature"), (3, "rain-multiplier"), (4, "humidity") })
+                {
+                    layer = entry.Item1;
+                    byte[] climate = Capture(entry.Item2);
+                    if (climate.AsSpan().SequenceEqual(water)) throw new InvalidOperationException("Climate layer did not change the map.");
+                    if (!climate.AsSpan().SequenceEqual(Capture(entry.Item2 + "-paused")))
+                        throw new InvalidOperationException("Paused climate raster changed.");
+                }
                 if (time != world.Environment.Time || stored != world.Environment.StoredWater || statistics != world.ForestStatistics ||
                     !indices.AsSpan().SequenceEqual(world.Soils.ProfileIndices)) throw new InvalidOperationException("Raster reader changed simulation.");
                 using var save = new MemoryStream(); world.Save(save); save.Position = 0; world.Load(save);
                 if (!indices.AsSpan().SequenceEqual(world.Soils.ProfileIndices) || stored != world.Environment.StoredWater)
                     throw new InvalidOperationException("Soil save/replay changed the raster or water.");
-                Console.WriteLine($"Soil raster UI smoke passed: categorical/water layers, paused image, read-only state and pinned save/replay. Captures: {output}");
+                Console.WriteLine($"Ecology raster UI smoke passed: soil/water/temperature/rain/humidity layers, paused images, read-only state and pinned save/replay. Captures: {output}");
             }
             finally { RenderDevice.Dispose(); }
         }

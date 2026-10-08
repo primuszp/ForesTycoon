@@ -150,6 +150,7 @@ namespace ForesTycoon
                 world.Update(1.0 / 30);
                 using var intact = new MemoryStream(); world.Save(intact);
                 var brokenSave = new WorldSaveData {
+                    Climate = ClimateDefinition.Legacy,
                     SoilModel = SoilModelData.From(SoilLandscapeDefinition.Default),
                     Terrain = TerrainSettingsData.From(TerrainSettings.Default.WithNodeSize(17, 42)),
                     Tick = 1, Commands = new() { new SpawnVehicleCommand().ToRecord(2) }

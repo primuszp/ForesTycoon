@@ -23,25 +23,25 @@ namespace ForesTycoon.Ecology
         internal double ForestYearSeconds { get; private set; }
 
         internal Ecosystem(IForestHabitat habitat, double forestYearSeconds = EcologyTime.DefaultGameSecondsPerYear,
-            SoilLandscapeDefinition soils = null)
+            SoilLandscapeDefinition soils = null, ClimateDefinition climate = null)
         {
             if (habitat == null) throw new ArgumentNullException(nameof(habitat));
             // Validate before allocating the forest, including direct diagnostic callers.
             if (!EcologyTime.IsValidForestYearSeconds(forestYearSeconds)) throw new ArgumentOutOfRangeException(nameof(forestYearSeconds));
             habitat = BindSoils(habitat, soils);
             Forest = new ForestSystem(habitat);
-            Attach(habitat, forestYearSeconds);
+            Attach(habitat, forestYearSeconds, climate);
         }
 
         /// <summary>Starts over on a new habitat (a regenerated or loaded map) at the given tempo.</summary>
-        internal void Reset(IForestHabitat habitat, double forestYearSeconds, SoilLandscapeDefinition soils = null)
+        internal void Reset(IForestHabitat habitat, double forestYearSeconds, SoilLandscapeDefinition soils = null, ClimateDefinition climate = null)
         {
             if (habitat == null) throw new ArgumentNullException(nameof(habitat));
             if (!EcologyTime.IsValidForestYearSeconds(forestYearSeconds)) throw new ArgumentOutOfRangeException(nameof(forestYearSeconds));
             habitat = BindSoils(habitat, soils);
             Forest.Environment = null;
             Forest.Reset(habitat);
-            Attach(habitat, forestYearSeconds);
+            Attach(habitat, forestYearSeconds, climate);
         }
 
         private IForestHabitat BindSoils(IForestHabitat habitat, SoilLandscapeDefinition definition)
@@ -51,12 +51,12 @@ namespace ForesTycoon.Ecology
             return landscape == null ? habitat : new SoilHabitat(habitat, landscape);
         }
 
-        private void Attach(IForestHabitat habitat, double forestYearSeconds)
+        private void Attach(IForestHabitat habitat, double forestYearSeconds, ClimateDefinition climate)
         {
             ForestYearSeconds = forestYearSeconds;
             Forest.Environment = null;
             Forest.UseEnvironmentTempo(forestYearSeconds);
-            Environment = new EnvironmentSystem(habitat, Forest, forestYearSeconds);
+            Environment = new EnvironmentSystem(habitat, Forest, forestYearSeconds, climate);
             coordinator = new ForestEnvironmentCoordinator(Forest, Environment);
         }
 
@@ -64,12 +64,13 @@ namespace ForesTycoon.Ecology
         internal void Update(double fixedDeltaSeconds) => coordinator.Update(fixedDeltaSeconds);
 
         internal EcologyCheckpoint Capture() => new(1, ForestYearSeconds, Soils?.Definition.Catalog.Hash,
-            Soils?.ProfileIndices.ToArray(), coordinator.Runtime.Capture(), Forest.Capture(), Environment.Capture());
+            Soils?.ProfileIndices.ToArray(), coordinator.Runtime.Capture(), Forest.Capture(), Environment.Capture(), Environment.Climate.Definition);
 
         // Caller restores an isolated ecosystem; failure must never publish partially restored state.
         internal void Restore(EcologyCheckpoint state)
         {
             ArgumentNullException.ThrowIfNull(state);
+            CheckpointGuard.Require((state.Climate ?? ClimateDefinition.Legacy) == Environment.Climate.Definition, "climate model");
             CheckpointGuard.Require(state.Version == 1 && state.ForestYearSeconds == ForestYearSeconds &&
                 state.SoilHash == Soils?.Definition.Catalog.Hash, "ecology model");
             if (Soils != null) CheckpointGuard.Require(state.SoilProfiles != null &&

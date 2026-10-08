@@ -35,17 +35,19 @@ namespace ForesTycoon
         internal GraphicsSettings Graphics { get; }
 
         public GameWorld(TerrainSettings settings, double forestYearSeconds = EcologyTime.DefaultGameSecondsPerYear,
-            SoilLandscapeDefinition soils = null)
-            : this(settings, new GraphicsSettings { AutomaticWeather = true }, forestYearSeconds, soils ?? SoilLandscapeDefinition.Default) { }
+            SoilLandscapeDefinition soils = null, ClimateDefinition climate = null)
+            : this(settings, new GraphicsSettings { AutomaticWeather = true }, forestYearSeconds, soils ?? SoilLandscapeDefinition.Default,
+                climate ?? ClimateDefinition.Default) { }
 
-        private GameWorld(TerrainSettings settings, GraphicsSettings graphics, double forestYearSeconds, SoilLandscapeDefinition soilModel)
+        private GameWorld(TerrainSettings settings, GraphicsSettings graphics, double forestYearSeconds, SoilLandscapeDefinition soilModel,
+            ClimateDefinition climate)
         {
             // Validate before allocating terrain/GPU resources, including direct diagnostic callers.
             if (!EcologyTime.IsValidForestYearSeconds(forestYearSeconds))
                 throw new ArgumentOutOfRangeException(nameof(forestYearSeconds));
             Graphics = graphics;
             terrain = new Terrain(settings ?? throw new ArgumentNullException(nameof(settings)));
-            ecosystem = new Ecosystem(map, forestYearSeconds, soilModel);
+            ecosystem = new Ecosystem(map, forestYearSeconds, soilModel, climate);
             timberCargo = systems.Add(new TimberCargoSystem());
             vehicles = systems.Add(new VehicleSystem(timberCargo, route => VehicleRoadRoute.Create(map, route)));
             effects = systems.Add(new WorldEffectSystem());
@@ -289,6 +291,7 @@ namespace ForesTycoon
                 TickRate = tickRate,
                 ForestYearSeconds = ecosystem.ForestYearSeconds,
                 SoilModel = SoilModelData.From(Soils.Definition),
+                Climate = Environment.Climate.Definition,
                 Tick = worldTick,
                 Terrain = TerrainSettingsData.From(terrain.Settings),
                 Commands = new List<WorldCommandRecord>(commandJournal),
@@ -302,7 +305,7 @@ namespace ForesTycoon
             save.ValidateReplay();
             var settings = save.Terrain.ToSettings();
             // Replay into an isolated world. Failure leaves the live world and queued commands intact.
-            using var candidate = new GameWorld(settings, Graphics, save.ReplayForestYearSeconds, save.ReplaySoilModel);
+            using var candidate = new GameWorld(settings, Graphics, save.ReplayForestYearSeconds, save.ReplaySoilModel, save.ReplayClimate);
             ulong startTick = save.Checkpoint?.Tick ?? 0;
             if (save.Checkpoint == null) candidate.Replay(save);
             else { candidate.RestoreCheckpoint(save.Checkpoint); candidate.ReplayTail(save); }
@@ -347,7 +350,7 @@ namespace ForesTycoon
             terrainRenderer.Dispose();
             terrain.Dispose();
             terrain = new Terrain(settings ?? throw new ArgumentNullException(nameof(settings)));
-            ecosystem.Reset(map, forestYearSeconds, SoilLandscapeDefinition.Default);
+            ecosystem.Reset(map, forestYearSeconds, SoilLandscapeDefinition.Default, ClimateDefinition.Default);
             wildlife = new WildlifeSystem();
             InitializeLogistics();
             terrainRenderer = new TerrainRenderer(terrain, vehicles, effects, forest, Graphics, Environment, wildlife, Logistics);

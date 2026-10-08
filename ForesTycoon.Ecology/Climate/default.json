@@ -1,0 +1,8 @@
+{
+  "GeneratorVersion": 1,
+  "RegionSizeTiles": 24,
+  "TemperatureContrast": 4.0,
+  "RainContrast": 0.35,
+  "ElevationCooling": 6.5,
+  "HumidityContrast": 0.1
+}

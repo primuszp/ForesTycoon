@@ -27,7 +27,8 @@ namespace ForesTycoon
         {
             // The historical v4 scenario must start with its original soil as well as its calendar.
             var soils = yearSeconds == 1200 ? SoilLandscapeDefinition.Legacy : SoilLandscapeDefinition.Default;
-            using var world = new GameWorld(TerrainSettings.Default, yearSeconds, soils);
+            using var world = new GameWorld(TerrainSettings.Default, yearSeconds, soils,
+                yearSeconds == 1200 ? ClimateDefinition.Legacy : ClimateDefinition.Default);
             var runner = new SimulationFrameRunner(30,2048,8);
             runner.Clock.Speed = 256;
             world.GetWorldBounds(out var min,out var max);

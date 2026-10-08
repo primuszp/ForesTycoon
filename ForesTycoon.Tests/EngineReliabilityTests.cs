@@ -42,7 +42,7 @@ public class EngineReliabilityTests
     public void ReplayValidationRejectsInvalidCommandOrder(bool future)
     {
         var command = new SpawnVehicleCommand();
-        var save = new WorldSaveData { Tick = 5, SoilModel = SoilModelData.From(SoilLandscapeDefinition.Default),
+        var save = new WorldSaveData { Climate = ClimateDefinition.Legacy, Tick = 5, SoilModel = SoilModelData.From(SoilLandscapeDefinition.Default),
             Commands = future ? [command.ToRecord(6)] : [command.ToRecord(4), command.ToRecord(3)] };
         Assert.Throws<InvalidDataException>(save.ValidateReplay);
     }
@@ -50,7 +50,7 @@ public class EngineReliabilityTests
     [Fact]
     public void PreviousEcologySaveVersionCannotReplayWithChangedGrowthRules()
     {
-        var save = new WorldSaveData { Version = 3 };
+        var save = new WorldSaveData { Climate = ClimateDefinition.Legacy, Version = 3 };
         Assert.Throws<NotSupportedException>(save.ValidateReplay);
     }
 

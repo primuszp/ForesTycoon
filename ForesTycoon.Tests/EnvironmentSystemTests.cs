@@ -121,7 +121,7 @@ public class EnvironmentSystemTests
     [Fact] public void WeatherCommandRoundTrip()
     {
         var command=new SetWeatherCommand(WeatherPreset.Storm,32,60);
-        var save=new WorldSaveData{SoilModel=SoilModelData.From(SoilLandscapeDefinition.Default),Commands=[command.ToRecord(17)]};
+        var save=new WorldSaveData{ Climate = ClimateDefinition.Legacy,SoilModel=SoilModelData.From(SoilLandscapeDefinition.Default),Commands=[command.ToRecord(17)]};
         using var stream=new MemoryStream();WorldSaveSerializer.Write(stream,save);stream.Position=0;
         var loaded=WorldSaveSerializer.Read(stream);Assert.Equal(WorldSaveData.CurrentVersion,loaded.Version);
         Assert.Equal(command.ToRecord(17),WorldCommandFactory.Create(loaded.Commands[0]).ToRecord(17));

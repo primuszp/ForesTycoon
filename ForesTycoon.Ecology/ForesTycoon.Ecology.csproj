@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Soil/profiles.json" />
+    <EmbeddedResource Include="Climate/default.json" />
     <InternalsVisibleTo Include="ForesTycoon" />
     <InternalsVisibleTo Include="ForesTycoon.TreeModels" />
     <InternalsVisibleTo Include="ForesTycoon.Effects" />

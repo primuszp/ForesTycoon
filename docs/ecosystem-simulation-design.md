@@ -127,6 +127,47 @@ próbálja a konvergáló áramlást, anyagmérleget, zárt mélyedést és feld
 Ez a meglévő egyirányú felszíni lefolyás moduláris alapja. A regionális klíma, több szomszéd
 közötti hidraulikus fluxus és talajvízáramlás továbbra is külön következő fejlesztés.
 
+## Megvalósult: regionális klíma és koherens erdő-LOD
+
+Az új világok `RegionalClimate` modulja a közös időjárási intervallumot helyi forcinggá alakítja.
+Külön seedcsatornán generált, simán interpolált hőmérsékleti és nedvességi foltok adják a
+regionális eltérést. A nedvességi folt a csapadékszorzót és páratartalmat módosítja; a terep
+aktuális relatív magassága helyi hűtést ad. A regionális mintát a terraform nem generálja újra.
+Az időjárási esemény, évszak és eseményhatáron darabolt integrál továbbra is közös idővonalról jön.
+
+Paraméterek: `ForesTycoon.Ecology/Climate/default.json`. A hőmérsékleti amplitúdó °C, a csapadék
+relatív amplitúdó, a hűtés °C a teljes normalizált magasságtartományra, a páratartalom 0–1
+arány. Ezek játékmeneti értékek, nem meteorológiai kalibráció vagy valódi méterenkénti hőgradiens.
+A helyi eső a vízkészleteket táplálja; a helyi hőmérséklet és páratartalom a párolgási és
+transzspirációs igényt módosítja, így a vízellátáson keresztül hat a növekedésre. A megváltozott
+csapadékot külön tényleges bemeneti mérleg összegzi: nem a háttéresőt szorozzuk a csempeszámmal.
+
+A szervezési minta az iLand [térbeli klíma-hozzárendelése](https://iland-model.org/wiki/climatedata.html):
+a helyi környezeti egységek klímabemenetet kapnak, amely kapcsolódik a vízfolyamathoz.
+Itt procedurális anomáliák futnak; nem vesszük át a kutatási modell napi adatbázisát és élettani modelljét.
+Az atmoszféra grafikai effektusai egyelőre a háttér-időjárást követik; külön helyi esőfelhők,
+szélirány, domborzati esőárnyék, lombkorona-mikroklíma és közvetlen fajfüggő hőstressz még nincs.
+
+A 9-es mentés rögzíti a teljes klímakonfigurációt és a regionális csapadékmérleget; hibás vagy
+hiányzó modell elutasításra kerül. A 4–8-as világok egységes klímával futnak tovább. A 8-as
+checkpoint hiányzó csapadékmérlege a régi egységes összefüggésből visszaállítható. A Környezet
+panel talaj/víz térképe hőmérséklet-, csapadékszorzó- és páratartalom-réteget, pontos csempeadatot ad.
+
+A zoomhiba oka az eltérő időpontban készült LOD-geometria fa-/termőhelybemenete és a tartalék
+szintek elavult GPU-időeltolása volt. A chunk friss LOD-jai most egy közös, fagyasztott
+morfológiai pillanatképet használnak, közös méret-, azonosító- és termőhelyadatokkal. A frissesség
+ellenőrzése és az aszinkron publikálás az aktuális növekedési/évszakos órát is frissíti.
+Az új pillanatkép érvényteleníti a korábbi LOD-családot, így nem lehet visszaváltani egy régi
+állapothoz. Ha egyik LOD sem friss még, az utoljára megjelenített szint marad látható az új
+pillanatkép elkészültéig, így a zoom nem válogat eltérő elavult állapotok között.
+A részletességi szintek eltérő tesszellációja továbbra is látható lehet.
+
+Ellenőrzés: regionális seed/reprodukálhatóság, simaság, helyi terraformhatás, vízmérleg,
+konfiguráció- és checkpoint-körutazás, pontos több hónapos folytatás. Natív próbák:
+`--checkpoint-smoke-test` (7–8 migráció mellett regionális egyedi konfiguráció),
+`--soil-raster-smoke-test` (öt réteg, szünetbeli képegyezés), `--forest-smoke-test`
+(később felépített élőfa-LOD, azonos pillanatképek/GPU-órák, zoom nem ír a szimulációba).
+
 ## Döntés és tudományos minták
 
 Térbeli hibrid modellt építünk: a csempékhez folytonos készletek és fluxusok, a fákhoz egyedi
@@ -358,9 +399,10 @@ Pontos ms-cél csak rögzített hardverprofil és reprezentatív fasűrűség ut
    Két talajhorizont és dinamikus/chunkos raszterpublikálás később.
 3. **Elkészült alap:** típusos folyamatfuttató a meglévő víz/erdő adapterével, változatlan
    referenciakimenet; teljes dinamikus checkpoint és naplórészlet, modellvalidálás és migráció.
-4. **Első lépcső elkészült:** elkülönített konzervatív felszíni vízfluxus és paraméterezett
-   lefolyási törvény, változatlan történeti eredménnyel. Regionális klíma, többirányú vízfluxus
-   és inkrementális vízgyűjtő/topológia frissítés következik.
+4. **Első lépcsők elkészültek:** elkülönített konzervatív felszíni vízfluxus és paraméterezett
+   lefolyási törvény, változatlan történeti eredménnyel; konfigurált regionális klíma, tényleges
+   csapadékmérleg és klímaképek. Többirányú vízfluxus, lombkorona-mikroklíma és inkrementális
+   vízgyűjtő/topológia frissítés következik.
 5. Fajkatalógus, fény/tápanyag/egészség folyamatok, vegyes fajaggregátumok és alkalmassági UI.
 6. Károsító/gazda modellek és valós rágási visszacsatolás; térképi magyarázat és emergens próbák.
 

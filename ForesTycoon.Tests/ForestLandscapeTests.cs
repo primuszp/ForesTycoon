@@ -38,7 +38,7 @@ public class ForestLandscapeTests
         var settings=TerrainSettings.Default.WithForestPattern(pattern).WithSeed(555).WithNodeSize(33,555);
         Assert.Equal(pattern,TerrainSettingsData.From(settings).ToSettings().ForestPattern);
         using var save=new System.IO.MemoryStream();
-        WorldSaveSerializer.Write(save,new WorldSaveData{SoilModel=SoilModelData.From(SoilLandscapeDefinition.Default),Terrain=TerrainSettingsData.From(settings)});
+        WorldSaveSerializer.Write(save,new WorldSaveData{ Climate = ClimateDefinition.Legacy,SoilModel=SoilModelData.From(SoilLandscapeDefinition.Default),Terrain=TerrainSettingsData.From(settings)});
         save.Position=0;
         Assert.Equal(pattern,WorldSaveSerializer.Read(save).Terrain.ToSettings().ForestPattern);
         Assert.Equal(ForestPattern.Natural,new TerrainSettingsData{NodeColumns=33,NodeRows=33,TileWidth=5,TileHeight=5,HeightScale=2,MinimumWaterDepth=0.04f,RiverWaterHeight=0.55f,SeaLevel=3,MaxHeight=6}.ToSettings().ForestPattern);

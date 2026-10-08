@@ -16,7 +16,7 @@ public class WorldSaveSerializerTests
     public void SaveVersionPreservesCalendarAndTerrainEditRules(int version, bool legacyEdits)
     {
         using var stream = new MemoryStream();
-        WorldSaveSerializer.Write(stream, new WorldSaveData { Version = version, ForestYearSeconds = 120 });
+        WorldSaveSerializer.Write(stream, new WorldSaveData { Climate = ClimateDefinition.Legacy, Version = version, ForestYearSeconds = 120 });
         stream.Position = 0;
         var loaded = WorldSaveSerializer.Read(stream);
         Assert.Equal(version, loaded.Version);
@@ -32,13 +32,13 @@ public class WorldSaveSerializerTests
     [Theory]
     [InlineData(0)] [InlineData(119)] [InlineData(1201)] [InlineData(double.NaN)]
     public void InvalidCalendarIsRejectedBeforeReplay(double tempo)
-        => Assert.Throws<InvalidOperationException>(() => new WorldSaveData { ForestYearSeconds = tempo }.ValidateReplay());
+        => Assert.Throws<InvalidOperationException>(() => new WorldSaveData { Climate = ClimateDefinition.Legacy, ForestYearSeconds = tempo }.ValidateReplay());
 
     [Fact]
     public void RoundTrip_PreservesVersionedSettingsAndCommandTicks()
     {
         WorldSaveData expected = new WorldSaveData
-        {
+        { Climate = ClimateDefinition.Legacy,
             SoilModel = SoilModelData.From(SoilLandscapeDefinition.Default),
             Tick = 12,
             TickRate = 30,

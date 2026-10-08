@@ -89,6 +89,7 @@ namespace ForesTycoon
                 CheckDeferredForestBuild();
                 CheckPagedForestUpload();
                 CheckDeadTreeLodState();
+                CheckGrowingForestLodState();
                 Console.WriteLine($"Forest GL smoke test passed: near={near}, medium={medium}, far={far} vertices; stable frames rebuild 0 chunks.");
             }
             finally
@@ -106,6 +107,31 @@ namespace ForesTycoon
             RenderMetrics.BeginFrame();
             terrain.DrawTrees(forest, context);
             return RenderMetrics.SubmittedVertices;
+        }
+
+        private static void CheckGrowingForestLodState()
+        {
+            using var terrain = new Terrain(TerrainSettings.Default.WithNodeSize(17, 42), (_, _) => 4);
+            var forest = new ForestSystem(terrain.Map);
+            var graphics = new GraphicsSettings { Enhanced = false };
+            Draw(terrain, forest, 12);
+            // Build previously missing LODs much later, while physical tree dimensions have grown.
+            forest.Update(.5);
+            terrain.WarmIndividualForest(forest, graphics);
+            Require(terrain.CheckForestLodConsistency(forest, graphics) > 0, "No cached LODs were compared.");
+            string before = System.Text.Json.JsonSerializer.Serialize(forest.Capture());
+            foreach (float zoom in new[] { 1f, 5f, 12f, 3f, 10f, 1f, 12f })
+            {
+                Draw(terrain, forest, zoom);
+                Require(terrain.CheckForestLodConsistency(forest, graphics) > 0, "Zoom discarded shared LOD state.");
+            }
+            Require(before == System.Text.Json.JsonSerializer.Serialize(forest.Capture()), "Zoom modified the forest simulation.");
+            // Exercise stale fallback and background publication after a real monthly state change.
+            forest.Update(10);
+            foreach (float zoom in new[] { 1f, 12f, 5f, 1f, 12f }) Draw(terrain, forest, zoom);
+            terrain.WarmIndividualForest(forest, graphics);
+            Require(terrain.CheckForestLodConsistency(forest, graphics) > 0, "Growth produced inconsistent LOD snapshots.");
+            Console.WriteLine("Living forest LOD: shared tree/site snapshots, current GPU clocks and read-only zoom passed.");
         }
 
         private static void Require(bool condition, string message)

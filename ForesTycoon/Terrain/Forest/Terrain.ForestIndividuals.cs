@@ -27,6 +27,7 @@ namespace ForesTycoon
             internal bool LightShapeDirty;
             internal ForestModelStyle ModelStyle;
             internal bool ImportedBirch;
+            internal Dictionary<int, ForestTreeStore.Patch> Snapshot;
             internal IndividualForestChunk(int count) => TileRevisions = new ulong[count];
             public void Dispose() {
                 Wood.Dispose(); Crowns.Dispose(); Floor.Dispose();
@@ -35,6 +36,8 @@ namespace ForesTycoon
         }
 
         private readonly Dictionary<(TerrainChunk, ForestLod), IndividualForestChunk> individualForestChunks = new();
+        private readonly Dictionary<TerrainChunk, Dictionary<int, ForestTreeStore.Patch>> forestLodSnapshots = new();
+        private readonly Dictionary<TerrainChunk, ForestLod> displayedForestLods = new();
         private readonly List<Vertex> individualWood = new(), individualCrowns = new(), individualFloor = new();
         private readonly List<ForestVertexGrowth> individualWoodGrowth = new(), individualCrownGrowth = new(), individualFloorGrowth = new();
         private sealed class ForestBuild : IDisposable
@@ -79,6 +82,31 @@ namespace ForesTycoon
                 foreach (var lod in Enum.GetValues<ForestLod>()) GetIndividualForestChunk(chunk, forest, graphics, lod, false, out _);
         }
 
+        // Native regression diagnostic: all current LODs must share a morphology epoch and GPU clock.
+        internal int CheckForestLodConsistency(ForestSystem forest, GraphicsSettings graphics)
+        {
+            int compared = 0;
+            foreach (var chunk in chunkIndex.Chunks)
+            {
+                IndividualForestChunk basis = null;
+                foreach (var lod in Enum.GetValues<ForestLod>())
+                {
+                    if (!individualForestChunks.TryGetValue((chunk, lod), out var geometry) || !IsFresh(geometry, chunk, forest, graphics)) continue;
+                    if (geometry.Wood.ForestCurrentYear != (float)forest.ForestYear ||
+                        Math.Abs(geometry.GrowthYear + geometry.Wood.ForestElapsedYears - forest.ForestYear) > 1e-6)
+                        throw new InvalidOperationException("LOD uses an outdated growth/phenology clock.");
+                    if (basis == null) { basis = geometry; continue; }
+                    if (!ReferenceEquals(basis.Snapshot, geometry.Snapshot) || basis.AnchorYear != geometry.AnchorYear ||
+                        basis.Trees.Count != geometry.Trees.Count)
+                        throw new InvalidOperationException("LOD changed its tree morphology snapshot.");
+                    for (int i = 0; i < basis.Trees.Count; i++)
+                        if (basis.Trees[i] != geometry.Trees[i]) throw new InvalidOperationException("LOD changed tree identity, size or site.");
+                    compared++;
+                }
+            }
+            return compared;
+        }
+
         /// <summary>
         /// Brings the cached geometry of <paramref name="lod"/> up to date. <paramref name="current"/> is false
         /// when only a stale copy is available yet (its replacement is being built in the background);
@@ -92,6 +120,7 @@ namespace ForesTycoon
             if (!individualForestChunks.TryGetValue((chunk, lod), out var geometry))
                 individualForestChunks.Add((chunk, lod), geometry = new(chunk.TileIds.Length));
             bool changed = !geometry.Initialized || geometry.TerrainVersion != chunk.PropVersion
+                || (forestLodSnapshots.TryGetValue(chunk, out var snapshot) && !ReferenceEquals(snapshot, geometry.Snapshot))
                 || forest.ForestYear >= geometry.NextStageYear
                 || geometry.Generation != forest.IndividualTrees.Generation
                 || geometry.ModelStyle != graphics.ForestModels || geometry.ImportedBirch != graphics.ImportedBirch;
@@ -165,6 +194,7 @@ namespace ForesTycoon
         private bool IsFresh(IndividualForestChunk geometry, TerrainChunk chunk, ForestSystem forest, GraphicsSettings graphics)
         {
             if (!geometry.Initialized || geometry.TerrainVersion != chunk.PropVersion
+                || !forestLodSnapshots.TryGetValue(chunk, out var snapshot) || !ReferenceEquals(snapshot, geometry.Snapshot)
                 || forest.ForestYear >= geometry.NextStageYear || geometry.Generation != forest.IndividualTrees.Generation
                 || geometry.ModelStyle != graphics.ForestModels || geometry.ImportedBirch != graphics.ImportedBirch) return false;
             if (geometry.ForestRevision != forest.Revision)
@@ -178,6 +208,7 @@ namespace ForesTycoon
                 geometry.ForestRevision = forest.Revision;
                 geometry.EditRevision = forest.EditRevision;
             }
+            SetIndividualForestElapsed(geometry, forest.ForestYear);
             return !geometry.LightShapeDirty;
         }
 
@@ -191,6 +222,7 @@ namespace ForesTycoon
             if (individualForestChunks.TryGetValue((chunk, target), out var wanted) && IsFresh(wanted, chunk, forest, graphics))
             {
                 GetIndividualForestChunk(chunk, forest, graphics, target, false, out _);
+                displayedForestLods[chunk] = target;
                 return target;
             }
             ForestLod? fallback = null;
@@ -201,8 +233,17 @@ namespace ForesTycoon
                 int distance = Math.Abs((int)lod - (int)target);
                 if (distance < bestDistance && IsFresh(other, chunk, forest, graphics)) { fallback = lod; bestDistance = distance; }
             }
+            // While every mesh is waiting for a new morphology epoch, keep the last displayed
+            // level. Zoom must not select a different stale epoch merely because no LOD is fresh.
+            if (!fallback.HasValue && displayedForestLods.TryGetValue(chunk, out var previous))
+            {
+                GetIndividualForestChunk(chunk, forest, graphics, previous, false, out _);
+                fallback = previous;
+            }
             GetIndividualForestChunk(chunk, forest, graphics, target, fallback.HasValue, out bool current);
-            return current || fallback is null ? target : fallback.Value;
+            var displayed = current || fallback is null ? target : fallback.Value;
+            displayedForestLods[chunk] = displayed;
+            return displayed;
         }
 
         private static void SetIndividualForestElapsed(IndividualForestChunk geometry, double year)
@@ -225,6 +266,7 @@ namespace ForesTycoon
             if (build == null) return;
             var geometry = build.Geometry;
             bool obsolete = geometry.Generation != forest.IndividualTrees.Generation
+                || !forestLodSnapshots.TryGetValue(build.Chunk, out var snapshot) || !ReferenceEquals(snapshot, geometry.Snapshot)
                 || geometry.TerrainVersion != build.Chunk.PropVersion || geometry.EditRevision != forest.EditRevision
                 || geometry.ModelStyle != graphics.ForestModels || geometry.ImportedBirch != graphics.ImportedBirch;
             for (int i = 0; i < build.Chunk.TileIds.Length && !obsolete; i++)
@@ -240,6 +282,7 @@ namespace ForesTycoon
                 {
                     UpdateIndividualForestState(geometry, forest);
                     geometry.ForestRevision = forest.Revision;
+                    SetIndividualForestElapsed(geometry, forest.ForestYear);
                     geometry.Initialized = true;
                     var key = (build.Chunk, build.Lod);
                     individualForestChunks[key].Dispose();
@@ -311,7 +354,14 @@ namespace ForesTycoon
         {
             individualWood.Clear(); individualCrowns.Clear(); individualFloor.Clear();
             individualWoodGrowth.Clear(); individualCrownGrowth.Clear(); individualFloorGrowth.Clear();
-            geometry.AnchorYear = forest.ForestYear;
+            // Every LOD is a tessellation of the same frozen tree/site snapshot. Building a
+            // missing LOD from today's dimensions would change morphology when zooming.
+            IndividualForestChunk basis = null;
+            foreach (var level in Enum.GetValues<ForestLod>())
+                if (individualForestChunks.TryGetValue((chunk, level), out var cached) &&
+                    !ReferenceEquals(cached, geometry) && IsFresh(cached, chunk, forest, graphics))
+                { basis = cached; break; }
+            geometry.AnchorYear = basis?.AnchorYear ?? forest.ForestYear;
             geometry.NextStageYear = double.PositiveInfinity;
             geometry.Trees.Clear();
             geometry.TerrainVersion = chunk.PropVersion;
@@ -319,13 +369,16 @@ namespace ForesTycoon
             geometry.EditRevision = forest.EditRevision;
             geometry.ModelStyle = graphics.ForestModels;
             geometry.ImportedBirch = graphics.ImportedBirch;
-            var snapshots = new Dictionary<int, ForestTreeStore.Patch>();
+            var snapshots = basis?.Snapshot ?? new Dictionary<int, ForestTreeStore.Patch>();
+            geometry.Snapshot = snapshots;
+            forestLodSnapshots[chunk] = snapshots;
             for (int i = 0; i < chunk.TileIds.Length; i++)
             {
                 int id = chunk.TileIds[i];
                 geometry.TileRevisions[i] = 0;
                 if (!forest.IndividualTrees.TryGet(id, out var source)) continue;
                 geometry.TileRevisions[i] = source.TopologyRevision;
+                if (basis != null) continue;
                 var snapshot = new ForestTreeStore.Patch(source.Count) { Count = source.Count };
                 Array.Copy(source.Trees, snapshot.Trees, source.Count);
                 if (source.DeadTrees != null) snapshot.DeadTrees = new(source.DeadTrees);
@@ -480,6 +533,8 @@ namespace ForesTycoon
             importedForestModels.Dispose();
             foreach (var chunk in individualForestChunks.Values) chunk.Dispose();
             individualForestChunks.Clear();
+            forestLodSnapshots.Clear();
+            displayedForestLods.Clear();
             individualWood.Clear(); individualCrowns.Clear(); individualFloor.Clear();
             individualWoodGrowth.Clear(); individualCrownGrowth.Clear(); individualFloorGrowth.Clear();
         }

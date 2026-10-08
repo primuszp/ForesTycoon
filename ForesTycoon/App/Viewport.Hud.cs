@@ -575,15 +575,15 @@ namespace ForesTycoon
 
             HudTheme.IconText(WeatherIcon(environment.Preset),
                 $"{WeatherName(environment.Preset)} · még {Math.Max(0, environment.EventEnd - environment.Time):0} s", HudTheme.AmberAccent);
-            HudTheme.KeyValue("Csapadék", $"{environment.RainRate:0.0} mm/óra");
+            HudTheme.KeyValue("Háttércsapadék", $"{environment.RainRate:0.0} mm/óra");
             HudTheme.KeyValue("Esemény", $"{environment.EventRain:0.00} / {environment.ExpectedEventRain:0.00} mm");
-            HudTheme.KeyValue("Hőmérséklet", $"{environment.Temperature:0.0} °C");
+            HudTheme.KeyValue("Háttér-hőmérséklet", $"{environment.Temperature:0.0} °C");
             HudTheme.KeyValue("Szél", $"{environment.WindSpeed:0.0} m/s");
             HudTheme.KeyValue("Besugárzás", $"{environment.Radiation * 100:0}%");
             HudTheme.Meter("Gyökérzóna átlagos víztelítettsége", (float)environment.MeanSoil, $"{environment.MeanSoil * 100:0}%",
                 new NVec4(0.36f, 0.62f, 0.86f, 1f));
-            ImGui.TextDisabled("1 erdőév = 20 perc · 1 játékperc = 1 vízóra");
-            if (world.Soils != null && ImGui.CollapsingHeader("Talaj és víz térképe"))
+            ImGui.TextDisabled($"1 erdőév = {environment.ForestYearSeconds / 60:0.#} játékperc");
+            if (world.Soils != null && ImGui.CollapsingHeader("Talaj, víz és klíma térképe"))
                 EcologyRasterView.Draw(world.Soils, environment, ref ecologyRasterLayer, ref ecologyRasterSelection);
 
             int id = world.HoveredTileId;
@@ -592,6 +592,10 @@ namespace ForesTycoon
                 var cell = environment.Cell(id);
                 ImGui.SeparatorText($"Csempe {id}");
                 if (world.Soils != null) HudTheme.KeyValue("Talaj", world.Soils.Profile(id).Name);
+                var local = environment.ClimateAt(id);
+                HudTheme.KeyValue("Helyi hőmérséklet", $"{local.Forcing.Temperature:0.0} °C");
+                HudTheme.KeyValue("Helyi csapadék", $"{environment.RainRate * local.RainMultiplier:0.0} mm/óra");
+                HudTheme.KeyValue("Páratartalom", $"{local.Forcing.Humidity:P0}");
                 HudTheme.Meter("Gyökérzóna", (float)(cell.Soil / cell.Capacity), $"{cell.Soil:0.0} / {cell.Capacity:0} mm", new NVec4(0.36f, 0.62f, 0.86f, 1f));
                 HudTheme.KeyValue("Felszíni víz", $"{cell.Surface:0.00} mm");
                 HudTheme.KeyValue("Koronavíz", $"{cell.Canopy:0.00} mm");

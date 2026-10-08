@@ -8,7 +8,8 @@ namespace ForesTycoon.Ecology
     internal sealed record RuntimeCheckpoint(double Time, double PendingSeconds, ulong CompletedSteps);
     internal sealed record EnvironmentCheckpoint(double[][] Fields, double Remainder, double MonthSeconds,
         double RadiationIntegral, double Evaporated, double Transpired, double Outflow, double InitialWater,
-        ulong Revision, WeatherCheckpoint Weather, ForestHydrologyInputs[] Vegetation, ulong VegetationRevision);
+        ulong Revision, WeatherCheckpoint Weather, ForestHydrologyInputs[] Vegetation, ulong VegetationRevision,
+        double? RainReceived = null);
     internal sealed record TreePatchCheckpoint(int TileId, ForestTree[] Trees, ForestTreeStump[] Stumps,
         ForestDeadTree[] DeadTrees, float Depot, ulong Revision, ulong TopologyRevision);
     internal sealed record TreeStoreCheckpoint(TreePatchCheckpoint[] Patches, ulong NextId, ulong TopologyRevision,
@@ -19,7 +20,7 @@ namespace ForesTycoon.Ecology
         ForestStand[] Stands, TreeStoreCheckpoint Trees, PlantationCheckpoint[] Plantations,
         CompetitionCheckpoint Competition, PreparationCheckpoint Preparation);
     internal sealed record EcologyCheckpoint(int Version, double ForestYearSeconds, string SoilHash, byte[] SoilProfiles,
-        RuntimeCheckpoint Clock, ForestCheckpoint Forest, EnvironmentCheckpoint Environment);
+        RuntimeCheckpoint Clock, ForestCheckpoint Forest, EnvironmentCheckpoint Environment, ClimateDefinition Climate = null);
 
     internal sealed partial class EnvironmentSystem
     {
@@ -27,7 +28,7 @@ namespace ForesTycoon.Ecology
             demandIntegral, uptakeIntegral, uptakeRate, demandRate };
         internal EnvironmentCheckpoint Capture() => new(StateFields.Select(a => (double[])a.Clone()).ToArray(),
             remainder, monthSeconds, radiationIntegral, Evaporated, Transpired, Outflow, InitialWater, Revision, weather.Capture(),
-            (ForestHydrologyInputs[])vegetation.Clone(), vegetationRevision);
+            (ForestHydrologyInputs[])vegetation.Clone(), vegetationRevision, RainReceived);
 
         internal void Restore(EnvironmentCheckpoint state)
         {
@@ -56,12 +57,16 @@ namespace ForesTycoon.Ecology
                 CheckpointGuard.NonNegative(input.LeafAreaIndex, "leaf area index");
             }
             weather.Restore(state.Weather);
+            CheckpointGuard.Require(Climate.Uniform || state.RainReceived.HasValue, "regional rain ledger");
+            regionalRainReceived = state.RainReceived ?? weather.TotalRain * CellCount;
+            CheckpointGuard.NonNegative(regionalRainReceived, "received precipitation");
+            if (Climate.Uniform) CheckpointGuard.Require(regionalRainReceived == weather.TotalRain * CellCount, "uniform precipitation ledger");
             for (int i = 0; i < fields.Length; i++) state.Fields[i].CopyTo(fields[i], 0);
             remainder = state.Remainder; monthSeconds = state.MonthSeconds; radiationIntegral = state.RadiationIntegral;
             Evaporated = state.Evaporated; Transpired = state.Transpired; Outflow = state.Outflow; Revision = state.Revision;
             state.Vegetation.CopyTo(vegetation, 0); vegetationRevision = state.VegetationRevision;
             surfaceFlux.Cancel(); RefreshRouting(); Summarize();
-            double scale = Math.Max(1, InitialWater + TotalRain * CellCount);
+            double scale = Math.Max(1, InitialWater + RainReceived);
             CheckpointGuard.Require(Math.Abs(BalanceError) <= scale * 1e-9, "water balance");
         }
     }
