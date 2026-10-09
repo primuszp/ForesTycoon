@@ -40,6 +40,16 @@ namespace ForesTycoon
             new(0.498f, 0.616f, 0.690f, 1)  // winter #7F9DB0
         };
         private static readonly string[] SeasonNames = { "tavasz", "nyár", "ősz", "tél" };
+        private static readonly string[] MonthNames = { "márc.", "ápr.", "máj.", "jún.", "júl.", "aug.", "szept.", "okt.", "nov.", "dec.", "jan.", "febr." };
+
+        /// <summary>The calendar date: the forest year starts with spring (March); twelve 30-day months.</summary>
+        private string DateText()
+        {
+            var (year, _, _, fraction) = Calendar();
+            float months = fraction * 12;
+            int month = Math.Clamp((int)months, 0, 11), day = 1 + Math.Clamp((int)((months - month) * 30), 0, 29);
+            return $"{year}. év {MonthNames[month]} {day}.";
+        }
         private static readonly string[] SeasonArrived = { "a tavasz", "a nyár", "az ősz", "a tél" };
         private static readonly string[] SeasonAdverb = { "Tavasszal", "Nyáron", "Ősszel", "Télen" };
 
@@ -257,7 +267,7 @@ namespace ForesTycoon
             ImGui.SameLine(0, 14);
             var (_, season, part, _) = Calendar();
             ImGui.BeginGroup();
-            ImGui.TextColored(HudTheme.Muted, simulationClock.IsPaused ? "Szünet" : $"{simulationClock.Speed:0}× · {SeasonNames[season]}");
+            ImGui.TextColored(HudTheme.Muted, (simulationClock.IsPaused ? "Szünet" : $"{simulationClock.Speed:0}×") + $" · {DateText()}");
             var p = ImGui.GetCursorScreenPos();
             var dl = ImGui.GetWindowDrawList();
             dl.AddRectFilled(p + new NVec2(0, 4), p + new NVec2(110, 9), ImGui.ColorConvertFloat4ToU32(new NVec4(0.17f, 0.21f, 0.18f, 1)), 3f);
