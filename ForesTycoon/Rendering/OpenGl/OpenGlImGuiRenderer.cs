@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Runtime.CompilerServices;
 using ImGuiNET;
 using OpenTK.Graphics.OpenGL;
@@ -12,6 +13,8 @@ namespace ForesTycoon.OpenGl
         private int shader;
         private int projLoc, texLoc;
         private int fontTexture;
+        private int iconTexture;
+        private IntPtr iconContext;
         private static readonly int VertSize = Unsafe.SizeOf<ImDrawVert>();
         public void Initialize(ImGuiIOPtr io)
         {
@@ -42,6 +45,34 @@ namespace ForesTycoon.OpenGl
             GL.BindVertexArray(0);
 
             RecreateFontDeviceTexture(io);
+            CreateIconTexture();
+        }
+
+        private void CreateIconTexture()
+        {
+            using var stream = typeof(GameIcons).Assembly.GetManifestResourceStream("ForesTycoon.ForestIconsTransport.png")
+                ?? throw new InvalidOperationException("Missing forest icon artwork.");
+            using var data = new MemoryStream();
+            stream.CopyTo(data);
+            var image = PngImage.Decode(data.ToArray());
+            if (image.Width != 1448 || image.Height != 1086)
+                throw new InvalidOperationException("Forest icon artwork dimensions do not match the source regions.");
+            iconTexture = GL.GenTexture();
+            GL.GetInteger(GetPName.TextureBinding2D, out int previousTexture);
+            try
+            {
+                GL.BindTexture(TextureTarget.Texture2D, iconTexture);
+                GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba, image.Width, image.Height, 0,
+                    PixelFormat.Rgba, PixelType.UnsignedByte, image.Pixels);
+                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.LinearMipmapLinear);
+                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Linear);
+                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
+                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
+                GL.GenerateMipmap(GenerateMipmapTarget.Texture2D);
+                iconContext = ImGui.GetCurrentContext();
+                GameIconAtlas.Register(iconContext, (IntPtr)iconTexture);
+            }
+            finally { GL.BindTexture(TextureTarget.Texture2D, previousTexture); }
         }
 
         private static int BuildShader()
@@ -171,6 +202,8 @@ void main()
 
         public void Dispose()
         {
+            GameIconAtlas.Unregister(iconContext);
+            GL.DeleteTexture(iconTexture);
             GL.DeleteVertexArray(vao);
             GL.DeleteBuffer(vbo);
             GL.DeleteBuffer(ebo);

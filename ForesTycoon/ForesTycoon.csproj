@@ -12,6 +12,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Assets/UI/forest-icons-transport.png" LogicalName="ForesTycoon.ForestIconsTransport.png" />
     <Using Include="ForesTycoon.Engine" />
     <Using Include="ForesTycoon.Ecology" />
     <Using Include="ForesTycoon.TreeModels" />

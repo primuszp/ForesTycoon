@@ -17,10 +17,9 @@ namespace ForesTycoon
     }
 
     /// <summary>
-    /// Vector icon set drawn straight into ImGui draw lists. No icon font or image asset is
-    /// needed, the icons stay crisp at any DPI, and each one carries its own semantic colours
-    /// (leaf green, timber brown, water blue, warning red) on top of the neutral line colour.
-    /// Every icon is laid out on a unit square and scaled to the requested size.
+    /// Shared game icon entry point. The ImageGen transport artwork supplies all 46 icons;
+    /// the original vector definitions remain available to renderers without an atlas.
+    /// Each symbol keeps its semantic colours and scales inside the requested square.
     /// </summary>
     internal static class GameIcons
     {
@@ -44,6 +43,7 @@ namespace ForesTycoon
         /// <summary>Draws an icon inside the square at <paramref name="origin"/> with side <paramref name="size"/>.</summary>
         internal static void Draw(ImDrawListPtr dl, GameIcon icon, NVec2 origin, float size, uint ink)
         {
+            if (GameIconAtlas.Draw(dl, icon, origin, size, ink)) return;
             var c = new Canvas(dl, origin, size, ink);
             switch (icon)
             {
