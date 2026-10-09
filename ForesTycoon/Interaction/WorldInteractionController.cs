@@ -32,12 +32,15 @@ namespace ForesTycoon
             set => brushStrength = value > 0 ? value : throw new ArgumentOutOfRangeException(nameof(value));
         }
         public bool IsRoadDragging => roadDragStartTileId >= 0;
+        public int RoadDragStartTileId => roadDragStartTileId;
         public bool IsForestryDragging => forestryDragStartTileId >= 0;
         public bool IsRoadRemoval { get; private set; }
         public ForestSpecies PlantingSpecies { get; set; } = ForestSpecies.Spruce;
+        /// <summary>Surface the road tool lays.</summary>
+        public RoadPaving RoadSurface { get; set; } = RoadPaving.Macadam;
 
         public static bool IsRoadTool(TerrainEditTool tool) =>
-            tool == TerrainEditTool.Road || tool == TerrainEditTool.RoadRemove;
+            tool == TerrainEditTool.Road || tool == TerrainEditTool.RoadRemove || tool == TerrainEditTool.RoadRepair;
 
         public static bool IsForestryTool(TerrainEditTool tool) =>
             tool == TerrainEditTool.PlantForest || tool == TerrainEditTool.HarvestForest;
@@ -75,7 +78,8 @@ namespace ForesTycoon
             }
 
             if (!IsRoadDragging) return;
-            world.SetRoadPreview(roadDragStartTileId, world.HoveredTileId, IsRoadRemoval);
+            if (ActiveTool == TerrainEditTool.RoadRepair) world.SetRoadRepairPreview(roadDragStartTileId, world.HoveredTileId);
+            else world.SetRoadPreview(roadDragStartTileId, world.HoveredTileId, IsRoadRemoval);
         }
 
         /// <returns>True when the active world-edit tool consumed the release.</returns>
@@ -86,7 +90,11 @@ namespace ForesTycoon
             {
                 int endTileId = world.HoveredTileId;
                 if (IsRoadDragging && endTileId >= 0)
-                    world.QueueRoadPath(roadDragStartTileId, endTileId, IsRoadRemoval);
+                {
+                    if (ActiveTool == TerrainEditTool.RoadRepair) world.QueueRoadRepair(roadDragStartTileId, endTileId);
+                    else if (IsRoadRemoval) world.QueueRoadPath(roadDragStartTileId, endTileId, true);
+                    else world.QueueRoadPath(roadDragStartTileId, endTileId, false, RoadSurface);
+                }
                 CancelGesture();
                 return true;
             }

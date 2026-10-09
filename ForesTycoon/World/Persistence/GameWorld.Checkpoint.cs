@@ -6,7 +6,7 @@ namespace ForesTycoon
     {
         internal WorldCheckpointData CaptureCheckpoint() => new(1, worldTick, commandJournal.Count - commands.Count,
             commands.Count, map.Capture(), ecosystem.Capture(), wildlife.Capture(), Logistics.Capture(), vehicles.Capture(),
-            timberCargo.Available, timberCargo.Delivered, effects.Capture(), lastForestryAction, lastForestryArea);
+            timberCargo.Available, timberCargo.Delivered, effects.Capture(), lastForestryAction, lastForestryArea, Expenses);
 
         private void RestoreCheckpoint(WorldCheckpointData s)
         {
@@ -18,7 +18,8 @@ namespace ForesTycoon
             vehicles.Restore(s.Vehicles, map.Tiles.Count); wildlife.Restore(s.Wildlife, map.Tiles.Count); effects.Restore(s.Effects);
             foreach (var v in vehicles.Vehicles)
                 if (v.LocalCargo) CheckpointGuard.Require(Logistics.Mills.Exists(m => m.TileId == v.SawmillTileId), "truck destination");
-            worldTick = s.Tick; lastForestryAction = s.LastAction; lastForestryArea = s.LastArea;
+            CheckpointGuard.NonNegative(s.Expenses, "expenses");
+            worldTick = s.Tick; lastForestryAction = s.LastAction; lastForestryArea = s.LastArea; Expenses = s.Expenses;
             terrainRenderer.Dispose();
             terrainRenderer = new TerrainRenderer(terrain, vehicles, effects, forest, Graphics, Environment, wildlife, Logistics);
         }

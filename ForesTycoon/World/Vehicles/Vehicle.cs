@@ -26,6 +26,11 @@ namespace ForesTycoon
         public VehicleRoadRoute RoadRoute { get; }
         public double CurrentSpeed { get; private set; }
         internal TruckSpec Spec { get; } = TruckSpec.Default;
+        internal Func<int, (RoadSurface Surface, float Condition)> RoadState;
+        internal Action<int, float> RoadWear;
+        /// <summary>Wear of the road under the truck (0 new … 1 ruined): it slows the truck and shakes it.</summary>
+        public float RoadDamage { get; private set; }
+        private int wornTile = -1;
         /// <summary>Diesel burnt so far, litres.</summary>
         public double FuelUsed { get; private set; }
         /// <summary>Distance driven so far, metres.</summary>
@@ -113,11 +118,13 @@ namespace ForesTycoon
                 // Physical dynamics in metres: tractive force against rolling, grade and air resistance.
                 double metres = MetresPerTile;
                 double braking = Spec.Braking / metres;
-                double target = Math.Min(RoadRoute.TargetSpeed(RoutePosition, SpeedTilesPerSecond, CargoFill),
+                var (surface, damage) = RoadUnderTruck();
+                // A worn road is driven slower and rolls heavier: potholes add to the geometric roughness.
+                double target = Math.Min(RoadRoute.TargetSpeed(RoutePosition, SpeedTilesPerSecond, CargoFill) * (1 - 0.55 * damage),
                     Math.Sqrt(2 * braking * remaining));
                 double before = CurrentSpeed;
                 var (speed, fuel) = VehicleDynamics.Step(Spec, Mass, (float)(CurrentSpeed * metres), (float)(target * metres),
-                    RoadRoute.Grade(RoutePosition), RoadRoute.Surface, RoadRoute.Roughness(RoutePosition, 1f), (float)dt);
+                    RoadRoute.Grade(RoutePosition), surface, Math.Max(RoadRoute.Roughness(RoutePosition, 1f), damage), (float)dt);
                 CurrentSpeed = speed / metres;
                 FuelUsed += fuel;
                 double travel = (before + CurrentSpeed) * 0.5 * dt;
@@ -130,6 +137,22 @@ namespace ForesTycoon
                 }
                 RoutePosition += travel;
             }
+        }
+
+        private (RoadSurface Surface, float Damage) RoadUnderTruck()
+        {
+            GetSegment(RoutePosition, out int from, out int to, out float amount);
+            int tile = amount < 0.5f ? from : to;
+            if (tile != wornTile)
+            {
+                // Each tile entered is one pass: heavier trucks wear the road more.
+                if (wornTile >= 0) RoadWear?.Invoke(tile, 0.0015f * Mass / 36000f);
+                wornTile = tile;
+            }
+            if (RoadState == null) { RoadDamage = 0; return (RoadRoute.Surface, 0); }
+            var (surface, condition) = RoadState(tile);
+            RoadDamage = Math.Clamp(1 - condition, 0, 1);
+            return (surface, RoadDamage);
         }
 
         public double InterpolatedRoutePosition(float alpha) =>

@@ -38,12 +38,37 @@ namespace ForesTycoon
                     foreach (Tile tile in visibleTiles)
                     {
                         if (!roads.Has(tile.Id)) continue;
-                        RoadSurface(tile, roads.GetEdges(tile.Id), RoadSurfaceWidthFactor, RoadSurfaceColor);
+                        RoadSurface(tile, roads.GetEdges(tile.Id), RoadSurfaceWidthFactor, RoadColor(tile.Id));
+                    }
+                });
+
+                // Potholes and ruts on worn tiles: darker patches that grow with the damage.
+                DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () =>
+                {
+                    foreach (Tile tile in visibleTiles)
+                    {
+                        if (!roads.Has(tile.Id)) continue;
+                        float damage = 1 - roads.GetCondition(tile.Id);
+                        if (damage > 0.2f) DrawRoadPotholes(tile, damage, roads.GetPaving(tile.Id));
                     }
                 });
             }
 
-            if (previewTiles.Count > 0)
+            if (previewTiles.Count > 0 && previewRepair)
+            {
+                using (RenderDevice.CreateStateScope().AlphaBlend())
+                    DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () =>
+                    {
+                        foreach (TerrainMap.RoadPlanStep step in previewTiles)
+                        {
+                            if (!roads.Has(step.TileId)) continue;
+                            bool worn = roads.GetCondition(step.TileId) < 0.995f;
+                            RoadSurface(tiles[step.TileId], roads.GetEdges(step.TileId), RoadShoulderWidthFactor,
+                                worn ? Color.FromArgb(120, 255, 196, 64) : Color.FromArgb(50, 255, 255, 255));
+                        }
+                    });
+            }
+            else if (previewTiles.Count > 0)
             {
                 Color okFill = Color.FromArgb(70, 255, 255, 255), okLine = Color.FromArgb(235, 255, 255, 255);
                 Color foundationFill = Color.FromArgb(85, 245, 225, 140), foundationLine = Color.FromArgb(245, 245, 225, 140);
@@ -85,6 +110,41 @@ namespace ForesTycoon
                 }
             }
         }
+        private static readonly Color MacadamColor = Color.FromArgb(150, 141, 122);
+
+        /// <summary>Asphalt is grey, macadam a light gravel; both fade toward dusty earth as they wear.</summary>
+        private Color RoadColor(int tileId)
+        {
+            Color baseColor = roads.GetPaving(tileId) == RoadPaving.Asphalt ? RoadSurfaceColor : MacadamColor;
+            float damage = 1 - roads.GetCondition(tileId);
+            if (damage <= 0) return baseColor;
+            Color worn = roads.GetPaving(tileId) == RoadPaving.Asphalt ? Color.FromArgb(132, 128, 118) : Color.FromArgb(128, 108, 82);
+            float t = Math.Clamp(damage, 0, 1) * 0.85f;
+            return Color.FromArgb((int)(baseColor.R + (worn.R - baseColor.R) * t), (int)(baseColor.G + (worn.G - baseColor.G) * t),
+                (int)(baseColor.B + (worn.B - baseColor.B) * t));
+        }
+
+        /// <summary>A few dark potholes scattered on the lane, deterministic per tile; more and larger as the damage grows.</summary>
+        private void DrawRoadPotholes(Tile t, float damage, RoadPaving surface)
+        {
+            RoadFootprintCorners(t, out Vector3 W, out Vector3 S, out Vector3 E, out Vector3 N);
+            Color hole = surface == RoadPaving.Asphalt ? Color.FromArgb(70, 70, 72) : Color.FromArgb(96, 78, 56);
+            DynamicPrimitiveBatch.Color4(hole);
+            int count = (int)MathF.Ceiling((damage - 0.2f) * 10);
+            uint seed = (uint)t.Id * 2654435761u;
+            float size = 0.035f + 0.05f * damage;
+            for (int i = 0; i < count; i++)
+            {
+                seed = seed * 1664525u + 1013904223u; float u = 0.35f + 0.3f * (seed >> 8) / 16777216f;
+                seed = seed * 1664525u + 1013904223u; float v = 0.35f + 0.3f * (seed >> 8) / 16777216f;
+                Vector3 lift = new Vector3(0, 0, 0.012f);
+                DynamicPrimitiveBatch.Vertex3(TileUV(W, S, E, N, u - size, v - size) + lift);
+                DynamicPrimitiveBatch.Vertex3(TileUV(W, S, E, N, u + size, v - size) + lift);
+                DynamicPrimitiveBatch.Vertex3(TileUV(W, S, E, N, u + size, v + size) + lift);
+                DynamicPrimitiveBatch.Vertex3(TileUV(W, S, E, N, u - size, v + size) + lift);
+            }
+        }
+
         private void RoadSurface(Tile t, RoadEdge edges, float widthFactor, Color color)
         {
             // A befagyasztott vezetőfelület magasságán renderelünk (foundation), nem a

@@ -13,7 +13,8 @@ namespace ForesTycoon
         PlantForestArea,
         HarvestForestArea,
         SetWeather,
-        PlaceSawmill
+        PlaceSawmill,
+        RoadRepair
     }
 
     readonly record struct WorldCommandRecord(

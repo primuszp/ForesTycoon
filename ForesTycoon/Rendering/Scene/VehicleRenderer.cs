@@ -34,7 +34,7 @@ namespace ForesTycoon
                             (float)(routePosition * vehicle.RoadRoute.TileLength / (0.23*scale)),
                             vehicle.RoadRoute.BodyCurvature(routePosition,importedModel.Wheelbase*scale),
                             VehicleVisualMotion.Suspension(routePosition*vehicle.RoadRoute.TileLength,
-                                (float)vehicle.CurrentSpeed,vehicle.RoadRoute.Roughness(routePosition,importedModel.Wheelbase*scale),vehicle.CargoFill));
+                                (float)vehicle.CurrentSpeed,Math.Max(vehicle.RoadRoute.Roughness(routePosition,importedModel.Wheelbase*scale),vehicle.RoadDamage),vehicle.CargoFill));
                         continue;
                     }
                     vehicle.GetSegment(vehicle.InterpolatedRoutePosition(interpolationAlpha),

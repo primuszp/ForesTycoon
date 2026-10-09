@@ -15,6 +15,14 @@ namespace ForesTycoon
         // Húzás közbeni előnézet csempéi (remove = bontás, piros előnézet).
         private readonly List<TerrainMap.RoadPlanStep> previewTiles = new List<TerrainMap.RoadPlanStep>();
         private bool previewRemove;
+        // Repair preview: worn road tiles on the dragged path light up, the rest stay as they are.
+        private bool previewRepair;
+
+        public void SetRoadRepairPreview(int startTileId, int endTileId)
+        {
+            SetRoadPreview(startTileId, endTileId, false);
+            previewRepair = true;
+        }
 
         public void SetRoadPreview(int startTileId, int endTileId, bool remove)
         {
@@ -26,7 +34,7 @@ namespace ForesTycoon
         public void SetRoadPreview(Tile a, Tile b, bool remove)
         {
             previewTiles.Clear();
-            previewRemove = remove;
+            previewRemove = remove; previewRepair = false;
             previewTiles.AddRange(map.BuildRoadPlan(a, b));
         }
         public void ClearRoadPreview() => previewTiles.Clear();

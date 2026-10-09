@@ -7,6 +7,10 @@ namespace ForesTycoon
         int SelectedNodeId { get; }
         void QueueElevationEdit(int nodeId, int delta, int radius, int strength);
         void QueueRoadPath(int startTileId, int endTileId, bool remove);
+        void QueueRoadPath(int startTileId, int endTileId, bool remove, RoadPaving surface) =>
+            QueueRoadPath(startTileId, endTileId, remove);
+        void QueueRoadRepair(int startTileId, int endTileId) => throw new System.NotSupportedException();
+        void SetRoadRepairPreview(int startTileId, int endTileId) { }
         void QueuePlantForest(int tileId, ForestSpecies species);
         void QueueHarvestForest(int tileId);
         void QueuePlantForestArea(int startTileId, int endTileId, ForestSpecies species);

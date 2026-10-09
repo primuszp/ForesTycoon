@@ -31,17 +31,35 @@ namespace ForesTycoon
         private readonly int startTileId;
         private readonly int endTileId;
         private readonly bool remove;
+        private readonly RoadPaving surface;
 
-        public RoadPathCommand(int startTileId, int endTileId, bool remove)
+        public RoadPathCommand(int startTileId, int endTileId, bool remove, RoadPaving surface = RoadPaving.Asphalt)
         {
             this.startTileId = startTileId;
             this.endTileId = endTileId;
             this.remove = remove;
+            this.surface = surface;
         }
 
-        public void Execute(IWorldCommandTarget world) => world.ExecuteRoadPath(startTileId, endTileId, remove);
+        public void Execute(IWorldCommandTarget world) => world.ExecuteRoadPath(startTileId, endTileId, remove, surface);
         public WorldCommandRecord ToRecord(ulong tick) =>
-            new WorldCommandRecord(tick, WorldCommandKind.RoadPath, startTileId, endTileId, 0, 0, remove);
+            new WorldCommandRecord(tick, WorldCommandKind.RoadPath, startTileId, endTileId, (int)surface, 0, remove);
+    }
+
+    sealed class RoadRepairCommand : IWorldCommand
+    {
+        private readonly int startTileId;
+        private readonly int endTileId;
+
+        public RoadRepairCommand(int startTileId, int endTileId)
+        {
+            this.startTileId = startTileId;
+            this.endTileId = endTileId;
+        }
+
+        public void Execute(IWorldCommandTarget world) => world.ExecuteRoadRepair(startTileId, endTileId);
+        public WorldCommandRecord ToRecord(ulong tick) =>
+            new WorldCommandRecord(tick, WorldCommandKind.RoadRepair, startTileId, endTileId, 0, 0, false);
     }
 
     sealed class SpawnVehicleCommand : IWorldCommand

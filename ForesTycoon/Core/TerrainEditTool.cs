@@ -9,6 +9,7 @@ namespace ForesTycoon
         RoadRemove,
         PlantForest,
         HarvestForest,
-        PlaceSawmill
+        PlaceSawmill,
+        RoadRepair
     }
 }

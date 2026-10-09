@@ -139,6 +139,8 @@ namespace ForesTycoon
             ImGui.SameLine(0, 22);
             Chip(GameIcon.Truck, "Leszállítva", $"{world.DeliveredTimber:N0} m³");
             ImGui.SameLine(0, 22);
+            Chip(GameIcon.RoadRepair, "Építés, javítás", $"{world.Expenses:N0} eFt");
+            ImGui.SameLine(0, 22);
             HealthRing(forest.StandCount > 0 ? forest.AverageHealth : 0);
             ImGui.Spacing();
             const float Small = 28f;
@@ -272,7 +274,7 @@ namespace ForesTycoon
             {
                 TerrainEditTool.PlantForest => Verb.Tend,
                 TerrainEditTool.HarvestForest => Verb.Produce,
-                TerrainEditTool.Road or TerrainEditTool.RoadRemove or TerrainEditTool.PlaceSawmill
+                TerrainEditTool.Road or TerrainEditTool.RoadRemove or TerrainEditTool.RoadRepair or TerrainEditTool.PlaceSawmill
                     or TerrainEditTool.Raise or TerrainEditTool.Lower => Verb.Build,
                 // Observe and Transport work with the inspect tool and keep their own state.
                 _ => verb == Verb.Transport ? Verb.Transport : verb == Verb.Observe || showManagement ? Verb.Observe : Verb.None
@@ -366,6 +368,9 @@ namespace ForesTycoon
                         "Az erdei út minden munkát szolgál: ültetést, ápolást, kitermelést és szállítást.");
                     ImGui.SameLine();
                     ToolIcon(GameIcon.RoadRemove, TerrainEditTool.RoadRemove, Size, "Útbontás", "5", "Húzással eltávolítja az utat.");
+                    ImGui.SameLine();
+                    ToolIcon(GameIcon.RoadRepair, TerrainEditTool.RoadRepair, Size, "Útjavítás", "9",
+                        "Húzással jelöld ki a kopott szakaszt: a hibás csempék újjá válnak. A makadám gyorsabban romlik.");
                     ImGui.SameLine();
                     ToolIcon(GameIcon.Sawmill, TerrainEditTool.PlaceSawmill, Size, "Fűrészmalom", "8", "2×2 sík, száraz csempére, út mellé.");
                     ImGui.SameLine(0, 14);

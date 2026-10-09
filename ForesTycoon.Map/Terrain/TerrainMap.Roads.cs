@@ -192,14 +192,64 @@ namespace ForesTycoon.Map
                 && level - terrainW <= 1 && level - terrainS <= 1 && level - terrainE <= 1 && level - terrainN <= 1;
         }
 
-        public int[] BuildRoadTilePath(Tile a, Tile b)
+        public RoadPaving GetRoadPaving(int tileId) => roads.GetPaving(tileId);
+        /// <summary>Surface condition of a road tile: 1 = new, 0 = ruined.</summary>
+        public float GetRoadCondition(int tileId) => roads.GetCondition(tileId);
+        public IEnumerable<int> RoadTiles => roads.Tiles;
+
+        /// <summary>Wears the surface of a road tile by <paramref name="amount"/> (traffic).</summary>
+        public void WearRoad(int tileId, float amount)
+        {
+            if (amount > 0 && roads.Has(tileId)) roads.SetCondition(tileId, roads.GetCondition(tileId) - amount);
+        }
+
+        /// <summary>Restores the worn road tiles along the a → b path; returns each repaired tile and the condition it lacked.</summary>
+        public (int Tile, float Damage)[] RepairRoadTilePath(int startTileId, int endTileId)
+        {
+            if (!IsValidTileId(startTileId) || !IsValidTileId(endTileId)) return Array.Empty<(int, float)>();
+            var repaired = new List<(int, float)>();
+            foreach (RoadPlanStep step in BuildRoadPlan(tiles[startTileId], tiles[endTileId]))
+            {
+                if (!roads.Has(step.TileId)) continue;
+                float damage = 1 - roads.GetCondition(step.TileId);
+                if (damage < 0.005f) continue;
+                roads.SetCondition(step.TileId, 1); repaired.Add((step.TileId, damage));
+            }
+            return repaired.ToArray();
+        }
+
+        /// <summary>The a → b path's tiles that a repair would restore, with the condition they lack (preview and cost).</summary>
+        public (int Tile, float Damage)[] PlanRoadRepair(int startTileId, int endTileId)
+        {
+            if (!IsValidTileId(startTileId) || !IsValidTileId(endTileId)) return Array.Empty<(int, float)>();
+            var worn = new List<(int, float)>();
+            foreach (RoadPlanStep step in BuildRoadPlan(tiles[startTileId], tiles[endTileId]))
+                if (roads.Has(step.TileId) && 1 - roads.GetCondition(step.TileId) >= 0.005f)
+                    worn.Add((step.TileId, 1 - roads.GetCondition(step.TileId)));
+            return worn.ToArray();
+        }
+
+        public int[] BuildRoadTilePath(Tile a, Tile b) => BuildRoadTilePath(a, b, RoadPaving.Asphalt);
+
+        /// <summary>
+        /// Builds the a → b road with the given surface. Road tiles already on the path that carry the other surface are
+        /// resurfaced. Returns every tile newly built or resurfaced.
+        /// </summary>
+        public int[] BuildRoadTilePath(Tile a, Tile b, RoadPaving surface)
         {
             List<int> changed = new();
             foreach (RoadPlanStep step in BuildRoadPlan(a, b))
             {
                 Tile tile = tiles[step.TileId];
                 RoadPlacement placement = AnalyzeRoadPlacement(tile, step.Edges);
-                if (placement.IsValid && roads.Add(step.TileId, step.Edges))
+                bool resurfaced = placement.IsValid && roads.Resurface(step.TileId, surface);
+                if (resurfaced && !roads.Add(step.TileId, step.Edges, surface))
+                {
+                    changed.Add(step.TileId);
+                    chunkIndex.MarkTileAndNeighboursDirty(step.TileId, ChunkDirtyFlags.Roads);
+                    continue;
+                }
+                if (resurfaced || (placement.IsValid && roads.Add(step.TileId, step.Edges, surface)))
                 {
                     changed.Add(step.TileId);
                     CaptureRoadSurface(tile, placement);
@@ -211,10 +261,28 @@ namespace ForesTycoon.Map
             return changed.ToArray();
         }
 
-        public int[] BuildRoadTilePath(int startTileId, int endTileId)
+        public int[] BuildRoadTilePath(int startTileId, int endTileId, RoadPaving surface = RoadPaving.Asphalt)
         {
             if (!IsValidTileId(startTileId) || !IsValidTileId(endTileId)) return Array.Empty<int>();
-            return BuildRoadTilePath(tiles[startTileId], tiles[endTileId]);
+            return BuildRoadTilePath(tiles[startTileId], tiles[endTileId], surface);
+        }
+
+        /// <summary>
+        /// Weathering over <paramref name="years"/>: macadam washes out, much faster on wet ground and in rain; asphalt
+        /// ages slowly. <paramref name="rain"/> is the present rain intensity (0 dry … 1 downpour).
+        /// </summary>
+        public void WeatherRoads(float years, float rain)
+        {
+            if (years <= 0 || roads.Count == 0) return;
+            float[] moisture = hydro.TileMoisture;
+            foreach (int id in roads.Tiles)
+            {
+                float wet = Math.Clamp(moisture[id], 0, 1);
+                float rate = roads.GetPaving(id) == RoadPaving.Macadam
+                    ? 0.10f * (1 + 2.5f * wet) + 1.6f * rain * (0.4f + wet)
+                    : 0.015f * (1 + wet) + 0.08f * rain;
+                roads.SetCondition(id, roads.GetCondition(id) - rate * years);
+            }
         }
 
         public int[] RemoveRoadTilePath(Tile a, Tile b)

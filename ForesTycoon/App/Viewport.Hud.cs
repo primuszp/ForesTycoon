@@ -173,10 +173,30 @@ namespace ForesTycoon
                     ImGui.PopItemWidth();
                     break;
                 case TerrainEditTool.Road:
+                    SurfaceButton(RoadPaving.Macadam, GameIcon.Macadam, "Makadám",
+                        $"Olcsó ({RoadCosts.Build(RoadPaving.Macadam):0} eFt/csempe), de gyorsan romlik, főleg esőben és vizes talajon.");
+                    ImGui.SameLine();
+                    SurfaceButton(RoadPaving.Asphalt, GameIcon.Road, "Aszfalt",
+                        $"Drága ({RoadCosts.Build(RoadPaving.Asphalt):0} eFt/csempe), de sokáig bírja.");
+                    ImGui.SameLine();
+                    ImGui.TextDisabled("Húzd az egeret a nyomvonalon.");
+                    ImGui.SameLine();
+                    ImGui.TextUnformatted(interaction.IsRoadDragging
+                        ? $"Hossz: {world.RoadPreviewCount} csempe · ~{world.RoadPreviewCount * RoadCosts.Build(interaction.RoadSurface):0} eFt"
+                        : $"Út-csempék: {world.RoadCount}");
+                    break;
                 case TerrainEditTool.RoadRemove:
-                    ImGui.TextDisabled(tool == TerrainEditTool.Road ? "Húzd az egeret a nyomvonalon." : "Húzd végig a bontandó szakaszon.");
+                    ImGui.TextDisabled("Húzd végig a bontandó szakaszon.");
                     ImGui.SameLine();
                     ImGui.TextUnformatted(interaction.IsRoadDragging ? $"Hossz: {world.RoadPreviewCount} csempe" : $"Út-csempék: {world.RoadCount}");
+                    break;
+                case TerrainEditTool.RoadRepair:
+                    ImGui.TextDisabled("Húzd végig a javítandó szakaszon; a sárga csempék kopottak.");
+                    if (interaction.IsRoadDragging && interaction.RoadDragStartTileId >= 0 && world.HoveredTileId >= 0)
+                    {
+                        ImGui.SameLine();
+                        ImGui.TextUnformatted($"Javítás: ~{world.RoadRepairCost(interaction.RoadDragStartTileId, world.HoveredTileId):0} eFt");
+                    }
                     break;
                 case TerrainEditTool.HarvestForest:
                     ImGui.TextDisabled("Húzással jelöld ki az erdőterületet. A fák rakodás közben fogynak.");
@@ -186,6 +206,12 @@ namespace ForesTycoon
                     ImGui.TextDisabled("Zöld keret: építhető. 2×2 sík, üres, száraz csempe; mellé út kell.");
                     break;
             }
+        }
+
+        private void SurfaceButton(RoadPaving surface, GameIcon icon, string label, string description)
+        {
+            if (HudTheme.LabeledIconButton(label, icon, interaction.RoadSurface == surface, 30f, description))
+                interaction.RoadSurface = surface;
         }
 
         private void SpeciesButton(ForestSpecies species, GameIcon icon, string label, string description)
@@ -228,6 +254,7 @@ namespace ForesTycoon
             TerrainEditTool.Lower => GameIcon.Lower,
             TerrainEditTool.Road => GameIcon.Road,
             TerrainEditTool.RoadRemove => GameIcon.RoadRemove,
+            TerrainEditTool.RoadRepair => GameIcon.RoadRepair,
             TerrainEditTool.PlantForest => GameIcon.Plant,
             TerrainEditTool.HarvestForest => GameIcon.Harvest,
             TerrainEditTool.PlaceSawmill => GameIcon.Sawmill,
@@ -282,9 +309,19 @@ namespace ForesTycoon
             if (imgui.WantCaptureMouse) return;
             bool hasStand = world.TryGetForestStand(world.HoveredTileId, out ForestStand stand);
             bool planted = world.TryGetPlantationStatus(world.HoveredTileId, out var plot);
-            if (!hasStand && !planted) return;
+            bool road = world.IsRoadTile(world.HoveredTileId);
+            if (!hasStand && !planted && !road) return;
 
             ImGui.BeginTooltip();
+            if (road)
+            {
+                bool asphalt = world.GetRoadPaving(world.HoveredTileId) == RoadPaving.Asphalt;
+                float condition = world.GetRoadCondition(world.HoveredTileId);
+                HudTheme.IconText(asphalt ? GameIcon.Road : GameIcon.Macadam, asphalt ? "Aszfaltút" : "Makadámút", HudTheme.AmberAccent);
+                HudTheme.KeyValue("Állapot", $"{condition:P0}" + (condition < 0.5f ? " · javítandó" : ""));
+                ImGui.EndTooltip();
+                return;
+            }
             if (hasStand)
             {
                 HudTheme.IconText(SpeciesIcon(stand.Species), Capitalize(ForestSpeciesName(stand.Species)), HudTheme.AmberAccent);
@@ -708,6 +745,7 @@ namespace ForesTycoon
                 case Keys.D6: SelectTool(TerrainEditTool.PlantForest); return true;
                 case Keys.D7: SelectTool(TerrainEditTool.HarvestForest); return true;
                 case Keys.D8: SelectTool(TerrainEditTool.PlaceSawmill); return true;
+                case Keys.D9: SelectTool(TerrainEditTool.RoadRepair); return true;
                 case Keys.T: ChooseVerb(Verb.Transport); return true;
                 case Keys.V: showVehicles = !showVehicles; return true;
                 case Keys.F: showForestry = !showForestry; return true;
@@ -766,6 +804,7 @@ namespace ForesTycoon
             TerrainEditTool.Lower => "Süllyesztés",
             TerrainEditTool.Road => "Útépítés",
             TerrainEditTool.RoadRemove => "Útbontás",
+            TerrainEditTool.RoadRepair => "Útjavítás",
             TerrainEditTool.PlantForest => $"Ültetés ({ForestSpeciesName(interaction.PlantingSpecies)})",
             TerrainEditTool.HarvestForest => "Kitermelési terület",
             TerrainEditTool.PlaceSawmill => "Fűrészmalom építése",

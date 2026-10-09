@@ -7,7 +7,11 @@ namespace ForesTycoon
         public static IWorldCommand Create(WorldCommandRecord record) => record.Kind switch
         {
             WorldCommandKind.EditElevation => new EditElevationCommand(record.A, record.B, record.C, record.D, record.Flag),
-            WorldCommandKind.RoadPath => new RoadPathCommand(record.A, record.B, record.Flag),
+            // C carries the surface; old saves have 0, the asphalt every earlier road was built with.
+            WorldCommandKind.RoadPath => new RoadPathCommand(record.A, record.B, record.Flag,
+                Enum.IsDefined((RoadPaving)record.C) ? (RoadPaving)record.C
+                    : throw new InvalidOperationException($"Unknown road surface: {record.C}.")),
+            WorldCommandKind.RoadRepair => new RoadRepairCommand(record.A, record.B),
             WorldCommandKind.PlaceSawmill => new PlaceSawmillCommand(record.A),
             WorldCommandKind.SpawnVehicle => new SpawnVehicleCommand(),
             WorldCommandKind.SetWeather => new SetWeatherCommand((WeatherPreset)record.A,record.B,record.C),

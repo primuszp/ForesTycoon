@@ -12,7 +12,8 @@ namespace ForesTycoon
         Inspect, Raise, Lower, Road, RoadRemove, Plant, Harvest, Sawmill, Truck, TruckAdd,
         Vehicles, Forestry, Environment, Graphics, Developer, Help, Camera, Deer,
         Spruce, Birch, Oak, Beech,
-        Sun, Cloud, Rain, Storm, Thermometer, Calendar, Timber, Lightning, Speedometer
+        Sun, Cloud, Rain, Storm, Thermometer, Calendar, Timber, Lightning, Speedometer,
+        RoadRepair, Macadam
     }
 
     /// <summary>
@@ -122,6 +123,21 @@ namespace ForesTycoon
                     c.Line(0.50f, 0.68f, 0.50f, 0.84f, Amber, 1.1f);
                     c.Line(0.24f, 0.30f, 0.76f, 0.78f, Warning, 1.8f);
                     c.Line(0.76f, 0.30f, 0.24f, 0.78f, Warning, 1.8f);
+                    break;
+                case GameIcon.RoadRepair:
+                    // A worn road with a shovel resting across it.
+                    c.Poly(Asphalt, 0.36f, 0.12f, 0.64f, 0.12f, 0.90f, 0.88f, 0.10f, 0.88f);
+                    c.EllipseFilled(0.40f, 0.62f, 0.08f, 0.04f, Rgb(54, 56, 60));
+                    c.EllipseFilled(0.60f, 0.40f, 0.06f, 0.03f, Rgb(54, 56, 60));
+                    c.Line(0.22f, 0.20f, 0.70f, 0.70f, Wood, 1.4f);
+                    c.Poly(Rgb(196, 204, 212), 0.66f, 0.66f, 0.84f, 0.70f, 0.88f, 0.88f, 0.70f, 0.84f);
+                    break;
+                case GameIcon.Macadam:
+                    c.Poly(Rgb(150, 141, 122), 0.36f, 0.12f, 0.64f, 0.12f, 0.90f, 0.88f, 0.10f, 0.88f);
+                    c.EllipseFilled(0.42f, 0.30f, 0.04f, 0.03f, Rgb(110, 100, 86));
+                    c.EllipseFilled(0.56f, 0.52f, 0.05f, 0.03f, Rgb(110, 100, 86));
+                    c.EllipseFilled(0.36f, 0.72f, 0.05f, 0.03f, Rgb(110, 100, 86));
+                    c.EllipseFilled(0.66f, 0.76f, 0.04f, 0.03f, Rgb(196, 188, 170));
                     break;
                 case GameIcon.Plant:
                     c.Poly(Earth, 0.16f, 0.86f, 0.30f, 0.74f, 0.70f, 0.74f, 0.84f, 0.86f);

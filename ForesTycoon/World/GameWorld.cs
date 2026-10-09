@@ -31,6 +31,9 @@ namespace ForesTycoon
         internal EnvironmentSystem Environment => ecosystem.Environment;
         internal SoilLandscape Soils => ecosystem.Soils;
         private ForestryActionResult lastForestryAction;
+        /// <summary>Money spent on building and repairing, thousand forints.</summary>
+        internal double Expenses { get; private set; }
+        private double roadWeatherSeconds;
         private ForestryAreaSummary lastForestryArea;
         internal GraphicsSettings Graphics { get; }
 
@@ -131,6 +134,7 @@ namespace ForesTycoon
             ecosystem.Update(fixedDeltaSeconds);
             long environmentUpdated = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
             Logistics?.Update(fixedDeltaSeconds);
+            WeatherRoads(fixedDeltaSeconds);
             long logisticsUpdated = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
             wildlife.Update(fixedDeltaSeconds, map, forest, Environment);
             long wildlifeUpdated = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
@@ -152,6 +156,21 @@ namespace ForesTycoon
             Enqueue(new EditElevationCommand(nodeId, delta, radius, strength));
         public void QueueRoadPath(int startTileId, int endTileId, bool remove) =>
             Enqueue(new RoadPathCommand(startTileId, endTileId, remove));
+        public void QueueRoadPath(int startTileId, int endTileId, bool remove, RoadPaving surface) =>
+            Enqueue(new RoadPathCommand(startTileId, endTileId, remove, surface));
+        public void QueueRoadRepair(int startTileId, int endTileId) => Enqueue(new RoadRepairCommand(startTileId, endTileId));
+        public void SetRoadRepairPreview(int startTileId, int endTileId) => terrain.SetRoadRepairPreview(startTileId, endTileId);
+        internal RoadPaving GetRoadPaving(int tileId) => map.GetRoadPaving(tileId);
+        internal float GetRoadCondition(int tileId) => map.GetRoadCondition(tileId);
+        internal bool IsRoadTile(int tileId) => map.IsRoadTile(tileId);
+        /// <summary>Cost of repairing the worn tiles along a → b, thousand forints.</summary>
+        internal double RoadRepairCost(int startTileId, int endTileId)
+        {
+            double cost = 0;
+            foreach (var (tile, damage) in map.PlanRoadRepair(startTileId, endTileId))
+                cost += RoadCosts.Repair(map.GetRoadPaving(tile), damage);
+            return cost;
+        }
         public void QueuePlaceSawmill(int tileId) => Enqueue(new PlaceSawmillCommand(tileId));
         void IWorldCommandTarget.ExecutePlaceSawmill(int tileId) { Logistics?.PlaceMill(tileId); }
         public void QueueSpawnVehicle() => Enqueue(new SpawnVehicleCommand());
@@ -197,12 +216,33 @@ namespace ForesTycoon
             if (map.TryGetNodePosition(nodeId, out Vector3 position)) effects.Spawn(WorldEffectKind.TerrainChanged, position);
         }
 
-        void IWorldCommandTarget.ExecuteRoadPath(int startTileId, int endTileId, bool remove)
+        void IWorldCommandTarget.ExecuteRoadPath(int startTileId, int endTileId, bool remove) =>
+            ((IWorldCommandTarget)this).ExecuteRoadPath(startTileId, endTileId, remove, RoadPaving.Asphalt);
+
+        void IWorldCommandTarget.ExecuteRoadRepair(int startTileId, int endTileId)
+        {
+            foreach (var (tile, damage) in map.RepairRoadTilePath(startTileId, endTileId))
+                Expenses += RoadCosts.Repair(map.GetRoadPaving(tile), damage);
+            if (map.TryGetRoadTileCenter(endTileId, out Vector3 position)) effects.Spawn(WorldEffectKind.RoadChanged, position);
+        }
+
+        /// <summary>Rain and wet ground wear the roads; applied twice a second of game time.</summary>
+        private void WeatherRoads(double seconds)
+        {
+            roadWeatherSeconds += seconds;
+            if (roadWeatherSeconds < 0.5) return;
+            float rain = (float)Math.Clamp(Environment.RainRate / 20, 0, 1);
+            map.WeatherRoads((float)(roadWeatherSeconds / ecosystem.ForestYearSeconds), rain);
+            roadWeatherSeconds = 0;
+        }
+
+        void IWorldCommandTarget.ExecuteRoadPath(int startTileId, int endTileId, bool remove, RoadPaving surface)
         {
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             int[] changed = remove ? map.RemoveRoadTilePath(startTileId, endTileId)
-                : map.BuildRoadTilePath(startTileId, endTileId);
+                : map.BuildRoadTilePath(startTileId, endTileId, surface);
             if (changed.Length == 0) return;
+            if (!remove) Expenses += changed.Length * RoadCosts.Build(surface);
             long t1 = System.Diagnostics.Stopwatch.GetTimestamp();
             forest.RefreshHabitat(changed);
             long t2 = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -389,6 +429,9 @@ namespace ForesTycoon
             vehicles.SourceLoader = Logistics.Load;
             vehicles.DestinationReceiver = Logistics.Deliver;
             vehicles.RouteValidator = Logistics.RouteConnected;
+            vehicles.RoadState = id => (map.GetRoadPaving(id) == RoadPaving.Asphalt ? RoadSurface.Asphalt : RoadSurface.Gravel,
+                map.GetRoadCondition(id));
+            vehicles.RoadWear = (id, amount) => map.WearRoad(id, amount * (map.GetRoadPaving(id) == RoadPaving.Macadam ? 1f : 0.2f));
         }
 
         public void Dispose()

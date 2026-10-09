@@ -12,6 +12,9 @@ namespace ForesTycoon
         void ExecuteLegacyElevationEdit(int nodeId, int delta, int radius, int strength) =>
             ExecuteElevationEdit(nodeId, delta, radius, strength);
         void ExecuteRoadPath(int startTileId, int endTileId, bool remove);
+        void ExecuteRoadPath(int startTileId, int endTileId, bool remove, RoadPaving surface) =>
+            ExecuteRoadPath(startTileId, endTileId, remove);
+        void ExecuteRoadRepair(int startTileId, int endTileId) => throw new System.NotSupportedException();
         void ExecuteSpawnVehicle();
         void ExecutePlaceSawmill(int tileId) => throw new System.NotSupportedException();
         void ExecuteWeather(WeatherPreset preset,int intensity,int duration) => throw new System.NotSupportedException();

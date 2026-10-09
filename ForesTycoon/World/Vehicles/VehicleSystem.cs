@@ -14,6 +14,10 @@ namespace ForesTycoon
         internal Func<Vehicle,float,float> SourceLoader;
         internal Action<Vehicle,float> DestinationReceiver;
         internal Func<Vehicle,bool> RouteValidator;
+        /// <summary>Surface and condition (1 new … 0 ruined) of a road tile.</summary>
+        internal Func<int,(RoadSurface Surface,float Condition)> RoadState;
+        /// <summary>Wears a road tile; the amount is for one pass of a loaded truck on macadam.</summary>
+        internal Action<int,float> RoadWear;
         internal Vehicle SpawnLogistics(int[] route,int[] sources,int mill)
         {
             var vehicle=new Vehicle(nextId++,route,1.5,roadRoute:RoadRouteFactory?.Invoke(route),roadPhysics:UseRoadPhysics);
@@ -48,6 +52,7 @@ namespace ForesTycoon
             for (int i = 0; i < vehicles.Count; i++)
             {
                 Vehicle vehicle = vehicles[i];
+                vehicle.RoadState = RoadState; vehicle.RoadWear = RoadWear;
                 if(vehicle.RouteBlocked){vehicle.Hold();continue;}
                 if(vehicle.LocalCargo){UpdateLogistics(vehicle,deltaSeconds);continue;}
                 if (!vehicle.CargoStopsEnabled)
