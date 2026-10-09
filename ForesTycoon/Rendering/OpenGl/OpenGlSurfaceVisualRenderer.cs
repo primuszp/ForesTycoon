@@ -101,6 +101,10 @@ namespace ForesTycoon.OpenGl
                 GL.Uniform1(GlProgram.Uniform(shader, "lit"), settings.Lighting ? 1 : 0);
                 GL.Uniform1(GlProgram.Uniform(shader, "shadowed"), shadowsReady ? 1 : 0);
                 GL.Uniform3(GlProgram.Uniform(shader, "sun"), sun);
+                var light = Daylight.Current;
+                GL.Uniform3(GlProgram.Uniform(shader, "sun_tint"), light.SunTint);
+                GL.Uniform3(GlProgram.Uniform(shader, "sky_tint"), light.SkyTint);
+                GL.Uniform3(GlProgram.Uniform(shader, "ground_tint"), light.GroundTint);
                 GL.Uniform4(GlProgram.Uniform(shader, "climate"), settings.Weather ? new Vector4(weather.Cloud, weather.Wetness, weather.SnowCover, weather.Rain) : Vector4.Zero);
                 GL.Uniform1(GlProgram.Uniform(shader, "clouds"), settings.Weather && settings.Clouds ? 1 : 0);
                 GL.Uniform1(GlProgram.Uniform(shader, "flash"), settings.Weather ? weather.Flash : 0);
@@ -179,7 +183,7 @@ uniform int environment_active;
 uniform int kind, textured, lit, shadowed;
 uniform float outline_width, time, flash, storm;
 uniform int clouds;
-uniform vec3 sun;
+uniform vec3 sun, sun_tint, sky_tint, ground_tint;
 uniform vec4 climate;
 
 float shadow(vec3 n) {
@@ -279,6 +283,11 @@ void main() {
         }
     }
     base *= detail;
+    // The season colours green ground: fresh in spring, straw in autumn, faded in winter (snow covers it later).
+    if(kind == 1 || kind == 8) {
+        float green = clamp((base.g - max(base.r, base.b)) * 9.0, 0.0, 1.0);
+        base *= mix(vec3(1.0), ground_tint, green);
+    }
 
     vec4 local_environment=environment_active!=0?texture(environment_map,(world.xy-environment_bounds.xy)/environment_bounds.zw):vec4(0);
     float wetness=environment_active!=0?local_environment.r:climate.y;
@@ -304,7 +313,7 @@ void main() {
         vec3 sunlight = mix(vec3(0.62,0.55,0.43),vec3(0.13,0.14,0.15),climate.x);
         // Beer-Lambert transmittance of a moving, layered coverage field.
         float transmission = clouds != 0 ? exp(-cloudDensity(world.xy + sun.xy*18)*climate.x*(1.2+storm)) : 1;
-        base *= ambient * (1-storm*0.16) + sunlight * direct * shadow(n) * transmission;
+        base *= ambient * sky_tint * (1-storm*0.16) + sunlight * sun_tint * direct * shadow(n) * transmission;
         base += vec3(0.65,0.75,1) * flash * (0.35+max(n.z,0)*0.65);
     }
     if(lit != 0 && (kind == 4 || kind == 9 || kind == 10)) {

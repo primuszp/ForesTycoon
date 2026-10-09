@@ -57,6 +57,7 @@ namespace ForesTycoon
             if (Array.Exists(args, argument => argument == "--road-network-smoke-test")) { RoadNetworkSmokeTest.Run(); return; }
 
             if (Array.Exists(args, argument => argument == "--truck-smoke-test")) { TruckRenderSmokeTest.Run(); return; }
+            if (Array.Exists(args, argument => argument == "--daylight-preview")) { DaylightPreview.Run(); return; }
             if (Array.Exists(args, argument => argument == "--forest-machine-smoke-test")) { ForestMachineSmokeTest.Run(); return; }
             if (Array.Exists(args, argument => argument == "--camera-benchmark")) { ForestBenchmark.Run(true); return; }
             if (Array.Exists(args, argument => argument == "--engine-stress-benchmark")) { EngineStressBenchmark.Run(); return; }

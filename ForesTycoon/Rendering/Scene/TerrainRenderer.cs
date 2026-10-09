@@ -61,6 +61,19 @@ namespace ForesTycoon
                 terrain.UpdateVisibleTiles(context);
                 if(environment!=null && graphics.AutomaticWeather)weather.Update(environment,graphics,context.SimulationTimeSeconds);
                 else weather.Update(context.SimulationTimeSeconds, graphics);
+                // Time of day and season: the light follows the calendar.
+                if (Daylight.Override is { } fixedLight)
+                {
+                    Daylight.Current = fixedLight;
+                    graphics.SunAzimuth = fixedLight.Azimuth; graphics.SunElevation = fixedLight.Elevation;
+                }
+                else if (graphics.TimeOfDay && environment != null)
+                {
+                    var light = Daylight.At(environment.Time / environment.ForestYearSeconds);
+                    Daylight.Current = light;
+                    graphics.SunAzimuth = light.Azimuth; graphics.SunElevation = light.Elevation;
+                }
+                else Daylight.Current = Daylight.Neutral with { Azimuth = graphics.SunAzimuth, Elevation = graphics.SunElevation };
                 surfaces.BeginFrame();
                 VehicleRenderer.BeginFrame(context, graphics);
             }

@@ -33,7 +33,7 @@ in vec4 light_position;
 uniform sampler2D albedo;
 uniform sampler2DShadow shadow_map;
 uniform vec4 tint,climate;
-uniform vec3 sun;
+uniform vec3 sun, sun_tint, sky_tint;
 uniform vec3 flat_color;
 uniform int textured,lit,shadowed,source_material,alpha_mode,has_albedo,shadow_pass;
 uniform float outline_width,alpha_cutoff;
@@ -58,7 +58,7 @@ void main(){
     if(lit!=0){
         vec3 ambient=mix(vec3(0.66,0.71,0.78),vec3(0.76,0.81,0.88),climate.x);
         vec3 direct=mix(vec3(0.56,0.49,0.38),vec3(0.13,0.14,0.15),climate.x);
-        base*=ambient*(1-climate.y*0.16)+direct*max(dot(normal,sun),0)*shade;
+        base*=ambient*sky_tint*(1-climate.y*0.16)+direct*sun_tint*max(dot(normal,sun),0)*shade;
         base+=vec3(0.65,0.75,1)*climate.z*(0.35+max(normal.z,0)*0.65);
     }
     output_color=vec4(pow(max(base,vec3(0)),vec3(1.0/2.2)),alpha_mode==2&&shadow_pass==0?alpha:1);

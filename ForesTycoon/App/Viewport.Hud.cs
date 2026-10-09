@@ -787,8 +787,12 @@ namespace ForesTycoon
             ImGui.Checkbox("Napfény", ref g.Lighting);
             ImGui.SameLine(170);
             ImGui.Checkbox("Vetett árnyékok", ref g.Shadows);
+            ImGui.Checkbox("Napszakok és évszakos színek", ref g.TimeOfDay);
+            if (ImGui.IsItemHovered()) ImGui.SetTooltip("A Nap a naptár szerint jár: hajnal, dél, alkony, holdfényes éjszaka (egy látható nap egy hónap).\nA fű tavasszal friss, ősszel sárgul, télen fakó.");
+            ImGui.BeginDisabled(g.TimeOfDay);
             ImGui.SliderFloat("Nap iránya", ref g.SunAzimuth, 0, 360, "%.0f°");
-            ImGui.SliderFloat("Nap magassága", ref g.SunElevation, 15, 80, "%.0f°");
+            ImGui.SliderFloat("Nap magassága", ref g.SunElevation, 8, 80, "%.0f°");
+            ImGui.EndDisabled();
 
             ImGui.SeparatorText("Részletek");
             ImGui.Checkbox("Textúrák", ref g.Textures);

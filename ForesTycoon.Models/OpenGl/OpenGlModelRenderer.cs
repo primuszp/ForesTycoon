@@ -50,6 +50,8 @@ namespace ForesTycoon.Models.OpenGl
                 GL.UniformMatrix4(GlProgram.Uniform(program,"light_camera"),false,ref light);
                 float az=MathHelper.DegreesToRadians(scene.SunAzimuth),el=MathHelper.DegreesToRadians(scene.SunElevation);
                 GL.Uniform3(GlProgram.Uniform(program,"sun"),MathF.Cos(az)*MathF.Cos(el),MathF.Sin(az)*MathF.Cos(el),MathF.Sin(el));
+                GL.Uniform3(GlProgram.Uniform(program,"sun_tint"),ForesTycoon.Rendering.Daylight.Current.SunTint);
+                GL.Uniform3(GlProgram.Uniform(program,"sky_tint"),ForesTycoon.Rendering.Daylight.Current.SkyTint);
                 GL.Uniform1(GlProgram.Uniform(program,"lit"),scene.Lit?1:0);
                 GL.Uniform1(GlProgram.Uniform(program,"shadowed"),scene.Shadowed?1:0);
                 GL.Uniform1(GlProgram.Uniform(program,"shadow_map"),1);

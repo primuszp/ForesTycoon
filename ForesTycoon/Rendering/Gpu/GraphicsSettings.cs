@@ -34,6 +34,8 @@ namespace ForesTycoon
         internal WeatherPreset Preset = WeatherPreset.Sunny;
         internal float SunAzimuth = 135;
         internal float SunElevation = 48;
+        /// <summary>Times of day and season colours drive the light from the calendar (the sun sliders then only show it).</summary>
+        internal bool TimeOfDay = true;
         // Diorama post-processing: a miniature-photography look over the finished frame.
         internal bool Diorama = true;
         internal bool TiltShift = true;

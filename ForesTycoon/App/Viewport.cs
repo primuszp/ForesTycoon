@@ -281,9 +281,11 @@ namespace ForesTycoon
         private void Render()
         {
             bool diorama = postProcess.Begin(world.Graphics, FramebufferWidth, FramebufferHeight);
-            RenderDevice.Clear(new Vector4(BG_COLOR.R/255f, BG_COLOR.G/255f, BG_COLOR.B/255f, BG_COLOR.A/255f));
+            // The studio backdrop follows the sky: warm at dusk, deep blue at night (last frame's light).
+            Vector3 backdrop = new Vector3(BG_COLOR.R / 255f, BG_COLOR.G / 255f, BG_COLOR.B / 255f) * Rendering.Daylight.Current.SkyTint;
+            RenderDevice.Clear(new Vector4(backdrop, BG_COLOR.A / 255f));
             if (diorama)
-                postProcess.DrawBackdrop(world.Graphics, new Vector3(BG_COLOR.R / 255f, BG_COLOR.G / 255f, BG_COLOR.B / 255f));
+                postProcess.DrawBackdrop(world.Graphics, backdrop);
 
             modelView = camera.CreateViewMatrix();
             RenderDevice.SetCamera(modelView * projection);
