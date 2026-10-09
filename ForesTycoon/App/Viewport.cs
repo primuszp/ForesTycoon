@@ -75,6 +75,14 @@ namespace ForesTycoon
         private readonly SimulationFrameRunner simulation = new SimulationFrameRunner(
             ticksPerSecond: 30.0, maximumTicksPerFrame: 2048, maximumWorkMilliseconds: 8);
         private FixedStepClock simulationClock => simulation.Clock;
+        /// <summary>
+        /// Simulated seconds per real second at "1×". The game's 1× is a slow, thoughtful pace: a year lasts an hour and the
+        /// vehicles move at a quarter of their pace. Around 2–4× it plays at Transport Tycoon's normal speed (4×: a 15-minute
+        /// year, vehicles at full pace).
+        /// </summary>
+        internal const double GamePace = 0.25;
+        /// <summary>The speed the player sees and picks (1×, 2×, 4× … 256×).</summary>
+        private double GameSpeed { get => simulationClock.Speed / GamePace; set => simulationClock.Speed = value * GamePace; }
         private readonly FramePerformanceMonitor performance = new FramePerformanceMonitor();
         private ulong frameIndex;
         private int currentMapTiles = 64;
@@ -236,6 +244,7 @@ namespace ForesTycoon
 
                 world = new GameWorld(TerrainSettings.Default);
                 interaction = new WorldInteractionController(world) { TargetPicked = SendTargetPicked };
+                GameSpeed = 1;   // start at the slow 1×
                 imgui = new ImGuiController();
                 HudTheme.Apply();
                 isLoaded = true;

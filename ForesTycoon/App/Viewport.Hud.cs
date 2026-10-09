@@ -103,10 +103,10 @@ namespace ForesTycoon
 
         private void SpeedButton(string id, GameIcon icon, double speed, float size, string title)
         {
-            bool active = !simulationClock.IsPaused && Math.Abs(simulationClock.Speed - speed) < 0.001;
+            bool active = !simulationClock.IsPaused && Math.Abs(GameSpeed - speed) < 0.001;
             if (HudTheme.IconButton(id, icon, size, active, title, null, "A szimuláció, a növekedés és a szállítás sebessége."))
             {
-                simulationClock.Speed = speed;
+                GameSpeed = speed;
                 simulationClock.IsPaused = false;
             }
         }
@@ -115,9 +115,9 @@ namespace ForesTycoon
         {
             NVec2 menuPosition = ImGui.GetCursorScreenPos() + new NVec2(0, size + 6);
             if (captureDirectory != null && frameIndex == 284) ImGui.OpenPopup("simulation-speed");
-            bool active = !simulationClock.IsPaused && simulationClock.Speed >= 4;
+            bool active = !simulationClock.IsPaused && GameSpeed >= 4;
             if (HudTheme.IconButton("fast-forward", GameIcon.Faster, size, active,
-                $"Időgyorsítás ({simulationClock.Speed:0}×)", null,
+                $"Időgyorsítás ({GameSpeed:0}×)", null,
                 "Válassz 4×–256× sebességet az erdő fejlődésének megfigyeléséhez. Nagy terhelésnél az elért gyorsítás kisebb lehet."))
                 ImGui.OpenPopup("simulation-speed");
             if (ImGui.IsPopupOpen("simulation-speed"))
@@ -125,9 +125,9 @@ namespace ForesTycoon
             if (ImGui.BeginPopup("simulation-speed"))
             {
                 foreach (int speed in new[] { 4, 8, 16, 32, 64, 128, 256 })
-                    if (ImGui.MenuItem($"{speed}×", "", !simulationClock.IsPaused && simulationClock.Speed == speed))
+                    if (ImGui.MenuItem($"{speed}×", "", !simulationClock.IsPaused && GameSpeed == speed))
                     {
-                        simulationClock.Speed = speed;
+                        GameSpeed = speed;
                         simulationClock.IsPaused = false;
                     }
                 ImGui.EndPopup();
@@ -640,7 +640,7 @@ namespace ForesTycoon
             HudTheme.KeyValue("Besugárzás", $"{environment.Radiation * 100:0}%");
             HudTheme.Meter("Gyökérzóna átlagos víztelítettsége", (float)environment.MeanSoil, $"{environment.MeanSoil * 100:0}%",
                 new NVec4(0.36f, 0.62f, 0.86f, 1f));
-            ImGui.TextDisabled($"1 erdőév = {environment.ForestYearSeconds / 60:0.#} játékperc");
+            ImGui.TextDisabled($"1 erdőév = {environment.ForestYearSeconds / GamePace / 60:0.#} perc 1×-en, {environment.ForestYearSeconds / GamePace / 60 / GameSpeed:0.#} perc most");
             if (world.Soils != null && ImGui.CollapsingHeader("Talaj, víz és klíma térképe"))
                 EcologyRasterView.Draw(world.Soils, environment, ref ecologyRasterLayer, ref ecologyRasterSelection);
 

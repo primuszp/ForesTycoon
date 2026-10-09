@@ -6,11 +6,13 @@ namespace ForesTycoon.Ecology
         /// <summary>Reference tempo: weather intensities are defined for a year of this many simulated seconds.</summary>
         internal const double SecondsPerForestYear = 1200;
         /// <summary>
-        /// Default tempo: at normal (1×) speed a year lasts an hour and a season a quarter of an hour, so a day is about
-        /// ten seconds — the scale of Transport Tycoon (a 74-tick day of ~2 s at its 1×, a year of ~13 minutes) at 4×.
-        /// The speed buttons multiply it (up to 256×: a year in 14 s).
+        /// Default tempo: 900 simulated seconds per year. The viewport's 1× runs a quarter simulated second per real
+        /// second (a year an hour, a season a quarter of an hour); 4× is Transport Tycoon's normal pace (a ~15-minute
+        /// year, as its 74-tick, ~2 s day gives). The speed menu goes up to 256×.
         /// </summary>
-        internal const double DefaultGameSecondsPerYear = 3600;
+        internal const double DefaultGameSecondsPerYear = 900;
+        /// <summary>Slowest tempo a world may use.</summary>
+        internal const double MaxGameSecondsPerYear = 3600;
         /// <summary>Fastest tempo saved games may use (the earlier default).</summary>
         internal const double MinGameSecondsPerYear = 120;
         /// <summary>Environment seconds per hour of simulated weather.</summary>
@@ -18,7 +20,7 @@ namespace ForesTycoon.Ecology
         /// <summary>Granularity of water and weather stepping.</summary>
         internal const double StepSeconds = 0.5;
         internal static bool IsValidForestYearSeconds(double seconds) => double.IsFinite(seconds)
-            && seconds >= MinGameSecondsPerYear && seconds <= DefaultGameSecondsPerYear;
+            && seconds >= MinGameSecondsPerYear && seconds <= MaxGameSecondsPerYear;
     }
 
     /// <summary>What the water balance needs to know about the vegetation of the world.</summary>

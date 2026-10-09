@@ -267,7 +267,7 @@ namespace ForesTycoon
             ImGui.SameLine(0, 14);
             var (_, season, part, _) = Calendar();
             ImGui.BeginGroup();
-            ImGui.TextColored(HudTheme.Muted, (simulationClock.IsPaused ? "Szünet" : $"{simulationClock.Speed:0}×") + $" · {DateText()}");
+            ImGui.TextColored(HudTheme.Muted, (simulationClock.IsPaused ? "Szünet" : $"{GameSpeed:0}×") + $" · {DateText()}");
             var p = ImGui.GetCursorScreenPos();
             var dl = ImGui.GetWindowDrawList();
             dl.AddRectFilled(p + new NVec2(0, 4), p + new NVec2(110, 9), ImGui.ColorConvertFloat4ToU32(new NVec4(0.17f, 0.21f, 0.18f, 1)), 3f);
@@ -482,7 +482,7 @@ namespace ForesTycoon
             lastSeason = index;
             AddJournal($"Beköszöntött {SeasonArrived[season]}.", SeasonColours[season]);
             // Scripted captures and smoke tests must never stop on a card.
-            if (!seasonCards || captureDirectory != null || smokeTestFrameLimit.HasValue || simulationClock.Speed > 16) return;
+            if (!seasonCards || captureDirectory != null || smokeTestFrameLimit.HasValue || GameSpeed > 16) return;
             showSeasonCard = true;
             resumeAfterSeasonCard = !simulationClock.IsPaused;
             simulationClock.IsPaused = true;
