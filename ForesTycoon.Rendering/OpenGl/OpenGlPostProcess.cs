@@ -7,7 +7,7 @@ namespace ForesTycoon.Rendering.OpenGl
     /// <summary>
     /// Miniature-photography finish for the world view. The scene is drawn into an offscreen
     /// multisampled target, then composited in full-screen passes:
-    ///   1. SSAO at half resolution: hemisphere samples around the surface normal rebuilt from the
+    ///   1. SSAO at full resolution (half resolution stair-stepped the tree silhouettes): hemisphere samples around the surface normal rebuilt from the
     ///      (orthographic, so linear) depth, then a depth-aware blur that keeps edges crisp;
     ///   2. the occlusion applied, and colour grading;
     ///   3. depth-of-field tilt-shift: the ground at the centre of the view is in focus, blur grows
@@ -194,8 +194,8 @@ namespace ForesTycoon.Rendering.OpenGl
             GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2D, gradeTexture, 0);
             Check("Diorama grade");
 
-            // Half-resolution occlusion and its blurred copy; white means unoccluded (also when AO is off).
-            aoWidth = Math.Max(1, width / 2); aoHeight = Math.Max(1, height / 2);
+            // Full-resolution occlusion and its blurred copy; white means unoccluded (also when AO is off).
+            aoWidth = width; aoHeight = height;
             aoTexture = CreateTexture(PixelInternalFormat.R8, PixelFormat.Red, PixelType.UnsignedByte, TextureMinFilter.Linear, aoWidth, aoHeight);
             aoFramebuffer = GL.GenFramebuffer();
             GL.BindFramebuffer(FramebufferTarget.Framebuffer, aoFramebuffer);
@@ -390,7 +390,8 @@ void main() {
         vec3 sum = c;
         float weight = 1.0;
         for(int i = 0; i < blur_taps; i++) {
-            float a = float(i) * GOLDEN + hash(gl_FragCoord.xy) * 6.2831;
+            // A fixed spiral: a per-pixel random turn is screen-fixed noise that crawls when the camera moves.
+            float a = float(i) * GOLDEN;
             float k = sqrt((float(i) + 0.5) / float(blur_taps));
             vec2 p = uv + vec2(cos(a), sin(a)) * k * r * texel;
             vec3 s = texture(graded, p).rgb;

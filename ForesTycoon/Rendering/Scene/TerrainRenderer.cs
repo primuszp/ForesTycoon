@@ -70,6 +70,9 @@ namespace ForesTycoon
                 else if (graphics.TimeOfDay && environment != null)
                 {
                     var light = Daylight.At(environment.Time / environment.ForestYearSeconds);
+                    // The shadow map follows the sun in whole-degree steps: a light that turns a little every frame makes
+                    // shadow edges crawl. Colours change smoothly; only the direction is stepped.
+                    light = light with { Azimuth = MathF.Round(light.Azimuth), Elevation = MathF.Round(light.Elevation) };
                     Daylight.Current = light;
                     graphics.SunAzimuth = light.Azimuth; graphics.SunElevation = light.Elevation;
                 }
