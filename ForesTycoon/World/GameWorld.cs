@@ -173,6 +173,8 @@ namespace ForesTycoon
         internal bool IsSkidTrail(int tileId) => map.IsSkidTrail(tileId);
         internal float GetSkidTrailWear(int tileId) => map.GetSkidTrailWear(tileId);
         internal int SkidTrailCount => map.SkidTrailCount;
+        /// <summary>Order-tool marks drawn on the ground (targets, cursor tile, routes).</summary>
+        internal OrderOverlay Orders => terrain.Orders;
         public void SetRoadRepairPreview(int startTileId, int endTileId) => terrain.SetRoadRepairPreview(startTileId, endTileId);
         internal RoadPaving GetRoadPaving(int tileId) => map.GetRoadPaving(tileId);
         internal float GetRoadCondition(int tileId) => map.GetRoadCondition(tileId);
@@ -216,9 +218,9 @@ namespace ForesTycoon
             if (m == null) return;
             if (m.Kind == ForestMachineKind.Harvester)
             {
-                var site = Logistics.SiteAt(tileId);
-                if (site == null) { Logistics.Status = "A processzort egy kijelölt vágásba küldd."; return; }
-                Logistics.AssignProcessor(m, site);
+                var stack = Logistics.StackAt(tileId);
+                if (stack == null) { Logistics.Status = "A processzort egy sarangra küldd: oda hordja a fát."; return; }
+                Logistics.AssignProcessor(m, stack);
             }
             else
             {

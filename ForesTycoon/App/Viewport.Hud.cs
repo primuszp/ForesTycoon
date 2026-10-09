@@ -49,7 +49,11 @@ namespace ForesTycoon
             DrawVerbDock();
             DrawMinimap();
             DrawHoverInspector();
+            hoveredFleetRow = null;
             DrawVehiclesWindow();
+            UpdateOrderOverlay();
+            DrawOrderTooltip();
+            DrawStackLabels();
             DrawForestryWindow();
             DrawEnvironmentWindow();
             DrawManagementWindow();
@@ -437,7 +441,7 @@ namespace ForesTycoon
         // The order being given: the vehicle, whether it needs a destination after the source, and the source picked.
         private int sendVehicleId = -1, sendSource = -1;
         private bool sendTruck, sendNeedsDestination;
-        internal string SendHint => sendVehicleId < 0 ? "" : !sendNeedsDestination ? "Kattints a vágásra, ahol a processzor dolgozzon."
+        internal string SendHint => sendVehicleId < 0 ? "" : !sendNeedsDestination ? "Kattints a fogadó sarangra: oda hordja a fát, és a legközelebbi kijelölt fákat termeli."
             : sendSource < 0 ? "Kattints a forrás sarangra." : "Kattints a célra: sarang helyére vagy a fűrészmalomra.";
 
         private void BeginSend(int id, bool truck, bool needsDestination)
@@ -451,6 +455,9 @@ namespace ForesTycoon
         private void SendTargetPicked(int tile)
         {
             if (sendVehicleId < 0) return;
+            string reason = CheckPick(tile);
+            if (reason != null) { ShowToast(reason.Length > 0 ? reason : "Ide nem küldhető.", HudTheme.Bad); return; }
+            hoverCheck = (-1, null);
             if (sendNeedsDestination && sendSource < 0) { sendSource = tile; ShowToast(SendHint, HudTheme.Info); return; }
             world.QueueSendVehicle(sendVehicleId, sendNeedsDestination ? sendSource : tile, sendNeedsDestination ? tile : -1, sendTruck);
             sendVehicleId = -1; sendSource = -1;
@@ -460,8 +467,10 @@ namespace ForesTycoon
         private bool FleetButtons(string key, int id, bool truck, bool atHome, Vector3? position, bool needsDestination)
         {
             ImGui.PushID(key + id);
-            if (ImGui.SmallButton("Küldés")) BeginSend(id, truck, needsDestination);
-            if (ImGui.IsItemHovered()) ImGui.SetTooltip(needsDestination ? "Utána kattints a forrás sarangra, majd a célra." : "Utána kattints a vágásra.");
+            if (ImGui.SmallButton("Utasítás")) BeginSend(id, truck, needsDestination);
+            if (ImGui.IsItemHovered()) ImGui.SetTooltip(needsDestination
+                ? "A térképen: 1. forrás sarang, 2. cél (sarang helye vagy fűrészmalom)."
+                : "A térképen: a fogadó sarang. Onnan a legközelebbi kijelölt fákat termeli.");
             ImGui.SameLine();
             ImGui.BeginDisabled(atHome);
             if (ImGui.SmallButton("Haza")) world.QueueSendHome(id, truck);
@@ -475,6 +484,14 @@ namespace ForesTycoon
         }
 
         private void FleetMachineRow(ForestMachine machine)
+        {
+            ImGui.BeginGroup();
+            FleetMachineRowBody(machine);
+            ImGui.EndGroup();
+            if (ImGui.IsItemHovered()) hoveredFleetRow = "m" + machine.Id;
+        }
+
+        private void FleetMachineRowBody(ForestMachine machine)
         {
             bool processor = machine.Kind == ForestMachineKind.Harvester;
             bool home = !machine.Working && machine.State == ForestMachineState.Parked;
@@ -496,7 +513,7 @@ namespace ForesTycoon
             if (machine.Cargo > 0.01f)
                 ImGui.ProgressBar(machine.CargoFill, new NVec2(-1, 12), $"{machine.Cargo:F1} / {machine.Capacity:F0} m³");
             string order = processor
-                ? (machine.Site != null ? $"Vágás → sarang #{machine.Target?.Id}" : "")
+                ? (machine.Target != null ? $"Kijelölt fák → sarang #{machine.Target.Id}" : "")
                 : (machine.Source != null ? $"Sarang #{machine.Source.Id} → {DestinationName(machine.Destination)}" : "");
             ImGui.TextDisabled((order.Length > 0 ? order + " · " : "") + $"{machine.FuelUsed:F0} l gázolaj");
             Vector3? at = world.TryGetTileCenter(machine.Tile, out var c) ? c : null;
@@ -504,6 +521,14 @@ namespace ForesTycoon
         }
 
         private void FleetTruckRow(FleetTruck truck)
+        {
+            ImGui.BeginGroup();
+            FleetTruckRowBody(truck);
+            ImGui.EndGroup();
+            if (ImGui.IsItemHovered()) hoveredFleetRow = "t" + truck.Id;
+        }
+
+        private void FleetTruckRowBody(FleetTruck truck)
         {
             var vehicle = truck.Vehicle;
             (string state, NVec4 color) = truck.Phase switch

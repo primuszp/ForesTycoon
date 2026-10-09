@@ -125,7 +125,7 @@ namespace ForesTycoon
             pipeline.Add(RenderLayer.ForestryPreview, "forestry-preview", _ => DrawSurface(SurfaceKind.Plain,()=> {
                 terrain.DrawManagementOverlay();
                 terrain.DrawPlantations(forest,graphics);
-                terrain.DrawHarvestSites(logistics);terrain.DrawForestryPreview();
+                terrain.DrawHarvestSites(logistics);terrain.DrawStackSites(logistics);terrain.DrawForestryPreview();
                 content.DrawBuildingPreview(terrain,forest,logistics,graphics.SawmillPreview);
             }));
             pipeline.Add(RenderLayer.DecalEnd, "decal-state-end", _ => EndDecals());
@@ -136,6 +136,8 @@ namespace ForesTycoon
                 DrawSurface(SurfaceKind.Vehicle, () => VehicleRenderer.Draw(vehicles, terrain, context.InterpolationAlpha)));
             pipeline.Add(RenderLayer.Vehicles, "forest-machines", context =>
                 DrawSurface(SurfaceKind.Vehicle, () => machines.Draw(terrain, logistics, graphics, (float)context.InterpolationAlpha)));
+            pipeline.Add(RenderLayer.Effects, "order-overlay", context =>
+                DrawSurface(SurfaceKind.Plain, () => terrain.DrawOrderOverlay(context.SimulationTimeSeconds)));
             pipeline.Add(RenderLayer.Effects, "world-effects", context =>
                 DrawSurface(SurfaceKind.Plain, () => EffectRenderer.Draw(effects, context.InterpolationAlpha)));
             pipeline.Add(RenderLayer.Weather, "weather", context =>

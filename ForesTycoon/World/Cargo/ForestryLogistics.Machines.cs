@@ -46,7 +46,9 @@ namespace ForesTycoon
         internal bool Arrived => PathPosition >= Path.Length - 1 - 1e-9;
         internal float Capacity => Kind == ForestMachineKind.Forwarder ? ForwarderCapacity : ProcessorCapacity;
         internal float CargoFill => Cargo / Capacity;
-        internal bool Working => Site != null || Source != null;
+        /// <summary>Processor: whether designated timber is still reachable from its stack (set at each decision).</summary>
+        internal bool HasWork;
+        internal bool Working => Source != null || (Kind == ForestMachineKind.Harvester && Target != null);
     }
 
     /// <summary>
@@ -67,7 +69,7 @@ namespace ForesTycoon
 
         // Where machines may drive: the network, their felling, stack sites, depot and mill yards.
         private bool Passable(HarvestSite site, int tile) =>
-            terrain.IsNetworkTile(tile) || (site != null && Array.IndexOf(site.Tiles, tile) >= 0) || StackAt(tile) != null
+            terrain.IsNetworkTile(tile) || ContainsTile(tile) || StackAt(tile) != null
             || Depots.Exists(d => Array.IndexOf(d.Footprint, tile) >= 0) || Mills.Exists(m => Array.IndexOf(m.Footprint, tile) >= 0);
 
         // Network-to-network travel follows its actual arms. Worksites and yards still allow manoeuvring.
@@ -110,20 +112,25 @@ namespace ForesTycoon
             return sum;
         }
 
-        /// <summary>The processor's work: fell this site, carrying to the nearest stack. False with a reason in <see cref="Status"/>.</summary>
-        internal bool AssignProcessor(ForestMachine machine, HarvestSite site)
+        /// <summary>
+        /// The processor's work: <paramref name="stack"/> is its receiving stack. It drives there, then fells the nearest
+        /// reachable designated trees (any harvest site) and carries every load back to that stack.
+        /// </summary>
+        internal bool AssignProcessor(ForestMachine machine, TimberStack stack)
         {
-            if (StandingTimber(site) <= 0.001f) { Status = "Ebben a vágásban már nincs fa."; return false; }
-            if (FindPath(site, machine.Tile, t => Array.IndexOf(site.Tiles, t) >= 0) == null)
-            { Status = "A processzor nem jut be: kösd a vágást közelítő nyommal az úthálózathoz."; return false; }
-            var stack = NearestStack(site, site.Tiles[0]);
-            if (stack == null) { Status = "Jelölj ki sarang helyet a vágás közelében (Termel → Sarang)."; return false; }
+            if (FindPath(null, machine.Tile, t => t == stack.Tile) == null) { Status = "A processzor nem jut el ehhez a saranghoz."; return false; }
+            if (NearestTimber(stack.Tile) == null)
+            { Status = "A sarangtól nem érhető el kijelölt fa: jelölj ki kitermelést, és kösd nyommal a saranghoz."; return false; }
             Release(machine);
-            machine.Site = site; machine.Target = stack;
+            machine.Target = stack; machine.HasWork = true;
             Restart(machine);
-            Status = "A processzor a vágásba indult.";
+            Status = $"A processzor a #{stack.Id} saranghoz indult, onnan termel.";
             return true;
         }
+
+        /// <summary>Path to the nearest designated tile with standing timber, over network, trails, stacks and fellings.</summary>
+        private int[] NearestTimber(int from) =>
+            FindPath(null, from, t => ContainsTile(t) && forest.AvailableTimber(t) > 0.001f);
 
         /// <summary>The forwarder's work: carry <paramref name="source"/> to <paramref name="destination"/> until it is empty.</summary>
         internal bool AssignForwarder(ForestMachine machine, TimberStack source, int destination)
@@ -164,7 +171,7 @@ namespace ForesTycoon
             if (depth > 4) return false;
             foreach (var m in Machines)
             {
-                if (m.Kind == ForestMachineKind.Harvester && m.Target == stack && m.Site != null && (m.Cargo > 0 || StandingTimber(m.Site) > 0.001f)) return true;
+                if (m.Kind == ForestMachineKind.Harvester && m.Target == stack && (m.Cargo > 0 || m.HasWork)) return true;
                 if (m.Kind == ForestMachineKind.Forwarder && m.Destination == stack.Tile && m.Source != null &&
                     (m.Cargo > 0 || m.Source.Volume > 0.01f || BeingFed(m.Source, depth + 1))) return true;
             }
@@ -273,7 +280,6 @@ namespace ForesTycoon
 
         private void UpdateProcessor(ForestMachine machine, double dt)
         {
-            var site = machine.Site;
             if (machine.State == ForestMachineState.Felling)
             {
                 machine.WorkTime += dt;
@@ -289,21 +295,19 @@ namespace ForesTycoon
             {
                 if (!UnloadStep(machine, ProcessorUnloadRate, machine.Tile, dt)) return;
             }
-            // Decide: a full grapple (or the felling done, or called home) goes to the stack; empty, it fells on or goes home.
-            bool more = StandingTimber(site) > 0.001f && !machine.HomeRequested;
-            if (machine.Cargo > 0.001f && (!more || machine.Cargo >= machine.Capacity - 0.001f))
+            // Decide: a full grapple (or nothing more to fell, or called home) goes to the stack; empty, it fells on or goes home.
+            int[] timber = machine.HomeRequested ? null : NearestTimber(machine.Tile);
+            machine.HasWork = timber != null;
+            if (machine.Cargo > 0.001f && (timber == null || machine.Cargo >= machine.Capacity - 0.001f))
             {
-                machine.Target = NearestStack(site, machine.Tile) ?? machine.Target;
-                int[] toStack = machine.Target == null ? null : FindPath(site, machine.Tile, t => t == machine.Target.Tile);
+                int[] toStack = FindPath(null, machine.Tile, t => t == machine.Target.Tile);
                 if (toStack != null) { Drive(machine, toStack, ForestMachineState.Unloading); return; }
-                Status = "A processzor nem talál sarangot: jelölj ki sarang helyet a vágás mellett.";
+                Status = $"{MachineName(machine)} nem jut vissza a sarangjához.";
                 machine.State = ForestMachineState.Parked;
                 return;
             }
-            if (!more) { GoHome(machine); return; }
-            int[] path = FindPath(site, machine.Tile, t => Array.IndexOf(site.Tiles, t) >= 0 && forest.AvailableTimber(t) > 0.001f);
-            if (path != null) Drive(machine, path, ForestMachineState.Felling);
-            else machine.State = ForestMachineState.Parked;
+            if (timber == null) { GoHome(machine); return; }
+            Drive(machine, timber, ForestMachineState.Felling);
         }
 
         private void UpdateForwarder(ForestMachine machine, double dt)

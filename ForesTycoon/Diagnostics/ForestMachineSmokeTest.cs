@@ -46,8 +46,16 @@ namespace ForesTycoon
                     double time = 0;
                     void Step(double seconds) { for (int i = 0; i < seconds * 30; i++) { logistics.Update(1.0 / 30); vehicles.Update(1.0 / 30); time += 1.0 / 30; } }
                     Capture(scene, terrain, "depot", time);
+                    // The order tool's ground marks: target stacks glowing, the cursor tile, a forwarder and a truck route.
+                    var orders = terrain.Orders;
+                    orders.Candidates.Add(120); orders.Candidates.Add(99); orders.Hover = 99; orders.HoverValid = true;
+                    orders.Routes.Add((logistics.PreviewMachinePath(120, 99), System.Drawing.Color.FromArgb(120, 200, 96), true));
+                    orders.Routes.Add((logistics.PreviewTruckRoute(99, 195), System.Drawing.Color.FromArgb(110, 176, 236), false));
+                    Require(orders.Routes.TrueForAll(r => r.Tiles != null), "Order route preview failed.");
+                    Capture(scene, terrain, "orders", time);
+                    orders.Clear();
                     foreach (var machine in logistics.Machines)
-                        Require(machine.Kind == ForestMachineKind.Harvester ? logistics.AssignProcessor(machine, site)
+                        Require(machine.Kind == ForestMachineKind.Harvester ? logistics.AssignProcessor(machine, logistics.StackAt(120))
                             : logistics.AssignForwarder(machine, logistics.StackAt(120), 99), logistics.Status);
                     Require(logistics.AssignTruck(logistics.Trucks[0], logistics.StackAt(99), 195), logistics.Status);
                     Step(6); Capture(scene, terrain, "driving-in", time);

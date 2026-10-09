@@ -61,7 +61,7 @@ public class FleetTests
     {
         var s = Build(mixedRoads: true, firstSurface: macadamFirst ? RoadPaving.Macadam : RoadPaving.Asphalt);
         var processor = Processor(s);
-        Assert.True(s.Logistics.AssignProcessor(processor, s.Logistics.Sites[0]), s.Logistics.Status);
+        Assert.True(s.Logistics.AssignProcessor(processor, s.Logistics.StackAt(ForestStack)!), s.Logistics.Status);
         Run(s, 60);
         Assert.True(s.Logistics.StackAt(ForestStack)!.Volume > 0, "The processor did not reach the felling and deliver timber.");
         Assert.True(processor.FuelUsed > 0);
@@ -80,14 +80,13 @@ public class FleetTests
     }
 
     [Fact]
-    public void ProcessorNeedsAStackSiteAndCarriesToTheNearest()
+    public void ProcessorCarriesToTheStackItWasSentTo()
     {
         var s = Build(stacks: false);
-        Assert.False(s.Logistics.AssignProcessor(Processor(s), s.Logistics.Sites[0]));
-        Assert.Contains("sarang", s.Logistics.Status);
+        Assert.Null(s.Logistics.StackAt(ForestStack));
         Assert.True(s.Logistics.PlaceStack(ForestStack)); Assert.True(s.Logistics.PlaceStack(RoadStack));
         Assert.False(s.Logistics.PlaceStack(Mill), "A stack on the mill was accepted.");
-        Assert.True(s.Logistics.AssignProcessor(Processor(s), s.Logistics.Sites[0]), s.Logistics.Status);
+        Assert.True(s.Logistics.AssignProcessor(Processor(s), s.Logistics.StackAt(ForestStack)!), s.Logistics.Status);
         Assert.Same(s.Logistics.StackAt(ForestStack), Processor(s).Target);
         Run(s, 60);
         var stack = s.Logistics.StackAt(ForestStack);
@@ -104,7 +103,7 @@ public class FleetTests
         {
             var s = Build(stacks: false);
             s.Logistics.PlaceStack(stackTile);
-            s.Logistics.AssignProcessor(Processor(s), s.Logistics.Sites[0]);
+            Assert.True(s.Logistics.AssignProcessor(Processor(s), s.Logistics.StackAt(stackTile)!), s.Logistics.Status);
             Run(s, 90);
             return (s.Logistics.StackAt(stackTile).Volume, Processor(s).FuelUsed);
         }
@@ -120,7 +119,7 @@ public class FleetTests
         var s = Build();
         float initial = s.Logistics.Volume(s.Logistics.Sites[0]);
         double value = initial * TimberPriceOak;
-        Assert.True(s.Logistics.AssignProcessor(Processor(s), s.Logistics.Sites[0]), s.Logistics.Status);
+        Assert.True(s.Logistics.AssignProcessor(Processor(s), s.Logistics.StackAt(ForestStack)!), s.Logistics.Status);
         Assert.True(s.Logistics.AssignForwarder(Forwarder(s), s.Logistics.StackAt(ForestStack), RoadStack), s.Logistics.Status);
         Assert.True(s.Logistics.AssignTruck(s.Logistics.Trucks[0], s.Logistics.StackAt(RoadStack), Mill), s.Logistics.Status);
         Run(s, 2400);
@@ -152,7 +151,7 @@ public class FleetTests
     {
         var s = Build();
         var processor = Processor(s);
-        s.Logistics.AssignProcessor(processor, s.Logistics.Sites[0]);
+        s.Logistics.AssignProcessor(processor, s.Logistics.StackAt(ForestStack)!);
         Run(s, 40);
         s.Logistics.SendHome(processor);
         Run(s, 80);
@@ -164,7 +163,7 @@ public class FleetTests
     public void CheckpointKeepsStacksOrdersAndMoney()
     {
         var s = Build();
-        s.Logistics.AssignProcessor(Processor(s), s.Logistics.Sites[0]);
+        s.Logistics.AssignProcessor(Processor(s), s.Logistics.StackAt(ForestStack)!);
         s.Logistics.AssignForwarder(Forwarder(s), s.Logistics.StackAt(ForestStack), RoadStack);
         s.Logistics.AssignTruck(s.Logistics.Trucks[0], s.Logistics.StackAt(RoadStack), Mill);
         Run(s, 200);
