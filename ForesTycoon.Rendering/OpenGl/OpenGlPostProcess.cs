@@ -126,8 +126,8 @@ namespace ForesTycoon.Rendering.OpenGl
             GL.Uniform1(GlProgram.Uniform(finishProgram, "graded"), 0);
             GL.Uniform1(GlProgram.Uniform(finishProgram, "depth"), 1);
             GL.Uniform1(GlProgram.Uniform(finishProgram, "depth_range"), DepthRange);
-            // In focus: about a third of the depth the view shows; beyond that the blur reaches its full size.
-            GL.Uniform1(GlProgram.Uniform(finishProgram, "focus_range"), Math.Max(2f, height * worldPerTexel * 0.32f));
+            // In focus: most of the play area; only the far background and the nearest foreground soften.
+            GL.Uniform1(GlProgram.Uniform(finishProgram, "focus_range"), Math.Max(2f, height * worldPerTexel * 0.5f));
             GL.Uniform2(GlProgram.Uniform(finishProgram, "texel"), new Vector2(1f / width, 1f / height));
             GL.Uniform2(GlProgram.Uniform(finishProgram, "aspect"), new Vector2(width / (float)Math.Max(1, height), 1));
             // The miniature illusion is strongest from afar; close-ups keep more of the frame sharp.
@@ -377,9 +377,9 @@ float focus_depth() {
 // The backdrop counts as far; a gentle screen band keeps the miniature look on flat views.
 float coc(vec2 p, float focus) {
     float d = texture(depth, p).r;
-    float depth_blur = d >= 0.99999 ? 1.0 : smoothstep(0.45, 1.0, abs(d * depth_range - focus) / focus_range);
-    float band = smoothstep(0.25, 0.55, abs(p.y - 0.46));
-    return max(depth_blur, 0.45 * band);
+    float depth_blur = d >= 0.99999 ? 1.0 : smoothstep(0.7, 1.4, abs(d * depth_range - focus) / focus_range);
+    float band = smoothstep(0.38, 0.62, abs(p.y - 0.46));
+    return max(depth_blur, 0.3 * band);
 }
 void main() {
     vec3 c = texture(graded, uv).rgb;

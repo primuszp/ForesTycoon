@@ -30,7 +30,7 @@ namespace ForesTycoon
                     {
                         // Mid-season, the chosen hour of a visible day.
                         double year = s * 0.25 + 0.125;
-                        double visibleDay = Math.Floor(year * Daylight.DaysPerYear) + day;
+                        double visibleDay = Math.Floor(year * Daylight.DaysPerYear) + day - Daylight.StartHour;
                         Daylight.Override = Daylight.At(visibleDay / Daylight.DaysPerYear);
                         for (int frame = 0; frame < 3; frame++)
                         {

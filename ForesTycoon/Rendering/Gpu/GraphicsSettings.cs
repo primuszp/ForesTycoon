@@ -39,7 +39,7 @@ namespace ForesTycoon
         // Diorama post-processing: a miniature-photography look over the finished frame.
         internal bool Diorama = true;
         internal bool TiltShift = true;
-        internal float TiltShiftStrength = 0.55f;
+        internal float TiltShiftStrength = 0.45f;
         internal bool AmbientOcclusion = true;
         internal float AmbientOcclusionStrength = 0.8f;
         internal bool ColorGrading = true;

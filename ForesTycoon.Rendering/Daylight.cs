@@ -21,11 +21,14 @@ namespace ForesTycoon.Rendering
     {
         /// <summary>Visible days per forest year.</summary>
         internal const double DaysPerYear = 12;
+        /// <summary>Hour of the visible day at the start of the year: a new game opens in the morning, not at midnight.</summary>
+        internal const double StartHour = 0.33;
 
         internal static DaylightState At(double forestYears)
         {
             double yearFraction = forestYears - Math.Floor(forestYears);
-            double dayFraction = forestYears * DaysPerYear - Math.Floor(forestYears * DaysPerYear);
+            double days = forestYears * DaysPerYear + StartHour;
+            double dayFraction = days - Math.Floor(days);
             // +1 at midsummer, -1 at midwinter.
             float summer = (float)Math.Cos(2 * Math.PI * (yearFraction - 0.25));
             return At((float)yearFraction, (float)dayFraction, summer);
