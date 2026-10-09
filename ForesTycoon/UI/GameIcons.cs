@@ -13,7 +13,7 @@ namespace ForesTycoon
         Vehicles, Forestry, Environment, Graphics, Developer, Help, Camera, Deer,
         Spruce, Birch, Oak, Beech,
         Sun, Cloud, Rain, Storm, Thermometer, Calendar, Timber, Lightning, Speedometer,
-        RoadRepair, Macadam, SkidTrail, SkidTrailRemove, Depot, Forwarder
+        RoadRepair, Macadam, SkidTrail, SkidTrailRemove, Depot, Forwarder, TimberRemove
     }
 
     /// <summary>
@@ -44,6 +44,12 @@ namespace ForesTycoon
         internal static void Draw(ImDrawListPtr dl, GameIcon icon, NVec2 origin, float size, uint ink)
         {
             if (GameIconAtlas.Draw(dl, icon, origin, size, ink)) return;
+            if (icon == GameIcon.TimberRemove)
+            {
+                Draw(dl, GameIcon.Timber, origin, size, ink);
+                DrawRemovalBadge(dl, origin, size, ink);
+                return;
+            }
             var c = new Canvas(dl, origin, size, ink);
             switch (icon)
             {
@@ -334,6 +340,19 @@ namespace ForesTycoon
                     c.CircleFilled(0.50f, 0.62f, 0.06f, ink);
                     break;
             }
+        }
+
+        internal static void DrawRemovalBadge(ImDrawListPtr dl, NVec2 origin, float size, uint ink)
+        {
+            var center = origin + new NVec2(0.79f, 0.25f) * size;
+            uint alpha = ink & 0xff000000;
+            uint red = (Color(HudTheme.Bad) & 0x00ffffff) | alpha;
+            uint dark = (Rgb(48, 61, 53) & 0x00ffffff) | alpha;
+            dl.AddCircleFilled(center, size * 0.20f, red, 24);
+            float arm = size * 0.073f;
+            float stroke = MathF.Max(1.3f, size * 0.057f);
+            dl.AddLine(center - new NVec2(arm, arm), center + new NVec2(arm, arm), dark, stroke);
+            dl.AddLine(center + new NVec2(-arm, arm), center + new NVec2(arm, -arm), dark, stroke);
         }
 
         private static void Arrow(Canvas c, float x0, float y0, float x1, float y1, uint color)

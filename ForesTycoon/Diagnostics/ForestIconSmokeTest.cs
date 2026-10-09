@@ -27,7 +27,7 @@ namespace ForesTycoon
             GL.Clear(ClearBufferMask.ColorBufferBit);
             var dl = ImGui.GetBackgroundDrawList();
             uint ink = GameIcons.Color(HudTheme.Parchment);
-            dl.AddText(new(24, 16), ink, "FORESTYCOON / TRANSPORT IKONKÉSZLET / 46 IKON");
+            dl.AddText(new(24, 16), ink, $"FORESTYCOON / TRANSPORT IKONKÉSZLET / {icons.Length} IKON");
             dl.AddText(new(24, 40), GameIcons.Color(HudTheme.Muted), "ImageGen · 64 px és 28 px · a játék tényleges megjelenítőjével");
             foreach (var icon in icons)
             {

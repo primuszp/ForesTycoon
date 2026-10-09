@@ -281,7 +281,7 @@ namespace ForesTycoon
             TerrainEditTool.RoadRepair => GameIcon.RoadRepair,
             TerrainEditTool.SkidTrail => GameIcon.SkidTrail,
             TerrainEditTool.PlaceStack => GameIcon.Timber,
-            TerrainEditTool.RemoveStack => GameIcon.Timber,
+            TerrainEditTool.RemoveStack => GameIcon.TimberRemove,
             TerrainEditTool.SkidTrailRemove => GameIcon.SkidTrailRemove,
             TerrainEditTool.PlantForest => GameIcon.Plant,
             TerrainEditTool.HarvestForest => GameIcon.Harvest,

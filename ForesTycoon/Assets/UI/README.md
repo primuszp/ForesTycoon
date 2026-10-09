@@ -1,6 +1,25 @@
-# Erdei ikonok – B stílus
+# Erdei ikonok – Transport stílus
 
-A `forest-icons-b.png` a felhasználó által kiválasztott B ikonstílus teljes, 46 elemes készlete,
+## Jelenlegi készlet
+
+A játék a `forest-icons-transport.png` ImageGen-készletet használja mind a 46 ikonhoz.
+A B változat finomítása: komolyabb ipari arányok, visszafogottabb formák,
+Transport Tycoon jellegű erdészeti gépek. A rönkszállító, a hozzáadás-ikon és a forwarder
+rönkjei a gép hossztengelyével párhuzamosan, a fülke mögötti rakfelületen fekszenek.
+
+A `GameIconAtlas` forrásterületeit a PNG alfa-csatornájának összefüggő alakzataiból
+mértük, a különálló vezérlővonalakat, napsugarakat és esőcseppeket is beleértve.
+Két forráspixel ráhagyás őrzi az élsimítást. Az ikonok saját képarányukat megtartva,
+középre igazítva jelennek meg; a szomszédos ikonrészletek nem kerülnek a kivágásba.
+Az ikonlap változatlan generált PNG, 1448 × 1086 pixel.
+
+Ellenőrzés: `dotnet run --project ForesTycoon -- --forest-icon-smoke-test`.
+Aktuális vizuális katalógus: `artifacts/icon-preview/forest-icons-transport.png`.
+Generálási prompt: `transport-imagegen-prompt.txt`.
+
+## Korábbi B változat
+
+A `forest-icons-b.png` a felhasználó által korábban kiválasztott B ikonstílus teljes, 46 elemes készlete,
 a beépített ImageGen eszközzel generálva. Átlátszó PNG, 1448 × 1086 pixel; a fordítás az
 alkalmazásba ágyazza. A közös `GameIcons.Draw` használja minden gombhoz és ikonhoz.
 

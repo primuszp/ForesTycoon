@@ -9,7 +9,7 @@ namespace ForesTycoon
     // Explicit source regions prevent neighbouring symbols bleeding into small toolbar icons.
     internal static class GameIconAtlas
     {
-        internal const int Columns = 8, Rows = 6, IconCount = 46;
+        internal const int Columns = 8, Rows = 6, IconCount = 47;
         private static readonly Dictionary<IntPtr, IntPtr> textures = new();
         private static readonly (V2 Min, V2 Max)[] regions = BuildRegions();
 
@@ -29,7 +29,7 @@ namespace ForesTycoon
                 (27,948,191,1075), (208,948,371,1078), (388,956,547,1082), (562,944,719,1081),
                 (736,939,902,1082), (913,938,1092,1078)
             };
-            var result = new (V2, V2)[IconCount];
+            var result = new (V2, V2)[bounds.Length];
             for (int i = 0; i < result.Length; i++)
             {
                 var b = bounds[i];
@@ -46,8 +46,9 @@ namespace ForesTycoon
         internal static bool Draw(ImDrawListPtr draw, GameIcon icon, V2 origin, float size, uint ink)
         {
             if (!textures.TryGetValue(ImGui.GetCurrentContext(), out IntPtr texture)) return false;
-            int index = (int)icon;
-            if (index < 0 || index >= IconCount) return false;
+            bool removeTimber = icon == GameIcon.TimberRemove;
+            int index = (int)(removeTimber ? GameIcon.Timber : icon);
+            if (index < 0 || index >= regions.Length) return false;
             var region = regions[index];
             var extent = region.Max - region.Min;
             var dimensions = new V2(1448, 1086);
@@ -57,6 +58,7 @@ namespace ForesTycoon
             var position = origin + (new V2(size) - drawSize) * 0.5f;
             // Artwork already carries semantic colours; the caller's opacity still applies.
             draw.AddImage(texture, position, position + drawSize, uv0, uv1, (ink & 0xff000000) | 0x00ffffff);
+            if (removeTimber) GameIcons.DrawRemovalBadge(draw, origin, size, ink);
             return true;
         }
     }

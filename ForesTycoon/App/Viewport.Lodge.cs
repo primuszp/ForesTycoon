@@ -384,7 +384,7 @@ namespace ForesTycoon
                     ToolIcon(GameIcon.Timber, TerrainEditTool.PlaceStack, Size, "Sarang", "",
                         "Sarang helye nyom vagy út mellett. A processzor a legközelebbihez hordja a fát: messze sok üzemanyag, kevés teljesítmény.");
                     ImGui.SameLine();
-                    ToolIcon(GameIcon.Timber, TerrainEditTool.RemoveStack, Size, "Sarang törlése", "", "Üres sarang helyének törlése.");
+                    ToolIcon(GameIcon.TimberRemove, TerrainEditTool.RemoveStack, Size, "Sarang törlése", "", "Üres sarang helyének törlése.");
                     break;
                 case Verb.Build:
                     ToolIcon(GameIcon.Road, TerrainEditTool.Road, Size, "Útépítés", "4",
