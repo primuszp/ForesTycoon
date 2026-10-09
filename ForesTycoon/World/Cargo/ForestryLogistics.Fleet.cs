@@ -81,7 +81,7 @@ namespace ForesTycoon
                 foreach (var mill in Mills)
                     foreach (int end in terrain.FindRoadDocks(mill.Footprint))
                     {
-                        int[] route = terrain.FindLogisticsRoadPath(start, end);
+                        int[] route = terrain.FindNetworkPath(start, end);
                         if (route.Length >= 2 && (best.Item2 == null || route.Length < best.Item2.Length)) best = (mill, route);
                     }
             return best;
@@ -95,7 +95,7 @@ namespace ForesTycoon
             var (mill, route) = NearestMill(site);
             if (mill == null) { Status = "A rakodótól nem vezet út fűrészmalomhoz."; return false; }
             int dock = DepotDock(truck.Home);
-            int[] approach = dock < 0 ? Array.Empty<int>() : terrain.FindLogisticsRoadPath(dock, route[0]);
+            int[] approach = dock < 0 ? Array.Empty<int>() : terrain.FindNetworkPath(dock, route[0]);
             if (dock != route[0] && approach.Length < 2) { Status = "A telephelyről nem vezet út a rakodóhoz."; return false; }
             truck.Site = site; truck.Mill = mill.TileId; truck.HomeRequested = false;
             if (approach.Length >= 2) { truck.Vehicle = Vehicles.SpawnTransit(approach); truck.Phase = TruckPhase.ToWork; }
@@ -161,7 +161,7 @@ namespace ForesTycoon
         private void Return(FleetTruck truck, int from)
         {
             int dock = DepotDock(truck.Home);
-            int[] path = dock < 0 ? Array.Empty<int>() : terrain.FindLogisticsRoadPath(from, dock);
+            int[] path = dock < 0 ? Array.Empty<int>() : terrain.FindNetworkPath(from, dock);
             if (truck.Vehicle != null) Vehicles.Remove(truck.Vehicle);
             truck.Vehicle = null;
             if (path.Length < 2) { Park(truck); return; }

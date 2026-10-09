@@ -77,8 +77,8 @@ namespace ForesTycoon
                         TileUV(W, S, E, N, a1u + du, a1v + dv), TileUV(W, S, E, N, a0u + du, a0v + dv));
                 }
             }
-            // A bend (two adjacent edges) curves round the shared tile corner like a road bend: two concentric quarter arcs.
-            if (TryCornerArc(edges, out float startDeg))
+            // Quarter arcs round a tile corner: how a trail turns left or right, in a bend or at a junction.
+            void Arc(float startDeg)
             {
                 float cu = startDeg < 90f ? 0f : startDeg < 270f ? 1f : 0f;
                 float cv = startDeg < 180f ? 0f : 1f;
@@ -97,13 +97,24 @@ namespace ForesTycoon
                             TileUV(W, S, E, N, cu + inner * MathF.Cos(a1), cv + inner * MathF.Sin(a1)));
                     }
                 }
+            }
+            bool ws = (edges & RoadEdge.WS) != 0, se = (edges & RoadEdge.SE) != 0, en = (edges & RoadEdge.EN) != 0, nw = (edges & RoadEdge.NW) != 0;
+            int count = TerrainMap.CountEdges(edges);
+            if (count == 1)
+            {
+                // A dead end: the ruts run in to the tile centre.
+                if (ws) Arm(0.5f, 0f); if (se) Arm(1f, 0.5f); if (en) Arm(0.5f, 1f); if (nw) Arm(0f, 0.5f);
                 return;
             }
-            // Tile (u, v): u runs W→S… as in TileUV; the edge midpoints in those coordinates.
-            if ((edges & RoadEdge.WS) != 0) Arm(0.5f, 0f);
-            if ((edges & RoadEdge.SE) != 0) Arm(1f, 0.5f);
-            if ((edges & RoadEdge.EN) != 0) Arm(0.5f, 1f);
-            if ((edges & RoadEdge.NW) != 0) Arm(0f, 0.5f);
+            // Straight through where two opposite edges meet …
+            if (ws && en) { Arm(0.5f, 0f); Arm(0.5f, 1f); }
+            if (se && nw) { Arm(1f, 0.5f); Arm(0f, 0.5f); }
+            // … and an arc for every turn a vehicle can take: a bend, or each branch of a junction off the through line.
+            bool Turn(bool a, bool b, bool aOpposite, bool bOpposite) => a && b && (count == 2 || count == 4 || !aOpposite || !bOpposite);
+            if (Turn(nw, ws, se, en)) Arc(0f);    // W corner
+            if (Turn(ws, se, en, nw)) Arc(90f);   // S corner
+            if (Turn(se, en, nw, ws)) Arc(180f);  // E corner
+            if (Turn(en, nw, ws, se)) Arc(270f);  // N corner
         }
 
         private static void Quad(Vector3 a, Vector3 b, Vector3 c, Vector3 d)

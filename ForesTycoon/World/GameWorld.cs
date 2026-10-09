@@ -265,7 +265,9 @@ namespace ForesTycoon
         {
             int[] changed = remove ? map.RemoveSkidTrailPath(startTileId, endTileId) : map.MarkSkidTrailPath(startTileId, endTileId);
             if (changed.Length == 0) return;
+            if (!remove) Expenses += changed.Length * RoadCosts.Trail;
             Logistics?.TrailsChanged();
+            if (remove) vehicles.RemoveInvalidRoutes(map.IsNetworkTile); else vehicles.RefreshLogisticsRoutes(map.IsNetworkTile);
             if (map.TryGetTileCenter(endTileId, out Vector3 position)) effects.Spawn(WorldEffectKind.RoadChanged, position);
         }
 
@@ -281,8 +283,8 @@ namespace ForesTycoon
             long t2 = System.Diagnostics.Stopwatch.GetTimestamp();
             Environment?.RefreshRouting(changed);
             long t3 = System.Diagnostics.Stopwatch.GetTimestamp();
-            if (remove) vehicles.RemoveInvalidRoutes(map.IsRoadTile);
-            else vehicles.RefreshLogisticsRoutes(map.IsRoadTile);
+            if (remove) vehicles.RemoveInvalidRoutes(map.IsNetworkTile);
+            else vehicles.RefreshLogisticsRoutes(map.IsNetworkTile);
             long t4 = System.Diagnostics.Stopwatch.GetTimestamp();
             static double Ms(long a, long b) => System.Diagnostics.Stopwatch.GetElapsedTime(a, b).TotalMilliseconds;
             LastRoadBuildProfile = $"[{changed.Length} tiles: map {Ms(t0, t1):F1}, habitat {Ms(t1, t2):F1}, routing {Ms(t2, t3):F1}, vehicles {Ms(t3, t4):F1}]";
@@ -463,9 +465,15 @@ namespace ForesTycoon
             vehicles.DestinationReceiver = Logistics.Deliver;
             vehicles.RouteValidator = Logistics.RouteConnected;
             Logistics.Vehicles = vehicles;
-            vehicles.RoadState = id => (map.GetRoadPaving(id) == RoadPaving.Asphalt ? RoadSurface.Asphalt : RoadSurface.Gravel,
-                map.GetRoadCondition(id));
-            vehicles.RoadWear = (id, amount) => map.WearRoad(id, amount * (map.GetRoadPaving(id) == RoadPaving.Macadam ? 1f : 0.2f));
+            // A skid trail is bare, rutted ground: trucks crawl and pitch on it, the deeper the ruts the worse.
+            vehicles.RoadState = id => map.IsRoadTile(id)
+                ? (map.GetRoadPaving(id) == RoadPaving.Asphalt ? RoadSurface.Asphalt : RoadSurface.Gravel, map.GetRoadCondition(id))
+                : (RoadSurface.Dirt, 0.2f - 0.2f * map.GetSkidTrailWear(id));
+            vehicles.RoadWear = (id, amount) =>
+            {
+                if (map.IsSkidTrail(id)) map.DriveSkidTrail(id, amount * 20);
+                else map.WearRoad(id, amount * (map.GetRoadPaving(id) == RoadPaving.Macadam ? 1f : 0.2f));
+            };
         }
 
         public void Dispose()

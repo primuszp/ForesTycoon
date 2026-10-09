@@ -28,6 +28,7 @@ namespace ForesTycoon
                     terrain.Map.BuildRoadTilePath(34, 210, RoadPaving.Macadam);
                     // A trail with a bend: up from the road, then across to the stand.
                     terrain.Map.MarkSkidTrailPath(115, 119); terrain.Map.MarkSkidTrailPath(119, 135);
+                    terrain.Map.MarkSkidTrailPath(117, 85);   // a side branch: a T junction on the trail
                     var logistics = new ForestryLogistics(terrain.Map, forest) { MachinesEnabled = true };
                     var cargo = new TimberCargoSystem();
                     var vehicles = new VehicleSystem(cargo, route => VehicleRoadRoute.Create(terrain.Map, route))

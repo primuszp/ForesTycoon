@@ -62,7 +62,7 @@ namespace ForesTycoon
                 if(MachinesEnabled&&site.Landing<0)continue;
                 var origins=MachinesEnabled?terrain.FindRoadDocks(new[]{site.Landing}):terrain.FindRoadDocks(site.Tiles);
                 foreach(var mill in Mills)foreach(int start in origins)foreach(int end in terrain.FindRoadDocks(mill.Footprint)) {
-                    int[] path=terrain.FindLogisticsRoadPath(start,end);
+                    int[] path=terrain.FindNetworkPath(start,end);
                     if(path.Length<2)continue;
                     vehicles.SpawnLogistics(path,site.Tiles,mill.TileId);
                     Status="Teherautó indult: erdő → fűrészmalom → erdő.";return true;
@@ -95,7 +95,7 @@ namespace ForesTycoon
         internal bool RouteConnected(Vehicle vehicle)
         {
             for(int i=1;i<vehicle.Route.Length;i++)
-                if(terrain.FindLogisticsRoadPath(vehicle.Route[i-1],vehicle.Route[i]).Length!=2)return false;
+                if(!terrain.AreNetworkNeighbours(vehicle.Route[i-1],vehicle.Route[i]))return false;
             return true;
         }
     }
