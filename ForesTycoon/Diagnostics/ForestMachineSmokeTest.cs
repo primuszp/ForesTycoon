@@ -58,7 +58,7 @@ namespace ForesTycoon
             {
                 terrain.Map.TryGetTileCenter(120, out Vector3 centre);
                 RenderDevice.SetCamera(Matrix4.CreateTranslation(-centre) * Matrix4.CreateRotationZ(-MathF.PI / 4)
-                    * Matrix4.CreateRotationX(-0.95f) * Matrix4.CreateOrthographicOffCenter(-22, 22, -16, 16, -400, 400));
+                    * Matrix4.CreateRotationX(-0.95f) * Matrix4.CreateOrthographicOffCenter(-15, 15, -11, 11, -400, 400));
                 GL.ClearColor(0.16f, 0.2f, 0.26f, 1); GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
                 scene.Draw(new RenderContext(seconds, 1f / 30, (ulong)(seconds * 30), seconds, (ulong)(seconds * 30), 0, false, false,
                     1, -45, -45, -1000, -1000, 1000, 1000, 20));

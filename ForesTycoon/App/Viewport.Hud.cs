@@ -207,7 +207,7 @@ namespace ForesTycoon
                     ImGui.TextDisabled("Húzd végig a megszüntetendő nyomon.");
                     break;
                 case TerrainEditTool.HarvestForest:
-                    ImGui.TextDisabled("Húzással jelöld ki a vágást. A harveszter dönt, a forwarder a rakodóra hordja; nyom kell az útig.");
+                    ImGui.TextDisabled("Húzással jelöld ki a vágást. A processzor dönt, darabol és a nyom mellé sarangol; a forwarder a rakodóra hordja. Nyom kell az útig.");
                     if (interaction.IsForestryDragging) { ImGui.SameLine(); ImGui.TextUnformatted($"{world.ForestryPreviewCount} csempe"); }
                     break;
                 case TerrainEditTool.PlaceSawmill:
@@ -431,7 +431,7 @@ namespace ForesTycoon
                         ForestMachineState.Unloading => "lerak a rakodón",
                         _ => "áll a rakodón"
                     };
-                    HudTheme.IconText(harvester ? GameIcon.Harvest : GameIcon.Timber, $"{(harvester ? "Harveszter" : "Forwarder")} #{machine.Id}");
+                    HudTheme.IconText(harvester ? GameIcon.Harvest : GameIcon.Timber, $"{(harvester ? "Processzor" : "Forwarder")} #{machine.Id}");
                     ImGui.SameLine();
                     ImGui.TextColored(machine.State == ForestMachineState.Parked ? HudTheme.Muted : HudTheme.Good, state);
                     if (!harvester)

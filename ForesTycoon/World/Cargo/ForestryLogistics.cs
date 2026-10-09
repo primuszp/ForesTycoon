@@ -13,6 +13,8 @@ namespace ForesTycoon
         internal readonly SortedDictionary<int, float> Piles = new();
         /// <summary>Logs stacked at the landing, m³.</summary>
         internal float LandingStock;
+        /// <summary>Cache: felling tile → the trail tile its logs are stacked beside (rebuilt when trails change).</summary>
+        internal readonly Dictionary<int, int> StackTiles = new();
     }
     internal sealed class Sawmill
     {

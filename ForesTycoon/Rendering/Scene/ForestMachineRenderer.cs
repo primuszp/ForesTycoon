@@ -25,7 +25,7 @@ namespace ForesTycoon
             internal AnimatedGlbModel.Pose Pose;
             internal int[] Wheels;
             internal bool[] LeftWheel;
-            internal int Crane = -1, Boom = -1;
+            internal int Crane = -1, Boom = -1, Trailer = -1;
             internal void Dispose() => Renderer?.Dispose();
             void IDisposable.Dispose() => Dispose();
         }
@@ -39,17 +39,29 @@ namespace ForesTycoon
             if (!File.Exists(path)) return null;
             var model = AnimatedGlbModel.Load(path);
             var wheels = new List<int>(); var left = new List<bool>();
-            int crane = -1, boom = -1;
+            int crane = -1, boom = -1, trailer = -1;
             for (int i = 0; i < model.Nodes.Length; i++)
             {
                 string name = model.Nodes[i].Name ?? "";
                 if (name.StartsWith("wheel", StringComparison.Ordinal)) { wheels.Add(i); left.Add(name.EndsWith(".L", StringComparison.Ordinal)); }
                 else if (name == "knee_1") crane = i;
                 else if (name == "knee_2") boom = i;
+                else if (name == "trailer") trailer = i;
             }
             return new MachineModel { Model = model, Renderer = new AnimatedModelRenderer(model), Pose = model.CreatePose(),
-                Wheels = wheels.ToArray(), LeftWheel = left.ToArray(), Crane = crane, Boom = boom };
+                Wheels = wheels.ToArray(), LeftWheel = left.ToArray(), Crane = crane, Boom = boom, Trailer = trailer };
         }
+
+        // Stack (sarang) models, smallest first, with the timber volume each one shows.
+        private static readonly (string File, float Volume)[] StackSizes =
+            { ("stack-1.glb", 4), ("stack-2.glb", 10), ("stack-3.glb", 20), ("stack-4.glb", 40), ("stack-5.glb", 80) };
+        private readonly AnimatedGlbModel[] stacks = new AnimatedGlbModel[StackSizes.Length];
+        private readonly AnimatedModelRenderer[] stackRenderers = new AnimatedModelRenderer[StackSizes.Length];
+        private readonly AnimatedGlbModel.Pose[] stackPoses = new AnimatedGlbModel.Pose[StackSizes.Length];
+        private readonly bool[] stackTried = new bool[StackSizes.Length];
+
+        /// <summary>Forwarder geometry, metres: the frame joint behind the front unit and the trailer bogie behind the joint.</summary>
+        internal const float ForwarderJoint = 2.2f, ForwarderBogie = 4.8f;
 
         /// <summary>Position on the ground plane and heading at a fractional path position.</summary>
         internal static bool TrySample(TerrainMap map, int[] path, double position, out Vector2 point, out Vector2 heading)
@@ -73,7 +85,7 @@ namespace ForesTycoon
         internal void Draw(Terrain terrain, ForestryLogistics logistics, GraphicsSettings settings, float alpha)
         {
             if (logistics == null) return;
-            DrawPiles(terrain, logistics);
+            DrawPiles(terrain, logistics, settings);
             if (logistics.Machines.Count == 0) return;
             if (!loaded)
             {
@@ -81,6 +93,7 @@ namespace ForesTycoon
                 models[(int)ForestMachineKind.Harvester] = Load("harvester.glb");
                 models[(int)ForestMachineKind.Forwarder] = Load("forwarder.glb");
             }
+            float tile = terrain.Map.TileWidth;
             alpha = Math.Clamp(alpha, 0, 1);
             foreach (var machine in logistics.Machines)
             {
@@ -89,10 +102,13 @@ namespace ForesTycoon
                 Matrix4 placement = Placement(terrain.Map, point, heading, machine.Kind == ForestMachineKind.Forwarder ? 2.2f : 1.4f);
                 if (RenderDevice.Visuals?.ShadowPass != true &&
                     !RenderVisibility.SphereVisible(placement.Row3.Xyz, 4f, RenderDevice.ViewProjection)) continue;
+                float articulation = machine.Kind == ForestMachineKind.Forwarder
+                    ? Articulation(terrain.Map, machine.Path, position, point, heading, tile) : 0;
+                Matrix4 trailer = TrailerFrame(placement, articulation);
                 var model = models[(int)machine.Kind];
-                if (model != null) DrawModel(model, machine, position, placement, settings);
-                else DrawStandIn(machine, placement);
-                if (machine.Kind == ForestMachineKind.Forwarder && machine.Cargo > 0.05f) DrawLoad(machine, placement);
+                if (model != null) DrawModel(model, machine, position, placement, articulation, settings);
+                else DrawStandIn(machine, placement, trailer);
+                if (machine.Kind == ForestMachineKind.Forwarder && machine.Cargo > 0.05f) DrawLoad(machine, trailer);
             }
         }
 
@@ -110,7 +126,29 @@ namespace ForesTycoon
             return new Matrix4(new Vector4(forward, 0), new Vector4(left, 0), new Vector4(up, 0), new Vector4(point.X, point.Y, z + 0.02f, 1));
         }
 
-        private static void DrawModel(MachineModel m, ForestMachine machine, double position, Matrix4 placement, GraphicsSettings settings)
+        /// <summary>
+        /// Forwarder frame steering: the rear unit points from its bogie, which rolls along the path behind, to the frame
+        /// joint, so in a bend the two halves fold like a real articulated forwarder. Radians, + = rear unit to the left.
+        /// </summary>
+        internal static float Articulation(TerrainMap map, int[] path, double position, Vector2 point, Vector2 heading, float tileSize)
+        {
+            float behind = (ForwarderJoint + ForwarderBogie) * MetreScale / tileSize;
+            if (!TrySample(map, path, position - behind, out Vector2 bogie, out _)) return 0;
+            Vector2 joint = point - heading * ForwarderJoint * MetreScale;
+            Vector2 rear = joint - bogie;
+            if (rear.LengthSquared < 1e-8f) return 0;
+            float angle = MathF.Atan2(heading.X * rear.Y - heading.Y * rear.X, Vector2.Dot(heading, rear));
+            return Math.Clamp(angle, -0.8f, 0.8f);
+        }
+
+        // The rear unit's frame: turned by the articulation about the frame joint.
+        private static Matrix4 TrailerFrame(Matrix4 placement, float articulation)
+        {
+            float joint = -ForwarderJoint * MetreScale;
+            return Matrix4.CreateTranslation(-joint, 0, 0) * Matrix4.CreateRotationZ(articulation) * Matrix4.CreateTranslation(joint, 0, 0) * placement;
+        }
+
+        private static void DrawModel(MachineModel m, ForestMachine machine, double position, Matrix4 placement, float articulation, GraphicsSettings settings)
         {
             var model = m.Model;
             // Rest pose, then extra local rotations: wheels roll with the distance driven, the crane works while felling or loading.
@@ -126,81 +164,178 @@ namespace ForesTycoon
                 if (wheel >= 0) local = Matrix4.CreateRotationY(m.LeftWheel[wheel] ? -roll : roll) * local;
                 else if (i == m.Crane) local = Matrix4.CreateRotationY(swing) * local;
                 else if (i == m.Boom) local = Matrix4.CreateRotationZ(lift) * local;
+                else if (i == m.Trailer)
+                    // Turn the rear unit about the up axis of its parent (the front frame) at the joint.
+                    local = Matrix4.CreateScale(node.Scale) * Matrix4.CreateFromQuaternion(node.Rotation)
+                        * Matrix4.CreateRotationY(articulation) * Matrix4.CreateTranslation(node.Translation);
                 m.Pose.World[i] = node.Parent < 0 ? local : local * m.Pose.World[node.Parent];
             }
             m.Renderer.Draw(m.Pose, Axis * Matrix4.CreateScale(MetreScale) * placement, settings, sourceMaterial: true);
         }
 
         // Stand-in when the licensed models are missing: chassis, cab, crane post and wheels in the machine colours.
-        private static void DrawStandIn(ForestMachine machine, Matrix4 placement)
+        private static void DrawStandIn(ForestMachine machine, Matrix4 placement, Matrix4 trailer)
         {
             bool harvester = machine.Kind == ForestMachineKind.Harvester;
             float s = MetreScale;
-            Color body = harvester ? Color.FromArgb(222, 150, 40) : Color.FromArgb(70, 128, 72);
+            Color body = harvester ? Color.FromArgb(222, 150, 40) : Color.FromArgb(70, 128, 72), tyre = Color.FromArgb(38, 38, 40);
             DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () =>
             {
-                float length = harvester ? 7.2f : 10.5f;
-                Box(placement, new Vector3(-length / 2, -1.2f, 0.6f) * s, new Vector3(length / 2, 1.2f, 1.5f) * s, body);
-                Box(placement, new Vector3(length / 2 - 2.6f, -1.0f, 1.5f) * s, new Vector3(length / 2 - 0.6f, 1.0f, 3.3f) * s, Color.FromArgb(60, 64, 70));
-                Box(placement, new Vector3(-0.3f, -0.3f, 1.5f) * s, new Vector3(0.3f, 0.3f, 3.6f) * s, Color.FromArgb(200, 200, 196));
-                for (int axle = 0; axle < (harvester ? 2 : 4); axle++)
+                // Front unit: engine, cab and crane post over two wheels a side.
+                Box(placement, new Vector3(-2.0f, -1.2f, 0.6f) * s, new Vector3(2.6f, 1.2f, 1.5f) * s, body);
+                Box(placement, new Vector3(0.2f, -1.0f, 1.5f) * s, new Vector3(2.2f, 1.0f, 3.3f) * s, Color.FromArgb(60, 64, 70));
+                Box(placement, new Vector3(-1.2f, -0.3f, 1.5f) * s, new Vector3(-0.6f, 0.3f, 3.6f) * s, Color.FromArgb(200, 200, 196));
+                foreach (float x in new[] { 1.6f, -0.8f })
+                    foreach (float y in new[] { -1.3f, 1.3f }) Wheel(placement, new Vector3(x, y, 0.65f) * s, 0.65f * s, 0.35f * s, tyre);
+                if (harvester)
                 {
-                    float x = -length / 2 + 1.1f + axle * (length - 2.2f) / (harvester ? 1 : 3);
-                    foreach (float y in new[] { -1.3f, 1.3f })
-                        Box(placement, new Vector3(x - 0.65f, y - 0.35f, 0) * s, new Vector3(x + 0.65f, y + 0.35f, 1.3f) * s, Color.FromArgb(38, 38, 40));
+                    Box(placement, new Vector3(-3.6f, -1.1f, 0.6f) * s, new Vector3(-2.0f, 1.1f, 1.5f) * s, body);
+                    return;
                 }
+                // Rear unit (articulated): load bed with stakes over a bogie.
+                Box(trailer, new Vector3(-7.4f, -1.2f, 0.9f) * s, new Vector3(-2.4f, 1.2f, 1.4f) * s, body);
+                foreach (float x in new[] { -7.2f, -4.9f, -2.6f })
+                    foreach (float y in new[] { -1.15f, 1.15f })
+                        Box(trailer, new Vector3(x - 0.08f, y - 0.08f, 1.4f) * s, new Vector3(x + 0.08f, y + 0.08f, 3.3f) * s, Color.FromArgb(52, 54, 58));
+                foreach (float x in new[] { -6.2f, -4.8f })
+                    foreach (float y in new[] { -1.3f, 1.3f }) Wheel(trailer, new Vector3(x, y, 0.65f) * s, 0.65f * s, 0.35f * s, tyre);
             });
         }
 
-        // Logs on the forwarder's bunk, filling it as the cargo grows.
-        private static void DrawLoad(ForestMachine machine, Matrix4 placement)
+        // Round logs between the forwarder's stakes, filling the bunk as the cargo grows.
+        private static void DrawLoad(ForestMachine machine, Matrix4 trailer)
         {
             float s = MetreScale;
-            int logs = Math.Clamp((int)MathF.Ceiling(machine.CargoFill * 9), 1, 9);
+            int logs = Math.Clamp((int)MathF.Ceiling(machine.CargoFill * 12), 1, 12);
             DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () =>
             {
                 for (int i = 0; i < logs; i++)
                 {
-                    int layer = i / 3, column = i % 3;
-                    float y = (column - 1) * 0.55f, z = 1.9f + layer * 0.5f;
-                    Box(placement, new Vector3(-5.6f, y - 0.24f, z) * s, new Vector3(-1.4f, y + 0.24f, z + 0.48f) * s,
-                        (i & 1) == 0 ? Color.FromArgb(150, 104, 60) : Color.FromArgb(132, 92, 54));
+                    int layer = i < 5 ? 0 : i < 9 ? 1 : 2, first = layer == 0 ? 0 : layer == 1 ? 5 : 9, inRow = 5 - layer;
+                    float r = 0.21f, y = (i - first - (inRow - 1) / 2f) * 2 * r, z = 1.4f + r + layer * r * 1.73f;
+                    RoundLog(trailer, new Vector3(-7.5f + (i % 2) * 0.3f, y, z) * s, new Vector3(-2.3f - (i % 3) * 0.2f, y, z) * s, r * s, i);
                 }
             });
         }
 
-        // Log piles beside the harvester's track and the stack at each landing.
-        private static void DrawPiles(Terrain terrain, ForestryLogistics logistics)
+        // Stacks (sarangok) of round logs beside the skid trail, and the big stack at each landing.
+        private void DrawPiles(Terrain terrain, ForestryLogistics logistics, GraphicsSettings settings)
         {
+            foreach (var site in logistics.Sites)
+            {
+                foreach (var pile in site.Piles) Stack(terrain.Map, pile.Key, pile.Value, settings);
+                if (site.Landing >= 0 && site.LandingStock > 0.05f) Stack(terrain.Map, site.Landing, site.LandingStock, settings);
+            }
+        }
+
+        /// <summary>Where a stack stands on its tile: along the trail (or road) through it, set off to one side of the track.</summary>
+        private static void StackPlace(TerrainMap map, int tile, out Vector2 at, out Vector2 heading)
+        {
+            map.TryGetTileCenter(tile, out Vector3 centre);
+            RoadEdge edges = map.IsSkidTrail(tile) ? map.GetSkidTrailEdges(tile) : RoadEdge.None;
+            Tile t = map.Tiles[tile];
+            Vector2 w = new(t.W.xPos, t.W.yPos), s = new(t.S.xPos, t.S.yPos), n = new(t.N.xPos, t.N.yPos);
+            // The tile's u axis runs W→S, its v axis W→N; a trail along WS/EN edges runs along v.
+            bool alongV = (edges & (RoadEdge.WS | RoadEdge.EN)) != 0 && (edges & (RoadEdge.SE | RoadEdge.NW)) == 0;
+            bool alongU = (edges & (RoadEdge.SE | RoadEdge.NW)) != 0 && (edges & (RoadEdge.WS | RoadEdge.EN)) == 0;
+            Vector2 axis = alongU ? (s - w) : (n - w);
+            if (!alongU && !alongV) axis = ((tile * 2654435761u) & 1) == 0 ? s - w : n - w;
+            heading = axis.Normalized();
+            Vector2 side = new(-heading.Y, heading.X);
+            at = centre.Xy + side * (0.3f * axis.Length);
+        }
+
+        private void Stack(TerrainMap map, int tile, float volume, GraphicsSettings settings)
+        {
+            StackPlace(map, tile, out Vector2 at, out Vector2 heading);
+            Matrix4 placement = Placement(map, at, heading, 0.8f);
+            int size = 0;
+            while (size + 1 < StackSizes.Length && volume > StackSizes[size].Volume * 1.4f) size++;
+            if (TryStackModel(size))
+            {
+                // The model's logs lie along its x axis; scale gently with the volume within its size step.
+                float fill = Math.Clamp(MathF.Pow(volume / StackSizes[size].Volume, 1 / 3f), 0.6f, 1.15f);
+                stackRenderers[size].Draw(stackPoses[size], Axis * Matrix4.CreateScale(MetreScale * 0.55f * fill) * placement, settings, sourceMaterial: true);
+                return;
+            }
+            // Without the model: a stack of round logs, more layers as the volume grows.
+            int logs = Math.Clamp((int)MathF.Ceiling(volume / 0.8f), 1, 21);
+            float r = 0.22f, sScale = MetreScale;
             DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () =>
             {
-                foreach (var site in logistics.Sites)
-                {
-                    foreach (var pile in site.Piles) Pile(terrain.Map, pile.Key, pile.Value, 0.6f);
-                    if (site.Landing >= 0 && site.LandingStock > 0.05f) Pile(terrain.Map, site.Landing, site.LandingStock, 1f);
-                }
+                int i = 0;
+                for (int layer = 0, inRow = 6; i < logs && inRow > 0; layer++, inRow--)
+                    for (int k = 0; k < inRow && i < logs; k++, i++)
+                    {
+                        float y = (k - (inRow - 1) / 2f) * 2 * r, z = r + layer * r * 1.73f;
+                        RoundLog(placement, new Vector3(-2.1f + (i % 3) * 0.15f, y, z) * sScale, new Vector3(2.1f - (i % 2) * 0.2f, y, z) * sScale, r * sScale, i);
+                    }
             });
         }
 
-        private static void Pile(TerrainMap map, int tile, float volume, float size)
+        private bool TryStackModel(int size)
         {
-            if (!map.TryGetTileCenter(tile, out Vector3 centre)) return;
-            uint hash = (uint)tile * 2654435761u;
-            float yaw = (hash >> 20) / 4096f * MathF.PI;
-            Vector2 heading = new(MathF.Cos(yaw), MathF.Sin(yaw));
-            // Off-centre so the machine passing the tile does not drive through the pile.
-            Vector2 at = centre.Xy + new Vector2(-heading.Y, heading.X) * 1.3f;
-            Matrix4 placement = Placement(map, at, heading, 0.8f);
-            int logs = Math.Clamp((int)MathF.Ceiling(volume / 1.2f), 1, 15);
-            float s = MetreScale * size;
-            for (int i = 0; i < logs; i++)
+            if (stacks[size] != null) return true;
+            if (!stackTried[size])
             {
-                int layer = i < 5 ? 0 : i < 9 ? 1 : i < 12 ? 2 : i < 14 ? 3 : 4;
-                int first = layer switch { 0 => 0, 1 => 5, 2 => 9, 3 => 12, _ => 14 };
-                int inRow = layer switch { 0 => 5, 1 => 4, 2 => 3, 3 => 2, _ => 1 };
-                float y = (i - first - (inRow - 1) / 2f) * 0.5f, z = layer * 0.43f;
-                Box(placement, new Vector3(-2f, y - 0.23f, z) * s, new Vector3(2f, y + 0.23f, z + 0.46f) * s,
-                    (i % 3) == 0 ? Color.FromArgb(158, 112, 66) : Color.FromArgb(136, 96, 56));
+                stackTried[size] = true;
+                string path = Path.Combine(AppContext.BaseDirectory, "Assets", "Licensed", StackSizes[size].File);
+                if (!File.Exists(path)) return false;
+                stacks[size] = AnimatedGlbModel.Load(path);
+                stackRenderers[size] = new AnimatedModelRenderer(stacks[size]);
+                stackPoses[size] = stacks[size].CreatePose();
+                stackPoses[size].Evaluate(null, 0);
+            }
+            return stacks[size] != null;
+        }
+
+        /// <summary>A round log: an eight-sided bark mantle with light cut ends, from <paramref name="a"/> to <paramref name="b"/>.</summary>
+        private static void RoundLog(Matrix4 frame, Vector3 a, Vector3 b, float radius, int seed)
+        {
+            Vector3 axis = (b - a).Normalized();
+            Vector3 u = Vector3.Cross(axis, Vector3.UnitZ).LengthSquared > 1e-6f ? Vector3.Cross(axis, Vector3.UnitZ).Normalized() : Vector3.UnitY;
+            Vector3 v = Vector3.Cross(u, axis);
+            Vector3 P(Vector3 p) => Vector3.TransformPosition(p, frame);
+            Color bark = (seed % 3) switch { 0 => Color.FromArgb(104, 74, 48), 1 => Color.FromArgb(92, 64, 42), _ => Color.FromArgb(116, 84, 54) };
+            Color wood = (seed % 2) == 0 ? Color.FromArgb(222, 184, 132) : Color.FromArgb(208, 166, 112);
+            const int Sides = 8;
+            for (int i = 0; i < Sides; i++)
+            {
+                float a0 = i * MathF.Tau / Sides, a1 = (i + 1) * MathF.Tau / Sides;
+                Vector3 o0 = (u * MathF.Cos(a0) + v * MathF.Sin(a0)) * radius, o1 = (u * MathF.Cos(a1) + v * MathF.Sin(a1)) * radius;
+                // Faces toward the sky are lighter: simple shading without normals.
+                float light = 0.75f + 0.3f * Vector3.Dot(((o0 + o1) * 0.5f).Normalized(), Vector3.UnitZ);
+                DynamicPrimitiveBatch.Color4(Color.FromArgb((int)Math.Min(255, bark.R * light), (int)Math.Min(255, bark.G * light), (int)Math.Min(255, bark.B * light)));
+                DynamicPrimitiveBatch.Vertex3(P(a + o0)); DynamicPrimitiveBatch.Vertex3(P(b + o0));
+                DynamicPrimitiveBatch.Vertex3(P(b + o1)); DynamicPrimitiveBatch.Vertex3(P(a + o1));
+            }
+            DynamicPrimitiveBatch.Color4(wood);
+            foreach (var (end, sign) in new[] { (a, -1f), (b, 1f) })
+                for (int i = 0; i < Sides; i += 2)
+                {
+                    float a0 = i * MathF.Tau / Sides, a1 = (i + 1) * MathF.Tau / Sides, a2 = (i + 2) * MathF.Tau / Sides;
+                    Vector3 c = end + axis * sign * 0.001f;
+                    DynamicPrimitiveBatch.Vertex3(P(c));
+                    DynamicPrimitiveBatch.Vertex3(P(c + (u * MathF.Cos(a0) + v * MathF.Sin(a0)) * radius));
+                    DynamicPrimitiveBatch.Vertex3(P(c + (u * MathF.Cos(a1) + v * MathF.Sin(a1)) * radius));
+                    DynamicPrimitiveBatch.Vertex3(P(c + (u * MathF.Cos(a2) + v * MathF.Sin(a2)) * radius));
+                }
+        }
+
+        private static void Wheel(Matrix4 frame, Vector3 centre, float radius, float halfWidth, Color colour) =>
+            RoundLogLike(frame, centre - Vector3.UnitY * halfWidth, centre + Vector3.UnitY * halfWidth, radius, colour);
+
+        private static void RoundLogLike(Matrix4 frame, Vector3 a, Vector3 b, float radius, Color colour)
+        {
+            Vector3 P(Vector3 p) => Vector3.TransformPosition(p, frame);
+            const int Sides = 8;
+            DynamicPrimitiveBatch.Color4(colour);
+            for (int i = 0; i < Sides; i++)
+            {
+                float a0 = i * MathF.Tau / Sides, a1 = (i + 1) * MathF.Tau / Sides;
+                Vector3 o0 = new(MathF.Cos(a0) * radius, 0, MathF.Sin(a0) * radius), o1 = new(MathF.Cos(a1) * radius, 0, MathF.Sin(a1) * radius);
+                DynamicPrimitiveBatch.Vertex3(P(a + o0)); DynamicPrimitiveBatch.Vertex3(P(b + o0));
+                DynamicPrimitiveBatch.Vertex3(P(b + o1)); DynamicPrimitiveBatch.Vertex3(P(a + o1));
             }
         }
 
@@ -224,7 +359,8 @@ namespace ForesTycoon
         public void Dispose()
         {
             foreach (var m in models) m?.Dispose();
-            Array.Clear(models);
+            foreach (var r in stackRenderers) r?.Dispose();
+            Array.Clear(models); Array.Clear(stacks); Array.Clear(stackRenderers); Array.Clear(stackPoses); Array.Clear(stackTried);
             loaded = false;
         }
     }

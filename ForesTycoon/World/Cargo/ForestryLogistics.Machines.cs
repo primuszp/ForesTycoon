@@ -110,7 +110,7 @@ namespace ForesTycoon
         internal void TrailsChanged()
         {
             if (!MachinesEnabled) return;
-            foreach (var site in Sites) site.Landing = FindLanding(site);
+            foreach (var site in Sites) { site.Landing = FindLanding(site); site.StackTiles.Clear(); }
             SpawnMachines();
         }
 
@@ -136,6 +136,17 @@ namespace ForesTycoon
             float sum = 0;
             foreach (float v in site.Piles.Values) sum += v;
             return sum;
+        }
+
+        /// <summary>Where the logs felled on <paramref name="tile"/> are stacked: the nearest skid-trail tile (within three
+        /// tiles), else the felling tile itself.</summary>
+        internal int StackTileFor(HarvestSite site, int tile)
+        {
+            if (site.StackTiles.TryGetValue(tile, out int stack)) return stack;
+            int[] path = terrain.IsSkidTrail(tile) ? null : FindPath(site, tile, t => terrain.IsSkidTrail(t));
+            stack = path != null && path.Length <= 4 ? path[^1] : tile;
+            site.StackTiles[tile] = stack;
+            return stack;
         }
 
         private void UpdateMachines(double seconds)
@@ -188,7 +199,12 @@ namespace ForesTycoon
                     machine.WorkTime += dt;
                     int tile = machine.Tile;
                     float cut = forest.ExtractTimber(tile, (float)(FellingRate * dt));
-                    if (cut > 0) site.Piles[tile] = (site.Piles.TryGetValue(tile, out float pile) ? pile : 0) + cut;
+                    if (cut > 0)
+                    {
+                        // The processor stacks the logs in a stack (sarang) beside the nearest skid trail for the forwarder.
+                        int stack = StackTileFor(site, tile);
+                        site.Piles[stack] = (site.Piles.TryGetValue(stack, out float pile) ? pile : 0) + cut;
+                    }
                     if (forest.AvailableTimber(tile) > 0.001f) break;
                     goto default;
                 }

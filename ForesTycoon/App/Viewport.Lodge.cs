@@ -364,7 +364,7 @@ namespace ForesTycoon
                     ToolIcon(GameIcon.Harvest, TerrainEditTool.HarvestForest, Size, "Kitermelés", "7", "Húzással jelöld ki a vágásterületet.");
                     ImGui.SameLine();
                     ToolIcon(GameIcon.SkidTrail, TerrainEditTool.SkidTrail, Size, "Közelítő nyom", "0",
-                        "Húzással jelöld ki a nyomot az úttól a vágásig: ezen jár a harveszter és a forwarder. Csak keréknyom: használat nélkül benő.");
+                        "Húzással jelöld ki a nyomot az úttól a vágásig: ezen jár a processzor és a forwarder. Csak keréknyom: használat nélkül benő.");
                     ImGui.SameLine();
                     ToolIcon(GameIcon.SkidTrailRemove, TerrainEditTool.SkidTrailRemove, Size, "Nyom törlése", "", "Húzással megszünteti a közelítő nyomot.");
                     break;
