@@ -34,6 +34,12 @@ namespace ForesTycoon
         /// <summary>Money spent on building and repairing, thousand forints.</summary>
         internal double Expenses { get; private set; }
         private double roadWeatherSeconds;
+        /// <summary>
+        /// Vehicle time per calendar time. As in Transport Tycoon, vehicles move at a natural pace whatever the calendar
+        /// does: at the viewport's slow 1× (a quarter simulated second per real second, a year an hour) they still drive in
+        /// real time, while the year runs slowly enough to plan.
+        /// </summary>
+        internal const double VehicleTimeScale = 4;
         private ForestryAreaSummary lastForestryArea;
         internal GraphicsSettings Graphics { get; }
 
@@ -52,7 +58,7 @@ namespace ForesTycoon
             terrain = new Terrain(settings ?? throw new ArgumentNullException(nameof(settings)));
             ecosystem = new Ecosystem(map, forestYearSeconds, soilModel, climate);
             timberCargo = systems.Add(new TimberCargoSystem());
-            vehicles = systems.Add(new VehicleSystem(timberCargo, route => VehicleRoadRoute.Create(map, route)));
+            vehicles = systems.Add(new VehicleSystem(timberCargo, route => VehicleRoadRoute.Create(map, route)) { TimeScale = VehicleTimeScale });
             effects = systems.Add(new WorldEffectSystem());
             InitializeLogistics();
             terrainRenderer = new TerrainRenderer(terrain, vehicles, effects, forest, Graphics, Environment, wildlife, Logistics);
@@ -133,7 +139,8 @@ namespace ForesTycoon
             long start = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
             ecosystem.Update(fixedDeltaSeconds);
             long environmentUpdated = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
-            Logistics?.Update(fixedDeltaSeconds);
+            // Vehicles and machines keep their own clock, faster than the calendar (see VehicleTimeScale).
+            Logistics?.Update(fixedDeltaSeconds * VehicleTimeScale);
             WeatherRoads(fixedDeltaSeconds);
             long logisticsUpdated = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
             wildlife.Update(fixedDeltaSeconds, map, forest, Environment);

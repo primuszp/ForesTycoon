@@ -10,6 +10,8 @@ namespace ForesTycoon
         private int nextId = 1;
         internal Func<int[], VehicleRoadRoute> RoadRouteFactory { get; set; }
         public bool UseRoadPhysics { get; set; } = true;
+        /// <summary>Vehicle seconds per world second (the world's vehicle clock runs faster than its calendar).</summary>
+        internal double TimeScale { get; set; } = 1;
         public bool UseCargoStops { get; set; } = true;
         internal Func<Vehicle,float,float> SourceLoader;
         internal Action<Vehicle,float> DestinationReceiver;
@@ -58,6 +60,7 @@ namespace ForesTycoon
         public void Update(double deltaSeconds)
         {
             if (!double.IsFinite(deltaSeconds) || deltaSeconds < 0) throw new ArgumentOutOfRangeException(nameof(deltaSeconds));
+            deltaSeconds *= TimeScale;
             for (int i = 0; i < vehicles.Count; i++)
             {
                 Vehicle vehicle = vehicles[i];

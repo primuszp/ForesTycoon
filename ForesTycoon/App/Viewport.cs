@@ -76,9 +76,9 @@ namespace ForesTycoon
             ticksPerSecond: 30.0, maximumTicksPerFrame: 2048, maximumWorkMilliseconds: 8);
         private FixedStepClock simulationClock => simulation.Clock;
         /// <summary>
-        /// Simulated seconds per real second at "1×". The game's 1× is a slow, thoughtful pace: a year lasts an hour and the
-        /// vehicles move at a quarter of their pace. Around 2–4× it plays at Transport Tycoon's normal speed (4×: a 15-minute
-        /// year, vehicles at full pace).
+        /// Simulated seconds per real second at "1×". The game's 1× is a slow, thoughtful calendar (a year an hour) while
+        /// vehicles still move in real time (their clock runs <see cref="GameWorld.VehicleTimeScale"/> times faster). At
+        /// 2–4× the calendar runs at Transport Tycoon's normal pace (4×: a 15-minute year).
         /// </summary>
         internal const double GamePace = 0.25;
         /// <summary>The speed the player sees and picks (1×, 2×, 4× … 256×).</summary>
