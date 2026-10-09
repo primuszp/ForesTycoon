@@ -199,13 +199,20 @@ namespace ForesTycoon
 
         void IWorldCommandTarget.ExecuteRoadPath(int startTileId, int endTileId, bool remove)
         {
+            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             int[] changed = remove ? map.RemoveRoadTilePath(startTileId, endTileId)
                 : map.BuildRoadTilePath(startTileId, endTileId);
             if (changed.Length == 0) return;
+            long t1 = System.Diagnostics.Stopwatch.GetTimestamp();
             forest.RefreshHabitat(changed);
+            long t2 = System.Diagnostics.Stopwatch.GetTimestamp();
             Environment?.RefreshRouting(changed);
+            long t3 = System.Diagnostics.Stopwatch.GetTimestamp();
             if (remove) vehicles.RemoveInvalidRoutes(map.IsRoadTile);
             else vehicles.RefreshLogisticsRoutes(map.IsRoadTile);
+            long t4 = System.Diagnostics.Stopwatch.GetTimestamp();
+            static double Ms(long a, long b) => System.Diagnostics.Stopwatch.GetElapsedTime(a, b).TotalMilliseconds;
+            LastRoadBuildProfile = $"[{changed.Length} tiles: map {Ms(t0, t1):F1}, habitat {Ms(t1, t2):F1}, routing {Ms(t2, t3):F1}, vehicles {Ms(t3, t4):F1}]";
             if (map.TryGetRoadTileCenter(endTileId, out Vector3 position))
                 effects.Spawn(WorldEffectKind.RoadChanged, position);
         }
@@ -270,6 +277,9 @@ namespace ForesTycoon
             terrainRenderer.Draw(context);
         }
         public void GetWorldBounds(out Vector3 min, out Vector3 max) => map.GetWorldBounds(out min, out max);
+        internal int TilesPerSide => map.TilesPerSide;
+        /// <summary>Per-step timings of the last road edit (diagnostics).</summary>
+        internal string LastRoadBuildProfile { get; private set; } = "";
         public bool TryGetSurfaceZ(double x, double y, out float z) => map.TryGetSurfaceZ(x, y, out z);
         public bool TryRaycastTerrain(Vector3 rayNear, Vector3 rayFar, out Vector3 hit) =>
             map.TryRaycast(rayNear, rayFar, out hit);

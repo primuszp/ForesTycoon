@@ -44,9 +44,12 @@ namespace ForesTycoon
             internal ForestLod Lod;
             internal IndividualForestChunk Geometry;
             internal IEnumerator<bool> Work;
+            /// <summary>Rebuild caused by a player edit (road, building, terrain, forestry): jumps the queue and gets a larger budget.</summary>
+            internal bool Priority;
             public void Dispose() { Work.Dispose(); Geometry.Dispose(); }
         }
         private ForestBuild pendingForestBuild;
+        internal bool HasPendingForestBuild => pendingForestBuild != null;
         // Explicit diagnostic mode for pixel assertions at an exact life-stage boundary.
         internal bool SynchronousForestBuilds { get; set; }
         private ForestLod? generatedForestLod;
@@ -136,15 +139,19 @@ namespace ForesTycoon
             changed |= geometry.LightShapeDirty;
             if (changed)
             {
+                // A player edit must never stall the frame: the old copy stays on screen for the few frames its
+                // replacement takes, and that replacement goes ahead of any background work.
+                bool edited = geometry.Initialized && geometry.Generation == forest.IndividualTrees.Generation
+                    && (geometry.TerrainVersion != chunk.PropVersion || (geometry.EditRevision != forest.EditRevision && topologyChanged));
                 bool immediate = SynchronousForestBuilds || (!deferIfStale && (!geometry.Initialized
-                    || geometry.TerrainVersion != chunk.PropVersion || geometry.Generation != forest.IndividualTrees.Generation
-                    || (geometry.EditRevision != forest.EditRevision && topologyChanged)));
+                    || geometry.Generation != forest.IndividualTrees.Generation));
                 if (!immediate)
                 {
+                    if (edited && pendingForestBuild != null && !pendingForestBuild.Priority) CancelForestBuild();
                     if (pendingForestBuild == null)
                     {
                         var replacement = new IndividualForestChunk(chunk.TileIds.Length);
-                        pendingForestBuild = new ForestBuild { Chunk = chunk, Lod = lod, Geometry = replacement,
+                        pendingForestBuild = new ForestBuild { Chunk = chunk, Lod = lod, Geometry = replacement, Priority = edited,
                             Work = BuildIndividualForestChunk(chunk, replacement, forest, graphics, lod).GetEnumerator() };
                         pendingForestBuild.Work.MoveNext(); // Capture a consistent tree snapshot before yielding.
                     }
@@ -266,6 +273,7 @@ namespace ForesTycoon
             }
             if (obsolete) { CancelForestBuild(); return; }
             long started = System.Diagnostics.Stopwatch.GetTimestamp();
+            double budget = build.Priority ? 8 : 2;
             do
             {
                 if (!build.Work.MoveNext())
@@ -282,7 +290,7 @@ namespace ForesTycoon
                     ForestChunkRebuilds++; TotalForestChunkRebuilds++;
                     return;
                 }
-            } while (System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds < 2);
+            } while (System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds < budget);
         }
 
         private static void UpdateIndividualForestState(IndividualForestChunk geometry, ForestSystem forest)

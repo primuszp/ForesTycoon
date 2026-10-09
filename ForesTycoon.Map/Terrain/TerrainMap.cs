@@ -72,6 +72,7 @@ namespace ForesTycoon.Map
         public int TileWidth => data.TileSizeH;
         public int TileHeight => data.TileSizeV;
         public int TileSizeM => tileSizeM;
+        internal int TilesPerSide => nodeRows - 1;
         public int TotalChunkCount => chunkIndex.Chunks.Count;
         internal IReadOnlySet<int> FlippedDiagonalTiles => flippedDiagonalTiles;
         internal bool IsDiagonalFlipped(int tileId) => flippedDiagonalTiles.Contains(tileId);

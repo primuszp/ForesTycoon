@@ -62,25 +62,24 @@ namespace ForesTycoon
                 int tileId = 0;
                 while (!forest.TryGetStand(tileId, out _)) tileId++;
                 forest.Harvest(tileId, out _);
-                Draw(terrain, forest, 1.5f);
-                Require(terrain.ForestChunkRebuilds > 0, "Harvest did not invalidate geometry.");
-                Require(terrain.ForestChunkRebuilds < terrain.VisibleChunkCount, "Harvest rebuilt unrelated chunks.");
+                // Player edits rebuild in prioritised background steps: the frame never stalls, the result lands within a few frames.
+                int rebuilt = DrawUntilRebuilt(terrain, forest);
+                Require(rebuilt > 0, "Harvest did not invalidate geometry.");
+                Require(rebuilt < terrain.VisibleChunkCount, "Harvest rebuilt unrelated chunks.");
                 forest.Plant(tileId, ForestSpecies.Oak);
-                Draw(terrain, forest, 1.5f);
-                Require(terrain.ForestChunkRebuilds > 0, "Planting did not invalidate geometry.");
+                Require(DrawUntilRebuilt(terrain, forest) > 0, "Planting did not invalidate geometry.");
                 var editTimer = System.Diagnostics.Stopwatch.StartNew();
                 terrain.Map.EditElevationAtNode(4 * 33 + 4, 1, 0, 1);
                 Draw(terrain, forest, 1.5f);
                 editTimer.Stop();
-                Console.WriteLine($"Local terrain edit + forest refresh: {editTimer.Elapsed.TotalMilliseconds:F1} ms, {terrain.ForestChunkRebuilds}/{terrain.VisibleChunkCount} forest chunks rebuilt.");
-                Require(terrain.ForestChunkRebuilds > 0 && terrain.ForestChunkRebuilds < terrain.VisibleChunkCount,
-                    "Local terrain edit rebuilt unrelated forest chunks.");
+                rebuilt = terrain.ForestChunkRebuilds + DrawUntilRebuilt(terrain, forest);
+                Console.WriteLine($"Local terrain edit frame: {editTimer.Elapsed.TotalMilliseconds:F1} ms; {rebuilt}/{terrain.VisibleChunkCount} forest chunks rebuilt.");
+                Require(rebuilt > 0 && rebuilt < terrain.VisibleChunkCount, "Local terrain edit rebuilt unrelated forest chunks.");
                 Draw(terrain, forest, 1.5f);
                 Require(terrain.ForestChunkRebuilds == 0, "Edited forest cache did not settle.");
                 // A central terrain edit must invalidate positions even without a forest revision.
                 terrain.Map.EditElevationAtNode(16 * 33 + 16, 1, 0, 1);
-                Draw(terrain, forest, 1.5f);
-                Require(terrain.ForestChunkRebuilds > 0, "Terrain edit did not invalidate geometry.");
+                Require(DrawUntilRebuilt(terrain, forest) > 0, "Terrain edit did not invalidate geometry.");
                 forest.Clear();
                 Require(Draw(terrain, forest, 1.5f) == 0, "Cleared forest left stale GPU geometry.");
                 Require(GL.GetError() == ErrorCode.NoError, "OpenGL reported an error.");
@@ -139,6 +138,18 @@ namespace ForesTycoon
         private static void Require(bool condition, string message)
         {
             if (!condition) throw new InvalidOperationException(message);
+        }
+
+        private static int DrawUntilRebuilt(Terrain terrain, ForestSystem forest)
+        {
+            int total = 0;
+            for (int frame = 0; frame < 600; frame++)
+            {
+                Draw(terrain, forest, 1.5f);
+                total += terrain.ForestChunkRebuilds;
+                if (total > 0 && !terrain.HasPendingForestBuild) break;
+            }
+            return total;
         }
 
         private static void CheckStaticTerrainCache()
