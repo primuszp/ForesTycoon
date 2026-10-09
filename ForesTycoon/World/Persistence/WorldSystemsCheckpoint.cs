@@ -93,8 +93,11 @@ namespace ForesTycoon
     }
     internal sealed partial class ForestryLogistics
     {
-        internal LogisticsCheckpoint Capture() => new(Sites.Select(s => new HarvestCheckpoint((int[])s.Tiles.Clone(), s.InitialVolume)).ToArray(),
-            Mills.Select(m => new MillCheckpoint(m.TileId, (int[])m.Footprint.Clone(), new(m.Position), m.Received, m.Stock, m.Processed)).ToArray(), Status);
+        internal LogisticsCheckpoint Capture() => new(Sites.Select(s => new HarvestCheckpoint((int[])s.Tiles.Clone(), s.InitialVolume,
+                s.Landing, s.Piles.Select(p => new PileCheckpoint(p.Key, p.Value)).ToArray(), s.LandingStock)).ToArray(),
+            Mills.Select(m => new MillCheckpoint(m.TileId, (int[])m.Footprint.Clone(), new(m.Position), m.Received, m.Stock, m.Processed)).ToArray(), Status,
+            Machines.Select(m => new ForestMachineCheckpoint(m.Id, m.Kind, Sites.IndexOf(m.Site), (int[])m.Path.Clone(), m.PathPosition,
+                m.PreviousPathPosition, m.State, m.Goal, m.Cargo, m.WorkTime)).ToArray(), nextMachineId);
         internal void Restore(LogisticsCheckpoint s)
         {
             CheckpointGuard.Require(s != null && s.Sites != null && s.Mills != null && s.Status != null, "logistics system");
@@ -103,7 +106,17 @@ namespace ForesTycoon
                 CheckpointGuard.Require(site != null && site.Tiles != null && site.Tiles.Length > 0, "harvest site");
                 foreach (int id in site.Tiles) CheckpointGuard.Require(terrain.IsValidTileId(id) && used.Add(id), "harvest tile");
                 CheckpointGuard.NonNegative(site.InitialVolume, "harvest volume");
-                sites.Add(new HarvestSite { Tiles = (int[])site.Tiles.Clone(), InitialVolume = site.InitialVolume });
+                CheckpointGuard.Require(site.Landing == -1 || terrain.IsValidTileId(site.Landing), "harvest landing");
+                CheckpointGuard.NonNegative(site.LandingStock, "landing stock");
+                var restored = new HarvestSite { Tiles = (int[])site.Tiles.Clone(), InitialVolume = site.InitialVolume,
+                    Landing = site.Landing, LandingStock = site.LandingStock };
+                foreach (var pile in site.Piles ?? Array.Empty<PileCheckpoint>())
+                {
+                    CheckpointGuard.Require(pile != null && terrain.IsValidTileId(pile.Tile) && !restored.Piles.ContainsKey(pile.Tile), "log pile");
+                    CheckpointGuard.NonNegative(pile.Volume, "log pile volume");
+                    restored.Piles[pile.Tile] = pile.Volume;
+                }
+                sites.Add(restored);
             }
             var footprints = new HashSet<int>(); var destinations = new HashSet<int>();
             foreach (var m in s.Mills) {
@@ -117,7 +130,22 @@ namespace ForesTycoon
                 mills.Add(new Sawmill { TileId = m.TileId, Footprint = (int[])m.Footprint.Clone(), Position = m.Position.Vector,
                     Received = m.Received, Stock = m.Stock, Processed = m.Processed });
             }
+            var machines = new List<ForestMachine>(); var ids = new HashSet<int>();
+            foreach (var m in s.Machines ?? Array.Empty<ForestMachineCheckpoint>())
+            {
+                CheckpointGuard.Require(m != null && ids.Add(m.Id) && m.Id > 0 && m.Id < s.NextMachineId && Enum.IsDefined(m.Kind) &&
+                    Enum.IsDefined(m.State) && Enum.IsDefined(m.Goal) && (uint)m.Site < (uint)sites.Count &&
+                    m.Path != null && m.Path.Length > 0 && Array.TrueForAll(m.Path, terrain.IsValidTileId), "forest machine");
+                CheckpointGuard.Require(double.IsFinite(m.Position) && m.Position >= 0 && m.Position <= m.Path.Length - 1 &&
+                    double.IsFinite(m.PreviousPosition) && m.PreviousPosition >= 0 && m.PreviousPosition <= m.Path.Length - 1, "forest machine position");
+                CheckpointGuard.NonNegative(m.Cargo, "forest machine cargo"); CheckpointGuard.NonNegative(m.WorkTime, "forest machine work time");
+                CheckpointGuard.Require(m.Cargo <= ForestMachine.ForwarderCapacity + 0.001f, "forest machine cargo");
+                machines.Add(new ForestMachine { Id = m.Id, Kind = m.Kind, Site = sites[m.Site], Path = (int[])m.Path.Clone(),
+                    PathPosition = m.Position, PreviousPathPosition = m.PreviousPosition, State = m.State, Goal = m.Goal, Cargo = m.Cargo, WorkTime = m.WorkTime });
+            }
+            CheckpointGuard.Require(s.NextMachineId >= 1, "forest machine ids");
             Sites.Clear(); Sites.AddRange(sites); Mills.Clear(); Mills.AddRange(mills); Status = s.Status;
+            Machines.Clear(); Machines.AddRange(machines); nextMachineId = s.NextMachineId;
         }
     }
     sealed partial class TimberCargoSystem

@@ -207,7 +207,7 @@ namespace ForesTycoon
                     ImGui.TextDisabled("Húzd végig a megszüntetendő nyomon.");
                     break;
                 case TerrainEditTool.HarvestForest:
-                    ImGui.TextDisabled("Húzással jelöld ki az erdőterületet. A fák rakodás közben fogynak.");
+                    ImGui.TextDisabled("Húzással jelöld ki a vágást. A harveszter dönt, a forwarder a rakodóra hordja; nyom kell az útig.");
                     if (interaction.IsForestryDragging) { ImGui.SameLine(); ImGui.TextUnformatted($"{world.ForestryPreviewCount} csempe"); }
                     break;
                 case TerrainEditTool.PlaceSawmill:
@@ -414,6 +414,34 @@ namespace ForesTycoon
                 {
                     string fuel = vehicle.FuelPer100Km > 0 ? $"{vehicle.FuelPer100Km:F0} l/100 km" : "–";
                     ImGui.TextDisabled($"{vehicle.CurrentSpeed * vehicle.MetresPerTile * 3.6:F0} km/h · {vehicle.Mass / 1000:F1} t · {fuel}");
+                }
+            }
+            var logistics = world.Logistics;
+            if (logistics != null && logistics.Machines.Count > 0)
+            {
+                ImGui.SeparatorText("Erdei gépek");
+                foreach (var machine in logistics.Machines)
+                {
+                    bool harvester = machine.Kind == ForestMachineKind.Harvester;
+                    string state = machine.State switch
+                    {
+                        ForestMachineState.Driving => harvester ? "a vágásba tart" : machine.Cargo > 0 ? "a rakodóra visz" : "rakatért megy",
+                        ForestMachineState.Felling => "dönt és darabol",
+                        ForestMachineState.Loading => "rakodik",
+                        ForestMachineState.Unloading => "lerak a rakodón",
+                        _ => "áll a rakodón"
+                    };
+                    HudTheme.IconText(harvester ? GameIcon.Harvest : GameIcon.Timber, $"{(harvester ? "Harveszter" : "Forwarder")} #{machine.Id}");
+                    ImGui.SameLine();
+                    ImGui.TextColored(machine.State == ForestMachineState.Parked ? HudTheme.Muted : HudTheme.Good, state);
+                    if (!harvester)
+                        ImGui.ProgressBar(machine.CargoFill, new NVec2(-1, 12), $"{machine.Cargo:F1} / {ForestMachine.ForwarderCapacity:F0} m³");
+                }
+                foreach (var site in logistics.Sites)
+                {
+                    if (site.Landing < 0 || logistics.Volume(site) <= 0.001f) continue;
+                    float piled = 0; foreach (float v in site.Piles.Values) piled += v;
+                    ImGui.TextDisabled($"Vágás: {piled:F1} m³ az erdőben rakásban · {site.LandingStock:F1} m³ a rakodón");
                 }
             }
             ImGui.End();

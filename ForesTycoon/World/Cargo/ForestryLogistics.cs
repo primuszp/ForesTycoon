@@ -7,6 +7,12 @@ namespace ForesTycoon
     {
         internal int[] Tiles;
         internal float InitialVolume;
+        /// <summary>Tile at the road where the forwarder unloads and trucks load; -1 until a skid trail connects the site.</summary>
+        internal int Landing = -1;
+        /// <summary>Felled, processed logs waiting beside the harvester's track, m³ per tile.</summary>
+        internal readonly SortedDictionary<int, float> Piles = new();
+        /// <summary>Logs stacked at the landing, m³.</summary>
+        internal float LandingStock;
     }
     internal sealed class Sawmill
     {
@@ -23,7 +29,7 @@ namespace ForesTycoon
         internal readonly List<Sawmill> Mills=new();
         internal string Status="Jelölj ki kitermelési területet, és helyezz el egy fűrészmalmot.";
         internal ForestryLogistics(TerrainMap terrain,ForestSystem forest){this.terrain=terrain;this.forest=forest;}
-        internal float Volume(HarvestSite site){float result=0;foreach(int id in site.Tiles)result+=forest.AvailableTimber(id);return result;}
+        internal float Volume(HarvestSite site){float result=site.LandingStock;foreach(int id in site.Tiles)result+=forest.AvailableTimber(id);foreach(float v in site.Piles.Values)result+=v;return result;}
         internal float Remaining {get {float sum=0;foreach(var site in Sites)sum+=Volume(site);return sum;}}
         internal bool ContainsTile(int id){foreach(var site in Sites)if(Array.IndexOf(site.Tiles,id)>=0)return true;return false;}
         internal int Designate(ReadOnlySpan<int> ids)
@@ -32,6 +38,10 @@ namespace ForesTycoon
             foreach(int id in ids)if(!ContainsTile(id)&&forest.AvailableTimber(id)>0){selected.Add(id);volume+=forest.AvailableTimber(id);}
             if(selected.Count>0)Sites.Add(new HarvestSite{Tiles=selected.ToArray(),InitialVolume=volume});
             Status=selected.Count>0?$"Kitermelés kijelölve: {selected.Count} csempe, {volume:F1} m³.":"Nincs új kitermelhető erdő a kijelölésben.";
+            if(selected.Count>0&&MachinesEnabled){
+                var site=Sites[^1];site.Landing=FindLanding(site);SpawnMachines();
+                if(site.Landing<0)Status+=" Jelölj ki közelítő nyomot az úttól a vágásig, hogy a gépek odaérjenek.";
+            }
             return selected.Count;
         }
         internal bool PlaceMill(int id)
@@ -46,7 +56,9 @@ namespace ForesTycoon
         {
             foreach(var site in Sites) {
                 if(Volume(site)<0.001f)continue;
-                var origins=terrain.FindRoadDocks(site.Tiles);
+                // With forest machines the trucks load at the landing the forwarder fills.
+                if(MachinesEnabled&&site.Landing<0)continue;
+                var origins=MachinesEnabled?terrain.FindRoadDocks(new[]{site.Landing}):terrain.FindRoadDocks(site.Tiles);
                 foreach(var mill in Mills)foreach(int start in origins)foreach(int end in terrain.FindRoadDocks(mill.Footprint)) {
                     int[] path=terrain.FindLogisticsRoadPath(start,end);
                     if(path.Length<2)continue;
@@ -54,10 +66,16 @@ namespace ForesTycoon
                     Status="Teherautó indult: erdő → fűrészmalom → erdő.";return true;
                 }
             }
-            Status="Nincs összekötött forrás és cél. Építs összefüggő utat az erdő és a malom mellé.";return false;
+            Status=MachinesEnabled&&Sites.Exists(s=>s.Landing<0&&Volume(s)>0.001f)
+                ?"A vágáshoz nem vezet közelítő nyom. Jelölj ki nyomot az úttól a vágásig, és kösd úttal a malomhoz."
+                :"Nincs összekötött forrás és cél. Építs összefüggő utat az erdő és a malom mellé.";return false;
         }
         internal float Load(Vehicle vehicle,float requested)
         {
+            if(MachinesEnabled){
+                var site=SiteOf(vehicle);if(site==null)return 0;
+                float take=Math.Min(requested,site.LandingStock);site.LandingStock-=take;return take;
+            }
             float loaded=0;
             foreach(int tile in vehicle.SourceTiles){loaded+=forest.ExtractTimber(tile,requested-loaded);if(loaded>=requested-0.00001f)break;}
             return loaded;
@@ -67,9 +85,10 @@ namespace ForesTycoon
             foreach(var mill in Mills)if(mill.TileId==vehicle.SawmillTileId){mill.Received+=amount;mill.Stock+=amount;return;}
             throw new InvalidOperationException("Missing sawmill destination.");
         }
-        /// <summary>Skid trails were marked, removed or grew over: machine routes are found again.</summary>
-        internal void TrailsChanged() { }
-        internal void Update(double seconds){foreach(var mill in Mills){float cut=Math.Min(mill.Stock,(float)seconds*0.25f);mill.Stock-=cut;mill.Processed+=cut;}}
+        internal void Update(double seconds){
+            foreach(var mill in Mills){float cut=Math.Min(mill.Stock,(float)seconds*0.25f);mill.Stock-=cut;mill.Processed+=cut;}
+            if(MachinesEnabled)UpdateMachines(seconds);
+        }
         internal bool RouteConnected(Vehicle vehicle)
         {
             for(int i=1;i<vehicle.Route.Length;i++)

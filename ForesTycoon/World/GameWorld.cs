@@ -442,7 +442,7 @@ namespace ForesTycoon
         }
         private void InitializeLogistics()
         {
-            Logistics=new ForestryLogistics(map,forest);
+            Logistics=new ForestryLogistics(map,forest){MachinesEnabled=true};
             vehicles.SourceLoader = Logistics.Load;
             vehicles.DestinationReceiver = Logistics.Deliver;
             vehicles.RouteValidator = Logistics.RouteConnected;

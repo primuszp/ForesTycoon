@@ -15,9 +15,13 @@ namespace ForesTycoon
     internal sealed record ForageCheckpoint(int Tile, float Depletion);
     internal sealed record WildlifeCheckpoint(AnimalCheckpoint[] Animals, ForageCheckpoint[] Forage,
         ulong ForestRevision, ulong SurfaceRevision);
-    internal sealed record HarvestCheckpoint(int[] Tiles, float InitialVolume);
+    internal sealed record PileCheckpoint(int Tile, float Volume);
+    internal sealed record HarvestCheckpoint(int[] Tiles, float InitialVolume, int Landing = -1, PileCheckpoint[] Piles = null, float LandingStock = 0);
+    internal sealed record ForestMachineCheckpoint(int Id, ForestMachineKind Kind, int Site, int[] Path, double Position, double PreviousPosition,
+        ForestMachineState State, ForestMachineState Goal, float Cargo, double WorkTime);
     internal sealed record MillCheckpoint(int TileId, int[] Footprint, CheckpointPosition Position, float Received, float Stock, float Processed);
-    internal sealed record LogisticsCheckpoint(HarvestCheckpoint[] Sites, MillCheckpoint[] Mills, string Status);
+    internal sealed record LogisticsCheckpoint(HarvestCheckpoint[] Sites, MillCheckpoint[] Mills, string Status,
+        ForestMachineCheckpoint[] Machines = null, int NextMachineId = 1);
     internal sealed record WorldCheckpointData(int Version, ulong Tick, int CommandCursor, int PendingCommands,
         TerrainCheckpoint Terrain, EcologyCheckpoint Ecology, WildlifeCheckpoint Wildlife, LogisticsCheckpoint Logistics,
         VehiclesCheckpoint Vehicles, float AvailableTimber, float DeliveredTimber, EffectCheckpoint[] Effects,

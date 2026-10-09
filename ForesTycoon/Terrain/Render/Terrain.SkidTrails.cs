@@ -77,6 +77,28 @@ namespace ForesTycoon
                         TileUV(W, S, E, N, a1u + du, a1v + dv), TileUV(W, S, E, N, a0u + du, a0v + dv));
                 }
             }
+            // A bend (two adjacent edges) curves round the shared tile corner like a road bend: two concentric quarter arcs.
+            if (TryCornerArc(edges, out float startDeg))
+            {
+                float cu = startDeg < 90f ? 0f : startDeg < 270f ? 1f : 0f;
+                float cv = startDeg < 180f ? 0f : 1f;
+                float w = widthFraction * 0.5f;
+                const int Segments = 8;
+                foreach (float side in new[] { -Gauge, Gauge })
+                {
+                    float inner = 0.5f + side - w, outer = 0.5f + side + w;
+                    for (int i = 0; i < Segments; i++)
+                    {
+                        float a0 = MathHelper.DegreesToRadians(startDeg + 90f * i / Segments);
+                        float a1 = MathHelper.DegreesToRadians(startDeg + 90f * (i + 1) / Segments);
+                        Quad(TileUV(W, S, E, N, cu + inner * MathF.Cos(a0), cv + inner * MathF.Sin(a0)),
+                            TileUV(W, S, E, N, cu + outer * MathF.Cos(a0), cv + outer * MathF.Sin(a0)),
+                            TileUV(W, S, E, N, cu + outer * MathF.Cos(a1), cv + outer * MathF.Sin(a1)),
+                            TileUV(W, S, E, N, cu + inner * MathF.Cos(a1), cv + inner * MathF.Sin(a1)));
+                    }
+                }
+                return;
+            }
             // Tile (u, v): u runs W→S… as in TileUV; the edge midpoints in those coordinates.
             if ((edges & RoadEdge.WS) != 0) Arm(0.5f, 0f);
             if ((edges & RoadEdge.SE) != 0) Arm(1f, 0.5f);

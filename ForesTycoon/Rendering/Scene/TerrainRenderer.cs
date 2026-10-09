@@ -20,6 +20,7 @@ namespace ForesTycoon
         private readonly SurfaceVisualRenderer surfaces;
         private readonly ForestryLogistics logistics;
         private readonly WorldContentRenderer content=new WorldContentRenderer();
+        private readonly ForestMachineRenderer machines=new ForestMachineRenderer();
         internal int FishCount=>content.FishCount;
         private readonly ForestWeatherRenderer forestWeather = new ForestWeatherRenderer();
         private readonly CloudRenderer clouds = new CloudRenderer();
@@ -133,6 +134,8 @@ namespace ForesTycoon
             pipeline.Add(RenderLayer.Wildlife, "wildlife", context => wildlife.Draw(terrain, forest, graphics, context));
             pipeline.Add(RenderLayer.Vehicles, "vehicles", context =>
                 DrawSurface(SurfaceKind.Vehicle, () => VehicleRenderer.Draw(vehicles, terrain, context.InterpolationAlpha)));
+            pipeline.Add(RenderLayer.Vehicles, "forest-machines", context =>
+                DrawSurface(SurfaceKind.Vehicle, () => machines.Draw(terrain, logistics, graphics, (float)context.InterpolationAlpha)));
             pipeline.Add(RenderLayer.Effects, "world-effects", context =>
                 DrawSurface(SurfaceKind.Plain, () => EffectRenderer.Draw(effects, context.InterpolationAlpha)));
             pipeline.Add(RenderLayer.Weather, "weather", context =>
@@ -166,7 +169,7 @@ namespace ForesTycoon
 
         public void Dispose()
         {
-            EndDecals(); content.Dispose(); wildlife.Dispose(); forestWeather.Dispose(); clouds.Dispose(); precipitation.Dispose(); surfaces.Dispose();
+            EndDecals(); content.Dispose(); machines.Dispose(); wildlife.Dispose(); forestWeather.Dispose(); clouds.Dispose(); precipitation.Dispose(); surfaces.Dispose();
         }
     }
 }

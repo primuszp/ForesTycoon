@@ -51,3 +51,5 @@ tisztázva, a modelleket nem tesszük a repóba: a játék a helyi könyvtárbó
 **Döntés (2026-10-08):** a modellek nem kerülnek a repóba. Helyük a git által figyelmen kívül hagyott `ForesTycoon/Assets/Licensed/` mappa; a játék onnan tölti be őket, hiányukban a mostani modelleket használja.
 
 **Rönkszállító (kész, 2026-10-08):** `python tools/convert_licensed_truck.py <Separate_assets_glb>` a `truck_001` + `truck_trailer_004` + `log_002` modellekből elkészíti a textúrás `ForesTycoon/Assets/Licensed/log-truck-textured.glb`-t (git-ignored; eredeti UV és atlaszok, külön kerék- és rönkcsomópontok, `TexturedTruckModel`). A játék ezt használja, ha megvan; különben az `Assets/Vehicles/log-truck.glb`-t.
+
+**Harveszter és forwarder (kész, 2026-10-09):** `python tools/install_licensed_machines.py <Separate_assets_glb>` a `harvester_vehicle_001` és `forestry_vehicle_001` modellt a git-ignored `ForesTycoon/Assets/Licensed/` mappába másolja (`harvester.glb`, `forwarder.glb`). A játék forgatja a kerekeket és mozgatja a darut; a modellek hiányában egyszerű helyettesítő gépeket rajzol.
