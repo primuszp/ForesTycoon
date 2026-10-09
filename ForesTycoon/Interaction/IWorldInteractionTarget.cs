@@ -11,6 +11,8 @@ namespace ForesTycoon
             QueueRoadPath(startTileId, endTileId, remove);
         void QueueRoadRepair(int startTileId, int endTileId) => throw new System.NotSupportedException();
         void SetRoadRepairPreview(int startTileId, int endTileId) { }
+        void QueueSkidTrailPath(int startTileId, int endTileId, bool remove) => throw new System.NotSupportedException();
+        void SetSkidTrailPreview(int startTileId, int endTileId, bool remove) { }
         void QueuePlantForest(int tileId, ForestSpecies species);
         void QueueHarvestForest(int tileId);
         void QueuePlantForestArea(int startTileId, int endTileId, ForestSpecies species);

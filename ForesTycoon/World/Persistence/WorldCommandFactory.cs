@@ -12,6 +12,7 @@ namespace ForesTycoon
                 Enum.IsDefined((RoadPaving)record.C) ? (RoadPaving)record.C
                     : throw new InvalidOperationException($"Unknown road surface: {record.C}.")),
             WorldCommandKind.RoadRepair => new RoadRepairCommand(record.A, record.B),
+            WorldCommandKind.SkidTrailPath => new SkidTrailPathCommand(record.A, record.B, record.Flag),
             WorldCommandKind.PlaceSawmill => new PlaceSawmillCommand(record.A),
             WorldCommandKind.SpawnVehicle => new SpawnVehicleCommand(),
             WorldCommandKind.SetWeather => new SetWeatherCommand((WeatherPreset)record.A,record.B,record.C),

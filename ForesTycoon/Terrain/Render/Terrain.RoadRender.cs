@@ -13,6 +13,7 @@ namespace ForesTycoon
         internal void DrawRoads()
         {
             if (roads.Count == 0 && previewTiles.Count == 0) return;
+            if (previewSkidTrail) { DrawSkidTrailPreview(); if (roads.Count == 0) return; }
 
             if (roads.Count > 0)
             {
@@ -54,7 +55,8 @@ namespace ForesTycoon
                 });
             }
 
-            if (previewTiles.Count > 0 && previewRepair)
+            if (previewSkidTrail) { }
+            else if (previewTiles.Count > 0 && previewRepair)
             {
                 using (RenderDevice.CreateStateScope().AlphaBlend())
                     DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () =>

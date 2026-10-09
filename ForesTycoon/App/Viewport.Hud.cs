@@ -198,6 +198,14 @@ namespace ForesTycoon
                         ImGui.TextUnformatted($"Javítás: ~{world.RoadRepairCost(interaction.RoadDragStartTileId, world.HoveredTileId):0} eFt");
                     }
                     break;
+                case TerrainEditTool.SkidTrail:
+                    ImGui.TextDisabled("Húzd az úttól a kijelölt vágásig. Fát nem kell kivágni: a gépek a fák közt járnak.");
+                    if (interaction.IsRoadDragging) { ImGui.SameLine(); ImGui.TextUnformatted($"{world.RoadPreviewCount} csempe"); }
+                    else { ImGui.SameLine(); ImGui.TextUnformatted($"Nyomok: {world.SkidTrailCount} csempe"); }
+                    break;
+                case TerrainEditTool.SkidTrailRemove:
+                    ImGui.TextDisabled("Húzd végig a megszüntetendő nyomon.");
+                    break;
                 case TerrainEditTool.HarvestForest:
                     ImGui.TextDisabled("Húzással jelöld ki az erdőterületet. A fák rakodás közben fogynak.");
                     if (interaction.IsForestryDragging) { ImGui.SameLine(); ImGui.TextUnformatted($"{world.ForestryPreviewCount} csempe"); }
@@ -255,6 +263,8 @@ namespace ForesTycoon
             TerrainEditTool.Road => GameIcon.Road,
             TerrainEditTool.RoadRemove => GameIcon.RoadRemove,
             TerrainEditTool.RoadRepair => GameIcon.RoadRepair,
+            TerrainEditTool.SkidTrail => GameIcon.SkidTrail,
+            TerrainEditTool.SkidTrailRemove => GameIcon.SkidTrailRemove,
             TerrainEditTool.PlantForest => GameIcon.Plant,
             TerrainEditTool.HarvestForest => GameIcon.Harvest,
             TerrainEditTool.PlaceSawmill => GameIcon.Sawmill,
@@ -310,9 +320,17 @@ namespace ForesTycoon
             bool hasStand = world.TryGetForestStand(world.HoveredTileId, out ForestStand stand);
             bool planted = world.TryGetPlantationStatus(world.HoveredTileId, out var plot);
             bool road = world.IsRoadTile(world.HoveredTileId);
-            if (!hasStand && !planted && !road) return;
+            bool trail = world.IsSkidTrail(world.HoveredTileId);
+            if (!hasStand && !planted && !road && !trail) return;
 
             ImGui.BeginTooltip();
+            if (trail)
+            {
+                float wear = world.GetSkidTrailWear(world.HoveredTileId);
+                HudTheme.IconText(GameIcon.SkidTrail, "Közelítő nyom", HudTheme.AmberAccent);
+                HudTheme.KeyValue("Keréknyom", wear < 0.05f ? "még nem járt rajta gép" : wear < 0.4f ? $"sekély ({wear:P0})" : $"mély, sáros ({wear:P0})");
+                ImGui.Separator();
+            }
             if (road)
             {
                 bool asphalt = world.GetRoadPaving(world.HoveredTileId) == RoadPaving.Asphalt;
@@ -746,6 +764,7 @@ namespace ForesTycoon
                 case Keys.D7: SelectTool(TerrainEditTool.HarvestForest); return true;
                 case Keys.D8: SelectTool(TerrainEditTool.PlaceSawmill); return true;
                 case Keys.D9: SelectTool(TerrainEditTool.RoadRepair); return true;
+                case Keys.D0: SelectTool(TerrainEditTool.SkidTrail); return true;
                 case Keys.T: ChooseVerb(Verb.Transport); return true;
                 case Keys.V: showVehicles = !showVehicles; return true;
                 case Keys.F: showForestry = !showForestry; return true;
@@ -805,6 +824,8 @@ namespace ForesTycoon
             TerrainEditTool.Road => "Útépítés",
             TerrainEditTool.RoadRemove => "Útbontás",
             TerrainEditTool.RoadRepair => "Útjavítás",
+            TerrainEditTool.SkidTrail => "Közelítő nyom",
+            TerrainEditTool.SkidTrailRemove => "Nyom törlése",
             TerrainEditTool.PlantForest => $"Ültetés ({ForestSpeciesName(interaction.PlantingSpecies)})",
             TerrainEditTool.HarvestForest => "Kitermelési terület",
             TerrainEditTool.PlaceSawmill => "Fűrészmalom építése",

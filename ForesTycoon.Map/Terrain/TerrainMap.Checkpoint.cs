@@ -7,7 +7,8 @@ namespace ForesTycoon.Map
     internal sealed record RoadCheckpoint(int TileId, RoadEdge Edges, RoadPaving Paving = RoadPaving.Asphalt, float Condition = 1);
     internal sealed record LockedNodeCheckpoint(int NodeId, int Height);
     internal sealed record TerrainCheckpoint(int[] Heights, RoadCheckpoint[] Roads, LockedNodeCheckpoint[] RoadHeights,
-        int[] Buildings, ulong SurfaceVersion, float[] Moisture, float[] WaterDepth, int[] StandingWater, int[] RiverNodes);
+        int[] Buildings, ulong SurfaceVersion, float[] Moisture, float[] WaterDepth, int[] StandingWater, int[] RiverNodes,
+        SkidTrailCheckpoint[] SkidTrails = null);
 
     internal sealed partial class TerrainMap
     {
@@ -15,7 +16,8 @@ namespace ForesTycoon.Map
             roads.Tiles.OrderBy(id => id).Select(id => new RoadCheckpoint(id, roads.GetEdges(id), roads.GetPaving(id), roads.GetCondition(id))).ToArray(),
             roadSurfaceW.OrderBy(p => p.Key).Select(p => new LockedNodeCheckpoint(p.Key, p.Value)).ToArray(),
             buildingTiles.OrderBy(id => id).ToArray(), SurfaceVersion, (float[])hydro.TileMoisture.Clone(),
-            (float[])hydro.NodeWaterDepth.Clone(), hydro.StandingWaterTileIds.OrderBy(id => id).ToArray(), hydro.RiverNodeIds.OrderBy(id => id).ToArray());
+            (float[])hydro.NodeWaterDepth.Clone(), hydro.StandingWaterTileIds.OrderBy(id => id).ToArray(), hydro.RiverNodeIds.OrderBy(id => id).ToArray(),
+            CaptureSkidTrails());
 
         internal void Restore(TerrainCheckpoint s)
         {
@@ -40,11 +42,13 @@ namespace ForesTycoon.Map
                 CheckpointGuard.Require(locks.ContainsKey(t.W.Id) && locks.ContainsKey(t.S.Id) &&
                     locks.ContainsKey(t.E.Id) && locks.ContainsKey(t.N.Id), "missing road foundation");
             }
+            ValidateSkidTrails(s.SkidTrails);
             for (int id = 0; id < nodes.Length; id++) nodes[id].W = s.Heights[id];
             foreach (int id in roads.Tiles.ToArray()) roads.Remove(id, (RoadEdge)15);
             foreach (var r in s.Roads) { roads.Add(r.TileId, r.Edges, r.Paving); roads.SetCondition(r.TileId, r.Condition); }
             roadSurfaceW.Clear(); foreach (var n in locks) roadSurfaceW.Add(n.Key, n.Value);
             buildingTiles.Clear(); buildingTiles.UnionWith(buildings);
+            RestoreSkidTrails(s.SkidTrails);
             ApplyNodeChanges(new List<Node>(nodes)); RebuildHydrology(); RebuildFlippedDiagonalTiles();
             // Preserve the historical moisture/depth publication order of the existing hydrology.
             // Rebuilding it extra times would otherwise change wildlife feeding after a reload.

@@ -37,6 +37,7 @@ namespace ForesTycoon
                     Require(!logistics.Dispatch(vehicles),"Disconnected truck route was accepted.");
                     map.Map.BuildRoadTilePath(69,149,RoadPaving.Macadam);
                     for(int id=69;id<149;id+=16)map.Map.WearRoad(id,0.35f+0.1f*((id/16)%5));
+                    map.Map.MarkSkidTrailPath(20,68);map.Map.MarkSkidTrailPath(20,23);for(int k=0;k<6;k++){map.Map.DriveSkidTrail(52,0.2f);map.Map.DriveSkidTrail(36,0.12f);map.Map.DriveSkidTrail(20,0.06f);}
                     Require(logistics.Dispatch(vehicles),"Connected delivery route was not found: "+logistics.Status);
                     using var scene=new TerrainRenderer(map,vehicles,new WorldEffectSystem(),forest,new GraphicsSettings{Fog=false,Weather=false,Wildlife=false},logistics:logistics);
                     Capture(scene,"source-and-mill",0);

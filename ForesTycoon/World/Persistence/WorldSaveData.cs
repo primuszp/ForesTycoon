@@ -14,7 +14,8 @@ namespace ForesTycoon
         HarvestForestArea,
         SetWeather,
         PlaceSawmill,
-        RoadRepair
+        RoadRepair,
+        SkidTrailPath
     }
 
     readonly record struct WorldCommandRecord(

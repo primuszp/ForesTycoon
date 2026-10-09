@@ -10,6 +10,8 @@ namespace ForesTycoon
         PlantForest,
         HarvestForest,
         PlaceSawmill,
-        RoadRepair
+        RoadRepair,
+        SkidTrail,
+        SkidTrailRemove
     }
 }

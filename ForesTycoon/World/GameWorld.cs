@@ -159,6 +159,13 @@ namespace ForesTycoon
         public void QueueRoadPath(int startTileId, int endTileId, bool remove, RoadPaving surface) =>
             Enqueue(new RoadPathCommand(startTileId, endTileId, remove, surface));
         public void QueueRoadRepair(int startTileId, int endTileId) => Enqueue(new RoadRepairCommand(startTileId, endTileId));
+        public void QueueSkidTrailPath(int startTileId, int endTileId, bool remove) =>
+            Enqueue(new SkidTrailPathCommand(startTileId, endTileId, remove));
+        public void SetSkidTrailPreview(int startTileId, int endTileId, bool remove) =>
+            terrain.SetSkidTrailPreview(startTileId, endTileId, remove);
+        internal bool IsSkidTrail(int tileId) => map.IsSkidTrail(tileId);
+        internal float GetSkidTrailWear(int tileId) => map.GetSkidTrailWear(tileId);
+        internal int SkidTrailCount => map.SkidTrailCount;
         public void SetRoadRepairPreview(int startTileId, int endTileId) => terrain.SetRoadRepairPreview(startTileId, endTileId);
         internal RoadPaving GetRoadPaving(int tileId) => map.GetRoadPaving(tileId);
         internal float GetRoadCondition(int tileId) => map.GetRoadCondition(tileId);
@@ -226,14 +233,24 @@ namespace ForesTycoon
             if (map.TryGetRoadTileCenter(endTileId, out Vector3 position)) effects.Spawn(WorldEffectKind.RoadChanged, position);
         }
 
-        /// <summary>Rain and wet ground wear the roads; applied twice a second of game time.</summary>
+        /// <summary>Rain and wet ground wear the roads, and skid-trail ruts fade; applied twice a second of game time.</summary>
         private void WeatherRoads(double seconds)
         {
             roadWeatherSeconds += seconds;
             if (roadWeatherSeconds < 0.5) return;
             float rain = (float)Math.Clamp(Environment.RainRate / 20, 0, 1);
-            map.WeatherRoads((float)(roadWeatherSeconds / ecosystem.ForestYearSeconds), rain);
+            float years = (float)(roadWeatherSeconds / ecosystem.ForestYearSeconds);
+            map.WeatherRoads(years, rain);
+            if (map.AgeSkidTrails(years).Length > 0) Logistics?.TrailsChanged();
             roadWeatherSeconds = 0;
+        }
+
+        void IWorldCommandTarget.ExecuteSkidTrailPath(int startTileId, int endTileId, bool remove)
+        {
+            int[] changed = remove ? map.RemoveSkidTrailPath(startTileId, endTileId) : map.MarkSkidTrailPath(startTileId, endTileId);
+            if (changed.Length == 0) return;
+            Logistics?.TrailsChanged();
+            if (map.TryGetTileCenter(endTileId, out Vector3 position)) effects.Spawn(WorldEffectKind.RoadChanged, position);
         }
 
         void IWorldCommandTarget.ExecuteRoadPath(int startTileId, int endTileId, bool remove, RoadPaving surface)

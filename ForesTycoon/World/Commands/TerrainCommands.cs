@@ -46,6 +46,24 @@ namespace ForesTycoon
             new WorldCommandRecord(tick, WorldCommandKind.RoadPath, startTileId, endTileId, (int)surface, 0, remove);
     }
 
+    sealed class SkidTrailPathCommand : IWorldCommand
+    {
+        private readonly int startTileId;
+        private readonly int endTileId;
+        private readonly bool remove;
+
+        public SkidTrailPathCommand(int startTileId, int endTileId, bool remove)
+        {
+            this.startTileId = startTileId;
+            this.endTileId = endTileId;
+            this.remove = remove;
+        }
+
+        public void Execute(IWorldCommandTarget world) => world.ExecuteSkidTrailPath(startTileId, endTileId, remove);
+        public WorldCommandRecord ToRecord(ulong tick) =>
+            new WorldCommandRecord(tick, WorldCommandKind.SkidTrailPath, startTileId, endTileId, 0, 0, remove);
+    }
+
     sealed class RoadRepairCommand : IWorldCommand
     {
         private readonly int startTileId;

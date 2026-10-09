@@ -40,7 +40,11 @@ namespace ForesTycoon
         public RoadPaving RoadSurface { get; set; } = RoadPaving.Macadam;
 
         public static bool IsRoadTool(TerrainEditTool tool) =>
-            tool == TerrainEditTool.Road || tool == TerrainEditTool.RoadRemove || tool == TerrainEditTool.RoadRepair;
+            tool == TerrainEditTool.Road || tool == TerrainEditTool.RoadRemove || tool == TerrainEditTool.RoadRepair || IsSkidTrailTool(tool);
+
+        /// <summary>Skid trails are dragged like roads: from the road into the felling.</summary>
+        public static bool IsSkidTrailTool(TerrainEditTool tool) =>
+            tool == TerrainEditTool.SkidTrail || tool == TerrainEditTool.SkidTrailRemove;
 
         public static bool IsForestryTool(TerrainEditTool tool) =>
             tool == TerrainEditTool.PlantForest || tool == TerrainEditTool.HarvestForest;
@@ -79,6 +83,8 @@ namespace ForesTycoon
 
             if (!IsRoadDragging) return;
             if (ActiveTool == TerrainEditTool.RoadRepair) world.SetRoadRepairPreview(roadDragStartTileId, world.HoveredTileId);
+            else if (IsSkidTrailTool(ActiveTool))
+                world.SetSkidTrailPreview(roadDragStartTileId, world.HoveredTileId, ActiveTool == TerrainEditTool.SkidTrailRemove);
             else world.SetRoadPreview(roadDragStartTileId, world.HoveredTileId, IsRoadRemoval);
         }
 
@@ -92,6 +98,8 @@ namespace ForesTycoon
                 if (IsRoadDragging && endTileId >= 0)
                 {
                     if (ActiveTool == TerrainEditTool.RoadRepair) world.QueueRoadRepair(roadDragStartTileId, endTileId);
+                    else if (IsSkidTrailTool(ActiveTool))
+                        world.QueueSkidTrailPath(roadDragStartTileId, endTileId, ActiveTool == TerrainEditTool.SkidTrailRemove);
                     else if (IsRoadRemoval) world.QueueRoadPath(roadDragStartTileId, endTileId, true);
                     else world.QueueRoadPath(roadDragStartTileId, endTileId, false, RoadSurface);
                 }

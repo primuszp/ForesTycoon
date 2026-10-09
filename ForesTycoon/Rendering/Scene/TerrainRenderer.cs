@@ -115,6 +115,7 @@ namespace ForesTycoon
             pipeline.Add(RenderLayer.DecalBegin, "decal-state-begin", _ => BeginDecals());
             pipeline.Add(RenderLayer.Grid, "terrain-grid", context => { if (!graphics.Enhanced || graphics.ShowGrid) DrawSurface(SurfaceKind.Plain, () => terrain.DrawTerrainDecals(context)); });
             pipeline.Add(RenderLayer.Roads, "roads", _ => DrawSurface(SurfaceKind.Road, terrain.DrawRoads));
+            pipeline.Add(RenderLayer.Roads, "skid-trails", _ => DrawSurface(SurfaceKind.Plain, terrain.DrawSkidTrails));
             pipeline.Add(RenderLayer.HoverOverlay, "hover-overlay", context =>
             {
                 surfaces.Kind = SurfaceKind.Plain;

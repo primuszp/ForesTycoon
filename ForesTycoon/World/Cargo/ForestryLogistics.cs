@@ -67,6 +67,8 @@ namespace ForesTycoon
             foreach(var mill in Mills)if(mill.TileId==vehicle.SawmillTileId){mill.Received+=amount;mill.Stock+=amount;return;}
             throw new InvalidOperationException("Missing sawmill destination.");
         }
+        /// <summary>Skid trails were marked, removed or grew over: machine routes are found again.</summary>
+        internal void TrailsChanged() { }
         internal void Update(double seconds){foreach(var mill in Mills){float cut=Math.Min(mill.Stock,(float)seconds*0.25f);mill.Stock-=cut;mill.Processed+=cut;}}
         internal bool RouteConnected(Vehicle vehicle)
         {

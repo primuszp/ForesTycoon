@@ -273,7 +273,7 @@ namespace ForesTycoon
             verb = tool switch
             {
                 TerrainEditTool.PlantForest => Verb.Tend,
-                TerrainEditTool.HarvestForest => Verb.Produce,
+                TerrainEditTool.HarvestForest or TerrainEditTool.SkidTrail or TerrainEditTool.SkidTrailRemove => Verb.Produce,
                 TerrainEditTool.Road or TerrainEditTool.RoadRemove or TerrainEditTool.RoadRepair or TerrainEditTool.PlaceSawmill
                     or TerrainEditTool.Raise or TerrainEditTool.Lower => Verb.Build,
                 // Observe and Transport work with the inspect tool and keep their own state.
@@ -362,6 +362,11 @@ namespace ForesTycoon
                     break;
                 case Verb.Produce:
                     ToolIcon(GameIcon.Harvest, TerrainEditTool.HarvestForest, Size, "Kitermelés", "7", "Húzással jelöld ki a vágásterületet.");
+                    ImGui.SameLine();
+                    ToolIcon(GameIcon.SkidTrail, TerrainEditTool.SkidTrail, Size, "Közelítő nyom", "0",
+                        "Húzással jelöld ki a nyomot az úttól a vágásig: ezen jár a harveszter és a forwarder. Csak keréknyom: használat nélkül benő.");
+                    ImGui.SameLine();
+                    ToolIcon(GameIcon.SkidTrailRemove, TerrainEditTool.SkidTrailRemove, Size, "Nyom törlése", "", "Húzással megszünteti a közelítő nyomot.");
                     break;
                 case Verb.Build:
                     ToolIcon(GameIcon.Road, TerrainEditTool.Road, Size, "Útépítés", "4",

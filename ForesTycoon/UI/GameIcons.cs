@@ -13,7 +13,7 @@ namespace ForesTycoon
         Vehicles, Forestry, Environment, Graphics, Developer, Help, Camera, Deer,
         Spruce, Birch, Oak, Beech,
         Sun, Cloud, Rain, Storm, Thermometer, Calendar, Timber, Lightning, Speedometer,
-        RoadRepair, Macadam
+        RoadRepair, Macadam, SkidTrail, SkidTrailRemove
     }
 
     /// <summary>
@@ -138,6 +138,20 @@ namespace ForesTycoon
                     c.EllipseFilled(0.56f, 0.52f, 0.05f, 0.03f, Rgb(110, 100, 86));
                     c.EllipseFilled(0.36f, 0.72f, 0.05f, 0.03f, Rgb(110, 100, 86));
                     c.EllipseFilled(0.66f, 0.76f, 0.04f, 0.03f, Rgb(196, 188, 170));
+                    break;
+                case GameIcon.SkidTrail:
+                case GameIcon.SkidTrailRemove:
+                    // Two wheel ruts curving into the forest, a tree beside them.
+                    c.Poly(Earth, 0.10f, 0.92f, 0.40f, 0.92f, 0.62f, 0.10f, 0.50f, 0.10f);
+                    c.Line(0.18f, 0.90f, 0.52f, 0.12f, DarkWood, 1.1f);
+                    c.Line(0.34f, 0.90f, 0.58f, 0.12f, DarkWood, 1.1f);
+                    c.Poly(DarkLeaf, 0.80f, 0.20f, 0.66f, 0.56f, 0.94f, 0.56f);
+                    c.Line(0.80f, 0.56f, 0.80f, 0.66f, Wood, 1.0f);
+                    if (icon == GameIcon.SkidTrailRemove)
+                    {
+                        c.Line(0.18f, 0.30f, 0.62f, 0.78f, Warning, 1.8f);
+                        c.Line(0.62f, 0.30f, 0.18f, 0.78f, Warning, 1.8f);
+                    }
                     break;
                 case GameIcon.Plant:
                     c.Poly(Earth, 0.16f, 0.86f, 0.30f, 0.74f, 0.70f, 0.74f, 0.84f, 0.86f);

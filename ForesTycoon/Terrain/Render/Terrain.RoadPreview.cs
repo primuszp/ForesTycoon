@@ -18,6 +18,15 @@ namespace ForesTycoon
         // Repair preview: worn road tiles on the dragged path light up, the rest stay as they are.
         private bool previewRepair;
 
+        // Skid-trail preview: the dragged path drawn as faint ruts (red when removing).
+        private bool previewSkidTrail;
+
+        public void SetSkidTrailPreview(int startTileId, int endTileId, bool remove)
+        {
+            SetRoadPreview(startTileId, endTileId, remove);
+            previewSkidTrail = true;
+        }
+
         public void SetRoadRepairPreview(int startTileId, int endTileId)
         {
             SetRoadPreview(startTileId, endTileId, false);
@@ -34,7 +43,7 @@ namespace ForesTycoon
         public void SetRoadPreview(Tile a, Tile b, bool remove)
         {
             previewTiles.Clear();
-            previewRemove = remove; previewRepair = false;
+            previewRemove = remove; previewRepair = false; previewSkidTrail = false;
             previewTiles.AddRange(map.BuildRoadPlan(a, b));
         }
         public void ClearRoadPreview() => previewTiles.Clear();
