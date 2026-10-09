@@ -276,21 +276,54 @@ namespace ForesTycoon
             });
         }
 
-        // Stacks (sarangok) of round logs beside the skid trail, and the big stack at each landing.
+        // Stack sites (sarangok): an empty one shows its marking stakes, a filled one its round logs.
         private void DrawPiles(Terrain terrain, ForestryLogistics logistics, GraphicsSettings settings)
         {
-            foreach (var site in logistics.Sites)
+            foreach (var stack in logistics.Stacks)
             {
-                foreach (var pile in site.Piles) Stack(terrain.Map, pile.Key, pile.Value, settings);
-                if (site.Landing >= 0 && site.LandingStock > 0.05f) Stack(terrain.Map, site.Landing, site.LandingStock, settings);
+                if (stack.Volume > 0.05f) Stack(terrain.Map, stack.Tile, stack.Volume, settings);
+                else StackStakes(terrain.Map, stack.Tile);
             }
         }
 
-        /// <summary>Where a stack stands on its tile: along the trail (or road) through it, set off to one side of the track.</summary>
+        // Four orange-topped stakes mark where the stack will rise.
+        private static void StackStakes(TerrainMap map, int tile)
+        {
+            StackPlace(map, tile, out Vector2 at, out Vector2 heading);
+            Matrix4 placement = Placement(map, at, heading, 0.8f);
+            float s = MetreScale;
+            DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () =>
+            {
+                foreach (float x in new[] { -2.2f, 2.2f })
+                    foreach (float y in new[] { -1.1f, 1.1f })
+                    {
+                        Box(placement, new Vector3(x - 0.07f, y - 0.07f, 0) * s, new Vector3(x + 0.07f, y + 0.07f, 1.4f) * s, Color.FromArgb(150, 112, 70));
+                        Box(placement, new Vector3(x - 0.09f, y - 0.09f, 1.4f) * s, new Vector3(x + 0.09f, y + 0.09f, 1.7f) * s, Color.FromArgb(240, 140, 40));
+                    }
+            });
+        }
+
+        /// <summary>Where a stack stands on its tile: along the trail through it (set off to one side), or along the
+        /// network beside it.</summary>
         private static void StackPlace(TerrainMap map, int tile, out Vector2 at, out Vector2 heading)
         {
             map.TryGetTileCenter(tile, out Vector3 centre);
-            RoadEdge edges = map.IsSkidTrail(tile) ? map.GetSkidTrailEdges(tile) : RoadEdge.None;
+            bool onTrail = map.IsSkidTrail(tile);
+            RoadEdge edges = onTrail ? map.GetSkidTrailEdges(tile) : RoadEdge.None;
+            if (!onTrail)
+            {
+                // Beside the network: the logs lie parallel to the road or trail next to them, ready for the crane.
+                Span<int> next = stackalloc int[4];
+                int count = map.GetTileNeighbours(tile, next);
+                for (int i = 0; i < count; i++)
+                    if (map.IsNetworkTile(next[i]) && map.TryGetTileCenter(next[i], out Vector3 other))
+                    {
+                        Vector2 across = (other.Xy - centre.Xy).Normalized();
+                        heading = new Vector2(-across.Y, across.X);
+                        at = centre.Xy + across * 0.15f * map.TileWidth;
+                        return;
+                    }
+            }
             Tile t = map.Tiles[tile];
             Vector2 w = new(t.W.xPos, t.W.yPos), s = new(t.S.xPos, t.S.yPos), n = new(t.N.xPos, t.N.yPos);
             // The tile's u axis runs W→S, its v axis W→N; a trail along WS/EN edges runs along v.
@@ -300,20 +333,22 @@ namespace ForesTycoon
             if (!alongU && !alongV) axis = ((tile * 2654435761u) & 1) == 0 ? s - w : n - w;
             heading = axis.Normalized();
             Vector2 side = new(-heading.Y, heading.X);
-            at = centre.Xy + side * (0.3f * axis.Length);
+            at = onTrail ? centre.Xy + side * (0.3f * axis.Length) : centre.Xy;
         }
 
         private void Stack(TerrainMap map, int tile, float volume, GraphicsSettings settings)
         {
             StackPlace(map, tile, out Vector2 at, out Vector2 heading);
             Matrix4 placement = Placement(map, at, heading, 0.8f);
-            int size = 0;
-            while (size + 1 < StackSizes.Length && volume > StackSizes[size].Volume * 1.4f) size++;
-            if (TryStackModel(size))
+            // One stack model that grows with the wood: it rises to full height first, then gets longer along the track.
+            const int Model = 2;
+            if (TryStackModel(Model))
             {
-                // The model's logs lie along its x axis; scale gently with the volume within its size step.
-                float fill = Math.Clamp(MathF.Pow(volume / StackSizes[size].Volume, 1 / 3f), 0.6f, 1.15f);
-                stackRenderers[size].Draw(stackPoses[size], Axis * Matrix4.CreateScale(MetreScale * 0.55f * fill) * placement, settings, sourceMaterial: true);
+                float full = StackSizes[Model].Volume;
+                float height = Math.Clamp(MathF.Sqrt(volume / (full * 0.3f)), 0.35f, 1f);
+                float length = Math.Clamp(volume / (full * height), 0.2f, 2.2f);
+                var scale = Matrix4.CreateScale(length, height, height) * Matrix4.CreateScale(MetreScale * 0.55f);
+                stackRenderers[Model].Draw(stackPoses[Model], scale * Axis * placement, settings, sourceMaterial: true);
                 return;
             }
             // Without the model: a stack of round logs, more layers as the volume grows.

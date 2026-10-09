@@ -180,15 +180,45 @@ namespace ForesTycoon
         }
         public void QueuePlaceSawmill(int tileId) => Enqueue(new PlaceSawmillCommand(tileId));
         public void QueuePlaceDepot(int tileId) => Enqueue(new PlaceDepotCommand(tileId));
-        internal void QueueSendVehicle(int vehicleId, int tileId, bool truck) => Enqueue(new SendVehicleCommand(vehicleId, tileId, truck));
+        internal void QueueSendVehicle(int vehicleId, int tileId, int destination, bool truck) =>
+            Enqueue(new SendVehicleCommand(vehicleId, tileId, destination, truck));
+        public void QueueStackSite(int tileId, bool remove) => Enqueue(new StackSiteCommand(tileId, remove));
+        void IWorldCommandTarget.ExecuteStackSite(int tileId, bool remove)
+        {
+            if (remove) Logistics.RemoveStack(tileId); else Logistics.PlaceStack(tileId);
+        }
+        /// <summary>Money earned at the mills, thousand forints.</summary>
+        internal double Income => Logistics?.Income ?? 0;
+        /// <summary>Everything spent: building, repairs, fuel, thousand forints.</summary>
+        internal double Spending => Expenses + (Logistics?.RunningCosts ?? 0);
+        internal double Balance => Income - Spending;
         internal void QueueSendHome(int vehicleId, bool truck) => Enqueue(new SendHomeCommand(vehicleId, truck));
         void IWorldCommandTarget.ExecutePlaceDepot(int tileId) { Logistics?.PlaceDepot(tileId); }
-        void IWorldCommandTarget.ExecuteSendVehicle(int vehicleId, int tileId, bool truck)
+        void IWorldCommandTarget.ExecuteSendVehicle(int vehicleId, int tileId, int destination, bool truck)
         {
-            var site = Logistics.SiteAt(tileId);
-            if (site == null) { Logistics.Status = "Ide nem küldhető jármű: kattints egy kijelölt vágásra."; return; }
-            if (truck) { var t = Logistics.Trucks.Find(x => x.Id == vehicleId); if (t != null) Logistics.AssignTruck(t, site); }
-            else { var m = Logistics.Machines.Find(x => x.Id == vehicleId); if (m != null) Logistics.AssignMachine(m, site); }
+            if (truck)
+            {
+                var t = Logistics.Trucks.Find(x => x.Id == vehicleId);
+                var source = Logistics.StackAt(tileId);
+                if (t == null) return;
+                if (source == null) { Logistics.Status = "A rönkszállító forrása egy sarang legyen."; return; }
+                Logistics.AssignTruck(t, source, destination);
+                return;
+            }
+            var m = Logistics.Machines.Find(x => x.Id == vehicleId);
+            if (m == null) return;
+            if (m.Kind == ForestMachineKind.Harvester)
+            {
+                var site = Logistics.SiteAt(tileId);
+                if (site == null) { Logistics.Status = "A processzort egy kijelölt vágásba küldd."; return; }
+                Logistics.AssignProcessor(m, site);
+            }
+            else
+            {
+                var source = Logistics.StackAt(tileId);
+                if (source == null) { Logistics.Status = "A forwarder forrása egy sarang legyen."; return; }
+                Logistics.AssignForwarder(m, source, destination);
+            }
         }
         void IWorldCommandTarget.ExecuteSendHome(int vehicleId, bool truck)
         {

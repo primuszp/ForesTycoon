@@ -15,9 +15,9 @@ namespace ForesTycoon
     internal enum TruckPhase : byte { Parked, ToWork, Working, ToHome }
 
     /// <summary>
-    /// A log truck of the fleet. Parked at its depot it is no vehicle on the map; with an order it drives to the landing
-    /// (<see cref="TruckPhase.ToWork"/>), shuttles landing → sawmill (<see cref="TruckPhase.Working"/>) and returns home
-    /// when the site is cleared or the player calls it back.
+    /// A log truck of the fleet. Parked at its depot it is no vehicle on the map; with an order it drives to its source
+    /// stack (<see cref="TruckPhase.ToWork"/>), shuttles source → destination (<see cref="TruckPhase.Working"/>) and
+    /// returns home when the source is cleared or the player calls it back.
     /// </summary>
     internal sealed class FleetTruck
     {
@@ -25,9 +25,15 @@ namespace ForesTycoon
         internal Depot Home;
         internal TruckPhase Phase;
         internal Vehicle Vehicle;
-        internal HarvestSite Site;
-        internal int Mill = -1;
+        internal TimberStack Source;
+        /// <summary>Destination tile: a sawmill tile, or a stack site.</summary>
+        internal int Destination = -1;
+        internal TimberStack Target;
+        /// <summary>Value of the wood on the truck, thousand forints.</summary>
+        internal double CargoValue;
         internal bool HomeRequested;
+        /// <summary>Fuel already charged to the running costs, litres (the vehicle counts what it burns).</summary>
+        internal double FuelCharged;
     }
 
     internal sealed partial class ForestryLogistics
@@ -62,61 +68,47 @@ namespace ForesTycoon
             return true;
         }
 
-        /// <summary>Timber of a site still to be hauled, including what its forwarders carry right now.</summary>
-        internal float Unfinished(HarvestSite site)
-        {
-            float sum = Volume(site);
-            foreach (var m in Machines) if (m.Site == site) sum += m.Cargo;
-            return sum;
-        }
-
         private int DepotDock(Depot depot) { var docks = terrain.FindRoadDocks(depot.Footprint); return docks.Count > 0 ? docks[0] : -1; }
 
-        /// <summary>The sawmill nearest (by road) to a site's landing, with the road route from landing to mill.</summary>
-        private (Sawmill Mill, int[] Route) NearestMill(HarvestSite site)
+        /// <summary>The cheapest network route between any dock of the source and any dock of the destination.</summary>
+        private int[] TruckRoute(int sourceTile, int destination)
         {
-            (Sawmill, int[]) best = (null, null);
-            if (site.Landing < 0) return best;
-            foreach (int start in terrain.FindRoadDocks(new[] { site.Landing }))
-                foreach (var mill in Mills)
-                    foreach (int end in terrain.FindRoadDocks(mill.Footprint))
-                    {
-                        int[] route = terrain.FindNetworkPath(start, end);
-                        if (route.Length >= 2 && (best.Item2 == null || route.Length < best.Item2.Length)) best = (mill, route);
-                    }
+            var mill = MillAt(destination);
+            var ends = terrain.FindNetworkDocks(mill != null ? mill.Footprint : new[] { destination });
+            int[] best = null;
+            foreach (int start in terrain.FindNetworkDocks(new[] { sourceTile }))
+                foreach (int end in ends)
+                {
+                    int[] route = terrain.FindNetworkPath(start, end);
+                    if (route.Length >= 2 && (best == null || route.Length < best.Length)) best = route;
+                }
             return best;
         }
 
-        /// <summary>Gives a parked truck its schedule: load at the site's landing, unload at the nearest connected mill.</summary>
-        internal bool AssignTruck(FleetTruck truck, HarvestSite site)
+        /// <summary>Gives a parked truck its order: load at <paramref name="source"/>, unload at <paramref name="destination"/> (a mill or a stack site).</summary>
+        internal bool AssignTruck(FleetTruck truck, TimberStack source, int destination)
         {
             if (truck.Phase != TruckPhase.Parked) { Status = "A rönkszállító épp úton van: előbb hívd haza."; return false; }
-            if (site.Landing < 0) { Status = "A vágásnak még nincs rakodója: jelölj ki közelítő nyomot az útig."; return false; }
-            var (mill, route) = NearestMill(site);
-            if (mill == null) { Status = "A rakodótól nem vezet út fűrészmalomhoz."; return false; }
+            bool mill = MillAt(destination) != null;
+            if (!mill && StackAt(destination) == null && !CanPlaceStack(destination)) { Status = "Ide nem rakható le a fa."; return false; }
+            int[] route = TruckRoute(source.Tile, destination);
+            if (route == null) { Status = "A sarangtól nem vezet út a célig: a teherautó csak úton és nyomon jár."; return false; }
             int dock = DepotDock(truck.Home);
             int[] approach = dock < 0 ? Array.Empty<int>() : terrain.FindNetworkPath(dock, route[0]);
-            if (dock != route[0] && approach.Length < 2) { Status = "A telephelyről nem vezet út a rakodóhoz."; return false; }
-            truck.Site = site; truck.Mill = mill.TileId; truck.HomeRequested = false;
+            if (dock != route[0] && approach.Length < 2) { Status = "A telephelyről nem vezet út a sarangig."; return false; }
+            truck.Source = source; truck.Destination = destination; truck.Target = mill ? null : StackAt(destination); truck.HomeRequested = false;
+            if (truck.Target == null && !mill) { truck.Target = new TimberStack { Id = nextStackId++, Tile = destination }; Stacks.Add(truck.Target); }
             if (approach.Length >= 2) { truck.Vehicle = Vehicles.SpawnTransit(approach); truck.Phase = TruckPhase.ToWork; }
             else StartShuttle(truck, route);
-            Status = "A rönkszállító a rakodóhoz indult.";
+            Status = mill ? "A rönkszállító a sarangtól a malomba fuvaroz." : "A rönkszállító áthordja a sarangot.";
             return true;
         }
 
         private void StartShuttle(FleetTruck truck, int[] route)
         {
             if (truck.Vehicle != null) Vehicles.Remove(truck.Vehicle);
-            truck.Vehicle = Vehicles.SpawnLogistics(route, truck.Site.Tiles, truck.Mill);
+            truck.Vehicle = Vehicles.SpawnLogistics(route, new[] { truck.Source.Tile }, truck.Destination);
             truck.Phase = TruckPhase.Working;
-        }
-
-        /// <summary>Calls a machine or a truck back to its depot.</summary>
-        internal void SendHome(ForestMachine machine)
-        {
-            if (machine.Site == null) return;
-            machine.HomeRequested = true;
-            Status = "Hazahívva: befejezi a mostani mozdulatot, és visszamegy a telephelyre.";
         }
 
         internal void SendHome(FleetTruck truck)
@@ -126,27 +118,33 @@ namespace ForesTycoon
             Status = "A rönkszállító leadja a rakományt, és visszamegy a telephelyre.";
         }
 
+        private FleetTruck TruckOf(Vehicle vehicle) => Trucks.Find(t => t.Vehicle == vehicle);
+
         private void UpdateTrucks()
         {
             foreach (var truck in Trucks)
             {
+                if (truck.Vehicle != null)
+                {
+                    double burnt = truck.Vehicle.FuelUsed - truck.FuelCharged;
+                    if (burnt > 0) { Burn(burnt); truck.FuelCharged = truck.Vehicle.FuelUsed; }
+                }
                 // The road under it was removed: the truck is taken back to its yard.
                 if (truck.Vehicle != null && !Vehicles.Contains(truck.Vehicle)) { Park(truck); continue; }
                 switch (truck.Phase)
                 {
                     case TruckPhase.ToWork when truck.Vehicle.TransitArrived:
                     {
-                        var site = truck.Site;
-                        int[] route = Mills.Exists(m => m.TileId == truck.Mill) ? NearestMill(site).Route : null;
-                        if (route == null || truck.HomeRequested) { Return(truck, truck.Vehicle.Route[^1]); break; }
+                        int[] route = truck.HomeRequested ? null : TruckRoute(truck.Source.Tile, truck.Destination);
+                        if (route == null) { Return(truck, truck.Vehicle.Route[^1]); break; }
                         StartShuttle(truck, route);
                         break;
                     }
                     case TruckPhase.Working:
                     {
                         var v = truck.Vehicle;
-                        bool done = truck.HomeRequested || Unfinished(truck.Site) <= 0.001f;
-                        // Leave only empty and standing at the landing, so no timber is carried off.
+                        bool done = truck.HomeRequested || (truck.Source.Volume <= 0.01f && !BeingFed(truck.Source));
+                        // Leave only empty and standing at the source, so no timber is carried off.
                         if (done && v.CargoAmount <= 0.0001f && v.TransportState is VehicleTransportState.Loading or VehicleTransportState.Waiting)
                             Return(truck, v.Route[0]);
                         break;
@@ -163,7 +161,7 @@ namespace ForesTycoon
             int dock = DepotDock(truck.Home);
             int[] path = dock < 0 ? Array.Empty<int>() : terrain.FindNetworkPath(from, dock);
             if (truck.Vehicle != null) Vehicles.Remove(truck.Vehicle);
-            truck.Vehicle = null;
+            truck.Vehicle = null; truck.FuelCharged = 0;
             if (path.Length < 2) { Park(truck); return; }
             truck.Vehicle = Vehicles.SpawnTransit(path);
             truck.Phase = TruckPhase.ToHome;
@@ -172,13 +170,14 @@ namespace ForesTycoon
         private void Park(FleetTruck truck)
         {
             if (truck.Vehicle != null && Vehicles.Contains(truck.Vehicle)) Vehicles.Remove(truck.Vehicle);
-            truck.Vehicle = null; truck.Phase = TruckPhase.Parked; truck.Site = null; truck.Mill = -1; truck.HomeRequested = false;
+            truck.Vehicle = null; truck.FuelCharged = 0; truck.Phase = TruckPhase.Parked;
+            truck.Source = null; truck.Target = null; truck.Destination = -1; truck.HomeRequested = false;
         }
 
         /// <summary>The harvest site a tile belongs to, or null.</summary>
         internal HarvestSite SiteAt(int tile)
         {
-            foreach (var site in Sites) if (Array.IndexOf(site.Tiles, tile) >= 0 || site.Landing == tile) return site;
+            foreach (var site in Sites) if (Array.IndexOf(site.Tiles, tile) >= 0) return site;
             return null;
         }
     }

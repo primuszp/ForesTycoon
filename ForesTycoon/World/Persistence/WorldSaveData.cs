@@ -18,7 +18,8 @@ namespace ForesTycoon
         SkidTrailPath,
         PlaceDepot,
         SendVehicle,
-        SendHome
+        SendHome,
+        StackSite
     }
 
     readonly record struct WorldCommandRecord(

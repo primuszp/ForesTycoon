@@ -96,6 +96,7 @@ namespace ForesTycoon
             if(ActiveTool==TerrainEditTool.PlaceSawmill){if(world.HoveredTileId>=0)world.QueuePlaceSawmill(world.HoveredTileId);return true;}
             if(ActiveTool==TerrainEditTool.PlaceDepot){if(world.HoveredTileId>=0)world.QueuePlaceDepot(world.HoveredTileId);return true;}
             if(ActiveTool==TerrainEditTool.SendVehicle){if(world.HoveredTileId>=0)TargetPicked?.Invoke(world.HoveredTileId);return true;}
+            if(ActiveTool is TerrainEditTool.PlaceStack or TerrainEditTool.RemoveStack){if(world.HoveredTileId>=0)world.QueueStackSite(world.HoveredTileId,ActiveTool==TerrainEditTool.RemoveStack);return true;}
             if (IsRoadTool(ActiveTool))
             {
                 int endTileId = world.HoveredTileId;

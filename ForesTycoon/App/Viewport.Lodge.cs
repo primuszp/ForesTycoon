@@ -139,7 +139,9 @@ namespace ForesTycoon
             ImGui.SameLine(0, 22);
             Chip(GameIcon.Truck, "Leszállítva", $"{world.DeliveredTimber:N0} m³");
             ImGui.SameLine(0, 22);
-            Chip(GameIcon.RoadRepair, "Építés, javítás", $"{world.Expenses:N0} eFt");
+            Chip(GameIcon.Timber, "Egyenleg", $"{world.Balance:N0} eFt");
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip($"Bevétel a malmokból: {world.Income:N0} eFt\nÉpítés: {world.Expenses:N0} eFt\nÜzemanyag, javítás: {world.Logistics?.RunningCosts ?? 0:N0} eFt");
             ImGui.SameLine(0, 22);
             HealthRing(forest.StandCount > 0 ? forest.AverageHealth : 0);
             ImGui.Spacing();
@@ -273,7 +275,8 @@ namespace ForesTycoon
             verb = tool switch
             {
                 TerrainEditTool.PlantForest => Verb.Tend,
-                TerrainEditTool.HarvestForest or TerrainEditTool.SkidTrail or TerrainEditTool.SkidTrailRemove => Verb.Produce,
+                TerrainEditTool.HarvestForest or TerrainEditTool.SkidTrail or TerrainEditTool.SkidTrailRemove
+                    or TerrainEditTool.PlaceStack or TerrainEditTool.RemoveStack => Verb.Produce,
                 TerrainEditTool.Road or TerrainEditTool.RoadRemove or TerrainEditTool.RoadRepair or TerrainEditTool.PlaceSawmill or TerrainEditTool.PlaceDepot
                     or TerrainEditTool.Raise or TerrainEditTool.Lower => Verb.Build,
                 // Observe and Transport work with the inspect tool and keep their own state.
@@ -367,6 +370,11 @@ namespace ForesTycoon
                         "Húzással jelöld ki a nyomot az úttól a vágásig: ezen jár a processzor és a forwarder. Csak keréknyom: használat nélkül benő.");
                     ImGui.SameLine();
                     ToolIcon(GameIcon.SkidTrailRemove, TerrainEditTool.SkidTrailRemove, Size, "Nyom törlése", "", "Húzással megszünteti a közelítő nyomot.");
+                    ImGui.SameLine();
+                    ToolIcon(GameIcon.Timber, TerrainEditTool.PlaceStack, Size, "Sarang", "",
+                        "Sarang helye nyom vagy út mellett. A processzor a legközelebbihez hordja a fát: messze sok üzemanyag, kevés teljesítmény.");
+                    ImGui.SameLine();
+                    ToolIcon(GameIcon.Timber, TerrainEditTool.RemoveStack, Size, "Sarang törlése", "", "Üres sarang helyének törlése.");
                     break;
                 case Verb.Build:
                     ToolIcon(GameIcon.Road, TerrainEditTool.Road, Size, "Útépítés", "4",

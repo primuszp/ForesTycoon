@@ -4,6 +4,7 @@ namespace ForesTycoon
     {
         void QueuePlaceSawmill(int tileId) => throw new System.NotSupportedException();
         void QueuePlaceDepot(int tileId) => throw new System.NotSupportedException();
+        void QueueStackSite(int tileId, bool remove) => throw new System.NotSupportedException();
         int HoveredTileId { get; }
         int SelectedNodeId { get; }
         void QueueElevationEdit(int nodeId, int delta, int radius, int strength);

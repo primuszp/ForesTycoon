@@ -38,25 +38,30 @@ namespace ForesTycoon
                     Require(logistics.PlaceDepot(67), logistics.Status);
                     logistics.Designate(stand);
                     var site = logistics.Sites[0];
-                    Require(logistics.Sites[0].Landing == 115, $"Landing {logistics.Sites[0].Landing}, expected 115.");
+                    // A stack beside the trail at the felling, another beside the road.
+                    Require(logistics.PlaceStack(120), logistics.Status);
+                    Require(logistics.PlaceStack(99), logistics.Status);
                     using var scene = new TerrainRenderer(terrain, vehicles, new WorldEffectSystem(), forest,
                         new GraphicsSettings { Fog = false, Weather = false, Wildlife = false }, logistics: logistics);
                     double time = 0;
                     void Step(double seconds) { for (int i = 0; i < seconds * 30; i++) { logistics.Update(1.0 / 30); vehicles.Update(1.0 / 30); time += 1.0 / 30; } }
                     Capture(scene, terrain, "depot", time);
-                    foreach (var machine in logistics.Machines) Require(logistics.AssignMachine(machine, site), logistics.Status);
-                    Require(logistics.AssignTruck(logistics.Trucks[0], site), logistics.Status);
+                    foreach (var machine in logistics.Machines)
+                        Require(machine.Kind == ForestMachineKind.Harvester ? logistics.AssignProcessor(machine, site)
+                            : logistics.AssignForwarder(machine, logistics.StackAt(120), 99), logistics.Status);
+                    Require(logistics.AssignTruck(logistics.Trucks[0], logistics.StackAt(99), 195), logistics.Status);
                     Step(6); Capture(scene, terrain, "driving-in", time);
                     Step(30); Capture(scene, terrain, "felling", time);
                     Step(60); Capture(scene, terrain, "forwarding", time);
-                    Step(2000);
+                    Step(2600);
                     Capture(scene, terrain, "finished", time);
-                    Require(logistics.Machines.TrueForAll(m => m.Site == null && m.Tile == 67), "Machines did not return to the depot.");
+                    Require(logistics.Machines.TrueForAll(m => !m.Working && m.Tile == 67), "Machines did not return to the depot.");
                     Require(logistics.Trucks[0].Phase == TruckPhase.Parked, "The truck did not return to the depot.");
-                    Require(logistics.Unfinished(site) < 0.01f, "Timber was left behind when the fleet went home.");
+                    Require(logistics.Remaining < 0.01f, "Timber was left behind when the fleet went home.");
                     Require(logistics.Mills[0].Received > 1, "No timber reached the mill.");
                     Require(terrain.Map.GetSkidTrailWear(117) > 0.3f, "The trail shows no ruts.");
-                    Console.WriteLine($"Forest machines: {logistics.Mills[0].Received:F1} m³ delivered, trail wear {terrain.Map.GetSkidTrailWear(117):P0}.");
+                    Console.WriteLine($"Forest machines: {logistics.Mills[0].Received:F1} m³ delivered for {logistics.Income:N0} eFt, " +
+                        $"running costs {logistics.RunningCosts:N0} eFt, trail wear {terrain.Map.GetSkidTrailWear(117):P0}.");
                 }
                 finally { terrain.Dispose(); }
                 Console.WriteLine($"Forest machine smoke passed. Captures: {output}");

@@ -203,6 +203,12 @@ namespace ForesTycoon
                     if (interaction.IsRoadDragging) { ImGui.SameLine(); ImGui.TextUnformatted($"{world.RoadPreviewCount} csempe"); }
                     else { ImGui.SameLine(); ImGui.TextUnformatted($"Nyomok: {world.SkidTrailCount} csempe"); }
                     break;
+                case TerrainEditTool.PlaceStack:
+                    ImGui.TextDisabled("Kattints egy szabad csempére nyom vagy út mellett: ide hordja a processzor a fát. A legközelebbit választja.");
+                    break;
+                case TerrainEditTool.RemoveStack:
+                    ImGui.TextDisabled("Kattints egy üres sarangra a törléséhez.");
+                    break;
                 case TerrainEditTool.SkidTrailRemove:
                     ImGui.TextDisabled("Húzd végig a megszüntetendő nyomon.");
                     break;
@@ -214,7 +220,7 @@ namespace ForesTycoon
                     ImGui.TextDisabled("Zöld keret: építhető. 2×2 sík, üres, száraz csempe út mellett; innen indulnak a járművek.");
                     break;
                 case TerrainEditTool.SendVehicle:
-                    ImGui.TextDisabled("Kattints a kijelölt vágásra, ahová a jármű dolgozni menjen. Esc: mégse.");
+                    ImGui.TextDisabled(SendHint + " Esc: mégse.");
                     break;
                 case TerrainEditTool.PlaceSawmill:
                     ImGui.TextDisabled("Zöld keret: építhető. 2×2 sík, üres, száraz csempe; mellé út kell.");
@@ -270,6 +276,8 @@ namespace ForesTycoon
             TerrainEditTool.RoadRemove => GameIcon.RoadRemove,
             TerrainEditTool.RoadRepair => GameIcon.RoadRepair,
             TerrainEditTool.SkidTrail => GameIcon.SkidTrail,
+            TerrainEditTool.PlaceStack => GameIcon.Timber,
+            TerrainEditTool.RemoveStack => GameIcon.Timber,
             TerrainEditTool.SkidTrailRemove => GameIcon.SkidTrailRemove,
             TerrainEditTool.PlantForest => GameIcon.Plant,
             TerrainEditTool.HarvestForest => GameIcon.Harvest,
@@ -414,11 +422,11 @@ namespace ForesTycoon
                 ImGui.SeparatorText("Járműpark");
                 foreach (var machine in logistics.Machines) FleetMachineRow(machine);
                 foreach (var truck in logistics.Trucks) FleetTruckRow(truck);
-                foreach (var site in logistics.Sites)
+                if (logistics.Stacks.Count > 0)
                 {
-                    if (site.Landing < 0 || logistics.Volume(site) <= 0.001f) continue;
-                    float piled = 0; foreach (float v in site.Piles.Values) piled += v;
-                    ImGui.TextDisabled($"Vágás: {piled:F1} m³ sarangban · {site.LandingStock:F1} m³ a rakodón");
+                    ImGui.SeparatorText("Sarangok");
+                    foreach (var stack in logistics.Stacks)
+                        ImGui.TextDisabled($"#{stack.Id}: {stack.Volume:F1} m³ · {stack.Value:N0} eFt");
                 }
             }
             LegacyVehicleRows();
@@ -426,30 +434,34 @@ namespace ForesTycoon
         }
 
         // ── Fleet: every vehicle with its work, Send / Home / Show ───────────
-        private int sendVehicleId = -1;
-        private bool sendTruck;
+        // The order being given: the vehicle, whether it needs a destination after the source, and the source picked.
+        private int sendVehicleId = -1, sendSource = -1;
+        private bool sendTruck, sendNeedsDestination;
+        internal string SendHint => sendVehicleId < 0 ? "" : !sendNeedsDestination ? "Kattints a vágásra, ahol a processzor dolgozzon."
+            : sendSource < 0 ? "Kattints a forrás sarangra." : "Kattints a célra: sarang helyére vagy a fűrészmalomra.";
 
-        private void BeginSend(int id, bool truck)
+        private void BeginSend(int id, bool truck, bool needsDestination)
         {
-            sendVehicleId = id; sendTruck = truck;
+            sendVehicleId = id; sendTruck = truck; sendNeedsDestination = needsDestination; sendSource = -1;
             SelectTool(TerrainEditTool.SendVehicle);
-            ShowToast("Kattints a vágásra, ahová a jármű dolgozni menjen.", HudTheme.Info);
+            ShowToast(SendHint, HudTheme.Info);
         }
 
-        /// <summary>The click of the send tool: the vehicle is ordered to the harvest site under the cursor.</summary>
+        /// <summary>A click of the send tool: the processor's site, or a forwarder/truck's source and then its destination.</summary>
         private void SendTargetPicked(int tile)
         {
             if (sendVehicleId < 0) return;
-            world.QueueSendVehicle(sendVehicleId, tile, sendTruck);
-            sendVehicleId = -1;
+            if (sendNeedsDestination && sendSource < 0) { sendSource = tile; ShowToast(SendHint, HudTheme.Info); return; }
+            world.QueueSendVehicle(sendVehicleId, sendNeedsDestination ? sendSource : tile, sendNeedsDestination ? tile : -1, sendTruck);
+            sendVehicleId = -1; sendSource = -1;
             SelectTool(TerrainEditTool.Inspect);
         }
 
-        private bool FleetButtons(string key, int id, bool truck, bool atHome, Vector3? position)
+        private bool FleetButtons(string key, int id, bool truck, bool atHome, Vector3? position, bool needsDestination)
         {
             ImGui.PushID(key + id);
-            if (ImGui.SmallButton("Küldés")) BeginSend(id, truck);
-            if (ImGui.IsItemHovered()) ImGui.SetTooltip("Utána kattints a vágásra a térképen.");
+            if (ImGui.SmallButton("Küldés")) BeginSend(id, truck, needsDestination);
+            if (ImGui.IsItemHovered()) ImGui.SetTooltip(needsDestination ? "Utána kattints a forrás sarangra, majd a célra." : "Utána kattints a vágásra.");
             ImGui.SameLine();
             ImGui.BeginDisabled(atHome);
             if (ImGui.SmallButton("Haza")) world.QueueSendHome(id, truck);
@@ -465,24 +477,28 @@ namespace ForesTycoon
         private void FleetMachineRow(ForestMachine machine)
         {
             bool processor = machine.Kind == ForestMachineKind.Harvester;
-            bool home = machine.Site == null && machine.State == ForestMachineState.Parked;
-            string state = machine.Site == null
+            bool home = !machine.Working && machine.State == ForestMachineState.Parked;
+            string state = !machine.Working
                 ? (machine.State == ForestMachineState.Driving ? "hazafelé tart" : "a telephelyen áll")
                 : machine.State switch
                 {
-                    ForestMachineState.Driving => machine.HomeRequested ? "hazahívva" : processor ? "úton a vágáshoz" : machine.Cargo > 0 ? "a rakodóra visz" : "sarangért megy",
+                    ForestMachineState.Driving => machine.HomeRequested ? "hazahívva" : machine.Cargo > 0.01f ? "visz a célhoz" : processor ? "úton a fához" : "úton a saranghoz",
                     ForestMachineState.Felling => "dönt és darabol",
                     ForestMachineState.Loading => "rakodik",
-                    ForestMachineState.Unloading => "lerak a rakodón",
-                    _ => "vár a vágásnál"
+                    ForestMachineState.Unloading => "lerak a sarangra",
+                    _ => processor ? "vár (nincs elérhető sarang?)" : "vár, amíg gyűlik a fa"
                 };
             HudTheme.IconText(processor ? GameIcon.Harvest : GameIcon.Forwarder, $"{(processor ? "Processzor" : "Forwarder")} #{machine.Id}");
             ImGui.SameLine();
             ImGui.TextColored(home ? HudTheme.Muted : HudTheme.Good, state);
-            if (!processor && machine.Cargo > 0.01f)
-                ImGui.ProgressBar(machine.CargoFill, new NVec2(-1, 12), $"{machine.Cargo:F1} / {ForestMachine.ForwarderCapacity:F0} m³");
+            if (machine.Cargo > 0.01f)
+                ImGui.ProgressBar(machine.CargoFill, new NVec2(-1, 12), $"{machine.Cargo:F1} / {machine.Capacity:F0} m³");
+            string order = processor
+                ? (machine.Site != null ? $"Vágás → sarang #{machine.Target?.Id}" : "")
+                : (machine.Source != null ? $"Sarang #{machine.Source.Id} → {DestinationName(machine.Destination)}" : "");
+            ImGui.TextDisabled((order.Length > 0 ? order + " · " : "") + $"{machine.FuelUsed:F0} l gázolaj");
             Vector3? at = world.TryGetTileCenter(machine.Tile, out var c) ? c : null;
-            FleetButtons("m", machine.Id, false, home || machine.Site == null, at);
+            FleetButtons("m", machine.Id, false, !machine.Working, at, !processor);
         }
 
         private void FleetTruckRow(FleetTruck truck)
@@ -513,7 +529,16 @@ namespace ForesTycoon
             Vector3? at = null;
             if (vehicle != null) { vehicle.GetSegment(vehicle.RoutePosition, out int from, out _, out _); if (world.TryGetTileCenter(from, out var c)) at = c; }
             else at = truck.Home.Position;
-            FleetButtons("t", truck.Id, true, truck.Phase is TruckPhase.Parked or TruckPhase.ToHome, at);
+            if (truck.Source != null) ImGui.TextDisabled($"Sarang #{truck.Source.Id} → {DestinationName(truck.Destination)}");
+            FleetButtons("t", truck.Id, true, truck.Phase is TruckPhase.Parked or TruckPhase.ToHome, at, true);
+        }
+
+        private string DestinationName(int tile)
+        {
+            var logistics = world.Logistics;
+            if (logistics.MillAt(tile) != null) return "fűrészmalom";
+            var stack = logistics.StackAt(tile);
+            return stack != null ? $"sarang #{stack.Id}" : "új sarang";
         }
 
         // Old saves: trucks started without a depot keep their own list.
@@ -944,6 +969,8 @@ namespace ForesTycoon
             TerrainEditTool.RoadRemove => "Útbontás",
             TerrainEditTool.RoadRepair => "Útjavítás",
             TerrainEditTool.SkidTrail => "Közelítő nyom",
+            TerrainEditTool.PlaceStack => "Sarang helye",
+            TerrainEditTool.RemoveStack => "Sarang törlése",
             TerrainEditTool.SkidTrailRemove => "Nyom törlése",
             TerrainEditTool.PlantForest => $"Ültetés ({ForestSpeciesName(interaction.PlantingSpecies)})",
             TerrainEditTool.HarvestForest => "Kitermelési terület",
