@@ -15,8 +15,9 @@ namespace ForesTycoon
         float TrailerAxle => 0;
         bool Articulated => Kingpin > TrailerAxle;
         /// <param name="articulation">Trailer yaw relative to the tractor about the kingpin, radians (+ = to the left).</param>
+        /// <param name="trailerPitch">Trailer pitch relative to the tractor, radians (+ = kingpin above the trailer axle).</param>
         void Draw(Matrix4 transform, float cargoFill, float wheelAngle, float curvature = 0, float scale = 1,
-            Matrix4? suspension = null, float outlineWidth = 0, float articulation = 0);
+            Matrix4? suspension = null, float outlineWidth = 0, float articulation = 0, float trailerPitch = 0);
     }
 
     /// <summary>
@@ -92,13 +93,14 @@ namespace ForesTycoon
         }
 
         public void Draw(Matrix4 transform, float cargoFill, float wheelAngle, float curvature = 0, float scale = 1,
-            Matrix4? suspension = null, float outlineWidth = 0, float articulation = 0)
+            Matrix4? suspension = null, float outlineWidth = 0, float articulation = 0, float trailerPitch = 0)
         {
             int visible = (int)MathF.Ceiling(Math.Clamp(cargoFill, 0, 1) * cargoCount);
             var body = suspension ?? Matrix4.Identity;
-            // The semi-trailer, its wheels and its logs turn about the kingpin.
+            // The semi-trailer, its wheels and its logs turn and pitch about the kingpin (rear down when it sits lower).
             var hinge = Kingpin > TrailerAxle
-                ? Matrix4.CreateTranslation(-Kingpin, 0, 0) * Matrix4.CreateRotationZ(articulation) * Matrix4.CreateTranslation(Kingpin, 0, 0)
+                ? Matrix4.CreateTranslation(-Kingpin, 0, 0) * Matrix4.CreateRotationY(-trailerPitch) * Matrix4.CreateRotationZ(articulation)
+                    * Matrix4.CreateTranslation(Kingpin, 0, 0)
                 : Matrix4.Identity;
             for (int i = 0; i < kinds.Length; i++)
             {

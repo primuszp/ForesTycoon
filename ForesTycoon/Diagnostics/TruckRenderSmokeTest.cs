@@ -69,8 +69,9 @@ namespace ForesTycoon
                     var truck = system.Spawn(new[] { 0, 1, 2 });
                     for (int i = 0; i < 4000 && truck.RoutePosition < 1.3; i++) system.Update(0.05);
                     road.GetPose(truck.RoutePosition, out var center, out var forward, out _, out _);
-                    float articulation = VehicleRenderer.Articulation(road, truck.RoutePosition, center, forward,
-                        previewTerrain.RoadLaneWidth * DioramaScale.TruckLaneFill / VehicleRenderer.ModelWidth);
+                    road.GetPose(truck.RoutePosition, out _, out _, out var left, out var up);
+                    float articulation = VehicleRenderer.Articulation(road, truck.RoutePosition, center, forward, left, up,
+                        previewTerrain.RoadLaneWidth * DioramaScale.TruckLaneFill / VehicleRenderer.ModelWidth).Yaw;
                     Console.WriteLine($"loaded-bend: position={truck.RoutePosition:F2}, articulation={articulation * 180 / MathF.PI:F1}°");
                     // Turning left (+Y), the trailer lags behind: it points right of the tractor (negative yaw).
                     if (VehicleRenderer.ModelArticulated && !(articulation < -0.05f))
@@ -82,6 +83,22 @@ namespace ForesTycoon
                     VehicleRenderer.Draw(system, previewTerrain, 1);
                     GL.Finish();
                     FramebufferCapture.SavePng(Path.Combine(output, "loaded-bend.png"), 960, 640);
+                }
+                {
+                    // Over a crest and through a dip the trailer must pitch so its wheels stay on the road.
+                    VehicleRenderer.TruckScale = previewTerrain.RoadLaneWidth * DioramaScale.TruckLaneFill / VehicleRenderer.ModelWidth;
+                    foreach (var (name, z) in new[] { ("crest", -2.5f), ("dip", 2.5f) })
+                    {
+                        // Level approach, then the crest/dip tile, then level again; the whole trailer stays on built road.
+                        var road = new VehicleRoadRoute(new[] { new Vector3(-20, 0, z), new Vector3(-10, 0, z), Vector3.Zero,
+                                new Vector3(10, 0, z), new Vector3(20, 0, z) },
+                            new[] { Vector2.Zero, new Vector2(-z / 10, 0), Vector2.Zero, new Vector2(z / 10, 0), Vector2.Zero });
+                        float worst = 0;
+                        for (double p = 1.6; p <= 2.8; p += 0.05) worst = Math.Max(worst, Math.Abs(VehicleRenderer.TrailerAxleGap(road, p)));
+                        Console.WriteLine($"loaded-{name}: largest trailer-wheel gap {worst:F3} (lane {previewTerrain.RoadLaneWidth:F2})");
+                        if (VehicleRenderer.ModelArticulated && worst > 0.02f * VehicleRenderer.TruckScale * VehicleRenderer.ModelWidth)
+                            throw new InvalidOperationException($"Semi-trailer wheels leave the road on a {name}.");
+                    }
                 }
                 Console.WriteLine($"Truck render smoke passed. Captures: {output}");
             }

@@ -29,8 +29,8 @@ namespace ForesTycoon
                         vehicle.RoadRoute.GetPose(routePosition, out Vector3 center, out Vector3 forward,
                             out Vector3 left, out Vector3 up, importedModel.Wheelbase*scale, importedModel.AxleMidpoint*scale);
                         if (Culled(center, scale)) continue;
-                        float articulation = Articulation(vehicle.RoadRoute, routePosition, center, forward, scale);
-                        DrawTruck(new VehicleTransform(center, forward, left, up), vehicle.VisualCargoFill, scale, articulation,
+                        var (articulation, trailerPitch) = Articulation(vehicle.RoadRoute, routePosition, center, forward, left, up, scale);
+                        DrawTruck(new VehicleTransform(center, forward, left, up), vehicle.VisualCargoFill, scale, articulation, trailerPitch,
                             (float)(routePosition * vehicle.RoadRoute.TileLength / (0.23*scale)),
                             vehicle.RoadRoute.BodyCurvature(routePosition,importedModel.Wheelbase*scale),
                             VehicleVisualMotion.Suspension(routePosition*vehicle.RoadRoute.TileLength,
@@ -59,22 +59,56 @@ namespace ForesTycoon
 
         /// <summary>
         /// Semi-trailer yaw relative to the tractor: the trailer points from its own axle group, which rolls along
-        /// the road behind, to the kingpin on the tractor. So in a bend the trailer cuts in and its wheels follow the arc.
+        /// the road behind, to the kingpin on the tractor. So in a bend the trailer cuts in and its wheels follow the arc,
+        /// and over a crest or a dip it pitches so its wheels stay on the road. Both angles are in the tractor's frame.
         /// </summary>
-        internal static float Articulation(VehicleRoadRoute route, double position, Vector3 center, Vector3 forward, float scale)
+        internal static (float Yaw, float Pitch) Articulation(VehicleRoadRoute route, double position, Vector3 center,
+            Vector3 forward, Vector3 left, Vector3 up, float scale)
         {
             EnsureModel();
-            if (!importedModel.Articulated) return 0;
+            if (!importedModel.Articulated) return (0, 0);
+            // The kingpin projected to road level (the pose centre is at road level).
             Vector3 kingpin = center + forward * (importedModel.Kingpin * scale);
+            // Find the road point exactly one trailer length from the kingpin (the arc and the tractor's chord differ).
+            float length = (importedModel.Kingpin - importedModel.TrailerAxle) * scale;
             float behind = (importedModel.AxleMidpoint - importedModel.TrailerAxle) * scale;
-            Vector3 axle = route.PointBehind(position, behind);
-            Vector2 trailer = (kingpin - axle).Xy, tractor = forward.Xy;
-            if (trailer.LengthSquared < 1e-8f || tractor.LengthSquared < 1e-8f) return 0;
-            float angle = MathF.Atan2(tractor.X * trailer.Y - tractor.Y * trailer.X, Vector2.Dot(tractor, trailer));
-            return Math.Clamp(angle, -1.2f, 1.2f);
+            Vector3 d = kingpin - route.PointBehind(position, behind);
+            for (int i = 0; i < 4; i++)
+            {
+                behind += length - d.Length;
+                d = kingpin - route.PointBehind(position, behind);
+            }
+            float x = Vector3.Dot(d, forward), y = Vector3.Dot(d, left), z = Vector3.Dot(d, up);
+            if (x * x + y * y < 1e-8f) return (0, 0);
+            return (Math.Clamp(MathF.Atan2(y, x), -1.2f, 1.2f), Math.Clamp(MathF.Atan2(z, MathF.Sqrt(x * x + y * y)), -0.5f, 0.5f));
         }
 
-        private static void DrawTruck(VehicleTransform transform, float cargoFill, float scale, float articulation = 0, float wheelAngle = 0,float curvature=0,Matrix4? suspension=null)
+        /// <summary>Height of the drawn trailer axle above the road under it (diagnostics), world units.</summary>
+        internal static float TrailerAxleGap(VehicleRoadRoute route, double position)
+        {
+            EnsureModel();
+            float scale = TruckScale;
+            route.GetPose(position, out Vector3 center, out Vector3 forward, out Vector3 left, out Vector3 up,
+                importedModel.Wheelbase * scale, importedModel.AxleMidpoint * scale);
+            var (yaw, pitch) = Articulation(route, position, center, forward, left, up, scale);
+            var hinge = Matrix4.CreateTranslation(-importedModel.Kingpin, 0, 0) * Matrix4.CreateRotationY(-pitch)
+                * Matrix4.CreateRotationZ(yaw) * Matrix4.CreateTranslation(importedModel.Kingpin, 0, 0);
+            Vector3 local = Vector3.TransformPosition(new Vector3(importedModel.TrailerAxle, 0, 0), hinge) * scale;
+            Vector3 world = center + forward * local.X + left * local.Y + up * local.Z;
+            // Road height under the drawn axle: search along the road for the nearest point in plan.
+            float best = float.MaxValue, height = 0;
+            for (float behind = 0; behind < importedModel.Radius * 2 * scale; behind += 0.01f * scale)
+            {
+                Vector3 road = route.PointBehind(position, behind);
+                float plan = (road.Xy - world.Xy).LengthSquared;
+                if (plan < best) { best = plan; height = road.Z; }
+            }
+            return world.Z - height;
+        }
+
+        internal static float TruckScale { get; set; } = 1;
+
+        private static void DrawTruck(VehicleTransform transform, float cargoFill, float scale, float articulation = 0, float trailerPitch = 0, float wheelAngle = 0,float curvature=0,Matrix4? suspension=null)
         {
             EnsureModel();
             Matrix4 matrix=new Matrix4(
@@ -86,7 +120,7 @@ namespace ForesTycoon
                 {
                 float outline = RenderDevice.Visuals?.ShadowPass != true && outlineBudget > 0 ? 0.7f / outlinePixelsPerUnit / scale : 0;
                 if (outline > 0) outlineBudget--;
-                importedModel.Draw(Matrix4.CreateScale(scale)*matrix,cargoFill,wheelAngle,curvature,scale,suspension,outline,articulation);
+                importedModel.Draw(Matrix4.CreateScale(scale)*matrix,cargoFill,wheelAngle,curvature,scale,suspension,outline,articulation,trailerPitch);
             }
         }
 
