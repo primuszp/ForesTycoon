@@ -200,13 +200,14 @@ namespace ForesTycoon
 
         private void UpdateMachines(double seconds)
         {
+            // Drawing interpolates across the whole tick (all substeps); a new path resets the start to 0.
+            foreach (var machine in Machines) machine.PreviousPathPosition = machine.PathPosition;
             while (seconds > 1e-9)
             {
                 double dt = Math.Min(seconds, 1.0 / 30); seconds -= dt;
                 for (int i = 0; i < Machines.Count; i++)
                 {
                     var machine = Machines[i];
-                    machine.PreviousPathPosition = machine.PathPosition;
                     bool atHome = !machine.Working && machine.State == ForestMachineState.Parked;
                     if (atHome) { RunningCosts += machine.Upkeep.Service(dt); continue; }
                     // Wear and breakdowns: rough trails and loads strain the machine; broken, it waits for the mechanic.

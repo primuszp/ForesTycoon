@@ -64,18 +64,28 @@ namespace ForesTycoon
             for (int i = 0; i < vehicles.Count; i++)
             {
                 Vehicle vehicle = vehicles[i];
+                // A tick runs in several substeps; drawing interpolates across the whole tick, not just the last substep.
+                double before = vehicle.RoutePosition;
+                UpdateVehicle(vehicle, deltaSeconds);
+                vehicle.PreviousRoutePosition = Math.Min(before, vehicle.RoutePosition);
+            }
+        }
+
+        private void UpdateVehicle(Vehicle vehicle, double deltaSeconds)
+        {
+            {
                 vehicle.RoadState = RoadState; vehicle.RoadWear = RoadWear;
-                if(vehicle.RouteBlocked||vehicle.Broken){vehicle.Hold();continue;}
+                if(vehicle.RouteBlocked||vehicle.Broken){vehicle.Hold();return;}
                 if(vehicle.Transit){
                     if(!vehicle.TransitArrived){vehicle.Update(deltaSeconds);if(vehicle.RoutePosition>=vehicle.Route.Length-1-1e-6){vehicle.TransitArrived=true;vehicle.Hold();}}
                     else vehicle.Hold();
-                    continue;
+                    return;
                 }
-                if(vehicle.LocalCargo){UpdateLogistics(vehicle,deltaSeconds);continue;}
+                if(vehicle.LocalCargo){UpdateLogistics(vehicle,deltaSeconds);return;}
                 if (!vehicle.CargoStopsEnabled)
                 {
                     vehicle.Update(deltaSeconds); ProcessRouteEndpoints(vehicle);
-                    continue;
+                    return;
                 }
                 double remaining = deltaSeconds;
                 while (remaining > 0)

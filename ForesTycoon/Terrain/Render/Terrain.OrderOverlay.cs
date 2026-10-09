@@ -60,41 +60,61 @@ namespace ForesTycoon
             foreach (var (route, colour, strong) in o.Routes) DrawRoute(route, colour, strong, time);
         }
 
-        // A ribbon from tile centre to tile centre, with moving dashes and an arrowhead at the destination.
+        /// <summary>
+        /// The route as a smooth line: through the edge midpoints, bending inside each tile on a quadratic curve round its
+        /// centre — the same rounded corner the vehicles drive.
+        /// </summary>
+        private Vector3[] SmoothRoute(int[] route)
+        {
+            var centres = new Vector2[route.Length];
+            for (int i = 0; i < route.Length; i++) { map.TryGetTileCenter(route[i], out Vector3 c); centres[i] = c.Xy; }
+            const int Steps = 8;
+            var points = new List<Vector3>(route.Length * Steps + 1);
+            for (int k = 0; k < route.Length; k++)
+            {
+                Vector2 c = centres[k];
+                Vector2 entry = k > 0 ? (centres[k - 1] + c) * 0.5f : c;
+                Vector2 exit = k + 1 < route.Length ? (centres[k + 1] + c) * 0.5f : c;
+                for (int s = k == 0 ? 0 : 1; s <= Steps; s++)
+                {
+                    float t = s / (float)Steps;
+                    Vector2 p = (1 - t) * (1 - t) * entry + 2 * t * (1 - t) * c + t * t * exit;
+                    float z = map.TryGetSurfaceZ(p.X, p.Y, out float ground) ? ground : 0;
+                    points.Add(new Vector3(p.X, p.Y, z + 0.12f));
+                }
+            }
+            return points.ToArray();
+        }
+
+        // A rounded ribbon with dashes drifting toward the destination, and an arrowhead at its end.
         private void DrawRoute(int[] route, Color colour, bool strong, double time)
         {
             if (route == null || route.Length < 2) return;
             float width = Math.Min(tileSizeH, tileSizeV) * (strong ? 0.11f : 0.07f);
-            var points = new Vector3[route.Length];
-            for (int i = 0; i < route.Length; i++)
-            {
-                map.TryGetTileCenter(route[i], out points[i]);
-                if (map.TryGetSurfaceZ(points[i].X, points[i].Y, out float z)) points[i].Z = z;
-                points[i].Z += 0.12f;
-            }
+            var points = SmoothRoute(route);
             float alpha = strong ? 1f : 0.55f;
             DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () =>
             {
-                float travelled = 0;
+                // Joined segments: each quad uses the averaged side direction at its ends, so bends have no gaps or notches.
+                Vector3 Side(int i)
+                {
+                    Vector3 d = points[Math.Min(i + 1, points.Length - 1)] - points[Math.Max(i - 1, 0)];
+                    float l = d.Xy.Length;
+                    return l < 1e-5f ? Vector3.Zero : new Vector3(-d.Y, d.X, 0) / l * width * 0.5f;
+                }
+                float travelled = 0, tile = Math.Min(tileSizeH, tileSizeV);
                 for (int i = 1; i < points.Length; i++)
                 {
                     Vector3 a = points[i - 1], b = points[i];
-                    Vector3 d = b - a; float length = d.Xy.Length;
-                    if (length < 1e-4f) continue;
-                    Vector3 side = new Vector3(-d.Y, d.X, 0) / length * width * 0.5f;
+                    float length = (b - a).Xy.Length;
                     // Dashes drift toward the destination: the route reads as a direction, not only a line.
-                    const int Dashes = 4;
-                    for (int k = 0; k < Dashes; k++)
-                    {
-                        float phase = (float)((travelled / Math.Min(tileSizeH, tileSizeV) + k / (float)Dashes - time * 0.8) % 1.0);
-                        if (phase < 0) phase += 1;
-                        float shade = phase < 0.5f ? 1f : 0.65f;
-                        DynamicPrimitiveBatch.Color4(Color.FromArgb((int)(220 * alpha), (int)(colour.R * shade), (int)(colour.G * shade), (int)(colour.B * shade)));
-                        float t0 = k / (float)Dashes, t1 = (k + 1) / (float)Dashes;
-                        Vector3 p0 = a + d * t0, p1 = a + d * t1;
-                        DynamicPrimitiveBatch.Vertex3(p0 - side); DynamicPrimitiveBatch.Vertex3(p1 - side);
-                        DynamicPrimitiveBatch.Vertex3(p1 + side); DynamicPrimitiveBatch.Vertex3(p0 + side);
-                    }
+                    float phase = (float)(((travelled + length * 0.5f) / tile * 2 - time * 0.8) % 1.0);
+                    if (phase < 0) phase += 1;
+                    float shade = phase < 0.5f ? 1f : 0.62f;
+                    DynamicPrimitiveBatch.Color4(Color.FromArgb((int)(220 * alpha), (int)(colour.R * shade), (int)(colour.G * shade), (int)(colour.B * shade)));
+                    Vector3 sa = Side(i - 1), sb = Side(i);
+                    DynamicPrimitiveBatch.Vertex3(a - sa); DynamicPrimitiveBatch.Vertex3(b - sb);
+                    DynamicPrimitiveBatch.Vertex3(b + sb); DynamicPrimitiveBatch.Vertex3(a + sa);
                     travelled += length;
                 }
             });

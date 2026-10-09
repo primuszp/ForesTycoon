@@ -11,8 +11,17 @@ namespace ForesTycoon
         {
             outlinePixelsPerUnit = context.PixelsPerWorldUnit;
             TexturedTruckModel.Settings = settings;
-            outlineBudget = settings.Enhanced && settings.VehicleOutlines && context.PixelsPerWorldUnit >= 7 ?
-                settings.Quality == GraphicsQuality.High ? 8 : settings.Quality == GraphicsQuality.Medium ? 4 : 0 : 0;
+            // Edge highlight on every vehicle once it is a few pixels big: trucks and forest machines share the budget.
+            outlineBudget = settings.Enhanced && settings.VehicleOutlines && context.PixelsPerWorldUnit >= 3 ?
+                settings.Quality == GraphicsQuality.High ? 24 : settings.Quality == GraphicsQuality.Medium ? 12 : 4 : 0;
+        }
+
+        /// <summary>World-space outline width for one more vehicle this frame, or 0 when the budget is spent.</summary>
+        internal static float TakeOutline(float scale = 1)
+        {
+            if (RenderDevice.Visuals?.ShadowPass == true || outlineBudget <= 0 || outlinePixelsPerUnit <= 0) return 0;
+            outlineBudget--;
+            return 0.8f / outlinePixelsPerUnit / scale;
         }
         public static void Draw(VehicleSystem vehicles, Terrain terrain, float interpolationAlpha)
         {

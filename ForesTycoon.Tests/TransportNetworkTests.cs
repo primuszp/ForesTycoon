@@ -189,4 +189,18 @@ public class TransportNetworkTests
         Assert.True(trail < road * 0.7, $"trail {trail} vs road {road}");
         Assert.True(pitch >= 0.8f);
     }
+    [Fact]
+    public void DrawingInterpolatesAcrossTheWholeTickNotJustItsLastSubstep()
+    {
+        var map = Flat();
+        int[] route = Enumerable.Range(2, 13).Select(u => u * 16 + 2).ToArray();
+        map.BuildRoadTilePath(route[0], route[^1], RoadPaving.Asphalt);
+        var system = new VehicleSystem(new TimberCargoSystem(), r => VehicleRoadRoute.Create(map, r)) { TimeScale = 4, UseCargoStops = false };
+        var truck = system.Spawn(route);
+        for (int i = 0; i < 60; i++) system.Update(1.0 / 30);
+        double before = truck.RoutePosition;
+        system.Update(1.0 / 30);                       // four vehicle substeps
+        Assert.Equal(before, truck.PreviousRoutePosition, 9);
+        Assert.True(truck.RoutePosition - before > 0.05, "The truck did not move during the tick.");
+    }
 }

@@ -253,7 +253,8 @@ namespace ForesTycoon
                         * Matrix4.CreateRotationY(articulation) * Matrix4.CreateTranslation(node.Translation);
                 m.Pose.World[i] = node.Parent < 0 ? local : local * m.Pose.World[node.Parent];
             }
-            m.Renderer.Draw(m.Pose, Axis * Matrix4.CreateScale(MetreScale) * placement, settings, sourceMaterial: true);
+            m.Renderer.Draw(m.Pose, Axis * Matrix4.CreateScale(MetreScale) * placement, settings,
+                VehicleRenderer.TakeOutline(), sourceMaterial: true);
         }
 
         // Stand-in when the licensed models are missing: chassis, cab, crane post and wheels in the machine colours.

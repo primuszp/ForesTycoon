@@ -45,7 +45,7 @@ namespace ForesTycoon
         public int Id { get; }
         public int[] Route { get; }
         public double SpeedTilesPerSecond { get; }
-        public double PreviousRoutePosition { get; private set; }
+        public double PreviousRoutePosition { get; internal set; }
         public double RoutePosition { get; private set; }
         public float CargoCapacity { get; }
         public float CargoAmount { get; private set; }
