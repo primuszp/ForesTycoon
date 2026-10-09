@@ -29,7 +29,7 @@ namespace ForesTycoon
         internal bool Fog = true;
         internal int LightningRequest;
         internal float FogDensity = 0.65f;
-        // Snow remains an isolated experiment; the normal game never enables it.
+        // Manual weather preview can enable snowfall; the simulated climate remains rain-based.
         internal bool ExperimentalSnow;
         internal WeatherPreset Preset = WeatherPreset.Sunny;
         internal float SunAzimuth = 135;

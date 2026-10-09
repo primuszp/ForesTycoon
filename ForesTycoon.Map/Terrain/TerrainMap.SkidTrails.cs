@@ -49,7 +49,7 @@ namespace ForesTycoon.Map
                 if (!CanCarrySkidTrail(step.TileId)) continue;
                 skidTrails.TryGetValue(step.TileId, out var trail);
                 bool isNew = trail.Edges == RoadEdge.None;
-                RoadEdge merged = trail.Edges | step.Edges;
+                RoadEdge merged = GetNetworkEdges(step.TileId) | step.Edges;
                 if (!isNew && merged == trail.Edges) continue;
                 trail.Edges = merged;
                 trail.Idle = 0;

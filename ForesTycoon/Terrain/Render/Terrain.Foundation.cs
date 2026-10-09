@@ -30,20 +30,6 @@ namespace ForesTycoon
                 });
             }
 
-            using (RenderDevice.CreateStateScope().DepthWrite(false))
-            {
-                DynamicPrimitiveBatch.Color4(RoadFoundationLineColor);
-                DynamicPrimitiveBatch.Draw(PrimitiveTopology.Lines, () =>
-                {
-                    foreach (Tile tile in visibleTiles)
-                    {
-                        if (!roads.Has(tile.Id)) continue;
-                        RoadFootprintCorners(tile, out Vector3 iW, out Vector3 iS, out Vector3 iE, out Vector3 iN);
-                        DynamicPrimitiveBatch.Vertex3(iW); DynamicPrimitiveBatch.Vertex3(iS); DynamicPrimitiveBatch.Vertex3(iE); DynamicPrimitiveBatch.Vertex3(iN);
-                        DynamicPrimitiveBatch.Vertex3(iN); DynamicPrimitiveBatch.Vertex3(iW);
-                    }
-                });
-            }
         }
 
         private void DrawFoundationTerrainSurfaces()

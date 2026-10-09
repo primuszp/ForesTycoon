@@ -16,13 +16,20 @@ public class FleetTests
     private sealed record Scene(TerrainMap Map, ForestSystem Forest, ForestryLogistics Logistics, VehicleSystem Vehicles);
 
     // Road along v = 2, a skid trail (8, 3) → (8, 7) to the stand, a mill at (12, 3), the depot at (4, 3).
-    private static Scene Build(bool stacks = true)
+    private static Scene Build(bool stacks = true, bool mixedRoads = false, RoadPaving firstSurface = RoadPaving.Asphalt)
     {
         var map = new TerrainMap(Settings, (_, _) => 4);
         var stands = new ForestStand[map.Tiles.Count];
         foreach (int id in Stand) stands[id] = new ForestStand(ForestSpecies.Oak, 60, 0.7f, 1);
         var forest = new ForestSystem(map, stands);
-        map.BuildRoadTilePath(34, 210, RoadPaving.Macadam);
+        if (mixedRoads)
+        {
+            // Separate strokes meet at adjacent endpoints, without repainting an overlap tile.
+            map.BuildRoadTilePath(34, 82, firstSurface);
+            map.BuildRoadTilePath(98, 130, firstSurface == RoadPaving.Asphalt ? RoadPaving.Macadam : RoadPaving.Asphalt);
+            map.BuildRoadTilePath(146, 210, firstSurface);
+        }
+        else map.BuildRoadTilePath(34, 210, RoadPaving.Macadam);
         map.MarkSkidTrailPath(130, 135);
         var logistics = new ForestryLogistics(map, forest) { MachinesEnabled = true };
         var vehicles = new VehicleSystem(new TimberCargoSystem(), route => VehicleRoadRoute.Create(map, route))
@@ -46,6 +53,20 @@ public class FleetTests
 
     private static ForestMachine Processor(Scene s) => s.Logistics.Machines.Single(m => m.Kind == ForestMachineKind.Harvester);
     private static ForestMachine Forwarder(Scene s) => s.Logistics.Machines.Single(m => m.Kind == ForestMachineKind.Forwarder);
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ProcessorReachesTheFellingOverSeparatelyBuiltMixedSurfaceRoads(bool macadamFirst)
+    {
+        var s = Build(mixedRoads: true, firstSurface: macadamFirst ? RoadPaving.Macadam : RoadPaving.Asphalt);
+        var processor = Processor(s);
+        Assert.True(s.Logistics.AssignProcessor(processor, s.Logistics.Sites[0]), s.Logistics.Status);
+        Run(s, 60);
+        Assert.True(s.Logistics.StackAt(ForestStack)!.Volume > 0, "The processor did not reach the felling and deliver timber.");
+        Assert.True(processor.FuelUsed > 0);
+        Assert.Equal(0, s.Logistics.StackAt(RoadStack)!.Volume);
+    }
 
     [Fact]
     public void FirstDepotHoldsTheStartingFleetAndNothingWorksUntilSent()

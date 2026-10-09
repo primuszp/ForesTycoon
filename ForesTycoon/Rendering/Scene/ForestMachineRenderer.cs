@@ -198,12 +198,12 @@ namespace ForesTycoon
         // Ground-following frame: heading along the path, pitch and roll from the terrain under the machine.
         private static Matrix4 Placement(TerrainMap map, Vector2 point, Vector2 heading, float halfLength)
         {
-            map.TryGetSurfaceZ(point.X, point.Y, out float z);
+            map.TryGetDrivingSurfaceZ(point.X, point.Y, out float z);
             Vector3 forward = new(heading.X, heading.Y, 0), left = new(-heading.Y, heading.X, 0);
-            if (map.TryGetSurfaceZ(point.X + heading.X * halfLength, point.Y + heading.Y * halfLength, out float front) &&
-                map.TryGetSurfaceZ(point.X - heading.X * halfLength, point.Y - heading.Y * halfLength, out float back))
+            if (map.TryGetDrivingSurfaceZ(point.X + heading.X * halfLength, point.Y + heading.Y * halfLength, out float front) &&
+                map.TryGetDrivingSurfaceZ(point.X - heading.X * halfLength, point.Y - heading.Y * halfLength, out float back))
                 forward.Z = (front - back) / (2 * halfLength);
-            if (map.TryGetSurfaceZ(point.X + left.X, point.Y + left.Y, out float side) && map.TryGetSurfaceZ(point.X - left.X, point.Y - left.Y, out float other))
+            if (map.TryGetDrivingSurfaceZ(point.X + left.X, point.Y + left.Y, out float side) && map.TryGetDrivingSurfaceZ(point.X - left.X, point.Y - left.Y, out float other))
                 left.Z = (side - other) / 2;
             forward.Normalize(); Vector3 up = Vector3.Cross(forward, left).Normalized(); left = Vector3.Cross(up, forward).Normalized();
             return new Matrix4(new Vector4(forward, 0), new Vector4(left, 0), new Vector4(up, 0), new Vector4(point.X, point.Y, z + 0.02f, 1));

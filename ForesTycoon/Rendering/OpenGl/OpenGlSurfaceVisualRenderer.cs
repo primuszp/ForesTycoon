@@ -258,14 +258,14 @@ void main() {
     vec3 n = length(face)>0.000001 ? normalize(face) : vec3(0,0,1);
     if(!gl_FrontFacing) n = -n;
     if((kind == 5 || kind == 6 || kind == 4 || kind == 9 || kind == 10) && length(smooth_normal)>0.1) n = normalize(smooth_normal);
-    if(kind == 1 || kind == 3 || kind == 7 || kind == 8) { if(n.z<0) n=-n; }
+    if(kind == 1 || kind == 3 || kind == 7 || kind == 8 || kind >= 11) { if(n.z<0) n=-n; }
     vec3 base = pow(max(tint.rgb,vec3(0)),vec3(2.2));
     int species_code = (kind == 5 || kind == 6) ? int(tint.a*255.0 + 0.5) - 246 : 0;
     if(species_code < 1 || species_code > 5 || (kind == 6 && species_code == 1)) species_code = 0;
     float detail = 1;
     float materialPatch = texture(materials, vec3(world.xy/24.0,1)).r;
     if(textured != 0) {
-        float layer = kind == 3 ? 2 : (kind == 5 ? 3 : (kind == 8 || kind == 2 ? 1 : 0));
+        float layer = kind == 3 ? 5 : (kind == 11 ? 2 : (kind == 5 ? 3 : (kind == 8 || kind == 2 || kind == 12 || kind == 13 ? 1 : 0)));
         vec2 uv = kind == 5 || kind == 2 ? vec2(world.x+world.y,world.z)/4.0 : world.xy/5.0;
         detail = texture(materials,vec3(uv,layer)).r / 0.84;
         detail *= 0.94 + materialPatch * 0.1;
@@ -283,12 +283,19 @@ void main() {
     vec4 local_environment=environment_active!=0?texture(environment_map,(world.xy-environment_bounds.xy)/environment_bounds.zw):vec4(0);
     float wetness=environment_active!=0?local_environment.r:climate.y;
     if(environment_active!=0&&kind==6)base=mix(base,base*vec3(1.22,0.83,0.52),local_environment.b*0.65);
-    if(kind != 2 && kind != 7) base *= 1 - wetness * (kind == 6 ? 0.08 : 0.24);
+    if(kind != 2 && kind != 7) base *= 1 - wetness * (kind == 6 ? 0.08 : (kind == 12 ? 0.42 : kind == 11 ? 0.32 : 0.24));
+    bool roadMaterial = kind == 3 || kind == 11 || kind == 12;
+    float puddle = roadMaterial ? wetness * smoothstep(0.54,0.76,surfaceNoise2(world.xy*0.65)) * smoothstep(0.75,0.98,n.z) : 0;
     float snow = 0;
     if(kind != 2 && kind != 5 && kind != 7) {
         float up = smoothstep(0.25,0.8,n.z);
         snow = smoothstep(0.12,0.85,climate.z - (1-materialPatch)*0.25) * up;
         if(kind == 8) snow *= 0.55;
+        // Compacted snow/slush leaves the road alignment legible against untouched snowy ground.
+        if(kind == 3 || kind == 11) snow *= 0.86;
+        // The compressed wheel ruts retain dark slush under accumulating snow.
+        if(kind == 12) snow *= 0.48;
+        puddle *= 1-snow;
         base = mix(base,vec3(0.83,0.88,0.93) * (textured != 0 ? texture(materials,vec3(world.xy/3,4)).r : 1),snow);
     }
     if(lit != 0) {
@@ -325,10 +332,14 @@ void main() {
         }
         base += climate.w * vec3(0.045,0.065,0.08) * rings;
     }
-    if(kind == 3 || kind == 1) {
+    if(roadMaterial || kind == 1 || kind == 13) {
         float wet=wetness*smoothstep(0.7,0.98,materialPatch)*smoothstep(0.75,0.98,n.z);
         vec3 halfVector=normalize(sun+vec3(0,-0.7,0.7));
         base += wet * pow(max(dot(n,halfVector),0),48) * vec3(0.18,0.21,0.25);
+        // Broad sky reflections keep rain legible in the miniature's orthographic view.
+        base = mix(base,base*0.72+vec3(0.035,0.052,0.065),puddle*0.65);
+        float ripple = pow(0.5+0.5*sin(length(fract(world.xy*0.8)-0.5)*32-time*5),12);
+        base += puddle * climate.w * ripple * vec3(0.012,0.019,0.023);
     }
     base = mix(base,base*vec3(0.91,0.97,1.07),climate.x*0.35);
     output_color = vec4(pow(max(base,vec3(0)),vec3(1.0/2.2)),species_code > 0 ? 1.0 : tint.a);

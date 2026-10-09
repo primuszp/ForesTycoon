@@ -7,9 +7,9 @@ namespace ForesTycoon
 {
     partial class Terrain
     {
-        // ── Út-render konstansok (referencia tile-készlet: szürke aszfalt + krém padka) ─
-        private static readonly Color RoadSurfaceColor = Color.FromArgb(108, 110, 112);  // szürke úttest
-        private static readonly Color RoadShoulder     = Color.FromArgb(214, 210, 190);  // világos krém padka
+        // Muted miniature materials: warm asphalt and earth shoulders in the forest palette.
+        private static readonly Color RoadSurfaceColor = Color.FromArgb(98, 100, 98);
+        private static readonly Color RoadShoulder     = Color.FromArgb(151, 143, 117);
         private const float ShoulderFrac = 0.16f;  // padka szélessége a középpont felé
 
         // Húzás közbeni előnézet csempéi (remove = bontás, piros előnézet).

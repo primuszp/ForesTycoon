@@ -17,9 +17,22 @@ namespace ForesTycoon.Map
         public float NetworkCost(int tileId) =>
             IsRoadTile(tileId) ? (roads.GetPaving(tileId) == RoadPaving.Asphalt ? 1f : 1.15f) : 3.5f + 2f * GetSkidTrailWear(tileId);
 
+        /// <summary>Visible arms, including the reciprocal road exits at trail junctions.</summary>
+        public RoadEdge GetNetworkEdges(int tileId)
+        {
+            if (!IsNetworkTile(tileId)) return RoadEdge.None;
+            RoadEdge edges = roads.Has(tileId) ? roads.GetEdges(tileId) : GetSkidTrailEdges(tileId);
+            Span<int> neighbours = stackalloc int[4];
+            int count = GetNetworkNeighbours(tileId, neighbours), size = nodeRows - 1;
+            for (int i = 0; i < count; i++)
+                edges |= EdgeToNeighbor(tileId / size, tileId % size, neighbours[i] / size, neighbours[i] % size);
+            return edges;
+        }
+
         /// <summary>The network tiles a vehicle can drive to from <paramref name="tileId"/>.</summary>
         public int GetNetworkNeighbours(int tileId, Span<int> result)
         {
+            if (!IsValidTileId(tileId) || !IsNetworkTile(tileId)) return 0;
             int tpc = nodeRows - 1, u = tileId / tpc, v = tileId % tpc, count = 0;
             for (int k = 0; k < 4; k++)
             {
@@ -37,18 +50,22 @@ namespace ForesTycoon.Map
             return count;
         }
 
-        // Two roads join where both have the edge; a trail joins a road (or trail) where the trail has the edge.
+        // Explicit arms join normally; a dead end also joins the network directly ahead of its open end.
+        // This lets separately drawn surface types meet without requiring a repainted overlap tile.
         private bool Connects(int a, RoadEdge aEdge, int b, RoadEdge bEdge)
         {
             bool aRoad = roads.Has(a), bRoad = roads.Has(b), aTrail = IsSkidTrail(a), bTrail = IsSkidTrail(b);
+            if (!(aRoad || aTrail) || !(bRoad || bTrail)) return false;
+            RoadEdge aEdges = aRoad ? roads.GetEdges(a) : GetSkidTrailEdges(a);
+            RoadEdge bEdges = bRoad ? roads.GetEdges(b) : GetSkidTrailEdges(b);
+            if (aEdges == Opposite(aEdge) || bEdges == Opposite(bEdge)) return true;
             if (aRoad && bRoad) return roads.HasEdge(a, aEdge) && roads.HasEdge(b, bEdge);
             bool aHas = aRoad ? roads.HasEdge(a, aEdge) : aTrail && (GetSkidTrailEdges(a) & aEdge) != 0;
             bool bHas = bRoad ? roads.HasEdge(b, bEdge) : bTrail && (GetSkidTrailEdges(b) & bEdge) != 0;
-            if (!(aRoad || aTrail) || !(bRoad || bTrail)) return false;
             // A trail's loose end beside a road joins it too: the machines drive off the road onto it.
             bool aLoose = aTrail && CountEdges(GetSkidTrailEdges(a)) <= 1 && bRoad;
             bool bLoose = bTrail && CountEdges(GetSkidTrailEdges(b)) <= 1 && aRoad;
-            return (aTrail && aHas) || (bTrail && bHas) || aLoose || bLoose;
+            return aRoad ? bHas || bLoose : bRoad ? aHas || aLoose : aHas && bHas;
         }
 
         public bool AreNetworkNeighbours(int a, int b)
@@ -95,11 +112,32 @@ namespace ForesTycoon.Map
         {
             if (TryGetRoadSurface(tileId, out center, out gradient)) return true;
             if (!IsSkidTrail(tileId)) return false;
-            Tile tile = tiles[tileId];
-            Vector3 w = Corner(tile.W), s = Corner(tile.S), e = Corner(tile.E), n = Corner(tile.N);
+            GetTrailSurfaceCorners(tileId, out Vector3 w, out Vector3 s, out Vector3 e, out Vector3 n);
             center = (w + s + e + n) * 0.25f;
             Vector3 normal = Vector3.Cross(s - w, n - w) + Vector3.Cross(n - e, s - e);
             gradient = new Vector2(-normal.X / normal.Z, -normal.Y / normal.Z);
+            return true;
+        }
+
+        /// <summary>Trail ramps meet the locked road edge and taper back to natural ground.</summary>
+        public void GetTrailSurfaceCorners(int tileId, out Vector3 w, out Vector3 s, out Vector3 e, out Vector3 n)
+        {
+            Tile tile = tiles[tileId];
+            // Shared locked nodes also keep neighbouring trail ramps continuous at their seam.
+            w = RoadCorner(tile.W); s = RoadCorner(tile.S);
+            e = RoadCorner(tile.E); n = RoadCorner(tile.N);
+        }
+
+        /// <summary>Height on the driving surface, with ordinary ground as the fallback inside work yards.</summary>
+        public bool TryGetDrivingSurfaceZ(double x, double y, out float z)
+        {
+            if (!TryGetTileCoordinates(x, y, out int u, out int v, out double localX, out double localY))
+            { z = 0; return false; }
+            Tile tile = GetTile(u, v);
+            if (!IsNetworkTile(tile.Id)) return TryGetSurfaceZ(x, y, out z);
+            GetTrailSurfaceCorners(tile.Id, out Vector3 w, out Vector3 s, out Vector3 e, out Vector3 n);
+            float fx = (float)localX, fy = (float)localY;
+            z = (w.Z + (s.Z - w.Z) * fx) * (1 - fy) + (n.Z + (e.Z - n.Z) * fx) * fy;
             return true;
         }
 

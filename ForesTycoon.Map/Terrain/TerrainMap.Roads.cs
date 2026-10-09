@@ -38,13 +38,14 @@ namespace ForesTycoon.Map
 
         public bool AddRoadTile(Tile t)
         {
-            RoadEdge edges = RoadEdge.WS | RoadEdge.EN;
+            RoadEdge edges = RoadEdge.WS | RoadEdge.EN | GetNetworkEdges(t.Id);
             RoadPlacement placement = AnalyzeRoadPlacement(t, edges);
             if (!placement.IsValid) return false;
 
             bool added = roads.Add(t.Id, edges);
             if (added)
             {
+                skidTrails.Remove(t.Id);
                 CaptureRoadSurface(t, placement); InvalidateSurface();
                 chunkIndex.MarkTileAndNeighboursDirty(t.Id, ChunkDirtyFlags.Roads | ChunkDirtyFlags.Foundations);
             }
@@ -70,7 +71,7 @@ namespace ForesTycoon.Map
             if (t == null || IsBuildingTile(t.Id)) return RoadPlacement.Invalid;
             if (hydro.ShouldDrawStandingWater(t)) return RoadPlacement.Invalid;
 
-            RoadEdge mergedEdges = requestedEdges | roads.GetEdges(t.Id);
+            RoadEdge mergedEdges = requestedEdges | GetNetworkEdges(t.Id);
             if (mergedEdges == RoadEdge.None) return RoadPlacement.Invalid;
 
             int w = heightOf(t.W);
@@ -241,16 +242,18 @@ namespace ForesTycoon.Map
             foreach (RoadPlanStep step in BuildRoadPlan(a, b))
             {
                 Tile tile = tiles[step.TileId];
-                RoadPlacement placement = AnalyzeRoadPlacement(tile, step.Edges);
+                RoadEdge edges = step.Edges | GetNetworkEdges(step.TileId);
+                RoadPlacement placement = AnalyzeRoadPlacement(tile, edges);
                 bool resurfaced = placement.IsValid && roads.Resurface(step.TileId, surface);
-                if (resurfaced && !roads.Add(step.TileId, step.Edges, surface))
+                if (resurfaced && !roads.Add(step.TileId, edges, surface))
                 {
                     changed.Add(step.TileId);
                     chunkIndex.MarkTileAndNeighboursDirty(step.TileId, ChunkDirtyFlags.Roads);
                     continue;
                 }
-                if (resurfaced || (placement.IsValid && roads.Add(step.TileId, step.Edges, surface)))
+                if (resurfaced || (placement.IsValid && roads.Add(step.TileId, edges, surface)))
                 {
+                    skidTrails.Remove(step.TileId);
                     changed.Add(step.TileId);
                     CaptureRoadSurface(tile, placement);
                     InvalidateSurface();

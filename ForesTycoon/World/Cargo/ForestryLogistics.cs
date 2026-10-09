@@ -51,8 +51,8 @@ namespace ForesTycoon
             if(MachinesEnabled){Status="A rönkszállítót a Járművek ablakból küldd: forrás sarang, majd cél.";return false;}
             foreach(var site in Sites) {
                 if(Volume(site)<0.001f)continue;
-                var origins=terrain.FindRoadDocks(site.Tiles);
-                foreach(var mill in Mills)foreach(int start in origins)foreach(int end in terrain.FindRoadDocks(mill.Footprint)) {
+                var origins=terrain.FindNetworkDocks(site.Tiles);
+                foreach(var mill in Mills)foreach(int start in origins)foreach(int end in terrain.FindNetworkDocks(mill.Footprint)) {
                     int[] path=terrain.FindNetworkPath(start,end);
                     if(path.Length<2)continue;
                     vehicles.SpawnLogistics(path,site.Tiles,mill.TileId);

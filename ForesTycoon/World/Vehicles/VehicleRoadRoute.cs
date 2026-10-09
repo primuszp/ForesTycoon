@@ -20,8 +20,12 @@ namespace ForesTycoon
             var centers = new Vector3[route.Length];
             var gradients = new Vector2[route.Length];
             for (int i = 0; i < route.Length; i++)
+            {
+                if (i > 0 && !map.AreNetworkNeighbours(route[i - 1], route[i]))
+                    throw new ArgumentException("Vehicle route contains disconnected network tiles.", nameof(route));
                 if (!map.TryGetNetworkSurface(route[i], out centers[i], out gradients[i]))
                     throw new ArgumentException("Vehicle route contains a missing road tile.", nameof(route));
+            }
             return new VehicleRoadRoute(centers, gradients);
         }
 

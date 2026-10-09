@@ -165,6 +165,11 @@ namespace ForesTycoon
                         timberCargo.AddHarvested(vehicle.Unload());
                         return true;
                     }
+                if (RouteValidator?.Invoke(vehicle) == false)
+                {
+                    timberCargo.AddHarvested(vehicle.Unload());
+                    return true;
+                }
                 return false;
             });
         }

@@ -1,5 +1,13 @@
 # ForesTycoon
 
+## Úthálózat és időjárási felületek
+
+Az aszfalt, a makadám és a közelítő nyom közös közlekedési hálózatot alkot. A nyomok útcsatlakozásai látható lejárót kapnak; a felületük az út rögzített magasságához illeszkedik. Az erdészeti gépek és a teherautók a tényleges csatlakozásokat követik, megszakadt útvonalon megállnak. A nyom úttá fejlesztése megőrzi a bekötéseket.
+
+Az útfelületek külön textúrát kapnak, esőben sötétednek és tócsásodnak, havazáskor hó és latyak jelenik meg rajtuk. A kézi havazás a grafikai beállítások **Időjárás teszt → Időjárási kép → Havazás** választójával érhető el; a szimulált klíma továbbra is esőalapú.
+
+Ellenőrzés: `dotnet run --project ForesTycoon -- --road-network-smoke-test`. A száraz, esős, havas és olvadás utáni képek az `artifacts/road-network` könyvtárba kerülnek.
+
 ## DendroKit alapú procedurális fák
 
 Az alapértelmezett eljárásos famód az átemelt DendroKit ággenerátorát használja.

@@ -815,10 +815,11 @@ namespace ForesTycoon
             {
                 ImGui.Checkbox("Szimulált időjárás látványa", ref g.AutomaticWeather);
                 ImGui.TextDisabled("Kikapcsolva a lenti képválasztás érvényes (csak látvány).");
-                int preset = g.Preset == WeatherPreset.Storm ? 3 : Math.Min(2, (int)g.Preset);
-                if (ImGui.Combo("Időjárási kép", ref preset, "Napsütés\0Borult\0Eső\0Vihar\0"))
+                int preset = g.Preset == WeatherPreset.Snow ? 4 : g.Preset == WeatherPreset.Storm ? 3 : Math.Min(2, (int)g.Preset);
+                if (ImGui.Combo("Időjárási kép", ref preset, "Napsütés\0Borult\0Eső\0Vihar\0Havazás\0"))
                 {
-                    g.Preset = preset == 3 ? WeatherPreset.Storm : (WeatherPreset)preset;
+                    g.Preset = preset == 4 ? WeatherPreset.Snow : preset == 3 ? WeatherPreset.Storm : (WeatherPreset)preset;
+                    g.ExperimentalSnow = true;
                     g.AutomaticWeather = false;
                 }
                 if (HudTheme.LabeledIconButton("Villám most", GameIcon.Lightning, false, 28f))

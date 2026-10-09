@@ -3,7 +3,7 @@ using OpenTK.Mathematics;
 namespace ForesTycoon.Rendering
 {
     /// <summary>Material family a draw call belongs to; the surface shader picks its look from it.</summary>
-    internal enum SurfaceKind { Plain = 0, Ground = 1, Skirt = 2, Road = 3, Vehicle = 4, Wood = 5, Foliage = 6, Water = 7, ForestFloor = 8, Rubber = 9, LogCargo = 10 }
+    internal enum SurfaceKind { Plain = 0, Ground = 1, Skirt = 2, Road = 3, Vehicle = 4, Wood = 5, Foliage = 6, Water = 7, ForestFloor = 8, Rubber = 9, LogCargo = 10, Macadam = 11, SkidTrail = 12, RoadShoulder = 13 }
 
     /// <summary>The scene-wide surface shading state that geometry code reads and sets while drawing.</summary>
     internal interface ISurfaceVisuals

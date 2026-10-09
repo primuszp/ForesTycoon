@@ -7,7 +7,7 @@ namespace ForesTycoon.Rendering
     internal static class ProceduralSurfaceTextures
     {
         internal const int Size = 256;
-        internal const int Layers = 5; // grass, soil, gravel, bark, snow
+        internal const int Layers = 6; // grass, soil, gravel, bark, snow, asphalt
 
         internal static byte[] Build()
         {
@@ -24,6 +24,7 @@ namespace ForesTycoon.Rendering
                     1 => 0.72f + 0.3f * coarse + 0.18f * fine,
                     2 => 0.65f + 0.25f * coarse + 0.35f * Smooth(x / 4f, y / 4f, layer, 64),
                     3 => 0.65f + 0.45f * Smooth(x / 4f, y / 32f, layer, 64, 8) + 0.1f * fine,
+                    5 => 0.84f + 0.035f * coarse + 0.075f * fine,
                     _ => 0.90f + 0.08f * coarse + 0.02f * fine
                 };
                 int at = ((layer * Size + y) * Size + x) * 4;

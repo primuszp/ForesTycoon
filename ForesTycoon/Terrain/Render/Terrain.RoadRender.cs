@@ -6,23 +6,28 @@ namespace ForesTycoon
 {
     partial class Terrain
     {
-        private const float RoadShoulderWidthFactor = 1.0f;
+        private const float RoadShoulderWidthFactor = 0.84f;
         private const float RoadSurfaceWidthFactor = 0.62f;
         internal float RoadLaneWidth => Math.Min(tileSizeH,tileSizeV)*RoadSurfaceWidthFactor;
 
         internal void DrawRoads()
         {
             if (roads.Count == 0 && previewTiles.Count == 0) return;
-            if (previewSkidTrail) { DrawSkidTrailPreview(); if (roads.Count == 0) return; }
+            if (previewSkidTrail) {
+                if (RenderDevice.Visuals != null) RenderDevice.Visuals.Kind = SurfaceKind.Plain;
+                DrawSkidTrailPreview(); if (roads.Count == 0) return;
+            }
 
             if (roads.Count > 0)
             {
+                if (RenderDevice.Visuals != null) RenderDevice.Visuals.Kind = SurfaceKind.RoadShoulder;
                 DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () =>
                 {
                     foreach (Tile tile in visibleTiles)
                     {
                         if (!roads.Has(tile.Id)) continue;
-                        RoadSurface(tile, roads.GetEdges(tile.Id), RoadShoulderWidthFactor, RoadShoulder);
+                        RoadSurface(tile, map.GetNetworkEdges(tile.Id), RoadShoulderWidthFactor, RoadShoulder);
+                        DrawRoadTrailAprons(tile, RoadShoulderWidthFactor, RoadShoulder);
                     }
                 });
 
@@ -30,20 +35,27 @@ namespace ForesTycoon
                 DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () => {
                     foreach(Tile tile in visibleTiles) {
                         if(!roads.Has(tile.Id))continue;
-                        RoadSurface(tile,roads.GetEdges(tile.Id),RoadSurfaceWidthFactor*1.025f,Color.FromArgb(65,67,69));
+                        RoadSurface(tile,map.GetNetworkEdges(tile.Id),RoadSurfaceWidthFactor*1.04f,Color.FromArgb(91,87,76));
+                        DrawRoadTrailAprons(tile, RoadSurfaceWidthFactor * 1.04f, Color.FromArgb(91,87,76));
                     }
                 });
 
-                DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () =>
+                foreach (RoadPaving paving in new[] { RoadPaving.Asphalt, RoadPaving.Macadam })
                 {
-                    foreach (Tile tile in visibleTiles)
+                    if (RenderDevice.Visuals != null) RenderDevice.Visuals.Kind = paving == RoadPaving.Asphalt ? SurfaceKind.Road : SurfaceKind.Macadam;
+                    DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () =>
                     {
-                        if (!roads.Has(tile.Id)) continue;
-                        RoadSurface(tile, roads.GetEdges(tile.Id), RoadSurfaceWidthFactor, RoadColor(tile.Id));
-                    }
-                });
+                        foreach (Tile tile in visibleTiles)
+                        {
+                            if (!roads.Has(tile.Id) || roads.GetPaving(tile.Id) != paving) continue;
+                            RoadSurface(tile, map.GetNetworkEdges(tile.Id), RoadSurfaceWidthFactor, RoadColor(tile.Id));
+                            DrawRoadTrailAprons(tile, RoadSurfaceWidthFactor, RoadColor(tile.Id));
+                        }
+                    });
+                }
 
                 // Potholes and ruts on worn tiles: darker patches that grow with the damage.
+                if (RenderDevice.Visuals != null) RenderDevice.Visuals.Kind = SurfaceKind.SkidTrail;
                 DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () =>
                 {
                     foreach (Tile tile in visibleTiles)
@@ -54,6 +66,8 @@ namespace ForesTycoon
                     }
                 });
             }
+
+            if (RenderDevice.Visuals != null) RenderDevice.Visuals.Kind = SurfaceKind.Plain;
 
             if (previewSkidTrail) { }
             else if (previewTiles.Count > 0 && previewRepair)
@@ -112,7 +126,37 @@ namespace ForesTycoon
                 }
             }
         }
-        private static readonly Color MacadamColor = Color.FromArgb(150, 141, 122);
+        private static readonly Color MacadamColor = Color.FromArgb(166, 153, 126);
+
+        /// <summary>A short paved exit narrows from the road junction into the trail's two wheel ruts.</summary>
+        private void DrawRoadTrailAprons(Tile road, float widthFactor, Color color)
+        {
+            Span<int> neighbours = stackalloc int[4];
+            int count = map.GetNetworkNeighbours(road.Id, neighbours);
+            int size = settings.TileRows;
+            for (int i = 0; i < count; i++)
+            {
+                int id = neighbours[i];
+                if (roads.Has(id) || !map.IsSkidTrail(id)) continue;
+                TrailCorners(tiles[id], out Vector3 W, out Vector3 S, out Vector3 E, out Vector3 N);
+                // The midpoint of the trail edge shared with this road, in the trail's UV coordinates.
+                float eu = 0.5f, ev = 0.5f;
+                if (road.Id / size < id / size) eu = 0;
+                else if (road.Id / size > id / size) eu = 1;
+                else if (road.Id % size < id % size) ev = 0;
+                else ev = 1;
+                float du = 1 - 2 * eu, dv = 1 - 2 * ev;
+                float pu = -dv, pv = du;
+                float side = pu != 0 ? DistXY(W, S) : DistXY(W, N);
+                float half = Math.Min(tileSizeH, tileSizeV) * widthFactor * 0.5f / side;
+                const float length = 0.22f, taper = 0.72f;
+                DynamicPrimitiveBatch.Color4(color);
+                Quad(TileUV(W, S, E, N, eu + pu * half, ev + pv * half),
+                    TileUV(W, S, E, N, eu - pu * half, ev - pv * half),
+                    TileUV(W, S, E, N, eu + du * length - pu * half * taper, ev + dv * length - pv * half * taper),
+                    TileUV(W, S, E, N, eu + du * length + pu * half * taper, ev + dv * length + pv * half * taper));
+            }
+        }
 
         /// <summary>Asphalt is grey, macadam a light gravel; both fade toward dusty earth as they wear.</summary>
         private Color RoadColor(int tileId)

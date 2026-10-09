@@ -287,7 +287,11 @@ namespace ForesTycoon
             float rain = (float)Math.Clamp(Environment.RainRate / 20, 0, 1);
             float years = (float)(roadWeatherSeconds / ecosystem.ForestYearSeconds);
             map.WeatherRoads(years, rain);
-            if (map.AgeSkidTrails(years).Length > 0) Logistics?.TrailsChanged();
+            if (map.AgeSkidTrails(years).Length > 0)
+            {
+                Logistics?.TrailsChanged();
+                vehicles.RemoveInvalidRoutes(map.IsNetworkTile);
+            }
             roadWeatherSeconds = 0;
         }
 

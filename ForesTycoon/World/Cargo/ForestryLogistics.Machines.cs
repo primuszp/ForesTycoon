@@ -70,6 +70,10 @@ namespace ForesTycoon
             terrain.IsNetworkTile(tile) || (site != null && Array.IndexOf(site.Tiles, tile) >= 0) || StackAt(tile) != null
             || Depots.Exists(d => Array.IndexOf(d.Footprint, tile) >= 0) || Mills.Exists(m => Array.IndexOf(m.Footprint, tile) >= 0);
 
+        // Network-to-network travel follows its actual arms. Worksites and yards still allow manoeuvring.
+        private bool CanDriveBetween(int from, int to) =>
+            !terrain.IsNetworkTile(from) || !terrain.IsNetworkTile(to) || terrain.AreNetworkNeighbours(from, to);
+
         /// <summary>
         /// Shortest path over passable tiles from <paramref name="from"/> to the first tile that satisfies
         /// <paramref name="goal"/>; <paramref name="extra"/> is one more tile allowed (a new stack site).
@@ -91,7 +95,7 @@ namespace ForesTycoon
                 }
                 int count = terrain.GetTileNeighbours(tile, next);
                 for (int i = 0; i < count; i++)
-                    if ((next[i] == extra || Passable(site, next[i])) && !previous.ContainsKey(next[i])) { previous[next[i]] = tile; queue.Enqueue(next[i]); }
+                    if ((next[i] == extra || Passable(site, next[i])) && CanDriveBetween(tile, next[i]) && !previous.ContainsKey(next[i])) { previous[next[i]] = tile; queue.Enqueue(next[i]); }
             }
             return null;
         }
@@ -227,6 +231,12 @@ namespace ForesTycoon
 
         private void Advance(ForestMachine machine, double dt)
         {
+            int segment = Math.Min((int)Math.Floor(machine.PathPosition), machine.Path.Length - 2);
+            if (segment >= 0 && ((!Passable(machine.Site, machine.Path[segment + 1]) && machine.Path[segment + 1] != machine.Destination) || !CanDriveBetween(machine.Path[segment], machine.Path[segment + 1])))
+            {
+                Status = "Az útvonal megszakadt. Állítsd helyre az úthálózatot a gép továbbhaladásához.";
+                return;
+            }
             float speed = machine.Kind == ForestMachineKind.Harvester ? HarvesterSpeed
                 : machine.Cargo > 0.5f ? ForwarderLoadedSpeed : ForwarderSpeed;
             Fuel(machine, (machine.Cargo > 0.5f ? FuelDrivingLoaded : FuelDriving) * dt);
