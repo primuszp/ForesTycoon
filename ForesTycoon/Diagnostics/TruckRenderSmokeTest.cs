@@ -60,6 +60,29 @@ namespace ForesTycoon
                     for (int i = 0; i < 120; i++) { VehicleRenderer.Draw(system, previewTerrain, 1); GL.Finish(); }
                     Console.WriteLine($"Truck render average: {Stopwatch.GetElapsedTime(start).TotalMilliseconds / 120:F3} ms");
                 }
+                {
+                    // A right-angle bend: the semi-trailer must swing about the kingpin, cutting in toward the inside.
+                    var road = new VehicleRoadRoute(new[] { new Vector3(-10, 0, 0), Vector3.Zero, new Vector3(0, 10, 0) },
+                        new[] { Vector2.Zero, Vector2.Zero, Vector2.Zero });
+                    var cargo = new TimberCargoSystem(); cargo.AddHarvested(25);
+                    var system = new VehicleSystem(cargo, _ => road);
+                    var truck = system.Spawn(new[] { 0, 1, 2 });
+                    for (int i = 0; i < 4000 && truck.RoutePosition < 1.3; i++) system.Update(0.05);
+                    road.GetPose(truck.RoutePosition, out var center, out var forward, out _, out _);
+                    float articulation = VehicleRenderer.Articulation(road, truck.RoutePosition, center, forward,
+                        previewTerrain.RoadLaneWidth * DioramaScale.TruckLaneFill / VehicleRenderer.ModelWidth);
+                    Console.WriteLine($"loaded-bend: position={truck.RoutePosition:F2}, articulation={articulation * 180 / MathF.PI:F1}°");
+                    // Turning left (+Y), the trailer lags behind: it points right of the tractor (negative yaw).
+                    if (VehicleRenderer.ModelArticulated && !(articulation < -0.05f))
+                        throw new InvalidOperationException("Semi-trailer does not articulate in a bend.");
+                    RenderDevice.SetCamera(Matrix4.CreateTranslation(-center.X, -center.Y, -center.Z) *
+                        Matrix4.CreateOrthographic(5.8f, 3.87f, -100, 100));
+                    GL.ClearColor(0.39f, 0.46f, 0.29f, 1);
+                    GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
+                    VehicleRenderer.Draw(system, previewTerrain, 1);
+                    GL.Finish();
+                    FramebufferCapture.SavePng(Path.Combine(output, "loaded-bend.png"), 960, 640);
+                }
                 Console.WriteLine($"Truck render smoke passed. Captures: {output}");
             }
             finally { RenderDevice.Dispose(); }

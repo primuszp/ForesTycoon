@@ -29,7 +29,8 @@ namespace ForesTycoon
                         vehicle.RoadRoute.GetPose(routePosition, out Vector3 center, out Vector3 forward,
                             out Vector3 left, out Vector3 up, importedModel.Wheelbase*scale, importedModel.AxleMidpoint*scale);
                         if (Culled(center, scale)) continue;
-                        DrawTruck(new VehicleTransform(center, forward, left, up), vehicle.VisualCargoFill, scale,
+                        float articulation = Articulation(vehicle.RoadRoute, routePosition, center, forward, scale);
+                        DrawTruck(new VehicleTransform(center, forward, left, up), vehicle.VisualCargoFill, scale, articulation,
                             (float)(routePosition * vehicle.RoadRoute.TileLength / (0.23*scale)),
                             vehicle.RoadRoute.BodyCurvature(routePosition,importedModel.Wheelbase*scale),
                             VehicleVisualMotion.Suspension(routePosition*vehicle.RoadRoute.TileLength,
@@ -56,7 +57,24 @@ namespace ForesTycoon
         private static bool Culled(Vector3 center, float scale) => RenderDevice.Visuals?.ShadowPass != true &&
             !RenderVisibility.SphereVisible(center, importedModel.Radius * scale + 0.5f, RenderDevice.ViewProjection);
 
-        private static void DrawTruck(VehicleTransform transform, float cargoFill, float scale, float wheelAngle = 0,float curvature=0,Matrix4? suspension=null)
+        /// <summary>
+        /// Semi-trailer yaw relative to the tractor: the trailer points from its own axle group, which rolls along
+        /// the road behind, to the kingpin on the tractor. So in a bend the trailer cuts in and its wheels follow the arc.
+        /// </summary>
+        internal static float Articulation(VehicleRoadRoute route, double position, Vector3 center, Vector3 forward, float scale)
+        {
+            EnsureModel();
+            if (!importedModel.Articulated) return 0;
+            Vector3 kingpin = center + forward * (importedModel.Kingpin * scale);
+            float behind = (importedModel.AxleMidpoint - importedModel.TrailerAxle) * scale;
+            Vector3 axle = route.PointBehind(position, behind);
+            Vector2 trailer = (kingpin - axle).Xy, tractor = forward.Xy;
+            if (trailer.LengthSquared < 1e-8f || tractor.LengthSquared < 1e-8f) return 0;
+            float angle = MathF.Atan2(tractor.X * trailer.Y - tractor.Y * trailer.X, Vector2.Dot(tractor, trailer));
+            return Math.Clamp(angle, -1.2f, 1.2f);
+        }
+
+        private static void DrawTruck(VehicleTransform transform, float cargoFill, float scale, float articulation = 0, float wheelAngle = 0,float curvature=0,Matrix4? suspension=null)
         {
             EnsureModel();
             Matrix4 matrix=new Matrix4(
@@ -68,11 +86,13 @@ namespace ForesTycoon
                 {
                 float outline = RenderDevice.Visuals?.ShadowPass != true && outlineBudget > 0 ? 0.7f / outlinePixelsPerUnit / scale : 0;
                 if (outline > 0) outlineBudget--;
-                importedModel.Draw(Matrix4.CreateScale(scale)*matrix,cargoFill,wheelAngle,curvature,scale,suspension,outline);
+                importedModel.Draw(Matrix4.CreateScale(scale)*matrix,cargoFill,wheelAngle,curvature,scale,suspension,outline,articulation);
             }
         }
 
         private static ITruckModel importedModel;
+        internal static float ModelWidth { get { EnsureModel(); return importedModel.Width; } }
+        internal static bool ModelArticulated { get { EnsureModel(); return importedModel.Articulated; } }
         private static void EnsureModel()
         {
             if (importedModel != null) return;

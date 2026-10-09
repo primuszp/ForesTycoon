@@ -85,6 +85,13 @@ namespace ForesTycoon
             center += up * 0.025f;
         }
 
+        /// <summary>Road point <paramref name="distance"/> world units behind <paramref name="position"/>, against the travel direction.</summary>
+        internal Vector3 PointBehind(double position, float distance)
+        {
+            double d = Directed(position, Last, out int sign);
+            return SmoothSample(d - sign * distance / TileLength);
+        }
+
         private Vector3 SmoothSample(double d)
         {
             Vector3 p=Sample(d);

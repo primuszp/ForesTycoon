@@ -6,7 +6,9 @@ repository's Assets/Vehicles/log-truck.glb.
 
 Frame: +X forward, +Y left, +Z up; 3.3 units long; ground at the bottom of the wheels. Wheels are separate nodes
 placed at their centres (so the game can spin and steer them; steering axle names start with "wheel_front"),
-logs are separate "cargo_" nodes ordered bottom-up, everything else hangs on the "body" node. The original UVs
+logs are separate "cargo_" nodes ordered bottom-up. The tractor hangs on "body"; the semi-trailer is articulated:
+its "trailer" node sits at the kingpin (the hinge it turns about), its wheels are "trailer_wheel_" nodes, and the
+logs ride on it. The original UVs
 and texture atlases are kept.
 
 Usage (repo root): python tools/convert_licensed_truck.py <Logging_Facility_glb/Separate_assets_glb>
@@ -146,13 +148,17 @@ for s in range(2):
             cargo.append((f'cargo_{s}_{layer}_{k}', z, prims))
 cargo.sort(key=lambda c: c[1])
 
-# Nodes: body (all non-wheel primitives), one node per wheel, one per log.
+# Nodes: tractor body, trailer body (hinged at the kingpin), one node per wheel, one per log.
 front_x = max(centres)
-groups = [('body', [(p, n, i, uv, t) for nm, p, n, i, uv, t in truck + trailer if 'wheel' not in nm.lower()])]
-for nm, p, n, i, uv, t in truck + trailer:
+groups = [('body', [(p, n, i, uv, t) for nm, p, n, i, uv, t in truck if 'wheel' not in nm.lower()]),
+          ('trailer', [(p, n, i, uv, t) for nm, p, n, i, uv, t in trailer if 'wheel' not in nm.lower()])]
+for nm, p, n, i, uv, t in truck:
     if 'wheel' in nm.lower():
         front = abs(float(p[:, 0].mean()) - front_x) < 0.3
         groups.append((('wheel_front_' if front else 'wheel_rear_') + nm, [(p, n, i, uv, t)]))
+for k, (nm, p, n, i, uv, t) in enumerate(trailer):
+    if 'wheel' in nm.lower():
+        groups.append((f'trailer_wheel_{k}_' + nm, [(p, n, i, uv, t)]))
 groups += [(name, prims) for name, _, prims in cargo]
 
 allp = np.concatenate([p for _, prims in groups for p, *_ in prims])
@@ -172,7 +178,8 @@ def append(array, kind, component):
 for name, prims in groups:
     pts = np.concatenate([(p - origin) * scale for p, *_ in prims])
     # Wheels hang at their centres so the game can rotate them in place.
-    pivot = (pts.min(0) + pts.max(0)) / 2 if name.startswith('wheel') else np.zeros(3)
+    pivot = ((pts.min(0) + pts.max(0)) / 2 if 'wheel' in name
+             else (np.array([fifth_wheel, 0, 0]) - origin) * scale * [1, 0, 0] if name == 'trailer' else np.zeros(3))
     primitives = []
     for p, n, i, uv, t in prims:
         pos = ((p - origin) * scale - pivot).astype('<f4')

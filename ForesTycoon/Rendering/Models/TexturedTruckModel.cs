@@ -10,18 +10,25 @@ namespace ForesTycoon
         float Width { get; }
         float Wheelbase { get; }
         float AxleMidpoint { get; }
+        /// <summary>Model X of the kingpin and of the semi-trailer's axle group; equal when the model is rigid.</summary>
+        float Kingpin => 0;
+        float TrailerAxle => 0;
+        bool Articulated => Kingpin > TrailerAxle;
+        /// <param name="articulation">Trailer yaw relative to the tractor about the kingpin, radians (+ = to the left).</param>
         void Draw(Matrix4 transform, float cargoFill, float wheelAngle, float curvature = 0, float scale = 1,
-            Matrix4? suspension = null, float outlineWidth = 0);
+            Matrix4? suspension = null, float outlineWidth = 0, float articulation = 0);
     }
 
     /// <summary>
     /// The textured log truck produced by tools/convert_licensed_truck.py (game frame, +X forward, +Z up).
     /// Drawn through the textured model renderer: "wheel_*" nodes sit at their centres and spin (front ones also
-    /// steer), "cargo_*" nodes appear bottom-up with the load, and "body" follows the suspension.
+    /// steer), "cargo_*" nodes appear bottom-up with the load, and "body" follows the suspension. A "trailer" node
+    /// (placed at the kingpin) makes the semi-trailer articulated: it, its "trailer_wheel_*" nodes and the logs
+    /// turn about the kingpin.
     /// </summary>
     internal sealed class TexturedTruckModel : ITruckModel
     {
-        private enum Kind : byte { Body, FrontWheel, RearWheel, Cargo }
+        private enum Kind : byte { Body, FrontWheel, RearWheel, Cargo, Trailer, TrailerWheel }
 
         private readonly AnimatedGlbModel model;
         private readonly AnimatedModelRenderer renderer;
@@ -35,6 +42,8 @@ namespace ForesTycoon
         public float Width { get; }
         public float Wheelbase { get; }
         public float AxleMidpoint { get; }
+        public float Kingpin { get; }
+        public float TrailerAxle { get; }
 
         /// <summary>Shading settings of the current frame; set by the vehicle renderer.</summary>
         internal static IShadingSettings Settings { get; set; }
@@ -48,15 +57,20 @@ namespace ForesTycoon
             rest = (Matrix4[])pose.World.Clone();
             kinds = new Kind[model.Nodes.Length];
             var cargo = new System.Collections.Generic.List<int>();
-            float front = 0, rear = 0; int frontCount = 0, rearCount = 0;
+            float front = 0, rear = 0, trailerAxle = 0, kingpin = 0; int frontCount = 0, rearCount = 0, trailerCount = 0;
+            bool trailer = false;
             for (int i = 0; i < kinds.Length; i++)
             {
                 string name = model.Nodes[i].Name ?? "";
                 kinds[i] = name.StartsWith("wheel_front", StringComparison.Ordinal) ? Kind.FrontWheel
                     : name.StartsWith("wheel_", StringComparison.Ordinal) ? Kind.RearWheel
+                    : name.StartsWith("trailer_wheel_", StringComparison.Ordinal) ? Kind.TrailerWheel
+                    : name == "trailer" ? Kind.Trailer
                     : name.StartsWith("cargo_", StringComparison.Ordinal) ? Kind.Cargo : Kind.Body;
                 float x = rest[i].Row3.X;
                 if (kinds[i] == Kind.FrontWheel) { front += x; frontCount++; }
+                else if (kinds[i] == Kind.TrailerWheel) { trailerAxle += x; trailerCount++; }
+                else if (kinds[i] == Kind.Trailer) { kingpin = x; trailer = true; }
                 else if (kinds[i] == Kind.RearWheel) { rear += x; rearCount++; }
                 else if (kinds[i] == Kind.Cargo) cargo.Add(i);
             }
@@ -65,6 +79,7 @@ namespace ForesTycoon
             cargoCount = cargoOrder.Length;
             front /= frontCount; rear /= rearCount;
             Wheelbase = front - rear; AxleMidpoint = (front + rear) * 0.5f;
+            if (trailer && trailerCount > 0 && trailerAxle / trailerCount < kingpin) { Kingpin = kingpin; TrailerAxle = trailerAxle / trailerCount; }
             float minY = float.MaxValue, maxY = float.MinValue, radius = 0;
             foreach (var mesh in model.Meshes)
                 for (int v = 0; v < mesh.Vertices.Length; v += 16)
@@ -77,10 +92,14 @@ namespace ForesTycoon
         }
 
         public void Draw(Matrix4 transform, float cargoFill, float wheelAngle, float curvature = 0, float scale = 1,
-            Matrix4? suspension = null, float outlineWidth = 0)
+            Matrix4? suspension = null, float outlineWidth = 0, float articulation = 0)
         {
             int visible = (int)MathF.Ceiling(Math.Clamp(cargoFill, 0, 1) * cargoCount);
             var body = suspension ?? Matrix4.Identity;
+            // The semi-trailer, its wheels and its logs turn about the kingpin.
+            var hinge = Kingpin > TrailerAxle
+                ? Matrix4.CreateTranslation(-Kingpin, 0, 0) * Matrix4.CreateRotationZ(articulation) * Matrix4.CreateTranslation(Kingpin, 0, 0)
+                : Matrix4.Identity;
             for (int i = 0; i < kinds.Length; i++)
             {
                 switch (kinds[i])
@@ -90,6 +109,13 @@ namespace ForesTycoon
                         float steer = kinds[i] == Kind.FrontWheel
                             ? VehicleVisualMotion.Steering(curvature, Wheelbase * scale, rest[i].Row3.Y * scale) : 0;
                         pose.World[i] = Matrix4.CreateRotationY(-wheelAngle) * Matrix4.CreateRotationZ(steer) * rest[i];
+                        break;
+                    case Kind.TrailerWheel:
+                        pose.World[i] = Matrix4.CreateRotationY(-wheelAngle) * rest[i] * hinge;
+                        break;
+                    case Kind.Trailer:
+                    case Kind.Cargo:
+                        pose.World[i] = rest[i] * hinge * body;
                         break;
                     default:
                         pose.World[i] = rest[i] * body;
