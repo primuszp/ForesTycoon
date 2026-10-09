@@ -19,7 +19,7 @@ public class ForestMachineTests
         var forest = new ForestSystem(map, stands);
         map.BuildRoadTilePath(34, 210, RoadPaving.Macadam);
         if (trail) map.MarkSkidTrailPath(131, 135);
-        var logistics = new ForestryLogistics(map, forest) { MachinesEnabled = true };
+        var logistics = new ForestryLogistics(map, forest) { MachinesEnabled = true, AutoMachines = true };
         var cargo = new TimberCargoSystem();
         var vehicles = new VehicleSystem(cargo, route => VehicleRoadRoute.Create(map, route))
         {

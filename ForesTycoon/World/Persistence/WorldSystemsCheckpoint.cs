@@ -9,7 +9,7 @@ namespace ForesTycoon
         internal VehicleCheckpoint Capture() => new(Id, (int[])Route.Clone(), SpeedTilesPerSecond, CargoCapacity, useRoadPhysics,
             RoadRoute?.Capture(), CurrentSpeed, RoutePosition, PreviousRoutePosition, CargoAmount, CargoStopsEnabled,
             SourceTiles == null ? null : (int[])SourceTiles.Clone(), SawmillTileId, RouteBlocked, TransportState, TransferProgress,
-            FuelUsed, Distance);
+            FuelUsed, Distance, Transit, TransitArrived);
         internal static Vehicle Restore(VehicleCheckpoint s, int tileCount)
         {
             CheckpointGuard.Require(s != null && s.Id > 0 && s.Route != null && s.Route.Length >= 2 && Enum.IsDefined(s.State), "vehicle identity");
@@ -29,7 +29,7 @@ namespace ForesTycoon
             result.SourceTiles = s.SourceTiles == null ? null : (int[])s.SourceTiles.Clone(); result.SawmillTileId = s.Mill;
             result.RouteBlocked = s.Blocked; result.TransportState = s.State; result.TransferProgress = s.TransferProgress;
             CheckpointGuard.NonNegative(s.FuelUsed, "vehicle fuel"); CheckpointGuard.NonNegative(s.Distance, "vehicle distance");
-            result.FuelUsed = s.FuelUsed; result.Distance = s.Distance;
+            result.FuelUsed = s.FuelUsed; result.Distance = s.Distance; result.Transit = s.Transit; result.TransitArrived = s.TransitArrived;
             return result;
         }
     }
@@ -96,8 +96,11 @@ namespace ForesTycoon
         internal LogisticsCheckpoint Capture() => new(Sites.Select(s => new HarvestCheckpoint((int[])s.Tiles.Clone(), s.InitialVolume,
                 s.Landing, s.Piles.Select(p => new PileCheckpoint(p.Key, p.Value)).ToArray(), s.LandingStock)).ToArray(),
             Mills.Select(m => new MillCheckpoint(m.TileId, (int[])m.Footprint.Clone(), new(m.Position), m.Received, m.Stock, m.Processed)).ToArray(), Status,
-            Machines.Select(m => new ForestMachineCheckpoint(m.Id, m.Kind, Sites.IndexOf(m.Site), (int[])m.Path.Clone(), m.PathPosition,
-                m.PreviousPathPosition, m.State, m.Goal, m.Cargo, m.WorkTime)).ToArray(), nextMachineId);
+            Machines.Select(m => new ForestMachineCheckpoint(m.Id, m.Kind, m.Site == null ? -1 : Sites.IndexOf(m.Site), (int[])m.Path.Clone(), m.PathPosition,
+                m.PreviousPathPosition, m.State, m.Goal, m.Cargo, m.WorkTime, m.Home == null ? -1 : Depots.IndexOf(m.Home), m.HomeRequested)).ToArray(), nextMachineId,
+            Depots.Select(d => new DepotCheckpoint(d.TileId, (int[])d.Footprint.Clone(), new(d.Position))).ToArray(),
+            Trucks.Select(t => new TruckCheckpoint(t.Id, Depots.IndexOf(t.Home), t.Phase, t.Vehicle?.Id ?? -1,
+                t.Site == null ? -1 : Sites.IndexOf(t.Site), t.Mill, t.HomeRequested)).ToArray(), nextTruckId);
         internal void Restore(LogisticsCheckpoint s)
         {
             CheckpointGuard.Require(s != null && s.Sites != null && s.Mills != null && s.Status != null, "logistics system");
@@ -130,22 +133,62 @@ namespace ForesTycoon
                 mills.Add(new Sawmill { TileId = m.TileId, Footprint = (int[])m.Footprint.Clone(), Position = m.Position.Vector,
                     Received = m.Received, Stock = m.Stock, Processed = m.Processed });
             }
+            var depots = new List<Depot>();
+            foreach (var d in s.Depots ?? Array.Empty<DepotCheckpoint>())
+            {
+                CheckpointGuard.Require(d != null && terrain.IsValidTileId(d.TileId) && d.Footprint != null && d.Footprint.Length == 4 &&
+                    Array.IndexOf(d.Footprint, d.TileId) >= 0, "depot footprint");
+                foreach (int id in d.Footprint) CheckpointGuard.Require(terrain.IsValidTileId(id) && terrain.IsBuildingTile(id) &&
+                    footprints.Add(id) && !used.Contains(id), "depot tile");
+                d.Position.Validate();
+                depots.Add(new Depot { TileId = d.TileId, Footprint = (int[])d.Footprint.Clone(), Position = d.Position.Vector });
+            }
+            var trucks = new List<FleetTruck>(); var truckIds = new HashSet<int>(); pendingTruckVehicles.Clear();
+            foreach (var t in s.Trucks ?? Array.Empty<TruckCheckpoint>())
+            {
+                CheckpointGuard.Require(t != null && t.Id > 0 && t.Id < s.NextTruckId && truckIds.Add(t.Id) && (uint)t.Home < (uint)depots.Count &&
+                    Enum.IsDefined(t.Phase) && t.Site >= -1 && t.Site < sites.Count && (t.Phase == TruckPhase.Parked) == (t.Vehicle < 0) &&
+                    (t.Phase == TruckPhase.Parked || t.Site >= 0), "fleet truck");
+                var truck = new FleetTruck { Id = t.Id, Home = depots[t.Home], Phase = t.Phase, Site = t.Site < 0 ? null : sites[t.Site],
+                    Mill = t.Mill, HomeRequested = t.HomeRequested };
+                trucks.Add(truck);
+                if (t.Vehicle >= 0) pendingTruckVehicles.Add((truck, t.Vehicle));
+            }
+            CheckpointGuard.Require(s.NextTruckId >= 1, "fleet truck ids");
             var machines = new List<ForestMachine>(); var ids = new HashSet<int>();
             foreach (var m in s.Machines ?? Array.Empty<ForestMachineCheckpoint>())
             {
                 CheckpointGuard.Require(m != null && ids.Add(m.Id) && m.Id > 0 && m.Id < s.NextMachineId && Enum.IsDefined(m.Kind) &&
-                    Enum.IsDefined(m.State) && Enum.IsDefined(m.Goal) && (uint)m.Site < (uint)sites.Count &&
+                    Enum.IsDefined(m.State) && Enum.IsDefined(m.Goal) && m.Site >= -1 && m.Site < sites.Count && m.Home >= -1 && m.Home < depots.Count &&
+                    (m.Site >= 0 || m.Home >= 0) &&
                     m.Path != null && m.Path.Length > 0 && Array.TrueForAll(m.Path, terrain.IsValidTileId), "forest machine");
                 CheckpointGuard.Require(double.IsFinite(m.Position) && m.Position >= 0 && m.Position <= m.Path.Length - 1 &&
                     double.IsFinite(m.PreviousPosition) && m.PreviousPosition >= 0 && m.PreviousPosition <= m.Path.Length - 1, "forest machine position");
                 CheckpointGuard.NonNegative(m.Cargo, "forest machine cargo"); CheckpointGuard.NonNegative(m.WorkTime, "forest machine work time");
                 CheckpointGuard.Require(m.Cargo <= ForestMachine.ForwarderCapacity + 0.001f, "forest machine cargo");
-                machines.Add(new ForestMachine { Id = m.Id, Kind = m.Kind, Site = sites[m.Site], Path = (int[])m.Path.Clone(),
+                machines.Add(new ForestMachine { Id = m.Id, Kind = m.Kind, Site = m.Site < 0 ? null : sites[m.Site], Path = (int[])m.Path.Clone(),
+                    Home = m.Home < 0 ? null : depots[m.Home], HomeRequested = m.HomeRequested,
                     PathPosition = m.Position, PreviousPathPosition = m.PreviousPosition, State = m.State, Goal = m.Goal, Cargo = m.Cargo, WorkTime = m.WorkTime });
             }
             CheckpointGuard.Require(s.NextMachineId >= 1, "forest machine ids");
             Sites.Clear(); Sites.AddRange(sites); Mills.Clear(); Mills.AddRange(mills); Status = s.Status;
             Machines.Clear(); Machines.AddRange(machines); nextMachineId = s.NextMachineId;
+            Depots.Clear(); Depots.AddRange(depots); Trucks.Clear(); Trucks.AddRange(trucks); nextTruckId = s.NextTruckId;
+        }
+
+        // Fleet trucks refer to their road vehicles by id; vehicles are restored after the logistics.
+        private readonly List<(FleetTruck Truck, int Vehicle)> pendingTruckVehicles = new();
+
+        internal void BindVehicles(VehicleSystem vehicles)
+        {
+            Vehicles = vehicles;
+            foreach (var (truck, id) in pendingTruckVehicles)
+            {
+                truck.Vehicle = null;
+                foreach (var v in vehicles.Vehicles) if (v.Id == id) truck.Vehicle = v;
+                CheckpointGuard.Require(truck.Vehicle != null && truck.Vehicle.Transit == (truck.Phase != TruckPhase.Working), "fleet truck vehicle");
+            }
+            pendingTruckVehicles.Clear();
         }
     }
     sealed partial class TimberCargoSystem

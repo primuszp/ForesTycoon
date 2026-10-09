@@ -179,6 +179,22 @@ namespace ForesTycoon
             return cost;
         }
         public void QueuePlaceSawmill(int tileId) => Enqueue(new PlaceSawmillCommand(tileId));
+        public void QueuePlaceDepot(int tileId) => Enqueue(new PlaceDepotCommand(tileId));
+        internal void QueueSendVehicle(int vehicleId, int tileId, bool truck) => Enqueue(new SendVehicleCommand(vehicleId, tileId, truck));
+        internal void QueueSendHome(int vehicleId, bool truck) => Enqueue(new SendHomeCommand(vehicleId, truck));
+        void IWorldCommandTarget.ExecutePlaceDepot(int tileId) { Logistics?.PlaceDepot(tileId); }
+        void IWorldCommandTarget.ExecuteSendVehicle(int vehicleId, int tileId, bool truck)
+        {
+            var site = Logistics.SiteAt(tileId);
+            if (site == null) { Logistics.Status = "Ide nem küldhető jármű: kattints egy kijelölt vágásra."; return; }
+            if (truck) { var t = Logistics.Trucks.Find(x => x.Id == vehicleId); if (t != null) Logistics.AssignTruck(t, site); }
+            else { var m = Logistics.Machines.Find(x => x.Id == vehicleId); if (m != null) Logistics.AssignMachine(m, site); }
+        }
+        void IWorldCommandTarget.ExecuteSendHome(int vehicleId, bool truck)
+        {
+            if (truck) { var t = Logistics.Trucks.Find(x => x.Id == vehicleId); if (t != null) Logistics.SendHome(t); }
+            else { var m = Logistics.Machines.Find(x => x.Id == vehicleId); if (m != null) Logistics.SendHome(m); }
+        }
         void IWorldCommandTarget.ExecutePlaceSawmill(int tileId) { Logistics?.PlaceMill(tileId); }
         public void QueueSpawnVehicle() => Enqueue(new SpawnVehicleCommand());
         internal void QueueWeather(WeatherPreset preset,int intensity,int duration) => Enqueue(new SetWeatherCommand(preset,intensity,duration));
@@ -446,6 +462,7 @@ namespace ForesTycoon
             vehicles.SourceLoader = Logistics.Load;
             vehicles.DestinationReceiver = Logistics.Deliver;
             vehicles.RouteValidator = Logistics.RouteConnected;
+            Logistics.Vehicles = vehicles;
             vehicles.RoadState = id => (map.GetRoadPaving(id) == RoadPaving.Asphalt ? RoadSurface.Asphalt : RoadSurface.Gravel,
                 map.GetRoadCondition(id));
             vehicles.RoadWear = (id, amount) => map.WearRoad(id, amount * (map.GetRoadPaving(id) == RoadPaving.Macadam ? 1f : 0.2f));

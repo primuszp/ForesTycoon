@@ -235,7 +235,7 @@ namespace ForesTycoon
                 RenderDevice.InitializeFrameState();
 
                 world = new GameWorld(TerrainSettings.Default);
-                interaction = new WorldInteractionController(world);
+                interaction = new WorldInteractionController(world) { TargetPicked = SendTargetPicked };
                 imgui = new ImGuiController();
                 HudTheme.Apply();
                 isLoaded = true;
@@ -405,7 +405,7 @@ namespace ForesTycoon
         private void SelectTool(TerrainEditTool tool)
         {
             interaction.SelectTool(tool);
-            world.Graphics.SawmillPreview=tool==TerrainEditTool.PlaceSawmill;
+            world.Graphics.SawmillPreview=tool==TerrainEditTool.PlaceSawmill||tool==TerrainEditTool.PlaceDepot;
             RequestFrame();
         }
 

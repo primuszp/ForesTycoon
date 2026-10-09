@@ -108,6 +108,14 @@ namespace ForesTycoon
 
         internal static float TruckScale { get; set; } = 1;
 
+        /// <summary>An empty truck standing still (parked at its depot).</summary>
+        internal static void DrawParked(Terrain terrain, Vector3 position, float yaw)
+        {
+            EnsureModel();
+            float scale = terrain.RoadLaneWidth * DioramaScale.TruckLaneFill / importedModel.Width;
+            DrawTruck(new VehicleTransform(position, yaw, 0), 0, scale);
+        }
+
         private static void DrawTruck(VehicleTransform transform, float cargoFill, float scale, float articulation = 0, float trailerPitch = 0, float wheelAngle = 0,float curvature=0,Matrix4? suspension=null)
         {
             EnsureModel();

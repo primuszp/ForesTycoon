@@ -7,7 +7,7 @@ namespace ForesTycoon
     internal sealed record VehicleCheckpoint(int Id, int[] Route, double Speed, float Capacity, bool Physics,
         RoadRouteCheckpoint RoadGeometry, double CurrentSpeed, double Position, double PreviousPosition, float Cargo,
         bool CargoStops, int[] SourceTiles, int Mill, bool Blocked, VehicleTransportState State, float TransferProgress,
-        double FuelUsed = 0, double Distance = 0);
+        double FuelUsed = 0, double Distance = 0, bool Transit = false, bool TransitArrived = false);
     internal sealed record VehiclesCheckpoint(int NextId, bool RoadPhysics, bool CargoStops, VehicleCheckpoint[] Vehicles);
     internal sealed record AnimalCheckpoint(int Id, int Tile, int TargetTile, CheckpointPosition Position,
         CheckpointPosition PreviousPosition, CheckpointPosition Target, float Yaw, float PreviousYaw, float Blend,
@@ -18,10 +18,13 @@ namespace ForesTycoon
     internal sealed record PileCheckpoint(int Tile, float Volume);
     internal sealed record HarvestCheckpoint(int[] Tiles, float InitialVolume, int Landing = -1, PileCheckpoint[] Piles = null, float LandingStock = 0);
     internal sealed record ForestMachineCheckpoint(int Id, ForestMachineKind Kind, int Site, int[] Path, double Position, double PreviousPosition,
-        ForestMachineState State, ForestMachineState Goal, float Cargo, double WorkTime);
+        ForestMachineState State, ForestMachineState Goal, float Cargo, double WorkTime, int Home = -1, bool HomeRequested = false);
+    internal sealed record DepotCheckpoint(int TileId, int[] Footprint, CheckpointPosition Position);
+    internal sealed record TruckCheckpoint(int Id, int Home, TruckPhase Phase, int Vehicle, int Site, int Mill, bool HomeRequested);
     internal sealed record MillCheckpoint(int TileId, int[] Footprint, CheckpointPosition Position, float Received, float Stock, float Processed);
     internal sealed record LogisticsCheckpoint(HarvestCheckpoint[] Sites, MillCheckpoint[] Mills, string Status,
-        ForestMachineCheckpoint[] Machines = null, int NextMachineId = 1);
+        ForestMachineCheckpoint[] Machines = null, int NextMachineId = 1,
+        DepotCheckpoint[] Depots = null, TruckCheckpoint[] Trucks = null, int NextTruckId = 1);
     internal sealed record WorldCheckpointData(int Version, ulong Tick, int CommandCursor, int PendingCommands,
         TerrainCheckpoint Terrain, EcologyCheckpoint Ecology, WildlifeCheckpoint Wildlife, LogisticsCheckpoint Logistics,
         VehiclesCheckpoint Vehicles, float AvailableTimber, float DeliveredTimber, EffectCheckpoint[] Effects,

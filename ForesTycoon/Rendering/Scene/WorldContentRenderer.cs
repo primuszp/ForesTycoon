@@ -38,6 +38,7 @@ namespace ForesTycoon
                   mill.Draw(Matrix4.CreateTranslation(building.Position),settings,state);
             }
         }
+        /// <summary>Green or red 2×2 outline under the cursor while placing a sawmill or a depot.</summary>
         internal void DrawBuildingPreview(Terrain terrain,ForestSystem forest,ForestryLogistics logistics,bool enabled)
         {
             if(!enabled||terrain.Map.HoveredTile==null)return;

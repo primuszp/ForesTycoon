@@ -36,6 +36,8 @@ namespace ForesTycoon
         public bool IsForestryDragging => forestryDragStartTileId >= 0;
         public bool IsRoadRemoval { get; private set; }
         public ForestSpecies PlantingSpecies { get; set; } = ForestSpecies.Spruce;
+        /// <summary>The tile clicked while the send tool is active (the viewport turns it into a work order).</summary>
+        public Action<int> TargetPicked { get; set; }
         /// <summary>Surface the road tool lays.</summary>
         public RoadPaving RoadSurface { get; set; } = RoadPaving.Macadam;
 
@@ -92,6 +94,8 @@ namespace ForesTycoon
         public bool EndPrimaryGesture(bool hasHoveredNode)
         {
             if(ActiveTool==TerrainEditTool.PlaceSawmill){if(world.HoveredTileId>=0)world.QueuePlaceSawmill(world.HoveredTileId);return true;}
+            if(ActiveTool==TerrainEditTool.PlaceDepot){if(world.HoveredTileId>=0)world.QueuePlaceDepot(world.HoveredTileId);return true;}
+            if(ActiveTool==TerrainEditTool.SendVehicle){if(world.HoveredTileId>=0)TargetPicked?.Invoke(world.HoveredTileId);return true;}
             if (IsRoadTool(ActiveTool))
             {
                 int endTileId = world.HoveredTileId;

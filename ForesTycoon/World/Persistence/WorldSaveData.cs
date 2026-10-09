@@ -15,7 +15,10 @@ namespace ForesTycoon
         SetWeather,
         PlaceSawmill,
         RoadRepair,
-        SkidTrailPath
+        SkidTrailPath,
+        PlaceDepot,
+        SendVehicle,
+        SendHome
     }
 
     readonly record struct WorldCommandRecord(

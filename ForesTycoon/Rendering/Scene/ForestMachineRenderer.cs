@@ -82,9 +82,61 @@ namespace ForesTycoon
             return true;
         }
 
+        private ImportedSceneAsset depotModel;
+        private bool depotTried;
+
+        /// <summary>Where a parked vehicle of a depot stands: the yard in front of the hangar, one bay per vehicle.</summary>
+        internal static Vector3 ParkingBay(Terrain terrain, Depot depot, int bay)
+        {
+            float tile = terrain.Map.TileWidth;
+            // Machines side by side next to the hall; the truck lengthwise along the front of the yard.
+            var p = depot.Position + (bay < 2 ? new Vector3((bay - 0.5f) * tile * 0.9f, -tile * 0.28f, 0)
+                : new Vector3(0, -tile * (0.72f + 0.2f * (bay - 2)), 0));
+            if (terrain.Map.TryGetSurfaceZ(p.X, p.Y, out float z)) p.Z = z + 0.02f;
+            return p;
+        }
+
+        // The hangar on the back half of the 2×2 yard; parked vehicles on the front half.
+        private void DrawDepots(Terrain terrain, ForestryLogistics logistics, GraphicsSettings settings)
+        {
+            if (logistics.Depots.Count == 0) return;
+            float tile = terrain.Map.TileWidth;
+            if (!depotTried)
+            {
+                depotTried = true;
+                if (File.Exists(Path.Combine(AppContext.BaseDirectory, "Assets", "Licensed", "depot.glb")))
+                    depotModel = new ImportedSceneAsset("Assets/Licensed/depot.glb", tile * 1.7f);
+            }
+            foreach (var depot in logistics.Depots)
+            {
+                Vector3 hall = depot.Position + new Vector3(0, tile * 0.45f, 0);
+                if (depotModel != null) { using var state = depotModel.BeginBatch(); depotModel.Draw(Matrix4.CreateTranslation(hall), settings, state); }
+                else
+                {
+                    // Stand-in: a long shed with a dark gable roof and an open door toward the yard.
+                    Matrix4 frame = Matrix4.CreateTranslation(hall);
+                    DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () =>
+                    {
+                        Box(frame, new Vector3(-tile * 0.85f, -tile * 0.4f, 0), new Vector3(tile * 0.85f, tile * 0.4f, tile * 0.38f), Color.FromArgb(178, 176, 170));
+                        Box(frame, new Vector3(-tile * 0.88f, -tile * 0.44f, tile * 0.38f), new Vector3(tile * 0.88f, tile * 0.44f, tile * 0.5f), Color.FromArgb(120, 62, 46));
+                        Box(frame, new Vector3(-tile * 0.3f, -tile * 0.41f, 0), new Vector3(tile * 0.3f, -tile * 0.39f, tile * 0.3f), Color.FromArgb(48, 48, 50));
+                    });
+                }
+                // The yard: a gravel apron in front of the hall.
+                Matrix4 yard = Matrix4.CreateTranslation(depot.Position + new Vector3(0, -tile * 0.5f, 0.01f));
+                DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () =>
+                    Box(yard, new Vector3(-tile * 0.95f, -tile * 0.45f, 0), new Vector3(tile * 0.95f, tile * 0.45f, 0.01f), Color.FromArgb(150, 141, 122)));
+                int truckBay = 2;
+                foreach (var truck in logistics.Trucks)
+                    if (truck.Home == depot && truck.Phase == TruckPhase.Parked)
+                        VehicleRenderer.DrawParked(terrain, ParkingBay(terrain, depot, truckBay++), 0);
+            }
+        }
+
         internal void Draw(Terrain terrain, ForestryLogistics logistics, GraphicsSettings settings, float alpha)
         {
             if (logistics == null) return;
+            DrawDepots(terrain, logistics, settings);
             DrawPiles(terrain, logistics, settings);
             if (logistics.Machines.Count == 0) return;
             if (!loaded)
@@ -99,6 +151,12 @@ namespace ForesTycoon
             {
                 double position = machine.PreviousPathPosition + (machine.PathPosition - machine.PreviousPathPosition) * alpha;
                 if (!TrySample(terrain.Map, machine.Path, position, out Vector2 point, out Vector2 heading)) continue;
+                if (machine.Site == null && machine.Home != null && machine.State == ForestMachineState.Parked && machine.Tile == machine.Home.TileId)
+                {
+                    // At home: in its bay in the yard, facing the hall.
+                    point = ParkingBay(terrain, machine.Home, machine.Kind == ForestMachineKind.Harvester ? 0 : 1).Xy;
+                    heading = Vector2.UnitY;
+                }
                 Matrix4 placement = Placement(terrain.Map, point, heading, machine.Kind == ForestMachineKind.Forwarder ? 2.2f : 1.4f);
                 if (RenderDevice.Visuals?.ShadowPass != true &&
                     !RenderVisibility.SphereVisible(placement.Row3.Xyz, 4f, RenderDevice.ViewProjection)) continue;
@@ -360,6 +418,7 @@ namespace ForesTycoon
         {
             foreach (var m in models) m?.Dispose();
             foreach (var r in stackRenderers) r?.Dispose();
+            depotModel?.Dispose(); depotModel = null; depotTried = false;
             Array.Clear(models); Array.Clear(stacks); Array.Clear(stackRenderers); Array.Clear(stackPoses); Array.Clear(stackTried);
             loaded = false;
         }

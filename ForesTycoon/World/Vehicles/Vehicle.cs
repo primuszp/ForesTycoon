@@ -55,6 +55,9 @@ namespace ForesTycoon
         internal int SawmillTileId=-1;
         internal bool LocalCargo=>SourceTiles!=null;
         internal bool RouteBlocked;
+        /// <summary>A one-way drive (depot → landing, back home): no loading stops, it just arrives.</summary>
+        internal bool Transit;
+        internal bool TransitArrived;
         public VehicleTransportState TransportState { get; internal set; } = VehicleTransportState.Hauling;
         public float TransferProgress { get; private set; }
         public float VisualCargoFill => LocalCargo?CargoFill:TransportState == VehicleTransportState.Loading ? CargoFill * TransferProgress :

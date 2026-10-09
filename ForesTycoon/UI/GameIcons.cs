@@ -13,7 +13,7 @@ namespace ForesTycoon
         Vehicles, Forestry, Environment, Graphics, Developer, Help, Camera, Deer,
         Spruce, Birch, Oak, Beech,
         Sun, Cloud, Rain, Storm, Thermometer, Calendar, Timber, Lightning, Speedometer,
-        RoadRepair, Macadam, SkidTrail, SkidTrailRemove
+        RoadRepair, Macadam, SkidTrail, SkidTrailRemove, Depot, Forwarder
     }
 
     /// <summary>
@@ -152,6 +152,23 @@ namespace ForesTycoon
                         c.Line(0.18f, 0.30f, 0.62f, 0.78f, Warning, 1.8f);
                         c.Line(0.62f, 0.30f, 0.18f, 0.78f, Warning, 1.8f);
                     }
+                    break;
+                case GameIcon.Depot:
+                    // A round-roofed machine hall with an open door.
+                    c.Poly(Rgb(168, 172, 176), 0.08f, 0.86f, 0.08f, 0.54f, 0.24f, 0.30f, 0.50f, 0.22f, 0.76f, 0.30f, 0.92f, 0.54f, 0.92f, 0.86f);
+                    c.RectFilled(0.36f, 0.56f, 0.64f, 0.86f, Rgb(54, 56, 60));
+                    c.Line(0.08f, 0.86f, 0.92f, 0.86f, Earth, 1.2f);
+                    break;
+                case GameIcon.Forwarder:
+                    // Articulated forwarder: cab, bunk with stakes and logs.
+                    c.RectFilled(0.56f, 0.40f, 0.86f, 0.70f, Rgb(222, 170, 40));
+                    c.RectFilled(0.10f, 0.58f, 0.54f, 0.68f, Rgb(80, 84, 90));
+                    c.Line(0.14f, 0.30f, 0.14f, 0.60f, Rgb(80, 84, 90), 1.1f);
+                    c.Line(0.48f, 0.30f, 0.48f, 0.60f, Rgb(80, 84, 90), 1.1f);
+                    c.RectFilled(0.12f, 0.40f, 0.50f, 0.56f, Wood);
+                    c.EllipseFilled(0.24f, 0.78f, 0.09f, 0.09f, Rgb(40, 40, 42));
+                    c.EllipseFilled(0.42f, 0.78f, 0.09f, 0.09f, Rgb(40, 40, 42));
+                    c.EllipseFilled(0.74f, 0.78f, 0.09f, 0.09f, Rgb(40, 40, 42));
                     break;
                 case GameIcon.Plant:
                     c.Poly(Earth, 0.16f, 0.86f, 0.30f, 0.74f, 0.70f, 0.74f, 0.84f, 0.86f);

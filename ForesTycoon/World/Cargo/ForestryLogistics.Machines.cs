@@ -16,7 +16,12 @@ namespace ForesTycoon
         internal const float ForwarderCapacity = 14f;
         internal int Id;
         internal ForestMachineKind Kind;
+        /// <summary>The site it works; null while at (or on the way to) its depot.</summary>
         internal HarvestSite Site;
+        /// <summary>The depot it belongs to; null for machines of old saves, which appear at a site and leave when done.</summary>
+        internal Depot Home;
+        /// <summary>The player called it home: it finishes the present move and drives back to the depot.</summary>
+        internal bool HomeRequested;
         internal int[] Path;
         internal double PathPosition, PreviousPathPosition;
         internal ForestMachineState State;
@@ -43,6 +48,8 @@ namespace ForesTycoon
         private int nextMachineId = 1;
         /// <summary>When set, timber reaches the trucks only through the harvester → forwarder → landing chain.</summary>
         internal bool MachinesEnabled;
+        /// <summary>Old behaviour: machines appear at every connected site by themselves (no depot, no orders).</summary>
+        internal bool AutoMachines;
 
         private HarvestSite SiteOf(Vehicle vehicle)
         {
@@ -52,7 +59,12 @@ namespace ForesTycoon
             return null;
         }
 
-        private bool Passable(HarvestSite site, int tile) => Array.IndexOf(site.Tiles, tile) >= 0 || terrain.IsSkidTrail(tile);
+        // Forest floor a machine may cross: its site, the skid trails.
+        private bool OffRoad(HarvestSite site, int tile) => (site != null && Array.IndexOf(site.Tiles, tile) >= 0) || terrain.IsSkidTrail(tile);
+
+        // Machines drive on their own wheels: over roads, out of their depot yard, along trails into their site.
+        private bool Passable(HarvestSite site, int tile) =>
+            OffRoad(site, tile) || terrain.IsRoadTile(tile) || Depots.Exists(d => Array.IndexOf(d.Footprint, tile) >= 0);
 
         private bool TouchesRoad(int tile)
         {
@@ -78,7 +90,7 @@ namespace ForesTycoon
                 if (TouchesRoad(tile)) return tile;
                 int count = terrain.GetTileNeighbours(tile, next);
                 for (int i = 0; i < count; i++)
-                    if (Passable(site, next[i]) && seen.Add(next[i])) queue.Enqueue(next[i]);
+                    if (OffRoad(site, next[i]) && seen.Add(next[i])) queue.Enqueue(next[i]);
             }
             return -1;
         }
@@ -114,8 +126,35 @@ namespace ForesTycoon
             SpawnMachines();
         }
 
+        /// <summary>Sends a machine to work a site (an order from the player). False with a reason in <see cref="Status"/>.</summary>
+        internal bool AssignMachine(ForestMachine machine, HarvestSite site)
+        {
+            string name = machine.Kind == ForestMachineKind.Harvester ? "A processzor" : "A forwarder";
+            if (site.Landing < 0) { Status = $"{name} nem jut be: jelölj ki közelítő nyomot az úttól a vágásig."; return false; }
+            if (Volume(site) <= 0.001f) { Status = "Ez a vágás már kiürült."; return false; }
+            if (FindPath(site, machine.Tile, t => t == site.Landing) == null) { Status = $"{name} nem talál utat a telephelyről a vágáshoz."; return false; }
+            machine.Site = site; machine.HomeRequested = false;
+            if (machine.State != ForestMachineState.Driving) machine.State = ForestMachineState.Parked;
+            else machine.Goal = ForestMachineState.Parked;   // finish the present move, then take up the new work
+            Status = $"{name} a vágásba indult.";
+            return true;
+        }
+
+        private bool GoHome(ForestMachine machine)
+        {
+            if (machine.Home == null) return false;
+            machine.HomeRequested = false;
+            var site = machine.Site;
+            machine.Site = null;
+            int[] path = FindPath(site, machine.Tile, t => t == machine.Home.TileId);
+            if (path != null) Drive(machine, path, ForestMachineState.Parked);
+            else machine.State = ForestMachineState.Parked;
+            return true;
+        }
+
         private void SpawnMachines()
         {
+            if (!AutoMachines) return;
             foreach (var site in Sites)
             {
                 if (site.Landing < 0 || Volume(site) <= 0.001f || Machines.Exists(m => m.Site == site)) continue;
@@ -161,8 +200,9 @@ namespace ForesTycoon
                     if (machine.Kind == ForestMachineKind.Harvester) UpdateHarvester(machine, dt);
                     else UpdateForwarder(machine, dt);
                 }
-                // A finished site sends its machines away once they are parked back at the landing.
-                Machines.RemoveAll(m => m.State == ForestMachineState.Parked && Volume(m.Site) <= 0.001f && m.Tile == m.Site.Landing);
+                // Old saves: a finished site sends its depot-less machines away once they are parked back at the landing.
+                Machines.RemoveAll(m => m.Home == null && m.Site != null && m.State == ForestMachineState.Parked &&
+                    Volume(m.Site) <= 0.001f && m.Tile == m.Site.Landing);
             }
         }
 
@@ -189,6 +229,7 @@ namespace ForesTycoon
         private void UpdateHarvester(ForestMachine machine, double dt)
         {
             var site = machine.Site;
+            if (site == null) { if (machine.State == ForestMachineState.Driving) Advance(machine, dt); return; }
             switch (machine.State)
             {
                 case ForestMachineState.Driving:
@@ -205,11 +246,13 @@ namespace ForesTycoon
                         int stack = StackTileFor(site, tile);
                         site.Piles[stack] = (site.Piles.TryGetValue(stack, out float pile) ? pile : 0) + cut;
                     }
-                    if (forest.AvailableTimber(tile) > 0.001f) break;
+                    if (forest.AvailableTimber(tile) > 0.001f && !machine.HomeRequested) break;
                     goto default;
                 }
                 default:
                 {
+                    // Done here (or called home): back to the depot.
+                    if ((machine.HomeRequested || StandingTimber(site) <= 0.001f) && GoHome(machine)) break;
                     // Next standing timber, nearest first; with none left the harvester returns to the landing.
                     int[] path = StandingTimber(site) > 0.001f
                         ? FindPath(site, machine.Tile, t => Array.IndexOf(site.Tiles, t) >= 0 && forest.AvailableTimber(t) > 0.001f)
@@ -226,6 +269,7 @@ namespace ForesTycoon
         private void UpdateForwarder(ForestMachine machine, double dt)
         {
             var site = machine.Site;
+            if (site == null) { if (machine.State == ForestMachineState.Driving) Advance(machine, dt); return; }
             switch (machine.State)
             {
                 case ForestMachineState.Driving:
@@ -239,7 +283,7 @@ namespace ForesTycoon
                     float take = Math.Min(Math.Min((float)(ForwarderLoadRate * dt), pile), ForestMachine.ForwarderCapacity - machine.Cargo);
                     machine.Cargo += take;
                     if (pile - take <= 0.0001f) site.Piles.Remove(tile); else site.Piles[tile] = pile - take;
-                    if (machine.Cargo >= ForestMachine.ForwarderCapacity - 0.001f) { ReturnToLanding(machine); break; }
+                    if (machine.Cargo >= ForestMachine.ForwarderCapacity - 0.001f || machine.HomeRequested) { ReturnToLanding(machine); break; }
                     if (site.Piles.ContainsKey(tile)) break;
                     int[] next = FindPath(site, tile, t => site.Piles.ContainsKey(t));
                     if (next != null) Drive(machine, next, ForestMachineState.Loading);
@@ -261,6 +305,8 @@ namespace ForesTycoon
                     float piled = Piled(site);
                     bool worth = piled >= ForestMachine.ForwarderCapacity * 0.5f || (piled > 0.01f && StandingTimber(site) <= 0.001f);
                     if (machine.Cargo > 0.01f) { ReturnToLanding(machine); break; }
+                    // Every stack skidded and nothing left to fell (or called home): back to the depot.
+                    if ((machine.HomeRequested || (piled <= 0.01f && StandingTimber(site) <= 0.001f)) && GoHome(machine)) break;
                     if (!worth) { if (machine.Tile != site.Landing && site.Landing >= 0) ReturnToLanding(machine); break; }
                     int[] path = FindPath(site, machine.Tile, t => site.Piles.ContainsKey(t));
                     if (path != null) Drive(machine, path, ForestMachineState.Loading);

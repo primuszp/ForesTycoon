@@ -274,7 +274,7 @@ namespace ForesTycoon
             {
                 TerrainEditTool.PlantForest => Verb.Tend,
                 TerrainEditTool.HarvestForest or TerrainEditTool.SkidTrail or TerrainEditTool.SkidTrailRemove => Verb.Produce,
-                TerrainEditTool.Road or TerrainEditTool.RoadRemove or TerrainEditTool.RoadRepair or TerrainEditTool.PlaceSawmill
+                TerrainEditTool.Road or TerrainEditTool.RoadRemove or TerrainEditTool.RoadRepair or TerrainEditTool.PlaceSawmill or TerrainEditTool.PlaceDepot
                     or TerrainEditTool.Raise or TerrainEditTool.Lower => Verb.Build,
                 // Observe and Transport work with the inspect tool and keep their own state.
                 _ => verb == Verb.Transport ? Verb.Transport : verb == Verb.Observe || showManagement ? Verb.Observe : Verb.None
@@ -378,6 +378,9 @@ namespace ForesTycoon
                         "Húzással jelöld ki a kopott szakaszt: a hibás csempék újjá válnak. A makadám gyorsabban romlik.");
                     ImGui.SameLine();
                     ToolIcon(GameIcon.Sawmill, TerrainEditTool.PlaceSawmill, Size, "Fűrészmalom", "8", "2×2 sík, száraz csempére, út mellé.");
+                    ImGui.SameLine();
+                    ToolIcon(GameIcon.Depot, TerrainEditTool.PlaceDepot, Size, "Telephely", "",
+                        "Gépudvar 2×2 csempén, út mellett. Innen indulnak a járművek, és ide térnek haza.");
                     ImGui.SameLine(0, 14);
                     HudTheme.GroupDivider(Size);
                     ImGui.SameLine();
@@ -386,11 +389,8 @@ namespace ForesTycoon
                     ToolIcon(GameIcon.Lower, TerrainEditTool.Lower, Size, "Terep süllyesztése", "3", "Kattintással süllyeszti a terepet.");
                     break;
                 case Verb.Transport:
-                    if (HudTheme.LabeledIconButton("Rönkszállító indítása", GameIcon.TruckAdd, false, Size,
-                            "Új teherautó a kitermelés és a fűrészmalom közötti úton.")) SpawnTruck();
-                    ImGui.SameLine();
                     if (HudTheme.LabeledIconButton("Járművek", GameIcon.Vehicles, showVehicles, Size,
-                            "Teherautók állapota és rakománya (V).")) showVehicles = !showVehicles;
+                            "A járműpark: küldd a gépeket és a rönkszállítót dolgozni, vagy hívd haza őket (V).")) showVehicles = !showVehicles;
                     if (world.Logistics != null)
                     {
                         ImGui.SameLine(0, 14);

@@ -25,6 +25,15 @@ namespace ForesTycoon
             vehicle.TransportState=VehicleTransportState.Loading;vehicle.Hold();vehicles.Add(vehicle);return vehicle;
         }
 
+        /// <summary>A fleet truck driving one way along <paramref name="route"/>; <see cref="Vehicle.TransitArrived"/> marks the end.</summary>
+        internal Vehicle SpawnTransit(int[] route)
+        {
+            var vehicle=new Vehicle(nextId++,route,1.5,roadRoute:RoadRouteFactory?.Invoke(route),roadPhysics:UseRoadPhysics){Transit=true};
+            vehicles.Add(vehicle);return vehicle;
+        }
+        internal void Remove(Vehicle vehicle)=>vehicles.Remove(vehicle);
+        internal bool Contains(Vehicle vehicle)=>vehicles.Contains(vehicle);
+
         public VehicleSystem(TimberCargoSystem timberCargo = null, Func<int[], VehicleRoadRoute> roadRouteFactory = null)
         {
             this.timberCargo = timberCargo ?? new TimberCargoSystem();
@@ -54,6 +63,11 @@ namespace ForesTycoon
                 Vehicle vehicle = vehicles[i];
                 vehicle.RoadState = RoadState; vehicle.RoadWear = RoadWear;
                 if(vehicle.RouteBlocked){vehicle.Hold();continue;}
+                if(vehicle.Transit){
+                    if(!vehicle.TransitArrived){vehicle.Update(deltaSeconds);if(vehicle.RoutePosition>=vehicle.Route.Length-1-1e-6){vehicle.TransitArrived=true;vehicle.Hold();}}
+                    else vehicle.Hold();
+                    continue;
+                }
                 if(vehicle.LocalCargo){UpdateLogistics(vehicle,deltaSeconds);continue;}
                 if (!vehicle.CargoStopsEnabled)
                 {
@@ -144,7 +158,7 @@ namespace ForesTycoon
             RefreshLogisticsRoutes(isRoadTile);
             return vehicles.RemoveAll(vehicle =>
             {
-                if(vehicle.LocalCargo)return false;
+                if(vehicle.LocalCargo||vehicle.Transit)return false;
                 for (int i = 0; i < vehicle.Route.Length; i++)
                     if (!isRoadTile(vehicle.Route[i]))
                     {
@@ -156,7 +170,7 @@ namespace ForesTycoon
         }
         internal void RefreshLogisticsRoutes(Func<int,bool> isRoadTile)
         {
-            foreach(var vehicle in vehicles)if(vehicle.LocalCargo){
+            foreach(var vehicle in vehicles)if(vehicle.LocalCargo||vehicle.Transit){
                 vehicle.RouteBlocked=false;
                 foreach(int id in vehicle.Route)if(!isRoadTile(id)){vehicle.RouteBlocked=true;vehicle.Hold();break;}
                 if(!vehicle.RouteBlocked&&RouteValidator?.Invoke(vehicle)==false){vehicle.RouteBlocked=true;vehicle.Hold();}

@@ -32,19 +32,27 @@ namespace ForesTycoon
                     var cargo = new TimberCargoSystem();
                     var vehicles = new VehicleSystem(cargo, route => VehicleRoadRoute.Create(terrain.Map, route))
                     { SourceLoader = logistics.Load, DestinationReceiver = logistics.Deliver, RouteValidator = logistics.RouteConnected };
+                    logistics.Vehicles = vehicles;
                     Require(logistics.PlaceMill(195), logistics.Status);
+                    Require(logistics.PlaceDepot(67), logistics.Status);
                     logistics.Designate(stand);
+                    var site = logistics.Sites[0];
                     Require(logistics.Sites[0].Landing == 115, $"Landing {logistics.Sites[0].Landing}, expected 115.");
                     using var scene = new TerrainRenderer(terrain, vehicles, new WorldEffectSystem(), forest,
                         new GraphicsSettings { Fog = false, Weather = false, Wildlife = false }, logistics: logistics);
                     double time = 0;
                     void Step(double seconds) { for (int i = 0; i < seconds * 30; i++) { logistics.Update(1.0 / 30); vehicles.Update(1.0 / 30); time += 1.0 / 30; } }
+                    Capture(scene, terrain, "depot", time);
+                    foreach (var machine in logistics.Machines) Require(logistics.AssignMachine(machine, site), logistics.Status);
+                    Require(logistics.AssignTruck(logistics.Trucks[0], site), logistics.Status);
                     Step(6); Capture(scene, terrain, "driving-in", time);
-                    Step(20); Capture(scene, terrain, "felling", time);
-                    logistics.Dispatch(vehicles);
+                    Step(30); Capture(scene, terrain, "felling", time);
                     Step(60); Capture(scene, terrain, "forwarding", time);
-                    Step(400);
+                    Step(2000);
                     Capture(scene, terrain, "finished", time);
+                    Require(logistics.Machines.TrueForAll(m => m.Site == null && m.Tile == 67), "Machines did not return to the depot.");
+                    Require(logistics.Trucks[0].Phase == TruckPhase.Parked, "The truck did not return to the depot.");
+                    Require(logistics.Unfinished(site) < 0.01f, "Timber was left behind when the fleet went home.");
                     Require(logistics.Mills[0].Received > 1, "No timber reached the mill.");
                     Require(terrain.Map.GetSkidTrailWear(117) > 0.3f, "The trail shows no ruts.");
                     Console.WriteLine($"Forest machines: {logistics.Mills[0].Received:F1} m³ delivered, trail wear {terrain.Map.GetSkidTrailWear(117):P0}.");
@@ -56,9 +64,9 @@ namespace ForesTycoon
 
             void Capture(TerrainRenderer scene, Terrain terrain, string name, double seconds)
             {
-                terrain.Map.TryGetTileCenter(120, out Vector3 centre);
+                terrain.Map.TryGetTileCenter(100, out Vector3 centre);
                 RenderDevice.SetCamera(Matrix4.CreateTranslation(-centre) * Matrix4.CreateRotationZ(-MathF.PI / 4)
-                    * Matrix4.CreateRotationX(-0.95f) * Matrix4.CreateOrthographicOffCenter(-15, 15, -11, 11, -400, 400));
+                    * Matrix4.CreateRotationX(-0.95f) * Matrix4.CreateOrthographicOffCenter(-24, 24, -17, 17, -400, 400));
                 GL.ClearColor(0.16f, 0.2f, 0.26f, 1); GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
                 scene.Draw(new RenderContext(seconds, 1f / 30, (ulong)(seconds * 30), seconds, (ulong)(seconds * 30), 0, false, false,
                     1, -45, -45, -1000, -1000, 1000, 1000, 20));

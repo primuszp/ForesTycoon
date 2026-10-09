@@ -16,6 +16,9 @@ namespace ForesTycoon
             ExecuteRoadPath(startTileId, endTileId, remove);
         void ExecuteRoadRepair(int startTileId, int endTileId) => throw new System.NotSupportedException();
         void ExecuteSkidTrailPath(int startTileId, int endTileId, bool remove) => throw new System.NotSupportedException();
+        void ExecutePlaceDepot(int tileId) => throw new System.NotSupportedException();
+        void ExecuteSendVehicle(int vehicleId, int tileId, bool truck) => throw new System.NotSupportedException();
+        void ExecuteSendHome(int vehicleId, bool truck) => throw new System.NotSupportedException();
         void ExecuteSpawnVehicle();
         void ExecutePlaceSawmill(int tileId) => throw new System.NotSupportedException();
         void ExecuteWeather(WeatherPreset preset,int intensity,int duration) => throw new System.NotSupportedException();

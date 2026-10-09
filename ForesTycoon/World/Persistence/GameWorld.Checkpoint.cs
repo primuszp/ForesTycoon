@@ -15,7 +15,8 @@ namespace ForesTycoon
             CheckpointGuard.NonNegative(s.LastArea.TimberVolume, "forestry volume");
             map.Restore(s.Terrain); ecosystem.Restore(s.Ecology);
             Logistics.Restore(s.Logistics); timberCargo.Restore(s.AvailableTimber, s.DeliveredTimber);
-            vehicles.Restore(s.Vehicles, map.Tiles.Count); wildlife.Restore(s.Wildlife, map.Tiles.Count); effects.Restore(s.Effects);
+            vehicles.Restore(s.Vehicles, map.Tiles.Count); Logistics.BindVehicles(vehicles);
+            wildlife.Restore(s.Wildlife, map.Tiles.Count); effects.Restore(s.Effects);
             foreach (var v in vehicles.Vehicles)
                 if (v.LocalCargo) CheckpointGuard.Require(Logistics.Mills.Exists(m => m.TileId == v.SawmillTileId), "truck destination");
             CheckpointGuard.NonNegative(s.Expenses, "expenses");
