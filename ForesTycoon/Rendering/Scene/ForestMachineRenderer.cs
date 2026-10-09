@@ -133,10 +133,34 @@ namespace ForesTycoon
             }
         }
 
+        /// <summary>A blinking warning triangle over a broken-down vehicle.</summary>
+        private static void BreakdownSign(Vector3 at, float phase)
+        {
+            if (RenderDevice.Visuals?.ShadowPass == true || (int)(phase * 2) % 2 == 1) return;
+            float s = MetreScale;
+            Vector3 c = at + new Vector3(0, 0, 5.5f * s);
+            DynamicPrimitiveBatch.Draw(PrimitiveTopology.Triangles, () =>
+            {
+                DynamicPrimitiveBatch.Color4(Color.FromArgb(240, 186, 40));
+                DynamicPrimitiveBatch.Vertex3(c + new Vector3(-0.9f, 0, 0) * s);
+                DynamicPrimitiveBatch.Vertex3(c + new Vector3(0.9f, 0, 0) * s);
+                DynamicPrimitiveBatch.Vertex3(c + new Vector3(0, 0, 1.6f) * s);
+                DynamicPrimitiveBatch.Vertex3(c + new Vector3(0, -0.9f, 0) * s);
+                DynamicPrimitiveBatch.Vertex3(c + new Vector3(0, 0.9f, 0) * s);
+                DynamicPrimitiveBatch.Vertex3(c + new Vector3(0, 0, 1.6f) * s);
+            });
+        }
+
         internal void Draw(Terrain terrain, ForestryLogistics logistics, GraphicsSettings settings, float alpha)
         {
             if (logistics == null) return;
             DrawDepots(terrain, logistics, settings);
+            foreach (var truck in logistics.Trucks)
+                if (truck.Upkeep.Broken && truck.Vehicle != null)
+                {
+                    truck.Vehicle.GetSegment(truck.Vehicle.RoutePosition, out int from, out _, out _);
+                    if (terrain.Map.TryGetTileCenter(from, out Vector3 at)) BreakdownSign(at, truck.Upkeep.RepairLeft);
+                }
             DrawPiles(terrain, logistics, settings);
             if (logistics.Machines.Count == 0) return;
             if (!loaded)
@@ -166,6 +190,7 @@ namespace ForesTycoon
                 var model = models[(int)machine.Kind];
                 if (model != null) DrawModel(model, machine, position, placement, articulation, settings);
                 else DrawStandIn(machine, placement, trailer);
+                if (machine.Upkeep.Broken) BreakdownSign(placement.Row3.Xyz, (float)machine.Upkeep.RepairLeft);
                 if (machine.Kind == ForestMachineKind.Forwarder && machine.Cargo > 0.05f) DrawLoad(machine, trailer);
             }
         }

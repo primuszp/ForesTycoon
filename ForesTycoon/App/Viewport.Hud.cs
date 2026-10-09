@@ -490,7 +490,9 @@ namespace ForesTycoon
                 };
             HudTheme.IconText(processor ? GameIcon.Harvest : GameIcon.Forwarder, $"{(processor ? "Processzor" : "Forwarder")} #{machine.Id}");
             ImGui.SameLine();
-            ImGui.TextColored(home ? HudTheme.Muted : HudTheme.Good, state);
+            if (machine.Upkeep.Broken) ImGui.TextColored(HudTheme.Bad, $"elromlott – a szerelő {machine.Upkeep.RepairLeft:F0} mp múlva végez");
+            else ImGui.TextColored(home ? HudTheme.Muted : HudTheme.Good, home && machine.Upkeep.Wear > 0.001f ? "szervizben a telephelyen" : state);
+            UpkeepLine(machine.Upkeep);
             if (machine.Cargo > 0.01f)
                 ImGui.ProgressBar(machine.CargoFill, new NVec2(-1, 12), $"{machine.Cargo:F1} / {machine.Capacity:F0} m³");
             string order = processor
@@ -513,7 +515,9 @@ namespace ForesTycoon
             };
             HudTheme.IconText(GameIcon.Truck, $"Rönkszállító #{truck.Id}");
             ImGui.SameLine();
-            ImGui.TextColored(color, state);
+            if (truck.Upkeep.Broken) ImGui.TextColored(HudTheme.Bad, $"elromlott – a szerelő {truck.Upkeep.RepairLeft:F0} mp múlva végez");
+            else ImGui.TextColored(color, truck.Phase == TruckPhase.Parked && truck.Upkeep.Wear > 0.001f ? "szervizben a telephelyen" : state);
+            UpkeepLine(truck.Upkeep);
             if (vehicle != null && truck.Phase == TruckPhase.Working)
             {
                 float fill = vehicle.CargoCapacity > 0 ? (float)(vehicle.CargoAmount / vehicle.CargoCapacity) : 0f;
@@ -531,6 +535,18 @@ namespace ForesTycoon
             else at = truck.Home.Position;
             if (truck.Source != null) ImGui.TextDisabled($"Sarang #{truck.Source.Id} → {DestinationName(truck.Destination)}");
             FleetButtons("t", truck.Id, true, truck.Phase is TruckPhase.Parked or TruckPhase.ToHome, at, true);
+        }
+
+        // Wear as a bar that turns amber then red; breakdowns so far.
+        private static void UpkeepLine(VehicleUpkeep upkeep)
+        {
+            var colour = upkeep.Wear < 0.4f ? new NVec4(0.45f, 0.7f, 0.35f, 1) : upkeep.Wear < 0.7f ? new NVec4(0.9f, 0.68f, 0.25f, 1) : new NVec4(0.88f, 0.32f, 0.26f, 1);
+            ImGui.PushStyleColor(ImGuiCol.PlotHistogram, colour);
+            ImGui.ProgressBar(upkeep.Wear, new NVec2(-1, 8), "");
+            ImGui.PopStyleColor();
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip($"Kopás: {upkeep.Wear:P0}. A kopott gép többet fogyaszt, lassabban dolgozik, és gyakrabban romlik el.\n" +
+                    $"Meghibásodások eddig: {upkeep.Breakdowns}. A telephelyen szervizelik.");
         }
 
         private string DestinationName(int tile)

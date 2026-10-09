@@ -41,6 +41,7 @@ namespace ForesTycoon
         internal double FuelUsed;
         /// <summary>Processor: price of the wood it is felling (kept when the last standing tree of a tile is gone).</summary>
         internal double UnitPrice;
+        internal VehicleUpkeep Upkeep = new(0);
         internal int Tile => Path[Math.Clamp((int)Math.Round(PathPosition), 0, Path.Length - 1)];
         internal bool Arrived => PathPosition >= Path.Length - 1 - 1e-9;
         internal float Capacity => Kind == ForestMachineKind.Forwarder ? ForwarderCapacity : ProcessorCapacity;
@@ -195,8 +196,22 @@ namespace ForesTycoon
                 {
                     var machine = Machines[i];
                     machine.PreviousPathPosition = machine.PathPosition;
-                    if (machine.State == ForestMachineState.Driving) { Advance(machine, dt); continue; }
+                    bool atHome = !machine.Working && machine.State == ForestMachineState.Parked;
+                    if (atHome) { RunningCosts += machine.Upkeep.Service(dt); continue; }
+                    // Wear and breakdowns: rough trails and loads strain the machine; broken, it waits for the mechanic.
+                    bool rough = terrain.IsSkidTrail(machine.Tile) || (machine.Site != null && Array.IndexOf(machine.Site.Tiles, machine.Tile) >= 0);
+                    float strain = (rough ? 1.5f : 1f) * (1 + 0.5f * machine.CargoFill) * (machine.State == ForestMachineState.Felling ? 1.3f : 1f);
+                    bool running = machine.Upkeep.Operate(dt, strain, out double repair);
+                    if (repair > 0) { RunningCosts += repair; Status = $"{MachineName(machine)} megjavítva ({repair:N0} eFt)."; }
+                    if (!running)
+                    {
+                        if (machine.Upkeep.RepairLeft >= VehicleUpkeep.RepairSeconds - dt) Status = $"{MachineName(machine)} elromlott: a szerelő úton van.";
+                        continue;
+                    }
+                    double pace = machine.Upkeep.PaceFactor * dt;
+                    if (machine.State == ForestMachineState.Driving) { Advance(machine, pace); continue; }
                     if (!machine.Working) continue;
+                    dt = pace;
                     if (machine.Kind == ForestMachineKind.Harvester) UpdateProcessor(machine, dt);
                     else UpdateForwarder(machine, dt);
                 }
@@ -223,7 +238,14 @@ namespace ForesTycoon
             if (machine.Arrived) { machine.State = machine.Goal; machine.WorkTime = 0; }
         }
 
-        private void Fuel(ForestMachine machine, double litres) { machine.FuelUsed += litres; Burn(litres); }
+        private void Fuel(ForestMachine machine, double litres)
+        {
+            litres *= machine.Upkeep.FuelFactor / machine.Upkeep.PaceFactor;   // a worn machine burns more for the same work
+            machine.FuelUsed += litres; Burn(litres);
+        }
+
+        internal static string MachineName(ForestMachine machine) =>
+            (machine.Kind == ForestMachineKind.Harvester ? "A processzor #" : "A forwarder #") + machine.Id;
 
         // Puts part of the load down at the tile it stands on.
         private bool UnloadStep(ForestMachine machine, float rate, int destination, double dt)

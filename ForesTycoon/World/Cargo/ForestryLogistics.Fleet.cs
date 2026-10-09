@@ -34,6 +34,7 @@ namespace ForesTycoon
         internal bool HomeRequested;
         /// <summary>Fuel already charged to the running costs, litres (the vehicle counts what it burns).</summary>
         internal double FuelCharged;
+        internal VehicleUpkeep Upkeep = new(0);
     }
 
     internal sealed partial class ForestryLogistics
@@ -60,8 +61,13 @@ namespace ForesTycoon
             if (Depots.Count == 1)
             {
                 foreach (var kind in new[] { ForestMachineKind.Harvester, ForestMachineKind.Forwarder })
-                    Machines.Add(new ForestMachine { Id = nextMachineId++, Kind = kind, Home = depot, Path = new[] { depot.TileId } });
-                Trucks.Add(new FleetTruck { Id = nextTruckId++, Home = depot });
+                {
+                    int machineId = nextMachineId++;
+                    Machines.Add(new ForestMachine { Id = machineId, Kind = kind, Home = depot, Path = new[] { depot.TileId },
+                        Upkeep = new VehicleUpkeep((uint)machineId * 2654435761u) });
+                }
+                int truckId = nextTruckId++;
+                Trucks.Add(new FleetTruck { Id = truckId, Home = depot, Upkeep = new VehicleUpkeep((uint)truckId * 2246822519u + 1) });
                 Status = "Telephely kész: egy processzor, egy forwarder és egy rönkszállító várja a munkát.";
             }
             else Status = "Új telephely kész.";
@@ -120,15 +126,28 @@ namespace ForesTycoon
 
         private FleetTruck TruckOf(Vehicle vehicle) => Trucks.Find(t => t.Vehicle == vehicle);
 
-        private void UpdateTrucks()
+        private void UpdateTrucks(double seconds)
         {
             foreach (var truck in Trucks)
             {
                 if (truck.Vehicle != null)
                 {
-                    double burnt = truck.Vehicle.FuelUsed - truck.FuelCharged;
+                    double burnt = (truck.Vehicle.FuelUsed - truck.FuelCharged) * truck.Upkeep.FuelFactor;
                     if (burnt > 0) { Burn(burnt); truck.FuelCharged = truck.Vehicle.FuelUsed; }
+                    // Wear while on the move; a broken truck stands where it is until the mechanic is done.
+                    var road = truck.Vehicle;
+                    road.GetSegment(road.RoutePosition, out int from, out _, out _);
+                    float strain = (terrain.IsSkidTrail(from) ? 2f : 1f) * (1 + 0.5f * road.CargoFill);
+                    bool moving = road.CurrentSpeed > 0.01 || road.TransportState is VehicleTransportState.Loading or VehicleTransportState.Unloading;
+                    if (moving || truck.Upkeep.Broken)
+                    {
+                        bool running = truck.Upkeep.Operate(seconds, strain, out double repair);
+                        if (repair > 0) { RunningCosts += repair; Status = $"A rönkszállító #{truck.Id} megjavítva ({repair:N0} eFt)."; }
+                        if (!running && !road.Broken) Status = $"A rönkszállító #{truck.Id} elromlott: a szerelő úton van.";
+                        road.Broken = !running;
+                    }
                 }
+                else if (truck.Phase == TruckPhase.Parked) RunningCosts += truck.Upkeep.Service(seconds);
                 // The road under it was removed: the truck is taken back to its yard.
                 if (truck.Vehicle != null && !Vehicles.Contains(truck.Vehicle)) { Park(truck); continue; }
                 switch (truck.Phase)

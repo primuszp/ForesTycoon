@@ -11,10 +11,10 @@ namespace ForesTycoon
             Mills.Select(m => new MillCheckpoint(m.TileId, (int[])m.Footprint.Clone(), new(m.Position), m.Received, m.Stock, m.Processed)).ToArray(), Status,
             Machines.Select(m => new ForestMachineCheckpoint(m.Id, m.Kind, m.Site == null ? -1 : Sites.IndexOf(m.Site), (int[])m.Path.Clone(), m.PathPosition,
                 m.PreviousPathPosition, m.State, m.Goal, m.Cargo, m.WorkTime, m.Home == null ? -1 : Depots.IndexOf(m.Home), m.HomeRequested,
-                m.Source?.Id ?? -1, m.Target?.Id ?? -1, m.Destination, m.CargoValue, m.FuelUsed, m.UnitPrice)).ToArray(), nextMachineId,
+                m.Source?.Id ?? -1, m.Target?.Id ?? -1, m.Destination, m.CargoValue, m.FuelUsed, m.UnitPrice, Capture(m.Upkeep))).ToArray(), nextMachineId,
             Depots.Select(d => new DepotCheckpoint(d.TileId, (int[])d.Footprint.Clone(), new(d.Position))).ToArray(),
             Trucks.Select(t => new TruckCheckpoint(t.Id, Depots.IndexOf(t.Home), t.Phase, t.Vehicle?.Id ?? -1, t.Source?.Id ?? -1, t.Destination,
-                t.HomeRequested, t.Target?.Id ?? -1, t.CargoValue, t.FuelCharged)).ToArray(), nextTruckId,
+                t.HomeRequested, t.Target?.Id ?? -1, t.CargoValue, t.FuelCharged, Capture(t.Upkeep))).ToArray(), nextTruckId,
             Stacks.Select(s => new StackCheckpoint(s.Id, s.Tile, s.Volume, s.Value)).ToArray(), nextStackId, Income, RunningCosts);
 
         internal void Restore(LogisticsCheckpoint s)
@@ -80,7 +80,8 @@ namespace ForesTycoon
                     (t.Phase == TruckPhase.Parked || (t.Source >= 0 && terrain.IsValidTileId(t.Destination))), "fleet truck");
                 CheckpointGuard.NonNegative(t.CargoValue, "truck cargo value"); CheckpointGuard.NonNegative(t.FuelCharged, "truck fuel");
                 var truck = new FleetTruck { Id = t.Id, Home = depots[t.Home], Phase = t.Phase, Source = Stack(t.Source), Destination = t.Destination,
-                    Target = Stack(t.Target), HomeRequested = t.HomeRequested, CargoValue = t.CargoValue, FuelCharged = t.FuelCharged };
+                    Target = Stack(t.Target), HomeRequested = t.HomeRequested, CargoValue = t.CargoValue, FuelCharged = t.FuelCharged,
+                    Upkeep = Restore(t.Upkeep, (uint)t.Id * 2246822519u + 1) };
                 trucks.Add(truck);
                 if (t.Vehicle >= 0) pending.Add((truck, t.Vehicle));
             }
@@ -99,7 +100,8 @@ namespace ForesTycoon
                 machines.Add(new ForestMachine { Id = m.Id, Kind = m.Kind, Site = m.Site < 0 ? null : sites[m.Site], Path = (int[])m.Path.Clone(),
                     Home = m.Home < 0 ? null : depots[m.Home], HomeRequested = m.HomeRequested, Source = Stack(m.Source), Target = Stack(m.Target),
                     Destination = m.Destination, PathPosition = m.Position, PreviousPathPosition = m.PreviousPosition, State = m.State, Goal = m.Goal,
-                    Cargo = m.Cargo, CargoValue = m.CargoValue, WorkTime = m.WorkTime, FuelUsed = m.FuelUsed, UnitPrice = Math.Max(0, m.UnitPrice) });
+                    Cargo = m.Cargo, CargoValue = m.CargoValue, WorkTime = m.WorkTime, FuelUsed = m.FuelUsed, UnitPrice = Math.Max(0, m.UnitPrice),
+                    Upkeep = Restore(m.Upkeep, (uint)m.Id * 2654435761u) });
             }
             CheckpointGuard.NonNegative(s.Income, "income"); CheckpointGuard.NonNegative(s.RunningCosts, "running costs");
             Sites.Clear(); Sites.AddRange(sites); Mills.Clear(); Mills.AddRange(mills); Status = s.Status;
@@ -107,6 +109,18 @@ namespace ForesTycoon
             Depots.Clear(); Depots.AddRange(depots); Trucks.Clear(); Trucks.AddRange(trucks); nextTruckId = s.NextTruckId;
             Stacks.Clear(); Stacks.AddRange(stacks); nextStackId = nextStack; Income = s.Income; RunningCosts = s.RunningCosts;
             pendingTruckVehicles.Clear(); pendingTruckVehicles.AddRange(pending);
+        }
+
+        private static UpkeepCheckpoint Capture(VehicleUpkeep u) => new(u.Wear, u.Broken, u.RepairLeft, u.Seed, u.Breakdowns);
+
+        private static VehicleUpkeep Restore(UpkeepCheckpoint u, uint seed)
+        {
+            if (u == null) return new VehicleUpkeep(seed);
+            CheckpointGuard.Unit(u.Wear, "vehicle wear"); CheckpointGuard.NonNegative(u.RepairLeft, "vehicle repair");
+            CheckpointGuard.Require(u.Breakdowns >= 0 && u.RepairLeft <= VehicleUpkeep.RepairSeconds, "vehicle breakdowns");
+            var restored = VehicleUpkeep.FromState(u.Seed);
+            restored.Wear = u.Wear; restored.Broken = u.Broken; restored.RepairLeft = u.RepairLeft; restored.Breakdowns = u.Breakdowns;
+            return restored;
         }
 
         // Fleet trucks refer to their road vehicles by id; vehicles are restored after the logistics.

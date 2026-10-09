@@ -88,7 +88,7 @@ namespace ForesTycoon
         internal void Update(double seconds){
             foreach(var mill in Mills){float cut=Math.Min(mill.Stock,(float)seconds*0.25f);mill.Stock-=cut;mill.Processed+=cut;}
             if(MachinesEnabled)UpdateMachines(seconds);
-            if(Vehicles!=null)UpdateTrucks();
+            if(Vehicles!=null)UpdateTrucks(seconds);
         }
         internal bool RouteConnected(Vehicle vehicle)
         {

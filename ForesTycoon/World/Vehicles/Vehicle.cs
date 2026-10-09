@@ -58,6 +58,8 @@ namespace ForesTycoon
         /// <summary>A one-way drive (depot → landing, back home): no loading stops, it just arrives.</summary>
         internal bool Transit;
         internal bool TransitArrived;
+        /// <summary>Broken down: it stands still until repaired.</summary>
+        internal bool Broken;
         public VehicleTransportState TransportState { get; internal set; } = VehicleTransportState.Hauling;
         public float TransferProgress { get; private set; }
         public float VisualCargoFill => LocalCargo?CargoFill:TransportState == VehicleTransportState.Loading ? CargoFill * TransferProgress :

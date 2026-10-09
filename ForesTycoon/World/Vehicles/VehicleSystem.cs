@@ -62,7 +62,7 @@ namespace ForesTycoon
             {
                 Vehicle vehicle = vehicles[i];
                 vehicle.RoadState = RoadState; vehicle.RoadWear = RoadWear;
-                if(vehicle.RouteBlocked){vehicle.Hold();continue;}
+                if(vehicle.RouteBlocked||vehicle.Broken){vehicle.Hold();continue;}
                 if(vehicle.Transit){
                     if(!vehicle.TransitArrived){vehicle.Update(deltaSeconds);if(vehicle.RoutePosition>=vehicle.Route.Length-1-1e-6){vehicle.TransitArrived=true;vehicle.Hold();}}
                     else vehicle.Hold();

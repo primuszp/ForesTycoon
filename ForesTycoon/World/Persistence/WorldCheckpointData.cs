@@ -7,7 +7,7 @@ namespace ForesTycoon
     internal sealed record VehicleCheckpoint(int Id, int[] Route, double Speed, float Capacity, bool Physics,
         RoadRouteCheckpoint RoadGeometry, double CurrentSpeed, double Position, double PreviousPosition, float Cargo,
         bool CargoStops, int[] SourceTiles, int Mill, bool Blocked, VehicleTransportState State, float TransferProgress,
-        double FuelUsed = 0, double Distance = 0, bool Transit = false, bool TransitArrived = false);
+        double FuelUsed = 0, double Distance = 0, bool Transit = false, bool TransitArrived = false, bool Broken = false);
     internal sealed record VehiclesCheckpoint(int NextId, bool RoadPhysics, bool CargoStops, VehicleCheckpoint[] Vehicles);
     internal sealed record AnimalCheckpoint(int Id, int Tile, int TargetTile, CheckpointPosition Position,
         CheckpointPosition PreviousPosition, CheckpointPosition Target, float Yaw, float PreviousYaw, float Blend,
@@ -19,10 +19,12 @@ namespace ForesTycoon
     internal sealed record HarvestCheckpoint(int[] Tiles, float InitialVolume, int Landing = -1, PileCheckpoint[] Piles = null, float LandingStock = 0);
     internal sealed record ForestMachineCheckpoint(int Id, ForestMachineKind Kind, int Site, int[] Path, double Position, double PreviousPosition,
         ForestMachineState State, ForestMachineState Goal, float Cargo, double WorkTime, int Home = -1, bool HomeRequested = false,
-        int Source = -1, int Target = -1, int Destination = -1, double CargoValue = 0, double FuelUsed = 0, double UnitPrice = 0);
+        int Source = -1, int Target = -1, int Destination = -1, double CargoValue = 0, double FuelUsed = 0, double UnitPrice = 0,
+        UpkeepCheckpoint Upkeep = null);
+    internal sealed record UpkeepCheckpoint(float Wear, bool Broken, float RepairLeft, uint Seed, int Breakdowns);
     internal sealed record DepotCheckpoint(int TileId, int[] Footprint, CheckpointPosition Position);
     internal sealed record TruckCheckpoint(int Id, int Home, TruckPhase Phase, int Vehicle, int Source, int Destination, bool HomeRequested,
-        int Target = -1, double CargoValue = 0, double FuelCharged = 0);
+        int Target = -1, double CargoValue = 0, double FuelCharged = 0, UpkeepCheckpoint Upkeep = null);
     internal sealed record StackCheckpoint(int Id, int Tile, float Volume, double Value);
     internal sealed record MillCheckpoint(int TileId, int[] Footprint, CheckpointPosition Position, float Received, float Stock, float Processed);
     internal sealed record LogisticsCheckpoint(HarvestCheckpoint[] Sites, MillCheckpoint[] Mills, string Status,

@@ -67,3 +67,18 @@ indítása”) helyébe lép.
 2. **Kezdőtőke és árak:** a vásárlás előtt kell egy pénzügyi rendszer (bevétel a malomtól m³-enként, kiadások).
    Most tervezzük meg, vagy előbb a telephely és az utasítások készüljenek el pénz nélkül?
 3. **Kiürült vágás:** a gép automatikusan hazamenjen, vagy álljon meg a helyszínen új utasításra várva?
+
+## Megvalósítva (2026-10-09)
+
+- **Egységes úthálózat:** a közelítő nyom a legolcsóbb úttípus (30 eFt/csempe, csak keréknyom). Az útkereső a jó
+  utakat választja (aszfalt 1, makadám 1,15, nyom 3,5+ költség/csempe); a teherautó a nyomon is jár, de nagyon
+  lassan és erősen dülöngél. Kereszteződésben a nyom ívesen fordul balra és jobbra.
+- **Sarangok:** a játékos jelöli ki őket (Termel → Sarang) nyom vagy út mellé. A processzor a vágásban dönt, és a
+  legközelebbi saranghoz hordja a fát (3 m³-es fordulókkal): a távolság üzemanyagba és teljesítménybe kerül. A
+  sarang modellje a fával együtt nő.
+- **Utasítások:** processzor → vágás; forwarder és teherautó → forrás sarang, majd cél (másik sarang helye vagy a
+  fűrészmalom). A fa addig vándorol gépről gépre, amíg a malomba nem ér; ott fafaj szerinti áron bevétel lesz.
+- **Egyenleg:** bevétel a malmokból; kiadás az építésre, az üzemanyagra (620 Ft/l), a javításra és a szervizre.
+- **Kopás és meghibásodás:** a munka koptat (nyomon, rakottan, döntéskor jobban); a kopott gép többet fogyaszt,
+  lassabb, és gyakrabban romlik el. Elromlott gépet a helyszíni szerelő 40 mp alatt megjavít (díj + a kopás egy
+  része eltűnik); a telephelyen álló gépet szervizelik. A meghibásodás visszajátszható (járművenkénti generátor).
