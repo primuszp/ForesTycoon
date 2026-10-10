@@ -1,379 +1,129 @@
 # ForesTycoon
 
-## Szabályrendszer editor
+**Erdőgazdálkodási játék egy élő, izometrikus diorámában.** Nevelj változatos erdőt, kövesd az évszakokat, építs utakat, és szervezd meg a kitermelést és a faanyag szállítását.
 
-Külön alkalmazás: `dotnet run --project ForesTycoon.Editor`. Indításkor a jelenlegi játék
-74 szabályának, 13 moduljának és 553 mezőkapcsolatának áttekintése nyílik meg, forráskódhoz
-kötött képletekkel, paraméterekkel és ütemezéssel. A natív folyamatok leírása olvasható,
-az elrendezés és megjegyzések menthetők. A [verziózott katalógus](ForesTycoon.Rules/Catalog/current-game-rules.json)
-grafika nélkül exportálható a `--export-current-rules` kapcsolóval.
-Az útkopási nézetben vizuális gráf, szerkeszthető
-kapcsolatok és paraméterek, JSON-mentés/betöltés, próbaszámítás és saját tesztvilág.
-A játékban **F12 → Szabálymodell → Szabálymodell alkalmazása** tölti be a mentett JSON-t. A jármű-áthaladások a gráf
-kimenetével módosítják a térképi útállapotot, amely visszahat a haladásra és fogyasztásra.
-Az aktív modell és a szabályváltások játékmentésben és parancsnaplóban is megmaradnak.
-Használat, korlátok és ellenőrzés: [szabályeditor](docs/rule-editor.md).
+A ForesTycoon aktív fejlesztés alatt álló, később **fizetős játéknak tervezett** projekt. A GitHub a fejlesztés, a hibajelentések és a technikai dokumentáció helye; a megjelenés időpontja és ára még nincs meghirdetve. A pénzügyi támogatási lehetőség előkészítés alatt áll.
 
-## Úthálózat és időjárási felületek
+![A ForesTycoon jelenlegi nyári diorámája](images/preview/current-summer.png)
 
-Az aszfalt, a makadám és a közelítő nyom közös közlekedési hálózatot alkot. A nyomok útcsatlakozásai látható lejárót kapnak; a felületük az út rögzített magasságához illeszkedik. Az erdészeti gépek és a teherautók a tényleges csatlakozásokat követik, megszakadt útvonalon megállnak. A nyom úttá fejlesztése megőrzi a bekötéseket.
+| Őszi lombszínek | Téli erdő |
+| --- | --- |
+| ![Fafajonként eltérő, tömör őszi koronák](images/preview/current-autumn.png) | ![Csupasz lombhullatók, havas örökzöldek és szürke rács](images/preview/current-winter.png) |
 
-Az útfelületek külön textúrát kapnak, esőben sötétednek és tócsásodnak, havazáskor hó és latyak jelenik meg rajtuk. A kézi havazás a grafikai beállítások **Időjárás teszt → Időjárási kép → Havazás** választójával érhető el; a szimulált klíma továbbra is esőalapú.
+A képek a valódi játékablakból, ugyanarról a közeli nézetről származnak, 256× időgyorsítás mellett. A dioráma megjelenítése aktív.
 
-Ellenőrzés: `dotnet run --project ForesTycoon -- --road-network-smoke-test`. A száraz, esős, havas és olvadás utáni képek az `artifacts/road-network` könyvtárba kerülnek.
+## Jelenlegi játék és szimuláció
 
-## DendroKit alapú procedurális fák
+- **Élő erdő:** 16 fa- és cserjefaj, egyedi faazonosítók, kor, törzsátmérő, magasság, koronaméret, fény- és vízellátás. Növekedés, lombkorona-versengés, természetes újulat, önritkulás, tönkök és holtfa.
+- **Évszakos dioráma:** fafajspecifikus koronák és felületi minták, eltérő arany, okker, réz és vöröses őszi lombszínek. Az egészséges tavaszi és őszi korona tömör marad; lombhullás végén eltűnik a lomb, télen a részletes ágrendszer látszik. Az örökzöldek megtartják tűleveleiket, a vörösfenyő lombhullató.
+- **Időjárás és hó:** ősszel gyakoribb, tartós eső; nyáron rövid záporok és erős viharok; télen szállingózó, széllel sodródó hópelyhek. Csempénként változó hókészlet, szél által átrendezett hó és olvadásból származó víz.
+- **Terep és víz:** procedurális térkép, folyók és állóvizek, helyi talaj- és klímaviszonyok, terepszerkesztés. A csemperács alapból bekapcsolt, télen és havas tájon hűvös szürke.
+- **Erdészet és szállítás:** kitermelési terület kijelölése, soros telepítések, rönkdepók, fűrészmalom, rakodás és teherautós szállítás. A járművek a valódi úthálózaton haladnak; útmegszakadáskor megőrzik rakományukat.
+- **Utak:** aszfalt, makadám és közelítő nyom, csatlakozások, kopás és javítás, nedves és havas útfelületek.
+- **Vadállatok:** élőhelyhez igazodó szarvasmozgás, járási és legelési animáció; a vízben úszó halak.
+- **Megfigyelés és mentés:** birtoktérkép, gazdálkodási nézetek, környezeti adatok, játékmentés és determinisztikus szimulációs folytatás.
 
-Az alapértelmezett eljárásos famód az átemelt DendroKit ággenerátorát használja.
-A generátor forrása közvetlenül a `ForesTycoon.TreeModels/Generation/Dendro`
-könyvtárban, a TreeModels projekttel együtt fordul; nincs külön third-party projekt.
-A luc, nyír, tölgy és bükk egyedi seedje, kora és szimulált fényellátása eltérő,
-fajra jellemző ágstruktúrát (örvös luc, villás, terebélyes tölgy, lecsüngő nyír,
-kupolás bükk) és összefüggő poligonális koronát ad. A levélpontok egyetlen tömör
-koronát formálnak; a poligonszám a képernyőn látható sziluetthibából adódik.
-Nincs levélgeometria vagy alfa-kivágás. Cserjék: mogyoró és galagonya.
-Összehasonlító képek: `dotnet run --project ForesTycoon -- --dendro-tree-preview`.
-Részletek és forrásmegjelölés: [DendroKit integráció](docs/dendrokit-integration.md),
-[irodalmi áttekintés és fajmodellek](docs/tree-generation-literature.md).
+Az alap 1× időben a szarvasok és járművek természetes mozgási ütemet kapnak. Új világban egy erdőév 900 szimulációs másodperc: a játék 1× naptárórájával ez körülbelül egy valós óra, 256× mellett elméletileg 14,06 másodperc. A tényleges előrehaladást a gép terhelése is befolyásolhatja.
 
-## Magyar UI-betűk macOS-en
+Közeli nézetben a háttérben készülő új famodell nem cserélheti le a látható részletes modellt egy durvább LOD-ra. Az évszakos lombszín és lombtalanság a GPU-n követi az aktuális évet, modell-újraépítésre várakozás nélkül. A legutóbbi játékbeli próba két teljes év és 1633 képkocka alatt minden látható chunkot Near részletességen tartott 256× mellett.
 
-A UI macOS-en a rendszer Arial betűtípusát is keresi a
-`/System/Library/Fonts/Supplemental` könyvtárban. A fontatlasz a magyar
-ékezetekhez szükséges Latin Extended-A és az általános írásjelek tartományát is
-tartalmazza. Ellenőrzés: `dotnet run --project ForesTycoon -- --ui-font-smoke-test`;
-a renderelt ékezetminta az `artifacts/ui-font/hungarian.png` fájlba kerül.
+## Fejlesztői indítás
 
-## Egyedi fák és folytonos növekedés
-
-Az új világok fái saját azonosítót, kort, törzsátmérőt, magasságot és koronaméretet kapnak. Hónapon belül folyamatosan nőnek a GPU-n, háló-újraépítés nélkül; az érett fák tovább vastagodhatnak. A részrakodás egész fákat vág ki, a teherautó a helyi rönkdepóból vesz át, és a tönk az adott fa méretét őrzi. Az Erdészet ablak az egyedek számát és az előző évi növedéket is mutatja. Minden világ az egyedi famodellt használja; régi mentésekhez nincs kompatibilitási ág.
-
-Ellenőrzés: `dotnet run --project ForesTycoon -- --tree-growth-smoke-test`. A részletek és a még hátralévő öregedési/kidőlési szakasz az [első megvalósítási lépcső leírásában](docs/tree-individual-implementation.md) találhatók.
-
-## Live Preview
-
-![Current state](images/preview/hero_demo.gif)
-
-## Magyar osszefoglalo
-
-A `ForesTycoon` egy kiserleti, csempes alapu jatekmotor-projekt, amely a klasszikus Transport Tycoon jellegu gondolkodast viszi tovabb erdeszeti es erdogazdalkodasi iranyba.
-
-A jelenlegi allapot fokusza:
-
-- 3D izometrikus terepmegjelenites
-- node- es tile-alapu terepmodell
-- procedurális terepgeneralas
-- alloviz, folyok es partvonal-logika
-- interaktiv terepszerkesztes
-- kamera- es nezetrendszer finomitasa
-- determinisztikus erdoszimulacio negy fafajjal (luc, nyir, tolgy, bukk)
-- fafajonkent egyedi novekedes, termohely-igeny, arnyektures es faanyag-ertek
-- lombkorona-versenges es onritkulas, termeszetes ujulas a magot ado allomanyok korul
-- fafajonkent kulon 3D famodell (sziluett, torzs es korona szin)
-
-A projekt meg prototipus fazisban van. A hangsuly most a terepmotoron, a vizmegjelenitesen, a kameraelmenyen es a szerkesztesi workflow-n van.
-
-## English Summary
-
-`ForesTycoon` is an experimental tile-based engine prototype inspired by the Transport Tycoon style of simulation design, but redirected toward forestry and forest management gameplay.
-
-The current prototype focuses on:
-
-- 3D isometric terrain rendering
-- node and tile based terrain representation
-- procedural terrain generation
-- standing water, rivers, and shoreline logic
-- interactive terrain editing
-- camera and view-control polish
-- deterministic forest simulation with four species (spruce, birch, oak, beech)
-- per-species growth, site requirements, shade tolerance and timber value
-- canopy competition and self-thinning, with regeneration around seeding stands
-- a distinct low-poly 3D model per species
-
-The project is still in prototype stage. Right now the emphasis is on terrain technology, water rendering, camera behavior, and the core editing loop.
-
-## Tech Stack
-
-- C#
-- .NET 8
-- OpenTK 4 cross-platform `GameWindow`
-- OpenGL 3.3 core-profile renderer with GLSL, VAO/VBO batching and shader-based ImGui
-- ImGui.NET
-
-## Run
-
-Requirements:
-
-- macOS, Windows or Linux with OpenGL 3.3 core support
-- Linux: glibc 2.38 or newer (for example Ubuntu 24.04), required by the bundled ImGui.NET native library
-- .NET 8 or newer SDK
-
-From the repository root:
+Szükséges: **.NET 8 SDK**, OpenGL 3.3 core megjelenítés és Windows, Linux vagy macOS. Linuxon a használt ImGui.NET natív könyvtárhoz glibc 2.38 vagy újabb kell, például Ubuntu 24.04. A jelenlegi automatizált platformellenőrzések Windowsra és Linuxra készülnek.
 
 ```sh
-dotnet run --project ForesTycoon/ForesTycoon.csproj
+dotnet restore ForesTycoon.sln
+dotnet run --project ForesTycoon -c Release
 ```
 
-You can also open `ForesTycoon.sln` in Visual Studio.
+A solution Visual Studióban is megnyitható. A megvásárolt, helyileg telepített modellek opcionálisak: nélkülük a játék a repóban szereplő modellekkel vagy helyettesítő geometriával fut. A megvásárolt modellek nincsenek a nyilvános repóban; részletek: [helyi assetek](docs/logging-facility-assets.md).
 
-The test suite is cross-platform:
+## Kezelés
+
+| Művelet | Vezérlés |
+| --- | --- |
+| Kamera forgatása megfigyelő módban | Bal egérhúzás; bal/jobb nyíl |
+| Kamera mozgatása / nagyítás | Jobb egérhúzás / egérgörgő |
+| Kameradöntés / alapnézet | Fel/le nyíl / Home |
+| Szünet / időgyorsítás | Space / a HUD sebességválasztója, 1×–256× |
+| Megfigyelés / gondozás / építés | Q / W / R |
+| Termelés / szállítás | E / T |
+| Járművek / erdészet | V / F |
+| Környezet / gazdálkodás / grafika | K / M / G |
+| Mentés / betöltés | Ctrl vagy Cmd + S / L |
+| Súgó / fejlesztői eszközök | F1 / F12 |
+
+A gyorsmentés az operációs rendszer helyi alkalmazásadat-könyvtárának `ForesTycoon/quicksave.json` fájljába kerül. A részletes eszközök és gyorsbillentyűk a játék súgójában találhatók.
+
+## Motor és szabályeditor
+
+C# és .NET 8, OpenTK 4.9.4, OpenGL 3.3 core, GLSL és ImGui.NET. A fix lépéses szimuláció grafika nélkül is futtatható; a megjelenítés külön erőforrás-környezetet és háttérben épülő chunkgeometriát használ.
+
+| Projekt | Feladat |
+| --- | --- |
+| [ForesTycoon](ForesTycoon) | Játékablak, HUD, interakciók, világ, mentés, erdészet és szállítás |
+| [ForesTycoon.Engine](ForesTycoon.Engine) | Órák, fix lépések, rendszerek, feladatütemezés és animációs időzítés |
+| [ForesTycoon.Ecology](ForesTycoon.Ecology) | Erdő, fajok, növekedés, talaj, víz, regionális klíma és időjárás |
+| [ForesTycoon.Map](ForesTycoon.Map) | Terepadatok, generálás, hidrológia, utak és szerkesztési szabályok |
+| [ForesTycoon.TreeModels](ForesTycoon.TreeModels) | Fafajspecifikus ágváz, törzs, korona és részletességi szintek |
+| [ForesTycoon.Rendering](ForesTycoon.Rendering) | GPU-eszközök, shaderek, bufferek és renderelési környezetek |
+| [ForesTycoon.Models](ForesTycoon.Models) | glTF/GLB modellek, csontvázak, animáció és megjelenítés |
+| [ForesTycoon.Effects](ForesTycoon.Effects) | Csapadék, felhőzet, köd, villámlás és vizuális effektek |
+| [ForesTycoon.Rules](ForesTycoon.Rules) | Verziózott szabálykatalógus és szerkeszthető szabálymodellek |
+| [ForesTycoon.Editor](ForesTycoon.Editor) | Önálló szabályrendszer-editor |
+| [ForesTycoon.Tests](ForesTycoon.Tests) | Szimulációs, architektúra-, mentési és erőforrás-tesztek |
 
 ```sh
-dotnet test ForesTycoon.sln
+dotnet run --project ForesTycoon.Editor -c Release
 ```
 
-To validate native window creation and rendering in CI or on a new machine:
+Az editor a játék szabályait, képleteit és kapcsolatainak katalógusát mutatja. Az útkopási modell paraméterei és kapcsolatai szerkeszthetők, saját tesztvilágban kipróbálhatók és JSON-ként menthetők. A játékban **F12 → Szabálymodell → Szabálymodell alkalmazása** tölti be a modellt. [Editor használata](docs/rule-editor.md).
+
+## Ellenőrzés és dokumentáció
+
+Az [Engine validation](https://github.com/primuszp/ForesTycoon/actions/workflows/engine-validation.yml) Windows/Linux buildet, egységteszteket és Linux Mesa/Xvfb natív grafikai próbákat futtat. A külön [hardveres ellenőrzés](https://github.com/primuszp/ForesTycoon/actions/workflows/engine-hardware-validation.yml) Windows natív és teljesítményvizsgálatokra szolgál.
 
 ```sh
-dotnet run --project ForesTycoon/ForesTycoon.csproj -- --smoke-test
+dotnet build ForesTycoon.sln -c Release -warnaserror
+dotnet test ForesTycoon.Tests -c Release
+dotnet run --project ForesTycoon -c Release -- --smoke-test
 ```
 
-The smoke test renders 120 frames and exits automatically.
+PowerShellben a teljes ellenőrzőcsomag:
 
-## Controls
+```powershell
+./tools/verify-engine.ps1 -Native
+```
 
-- Left-drag in inspect mode: rotate camera
-- Right-drag: pan view
-- Mouse wheel: zoom
-- Left / Right arrow: rotate toward fixed isometric directions
-- Up / Down arrow: change tilt angle
-- Left click with the raise/lower tool: edit terrain
-- Left-drag with the road tools: build or remove a path
-- Left click with the planting tool: plant the selected species (spruce, birch, oak or beech)
-- Left click with the harvesting tool: cut a stand and add its biomass to the timber stockpile
-- Cmd/Ctrl+S: quicksave
-- Cmd/Ctrl+L: quickload
-- 1–8: tools in toolbar order (inspect, raise, lower, road, remove road, plant, harvest, sawmill); Esc: back to inspect
-- Space: pause · T: launch log truck · Home: reset camera
-- V / F / E / G: vehicles / forestry / environment / graphics window · F1: help · F12: developer tools
-
-Quicksaves are stored under the operating system's local application-data directory in `ForesTycoon/quicksave.json`.
-
-## Project Structure
-
-- [ForesTycoon/App](ForesTycoon/App): window, OpenGL context, frame loop, camera and platform input
-- [ForesTycoon/Interaction](ForesTycoon/Interaction): testable user-intent and editing gesture handling
-- [ForesTycoon.Engine](ForesTycoon.Engine): game-agnostic runtime kit (fixed-step time, systems, jobs, animation timing)
-- [ForesTycoon.Ecology](ForesTycoon.Ecology): the ecosystem simulation - weather, soil, water, species and forest; headless and deterministic
-- [ForesTycoon.TreeModels](ForesTycoon.TreeModels): species-level procedural tree and shrub models (Arbaro-format presets)
-- [ForesTycoon.Rendering](ForesTycoon.Rendering): GPU core of the renderer (device, shaders, pipeline, buffers, post-processing)
-- [ForesTycoon.Models](ForesTycoon.Models): glTF/GLB model loading, animation and drawing
-- [ForesTycoon.Effects](ForesTycoon.Effects): weather, clouds, fog, lightning and action markers
-- [ForesTycoon/World](ForesTycoon/World): game world, commands, save/replay, vehicles and effects
-- [ForesTycoon.Map](ForesTycoon.Map): the ground as data and rules (heights, generation, hydrology, roads, editing, picking), no drawing
-- [ForesTycoon/Terrain](ForesTycoon/Terrain): the terrain scene – draws a `TerrainMap` (surfaces, water, roads, props, forest)
-- [ForesTycoon/Rendering](ForesTycoon/Rendering): ordered render pipeline and GPU helpers
-
-The layering (Engine ← Ecology/Rendering ← TreeModels/Map/Models/Effects ← game) is described in [docs/architecture.md](docs/architecture.md) and enforced by the architecture tests.
-- [ForesTycoon/Diagnostics](ForesTycoon/Diagnostics): frame, simulation, allocation and draw-call metrics
-- [ForesTycoon/Camera](ForesTycoon/Camera): platform-independent isometric camera state
-- [Engine architecture](docs/engine-architecture.md): responsibility boundaries, performance policy and roadmap
-
-## Current Direction
-
-Planned next steps include:
-
-- faster partial terrain and hydrology updates
-- improved river bed and water surface rendering
-- biome and terrain-type layers
-- placeable timber depots, route assignment and delivery contracts
-- later transport, roads, and industrial chains
-
-Forest cache and LOD integration check (requires OpenGL):
+A közeli, két erdőéves, valódi 256× játékbeli évszakpróba képkockánként ellenőrzi a részletességet és képeket ment:
 
 ```sh
-dotnet run --project ForesTycoon/ForesTycoon.csproj -- --forest-smoke-test
+dotnet run --project ForesTycoon -c Release -- --capture-seasons artifacts/seasonal-256x
 ```
 
-This hidden-window test checks cached geometry reuse, detail reduction, and geometry refresh after planting, harvesting and terrain edits.
+A legutóbbi helyi ellenőrzésben **1589 egységteszt és a teljes Windows natív csomag sikeres**, a Release build figyelmeztetés és hiba nélkül készült. A tiszta GPU-n futó új teljesítménykapu-mérés még hátralévő feladat; a vizuális próba nem helyettesíti azt.
 
-## Erdő látványminta
+- [Architektúra és projektfüggőségek](docs/architecture.md)
+- [Játékmotor code review és javítások](docs/engine-review-2026-10-10.md)
+- [Nagy térképek teljesítményterve és mérési kapuk](docs/large-world-performance.md)
+- [Ökoszisztéma és regionális folyamatok](docs/ecosystem-simulation-design.md)
+- [Faegyedek életciklusa](docs/tree-individual-lifecycle-plan.md)
+- [Fagenerálási irodalom és fajmodellek](docs/tree-generation-literature.md)
+- [Időjárás, vihar és hó kutatási alapjai](docs/rain-storm-cloud-research.md)
+- [Modellimport és GPU-erőforrások](docs/model-import-contract.md)
 
-A képreferenciához készített, rögzített 16×16 csempés erdőminta külön nézetben indítható:
+## Támogatás és visszajelzés
 
-```sh
-dotnet run --project ForesTycoon/ForesTycoon.csproj -- --forest-preview
-```
+A pénzügyi támogatási oldal még nincs létrehozva; ide kerül a hivatalos link, amikor elérhetővé válik. Addig a projekt követésével, GitHub-csillaggal, valamint reprodukálható [hibajelentésekkel és ötletekkel](https://github.com/primuszp/ForesTycoon/issues) segítheted a fejlesztést. Hibajelentéshez add meg az operációs rendszert, a videókártyát, a használt revíziót és a reprodukálási lépéseket.
 
-Bal egérhúzás: forgatás; görgő: zoom; bal/jobb nyíl: 45° forgatás; fel/le nyíl: kameradöntés; Esc: bezárás. A mintában négy fafaj, összefüggő lombkorona, ritkuló tisztásszegély és enyhe tereplépcső szerepel. A minta nem ír játékmentést.
+## Licenc és a tervezett fizetős kiadás
 
-36 összehasonlítható PNG exportja (4 kamerairány × 3 dőlés × 3 zoom):
+A cél az, hogy a ForesTycoon saját kódját mások ne használhassák engedély nélkül kereskedelmi termékben vagy bevételszerző szolgáltatásban. Ehhez a kiválasztott **PolyForm Noncommercial 1.0.0** licenc [változatlan tervezete](docs/licensing/PolyForm-Noncommercial-1.0.0.md) elkészült. **Ez még nem a teljes játék hatályos licence.**
 
-```sh
-dotnet run --project ForesTycoon/ForesTycoon.csproj -- --forest-preview --capture artifacts/forest-preview
-```
+A jelenlegi fagenerátor közvetlenül befordított DendroKit/Arbaro GPL-kódot és GPL-es származtatott paraméterkészleteket használ. A teljes összekapcsolt játékra ezért nem vezethető be egyszerűen kereskedelmi tiltás: előbb a GPL-függőséget kell megfelelően kiváltani vagy külön jogosultsággal rendezni. A harmadik felek licencei megmaradnak; a tervezet nem korlátozza az általuk megadott jogokat.
 
-Az új stilizált koronák, finom kontúrok és talpközeli árnyékok a normál játék erdőrenderelőjében is működnek. A mintaterület egy külön kezdeti állapot; a normál játék kezdőerdő-generátora és mentési formátuma változatlan.
+Az aktuális jogállás, a kivételek és a fizetős kiadás előfeltételei: **[LICENSING.md](LICENSING.md)**. A nyilvános forrás önmagában nem jelent szabad kereskedelmi felhasználási engedélyt.
 
-Zoom/forgatás és futó erdőszimuláció terheléses mérése:
+## English summary
 
-```sh
-dotnet run --project ForesTycoon/ForesTycoon.csproj -- --camera-benchmark
-```
-
-## Rönkszállító teherautó
-
-Az új játékok járművei háromtengelyes, forgó kerekű rönkszállítók. A rakomány mennyiségét legfeljebb kilenc látható rönk jelzi; üresen a tartórudazat marad. Az út befagyasztott vezetőfelületét követik, kanyarban negyedíven fordulnak, az első/hátsó tengely környezetéből számolt dőléssel és keresztlejtéssel. Egyszerű gyorsulás, terhelés- és emelkedőfüggő sebesség, kanyar előtti lassítás és végponti fékezés működik, fix szimulációs lépésekben.
-
-Ez útvonalhoz kötött kinematikai modell: még nincs ütközés, forgalomkövetés vagy külön kerékfelfüggesztés. A végponton megállás után a meglévő automatikus irányváltás történik. A korábbi mentések megőrzik az eredeti állandó sebességű szimulációt, hogy a parancsnapló visszajátszásakor a szállítások időzítése ne változzon; az új mentések külön járműfizika-verziót tárolnak.
-
-Grafikus ellenőrzés és három PNG (rakott emelkedő/lejtő, üres síkút), az `artifacts/truck-preview` könyvtárba:
-
-```sh
-dotnet run --project ForesTycoon/ForesTycoon.csproj -- --truck-smoke-test
-```
-
-## Grafika és időjárás
-
-A Nézet menüben az Új grafikai megjelenítés kapcsolóval az eredeti színalapú mód is visszaállítható. A Textúrázás, Napfény, Vetett árnyékok és Csemperács külön kapcsolható; a nap iránya és magassága állítható. Ezek a beállítások a futó játékban megmaradnak térképcsere közben.
-
-A csemperács alapból bekapcsolt; télen és havas terepen a vonalak hűvös szürkék. A közeli lombkoronák nagy fáknál 384, kisebb fáknál 192 pontból álló zárt hálót használnak; a fenyőkoronák legalább 12, legfeljebb 24 körirányú szegmenst és több koronaréteget kapnak. A fafajspecifikus formák és textúrák megmaradnak. Gyorsított időben a háttérben frissülő modell elkészültéig megmarad a korábban látható részletesség. Új terület közelről közvetlenül a közeli részletességgel épül; a nagyítás előnyt kap a szomszédos LOD-ok előtöltésével szemben.
-
-A lombhullatók ősszel fafajonként eltérő arany, okker, narancs, réz és vörösesbarna lombszínt kapnak. A lomb az egyedi lombhullási naptár szerint, térbeli foltokban ritkul; télen teljesen eltűnik, és a részletes ágrendszer látszik. Az örökzöldek tűlevelei megmaradnak, a vörösfenyő lombhullató. A GPU az aktuális erdőévet használja minden LOD, szín-, körvonal- és árnyékpasszban: a lombváltás nem vár modell-újraépítésre. Az évszakos látvány a dioráma megjelenítésével együtt működik; natív ellenőrzés és közeli nyári/őszi/téli képek: `--dendro-tree-smoke-test`, `--seasonal-weather-smoke-test`.
-
-Új világokban a látvány a Környezet 1.0 rendszer évszakos eseményeit követi: ősszel gyakori, tartós eső, nyáron rövid záporok és erős viharok, télen havazás. A hópelyhek lassan süllyednek, billegnek, forognak és széllel sodródnak; a felhalmozódó hó melegedéskor a talaj vízkészletét táplálja. A Nézet / Időjárási kép menü külön látványteszt; a Szimulált időjárás látványa kapcsolóval visszaállítható a környezet hiteles időjárása. A Felhőzet és Villámlás külön kapcsolható. Az eső nedvesíti a talajt, amely utána fokozatosan szárad; a szünet megállítja az effekteket. A normál téli havazáshoz nem kell bekapcsolni a kísérleti hóelőnézetet.
-
-A vihar szélirányba dőlő, világkoordinátákhoz rögzített esőt, térfogati felhőhátteret, puha mozgó felhőárnyékot, villámfényt és procedurális vízgyűrűket használ. A [grafikai terv](docs/graphics-weather-plan.md) és a [kutatási jegyzet](docs/rain-storm-cloud-research.md) ismerteti a technikákat és a közelítéseket.
-
-Ellenőrzés: dotnet test ForesTycoon.sln --no-restore; a lefordított játék --graphics-smoke-test kapcsolója PNG-ket ment az artifacts/graphics-weather mappába, és ellenőrzi a grafikai kapcsolókat, a cache megőrzését és az eredeti kép visszaállítását.
-
-Évszakos ellenőrzés: `--seasonal-weather-smoke-test` természetes nyári vihart, őszi esőt és téli havazást rajzol, továbbá ellenőrzi a hópelyhek megállását szünetben és mozgását folytatáskor. A képek az `artifacts/seasonal-weather` mappába kerülnek. A v13-as mentés a hó vízegyenértékét is tárolja; a korábbi v12-es mentés üres hókészlettel áttér az évszakos rendszerre.
-
-A szél csempék között hordja át a havat: a növényzet és a szél felőli domborzat védett hófelhalmozódásokat ad. A helyi hókészlet eltérő fedést, hóárnyalatot és szélirányú felületi hullámokat rajzol. A hullámok árnyalási közelítések; a terep geometriája nem változik. A hó áthelyezése megőrzi a vízmérleget és mentés után is ugyanúgy folytatódik.
-
-
-Viharban most elágazó, fényudvarral rajzolt villámcsatornák is megjelennek: a kisülések végpontja egy látható fa koronája. A **Talajköd** kapcsoló és **Köd sűrűsége** csúszka az erdő alacsony, lassan sodródó ködfoltjait szabályozza. A talajköd alapból engedélyezett, és a helyi körülmények alapján foltokban jelenik meg. A Villám most gomb azonnali kisülést indít, akár szünet alatt is. A villám csak látványelem, nem károsítja a fákat.
-
-
-A talajköd most **soft particle rendszer**: világkoordinátákban sodródó, eltérő életciklusú, zajmintás ködpamacsok jelennek meg az erdőben és a széleken. A részecskék fokozatosan megjelennek, növekednek és eltűnnek; a jelenet mélységéből számított átmenet lágyítja a talajjal és a fákkal való metszést. A Köd sűrűsége csúszkával állítható a hatás.
-
-
-A köd most a környezethez igazodik: erdőben, víz mellett és helyi terepmélyedésekben jelenhet meg, lassan változó, összefüggő foltokban. Eső után a nedves talaj növeli az esélyét és sűrűségét; erős szél és napsütés gyengíti. Az utak önmagukban nem képeznek ködöt, de nedves völgyekben vagy vízparton azok mentén is megjelenhet. Ez vizuális mikroklíma-közelítés, hőmérséklet/harmatpont szimuláció nélkül.
-
-**Fájl / Új nagy erdős térkép**: Fenyves és lombos erdő, Nagy fenyves vagy Nagy lombos erdő. A menüpont új térképet készít a választott térképmérettel. Nagy, összefüggő erdőtömbök és tisztások keletkeznek; a víz, utak és térképszél kizárása megmarad. Az új seed és a térképméret-váltás megtartja a kiválasztott erdőmintát. A mintát a mentés tárolja, a világ betöltése ugyanazt a generátort használja.
-
-
-A játék járműve most az átadott trucks_collection.glb gyűjteményből kiválasztott, világoskék rönkszállító. A külön kivágott Assets/Vehicles/log-truck.glb automatikusan a program mellé másolódik. A kerekek forognak, a jármű az út lejtéséhez igazodik, a hat külön rönk pedig a rakomány mennyisége szerint jelenik meg. Az eredeti színalapú grafikai mód működik ezzel a modellel is. Az import részletei az [asset leírásában](ForesTycoon/Assets/Vehicles/README.md) találhatók.
-
-A rönkszállító egyenletesen skálázva az aszfaltozott egyetlen sáv szélességének 80%-át foglalja el, így a térképmérettől és csempemérettől függetlenül illeszkedik az úthoz.
-
-
-A rönkszállító az íveket a modell tényleges tengelytávolságával mintavételezi, folyamatosan változó helyzettel és iránnyal. Az első kerekek előretekintő, ívfüggő Ackermann-kormányzást kapnak, így a belső kerék nagyobb szögben fordul. A felépítmény finom fel-le mozgása és billenése az út magasságváltozásától, a sebességtől és a rakománytól függ; sima úton minimális, egyenetlen úton erősebb. Ez látványbeli rugózás, nem teljes futóműfizika. A szállítási út két végpontján a rakodáshoz szükséges megállás megmarad; köztes íveken a jármű továbbhalad.
-
-### Motor teljesítménye
-
-A Nézet menüben választható alacsony, közepes vagy magas effektminőség. A mérési eredmények, a megvalósított optimalizálások és a további skálázási feladatok a [motoráttekintésben](docs/engine-performance.md) találhatók. Az `--engine-benchmark` az alapjeleneteket, az `--engine-stress-benchmark` a sűrű erdőt és az 1/25/100 teherautós vihart méri.
-
-### Teherautó és rakodás
-
-Új világban a teherautó kitermelt faanyagra vár, három másodperc alatt rakodik, majd a célvégponton külön lerakodik. Az állapot és a rakomány a járműlistában látható. A Nézet menü Járműkontúrok kapcsolója finom sötét vonalat ad a közeli modelleknek. A rönkök külön faanyagot kaptak, a kormányzás átmenete simább. Minden világ ezt a rakodási rendet használja. A nagyobb sugarú útívek és a környezet szimulációja a [következő szakasz terve](docs/vehicle-environment-plan.md).
-
-### Animált erdei szarvasok
-
-A Nézet → Erdei szarvasok kapcsolóval legelő és lassan sétáló szarvasok jelennek meg az erdők tisztásain/szélein. A Szarvas megkeresése menüpont rájuk közelít. Az importált GLB valódi csontvázas animációt, textúrákat és árnyékot használ, a szünetet követi. A [betöltő, animáció és ellenőrzések leírása](docs/animated-models.md) tartalmazza a támogatott formátumrészhalmazt; a `--wildlife-smoke-test` képi ellenőrzést futtat.
-
-Alap 1× tempónál a szarvasok és a járművek órája valós időben halad, miközben a naptár lassabb marad. A szarvasok járása és legelése a képkockák között interpolált, ezért a lassú naptár nem teszi darabossá az animációt. Gyorsításkor a mozgás is gyorsul, szünetben megáll.
-
-
-## Időjárás, talaj, víz és faegyedek
-
-A kijelölt erdőtelepítések tartós borostyánsárga határt és sorjelölést kapnak. Csempénként 6×6 csemete nő a fajára jellemző életfázisokon keresztül. Az egyedek a fényért, vízért és növőtérért versengenek; a tartósan elnyomott fák elhalnak, majd kidőlnek. A Vizsgálat eszköz mutatja a telepítés egyedszámát és erőforrásmutatóit. Modell, források, mentés és ellenőrzés: [erdőtelepítés és dinamika](docs/forest-plantation-dynamics.md). Képi próba: `dotnet run --project ForesTycoon -- --plantation-smoke-test`.
-
-Új világban egy erdőév 20 játékperc. A vízidő átváltása 1 játékperc = 1 környezeti óra. Az események nem képkockánként váltakoznak: napos idő 2–5 perc, borult idő 1–3 perc, eső 45–120 másodperc, vihar 20–60 másodperc. Az eső intenzitása mm/környezeti óra; a felerősödés és lecsengés integrálja adja a lehulló vizet.
-
-A **Környezet 1.0** panelen látható az esemény hátralévő ideje, intenzitása, lehulló/várható vízmennyisége, hőmérséklet és szél. A csempére mutatva a koronavíz, felszíni víz, gyökérzóna és vízstressz olvasható. Az **Időjárási esemény indítása** részben állítható a típus, csúcsintenzitás és időtartam; az indítás a tényleges vízkészletet módosító, menthető parancs. Bezárt panel a Játék → Környezeti panel kapcsolóval nyitható újra.
-
-Csempénként koronaintercepció, beszivárgás, párolgás, növényi vízfelvétel, mélyebb tároló és lejtő menti lefolyás működik. A fél játék-másodperces vízlépéseket és a havi erdőnövekedést közös koordinátor rendezi. A felhőzet csökkenti a tényleges besugárzást; az élő koronák levélfelülete vízigényt ad, a növekedéshez felhasznált víz pedig valóban levonódik a talajból. A havi teljesített vízigény és túlnedvesség hat a növekedésre és egészségre. Kivágáskor a szomszédok több fényt kapnak, a koronavíz a felszínre kerül. A helyi nedvesség a terepanyagokra és a ködfoltokra is hat. A szünet és gyorsítás közös; textúrázás és effektek kikapcsolása nem változtatja meg a vízmérleget.
-
-A mentés **9-es formátumverziója** a terep, ökológia, vadak, logisztika, járművek és effektusok teljes dinamikus pillanatképét rögzíti, az órákkal, véletlengenerátorokkal és folyamatban lévő előkészítéssel együtt. Betöltés után csak a pillanatképet követő naplórészlet fut; a normál mentésnél ez nulla történeti tick. A teljes talajkatalógus, hashe, generátorverziója és a klímakonfiguráció is megmarad. A 4/5/6/7-es mentések egyszeri visszajátszással tölthetők be; a 8-as pillanatképek közvetlenül helyreállnak. A régi világok megtartják a történeti egységes klímát és saját talajmodelljüket. A 3-as és korábbi verziók nem tölthetők be az új növekedési szabályokkal. Ellenőrzés: `dotnet run --project ForesTycoon -c Release -- --checkpoint-smoke-test`.
-
-Az új világok homokos, vályogos, agyagos és szerves/nedves talajprofilokat kapnak. A [JSON-katalógus](ForesTycoon.Ecology/Soil/profiles.json) szabályozza a víztárolást, beszivárgást, drénezést és termékenységet; a víz- és fanövekedési modell már ezeket használja. **Környezet (`E`) → Talaj és víz térképe:** felülnézeti talajtípus és elérhető gyökérzónavíz, jelmagyarázat, pontos egér alatti csempeadat és kattintással vizsgálható profil. A nézet és a terraform nem generálja újra a talajt. Natív ellenőrzés: `dotnet run --project ForesTycoon -c Release -- --soil-raster-smoke-test`. Megvalósítás és következő lépcsők: [ökoszisztéma-terv](docs/ecosystem-simulation-design.md).
-
-Az első modell egy effektív talajprofilt használ. A tavak/folyók vízszintje még rögzített; a mélyebb alapvízhozamot és térképi kifolyást könyvelt veszteségként kezeli. Fagy/jég, hóborítás, csúszós út és erdőtűz későbbi fejlesztés. Ez gyors növekedésre hangolt játékmodell; nem 365 napos fizikai éves hidrológiai előrejelzés.
-
-Aktuális modell, felelősségek és korlátok: [időjárás–talaj–fa kapcsolat](docs/environment-forest-coupling.md). Korábbi terv: [környezeti szimuláció](docs/environment-simulation-plan.md).
-
-A `--simulation-benchmark` grafika nélkül méri a havi erdőfrissítést, a helyi kitermelést és a versengés hónap közbeni előkészítését. Az előkészítés csökkenti a hónapváltás terhelését; [mérések és korlátok](docs/engine-performance.md#havi-versengés-fokozatos-előkészítése). Nagy térképen és közvetlenül hónap végi erdőművelésnél még lehet megakadás.
-
-```sh
-dotnet run --project ForesTycoon/ForesTycoon.csproj -- --world-benchmark
-```
-
-A világbenchmark a valódi világfrissítést és a befejezett GPU-kirajzolást méri egy hónapváltáson át, napsütésben és viharban. Képkockánkénti adatok: `artifacts/world-benchmark`. A havi profil külön méri az erdő/környezet, logisztika és vadállatok költségét; a renderprofil fázisonként CPU- és GPU-időbélyeg-adatokat ment. UI, diorama utófeldolgozás és aktív járműforgalom nincs a mérésben; [eredmények és mérési korlátok](docs/engine-performance.md#játékvilág-és-havi-élőhely-ellenőrzés), [adagolt erdőmesh-feltöltés](docs/engine-performance.md#erdőmesh-feltöltése-adagokban-és-renderfázisok-mérése).
-
-A külön [nagy térképes teljesítménykapu](docs/large-world-performance.md) 64×64 és 128×128 világot, álló/mozgó kamerát, tranzakciós betöltést és memóriacsúcsot is mér, diorama utófeldolgozással. Rögzített hardverprofilon: `pwsh -File tools/verify-performance.ps1 -Profile docs/performance-profiles/rtx5060-i78700.json`. A keretek regressziót fognak meg; nem jelentenek stabil 60 FPS-es minősítést.
-
-```sh
-dotnet run --project ForesTycoon/ForesTycoon.csproj -- --environment-smoke-test
-```
-
-A próba az `artifacts/environment` mappába ment képeket, ellenőrzi a nedvesedést/száradást, szünetet, grafikai függetlenséget, mentés visszajátszását és vízmérleget; külön méri a 64², 128² és 256² cellás vízlépéseket.
-
-
-## Kitermelési területek és fűrészmalmok
-
-A közeli, közepes és távoli LOD azonos fa- és termőhelypillanatképből épül, és az aktuális növekedési és évszakos időt használja. A zoom a geometria részletességét módosítja; a hiányzó LOD előkészítéséig megmarad a korábban kirajzolt modell. Közeli nézetben hideg cache esetén közvetlenül a részletes modell épül, durva távoli helyettesítő nélkül. A háttér-építés együttműködő időkerete előtöltésnél 2 ms, látható közepes/távoli kérésnél 4 ms, látható közeli modellnél és játékosi szerkesztésnél 8 ms. Natív regresszió: `--forest-smoke-test`.
-
-Új világban a regionális klíma csempénként módosítja a csapadékot, hőmérsékletet és páratartalmat, így a helyi vízkészletet és a fák vízellátását. Paraméterek: [klímakonfiguráció](ForesTycoon.Ecology/Climate/default.json). **Környezet (`E`) → Talaj, víz és klíma térképe:** öt felülnézeti réteg, pontos egér alatti és kijelölt csempeadatok. A régi mentések egységes klímával folytatódnak. A regionális értékek játékmeneti közelítések; a grafikai időjárás továbbra is közös háttéreseményt mutat.
-
-Új világban a **Kitermelés** eszköz húzással forrásterületet jelöl ki. A narancssárga jelölés tartós; kijelöléskor egyetlen fa sem tűnik el. Minden erdőcsempe rendelkezik faanyaggal, köbméterben (`biomassza × 100 m³`). A köbméter csak a forrásnál történő tényleges rakodás közben csökken; a törzsek a megmaradó biomassza alapján fokozatosan fogynak. A kijelölt terület készlete és a csempe faanyaga a felületen olvasható.
-
-1. Jelölj ki kitermelési területet az erdőben.
-2. A **Fűrészmalom** eszközzel kattints 2×2 sík, üres, száraz csempére.
-3. Építs összefüggő utat a forrásterület és a malom mellé. Az út a szomszédos csempéken csatlakozik, nem az épület alatt.
-4. Nyomd meg a **Rönkszállító indítása** gombot. A rendszer a tényleges úthálózaton keres útvonalat a forrástól a célhoz.
-
-A teherautó a kijelölt forrásnál rakodik, a malomnál fokozatosan lerakodik, majd visszatér. A malom külön könyveli az átvett készletet és a feldolgozott mennyiséget. A forrás kifogyásakor az autó vár; megszakított út esetén megőrzi a rakományát, és az út helyreállítása után folytatja az utat. Épületre út és erdő nem telepíthető, az alatta lévő terep magassága védett.
-
-A megadott `sawmill_paropank.glb` és `animated_low_poly_fish.glb` modellek kerültek be. A vízben a halak csontvázas animációval úsznak; nagy, térképszélhez csatlakozó tengerekben 8–120 hal, kis belső vizekben 1–2 hal jelenik meg, a kellően mély részeken. A víz saját finom rácsa megmarad.
-
-A mentés visszajátssza a kijelölési, építési és teherautó-indítási parancsokat. A jelenlegi 6-os formátumverzió megőrzi az erdőév hosszát és a történeti terepszerkesztési szabályt. A 4/5-ös mentések továbbra is betölthetők; régi parancsaik az eredeti szabállyal futnak vissza, az új szerkesztések már helyiek. A 4-es mentések eredeti 1200 másodperces évhossza megmarad.
-
-Terepszerkesztéskor csak a valóban megváltozott csempék növényzete vész el, kitermelt készlet nélkül.
-A többi fa állapota és a szimuláció ideje változatlan; a terep/rács geometriája chunkonként frissül.
-A térképi vízmedencék számítása még teljes rasztert jár be. A talaj-, víz-, fafaj-, klíma-, vad- és
-károsítórétegek következő fejlesztési terve: [térbeli ökoszisztéma](docs/ecosystem-simulation-design.md).
-
-Ellenőrzés: `dotnet run --project ForesTycoon -- --logistics-smoke-test`. A próba a fokozatos 60 m³-es kitermelést, útkapcsolatot, lerakott malmot, készletmérleget, mentés/visszajátszást és a tengeri/tavi halpopulációt ellenőrzi; képek az `artifacts/forestry-logistics` mappában.
-
-## Menürendszer és diorama-látvány
-
-A felület a Transport Tycoon mintáját követi:
-
-- **Felső ikonsor**, feladat szerinti csoportokban: játék menü (új térkép, térképméret, mentés, betöltés, kilépés) · idő (szünet, 1×/2×, gyorsítási menü 4×–256×) · terep · utak · erdészet · ipar és szállítás · információs ablakok · nézet, grafika, fejlesztői eszközök és súgó. Minden gomb tooltipje mutatja a nevet, a gyorsbillentyűt és egy rövid leírást.
-- **Eszköz-alsáv** az ikonsor alatt, csak ha az eszköznek vannak beállításai (fafajválasztó ikonokkal, ecsetméret, építési tipp).
-- **Állapotsor** alul: aktív eszköz, erdőév és évszak, időjárás, sebesség, leszállított faanyag, járművek.
-- **Ablakok**: Járművek, Erdészet, Környezet, Grafika, Súgó. Vizsgálat eszközzel az erdőcsempe adatai az egér mellett jelennek meg; a mentés és az erdészeti műveletek eredménye rövid értesítésként jelenik meg.
-- **Fejlesztői eszközök** (F12) egy ablakban: teljesítménymérés, időjárás-teszt és környezeti esemény, új seed és 512×512-es stresszteszt, kamera- és megjelenítés-hibakeresés.
-
-Az ikonok vektorosan, ImGui rajzlistába készülnek ([UI/GameIcons.cs](ForesTycoon/UI/GameIcons.cs)), így nincs szükség ikonfontra vagy képfájlra, és bármilyen DPI-n élesek.
-
-**Arányok** ([Rendering/DioramaScale.cs](ForesTycoon/Rendering/DioramaScale.cs)): a világ nem méretarányos, de a méretsorrend helyes: szarvas < teherautó < fűrészmalom. A teherautó a sáv 62%-át foglalja (≈5,8 egység hosszú), a malom épülete a 2×2 csempés telek 80%-át, az udvari rönkrakások a telek szélén belül maradnak, a szarvas a teherautónál alacsonyabb. A `DioramaScaleTests` ellenőrzi ezt a sorrendet.
-
-**Diorama utófeldolgozás** (Grafika ablak): a jelenet többmintás offscreen célba készül, majd tilt-shift mélységélesség (éles középső sáv, távolról erősebb), mélységpufferből számolt kontakt-árnyékolás a fák, épületek és partok tövében, makrófotó-színkorrekció, vignetta és stúdió háttér kerül rá. Minden hatás külön kapcsolható; alacsony minőségen az AO kikapcsol. A szimulációt nem befolyásolja.
-
-HUD és diorama ellenőrző képek az `artifacts/hud` mappába:
-
-```sh
-dotnet run --project ForesTycoon/ForesTycoon.csproj -- --capture-frame artifacts/hud
-```
-
-## Fafajonkénti textúrák, tönkök és rácsvonal
-
-**Textúrák**: Textúrázás bekapcsolva minden fafaj saját kéreg- és lombmintát kap. A mintákat a felület-shader procedurálisan rajzolja; a fafaj kódja a csúcsszín alfa-csatornájában érkezik (`Terrain.SurfaceSpeciesCode`).
-- Lucfenyő: vörösesbarna, pikkelyes kéreg; kékeszöld, emeletes tűlevél-sávok.
-- Nyír: krétafehér kéreg fekete, vízszintes paraszemölcsökkel és foltokkal; apró, csillogó sárgászöld levelek.
-- Tölgy: mélyen barázdált kéreg; nehéz, csomós lombtömegek árnyékos hézagokkal.
-- Bükk: sima ezüstszürke, foltos kéreg zuzmóval; tömör, réteges lomb.
-
-**Tönkök**: Kitermeléskor (teherautós rakodás vagy azonnali kivágás) a `ForestSystem` megjegyzi a kivágott állományt az első vágás előtti állapotában. A kirajzolás minden eltávolított törzs helyén tönköt rajzol (fajnak megfelelő kéreg, világos fűrészelt lap). A tönk 6 erdőév alatt lesüllyed, besötétedik, bemohásodik, majd eltűnik. Újratelepítéskor a felnövő fák fokozatosan átveszik a helyüket. Ültetést nem akadályoz; útépítéskor a tönk eltűnik. A mentés visszajátszása helyreállítja.
-
-**Rácsvonal**: a csemperács alapból bekapcsolt, minden zoomnál 1,6 pixeles, félátlátszó vonallal készül. Télen és havas terepen hűvös szürke, máskor sötét mohazöld. Az évszakváltás a shader színét módosítja, a terephálót nem építi újra. A Grafika ablakban kapcsolható.
-
-**Erdő megfigyelése gyorsítva**: a felső ikonsor háromnyilas gombja nyitja a 4×, 8×, 16×, 32×, 64×, 128× és 256× időgyorsítást. A kiválasztott sebesség az alsó állapotsorban látszik; az 1×/2× gombbal vissza lehet lassítani, Space-szel szüneteltetni. Új térképen egy erdőév **120 szimulációs másodperc**, a korábbi érték tizede. A természetes időjárási események, évszakok és vízfolyamatok időskálája ezzel együtt gyorsult; az éves természetes csapadékmennyiség megmarad. 256× mellett az elméleti évhossz 0,47 valós másodperc, a tényleges gépterheléstől függően hosszabb. A mért 64²-es világban körülbelül 3 év telt el 5 másodperc alatt. Régi, 4-es mentés betöltésekor az eredeti évhossz marad; az új ütemet új térkép használja. A fa-, talajvíz-, időjárás- és szállítási rendszerek továbbra is fix lépésekkel haladnak. Az érett fák néhány éves változása kisebb, a fiatal telepítések fejlődése jobban megfigyelhető.
-
-A kiszáradt fa az elhalás után két erdőévvel fekvő holtfává válik. Ez az állapot minden LOD-ban az aktuális erdőévből számolódik, ezért távolodáskor nem vált vissza álló törzsre. Célzott ellenőrzés: `--forest-smoke-test`; ütemezés és régi/új mentés-visszajátszás mérése: `--forest-tempo-benchmark`.
-
-Alapértelmezésként a változatosabb saját eljárásos fák jelennek meg. A lucfenyő, tölgy, nyír és bükk csemete, fiatal, középkorú és idős életfázisai külön ág- és koronageometriát kapnak, fázisonként három változattal. A mód neve **Eljárásos fák (életfázisok)**. Egyedenként változik a korona alakja és a fenyők ágazása; részletek és képi ellenőrzés: [eljárásos változatosság](docs/procedural-tree-variation.md). A **Grafika → Fa modellek** választóval a könnyű importált készlet és az eredeti részletes fenyő is visszakapcsolható; az eredeti fájlok megmaradtak. Az importált nyír külön kapcsolható (CC BY-NC, alapból kikapcsolva). A lomb alpha-kivágást használ; a merev ágak anyagonként összevont, megosztott GPU-geometriával készülnek. Részletek: [modellértékelés](docs/tree-asset-candidates.md), [eredeti lucfenyőmodell](docs/spruce-model-redesign.md). Integrációs képek és ellenőrzés: `dotnet run --project ForesTycoon/ForesTycoon.csproj -- --forest-model-smoke-test`.
-
-Ugyanitt a **Generált fák (EZ-Tree)** mód két fenyő- és két tölgyváltozatot ad, három, közös ágvázból készített részletességi szinten. A generátor előre készít GLB-modelleket; a játék futtatásához JavaScript nem szükséges. A korábbi modellkészletek megmaradnak. Paraméterek, újragenerálás és ellenőrzés: [EZ-Tree integráció](docs/ez-tree-integration.md).
+ForesTycoon is a forestry management game in development, built around a living isometric diorama, individual trees, seasonal weather, terrain and water simulation, and timber logistics. A paid release is planned; financial support options are not yet available. See the licensing status above and [LICENSING.md](LICENSING.md): the proposed noncommercial license is not yet in force for the integrated game because GPL components remain linked into it.
