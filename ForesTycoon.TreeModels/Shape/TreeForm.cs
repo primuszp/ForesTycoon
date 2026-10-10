@@ -135,7 +135,8 @@ namespace ForesTycoon.TreeModels
             Color crown = traits.Crown;
             DeadColor = Pack(Color.FromArgb(112, 102, 92), spec.Species, pigment);
             WoodColor = spec.Dead ? DeadColor : Pack(bark, spec.Species, pigment);
-            CrownColor = Pack(LeafTint(crown, spec), spec.Species, pigment);
+            CrownColor = (Pack(LeafTint(crown, spec), spec.Species, pigment) & 0x00ffffffu)
+                | (uint)TreeScale.CrownSpeciesCode(spec.Species) << 24;
         }
 
         /// <summary>Generator-unit point to the world frame of the tree base.</summary>

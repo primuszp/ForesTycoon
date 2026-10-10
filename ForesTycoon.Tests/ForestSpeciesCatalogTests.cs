@@ -110,7 +110,8 @@ public class ForestSpeciesCatalogTests
                 {
                     Assert.True(float.IsFinite(v.Position.X + v.Position.Y + v.Position.Z));
                     Assert.Equal(1, v.Normal.Length, 3);
-                    Assert.Equal((uint)Terrain.SurfaceSpeciesCode(species), v.Color >> 24);
+                    Assert.Equal((uint)(ReferenceEquals(vertices, mesh.Crown)
+                        ? TreeScale.CrownSpeciesCode(species) : Terrain.SurfaceSpeciesCode(species)), v.Color >> 24);
                 });
             if (leafy && mesh.Crown.Length > 0)
             {

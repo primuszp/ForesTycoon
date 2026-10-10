@@ -45,6 +45,29 @@ namespace ForesTycoon
                 Clear(); material.Use(); quad.DrawArray(false);
                 Require(main.SequenceEqual(Coverage()), "Legacy crown coverage differs from enhanced coverage.");
 
+                var speciesImages = new System.Collections.Generic.HashSet<string>();
+                settings.Enhanced = true;
+                foreach (var species in Enum.GetValues<ForestSpecies>().Where(s => s != ForestSpecies.None))
+                {
+                    green = (uint)TreeScale.CrownSpeciesCode(species) << 24 | 0x0040c020;
+                    quad.SetData(new[] { V(-1,-1), V(1,-1), V(1,1), V(-1,-1), V(1,1), V(-1,1) });
+                    settings.Textures = true; visuals.BeginFrame();
+                    Clear(); material.Use(); quad.DrawArray(false);
+                    byte[] textured = Pixels();
+                    Require(main.SequenceEqual(Coverage()), "Species foliage texture changed the crown silhouette.");
+                    VerifyDepth(main);
+                    Require(speciesImages.Add(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(textured))),
+                        "Two species rendered the same foliage material.");
+                    FramebufferCapture.SavePng(Path.Combine(output, "foliage-" + species + ".png"), size, size);
+                    settings.Textures = false; visuals.BeginFrame();
+                    Clear(); material.Use(); quad.DrawArray(false);
+                    Require(!textured.AsSpan().SequenceEqual(Pixels()), "Species foliage texture has no visible effect.");
+                    settings.Textures = true; visuals.BeginFrame();
+                    Clear(); material.Use(); quad.DrawArray(false);
+                    Require(textured.AsSpan().SequenceEqual(Pixels()), "Species foliage texture did not restore exactly.");
+                }
+                Console.WriteLine("Species foliage: 16 distinct materials, texture toggles/restoration and unchanged opaque color/depth coverage passed.");
+
                 settings.Enhanced = true; settings.Lighting = true; settings.Shadows = true;
                 visuals.BeginFrame();
                 using var terrain = new Terrain(TerrainSettings.Default.WithNodeSize(17, 42), (_, _) => 4);
@@ -74,6 +97,12 @@ namespace ForesTycoon
                 Console.WriteLine($"Dendro crown GL smoke passed: {main.Count(v => !v)} uncovered pixels; opaque color/legacy coverage, depth writes and solid shadow.");
                 Vertex V(float x, float y) => new(new(x, y, 0), Vector3.UnitZ, green);
                 void Clear() { GL.DepthMask(true); GL.ClearColor(1, 0, 0, 1); GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit); }
+                byte[] Pixels()
+                {
+                    byte[] pixels = new byte[size * size * 4];
+                    GL.ReadPixels(0, 0, size, size, PixelFormat.Rgba, PixelType.UnsignedByte, pixels);
+                    return pixels;
+                }
                 bool[] Coverage()
                 {
                     byte[] pixels = new byte[size * size * 4];
@@ -113,16 +142,19 @@ namespace ForesTycoon
             Light(0.1f);
             terrain.DrawTrees(forest, context, graphics);
             Require(terrain.ForestChunkRebuilds == 0, "Light changes rebuilt chunks synchronously.");
-            for (int frame = 0; frame < 100 && terrain.TotalForestChunkRebuilds - before < 4; frame++)
+            // Near replacements also schedule the adjacent Medium level. Drain both, rather
+            // than treating a legitimate prefetched replacement as a repeated Near rebuild.
+            for (int frame = 0; frame < 1000 && terrain.HasPendingForestBuild; frame++)
                 terrain.DrawTrees(forest, context, graphics);
-            Require(terrain.TotalForestChunkRebuilds - before == 4, "Queued light changes skipped a chunk or rebuilt it twice.");
+            Require(!terrain.HasPendingForestBuild && terrain.TotalForestChunkRebuilds - before == 8,
+                "Light changes did not replace exactly four Near and four adjacent Medium chunks.");
             for (int frame = 0; frame < 3; frame++)
             {
                 terrain.DrawTrees(forest, context, graphics);
                 Require(terrain.ForestChunkRebuilds == 0, "Light geometry cache did not settle.");
             }
             Require(GL.GetError() == ErrorCode.NoError, "Light topology OpenGL error.");
-            Console.WriteLine("Light topology: four chunks published asynchronously once each, then stable reuse.");
+            Console.WriteLine("Light topology: four Near and four adjacent Medium chunks published asynchronously once each, then stable reuse.");
         }
         private static void Require(bool value, string message) { if (!value) throw new InvalidOperationException(message); }
     }

@@ -249,9 +249,17 @@ vec3 barkPattern(int code, vec3 c, vec3 w, vec3 n){
     return mix(c, c*vec3(0.86,1.06,0.84), smoothstep(0.62,0.80, surfaceNoise2(b*vec2(1.3,2.0)))*0.6);
 }
 vec3 foliagePattern(int code, vec3 c, vec3 w, vec3 n){
-    // Opaque low-poly foliage: the mesh supplies the silhouette and facets.
+    // Species-specific, mipmapped leaf/needle clusters. Triplanar sampling follows the
+    // whole rounded crown without UV seams; geometry keeps its original silhouette.
+    vec3 weights = pow(abs(n), vec3(4));
+    weights /= max(dot(weights, vec3(1)), 0.0001);
+    float scale = (code == 2 || code == 8 || code == 9 || code == 10 || code == 17) ? 0.48 : 0.32;
+    float layer = float(6 + clamp(code - 2, 0, 15));
+    vec3 p = w * scale;
+    float leaves = dot(weights, vec3(texture(materials, vec3(p.yz, layer)).r,
+        texture(materials, vec3(p.xz, layer)).r, texture(materials, vec3(p.xy, layer)).r));
     float under = 0.82 + 0.20*smoothstep(-0.5, 0.7, n.z);
-    return c * under;
+    return c * under * mix(0.86, 1.14, clamp((leaves - 0.53) / 0.30, 0.0, 1.0));
 }
 float cloudDensity(vec2 p){
     p=p/42.0-vec2(time*0.012,time*0.004);
@@ -270,6 +278,8 @@ void main() {
     if(kind == 1 || kind == 3 || kind == 7 || kind == 8 || kind >= 11) { if(n.z<0) n=-n; }
     vec3 base = pow(max(tint.rgb,vec3(0)),vec3(2.2));
     int species_code = (kind == 5 || kind == 6) ? int(tint.a*255.0 + 0.5) - 246 : 0;
+    int crown_species = kind == 6 ? int(tint.a*255.0 + 0.5) - 224 : 0;
+    if(crown_species < 2 || crown_species > 17) crown_species = 0;
     if(species_code < 1 || species_code > 5 || (kind == 6 && species_code == 1)) species_code = 0;
     float detail = 1;
     float materialPatch = texture(materials, vec3(world.xy/24.0,1)).r;
@@ -282,7 +292,10 @@ void main() {
         if(kind == 4 || kind == 9) detail = 1;
         if(kind == 10) detail = 0.88 + 0.16*surfaceNoise2(vec2(world.x+world.y,world.z)*12);
         if(kind == 2) detail *= 0.92 + 0.08*sin(world.z*1.8 + materialPatch*2);
-        if(species_code > 0) {
+        if(crown_species > 0) {
+            detail = 1;
+            base = foliagePattern(crown_species, base, world, n);
+        } else if(species_code > 0) {
             detail = 1;
             base = kind == 5 ? barkPattern(species_code, base, world, n) : foliagePattern(species_code, base, world, n);
         }
@@ -356,7 +369,7 @@ void main() {
         base += puddle * climate.w * ripple * vec3(0.012,0.019,0.023);
     }
     base = mix(base,base*vec3(0.91,0.97,1.07),climate.x*0.35);
-    output_color = vec4(pow(max(base,vec3(0)),vec3(1.0/2.2)),species_code > 0 ? 1.0 : tint.a);
+    output_color = vec4(pow(max(base,vec3(0)),vec3(1.0/2.2)),species_code > 0 || crown_species > 0 ? 1.0 : tint.a);
 }";
             program = GlProgram.Create(vertex, fragment);
             depthProgram = GlProgram.Create(@"#version 330 core

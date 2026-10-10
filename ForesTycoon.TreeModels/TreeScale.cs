@@ -13,5 +13,7 @@ namespace ForesTycoon.TreeModels
         /// bark and foliage pattern, so every species borrows one of the five families it knows.
         /// </summary>
         internal static int SurfaceSpeciesCode(ForestSpecies species) => 246 + ForestSpeciesTraits.For(species).Pattern;
+        // Dedicated crown material IDs preserve the species rather than only its bark family.
+        internal static int CrownSpeciesCode(ForestSpecies species) => 224 + (byte)species;
     }
 }
