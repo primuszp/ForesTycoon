@@ -44,3 +44,5 @@ This is a list of confirmed items requiring separate treatment, not a completed 
 | NuGet and native dependencies | Package-specific licenses, including OpenTK and ImGui.NET | Preserve the required notices and review the exact packages shipped |
 
 When the GPL blocker and release-asset inventory are resolved, introduce a root license with the correct copyright holder notice and clearly scoped third-party exceptions. Do not describe the current integrated game as already cleared for restricted commercial distribution.
+
+The [own tree generator replacement plan](docs/own-tree-generator-plan.md) defines the implementation boundary, species profiles, visual requirements and validation gates. Implementation remains deferred; the current generator and its algorithm remain active.

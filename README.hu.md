@@ -126,4 +126,4 @@ A jelenlegi fagenerátor közvetlenül befordított DendroKit/Arbaro GPL-kódot 
 
 Az aktuális jogállás, a kivételek és a fizetős kiadás előfeltételei: **[LICENSING.md](LICENSING.md)**. A nyilvános forrás önmagában nem jelent szabad kereskedelmi felhasználási engedélyt.
 
-A fagenerátor kiváltása külön, későbbi feladat. A mostani frissítés a dokumentációt és a licenctervezetet rendezi.
+A fagenerátor kiváltása külön, későbbi feladat. A [kiváltási terv](docs/own-tree-generator-plan.md) rögzíti a mostani fafajformák, részletesség és dioráma megőrzését. A tervezés idején a jelenlegi generátor és algoritmus marad aktív.

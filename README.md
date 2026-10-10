@@ -126,4 +126,4 @@ The current tree generator directly incorporates DendroKit/Arbaro GPL code and G
 
 For the current status, exceptions, and paid-release requirements, see **[LICENSING.md](LICENSING.md)**. Public availability of source code does not, by itself, grant unrestricted commercial-use permission.
 
-Replacing the tree generator is a separate, deferred task. This update addresses documentation and the licensing proposal.
+Replacing the tree generator is a separate, deferred task. The [replacement plan](docs/own-tree-generator-plan.md) preserves the current species forms, detail, and diorama appearance. The existing generator and algorithm remain active while planning is completed.
