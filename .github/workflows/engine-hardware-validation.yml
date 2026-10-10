@@ -22,8 +22,8 @@ jobs:
     runs-on: [self-hosted, Windows, X64, forestycoon-rtx5060-i78700]
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-dotnet@v6.0.0
         env:
           DOTNET_INSTALL_DIR: ${{ runner.tool_cache }}/dotnet
         with:
@@ -39,7 +39,7 @@ jobs:
         if: inputs.performance
         shell: pwsh
         run: ./tools/test-performance-gate.ps1
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         if: always()
         with:
           name: windows-native-and-performance
