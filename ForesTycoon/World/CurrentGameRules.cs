@@ -212,7 +212,7 @@ namespace ForesTycoon
                 "harvest.sites|forest.volume|timber.localDepot|timber.stacks|machine.pace|machine.work|vehicle.broken|vehicle.time", "machine.work|machine.cargo|timber.localDepot|timber.stacks|machine.fuel",
                 "Kivágás, rönkfelvétel és sarangra hordás állapotgépe; kopás szerinti tempóval, rakománykapacitással és műveleti üzemanyag-rátákkal.");
             var forwarder = Add("machine.forwarder", "Forwarder: sarangok közötti közelítés", "Faanyag és logisztika", "Gép / sarangpár", "1/30 jármű-s al-lépés", machine, "UpdateForwarder",
-                "timber.stacks|machine.pace|vehicle.route|vehicle.broken|vehicle.time", "machine.cargo|timber.stacks|machine.position|machine.fuel", "Forrásból felvesz, célba lerak; terhelés szerint változó sebesség, úton/nyomon és kitermelési területen közlekedik.");
+                "timber.stacks|machine.pace|vehicle.route|vehicle.broken|vehicle.time", "machine.cargo|timber.stacks|machine.position|machine.fuel", "Úton vagy nyomon állva, rönkönként rakodik. A markoló megfogáskor kiveszi, elengedéskor átadja a térfogatot és értéket; az alap ciklus 8 másodperc. A rakomány alulról épül és felülről fogy.");
             Add("machine.movement", "Erdészeti gépek mozgása és nyomterhelése", "Faanyag és logisztika", "Gép / útvonal", "1/30 jármű-s al-lépés", machine, "Advance",
                 "vehicle.route|road.network|trail.network|trail.wear|machine.pace|machine.cargo|machine.work", "machine.position|trail.wear|machine.fuel",
                 "Eltérő üres/rakott sebesség, útvonaljárhatóság ellenőrzése, nyomvályú és művelethez tartozó fogyasztás. A gépek külön kinematikával futnak, a teherautó fizikai modelljét nem használják.");

@@ -26,7 +26,7 @@ namespace ForesTycoon
         /// <summary>Standing timber of a site still to fell, m³.</summary>
         internal float Volume(HarvestSite site){float result=0;foreach(int id in site.Tiles)result+=forest.AvailableTimber(id);return result;}
         /// <summary>Timber not yet at a mill: standing in the sites, in stacks and on the machines, m³.</summary>
-        internal float Remaining {get {float sum=0;foreach(var site in Sites)sum+=Volume(site);foreach(var s in Stacks)sum+=s.Volume;foreach(var m in Machines)sum+=m.Cargo;return sum;}}
+        internal float Remaining {get {float sum=0;foreach(var site in Sites)sum+=Volume(site);foreach(var s in Stacks)sum+=s.Volume;foreach(var m in Machines)sum+=m.Cargo+m.LogTransferVolume;return sum;}}
         internal bool ContainsTile(int id){foreach(var site in Sites)if(Array.IndexOf(site.Tiles,id)>=0)return true;return false;}
         internal int Designate(ReadOnlySpan<int> ids)
         {

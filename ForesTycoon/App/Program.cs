@@ -7,6 +7,10 @@ namespace ForesTycoon
         static void Main(string[] args)
         {
             RenderBackendSelection.UseOpenGl();
+            int forwarderExport = Array.IndexOf(args, "--export-forwarder-animation");
+            if (forwarderExport >= 0) { ForwarderAnimationExport.Run(args.Length > forwarderExport + 1 ? args[forwarderExport + 1] : "artifacts/forwarder-ik.glb"); return; }
+            int loadingPreview = Array.IndexOf(args, "--forwarder-loading-preview");
+            if (loadingPreview >= 0) { ForestMachineSmokeTest.LoadingPreview(args.Length > loadingPreview + 1 ? args[loadingPreview + 1] : "artifacts/forwarder-loading"); return; }
             int largeBenchmark = Array.FindIndex(args, argument => argument == "--large-world-benchmark");
             if (largeBenchmark >= 0) { LargeWorldBenchmark.Run(args, largeBenchmark); return; }
             if (Array.Exists(args, a => a == "--render-environment-smoke-test")) { RenderEnvironmentSmokeTest.Run(); return; }

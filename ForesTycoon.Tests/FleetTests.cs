@@ -160,7 +160,7 @@ public class FleetTests
         var s = Build();
         s.Logistics.StackAt(ForestStack)!.Add(20, 20 * 30);
         Assert.True(s.Logistics.AssignForwarder(Forwarder(s), s.Logistics.StackAt(ForestStack), Mill), s.Logistics.Status);
-        Run(s, 300);
+        Run(s, 800); // 32 physical logs need individual loading and unloading crane cycles.
         Assert.Equal(20, s.Logistics.Mills[0].Received, 2);
         Assert.Equal(600, s.Logistics.Income, 1);
         Assert.False(Forwarder(s).Working);
@@ -193,6 +193,31 @@ public class FleetTests
         copy.Logistics.Restore(logistics); copy.Vehicles.Restore(vehicles, copy.Map.Tiles.Count); copy.Logistics.BindVehicles(copy.Vehicles);
         Assert.Equal(JsonSerializer.Serialize(logistics), JsonSerializer.Serialize(copy.Logistics.Capture()));
         Assert.Same(copy.Logistics.StackAt(RoadStack), copy.Logistics.Trucks[0].Source);
+    }
+
+    [Fact]
+    public void CheckpointResumesAReservedLogWithoutDuplication()
+    {
+        var s = Build();
+        var source = s.Logistics.StackAt(ForestStack)!;
+        source.Volume = 3 * ForwarderLoading.LogVolume; source.Value = 300;
+        var machine = Forwarder(s);
+        Assert.True(s.Logistics.AssignForwarder(machine, source, RoadStack));
+        for (int i = 0; i < 6000 && machine.LogTransferVolume == 0; i++) Run(s, 1.0 / 30);
+        Assert.True(machine.LogTransferVolume > 0);
+        Assert.True(s.Map.IsNetworkTile(machine.Tile));
+        var checkpoint = JsonSerializer.Deserialize<LogisticsCheckpoint>(JsonSerializer.Serialize(s.Logistics.Capture()))!;
+        var copy = Build(stacks: false); copy.Logistics.Restore(checkpoint);
+        var restored = Forwarder(copy);
+        Assert.Equal(machine.LogTransferVolume, restored.LogTransferVolume);
+        Assert.Equal(machine.LogTransferValue, restored.LogTransferValue);
+        Assert.Equal(machine.WorkTime, restored.WorkTime);
+        Run(s, 20); Run(copy, 20);
+        Assert.Equal(machine.Cargo, restored.Cargo, 4);
+        Assert.Equal(machine.CargoValue, restored.CargoValue, 3);
+        Assert.Equal(source.Volume, copy.Logistics.StackAt(ForestStack)!.Volume, 4);
+        Assert.Equal(3 * ForwarderLoading.LogVolume,
+            restored.Cargo + restored.LogTransferVolume + copy.Logistics.StackAt(ForestStack)!.Volume, 4);
     }
 
     [Fact]

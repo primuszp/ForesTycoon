@@ -37,6 +37,8 @@ namespace ForesTycoon
         internal double CargoValue;
         /// <summary>Seconds spent in the present work state; drives crane and saw animation.</summary>
         internal double WorkTime;
+        internal float LogTransferVolume;
+        internal double LogTransferValue, LogCycleDuration;
         /// <summary>Diesel burnt so far, litres.</summary>
         internal double FuelUsed;
         /// <summary>Processor: price of the wood it is felling (kept when the last standing tree of a tile is gone).</summary>
@@ -60,7 +62,7 @@ namespace ForesTycoon
     /// </summary>
     internal sealed partial class ForestryLogistics
     {
-        internal const float FellingRate = 1.2f, ForwarderLoadRate = 2.5f, ForwarderUnloadRate = 3.5f, ProcessorUnloadRate = 2f;
+        internal const float FellingRate = 1.2f, ForwarderLoadRate = ForwarderLoading.LogVolume / 8, ForwarderUnloadRate = ForwarderLoading.LogVolume / 8, ProcessorUnloadRate = 2f;
         internal const float HarvesterSpeed = 0.45f, ForwarderSpeed = 0.6f, ForwarderLoadedSpeed = 0.4f;
         /// <summary>Diesel use by activity, litres per second of game time.</summary>
         internal const double FuelFelling = 1.0, FuelDriving = 0.5, FuelDrivingLoaded = 0.8, FuelCrane = 0.35;
@@ -82,6 +84,13 @@ namespace ForesTycoon
             || Depots.Exists(d => Array.IndexOf(d.Footprint, tile) >= 0) || Mills.Exists(m => Array.IndexOf(m.Footprint, tile) >= 0);
 
         // Network-to-network travel follows its actual arms. Worksites and yards still allow manoeuvring.
+        private int[] ForwarderPath(int from, int target)
+        {
+            var mill = MillAt(target);
+            var docks = terrain.FindNetworkDocks(mill != null ? mill.Footprint : new[] { target });
+            return FindPath(null, from, t => terrain.IsNetworkTile(t) && docks.Contains(t), networkOnly: true);
+        }
+
         private bool CanDriveBetween(int from, int to) =>
             !terrain.IsNetworkTile(from) || !terrain.IsNetworkTile(to) || terrain.AreNetworkNeighbours(from, to);
 
@@ -89,7 +98,7 @@ namespace ForesTycoon
         /// Shortest path over passable tiles from <paramref name="from"/> to the first tile that satisfies
         /// <paramref name="goal"/>; <paramref name="extra"/> is one more tile allowed (a new stack site).
         /// </summary>
-        private int[] FindPath(HarvestSite site, int from, Func<int, bool> goal, int extra = -1)
+        private int[] FindPath(HarvestSite site, int from, Func<int, bool> goal, int extra = -1, bool networkOnly = false)
         {
             var previous = new Dictionary<int, int> { [from] = -1 };
             var queue = new Queue<int>(); queue.Enqueue(from);
@@ -106,7 +115,7 @@ namespace ForesTycoon
                 }
                 int count = terrain.GetTileNeighbours(tile, next);
                 for (int i = 0; i < count; i++)
-                    if ((next[i] == extra || Passable(site, next[i])) && CanDriveBetween(tile, next[i]) && !previous.ContainsKey(next[i])) { previous[next[i]] = tile; queue.Enqueue(next[i]); }
+                    if ((!networkOnly || terrain.IsNetworkTile(next[i]) || IsDepotTile(next[i])) && (next[i] == extra || Passable(site, next[i])) && CanDriveBetween(tile, next[i]) && !previous.ContainsKey(next[i])) { previous[next[i]] = tile; queue.Enqueue(next[i]); }
             }
             return null;
         }
@@ -140,6 +149,7 @@ namespace ForesTycoon
         /// <summary>Path to the nearest designated tile with standing timber, over network, trails, stacks and fellings.</summary>
         private int[] NearestTimber(int from) =>
             FindPath(null, from, t => ContainsTile(t) && forest.AvailableTimber(t) > 0.001f);
+        private bool IsDepotTile(int tile) => Depots.Exists(d => Array.IndexOf(d.Footprint, tile) >= 0);
 
         /// <summary>The forwarder's work: carry <paramref name="source"/> to <paramref name="destination"/> until it is empty.</summary>
         internal bool AssignForwarder(ForestMachine machine, TimberStack source, int destination)
@@ -147,8 +157,8 @@ namespace ForesTycoon
             if (destination == source.Tile) { Status = "A cél nem lehet maga a forrás sarang."; return false; }
             bool mill = MillAt(destination) != null;
             if (!mill && StackAt(destination) == null && !CanPlaceStack(destination)) { Status = "Ide nem rakható sarang."; return false; }
-            if (FindPath(null, machine.Tile, t => t == source.Tile) == null) { Status = "A forwarder nem talál utat a forrás saranghoz."; return false; }
-            if (FindPath(null, source.Tile, t => t == destination, destination) == null) { Status = "A forrás sarangtól nem vezet út a célig."; return false; }
+            if (ForwarderPath(machine.Tile, source.Tile) == null) { Status = "A forwarder nem talál utat a forrás saranghoz."; return false; }
+            if (ForwarderPath(ForwarderPath(machine.Tile, source.Tile)[^1], destination) == null) { Status = "A forrás sarangtól nem vezet út a célig."; return false; }
             Release(machine);
             machine.Source = source; machine.Destination = destination;
             Restart(machine);
@@ -158,6 +168,8 @@ namespace ForesTycoon
 
         private static void Release(ForestMachine machine)
         {
+            machine.Cargo += machine.LogTransferVolume; machine.CargoValue += machine.LogTransferValue;
+            machine.LogTransferVolume = 0; machine.LogTransferValue = 0; machine.LogCycleDuration = 0; machine.WorkTime = 0;
             machine.Site = null; machine.Source = null; machine.Target = null; machine.Destination = -1; machine.HomeRequested = false;
         }
 
@@ -202,7 +214,7 @@ namespace ForesTycoon
         {
             var site = machine.Site;
             Release(machine);
-            int[] path = machine.Home == null ? null : FindPath(site, machine.Tile, t => t == machine.Home.TileId);
+            int[] path = machine.Home == null ? null : FindPath(site, machine.Tile, t => t == machine.Home.TileId, networkOnly: machine.Kind == ForestMachineKind.Forwarder);
             if (path != null) Drive(machine, path, ForestMachineState.Parked);
             else machine.State = ForestMachineState.Parked;
         }
@@ -325,20 +337,20 @@ namespace ForesTycoon
             var source = machine.Source;
             if (machine.State == ForestMachineState.Loading)
             {
-                machine.WorkTime += dt;
-                var (taken, value) = source.Take(Math.Min((float)(Tuning[Tune.ForwarderLoadRate] * dt), machine.Capacity - machine.Cargo));
-                machine.Cargo += taken; machine.CargoValue += value;
+                bool done = ForwarderLoading.Step(machine, dt, (amount, value) => Receive(machine.Destination, amount, value));
                 Fuel(machine, Tuning[Tune.FuelCrane] * dt);
-                if (machine.Cargo < machine.Capacity - 0.001f && source.Volume > 0.0001f && !machine.HomeRequested) return;
+                if (!done) return;
             }
             else if (machine.State == ForestMachineState.Unloading)
             {
-                if (!UnloadStep(machine, Tuning.F(Tune.ForwarderUnloadRate), machine.Destination, dt)) return;
+                bool done = ForwarderLoading.Step(machine, dt, (amount, value) => Receive(machine.Destination, amount, value));
+                Fuel(machine, Tuning[Tune.FuelCrane] * dt);
+                if (!done) return;
             }
             // Decide: loaded → to the destination; empty → fetch a worthwhile load, the rest once nothing more comes, or go home.
             if (machine.Cargo > 0.01f)
             {
-                int[] path = FindPath(null, machine.Tile, t => t == machine.Destination, machine.Destination);
+                int[] path = ForwarderPath(machine.Tile, machine.Destination);
                 if (path != null) Drive(machine, path, ForestMachineState.Unloading); else machine.State = ForestMachineState.Parked;
                 return;
             }
@@ -346,7 +358,7 @@ namespace ForesTycoon
             bool fed = BeingFed(source);
             if (source.Volume >= machine.Capacity * 0.5f || (source.Volume > 0.01f && !fed))
             {
-                int[] back = FindPath(null, machine.Tile, t => t == source.Tile);
+                int[] back = ForwarderPath(machine.Tile, source.Tile);
                 if (back != null) Drive(machine, back, ForestMachineState.Loading); else machine.State = ForestMachineState.Parked;
                 return;
             }

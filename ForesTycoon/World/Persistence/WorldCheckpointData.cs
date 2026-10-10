@@ -22,7 +22,7 @@ namespace ForesTycoon
     internal sealed record ForestMachineCheckpoint(int Id, ForestMachineKind Kind, int Site, int[] Path, double Position, double PreviousPosition,
         ForestMachineState State, ForestMachineState Goal, float Cargo, double WorkTime, int Home = -1, bool HomeRequested = false,
         int Source = -1, int Target = -1, int Destination = -1, double CargoValue = 0, double FuelUsed = 0, double UnitPrice = 0,
-        UpkeepCheckpoint Upkeep = null, bool HasWork = false);
+        UpkeepCheckpoint Upkeep = null, bool HasWork = false, float LogTransferVolume = 0, double LogTransferValue = 0, double LogCycleDuration = 0);
     internal sealed record UpkeepCheckpoint(float Wear, bool Broken, float RepairLeft, uint Seed, int Breakdowns);
     internal sealed record DepotCheckpoint(int TileId, int[] Footprint, CheckpointPosition Position);
     internal sealed record TruckCheckpoint(int Id, int Home, TruckPhase Phase, int Vehicle, int Source, int Destination, bool HomeRequested,

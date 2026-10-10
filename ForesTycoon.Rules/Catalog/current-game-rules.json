@@ -3088,7 +3088,7 @@
       "scope": "G\u00E9p / sarangp\u00E1r",
       "schedule": "1/30 j\u00E1rm\u0171-s al-l\u00E9p\u00E9s",
       "execution": "NativeCode",
-      "description": "Forr\u00E1sb\u00F3l felvesz, c\u00E9lba lerak; terhel\u00E9s szerint v\u00E1ltoz\u00F3 sebess\u00E9g, \u00FAton/nyomon \u00E9s kitermel\u00E9si ter\u00FCleten k\u00F6zlekedik.",
+      "description": "\u00DAton vagy nyomon \u00E1llva, r\u00F6nk\u00F6nk\u00E9nt rakodik. A markol\u00F3 megfog\u00E1skor kiveszi, elenged\u00E9skor \u00E1tadja a t\u00E9rfogatot \u00E9s \u00E9rt\u00E9ket; az alap ciklus 8 m\u00E1sodperc. A rakom\u00E1ny alulr\u00F3l \u00E9p\u00FCl \u00E9s fel\u00FClr\u0151l fogy.",
       "formula": "",
       "notes": "",
       "reads": [
@@ -3122,21 +3122,21 @@
         },
         {
           "name": "Rakod\u00E1si r\u00E1ta",
-          "value": 2.5,
+          "value": 0.07853981852531433,
           "unit": "m\u00B3/j\u00E1rm\u0171-s",
           "key": "ForwarderLoadRate",
           "min": 0.05,
           "max": 30,
-          "default": 2.5
+          "default": 0.07853981852531433
         },
         {
           "name": "Lerakod\u00E1si r\u00E1ta",
-          "value": 3.5,
+          "value": 0.07853981852531433,
           "unit": "m\u00B3/j\u00E1rm\u0171-s",
           "key": "ForwarderUnloadRate",
           "min": 0.05,
           "max": 30,
-          "default": 3.5
+          "default": 0.07853981852531433
         },
         {
           "name": "\u00DCres sebess\u00E9g",

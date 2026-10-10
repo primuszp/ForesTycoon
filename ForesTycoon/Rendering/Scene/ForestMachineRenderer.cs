@@ -23,6 +23,7 @@ namespace ForesTycoon
             internal AnimatedGlbModel Model;
             internal AnimatedModelRenderer Renderer;
             internal AnimatedGlbModel.Pose Pose;
+            internal ForwarderCraneRig Rig;
             internal int[] Wheels;
             internal bool[] LeftWheel;
             internal int Crane = -1, Boom = -1, Trailer = -1;
@@ -49,7 +50,7 @@ namespace ForesTycoon
                 else if (name == "trailer") trailer = i;
             }
             return new MachineModel { Model = model, Renderer = new AnimatedModelRenderer(model), Pose = model.CreatePose(),
-                Wheels = wheels.ToArray(), LeftWheel = left.ToArray(), Crane = crane, Boom = boom, Trailer = trailer };
+                Rig = new ForwarderCraneRig(model), Wheels = wheels.ToArray(), LeftWheel = left.ToArray(), Crane = crane, Boom = boom, Trailer = trailer };
         }
 
         // Stack (sarang) models, smallest first, with the timber volume each one shows.
@@ -154,6 +155,7 @@ namespace ForesTycoon
         internal void Draw(Terrain terrain, ForestryLogistics logistics, GraphicsSettings settings, float alpha)
         {
             if (logistics == null) return;
+            frameSettings = settings;
             DrawDepots(terrain, logistics, settings);
             foreach (var truck in logistics.Trucks)
                 if (truck.Upkeep.Broken && truck.Vehicle != null)
@@ -181,14 +183,27 @@ namespace ForesTycoon
                     point = ParkingBay(terrain, machine.Home, machine.Kind == ForestMachineKind.Harvester ? 0 : 1).Xy;
                     heading = Vector2.UnitY;
                 }
+                if (machine.Kind == ForestMachineKind.Forwarder && machine.State is ForestMachineState.Loading or ForestMachineState.Unloading)
+                {
+                    int stackTile = machine.State == ForestMachineState.Loading ? machine.Source.Tile : machine.Destination;
+                    StackPlace(terrain.Map, stackTile, out Vector2 stackAt, out heading);
+                    terrain.Map.TryGetTileCenter(machine.Tile, out Vector3 dock);
+                    Vector2 across = stackAt - dock.Xy;
+                    if (across.LengthSquared > .01f) across.Normalize();
+                    int count = ForwarderLoading.Count(machine.State == ForestMachineState.Loading ? machine.Source.Volume : (logistics.StackAt(stackTile)?.Volume ?? 0));
+                    bool held = machine.LogTransferVolume > 0, released = ForwarderLoading.Phase(machine) >= ForwarderLoading.Release;
+                    int index = machine.State == ForestMachineState.Loading ? count - (held || released ? 0 : 1) : count - (released ? 1 : 0);
+                    float pileOffset = ForwarderLoading.Slot(Math.Clamp(index, 0, 125), false).X * MetreScale;
+                    point = dock.Xy + heading * (1.2f + pileOffset) + across * .35f;
+                }
                 Matrix4 placement = Placement(terrain.Map, point, heading, machine.Kind == ForestMachineKind.Forwarder ? 2.2f : 1.4f);
                 if (RenderDevice.Visuals?.ShadowPass != true &&
                     !RenderVisibility.SphereVisible(placement.Row3.Xyz, 4f, RenderDevice.ViewProjection)) continue;
-                float articulation = machine.Kind == ForestMachineKind.Forwarder
+                float articulation = machine.Kind == ForestMachineKind.Forwarder && machine.State is not (ForestMachineState.Loading or ForestMachineState.Unloading)
                     ? Articulation(terrain.Map, machine.Path, position, point, heading, tile) : 0;
                 Matrix4 trailer = TrailerFrame(placement, articulation);
                 var model = models[(int)machine.Kind];
-                if (model != null) DrawModel(model, machine, position, placement, articulation, settings);
+                if (model != null) DrawModel(model, machine, position, placement, articulation, settings, terrain, logistics);
                 else DrawStandIn(machine, placement, trailer);
                 if (machine.Upkeep.Broken) BreakdownSign(placement.Row3.Xyz, (float)machine.Upkeep.RepairLeft);
                 if (machine.Kind == ForestMachineKind.Forwarder && machine.Cargo > 0.05f) DrawLoad(machine, trailer);
@@ -231,7 +246,7 @@ namespace ForesTycoon
             return Matrix4.CreateTranslation(-joint, 0, 0) * Matrix4.CreateRotationZ(articulation) * Matrix4.CreateTranslation(joint, 0, 0) * placement;
         }
 
-        private static void DrawModel(MachineModel m, ForestMachine machine, double position, Matrix4 placement, float articulation, GraphicsSettings settings)
+        private void DrawModel(MachineModel m, ForestMachine machine, double position, Matrix4 placement, float articulation, GraphicsSettings settings, Terrain terrain, ForestryLogistics logistics)
         {
             var model = m.Model;
             // Rest pose, then extra local rotations: wheels roll with the distance driven, the crane works while felling or loading.
@@ -253,6 +268,8 @@ namespace ForesTycoon
                         * Matrix4.CreateRotationY(articulation) * Matrix4.CreateTranslation(node.Translation);
                 m.Pose.World[i] = node.Parent < 0 ? local : local * m.Pose.World[node.Parent];
             }
+            if (machine.Kind == ForestMachineKind.Forwarder && machine.State is ForestMachineState.Loading or ForestMachineState.Unloading)
+                DrawCraneTransfer(m, machine, placement, terrain, logistics, settings);
             m.Renderer.Draw(m.Pose, Axis * Matrix4.CreateScale(MetreScale) * placement, settings,
                 VehicleRenderer.TakeOutline(), sourceMaterial: true);
         }
@@ -286,20 +303,49 @@ namespace ForesTycoon
             });
         }
 
-        // Round logs between the forwarder's stakes, filling the bunk as the cargo grows.
-        private static void DrawLoad(ForestMachine machine, Matrix4 trailer)
+        private AnimatedGlbModel logModel;
+        private AnimatedModelRenderer logRenderer;
+        private AnimatedGlbModel.Pose logPose;
+        private bool logTried;
+        private GraphicsSettings frameSettings;
+        private void DrawLog(Matrix4 frame, Vector3 slot)
         {
-            float s = MetreScale;
-            int logs = Math.Clamp((int)MathF.Ceiling(machine.CargoFill * 12), 1, 12);
-            DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () =>
-            {
-                for (int i = 0; i < logs; i++)
-                {
-                    int layer = i < 5 ? 0 : i < 9 ? 1 : 2, first = layer == 0 ? 0 : layer == 1 ? 5 : 9, inRow = 5 - layer;
-                    float r = 0.21f, y = (i - first - (inRow - 1) / 2f) * 2 * r, z = 1.4f + r + layer * r * 1.73f;
-                    RoundLog(trailer, new Vector3(-7.5f + (i % 2) * 0.3f, y, z) * s, new Vector3(-2.3f - (i % 3) * 0.2f, y, z) * s, r * s, i);
-                }
-            });
+            if(!logTried) {
+                logTried=true;string path=Path.Combine(AppContext.BaseDirectory,"Assets","Licensed","log-001.glb");
+                if(File.Exists(path)) {logModel=AnimatedGlbModel.Load(path);logRenderer=new AnimatedModelRenderer(logModel);logPose=logModel.CreatePose();logPose.Evaluate(null,0);}
+            }
+            if(logRenderer!=null) logRenderer.Draw(logPose,Axis*Matrix4.CreateScale(MetreScale)*Matrix4.CreateTranslation(slot*MetreScale)*frame,frameSettings,sourceMaterial:true);
+            else DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads,()=>RoundLog(frame,(slot-new Vector3(2.5f,0,0))*MetreScale,(slot+new Vector3(2.5f,0,0))*MetreScale,.2f*MetreScale,0));
+        }
+        private void DrawCraneTransfer(MachineModel m, ForestMachine machine, Matrix4 placement, Terrain terrain, ForestryLogistics logistics, GraphicsSettings settings)
+        {
+            bool unloading=machine.State==ForestMachineState.Unloading;
+            double phase=ForwarderLoading.Phase(machine);
+            int tile=unloading?machine.Destination:machine.Source.Tile;
+            StackPlace(terrain.Map,tile,out Vector2 at,out Vector2 heading);
+            Matrix4 stackFrame=Placement(terrain.Map,at,heading,.8f);
+            int stackCount=ForwarderLoading.Count(unloading?(logistics.StackAt(tile)?.Volume??0):machine.Source.Volume);
+            int cargoCount=ForwarderLoading.Count(machine.Cargo);
+            bool held=machine.LogTransferVolume>0, released=phase>=ForwarderLoading.Release;
+            int stackIndex=unloading?Math.Max(0,stackCount-(released?1:0)):Math.Max(0,stackCount-(held||released?0:1));
+            int cargoIndex=unloading?Math.Max(0,cargoCount-(held||released?0:1)):Math.Max(0,cargoCount-(released?1:0));
+            Vector3 ground=Vector3.TransformPosition(ForwarderLoading.Slot(Math.Clamp(stackIndex,0,125),false)*MetreScale,stackFrame);
+            Vector3 bunk=Vector3.TransformPosition(ForwarderLoading.Slot(cargoIndex,true)*MetreScale,placement);
+            Matrix4 modelFrame=Axis*Matrix4.CreateScale(MetreScale)*placement;
+            Vector3 ToModel(Vector3 world) {var g=Vector3.TransformPosition(world,placement.Inverted())/MetreScale;return g;}
+            Vector3 target=ForwarderLoading.Target(ToModel(unloading?bunk:ground),ToModel(unloading?ground:bunk),(float)phase,out float jaw);
+            Vector3 actual=m.Rig.Solve(m.Pose,new Vector3(target.X,target.Z,-target.Y),jaw,machine.Id);
+            if(held) {
+                Vector3 world=Vector3.TransformPosition(actual,modelFrame);
+                Matrix4 logFrame=stackFrame;logFrame.Row3=new Vector4(world,1);
+                DrawLog(logFrame,Vector3.Zero);
+            }
+        }
+
+        // Round logs between the forwarder's stakes, filling the bunk as the cargo grows.
+        private void DrawLoad(ForestMachine machine, Matrix4 trailer)
+        {
+            for (int i = 0; i < ForwarderLoading.Count(machine.Cargo); i++) DrawLog(trailer, ForwarderLoading.Slot(i, true));
         }
 
         // Stack sites (sarangok): an empty one shows its marking stakes, a filled one its round logs.
@@ -346,7 +392,7 @@ namespace ForesTycoon
                     {
                         Vector2 across = (other.Xy - centre.Xy).Normalized();
                         heading = new Vector2(-across.Y, across.X);
-                        at = centre.Xy + across * 0.15f * map.TileWidth;
+                        at = centre.Xy + across * 0.58f * map.TileWidth;
                         return;
                     }
             }
@@ -366,30 +412,8 @@ namespace ForesTycoon
         {
             StackPlace(map, tile, out Vector2 at, out Vector2 heading);
             Matrix4 placement = Placement(map, at, heading, 0.8f);
-            // One stack model that grows with the wood: it rises to full height first, then gets longer along the track.
-            const int Model = 2;
-            if (TryStackModel(Model))
-            {
-                float full = StackSizes[Model].Volume;
-                float height = Math.Clamp(MathF.Sqrt(volume / (full * 0.3f)), 0.35f, 1f);
-                float length = Math.Clamp(volume / (full * height), 0.2f, 2.2f);
-                var scale = Matrix4.CreateScale(length, height, height) * Matrix4.CreateScale(MetreScale * 0.55f);
-                stackRenderers[Model].Draw(stackPoses[Model], scale * Axis * placement, settings, sourceMaterial: true);
-                return;
-            }
-            // Without the model: a stack of round logs, more layers as the volume grows.
-            int logs = Math.Clamp((int)MathF.Ceiling(volume / 0.8f), 1, 21);
-            float r = 0.22f, sScale = MetreScale;
-            DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () =>
-            {
-                int i = 0;
-                for (int layer = 0, inRow = 6; i < logs && inRow > 0; layer++, inRow--)
-                    for (int k = 0; k < inRow && i < logs; k++, i++)
-                    {
-                        float y = (k - (inRow - 1) / 2f) * 2 * r, z = r + layer * r * 1.73f;
-                        RoundLog(placement, new Vector3(-2.1f + (i % 3) * 0.15f, y, z) * sScale, new Vector3(2.1f - (i % 2) * 0.2f, y, z) * sScale, r * sScale, i);
-                    }
-            });
+            int count = Math.Min(126, ForwarderLoading.Count(volume));
+            for(int i=0;i<count;i++) DrawLog(placement, ForwarderLoading.Slot(i, false));
         }
 
         private bool TryStackModel(int size)
@@ -479,6 +503,7 @@ namespace ForesTycoon
         {
             foreach (var m in models) m?.Dispose();
             foreach (var r in stackRenderers) r?.Dispose();
+            logRenderer?.Dispose(); logRenderer=null;logModel=null;logPose=null;logTried=false;
             depotModel?.Dispose(); depotModel = null; depotTried = false;
             Array.Clear(models); Array.Clear(stacks); Array.Clear(stackRenderers); Array.Clear(stackPoses); Array.Clear(stackTried);
             loaded = false;
