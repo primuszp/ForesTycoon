@@ -64,6 +64,15 @@ namespace ForesTycoon
         internal long ForestCpuPayloadBytes { get; private set; }
         internal long ForestBudgetExcessBytes { get; private set; }
         internal int ForestResidentLods => individualForestChunks.Count;
+        internal int ReadyVisibleForestChunks(ForestLod lod)
+        {
+            int count = 0;
+            foreach (var chunk in visibleChunks)
+                if (displayedForestLods.TryGetValue(chunk, out var displayed) && displayed == lod
+                    && individualForestChunks.TryGetValue((chunk, lod), out var geometry) && geometry.Initialized)
+                    count++;
+            return count;
+        }
         internal int ForestCacheEvictions { get; private set; }
         private long forestUseSequence;
         private ForestLod? generatedForestLod;
@@ -165,6 +174,25 @@ namespace ForesTycoon
                 SynchronousForestBuilds = true;
                 foreach (var chunk in chunkIndex.Chunks)
                     foreach (var lod in Enum.GetValues<ForestLod>()) GetIndividualForestChunk(chunk, forest, graphics, lod, false, out _);
+            }
+            finally { SynchronousForestBuilds = synchronous; }
+        }
+
+        // Restore the complete opening diorama at the camera's actual detail level.
+        // Only its visible chunks are prepared; the rest of the map still streams.
+        internal void PrepareOpeningForest(ForestSystem forest, GraphicsSettings graphics, RenderContext context)
+        {
+            bool synchronous = SynchronousForestBuilds;
+            try
+            {
+                SynchronousForestBuilds = true;
+                generatedForestLod = ForestLodPolicy.Select(context.PixelsPerWorldUnit, null);
+                foreach (var chunk in visibleChunks)
+                {
+                    GetIndividualForestChunk(chunk, forest, graphics, generatedForestLod.Value, false, out _);
+                    displayedForestLods[chunk] = generatedForestLod.Value;
+                }
+                TrimForestCache();
             }
             finally { SynchronousForestBuilds = synchronous; }
         }
@@ -612,18 +640,27 @@ namespace ForesTycoon
             if (!shadow0) AdvanceForestBuild(forest, graphics);
             generatedForestLod = ForestLodPolicy.Select(context.PixelsPerWorldUnit, generatedForestLod);
             ForestLod lod = generatedForestLod.Value;
+            bool needsCoverage = false;
             if (StreamGeometry && !SynchronousForestBuilds)
             {
                 // Finish the visible base layer before spending work on detailed upgrades.
                 foreach (var chunk in visibleChunks)
                     if (!displayedForestLods.TryGetValue(chunk, out var displayed)
                         || !individualForestChunks.TryGetValue((chunk, displayed), out var cached) || !cached.Initialized)
-                    { lod = ForestLod.Far; break; }
-                if (ForestBudgetExcessBytes > 0) lod = ForestLod.Far;
+                    { needsCoverage = true; break; }
+                // A cache limit controls unused geometry, never the camera's visual quality.
+                // The visible working set may exceed it and is reported separately.
             }
             chunkLods.Clear();
-            foreach (var chunk in visibleChunks) chunkLods.Add(ResolveForestLod(chunk, forest, graphics, lod));
-            if (!shadow0) PrepareNeighbouringLods(forest, graphics, lod);
+            foreach (var chunk in visibleChunks)
+            {
+                // New chunks must not downgrade already visible detailed trees (including in shadows).
+                var target = needsCoverage
+                    ? displayedForestLods.TryGetValue(chunk, out var displayed) ? displayed : ForestLod.Far
+                    : lod;
+                chunkLods.Add(ResolveForestLod(chunk, forest, graphics, target));
+            }
+            if (!shadow0 && !needsCoverage) PrepareNeighbouringLods(forest, graphics, lod);
             bool shadow = RenderDevice.Visuals?.ShadowPass == true;
             if (!shadow)
             {

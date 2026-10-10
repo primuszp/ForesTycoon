@@ -142,8 +142,11 @@ namespace ForesTycoon
                 "Budget pressure retained unused forest levels.");
             Require(terrain.ForestBudgetExcessBytes == terrain.ForestCpuPayloadBytes + terrain.ForestGpuPayloadBytes - 1,
                 "Visible working-set excess was not reported exactly.");
-            Require(Draw(terrain, forest, 12) == farVertices,
-                "Budget pressure rebuilt expensive detail instead of preserving Far coverage.");
+            int detailedVertices = Draw(terrain, forest, 12);
+            for (int frame = 0; frame < 2000 && terrain.ReadyVisibleForestChunks(ForestLod.Near) < terrain.VisibleChunkCount; frame++)
+                detailedVertices = Draw(terrain, forest, 12);
+            Require(detailedVertices > farVertices && terrain.ReadyVisibleForestChunks(ForestLod.Near) == terrain.VisibleChunkCount,
+                "Cache budget pressure permanently downgraded visible tree models.");
             var offscreen = new RenderContext(0, 0, 0, 0, 0, 0, false, false, 1,
                 -60, -45, 100000, 100000, 100032, 100032, 12);
             terrain.UpdateVisibleTiles(offscreen);
@@ -173,18 +176,20 @@ namespace ForesTycoon
                 double constructionMs = timer.Elapsed.TotalMilliseconds;
                 Require(world.ForestResidentLods == 0 && world.ForestGpuPayloadBytes == 0,
                     "World construction warmed forest meshes before its camera was known.");
-                world.Graphics.Enhanced = false;
                 RenderDevice.SetCamera(Matrix4.Identity);
                 var context = new RenderContext(0, 0, 0, 0, 0, 0, false, false, 1,
                     -60, -45, -32, -32, 32, 32, 12);
                 timer.Restart();
                 world.Draw(context);
                 GL.Finish();
-                Require(world.ForestChunkRebuilds == 0, "Cold world synchronously built forest geometry.");
+                Require(world.ForestGpuPayloadBytes > 0,
+                    "The opening diorama was published without forest geometry.");
+                Require(world.ReadyVisibleForestChunks(ForestLod.Near) == world.VisibleChunkCount,
+                    "The opening diorama did not retain the camera's detailed tree models in every visible chunk.");
                 Require(world.VisibleChunkCount < world.TotalChunkCount,
                     "Scaling test failed to restrict the initial viewport.");
-                Require(world.ForestResidentLods <= world.VisibleChunkCount,
-                    "Cold world allocated offscreen forest levels.");
+                Require(world.ForestResidentLods < world.TotalChunkCount * 3,
+                    "Opening preparation warmed every LOD across the entire map.");
                 Require(GL.GetError() == ErrorCode.NoError, "Cold world scaling produced an OpenGL error.");
                 Console.WriteLine($"Cold world {nodes - 1}x{nodes - 1}: constructor {constructionMs:F1} ms; first draw {timer.Elapsed.TotalMilliseconds:F1} ms; thread allocations {(GC.GetAllocatedBytesForCurrentThread() - allocated) / 1048576.0:F1} MiB; visible {world.VisibleChunkCount}/{world.TotalChunkCount}, resident forest levels {world.ForestResidentLods}.");
             }

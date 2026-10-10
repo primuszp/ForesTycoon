@@ -14,12 +14,14 @@ namespace ForesTycoon
         {
             void Save(string name)
             {
+                System.Console.WriteLine($"Capture {name}: forest resident={world.ForestResidentLods}, rebuilt={world.ForestChunkRebuilds}, visible={world.VisibleChunkCount}, CPU={world.ForestCpuPayloadBytes}, GPU={world.ForestGpuPayloadBytes}, enhanced={world.Graphics.Enhanced}, grid={world.Graphics.ShowGrid}");
                 Directory.CreateDirectory(captureDirectory);
                 FramebufferCapture.SavePng(Path.Combine(captureDirectory, name + ".png"), FramebufferWidth, FramebufferHeight);
             }
 
             switch (frameIndex)
             {
+                case 1: Save("00-first-frame"); break;
                 case 60: Save("01-hud-default"); break;
                 case 61:
                     showGraphics = showDeveloper = showForestry = true;

@@ -28,7 +28,7 @@ namespace ForesTycoon
                 int[] route = terrain.Map.FindDemoRoadRoute();
                 Require(route.Length >= 2, "Graphics fixture has no road.");
                 vehicles.Spawn(route);
-                Require(new GraphicsSettings().ShowGrid, "Grid is not enabled by default.");
+                Require(!new GraphicsSettings().ShowGrid, "The opening diorama is obscured by the editing grid.");
                 // Toggle comparisons intentionally start with the grid disabled.
                 var settings = new GraphicsSettings { Enhanced = false, Fog = false, Wildlife = false, ShowGrid = false };
                 using var renderer = new TerrainRenderer(terrain, vehicles, new WorldEffectSystem(), forest, settings);

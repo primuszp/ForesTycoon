@@ -4,6 +4,12 @@ A `large-world-v1` protokoll 64×64 és 128×128 csempés, 42-es seedű termész
 
 ## Mérés és memória
 
+### Az induló kép minőségének helyreállítása
+
+A felhasználó az induló erdőkép és a dioráma hangulatának romlását jelezte. A korábbi, részletes procedurális faformák generátora változatlan; a regresszió a hideg, fokozatos geometriaépítésben és a memóriahatár miatti Far-LOD kényszerítésben volt. A renderer most az első megjelenítés előtt elkészíti az induló kamera összes látható chunkját a kamera által kért LOD-on. A térkép többi része továbbra is fokozatosan töltődik. A cache a nem használt geometriát üríti; a látható részletesség túllépése külön mérve, nem automatikus minőségromlással kezelve. Új, még betöltődő chunkok nem egyszerűsítik le a már megjelenített fákat. A térképrács alapból kikapcsolva, kézzel továbbra is bekapcsolható.
+
+Az első rajzolás ezzel több munkát végez: ez tudatosan a teljes induló dioráma megjelenítéséhez tartozik. A lent szereplő korábbi hidegindítási és teljesítményadatok nem igazolják ezt az új útvonalat. A rögzített teljesítménykeretek nem emelve; az új vizuális minőség mellett később ismét ellenőrizni kell őket. A natív regresszió minden látható chunkban kész Near-geometriát követel a közeli kamera első rajzolása után, valamint kerettúllépés mellett is ellenőrzi a részletes modellekre való visszatérést.
+
 Az első konstrukció és rajzolás után 180 rajzolási lépés melegíti a világot. Az élő, már GPU-erőforrásokat birtokló világ mentését ugyanabba a világba töltjük vissza, tehát a tranzakció alatt az új jelölt és a régi világ is él. A betöltési idő, a mentés mérete és a betöltött világ első rajzolása külön adat. A szimuláció 65 másodpercre előrelép, a megváltozott világ rajzolása újra bemelegszik, majd 600 szimulációs/rajzolási képkocka készül. Az első 300 álló kamerával, a következő 300 a térkép közepét körbejáró kamerával fut. A 75. szimulációs másodpercnél pontosan egy havi váltásnak kell lennie.
 
 A P95 a rendezett 300 elemű fázis 285. eleme, nem átlag. Minden képkocka update/render/összes idejét, allokációját, látható chunkját, erdőrezidenciáját, CPU/GPU-payloadját és a renderfázisok CPU/GPU-időbélyegeit is elmentjük. A fázisprofil a világ renderpassait méri; az utófeldolgozás az összes renderidőben szerepel.

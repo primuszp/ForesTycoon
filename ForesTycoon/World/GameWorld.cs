@@ -44,6 +44,7 @@ namespace ForesTycoon
         internal GraphicsSettings Graphics { get; }
         internal TerrainMap Map => map;
         internal bool HasPresentation => terrainRenderer != null;
+        internal int ReadyVisibleForestChunks(ForestLod lod) => terrain?.ReadyVisibleForestChunks(lod) ?? 0;
         private bool disposed, faulted;
         internal bool IsFaulted => faulted;
 

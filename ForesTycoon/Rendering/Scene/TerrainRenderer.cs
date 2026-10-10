@@ -12,6 +12,7 @@ namespace ForesTycoon
         private bool disposed;
         internal void VerifyAccess() { ObjectDisposedException.ThrowIf(disposed, this); owner.VerifyAccess(); }
         private readonly Terrain terrain;
+        private bool openingForestPrepared;
         private readonly VehicleSystem vehicles;
         private readonly WorldEffectSystem effects;
         private readonly ForestSystem forest;
@@ -76,6 +77,11 @@ namespace ForesTycoon
             {
                 if (ownsWildlife) { wildlifeSimulation.Update(Math.Max(0, context.SimulationTimeSeconds-wildlifeTime), terrain.Map, forest, environment); wildlifeTime=context.SimulationTimeSeconds; }
                 terrain.UpdateVisibleTiles(context);
+                if (!openingForestPrepared)
+                {
+                    terrain.PrepareOpeningForest(forest, graphics, context);
+                    openingForestPrepared = true;
+                }
                 if(environment!=null && graphics.AutomaticWeather)weather.Update(environment,graphics,context.SimulationTimeSeconds);
                 else weather.Update(context.SimulationTimeSeconds, graphics);
                 // Time of day and season: the light follows the calendar.
