@@ -9,7 +9,7 @@ namespace ForesTycoon.Ecology
             * Radiation * (1 - Humidity * 0.5) * (1 + Wind * 0.035);
     }
 
-    internal readonly record struct WeatherInterval(double Seconds, double Rain, WeatherForcing Forcing);
+    internal readonly record struct WeatherInterval(double Seconds, double Rain, WeatherForcing Forcing, bool Snow = false);
 
     // Seeded event timeline and atmospheric forcing; independent of soil, forest and rendering.
     internal sealed partial class WeatherSystem
@@ -29,8 +29,11 @@ namespace ForesTycoon.Ecology
         internal double RainRate => RateAt(Time);
         private double Ramp => Math.Min(10 * timeScale, (EventEnd - EventStart) * 0.2);
         internal double ExpectedEventRain => PeakRain * (EventEnd - EventStart - Ramp) * HoursPerSecond;
-        internal double Temperature => 12 + 9 * Math.Sin(2 * Math.PI * Time / ForestYearSeconds);
-        internal double Humidity => Preset is WeatherPreset.Rain or WeatherPreset.Storm ? 0.9 : 0.55;
+        internal int Season => (int)Math.Floor(Time / ForestYearSeconds * 4 + 1e-9) % 4;
+        internal double Temperature => Preset == WeatherPreset.Snow
+            ? Math.Min(-1, SeasonalTemperature) : SeasonalTemperature;
+        private double SeasonalTemperature => 10 + 15 * Math.Sin(2 * Math.PI * (Time / ForestYearSeconds - .125));
+        internal double Humidity => Preset is WeatherPreset.Rain or WeatherPreset.Storm or WeatherPreset.Snow ? 0.9 : 0.55;
         internal double Wind => 1.5 + (Preset == WeatherPreset.Storm ? 8.5 : Preset == WeatherPreset.Rain ? 1.5 : 0)
             * Math.Clamp(RainRate / Math.Max(1, PeakRain), 0, 1);
         internal double Radiation => 1 - Cloud * 0.75;
@@ -70,29 +73,42 @@ namespace ForesTycoon.Ecology
 
         internal void ForceWeather(WeatherPreset preset, int peak = -1, int duration = -1)
         {
-            if (preset == WeatherPreset.Snow || !Enum.IsDefined(preset)) throw new ArgumentOutOfRangeException(nameof(preset));
+            if (!Enum.IsDefined(preset)) throw new ArgumentOutOfRangeException(nameof(preset));
             if (peak < -1 || peak > 100) throw new ArgumentOutOfRangeException(nameof(peak));
             if (duration < -1 || (duration != -1 && duration < 20) || duration > 600)
                 throw new ArgumentOutOfRangeException(nameof(duration));
             StartEvent(preset, duration < 0 ? (preset == WeatherPreset.Storm ? 45 : preset == WeatherPreset.Rain ? 90 : 180) * timeScale : duration,
-                preset is WeatherPreset.Rain or WeatherPreset.Storm ? (peak < 0 ? (preset == WeatherPreset.Storm ? 32 : 12) : peak) : 0);
+                preset is WeatherPreset.Rain or WeatherPreset.Storm or WeatherPreset.Snow ? (peak < 0 ? (preset == WeatherPreset.Storm ? 32 : preset == WeatherPreset.Snow ? 8 : 12) : peak) : 0);
         }
 
         private void NextEvent()
         {
             double r = Random();
             WeatherPreset next;
-            if (Preset is WeatherPreset.Rain or WeatherPreset.Storm) next = r < 0.65 ? WeatherPreset.Cloudy : WeatherPreset.Sunny;
-            else if (Preset == WeatherPreset.Cloudy) next = r < 0.15 ? WeatherPreset.Storm : r < 0.65 ? WeatherPreset.Rain : WeatherPreset.Sunny;
-            else next = r < 0.75 ? WeatherPreset.Cloudy : WeatherPreset.Sunny;
-            double duration = next switch
+            next = Season switch
             {
-                WeatherPreset.Sunny => 120 + Random() * 180,
-                WeatherPreset.Cloudy => 60 + Random() * 120,
-                WeatherPreset.Rain => 45 + Random() * 75,
-                _ => 20 + Random() * 40
+                1 => r < .45 ? WeatherPreset.Sunny : r < .70 ? WeatherPreset.Cloudy : r < .85 ? WeatherPreset.Rain : WeatherPreset.Storm,
+                2 => r < .10 ? WeatherPreset.Sunny : r < .38 ? WeatherPreset.Cloudy : r < .96 ? WeatherPreset.Rain : WeatherPreset.Storm,
+                3 => r < .15 ? WeatherPreset.Sunny : r < .40 ? WeatherPreset.Cloudy : WeatherPreset.Snow,
+                _ => r < .35 ? WeatherPreset.Sunny : r < .65 ? WeatherPreset.Cloudy : r < .96 ? WeatherPreset.Rain : WeatherPreset.Storm
             };
-            StartEvent(next, duration * timeScale, next == WeatherPreset.Rain ? 6 + Random() * 12 : next == WeatherPreset.Storm ? 20 + Random() * 20 : 0);
+            double duration = (Season, next) switch
+            {
+                (1, WeatherPreset.Rain) => 8 + Random() * 12,
+                (1, WeatherPreset.Storm) => 8 + Random() * 10,
+                (2, WeatherPreset.Rain) => 45 + Random() * 45,
+                (_, WeatherPreset.Snow) => 40 + Random() * 35,
+                (_, WeatherPreset.Sunny) => 45 + Random() * 65,
+                (_, WeatherPreset.Cloudy) => 25 + Random() * 35,
+                (_, WeatherPreset.Rain) => 25 + Random() * 30,
+                _ => 20 + Random() * 15
+            };
+            double quarter = ForestYearSeconds / 4;
+            double boundary = (Math.Floor(Time / quarter + 1e-9) + 1) * quarter;
+            double peak = next == WeatherPreset.Snow ? 4 + Random() * 6
+                : next == WeatherPreset.Storm ? (Season == 1 ? 32 : 20) + Random() * 20
+                : next == WeatherPreset.Rain ? (Season == 1 ? 16 : 6) + Random() * 12 : 0;
+            StartEvent(next, Math.Min(duration * timeScale, boundary - Time), peak);
         }
 
         private double RateAt(double time) => PeakRain * Math.Clamp(
@@ -108,7 +124,7 @@ namespace ForesTycoon.Ecology
             var forcing = new WeatherForcing(Radiation, Temperature, Humidity, Wind);
             double rain = (RateAt(Time) + RateAt(Time + dt)) * 0.5 * dt * HoursPerSecond;
             Time += dt; TotalRain += rain; EventRain += rain;
-            return new(dt, rain, forcing);
+            return new(dt, rain, forcing, Preset == WeatherPreset.Snow);
         }
     }
 }

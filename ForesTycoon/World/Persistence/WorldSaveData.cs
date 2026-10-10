@@ -70,10 +70,10 @@ namespace ForesTycoon
 
     sealed class WorldSaveData
     {
-        public const int CurrentVersion = 12;
+        public const int CurrentVersion = 13;
         // Bump whenever native simulation semantics change. Editable graphs and tuning
         // are stored separately in the checkpoint/journal; this identifies their runtime.
-        public const string CurrentRuntimeRulesVersion = "forestycoon-simulation/2026-10-10.1";
+        public const string CurrentRuntimeRulesVersion = "forestycoon-simulation/2026-10-10.2";
         public string RuntimeRulesVersion { get; init; } = CurrentRuntimeRulesVersion;
         public WorldSaveData() { }
         // Missing JSON must not silently inherit today's runtime identifier.
@@ -100,9 +100,10 @@ namespace ForesTycoon
 
         public void Validate()
         {
-            if (Version != 4 && Version != 5 && Version != 6 && Version != 7 && Version != 8 && Version != 9 && Version != 10 && Version != 11 && Version != CurrentVersion)
+            if (Version != 4 && Version != 5 && Version != 6 && Version != 7 && Version != 8 && Version != 9 && Version != 10 && Version != 11 && Version != 12 && Version != CurrentVersion)
                 throw new NotSupportedException($"Save version {Version} is not supported; expected {CurrentVersion}.");
-            if (Version >= 12 && !string.Equals(RuntimeRulesVersion, CurrentRuntimeRulesVersion, StringComparison.Ordinal))
+            bool migratedSeasonalWeather = Version == 12 && RuntimeRulesVersion == "forestycoon-simulation/2026-10-10.1";
+            if (Version >= 12 && !migratedSeasonalWeather && !string.Equals(RuntimeRulesVersion, CurrentRuntimeRulesVersion, StringComparison.Ordinal))
                 throw new NotSupportedException($"Simulation rules runtime '{RuntimeRulesVersion ?? "missing"}' is not supported; expected '{CurrentRuntimeRulesVersion}'.");
             if (!EnvironmentSystem.IsValidForestYearSeconds(ReplayForestYearSeconds))
                 throw new InvalidOperationException("Save forest year duration must be between 120 and 1200 seconds.");
@@ -113,6 +114,7 @@ namespace ForesTycoon
             _ = ReplaySoilModel;
             _ = ReplayClimate;
             if (Checkpoint != null) {
+                if (Version >= 13) CheckpointGuard.Require(Checkpoint.Ecology?.Environment?.Snow != null, "seasonal snow checkpoint");
                 if (Checkpoint.Rules != null) { var rules = new CompiledRoadRule(Checkpoint.Rules); rules.ValidateRange(); }
                 if (Version >= 10 && Checkpoint.Rules == null) throw new InvalidOperationException("Save has no rule model.");
                 if (Checkpoint.Tuning != null) _ = GameTuning.FromOverrides(Checkpoint.Tuning);

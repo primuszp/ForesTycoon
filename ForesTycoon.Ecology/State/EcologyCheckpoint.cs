@@ -9,7 +9,7 @@ namespace ForesTycoon.Ecology
     internal sealed record EnvironmentCheckpoint(double[][] Fields, double Remainder, double MonthSeconds,
         double RadiationIntegral, double Evaporated, double Transpired, double Outflow, double InitialWater,
         ulong Revision, WeatherCheckpoint Weather, ForestHydrologyInputs[] Vegetation, ulong VegetationRevision,
-        double? RainReceived = null);
+        double? RainReceived = null, double[] Snow = null);
     internal sealed record TreePatchCheckpoint(int TileId, ForestTree[] Trees, ForestTreeStump[] Stumps,
         ForestDeadTree[] DeadTrees, float Depot, ulong Revision, ulong TopologyRevision);
     internal sealed record TreeStoreCheckpoint(TreePatchCheckpoint[] Patches, ulong NextId, ulong TopologyRevision,
@@ -28,12 +28,17 @@ namespace ForesTycoon.Ecology
             demandIntegral, uptakeIntegral, uptakeRate, demandRate };
         internal EnvironmentCheckpoint Capture() => new(StateFields.Select(a => (double[])a.Clone()).ToArray(),
             remainder, monthSeconds, radiationIntegral, Evaporated, Transpired, Outflow, InitialWater, Revision, weather.Capture(),
-            (ForestHydrologyInputs[])vegetation.Clone(), vegetationRevision, RainReceived);
+            (ForestHydrologyInputs[])vegetation.Clone(), vegetationRevision, RainReceived, (double[])snow.Clone());
 
         internal void Restore(EnvironmentCheckpoint state)
         {
             ArgumentNullException.ThrowIfNull(state);
             var fields = StateFields;
+            if (state.Snow != null)
+            {
+                CheckpointGuard.Length(state.Snow, CellCount, "snow raster length");
+                foreach (double value in state.Snow) CheckpointGuard.NonNegative(value, "snow water");
+            }
             CheckpointGuard.Length(state.Fields, fields.Length, "water fields");
             for (int f = 0; f < fields.Length; f++)
             {
@@ -62,6 +67,8 @@ namespace ForesTycoon.Ecology
             CheckpointGuard.NonNegative(regionalRainReceived, "received precipitation");
             if (Climate.Uniform) CheckpointGuard.Require(regionalRainReceived == weather.TotalRain * CellCount, "uniform precipitation ledger");
             for (int i = 0; i < fields.Length; i++) state.Fields[i].CopyTo(fields[i], 0);
+            Array.Clear(snow);
+            state.Snow?.CopyTo(snow, 0);
             remainder = state.Remainder; monthSeconds = state.MonthSeconds; radiationIntegral = state.RadiationIntegral;
             Evaporated = state.Evaporated; Transpired = state.Transpired; Outflow = state.Outflow; Revision = state.Revision;
             state.Vegetation.CopyTo(vegetation, 0); vegetationRevision = state.VegetationRevision;
@@ -77,7 +84,7 @@ namespace ForesTycoon.Ecology
         internal void Restore(WeatherCheckpoint s)
         {
             ArgumentNullException.ThrowIfNull(s);
-            CheckpointGuard.Require(s.Random != 0 && Enum.IsDefined(s.Preset) && s.Preset != WeatherPreset.Snow, "weather RNG/preset");
+            CheckpointGuard.Require(s.Random != 0 && Enum.IsDefined(s.Preset), "weather RNG/preset");
             foreach (double v in new[] { s.Time, s.EventStart, s.EventEnd, s.PeakRain, s.EventRain, s.TotalRain })
                 CheckpointGuard.NonNegative(v, "weather scalar");
             CheckpointGuard.Require(s.EventStart <= s.Time && s.Time <= s.EventEnd + 1e-8 && s.EventEnd > s.EventStart &&

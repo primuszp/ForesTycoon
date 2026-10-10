@@ -562,8 +562,8 @@
       "scope": "Vil\u00E1g",
       "schedule": "Esem\u00E9nyhat\u00E1rok \u00E9s k\u00F6rnyezeti l\u00E9p\u00E9s",
       "execution": "NativeCode",
-      "description": "Napos, borult, es\u0151 \u00E9s vihar \u00E1llapotok; seedelt \u00E1tmenetek, szezon\u00E1lis h\u0151m\u00E9rs\u00E9klet, felh\u0151zet, p\u00E1ratartalom \u00E9s sz\u00E9l. A csapad\u00E9k r\u00E1mp\u00E1inak integr\u00E1l\u00E1sa pontos.",
-      "formula": "T = 12 \u002B 9 \u00D7 sin(2\u03C0 \u00D7 id\u0151 / erd\u0151\u00E9v); sug\u00E1rz\u00E1s = 1 - 0,75 \u00D7 felh\u0151zet",
+      "description": "\u00C9vszakos, seedelt \u00E1tmenetek: \u0151sszel gyakori tart\u00F3s es\u0151, ny\u00E1ron r\u00F6vid z\u00E1por \u00E9s er\u0151s vihar, t\u00E9len havaz\u00E1s. A h\u00F3 menthet\u0151 v\u00EDzk\u00E9szlet, meleged\u00E9skor olvad. A csapad\u00E9k r\u00E1mp\u00E1inak integr\u00E1l\u00E1sa pontos.",
+      "formula": "T = 10 \u002B 15 \u00D7 sin(2\u03C0 \u00D7 (id\u0151 / erd\u0151\u00E9v - 0,125)); havaz\u00E1skor T \u2264 -1 \u00B0C; sug\u00E1rz\u00E1s = 1 - 0,75 \u00D7 felh\u0151zet",
       "notes": "",
       "reads": [
         "world.seed",

@@ -227,11 +227,13 @@ dotnet run --project ForesTycoon/ForesTycoon.csproj -- --truck-smoke-test
 
 A Nézet menüben az Új grafikai megjelenítés kapcsolóval az eredeti színalapú mód is visszaállítható. A Textúrázás, Napfény, Vetett árnyékok és Csemperács külön kapcsolható; a nap iránya és magassága állítható. Ezek a beállítások a futó játékban megmaradnak térképcsere közben.
 
-Új világokban a látvány a Környezet 1.0 rendszer tartós eseményeit követi. A Nézet / Időjárási kép menü Napsütés, Borult, Eső és Vihar választása külön látványteszt; a Szimulált időjárás látványa kapcsolóval visszaállítható a környezet hiteles időjárása. A Felhőzet és Villámlás külön kapcsolható. Az eső nedvesíti a talajt, amely utána fokozatosan szárad; a szünet megállítja az effekteket. A hó kísérleti kódja megmaradt, de a normál játék nem kapcsolja be.
+Új világokban a látvány a Környezet 1.0 rendszer évszakos eseményeit követi: ősszel gyakori, tartós eső, nyáron rövid záporok és erős viharok, télen havazás. A hópelyhek lassan süllyednek, billegnek, forognak és széllel sodródnak; a felhalmozódó hó melegedéskor a talaj vízkészletét táplálja. A Nézet / Időjárási kép menü külön látványteszt; a Szimulált időjárás látványa kapcsolóval visszaállítható a környezet hiteles időjárása. A Felhőzet és Villámlás külön kapcsolható. Az eső nedvesíti a talajt, amely utána fokozatosan szárad; a szünet megállítja az effekteket. A normál téli havazáshoz nem kell bekapcsolni a kísérleti hóelőnézetet.
 
 A vihar szélirányba dőlő, világkoordinátákhoz rögzített esőt, térfogati felhőhátteret, puha mozgó felhőárnyékot, villámfényt és procedurális vízgyűrűket használ. A [grafikai terv](docs/graphics-weather-plan.md) és a [kutatási jegyzet](docs/rain-storm-cloud-research.md) ismerteti a technikákat és a közelítéseket.
 
 Ellenőrzés: dotnet test ForesTycoon.sln --no-restore; a lefordított játék --graphics-smoke-test kapcsolója PNG-ket ment az artifacts/graphics-weather mappába, és ellenőrzi a grafikai kapcsolókat, a cache megőrzését és az eredeti kép visszaállítását.
+
+Évszakos ellenőrzés: `--seasonal-weather-smoke-test` természetes nyári vihart, őszi esőt és téli havazást rajzol, továbbá ellenőrzi a hópelyhek megállását szünetben és mozgását folytatáskor. A képek az `artifacts/seasonal-weather` mappába kerülnek. A v13-as mentés a hó vízegyenértékét is tárolja; a korábbi v12-es mentés üres hókészlettel áttér az évszakos rendszerre.
 
 
 Viharban most elágazó, fényudvarral rajzolt villámcsatornák is megjelennek: a kisülések végpontja egy látható fa koronája. A **Talajköd** kapcsoló és **Köd sűrűsége** csúszka az erdő alacsony, lassan sodródó ködfoltjait szabályozza. A talajköd alapból engedélyezett, és a helyi körülmények alapján foltokban jelenik meg. A Villám most gomb azonnali kisülést indít, akár szünet alatt is. A villám csak látványelem, nem károsítja a fákat.

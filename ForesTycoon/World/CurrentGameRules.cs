@@ -71,8 +71,8 @@ namespace ForesTycoon
             Param(regional, "Páratartalom-kontraszt", climate.HumidityContrast, "1");
             Add("weather.events", "Seedelt időjárási események", "Talaj és klíma", "Világ", "Eseményhatárok és környezeti lépés",
                 "ForesTycoon.Ecology/Climate/WeatherSystem.cs", "NextEvent", "world.seed|calendar.time|commands", "weather.rain|weather.forcing",
-                "Napos, borult, eső és vihar állapotok; seedelt átmenetek, szezonális hőmérséklet, felhőzet, páratartalom és szél. A csapadék rámpáinak integrálása pontos.",
-                "T = 12 + 9 × sin(2π × idő / erdőév); sugárzás = 1 - 0,75 × felhőzet");
+                "Évszakos, seedelt átmenetek: ősszel gyakori tartós eső, nyáron rövid zápor és erős vihar, télen havazás. A hó menthető vízkészlet, melegedéskor olvad. A csapadék rámpáinak integrálása pontos.",
+                "T = 10 + 15 × sin(2π × (idő / erdőév - 0,125)); havazáskor T ≤ -1 °C; sugárzás = 1 - 0,75 × felhőzet");
             Add("weather.evaporation", "Légköri párologtató igény", "Talaj és klíma", "Térképcella", "Környezeti lépés",
                 "ForesTycoon.Ecology/Climate/WeatherSystem.cs", "PotentialEvaporationPerHour", "climate.local|weather.forcing", "water.potential",
                 "A talajpárolgás és a növényzeti vízigény ugyanabból a helyi légköri kényszerből származik.",

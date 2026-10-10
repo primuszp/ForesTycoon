@@ -159,4 +159,24 @@ public class WorldLifecycleTests
         Assert.Equal(0, restored.CaptureCheckpoint().RoadWeatherSeconds);
         restored.Update(1.0 / 30);
     }
+
+    [Fact]
+    public void VersionTwelveMigratesToSeasonalWeatherWithAnEmptySnowStore()
+    {
+        using var world = Create(); world.Update(.3);
+        var legacy = JsonNode.Parse(Save(world))!;
+        legacy["version"] = 12;
+        legacy["runtimeRulesVersion"] = "forestycoon-simulation/2026-10-10.1";
+        legacy["checkpoint"]!["ecology"]!["environment"]!.AsObject().Remove("snow");
+        using var restored = Create();
+        using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(legacy.ToJsonString()));
+        restored.Load(stream);
+        Assert.Equal(0, restored.Environment.SnowWater);
+        Assert.Equal(world.SimulationTick, restored.SimulationTick);
+        restored.Update(1.0 / 30);
+        using var currentStream = new MemoryStream(Save(restored));
+        var current = WorldSaveSerializer.Read(currentStream);
+        Assert.Equal(13, current.Version);
+        Assert.Equal(WorldSaveData.CurrentRuntimeRulesVersion, current.RuntimeRulesVersion);
+    }
 }

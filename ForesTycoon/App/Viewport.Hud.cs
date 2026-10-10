@@ -893,13 +893,13 @@ namespace ForesTycoon
                 }
 
                 ImGui.SeparatorText("Környezeti esemény (menthető)");
-                ImGui.Combo("Esemény", ref environmentPreset, "Napos\0Borult\0Eső\0Vihar\0");
+                ImGui.Combo("Esemény", ref environmentPreset, "Napos\0Borult\0Eső\0Vihar\0Havazás\0");
                 ImGui.SliderInt("Csúcsintenzitás", ref environmentIntensity, 0, 60, "%d mm/óra");
                 ImGui.SliderInt("Időtartam", ref environmentDuration, 20, 300, "%d s");
                 ImGui.TextDisabled("Módosítja a vízkészletet, a mentés visszajátssza.");
                 if (ImGui.Button("Esemény indítása"))
                 {
-                    world.QueueWeather(environmentPreset == 3 ? WeatherPreset.Storm : (WeatherPreset)environmentPreset,
+                    world.QueueWeather(environmentPreset == 4 ? WeatherPreset.Snow : environmentPreset == 3 ? WeatherPreset.Storm : (WeatherPreset)environmentPreset,
                         environmentIntensity, environmentDuration);
                     g.AutomaticWeather = true;
                 }

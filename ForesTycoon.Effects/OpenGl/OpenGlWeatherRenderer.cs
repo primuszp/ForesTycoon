@@ -60,8 +60,9 @@ namespace ForesTycoon.Effects.OpenGl
             GL.Uniform4(GlProgram.Uniform(program, "footprint"), min.X, min.Y, max.X - min.X, max.Y - min.Y);
             GL.Uniform4(GlProgram.Uniform(program, "emitter"), visibleMin.X, visibleMin.Y, visibleMax.X - visibleMin.X, visibleMax.Y - visibleMin.Y);
             GL.Uniform4(GlProgram.Uniform(program, "params"), (float)(weather.Time % 4096), snow, intensity, max.Z);
-            float yaw = MathHelper.DegreesToRadians(context.CameraYaw);
-            GL.Uniform3(GlProgram.Uniform(program, "right"), MathF.Cos(yaw), -MathF.Sin(yaw), 0);
+            var basis = FogParticleMotion.CameraBasis(context.CameraYaw, context.CameraTilt);
+            GL.Uniform3(GlProgram.Uniform(program, "right"), basis.Right);
+            GL.Uniform3(GlProgram.Uniform(program, "up"), basis.Up);
             GL.Uniform1(GlProgram.Uniform(program, "size"), Math.Clamp((snow > 0 ? 1.7f : 0.8f) / zoom, 0.035f, 0.28f));
             GL.Uniform1(GlProgram.Uniform(program, "heights"), 2);
             GL.ActiveTexture(TextureUnit.Texture2); GL.BindTexture(TextureTarget.Texture2D, heightTexture);
@@ -87,11 +88,12 @@ namespace ForesTycoon.Effects.OpenGl
 uniform mat4 camera;
 uniform vec4 footprint, emitter, params, grid;
 uniform vec2 wind;
-uniform vec3 right;
+uniform vec3 right, up;
 uniform float size, cell_size;
 uniform sampler2D heights;
 out vec2 uv;
 out float opacity;
+out float flake_shape;
 const vec2 corners[6] = vec2[6](vec2(-1,-1),vec2(1,-1),vec2(1,1),vec2(-1,-1),vec2(1,1),vec2(-1,1));
 void main(){
     float t=params.x, snow=params.y;
@@ -100,18 +102,32 @@ void main(){
     float id=float(gl_InstanceID%int(grid.w));
     vec3 random=fract(sin(vec3(dot(cell,vec2(127.1,311.7))+id*19.19,
         dot(cell,vec2(269.5,183.3))+id*73.17,dot(cell,vec2(419.2,371.9))+id*31.7))*43758.5453);
-    float speed=mix(22.0,2.5,snow);
+    // Shape-dependent settling and periodic flutter approximate the regimes in
+    // Stout et al. (2024), doi:10.5194/acp-24-11133-2024. World units are stylised.
+    float speed=mix(22.0,0.4+random.x*0.75,snow);
     float span=max(params.w,8);
     float age=fract(random.z+t*speed/span)*span/speed;
-    vec2 xy=cell*cell_size+random.xy*cell_size+wind*age;
+    vec2 xy=cell*cell_size+random.xy*cell_size+wind*age*mix(1.0,0.22,snow);
+    float angle=t*(0.85+random.y*1.3)+random.z*6.283185;
+    float flutter=(0.18+random.x*0.65);
+    xy+=snow*flutter*vec2(sin(angle)+0.22*sin(angle*0.47),cos(angle*0.83+random.x*6.283185));
     vec2 mapuv=(xy-footprint.xy)/footprint.zw;
     float floorz=texture(heights,mapuv).r;
     vec3 p=vec3(xy,params.w-age*speed);
     float phase=age*speed/span;
     vec2 corner=corners[gl_VertexID]; uv=corner;
-    vec3 stretch=normalize(vec3(-wind,speed));
-    float length=mix(speed*0.025,size*1.2,snow);
-    p += right*corner.x*size + stretch*corner.y*length;
+    flake_shape=random.z;
+    if(snow>0.5){
+        // Camera-facing compact aggregates: no velocity-aligned rain streak.
+        float rotation=t*(random.z-0.5)*1.2+random.y*6.283185;
+        vec2 c=mat2(cos(rotation),sin(rotation),-sin(rotation),cos(rotation))*corner;
+        float radius=size*(0.6+random.y*0.85);
+        float tilt=0.72+0.28*cos(angle);
+        p+=right*c.x*radius+up*c.y*radius*tilt;
+    } else {
+        vec3 stretch=normalize(vec3(-wind,speed));
+        p+=right*corner.x*size+stretch*corner.y*speed*0.025;
+    }
     opacity=params.z * smoothstep(0,0.08,phase)*(1-smoothstep(0.94,1,phase));
     if(p.z < floorz+0.05) opacity=0;
     if(any(lessThan(mapuv,vec2(0))) || any(greaterThan(mapuv,vec2(1)))) opacity=0;
@@ -119,10 +135,16 @@ void main(){
 }", @"#version 330 core
 in vec2 uv;
 in float opacity;
+in float flake_shape;
 uniform vec4 params;
 out vec4 output_color;
 void main(){
-    float mask=params.y > 0.5 ? 1-smoothstep(0.45,1,length(uv)) : (1-abs(uv.x))*(1-abs(uv.y));
+    float mask=(1-abs(uv.x))*(1-abs(uv.y));
+    if(params.y>0.5){
+        float radial=length(uv), angle=atan(uv.y,uv.x);
+        float edge=mix(0.72+0.1*cos(angle*5+flake_shape*18),0.6+0.18*cos(angle*6),step(0.75,flake_shape));
+        mask=1-smoothstep(edge*0.4,edge,radial);
+    }
     float alpha=mask*opacity*mix(0.36,0.78,params.y);
     if(alpha<0.01) discard;
     output_color=vec4(mix(vec3(0.69,0.79,0.88),vec3(0.92,0.96,1),params.y),alpha);

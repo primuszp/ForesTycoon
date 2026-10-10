@@ -15,7 +15,7 @@ namespace ForesTycoon.Ecology
         internal const double StepSeconds = EcologyTime.StepSeconds;
         private readonly IForestHabitat habitat;
         private readonly IForestCanopy forest;
-        private readonly double[] canopy, surface, soil, deep, drought, wet, wetIntegral;
+        private readonly double[] canopy, surface, soil, deep, drought, wet, wetIntegral, snow;
         private readonly SurfaceWaterFlux surfaceFlux;
         private readonly double[] demandIntegral, uptakeIntegral, uptakeRate, demandRate;
         private readonly SoilProperties[] soils;
@@ -53,12 +53,16 @@ namespace ForesTycoon.Ecology
         internal int CellCount => soil.Length;
         internal double MeanWetness { get; private set; }
         internal double MeanSoil { get; private set; }
+        internal double MeanSnowCover { get; private set; }
+        internal double SnowWater => System.Linq.Enumerable.Sum(snow);
+        internal double LiquidRainRate => Preset == WeatherPreset.Snow ? 0 : RainRate;
+        internal double SnowfallRate => Preset == WeatherPreset.Snow ? RainRate : 0;
         internal double StoredWater
         {
             get
             {
                 double total = 0;
-                for (int i = 0; i < CellCount; i++) total += canopy[i] + surface[i] + soil[i] + deep[i];
+                for (int i = 0; i < CellCount; i++) total += canopy[i] + surface[i] + soil[i] + deep[i] + snow[i];
                 return total;
             }
         }
@@ -78,6 +82,7 @@ namespace ForesTycoon.Ecology
             weather = new WeatherSystem(habitat.Seed, forestYearSeconds);
             int n = habitat.TileCount;
             canopy = new double[n]; surface = new double[n]; soil = new double[n]; deep = new double[n];
+            snow = new double[n];
             drought = new double[n]; wet = new double[n]; wetIntegral = new double[n]; surfaceFlux = new SurfaceWaterFlux(n);
             destinations = new int[n];
             demandIntegral = new double[n]; uptakeIntegral = new double[n];
@@ -177,6 +182,9 @@ namespace ForesTycoon.Ecology
                 double rain = interval.Rain * local.RainMultiplier;
                 double potential = Climate.Uniform ? uniformPotential : local.Forcing.PotentialEvaporationPerHour * hours;
                 if (!Climate.Uniform) regionalRainReceived += rain;
+                if (interval.Snow) { snow[id] += rain; rain = 0; }
+                // Snow remains a conserved water store until the local air temperature rises.
+                surface[id] += StockFlows.Withdraw(ref snow[id], Math.Max(0, local.Forcing.Temperature) * .18 * hours);
                 var profile = soils[id];
                 var trees = vegetation[id];
                 double held = Math.Min(rain, Math.Max(0, trees.InterceptionCapacity - canopy[id]));
@@ -225,14 +233,16 @@ namespace ForesTycoon.Ecology
 
         private void Summarize()
         {
-            double water = 0, root = 0;
+            double water = 0, root = 0, cover = 0;
             for (int i = 0; i < CellCount; i++)
             {
                 water += Math.Clamp(surface[i] / 2 + canopy[i] / 4, 0, 1);
                 root += soil[i] / soils[i].Saturation;
+                cover += Math.Clamp(snow[i] / 6, 0, 1);
             }
             MeanWetness = CellCount > 0 ? water / CellCount : 0;
             MeanSoil = CellCount > 0 ? root / CellCount : 0;
+            MeanSnowCover = CellCount > 0 ? cover / CellCount : 0;
         }
         internal double GrowthFactor(int id, ForestSpecies species)
         {

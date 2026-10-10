@@ -1,6 +1,16 @@
 # Eső, vihar és felhőzet: kutatás és megvalósítási terv
 
-2026-10-03. A felhasználói irányváltás alapján a hó jelenleg nem része a normál játéknak. A „felső” kifejezést felhőként értelmeztem. Ez a dokumentum a következő fejlesztés kutatási eredménye; a fejlettebb eső, vihar és felhőrenderer még nincs implementálva.
+2026-10-03-i kutatási és megvalósítási jegyzet, későbbi kiegészítésekkel. A kezdeti terv a havat kizárta; 2026-10-10-én a felhasználó évszakos havazást kért. Ennek aktuális megvalósítása és forrásai az alábbi kiegészítésben szerepelnek.
+
+## Évszakos havazás — 2026-10-10
+
+Elsődleges források: [Stout et al., 2024: Stable and unstable fall motions of plate-like ice crystal analogues](https://acp.copernicus.org/articles/24/11133/2024/), valamint [Quantification and parameterization of snowflake fall speeds in the atmospheric surface-layer, 2025](https://acp.copernicus.org/articles/25/16729/2025/). A laboratóriumi analógkísérletek stabil, billegő és spirális mozgásokat különítenek el; az alak, tehetetlenség és Reynolds-szám befolyásolja a viselkedést. A terepi sebességvizsgálat a turbulencia és a hópelyhek szerkezetének együttes szerepét mutatja.
+
+A játék ezekből vizuális közelítést készít: a GPU-részecskék egyedi, lassú süllyedési sebességet, eltérő méretet, két tengely menti periodikus oldalmozgást, finom forgást és billegést kapnak. A szél korlátozott sodródást ad. A kamera felé forduló, lágy szélű pehelyfelületek tömör aggregátumokat és ritkább, hatsugaras sziluetteket közelítenek. A 0,4–1,15 világegység/másodperc tartomány saját grafikai választás; nem a tanulmányokból átvett fizikai kalibráció. A folyamat a szimulációs órát követi, így szünetben azonos képet ad. Az eső megtartja a gyors, szélirányhoz igazított csíkokat.
+
+A normál játék télen automatikusan havazhat, ősszel gyakori, hosszabb esőt, nyáron rövid záporokat és intenzív viharokat választ a seedelt eseménygenerátor. A hó csempénként külön vízkészlet, vízegyenértékben mérve; fagypont felett a felszíni vízbe olvad. A meglévő irány- és anyagfüggő hófedés ezt a készletet követi. A koronák formái és fafajspecifikus textúrái megmaradnak. A modell nem oldja meg az egyedi hókristályok aerodinamikáját, a kristályok ütközését vagy a hótakaró tömörödését.
+
+Ellenőrzés: `SeasonalWeatherTests`, a v12→v13 mentésmigrációs teszt, valamint `--seasonal-weather-smoke-test`. A natív próba a normál automatikus időjárást és a valódi GPU-hórajzoló szüneteltetését és animációját ellenőrzi, évszakos képi mintákat is ment.
 
 ## Döntés
 
