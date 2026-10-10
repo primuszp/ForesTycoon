@@ -377,35 +377,43 @@ namespace ForesTycoon
 
         /// <summary>Where a stack stands on its tile: along the trail through it (set off to one side), or along the
         /// network beside it.</summary>
-        private static void StackPlace(TerrainMap map, int tile, out Vector2 at, out Vector2 heading)
+        internal static Vector2 NetworkHeading(TerrainMap map, int tile, Vector2 preferred)
+        {
+            // Use tile-centre differences: tile corner names are not the U/V travel axes.
+            map.TryGetTileCenter(0, out Vector3 origin);
+            map.TryGetTileCenter(map.TilesPerSide, out Vector3 u);
+            map.TryGetTileCenter(1, out Vector3 v);
+            Vector2 alongU = (u - origin).Xy.Normalized(), alongV = (v - origin).Xy.Normalized();
+            RoadEdge edges = map.GetNetworkEdges(tile);
+            int uArms = ((edges & RoadEdge.SE) != 0 ? 1 : 0) + ((edges & RoadEdge.NW) != 0 ? 1 : 0);
+            int vArms = ((edges & RoadEdge.WS) != 0 ? 1 : 0) + ((edges & RoadEdge.EN) != 0 ? 1 : 0);
+            if (uArms != vArms) return uArms > vArms ? alongU : alongV;
+            return Math.Abs(Vector2.Dot(preferred, alongU)) >= Math.Abs(Vector2.Dot(preferred, alongV)) ? alongU : alongV;
+        }
+
+        internal static void StackPlace(TerrainMap map, int tile, out Vector2 at, out Vector2 heading)
         {
             map.TryGetTileCenter(tile, out Vector3 centre);
-            bool onTrail = map.IsSkidTrail(tile);
-            RoadEdge edges = onTrail ? map.GetSkidTrailEdges(tile) : RoadEdge.None;
-            if (!onTrail)
+            if (map.IsNetworkTile(tile))
             {
-                // Beside the network: the logs lie parallel to the road or trail next to them, ready for the crane.
-                Span<int> next = stackalloc int[4];
-                int count = map.GetTileNeighbours(tile, next);
-                for (int i = 0; i < count; i++)
-                    if (map.IsNetworkTile(next[i]) && map.TryGetTileCenter(next[i], out Vector3 other))
-                    {
-                        Vector2 across = (other.Xy - centre.Xy).Normalized();
-                        heading = new Vector2(-across.Y, across.X);
-                        at = centre.Xy + across * 0.58f * map.TileWidth;
-                        return;
-                    }
+                heading = NetworkHeading(map, tile, Vector2.UnitX);
+                at = centre.Xy + new Vector2(-heading.Y, heading.X) * (.3f * map.TileWidth);
+                return;
             }
+            Span<int> next = stackalloc int[4];
+            int count = map.GetTileNeighbours(tile, next);
+            for (int i = 0; i < count; i++)
+                if (map.IsNetworkTile(next[i]) && map.TryGetTileCenter(next[i], out Vector3 other))
+                {
+                    Vector2 across = (other.Xy - centre.Xy).Normalized();
+                    heading = NetworkHeading(map, next[i], new Vector2(-across.Y, across.X));
+                    at = centre.Xy + across * .58f * map.TileWidth;
+                    return;
+                }
+            // Unconnected sites have no road axis yet; keep a deterministic orientation.
             Tile t = map.Tiles[tile];
-            Vector2 w = new(t.W.xPos, t.W.yPos), s = new(t.S.xPos, t.S.yPos), n = new(t.N.xPos, t.N.yPos);
-            // The tile's u axis runs W→S, its v axis W→N; a trail along WS/EN edges runs along v.
-            bool alongV = (edges & (RoadEdge.WS | RoadEdge.EN)) != 0 && (edges & (RoadEdge.SE | RoadEdge.NW)) == 0;
-            bool alongU = (edges & (RoadEdge.SE | RoadEdge.NW)) != 0 && (edges & (RoadEdge.WS | RoadEdge.EN)) == 0;
-            Vector2 axis = alongU ? (s - w) : (n - w);
-            if (!alongU && !alongV) axis = ((tile * 2654435761u) & 1) == 0 ? s - w : n - w;
-            heading = axis.Normalized();
-            Vector2 side = new(-heading.Y, heading.X);
-            at = onTrail ? centre.Xy + side * (0.3f * axis.Length) : centre.Xy;
+            heading = new Vector2(t.S.xPos - t.W.xPos, t.S.yPos - t.W.yPos).Normalized();
+            at = centre.Xy;
         }
 
         private void Stack(TerrainMap map, int tile, float volume, GraphicsSettings settings)

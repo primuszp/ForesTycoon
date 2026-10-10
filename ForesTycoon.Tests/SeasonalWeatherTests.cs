@@ -4,6 +4,21 @@ namespace ForesTycoon.Tests;
 
 public class SeasonalWeatherTests
 {
+    [Theory]
+    [InlineData(17)]
+    [InlineData(65)]
+    public void WinterDriftsMeltCompletelyBySummer(int nodeSize)
+    {
+        var map = new TerrainMap(TerrainSettings.Default.WithNodeSize(nodeSize, 42), (_, _) => 4);
+        var environment = new EnvironmentSystem(map, null, 900, ClimateDefinition.Default);
+        environment.Update(900);
+        Assert.True(environment.SnowWater > 0);
+        environment.Update(225);
+        Assert.Equal(0, Enumerable.Range(0, environment.CellCount).Max(environment.SnowWaterAt));
+        Assert.Equal(0, environment.MeanSnowCover);
+        Assert.InRange(Math.Abs(environment.BalanceError), 0, 1e-5);
+    }
+
     [Fact]
     public void WindRedistributesSnowByTileWithoutCreatingWaterAndReloadContinuesExactly()
     {

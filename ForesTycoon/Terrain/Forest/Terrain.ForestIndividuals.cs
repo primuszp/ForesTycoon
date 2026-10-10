@@ -281,12 +281,14 @@ namespace ForesTycoon
                 || forest.ForestYear >= geometry.NextStageYear
                 || geometry.Generation != forest.IndividualTrees.Generation;
             bool topologyChanged = changed;
+            bool roadClearedVegetation = false;
             if (changed || geometry.ForestRevision != forest.Revision)
             {
                 for (int i = 0; i < chunk.TileIds.Length; i++)
                 {
                     ulong revision = forest.IndividualTrees.TryGet(chunk.TileIds[i], out var patch) ? patch.TopologyRevision : 0;
                     changed |= geometry.TileRevisions[i] != revision;
+                    roadClearedVegetation |= geometry.TileRevisions[i] != 0 && roads.Has(chunk.TileIds[i]);
                 }
                 topologyChanged = changed;
                 geometry.LightShapeDirty = false;
@@ -297,11 +299,11 @@ namespace ForesTycoon
             changed |= geometry.LightShapeDirty;
             if (changed)
             {
-                // A player edit must never stall the frame: the old copy stays on screen for the few frames its
-                // replacement takes, and that replacement goes ahead of any background work.
+                // Road construction must clear all vegetation before drawing the next frame,
+                // including floor geometry and stumps. Other edits keep their priority background rebuild.
                 bool edited = geometry.Initialized && geometry.Generation == forest.IndividualTrees.Generation
                     && (geometry.TerrainVersion != chunk.PropVersion || (geometry.EditRevision != forest.EditRevision && topologyChanged));
-                bool immediate = SynchronousForestBuilds || (!StreamGeometry && !deferIfStale && (!geometry.Initialized
+                bool immediate = SynchronousForestBuilds || roadClearedVegetation || (!StreamGeometry && !deferIfStale && (!geometry.Initialized
                     || geometry.Generation != forest.IndividualTrees.Generation));
                 if (!immediate)
                 {

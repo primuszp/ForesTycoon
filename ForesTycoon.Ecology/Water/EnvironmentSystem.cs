@@ -186,8 +186,12 @@ namespace ForesTycoon.Ecology
                 double potential = Climate.Uniform ? uniformPotential : local.Forcing.PotentialEvaporationPerHour * hours;
                 if (!Climate.Uniform) regionalRainReceived += rain;
                 if (interval.Snow) { snow[id] += rain; rain = 0; }
-                // Snow remains a conserved water store until the local air temperature rises.
-                surface[id] += StockFlows.Withdraw(ref snow[id], Math.Max(0, local.Forcing.Temperature) * .18 * hours);
+                // Wind can concentrate a whole region's snow in a few cells. Include a
+                // depth-dependent thaw so these gameplay drifts do not survive the warm season.
+                // Integrate ds/d(degree-hour) = -0.18 - 0.35*s exactly; all melt becomes water.
+                double thaw = Math.Max(0, local.Forcing.Temperature) * hours;
+                double melt = (snow[id] + .18 / .35) * (1 - Math.Exp(-.35 * thaw));
+                surface[id] += StockFlows.Withdraw(ref snow[id], melt);
                 var profile = soils[id];
                 var trees = vegetation[id];
                 double held = Math.Min(rain, Math.Max(0, trees.InterceptionCapacity - canopy[id]));
