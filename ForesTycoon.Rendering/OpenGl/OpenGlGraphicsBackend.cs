@@ -6,38 +6,43 @@ namespace ForesTycoon.Rendering.OpenGl
 {
     internal sealed class OpenGlGraphicsBackend : IGraphicsBackend
     {
+        private readonly RenderResourceOwner owner = new();
         private readonly OpenGlGeometryProgram geometry = new();
         private readonly OpenGlScreenLineProgram screenLines = new();
         private ColoredVertex[] upload = Array.Empty<ColoredVertex>();
         private int vao, buffer;
 
-        public void Initialize() => geometry.Initialize();
-        public void UseGeometryShader() => geometry.Use();
-        public void UseScreenLineShader(float widthPixels) => screenLines.Use(widthPixels);
+        public void Initialize() { owner.Check(); geometry.Initialize(); }
+        public void UseGeometryShader() { owner.Check(); geometry.Use(); }
+        public void UseScreenLineShader(float widthPixels) { owner.Check(); screenLines.Use(widthPixels); }
         public IGeometryBufferBackend CreateGeometryBuffer(PrimitiveTopology topology, GeometryBufferUsage usage)
-            => new OpenGlVertexBuffer(topology, usage);
-        public IForestStateBuffer CreateForestStateBuffer() => new OpenGlForestStateBuffer();
-        public RenderStateScope CreateStateScope() => new OpenGlRenderStateScope();
-        public IPostProcessBackend CreatePostProcess() => new OpenGlPostProcess();
+            { owner.Check(); return new OpenGlVertexBuffer(topology, usage); }
+        public IForestStateBuffer CreateForestStateBuffer() { owner.Check(); return new OpenGlForestStateBuffer(); }
+        public RenderStateScope CreateStateScope() { owner.Check(); return new OpenGlRenderStateScope(); }
+        public IPostProcessBackend CreatePostProcess() { owner.Check(); return new OpenGlPostProcess(); }
         public void InitializeFrameState()
         {
+            owner.Check();
             GL.Enable(EnableCap.DepthTest); GL.Disable(EnableCap.CullFace); GL.LineWidth(1);
         }
-        public void SetViewport(int width, int height) => GL.Viewport(0, 0, width, height);
+        public void SetViewport(int width, int height) { owner.Check(); GL.Viewport(0, 0, width, height); }
         public void Clear(Vector4 color)
         {
+            owner.Check();
             GL.ClearColor(color.X, color.Y, color.Z, color.W);
             GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
         }
         public void ReadPixels(int x, int y, int width, int height, byte[] rgba)
-            => GL.ReadPixels(x, y, width, height, PixelFormat.Rgba, PixelType.UnsignedByte, rgba);
+            { owner.Check(); GL.ReadPixels(x, y, width, height, PixelFormat.Rgba, PixelType.UnsignedByte, rgba); }
         public void CheckErrors(string operation)
         {
+            owner.Check();
             ErrorCode error = GL.GetError();
             if (error != ErrorCode.NoError) throw new InvalidOperationException($"{operation}: {error}");
         }
         public void DrawPrimitives(PrimitiveTopology topology, ReadOnlySpan<ColoredVertex> vertices)
         {
+            owner.Check();
             if (vertices.IsEmpty) return;
             if (vao == 0)
             {
@@ -62,6 +67,7 @@ namespace ForesTycoon.Rendering.OpenGl
         }
         public void Dispose()
         {
+            owner.CheckIfBound();
             if (buffer != 0) GL.DeleteBuffer(buffer);
             if (vao != 0) GL.DeleteVertexArray(vao);
             vao = buffer = 0; upload = Array.Empty<ColoredVertex>();

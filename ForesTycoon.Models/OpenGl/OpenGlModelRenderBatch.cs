@@ -11,6 +11,6 @@ namespace ForesTycoon.Models.OpenGl
             Disable(RenderCapability.CullFace);
         }
 
-        internal void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(IsDisposed, this);
+        internal void ThrowIfDisposed() => VerifyAccess();
     }
 }

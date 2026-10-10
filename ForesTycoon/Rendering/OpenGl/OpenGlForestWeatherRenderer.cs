@@ -8,6 +8,7 @@ namespace ForesTycoon.OpenGl
 {
     internal sealed class OpenGlForestWeatherRenderer : IForestWeatherBackend
     {
+        private readonly RenderResourceOwner owner = new();
         private readonly List<FogSource> mist = new();
         private readonly List<Vector3> crowns = new();
         private readonly List<(Vector3 A, Vector3 B, float Width)> segments = new();
@@ -15,10 +16,28 @@ namespace ForesTycoon.OpenGl
         private long eventId = long.MinValue;
         private int fogProgram, vao, buffer, depthTexture, depthFramebuffer, depthWidth, depthHeight;
         private readonly List<(Vector4 Position, Vector4 Life)> particles = new();
+        private bool disposed, depthFallback;
+        private int submittedParticles, submittedSegments;
+        private long bufferPayload;
+        public void BeginFrame(GraphicsSettings settings)
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+            owner.CheckIfBound();
+            if ((long)depthWidth * depthHeight > settings.FogDepthBudgetBytes / 4) ReleaseDepth();
+        }
+        internal (int Texture, int Framebuffer) DepthHandles => (depthTexture, depthFramebuffer);
+        public ForestWeatherMetrics Metrics => new(submittedParticles, submittedSegments,
+            (long)upload.Length * 4 + (long)particles.Capacity * 32 + (long)mist.Capacity * System.Runtime.CompilerServices.Unsafe.SizeOf<FogSource>()
+                + (long)crowns.Capacity * 12 + (long)segments.Capacity * 28,
+            bufferPayload + (long)depthWidth * depthHeight * 4, 0, depthFallback);
         public void Draw(Terrain terrain, ForestSystem forest, WeatherVisualState weather, GraphicsSettings settings, RenderContext context,EnvironmentSystem environment=null)
         {
+            ObjectDisposedException.ThrowIf(disposed, this);
+            owner.Check();
+            submittedParticles = submittedSegments = 0; depthFallback = false;
             if((!settings.Fog || settings.FogDensity <= 0) && weather.Flash < 0.002f) return;
-            terrain.CollectForestWeather(mist, forest, crowns, settings.Lightning && weather.Flash >= 0.002f && eventId != weather.LightningEvent,environment);
+            terrain.CollectForestWeather(mist, forest, crowns, settings.Lightning && weather.Flash >= 0.002f && eventId != weather.LightningEvent,environment,
+                settings.Fog && settings.FogDensity > 0 ? settings.FogSourceBudget : 0);
             var basis=FogParticleMotion.CameraBasis(context.CameraYaw,context.CameraTilt);
             Vector3 right=basis.Right, up=basis.Up;
             if(settings.Fog && settings.FogDensity > 0 && mist.Count>0)
@@ -46,7 +65,7 @@ namespace ForesTycoon.OpenGl
                 }
                 if (particles.Count > 0)
                 {
-                CaptureDepth();
+                depthFallback = !CaptureDepth(settings.FogDepthBudgetBytes);
                 // Back-to-front ordering avoids view-dependent alpha seams.
                 Vector3 forward=Vector3.Cross(right,up);
                 particles.Sort((a,b)=>Vector3.Dot(a.Position.Xyz,forward).CompareTo(Vector3.Dot(b.Position.Xyz,forward)));
@@ -57,6 +76,7 @@ namespace ForesTycoon.OpenGl
                 GL.Uniform4(GlProgram.Uniform(fogProgram,"viewport"),(float)viewport[0],(float)viewport[1],(float)viewport[2],(float)viewport[3]);
                 GL.ActiveTexture(TextureUnit.Texture3); GL.BindTexture(TextureTarget.Texture2D,depthTexture);
                 GL.Uniform1(GlProgram.Uniform(fogProgram,"scene_depth"),3);
+                GL.Uniform1(GlProgram.Uniform(fogProgram,"soft_depth"), depthFallback ? 0 : 1);
                 GL.UniformMatrix4(GlProgram.Uniform(fogProgram,"camera"),false,ref camera);
                 GL.Uniform3(GlProgram.Uniform(fogProgram,"right"),right);
                 GL.Uniform3(GlProgram.Uniform(fogProgram,"up"),up);
@@ -71,10 +91,14 @@ namespace ForesTycoon.OpenGl
                     data[i*8+4]=p.Life.X; data[i*8+5]=p.Life.Y; data[i*8+6]=p.Life.Z; data[i*8+7]=p.Life.W;
                 }
                 GL.BufferData(BufferTarget.ArrayBuffer,particles.Count*8*sizeof(float),data,BufferUsageHint.StreamDraw);
+                var uploadError = GL.GetError();
+                if (uploadError != ErrorCode.NoError) throw new InvalidOperationException("Fog particle upload failed: " + uploadError);
+                bufferPayload = (long)particles.Count * 32;
                 using(RenderDevice.CreateStateScope().Enable(RenderCapability.DepthTest).Disable(RenderCapability.CullFace).AlphaBlend().DepthWrite(false))
                 {
                     GL.DrawArraysInstanced(PrimitiveType.Triangles,0,6,particles.Count);
                     RenderMetrics.RecordDraw(particles.Count*6);
+                    submittedParticles = particles.Count;
                 }
                 GL.BindVertexArray(0); GL.ActiveTexture(TextureUnit.Texture0);
                 }
@@ -120,6 +144,7 @@ namespace ForesTycoon.OpenGl
                         Ribbon(segment.A,segment.B,right,0.055f*segment.Width,Color.FromArgb((int)(255*power),235,244,255));
                     }
                 });
+                submittedSegments = segments.Count;
             }
         }
         private static void Ribbon(Vector3 a,Vector3 b,Vector3 right,float width,Color color)
@@ -130,6 +155,11 @@ namespace ForesTycoon.OpenGl
             DynamicPrimitiveBatch.Vertex3(b+offset); DynamicPrimitiveBatch.Vertex3(b-offset);
         }
         private void InitializeFog()
+        {
+            try { InitializeFogCore(); }
+            catch { ReleaseResources(); throw; }
+        }
+        private void InitializeFogCore()
         {
             fogProgram=GlProgram.Create(@"#version 330 core
 layout(location=0) in vec4 anchor;
@@ -152,6 +182,7 @@ uniform vec3 climate;
 uniform mat4 inverse_camera;
 uniform vec4 viewport;
 uniform sampler2D scene_depth;
+uniform bool soft_depth;
 out vec4 output_color;
 float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 float noise(vec2 p){
@@ -160,9 +191,12 @@ float noise(vec2 p){
 }
 void main(){
     vec2 screen=(gl_FragCoord.xy-viewport.xy)/viewport.zw;
-    float depth=texture(scene_depth,screen).r;
-    vec4 scene=inverse_camera*vec4(screen*2-1,depth*2-1,1);
-    float intersection=clamp(length(scene.xyz/scene.w-world)/1.8,0,1);
+    float intersection=1;
+    if(soft_depth){
+        float depth=texture(scene_depth,screen).r;
+        vec4 scene=inverse_camera*vec4(screen*2-1,depth*2-1,1);
+        intersection=clamp(length(scene.xyz/scene.w-world)/1.8,0,1);
+    }
     float edge=(1-smoothstep(0.5,1,length(uv)));
     vec2 q=uv*3.2+vec2(particle.z,particle.w)+vec2(climate.x*0.018,-climate.x*0.012);
     float density=noise(q)*0.65+noise(q*2.03)*0.25+noise(q*4.1)*0.1;
@@ -178,11 +212,18 @@ void main(){
             GL.EnableVertexAttribArray(1);
             GL.VertexAttribPointer(1,4,VertexAttribPointerType.Float,false,32,16);
             GL.VertexAttribDivisor(1,1); GL.BindVertexArray(0);
+            var error = GL.GetError();
+            if (error != ErrorCode.NoError) throw new InvalidOperationException("Fog allocation failed: " + error);
         }
         private readonly int[] viewport=new int[4];
-        private void CaptureDepth()
+        internal bool CaptureDepth(long budgetBytes)
         {
+            ObjectDisposedException.ThrowIf(disposed, this);
+            owner.Check();
             GL.GetInteger(GetPName.Viewport,viewport);
+            GL.GetInteger(GetPName.MaxTextureSize, out int deviceLimit);
+            var plan = FogDepthPlan.Create(viewport[2], viewport[3], budgetBytes, deviceLimit);
+            if (plan.PayloadBytes == 0) { ReleaseDepth(); return false; }
             GL.GetInteger(GetPName.DrawFramebufferBinding,out int draw);
             GL.GetInteger(GetPName.ReadFramebufferBinding,out int read);
             try
@@ -190,8 +231,7 @@ void main(){
                 if(depthTexture==0){depthTexture=GL.GenTexture(); depthFramebuffer=GL.GenFramebuffer();}
                 GL.ActiveTexture(TextureUnit.Texture3); GL.BindTexture(TextureTarget.Texture2D,depthTexture);
                 if(depthWidth!=viewport[2] || depthHeight!=viewport[3]){
-                    depthWidth=viewport[2]; depthHeight=viewport[3];
-                    GL.TexImage2D(TextureTarget.Texture2D,0,PixelInternalFormat.DepthComponent24,depthWidth,depthHeight,0,PixelFormat.DepthComponent,PixelType.Float,IntPtr.Zero);
+                    GL.TexImage2D(TextureTarget.Texture2D,0,PixelInternalFormat.DepthComponent24,plan.Width,plan.Height,0,PixelFormat.DepthComponent,PixelType.Float,IntPtr.Zero);
                     GL.TexParameter(TextureTarget.Texture2D,TextureParameterName.TextureMinFilter,(int)TextureMinFilter.Nearest);
                     GL.TexParameter(TextureTarget.Texture2D,TextureParameterName.TextureMagFilter,(int)TextureMagFilter.Nearest);
                     GL.TexParameter(TextureTarget.Texture2D,TextureParameterName.TextureWrapS,(int)TextureWrapMode.ClampToEdge);
@@ -200,11 +240,18 @@ void main(){
                 GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer,depthFramebuffer);
                 GL.FramebufferTexture2D(FramebufferTarget.DrawFramebuffer,FramebufferAttachment.DepthAttachment,TextureTarget.Texture2D,depthTexture,0);
                 GL.DrawBuffer(DrawBufferMode.None);
+                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer,depthFramebuffer);
+                GL.ReadBuffer(ReadBufferMode.None);
                 if(GL.CheckFramebufferStatus(FramebufferTarget.DrawFramebuffer)!=FramebufferErrorCode.FramebufferComplete)
                     throw new InvalidOperationException("Fog depth framebuffer is incomplete.");
                 GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer,draw);
-                GL.BlitFramebuffer(viewport[0],viewport[1],viewport[0]+depthWidth,viewport[1]+depthHeight,0,0,depthWidth,depthHeight,ClearBufferMask.DepthBufferBit,BlitFramebufferFilter.Nearest);
+                GL.BlitFramebuffer(viewport[0],viewport[1],viewport[0]+plan.Width,viewport[1]+plan.Height,0,0,plan.Width,plan.Height,ClearBufferMask.DepthBufferBit,BlitFramebufferFilter.Nearest);
+                var error = GL.GetError();
+                if (error != ErrorCode.NoError) throw new InvalidOperationException("Fog depth allocation/copy failed: " + error);
+                depthWidth = plan.Width; depthHeight = plan.Height;
+                return true;
             }
+            catch { ReleaseDepth(); throw; }
             finally{
                 GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer,draw);
                 GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer,read);
@@ -213,12 +260,22 @@ void main(){
         }
         public void Dispose()
         {
+            if (disposed) return; owner.CheckIfBound(); disposed = true; ReleaseResources();
+        }
+        private void ReleaseDepth()
+        {
+            if(depthTexture!=0) GL.DeleteTexture(depthTexture);
+            if(depthFramebuffer!=0) GL.DeleteFramebuffer(depthFramebuffer);
+            depthTexture=depthFramebuffer=depthWidth=depthHeight=0;
+        }
+        private void ReleaseResources()
+        {
             if(fogProgram!=0) GlProgram.Delete(fogProgram);
             if(vao!=0) GL.DeleteVertexArray(vao);
             if(buffer!=0) GL.DeleteBuffer(buffer);
-            if(depthTexture!=0) GL.DeleteTexture(depthTexture);
-            if(depthFramebuffer!=0) GL.DeleteFramebuffer(depthFramebuffer);
-            fogProgram=vao=buffer=depthTexture=depthFramebuffer=0;
+            ReleaseDepth(); fogProgram=vao=buffer=0; bufferPayload=0;
+            upload=Array.Empty<float>(); mist.Clear(); mist.TrimExcess(); crowns.Clear(); crowns.TrimExcess(); segments.Clear(); segments.TrimExcess(); particles.Clear(); particles.TrimExcess();
+            submittedParticles=submittedSegments=0; depthFallback=false;
         }
     }
 }

@@ -82,11 +82,13 @@ namespace ForesTycoon
             var mill = MillAt(destination);
             var ends = terrain.FindNetworkDocks(mill != null ? mill.Footprint : new[] { destination });
             int[] best = null;
+            float bestCost = float.PositiveInfinity;
             foreach (int start in terrain.FindNetworkDocks(new[] { sourceTile }))
                 foreach (int end in ends)
                 {
-                    int[] route = terrain.FindNetworkPath(start, end);
-                    if (route.Length >= 2 && (best == null || route.Length < best.Length)) best = route;
+                    int[] route = terrain.FindNetworkPath(start, end, out float cost);
+                    // Docks are sorted; preserve their order for equal-cost routes.
+                    if (route.Length >= 2 && cost < bestCost) { best = route; bestCost = cost; }
                 }
             return best;
         }
@@ -112,8 +114,10 @@ namespace ForesTycoon
 
         private void StartShuttle(FleetTruck truck, int[] route)
         {
+            ChargeTruckFuel(truck);
             if (truck.Vehicle != null) Vehicles.Remove(truck.Vehicle);
             truck.Vehicle = Vehicles.SpawnLogistics(route, new[] { truck.Source.Tile }, truck.Destination);
+            truck.FuelCharged = 0;
             truck.Phase = TruckPhase.Working;
         }
 
@@ -126,14 +130,22 @@ namespace ForesTycoon
 
         private FleetTruck TruckOf(Vehicle vehicle) => Trucks.Find(t => t.Vehicle == vehicle);
 
+        private void ChargeTruckFuel(FleetTruck truck)
+        {
+            if (truck.Vehicle == null) return;
+            double used = truck.Vehicle.FuelUsed;
+            double burnt = (used - truck.FuelCharged) * truck.Upkeep.Fuel(Tuning);
+            if (burnt > 0) Burn(burnt);
+            truck.FuelCharged = used;
+        }
+
         private void UpdateTrucks(double seconds)
         {
             foreach (var truck in Trucks)
             {
                 if (truck.Vehicle != null)
                 {
-                    double burnt = (truck.Vehicle.FuelUsed - truck.FuelCharged) * truck.Upkeep.Fuel(Tuning);
-                    if (burnt > 0) { Burn(burnt); truck.FuelCharged = truck.Vehicle.FuelUsed; }
+                    ChargeTruckFuel(truck);
                     // Wear while on the move; a broken truck stands where it is until the mechanic is done.
                     var road = truck.Vehicle;
                     road.GetSegment(road.RoutePosition, out int from, out _, out _);
@@ -177,6 +189,7 @@ namespace ForesTycoon
 
         private void Return(FleetTruck truck, int from)
         {
+            ChargeTruckFuel(truck);
             int dock = DepotDock(truck.Home);
             int[] path = dock < 0 ? Array.Empty<int>() : terrain.FindNetworkPath(from, dock);
             if (truck.Vehicle != null) Vehicles.Remove(truck.Vehicle);
@@ -188,6 +201,7 @@ namespace ForesTycoon
 
         private void Park(FleetTruck truck)
         {
+            ChargeTruckFuel(truck);
             if (truck.Vehicle != null && Vehicles.Contains(truck.Vehicle)) Vehicles.Remove(truck.Vehicle);
             truck.Vehicle = null; truck.FuelCharged = 0; truck.Phase = TruckPhase.Parked;
             truck.Source = null; truck.Target = null; truck.Destination = -1; truck.HomeRequested = false;

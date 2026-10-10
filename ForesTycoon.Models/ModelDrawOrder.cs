@@ -21,6 +21,8 @@ namespace ForesTycoon.Models
         internal ReadOnlySpan<int> Prepare(AnimatedGlbModel.Pose pose, Matrix4 transform,
             Matrix4 camera, bool shadow)
         {
+            ArgumentNullException.ThrowIfNull(pose);
+            if (!ReferenceEquals(pose.Model, model)) throw new ArgumentException("Pose belongs to another model.", nameof(pose));
             int solidCount = 0;
             for (int i = 0; i < model.Meshes.Length; i++)
                 if (shadow || model.Meshes[i].Alpha != AnimatedGlbModel.AlphaMode.Blend)

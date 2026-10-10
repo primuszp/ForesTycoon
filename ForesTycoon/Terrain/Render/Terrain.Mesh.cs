@@ -56,8 +56,12 @@ namespace ForesTycoon
 
             fillColor(code, low, ref data);
 
-            vbo.SetData(data.ToArray());
-            vbos.Add(key, vbo);
+            try
+            {
+                vbo.SetData(data.ToArray());
+                vbos.Add(key, vbo);
+            }
+            catch { vbo.Dispose(); throw; }
         }
 
         private void fillColor(string code, int low, ref List<Vertex> data)

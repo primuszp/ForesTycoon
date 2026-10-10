@@ -20,6 +20,7 @@ namespace ForesTycoon
             Terrain terrain = null;
             try
             {
+                WeatherEffectBudgetSmoke.Run();
                 terrain = new Terrain(TerrainSettings.Default.WithNodeSize(17, 20260913), ForestVisualFixture.Height);
                 terrain.Map.BuildRoadTilePath(101, 165);
                 var forest = new ForestSystem(terrain.Map, ForestVisualFixture.CreateStands());

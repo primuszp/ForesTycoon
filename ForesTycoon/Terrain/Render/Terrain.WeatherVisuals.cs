@@ -22,14 +22,19 @@ namespace ForesTycoon
         internal void FillWeatherHeights(float[] heights, ForestSystem forest) => map.FillWeatherHeights(heights, forest);
 
         private readonly System.Collections.Generic.Dictionary<int, (bool HasTrees, ulong TerrainRevision, FogSource? Source)> fogSources = new();
+        private readonly System.Collections.Generic.Queue<int> fogSourceOrder = new();
+        internal int CachedFogSourceCount => fogSources.Count;
+        internal const int MaxCachedFogSources = 4096;
         internal void CollectForestWeather(System.Collections.Generic.List<FogSource> mist, ForestSystem forest,
-            System.Collections.Generic.List<Vector3> crowns, bool collectCrowns,EnvironmentSystem environment=null)
+            System.Collections.Generic.List<Vector3> crowns, bool collectCrowns,EnvironmentSystem environment=null, int sourceLimit=768, int crownLimit=2048)
         {
+            if (sourceLimit < 0 || sourceLimit > 768 || crownLimit < 0 || crownLimit > 2048) throw new ArgumentOutOfRangeException(nameof(sourceLimit));
             mist.Clear(); crowns.Clear();
             foreach (TerrainChunk chunk in visibleChunks)
             {
                 for(int i=0;i<chunk.TileIds.Length;i++)
                 {
+                    if (mist.Count >= sourceLimit && (!collectCrowns || crowns.Count >= crownLimit)) return;
                     Tile tile=tiles[chunk.TileIds[i]];
                     forest.IndividualTrees.TryGet(tile.Id, out var patch);
                     int count = patch?.Count ?? 0;
@@ -52,14 +57,18 @@ namespace ForesTycoon
                             source = new FogSource(new Vector4(x,y,Math.Max(z,water>0?settings.SeaLevel:z)+1.4f,
                                 Math.Max(3,(tile.E.xPos-tile.W.xPos)*0.7f)),count>0?1:0,water,valley,tileMoisture[tile.Id]);
                         entry = (count > 0, WeatherSurfaceRevision, source);
+                        if (!fogSources.ContainsKey(tile.Id)) {
+                            if (fogSources.Count >= MaxCachedFogSources) fogSources.Remove(fogSourceOrder.Dequeue());
+                            fogSourceOrder.Enqueue(tile.Id);
+                        }
                         fogSources[tile.Id] = entry;
                     }
-                    if (entry.Source.HasValue && mist.Count < 768) {
+                    if (entry.Source.HasValue && mist.Count < sourceLimit) {
                         var source=entry.Source.Value;
                         if(environment!=null){var cell=environment.Cell(tile.Id);source=source with {Moisture=(float)Math.Clamp(cell.Soil/180+cell.Surface/5,0,1)};}
                         mist.Add(source);
                     }
-                    for(int j=0;collectCrowns && j<count;j++){
+                    for(int j=0;collectCrowns && j<count && crowns.Count<crownLimit;j++){
                         TreeInstance tree=IndividualStem(tile,patch.Trees[j],forest.ForestYear); TreeModel model=TreeModel.For(tree.Stand.Species);
                         float h=model.CrownHeight*tree.Scale*tree.CrownRise;
                         crowns.Add(new Vector3(tree.X,tree.Y,tree.TrunkTop(model)+h*(1-model.CrownDrop)));

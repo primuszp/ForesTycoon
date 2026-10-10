@@ -8,6 +8,8 @@ namespace ForesTycoon.OpenGl
 {
     internal sealed class OpenGlImGuiRenderer : IUiRenderBackend
     {
+        private readonly RenderResourceOwner owner = new();
+        private bool disposed;
         private int vao, vbo, ebo;
         private int vboSize, eboSize;
         private int shader;
@@ -18,6 +20,8 @@ namespace ForesTycoon.OpenGl
         private static readonly int VertSize = Unsafe.SizeOf<ImDrawVert>();
         public void Initialize(ImGuiIOPtr io)
         {
+            ObjectDisposedException.ThrowIf(disposed, this); owner.Check();
+            if (shader != 0) throw new InvalidOperationException("UI renderer is already initialized.");
             io.BackendFlags |= ImGuiBackendFlags.RendererHasVtxOffset;
             vbo = GL.GenBuffer();
             ebo = GL.GenBuffer();
@@ -119,6 +123,7 @@ void main()
 
         public void Draw(ImDrawDataPtr drawData)
         {
+            ObjectDisposedException.ThrowIf(disposed, this); owner.Check();
             if (drawData.CmdListsCount == 0) return;
 
             using (new ImGuiRenderStateScope())
@@ -202,13 +207,15 @@ void main()
 
         public void Dispose()
         {
+            if (disposed) return; owner.CheckIfBound(); disposed = true;
             GameIconAtlas.Unregister(iconContext);
             GL.DeleteTexture(iconTexture);
             GL.DeleteVertexArray(vao);
             GL.DeleteBuffer(vbo);
             GL.DeleteBuffer(ebo);
             GL.DeleteTexture(fontTexture);
-            GlProgram.Delete(shader);
+            if (shader != 0) GlProgram.Delete(shader);
+            iconTexture = vao = vbo = ebo = fontTexture = shader = 0; iconContext = IntPtr.Zero;
         }
 
         private sealed class ImGuiRenderStateScope : IDisposable

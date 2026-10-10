@@ -41,6 +41,7 @@ namespace ForesTycoon
                     Skins=Array.Empty<AnimatedGlbModel.Skin>(),Meshes=new[] {mesh},
                     Images=new[] {new PngImage(2,1,new byte[] {255,255,255,0,255,255,255,255})} };
                 var pose=model.CreatePose();pose.Evaluate(null,0);
+                CheckAllocationRecovery(model, pose);
                 using var renderer=new AnimatedModelRenderer(model);
                 var settings=new GraphicsSettings {Lighting=false,Textures=true,Enhanced=true,Quality=GraphicsQuality.Low};
                 RenderDevice.SetCamera(Matrix4.Identity);
@@ -126,6 +127,31 @@ namespace ForesTycoon
                 Require(GL.GetError()==ErrorCode.NoError,"OpenGL error");
                 Console.WriteLine("Material alpha smoke passed: MASK, BLEND, OPAQUE, quality switches, state restoration, shadow cutout.");
             } finally {RenderDevice.Dispose();}
+        }
+        private static void CheckAllocationRecovery(AnimatedGlbModel model, AnimatedGlbModel.Pose pose)
+        {
+            var backend = new ForesTycoon.Models.OpenGl.OpenGlModelRenderer(model);
+            using var renderer = new AnimatedModelRenderer(model, backend);
+            var frame = new ModelRenderFrame(new ModelSceneParameters(Matrix4.Identity, Matrix4.Identity,
+                Vector4.Zero, 0, 45, false, false, false, true), true, 0);
+            float[] vertices = model.Meshes[0].Vertices;
+            model.Meshes[0].Vertices = null; // Fail after textures, program and buffer handles were allocated.
+            bool rejected = false;
+            try { renderer.Draw(pose, Matrix4.Identity, frame); }
+            catch (NullReferenceException) { rejected = true; }
+            finally { model.Meshes[0].Vertices = vertices; }
+            Require(rejected && !backend.HasGpuResources, "Failed model upload retained partial GPU resources.");
+            renderer.Draw(pose, Matrix4.Identity, frame);
+            Require(backend.HasGpuResources, "Model renderer could not retry a failed upload.");
+            var handles = backend.CaptureResources();
+            renderer.Dispose(); renderer.Dispose();
+            Require(!backend.HasGpuResources && GL.GetError() == ErrorCode.NoError, "Model disposal retained GPU resources or produced a GL error.");
+            Require(!GL.IsProgram(handles.Program) && !GL.IsBuffer(handles.BoneBuffer), "Disposed model retained its GL program or palette.");
+            foreach (int handle in handles.VertexArrays) Require(!GL.IsVertexArray(handle), "Disposed model retained a vertex array.");
+            foreach (int handle in handles.VertexBuffers) Require(!GL.IsBuffer(handle), "Disposed model retained a vertex buffer.");
+            foreach (int handle in handles.IndexBuffers) Require(!GL.IsBuffer(handle), "Disposed model retained an index buffer.");
+            foreach (int handle in handles.Textures) Require(!GL.IsTexture(handle), "Disposed model retained a texture.");
+            Console.WriteLine("Model GPU lifecycle: partial upload rollback, retry and idempotent disposal passed.");
         }
         private static void Clear() { GL.DepthMask(true);GL.ClearColor(1,0,0,1);GL.Clear(ClearBufferMask.ColorBufferBit|ClearBufferMask.DepthBufferBit); }
         private static void RequirePolygonOffset(float factor, float units)

@@ -6,9 +6,12 @@ namespace ForesTycoon.Rendering
 {
     internal static class GlProgram
     {
-        private static readonly Dictionary<(int Program, string Name), int> uniforms = new();
+        private static readonly object uniformKey = new();
+        private static Dictionary<(int Program, string Name), int> uniforms => RenderDevice.GetState(uniformKey,
+            () => new Dictionary<(int Program, string Name), int>());
         internal static int Uniform(int program, string name)
         {
+            RenderDevice.Environment.VerifyAccess();
             var key = (program, name);
             if (!uniforms.TryGetValue(key, out int location))
                 uniforms.Add(key, location = GL.GetUniformLocation(program, name));
@@ -16,14 +19,18 @@ namespace ForesTycoon.Rendering
         }
         internal static void Delete(int program)
         {
+            RenderDevice.Environment.VerifyAccess();
             // GL names can be reused after deletion; never retain old locations.
             var keys = new List<(int Program, string Name)>();
             foreach (var key in uniforms.Keys) if (key.Program == program) keys.Add(key);
             foreach (var key in keys) uniforms.Remove(key);
+            GL.GetInteger(GetPName.CurrentProgram, out int current);
+            if (current == program) GL.UseProgram(0); // Bound programs otherwise remain alive after deletion.
             GL.DeleteProgram(program);
         }
         internal static int Create(string vertexSource, string fragmentSource, string geometrySource = null)
         {
+            RenderDevice.Environment.VerifyAccess();
             int vertex = 0, fragment = 0, geometry = 0, program = 0;
             try
             {

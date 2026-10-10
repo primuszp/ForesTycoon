@@ -17,6 +17,7 @@ namespace ForesTycoon
         public long AllocatedBytes { get; private set; }
         public int SimulationTicks { get; private set; }
         public int Commands { get; private set; }
+        public double DroppedSimulationSeconds { get; private set; }
         public int DrawCalls => RenderMetrics.DrawCalls;
         public int SubmittedVertices => RenderMetrics.SubmittedVertices;
 
@@ -29,11 +30,12 @@ namespace ForesTycoon
 
         public void BeginSimulation() => simulationStart = Stopwatch.GetTimestamp();
 
-        public void EndSimulation(int commands, int ticks)
+        public void EndSimulation(int commands, int ticks, double droppedSimulationSeconds = 0)
         {
             SimulationMilliseconds = Smooth(SimulationMilliseconds, ElapsedMilliseconds(simulationStart));
             Commands = commands;
             SimulationTicks = ticks;
+            DroppedSimulationSeconds = droppedSimulationSeconds;
         }
 
         public void BeginRender() => renderStart = Stopwatch.GetTimestamp();

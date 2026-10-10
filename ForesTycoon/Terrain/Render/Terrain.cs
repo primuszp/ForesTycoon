@@ -14,6 +14,8 @@ namespace ForesTycoon
     /// </summary>
     partial class Terrain : IDisposable
     {
+        private readonly RenderEnvironment renderOwner = RenderDevice.Environment;
+        private bool disposed;
         private readonly TerrainMap map;
         private readonly Dictionary<string, VertexBuffer> vbos = new Dictionary<string, VertexBuffer>();
         private readonly List<Tile> visibleTiles = new List<Tile>();
@@ -89,9 +91,13 @@ namespace ForesTycoon
         public Terrain(TerrainMap map)
         {
             this.map = map ?? throw new ArgumentNullException(nameof(map));
-            makeTiles();
-            map.NodesChanged += OnNodesChanged;
-            map.RoadDiagonalsChanged += OnRoadDiagonalsChanged;
+            try
+            {
+                makeTiles();
+                map.NodesChanged += OnNodesChanged;
+                map.RoadDiagonalsChanged += OnRoadDiagonalsChanged;
+            }
+            catch { Dispose(); throw; }
         }
 
         public int VisibleChunkCount => visibleChunkCount;
@@ -157,12 +163,15 @@ namespace ForesTycoon
         /// <summary>GL-erőforrások felszabadítása (regeneráláskor a régi terep buffereihez).</summary>
         public void Dispose()
         {
+            if (disposed) return; renderOwner.VerifyAccess();
             map.NodesChanged -= OnNodesChanged;
             map.RoadDiagonalsChanged -= OnRoadDiagonalsChanged;
             foreach (VertexBuffer vbo in vbos.Values) vbo.Dispose();
             vbos.Clear();
             DisposeForestGeometry();
             DisposeStaticTerrain();
+            fogSources.Clear(); fogSourceOrder.Clear();
+            disposed = true;
         }
     }
 }

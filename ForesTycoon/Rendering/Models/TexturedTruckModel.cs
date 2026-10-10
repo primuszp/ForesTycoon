@@ -47,7 +47,12 @@ namespace ForesTycoon
         public float TrailerAxle { get; }
 
         /// <summary>Shading settings of the current frame; set by the vehicle renderer.</summary>
-        internal static IShadingSettings Settings { get; set; }
+        private sealed class SettingsState { internal IShadingSettings Settings; }
+        private static readonly object settingsKey = new();
+        internal static IShadingSettings Settings {
+            get => RenderDevice.GetState(settingsKey, () => new SettingsState()).Settings;
+            set => RenderDevice.GetState(settingsKey, () => new SettingsState()).Settings = value;
+        }
 
         internal TexturedTruckModel(string path)
         {

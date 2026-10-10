@@ -46,10 +46,11 @@ public class EngineRegressionTests
         Assert.Throws<ArgumentOutOfRangeException>(() => effects.Update(double.NaN));
         Assert.Throws<ArgumentOutOfRangeException>(() => effects.Update(double.PositiveInfinity));
         effects.Update(0.2);
-        Assert.Equal(5000, effects.Count);
+        Assert.Equal(WorldEffectSystem.MaxActiveEffects / 2, effects.Count);
+        Assert.Equal(10000 - WorldEffectSystem.MaxActiveEffects, effects.DroppedEffects);
         for (int i = 0; i < effects.Count; i++)
         {
-            Assert.Equal(i * 2 + 1, effects.Active[i].Position.X);
+            Assert.Equal(10000 - WorldEffectSystem.MaxActiveEffects + i * 2 + 1, effects.Active[i].Position.X);
             Assert.Equal(0.2, effects.Active[i].AgeSeconds);
         }
     }

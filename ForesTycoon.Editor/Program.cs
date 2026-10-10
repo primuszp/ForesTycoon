@@ -21,6 +21,7 @@ namespace ForesTycoon.Editor
                 Console.WriteLine($"Exported {rules.Rules.Count} current rules and {rules.Connections().Length} dependencies: {destination}"); return;
             }
             RenderBackendSelection.UseOpenGl();
+            if (Array.Exists(args, a => a == "--window-lifecycle-smoke-test")) { WindowLifecycleSmokeTest.Run(); return; }
             if (Array.Exists(args, a => a == "--smoke-test"))
             {
                 RuleEditorSmokeTest.Run();
@@ -37,29 +38,29 @@ namespace ForesTycoon.Editor
     }
 
     /// <summary>Standalone authoring host. Its sandbox runs the same GameWorld adapter as the game.</summary>
-    internal sealed class EditorWindow : GameWindow
+    internal sealed class EditorWindow : RenderGameWindow
     {
         private ImGuiController ui;
+        protected override ImGuiController UiController => ui;
         private GameWorld sandbox;
         private readonly RuleEditorView editor;
         private bool open = true;
         private readonly bool smoke;
         private int frames;
-        internal EditorWindow(string file, bool smoke = false) : base(GameWindowSettings.Default, new NativeWindowSettings
+        internal EditorWindow(string file, bool smoke = false, bool visible = true) : base(GameWindowSettings.Default, new NativeWindowSettings
         {
             Title = "ForesTycoon – Szabályrendszer editor", ClientSize = new(1280, 900),
-            API = ContextAPI.OpenGL, APIVersion = new(3, 3), Profile = ContextProfile.Core, StartVisible = !smoke
+            API = ContextAPI.OpenGL, APIVersion = new(3, 3), Profile = ContextProfile.Core, StartVisible = !smoke && visible
         }) { editor = new RuleEditorView(file); this.smoke = smoke; }
 
-        protected override void OnLoad()
+        protected override void LoadScene()
         {
-            base.OnLoad(); VSync = VSyncMode.On; RenderDevice.Initialize();
-            sandbox = new GameWorld(TerrainSettings.Default.WithNodeSize(17, 42));
+            VSync = VSyncMode.On;
+            sandbox = new GameWorld(TerrainSettings.Default.WithNodeSize(17, 42), enableRendering: false);
             ui = new ImGuiController(); HudTheme.Apply();
         }
-        protected override void OnRenderFrame(FrameEventArgs args)
+        protected override void RenderScene(FrameEventArgs args)
         {
-            base.OnRenderFrame(args);
             sandbox.ExecutePendingCommands();
             Vec2 scale = new((float)FramebufferSize.X / Math.Max(1, ClientSize.X), (float)FramebufferSize.Y / Math.Max(1, ClientSize.Y));
             ui.Update(ClientSize.X, ClientSize.Y, FramebufferSize.X, FramebufferSize.Y, scale, (float)Math.Max(0.001, args.Time));
@@ -81,13 +82,13 @@ namespace ForesTycoon.Editor
             }
             SwapBuffers(); if (!open) Close();
         }
-        protected override void OnMouseMove(MouseMoveEventArgs e) { base.OnMouseMove(e); ui?.MouseMove((int)e.X, (int)e.Y); }
-        protected override void OnMouseDown(MouseButtonEventArgs e) { base.OnMouseDown(e); if ((int)e.Button < 5) ui?.MouseButton((int)e.Button, true); }
-        protected override void OnMouseUp(MouseButtonEventArgs e) { base.OnMouseUp(e); if ((int)e.Button < 5) ui?.MouseButton((int)e.Button, false); }
-        protected override void OnMouseWheel(MouseWheelEventArgs e) { base.OnMouseWheel(e); ui?.MouseScroll(e.OffsetY); }
-        protected override void OnTextInput(TextInputEventArgs e) { base.OnTextInput(e); if (ui != null) ImGui.GetIO().AddInputCharacter((uint)e.Unicode); }
-        protected override void OnKeyDown(KeyboardKeyEventArgs e) { base.OnKeyDown(e); Key(e.Key, true); }
-        protected override void OnKeyUp(KeyboardKeyEventArgs e) { base.OnKeyUp(e); Key(e.Key, false); }
+        protected override void MouseMoveScene(MouseMoveEventArgs e) { ui?.MouseMove((int)e.X, (int)e.Y); }
+        protected override void MouseDownScene(MouseButtonEventArgs e) { if ((int)e.Button < 5) ui?.MouseButton((int)e.Button, true); }
+        protected override void MouseUpScene(MouseButtonEventArgs e) { if ((int)e.Button < 5) ui?.MouseButton((int)e.Button, false); }
+        protected override void MouseWheelScene(MouseWheelEventArgs e) { ui?.MouseScroll(e.OffsetY); }
+        protected override void TextInputScene(TextInputEventArgs e) { if (ui != null) ImGui.GetIO().AddInputCharacter((uint)e.Unicode); }
+        protected override void KeyDownScene(KeyboardKeyEventArgs e) { Key(e.Key, true); }
+        protected override void KeyUpScene(KeyboardKeyEventArgs e) { Key(e.Key, false); }
         private void Key(Keys key, bool down)
         {
             if (ui == null) return;
@@ -109,9 +110,8 @@ namespace ForesTycoon.Editor
             io.AddKeyEvent(ImGuiKey.ModAlt, KeyboardState.IsKeyDown(Keys.LeftAlt) || KeyboardState.IsKeyDown(Keys.RightAlt));
             io.AddKeyEvent(ImGuiKey.ModSuper, KeyboardState.IsKeyDown(Keys.LeftSuper) || KeyboardState.IsKeyDown(Keys.RightSuper));
         }
-        protected override void OnUnload()
+        protected override void UnloadScene()
         {
-            ui?.Dispose(); sandbox?.Dispose(); RenderDevice.Dispose(); base.OnUnload();
-        }
+            ui?.Dispose(); sandbox?.Dispose(); ui = null; sandbox = null; }
     }
 }

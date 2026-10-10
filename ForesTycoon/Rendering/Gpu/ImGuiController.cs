@@ -11,12 +11,20 @@ namespace ForesTycoon
     /// </summary>
     sealed class ImGuiController : IDisposable
     {
+        private readonly RenderResourceOwner owner = new();
         private bool frameBegun;
 
         private readonly IUiRenderBackend backend;
         private GCHandle glyphRangeHandle;
         private readonly IntPtr context;
         private bool disposed;
+        private ImFontPtr titleFont, largeTitleFont;
+        private readonly record struct TitleFonts(ImFontPtr Title, ImFontPtr Large);
+        [ThreadStatic] private static System.Collections.Generic.Dictionary<IntPtr, TitleFonts> titleFonts;
+        private static TitleFonts CurrentTitleFonts => titleFonts != null && titleFonts.TryGetValue(ImGui.GetCurrentContext(), out var fonts) ? fonts : default;
+        internal bool IsDisposed => disposed;
+        internal IntPtr Context => context;
+        internal void MakeCurrent() => SelectContext();
         public ImGuiController(IUiRenderBackend backend = null)
         {
             this.backend = backend ?? SceneRenderBackends.Current.CreateUi();
@@ -26,7 +34,9 @@ namespace ForesTycoon
             {
                 ImGuiIOPtr io = ImGui.GetIO();
                 LoadUIFont(io);
+                (titleFonts ??= new()).Add(context, new(titleFont, largeTitleFont));
                 io.ConfigFlags |= ImGuiConfigFlags.NavEnableKeyboard;
+                owner.Check();
                 this.backend.Initialize(io);
             }
             catch { Dispose(); throw; }
@@ -50,16 +60,15 @@ namespace ForesTycoon
             io.Fonts.AddFontFromFileTTF(fontPath, 16f, IntPtr.Zero, glyphRangeHandle.AddrOfPinnedObject());
             // A serif face for estate names, seasons and panel titles (the HUD's calm "voice").
             string title = FindTitleFont() ?? fontPath;
-            TitleFont = io.Fonts.AddFontFromFileTTF(title, 22f, IntPtr.Zero, glyphRangeHandle.AddrOfPinnedObject());
-            LargeTitleFont = io.Fonts.AddFontFromFileTTF(title, 34f, IntPtr.Zero, glyphRangeHandle.AddrOfPinnedObject());
-            HasTitleFonts = true;
+            titleFont = io.Fonts.AddFontFromFileTTF(title, 22f, IntPtr.Zero, glyphRangeHandle.AddrOfPinnedObject());
+            largeTitleFont = io.Fonts.AddFontFromFileTTF(title, 34f, IntPtr.Zero, glyphRangeHandle.AddrOfPinnedObject());
         }
 
-        internal static bool HasTitleFonts { get; private set; }
+        internal static unsafe bool HasTitleFonts => TitleFont.NativePtr != null;
 
         /// <summary>Serif title fonts; null pointers when only ImGui's default font is available.</summary>
-        internal static ImFontPtr TitleFont { get; private set; }
-        internal static ImFontPtr LargeTitleFont { get; private set; }
+        internal static ImFontPtr TitleFont => CurrentTitleFonts.Title;
+        internal static ImFontPtr LargeTitleFont => CurrentTitleFonts.Large;
 
         private static string FindTitleFont()
         {
@@ -103,6 +112,7 @@ namespace ForesTycoon
         // Per-frame ---------------------------------------------------------
         public void Update(int width, int height, int framebufferWidth, int framebufferHeight, Vector2 framebufferScale, float deltaSeconds)
         {
+            SelectContext();
             if (frameBegun) ImGui.Render();
 
             ImGuiIOPtr io = ImGui.GetIO();
@@ -116,6 +126,7 @@ namespace ForesTycoon
 
         public void Render()
         {
+            SelectContext(); owner.Check();
             if (!frameBegun) return;
             frameBegun = false;
             ImGui.Render();
@@ -123,21 +134,19 @@ namespace ForesTycoon
         }
 
         // ── Egér-input ───────────────────────────────────────────────────────
-        public bool WantCaptureMouse => ImGui.GetIO().WantCaptureMouse;
-        public void MouseMove(int x, int y) => ImGui.GetIO().AddMousePosEvent(x, y);
-        public void MouseButton(int index, bool down) => ImGui.GetIO().AddMouseButtonEvent(index, down);
-        public void MouseScroll(float wheel) => ImGui.GetIO().AddMouseWheelEvent(0f, wheel);
+        private void SelectContext() { ObjectDisposedException.ThrowIf(disposed, this); ImGui.SetCurrentContext(context); }
+        public bool WantCaptureMouse { get { SelectContext(); return ImGui.GetIO().WantCaptureMouse; } }
+        public void MouseMove(int x, int y) { SelectContext(); ImGui.GetIO().AddMousePosEvent(x, y); }
+        public void MouseButton(int index, bool down) { SelectContext(); ImGui.GetIO().AddMouseButtonEvent(index, down); }
+        public void MouseScroll(float wheel) { SelectContext(); ImGui.GetIO().AddMouseWheelEvent(0f, wheel); }
 
         public void Dispose()
         {
             if (disposed) return;
-            disposed = true;
-            try { backend.Dispose(); }
-            finally
-            {
-                ImGui.DestroyContext(context);
-                if (glyphRangeHandle.IsAllocated) glyphRangeHandle.Free();
-            }
+            owner.CheckIfBound(); backend.Dispose(); disposed = true;
+            titleFonts?.Remove(context);
+            ImGui.DestroyContext(context);
+            if (glyphRangeHandle.IsAllocated) glyphRangeHandle.Free();
         }
     }
 }

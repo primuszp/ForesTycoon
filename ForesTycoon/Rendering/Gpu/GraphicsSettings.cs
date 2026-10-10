@@ -5,9 +5,13 @@ namespace ForesTycoon
     internal sealed class GraphicsSettings : IPostProcessSettings, IShadingSettings, IWeatherSettings
     {
         internal GraphicsQuality Quality = GraphicsQuality.High;
+        internal double EffectCpuBudgetMilliseconds => Quality == GraphicsQuality.Low ? .5 : Quality == GraphicsQuality.Medium ? 1 : 2;
+        double IWeatherSettings.EffectCpuBudgetMilliseconds => EffectCpuBudgetMilliseconds;
         internal int ShadowResolution => Quality == GraphicsQuality.Low ? 512 : Quality == GraphicsQuality.Medium ? 1024 : 2048;
         internal int FogSourceBudget => Quality == GraphicsQuality.Low ? 256 : Quality == GraphicsQuality.Medium ? 512 : 768;
         internal int FogLayers => Quality == GraphicsQuality.Low ? 2 : 3;
+        internal long FogDepthBudgetBytes => (Quality == GraphicsQuality.Low ? 16L : Quality == GraphicsQuality.Medium ? 32L : 64L) * 1024 * 1024;
+        internal int MarkerBudget => Quality == GraphicsQuality.Low ? 128 : Quality == GraphicsQuality.Medium ? 256 : 512;
         internal int RainBudget => Quality == GraphicsQuality.Low ? 1500 : Quality == GraphicsQuality.Medium ? 3000 : 6000;
         internal int CloudSteps => Quality == GraphicsQuality.Low ? 6 : Quality == GraphicsQuality.Medium ? 8 : 12;
         internal bool Enhanced = true;

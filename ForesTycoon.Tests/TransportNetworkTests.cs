@@ -167,6 +167,22 @@ public class TransportNetworkTests
     }
 
     [Fact]
+    public void TruckDockSelectionUsesWeightedCostInsteadOfTileCount()
+    {
+        var map = Flat();
+        map.BuildRoadTilePath(34, 66); map.BuildRoadTilePath(66, 74); map.BuildRoadTilePath(74, 42);
+        map.MarkSkidTrailPath(34, 42);
+        var logistics = new ForestryLogistics(map, new ForestSystem(map, new ForestStand[256]));
+        int[] chosen = logistics.PreviewTruckRoute(35, 41);
+        Assert.NotNull(chosen); Assert.Contains(66, chosen);
+        map.FindNetworkPath(chosen[0], chosen[^1], out float chosenCost);
+        int[] shorter = map.FindNetworkPath(36, 40, out float trailCost);
+        Assert.True(shorter.Length < chosen.Length);
+        Assert.True(chosenCost < trailCost);
+        Assert.Equal(chosen, logistics.PreviewTruckRoute(35, 41));
+    }
+
+    [Fact]
     public void TruckCrawlsAndPitchesOnATrail()
     {
         double TopSpeed(bool trail, out float damage)

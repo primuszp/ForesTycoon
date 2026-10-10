@@ -40,6 +40,7 @@ namespace ForesTycoon.Models
             private readonly Vector3[] translations,scales,otherTranslations,otherScales;
             private readonly Quaternion[] rotations,otherRotations;
             private readonly AnimatedGlbModel model;
+            internal AnimatedGlbModel Model => model;
             internal Pose(AnimatedGlbModel model) {
                 this.model=model;int n=model.Nodes.Length;World=new Matrix4[n];
                 translations=new Vector3[n];scales=new Vector3[n];rotations=new Quaternion[n];

@@ -18,6 +18,8 @@ namespace ForesTycoon.Rendering.OpenGl
     /// </summary>
     internal sealed class OpenGlPostProcess : IPostProcessBackend
     {
+        private readonly RenderResourceOwner owner = new();
+        private bool disposed;
         private int msaaFramebuffer, msaaColor, msaaDepth;
         private int resolveFramebuffer, sceneTexture, depthTexture;
         private int gradeFramebuffer, gradeTexture;
@@ -34,6 +36,7 @@ namespace ForesTycoon.Rendering.OpenGl
         /// <summary>Redirects drawing into the offscreen target. Returns false when the effect is off.</summary>
         public bool Begin(IPostProcessSettings settings, int framebufferWidth, int framebufferHeight)
         {
+            ObjectDisposedException.ThrowIf(disposed, this); owner.Check();
             active = false;
             if (!Enabled(settings) || framebufferWidth <= 0 || framebufferHeight <= 0) return false;
             if (gradeProgram == 0) CreatePrograms();
@@ -47,6 +50,7 @@ namespace ForesTycoon.Rendering.OpenGl
         /// <summary>Soft radial studio backdrop, drawn right after the clear and before the world.</summary>
         public void DrawBackdrop(IPostProcessSettings settings, Vector3 clearColor)
         {
+            ObjectDisposedException.ThrowIf(disposed, this); owner.Check();
             if (!active || !settings.StudioBackdrop) return;
             using var state = new OpenGlRenderStateScope().Disable(RenderCapability.DepthTest).Disable(RenderCapability.Blend).DepthWrite(false);
             GL.UseProgram(backdropProgram);
@@ -58,6 +62,7 @@ namespace ForesTycoon.Rendering.OpenGl
         /// <summary>Resolves the offscreen frame and composites it into the default framebuffer.</summary>
         public void End(IPostProcessSettings settings, float pixelsPerWorldUnit, float dpiScale, float time)
         {
+            ObjectDisposedException.ThrowIf(disposed, this); owner.Check();
             if (!active) return;
             active = false;
 
@@ -436,6 +441,7 @@ void main() {
 
         public void Dispose()
         {
+            if (disposed) return; owner.CheckIfBound(); disposed = true;
             DeleteTargets();
             if (gradeProgram != 0) GlProgram.Delete(gradeProgram);
             if (finishProgram != 0) GlProgram.Delete(finishProgram);
@@ -445,6 +451,7 @@ void main() {
             aoProgram = aoBlurProgram = 0;
             if (vao != 0) GL.DeleteVertexArray(vao);
             gradeProgram = finishProgram = backdropProgram = vao = 0;
+            active = false;
         }
     }
 }

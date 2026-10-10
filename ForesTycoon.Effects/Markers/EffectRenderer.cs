@@ -6,18 +6,21 @@ namespace ForesTycoon.Effects
 {
     static class EffectRenderer
     {
-        public static void Draw(WorldEffectSystem effects, float interpolationAlpha)
+        public static int Draw(WorldEffectSystem effects, float interpolationAlpha, int budget = 512)
         {
-            if (effects.Count == 0) return;
+            ArgumentNullException.ThrowIfNull(effects);
+            if (budget < 0 || budget > WorldEffectSystem.MaxActiveEffects) throw new ArgumentOutOfRangeException(nameof(budget));
+            int submitted = Math.Min(effects.Count, budget);
+            if (submitted == 0) return 0;
 
             using (RenderDevice.CreateStateScope().AlphaBlend().DepthWrite(false))
             {
                 DynamicPrimitiveBatch.Draw(PrimitiveTopology.Lines, () =>
                 {
-                    foreach (WorldEffect effect in effects.Active)
-                        DrawPulse(effect, interpolationAlpha);
+                    for (int i = effects.Count - submitted; i < effects.Count; i++) DrawPulse(effects.Active[i], interpolationAlpha);
                 });
             }
+            return submitted;
         }
 
         private static void DrawPulse(WorldEffect effect, float interpolationAlpha)

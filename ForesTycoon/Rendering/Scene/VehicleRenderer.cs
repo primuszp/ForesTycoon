@@ -5,8 +5,16 @@ namespace ForesTycoon
 {
     static class VehicleRenderer
     {
-        private static int outlineBudget;
-        private static float outlinePixelsPerUnit;
+        private sealed class FrameState
+        {
+            internal int OutlineBudget;
+            internal float OutlinePixelsPerUnit, TruckScale = 1;
+            internal ITruckModel Model;
+        }
+        private static readonly object stateKey = new();
+        private static FrameState State => RenderDevice.GetState(stateKey, () => new FrameState());
+        private static int outlineBudget { get => State.OutlineBudget; set => State.OutlineBudget = value; }
+        private static float outlinePixelsPerUnit { get => State.OutlinePixelsPerUnit; set => State.OutlinePixelsPerUnit = value; }
         internal static void BeginFrame(RenderContext context, GraphicsSettings settings)
         {
             outlinePixelsPerUnit = context.PixelsPerWorldUnit;
@@ -115,7 +123,7 @@ namespace ForesTycoon
             return world.Z - height;
         }
 
-        internal static float TruckScale { get; set; } = 1;
+        internal static float TruckScale { get => State.TruckScale; set => State.TruckScale = value; }
 
         /// <summary>An empty truck standing still (parked at its depot).</summary>
         internal static void DrawParked(Terrain terrain, Vector3 position, float yaw)
@@ -141,7 +149,7 @@ namespace ForesTycoon
             }
         }
 
-        private static ITruckModel importedModel;
+        private static ITruckModel importedModel { get => State.Model; set => State.Model = value; }
         internal static float ModelWidth { get { EnsureModel(); return importedModel.Width; } }
         internal static bool ModelArticulated { get { EnsureModel(); return importedModel.Articulated; } }
         private static void EnsureModel()

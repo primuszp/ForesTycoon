@@ -40,6 +40,7 @@ public class GlbMaterialTests
         }
         byte[] json = JsonSerializer.SerializeToUtf8Bytes(new {
             asset = new { version = "2.0" }, nodes = new[] { new { mesh = 0 } }, materials = new[] { material },
+            buffers = new[] { new { byteLength = (int)binary.Length } },
             meshes = new[] { new { primitives = new[] { new { attributes = new { POSITION = 0, NORMAL = 1 }, indices = 2, material = 0 } } } },
             bufferViews = new[] { new { buffer = 0, byteOffset = 0, byteLength = 36 }, new { buffer = 0, byteOffset = 36, byteLength = 36 }, new { buffer = 0, byteOffset = 72, byteLength = 12 } },
             accessors = new[] { new { bufferView = 0, componentType = 5126, count = 3, type = "VEC3" }, new { bufferView = 1, componentType = 5126, count = 3, type = "VEC3" }, new { bufferView = 2, componentType = 5125, count = 3, type = "SCALAR" } }

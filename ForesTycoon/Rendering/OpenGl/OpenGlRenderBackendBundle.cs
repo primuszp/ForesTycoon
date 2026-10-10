@@ -8,6 +8,6 @@ namespace ForesTycoon.OpenGl
     {
         internal static RenderBackendBundle Create() => new(new OpenGlGraphicsBackend(),
             model => new OpenGlModelRenderer(model), new OpenGlEffectBackendFactory(),
-            new OpenGlSceneBackendFactory(), new OpenGlWindowPlatform());
+            new OpenGlSceneBackendFactory(), new OpenGlWindowPlatform(), Create);
     }
 }

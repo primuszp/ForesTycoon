@@ -5,7 +5,7 @@ using System.Text.Json;
 using OpenTK.Mathematics;
 namespace ForesTycoon.Models
 {
-    // CPU asset/pose layer. GPU buffers are shared by all instances in AnimatedModelRenderer.
+    // CPU asset/pose layer. One AnimatedModelRenderer shares its GPU buffers across poses.
     internal sealed partial class AnimatedGlbModel
     {
         internal enum AlphaMode { Opaque, Mask, Blend }
@@ -39,18 +39,32 @@ namespace ForesTycoon.Models
         internal Pose CreatePose()=>new(this);
         internal static AnimatedGlbModel Load(string path)
         {
+            if (new FileInfo(path).Length > MaxAssetBytes) throw new NotSupportedException("GLB exceeds the 128 MiB asset budget.");
             byte[] bytes=File.ReadAllBytes(path);
+            try { return LoadCore(bytes); }
+            catch (Exception error) when (error is JsonException or EndOfStreamException or KeyNotFoundException or InvalidOperationException
+                or ArgumentException or IndexOutOfRangeException or OverflowException)
+            { throw new InvalidDataException("Malformed GLB structure or values.", error); }
+        }
+        private static AnimatedGlbModel LoadCore(byte[] bytes)
+        {
             if(bytes.Length<28||BitConverter.ToUInt32(bytes,0)!=0x46546c67||BitConverter.ToUInt32(bytes,4)!=2||BitConverter.ToUInt32(bytes,8)!=bytes.Length)
                 throw new InvalidDataException("Invalid GLB.");
             int jsonSize=checked((int)BitConverter.ToUInt32(bytes,12));
-            if(jsonSize>bytes.Length-28||BitConverter.ToUInt32(bytes,16)!=0x4e4f534a)throw new InvalidDataException("Invalid JSON chunk.");
+            if(jsonSize>bytes.Length-28||jsonSize%4!=0||BitConverter.ToUInt32(bytes,16)!=0x4e4f534a)throw new InvalidDataException("Invalid JSON chunk.");
             int binaryStart=28+jsonSize,binarySize=checked((int)BitConverter.ToUInt32(bytes,20+jsonSize));
-            if(binarySize!=bytes.Length-binaryStart||BitConverter.ToUInt32(bytes,24+jsonSize)!=0x004e4942)throw new InvalidDataException("Invalid BIN chunk.");
+            if(binarySize!=bytes.Length-binaryStart||binarySize%4!=0||BitConverter.ToUInt32(bytes,24+jsonSize)!=0x004e4942)throw new InvalidDataException("Invalid BIN chunk.");
             using var document=JsonDocument.Parse(bytes.AsMemory(20,jsonSize));var root=document.RootElement;
+            ValidateDocument(root, binarySize);
             if(root.TryGetProperty("extensionsRequired",out var required))foreach(var extension in required.EnumerateArray())
                 if(extension.GetString()!="KHR_materials_pbrSpecularGlossiness")throw new NotSupportedException("Required GLB extension: "+extension.GetString());
             var accessors=root.GetProperty("accessors");var views=root.GetProperty("bufferViews");
             var cache=new Dictionary<int,float[]>();
+            long decodedBytes = 0;
+            void ReservePayload(long payload) {
+                if (payload < 0 || payload > MaxDecodedAssetBytes - decodedBytes) throw new NotSupportedException("GLB exceeds the 256 MiB decoded asset budget.");
+                decodedBytes += payload;
+            }
             int Arity(JsonElement a)=>a.GetProperty("type").GetString() switch {"SCALAR"=>1,"VEC2"=>2,"VEC3"=>3,"VEC4"=>4,"MAT4"=>16,_=>throw new NotSupportedException("Accessor type.")};
             float[] Read(int id) {
                 if(cache.TryGetValue(id,out var result))return result;
@@ -62,6 +76,8 @@ namespace ForesTycoon.Models
                 if(count<1||stride<arity*size||relative<0||(long)relative+(long)(count-1)*stride+arity*size>view.GetProperty("byteLength").GetInt32()||offset<0||(long)offset+view.GetProperty("byteLength").GetInt32()-relative>binarySize)
                     throw new InvalidDataException("Accessor bounds.");
                 bool normalized=a.TryGetProperty("normalized",out v)&&v.GetBoolean();
+                long payload = (long)count * arity * sizeof(float);
+                ReservePayload(payload);
                 result=new float[checked(count*arity)];
                 for(int i=0;i<count;i++)for(int c=0;c<arity;c++) {
                     int at=binaryStart+offset+i*stride+c*size;
@@ -86,8 +102,31 @@ namespace ForesTycoon.Models
                 int c=child.GetInt32();if(c<0||c>=model.Nodes.Length||model.Nodes[c].Parent!=-1)throw new InvalidDataException("Node hierarchy.");model.Nodes[c].Parent=i;
             }
             var order=new List<int>();var visited=new byte[model.Nodes.Length];
-            void Visit(int i){if(visited[i]==2)return;if(visited[i]==1)throw new InvalidDataException("Node cycle.");visited[i]=1;if(model.Nodes[i].Parent>=0)Visit(model.Nodes[i].Parent);visited[i]=2;order.Add(i);}
-            for(int i=0;i<model.Nodes.Length;i++)Visit(i);model.Order=order.ToArray();
+            var ancestors = new List<int>();
+            for(int i=0;i<model.Nodes.Length;i++) {
+                int current = i; ancestors.Clear();
+                while (current >= 0 && visited[current] != 2) {
+                    if (visited[current] == 1) throw new InvalidDataException("Node cycle.");
+                    visited[current] = 1; ancestors.Add(current); current = model.Nodes[current].Parent;
+                }
+                for (int j = ancestors.Count - 1; j >= 0; j--) { visited[ancestors[j]] = 2; order.Add(ancestors[j]); }
+            }
+            model.Order=order.ToArray();
+            HashSet<int> activeNodes = null;
+            if (root.TryGetProperty("scenes", out var scenes)) {
+                int sceneIndex = root.TryGetProperty("scene", out var defaultScene) ? defaultScene.GetInt32() : 0;
+                if (sceneIndex < 0 || sceneIndex >= scenes.GetArrayLength()) throw new InvalidDataException("Default scene index.");
+                activeNodes = new HashSet<int>(); var pending = new Stack<int>();
+                foreach (var sceneRoot in scenes[sceneIndex].GetProperty("nodes").EnumerateArray()) {
+                    int id = sceneRoot.GetInt32();
+                    if (id < 0 || id >= model.Nodes.Length || model.Nodes[id].Parent >= 0) throw new InvalidDataException("Scene root node.");
+                    pending.Push(id);
+                }
+                while (pending.Count > 0) {
+                    int id = pending.Pop(); if (!activeNodes.Add(id)) continue;
+                    if (nodes[id].TryGetProperty("children", out var children)) foreach (var child in children.EnumerateArray()) pending.Push(child.GetInt32());
+                }
+            }
             var skins=new List<Skin>();
             if(root.TryGetProperty("skins",out var skinList))foreach(var skin in skinList.EnumerateArray()) {
                 var joints=skin.GetProperty("joints");if(joints.GetArrayLength()>64)throw new NotSupportedException("Maximum 64 joints per skin.");
@@ -100,20 +139,26 @@ namespace ForesTycoon.Models
             if(root.TryGetProperty("images",out var images))foreach(var image in images.EnumerateArray()) {
                 if(image.GetProperty("mimeType").GetString()!="image/png")throw new NotSupportedException("Embedded PNG required.");
                 var view=views[image.GetProperty("bufferView").GetInt32()];int offset=view.TryGetProperty("byteOffset",out var v)?v.GetInt32():0,size=view.GetProperty("byteLength").GetInt32();
-                if(offset<0||size<0||(long)offset+size>binarySize)throw new InvalidDataException("Image bounds.");imageList.Add(PngImage.Decode(bytes.AsSpan(binaryStart+offset,size).ToArray()));
+                if(offset<0||size<24||(long)offset+size>binarySize)throw new InvalidDataException("Image bounds.");
+                int width = System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(binaryStart + offset + 16, 4));
+                int height = System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(binaryStart + offset + 20, 4));
+                if (width < 1 || height < 1 || width > 4096 || height > 4096) throw new InvalidDataException("Image dimensions.");
+                ReservePayload((long)width * height * 8 + size); // RGBA result plus bounded decoder scratch and source.
+                imageList.Add(PngImage.Decode(bytes.AsSpan(binaryStart+offset,size).ToArray()));
             }
             model.Images=imageList.ToArray();var meshList=new List<Mesh>();
-            for(int i=0;i<model.Nodes.Length;i++)if(nodes[i].TryGetProperty("mesh",out var meshId))foreach(var primitive in root.GetProperty("meshes")[meshId.GetInt32()].GetProperty("primitives").EnumerateArray()) {
+            for(int i=0;i<model.Nodes.Length;i++)if((activeNodes == null || activeNodes.Contains(i)) && nodes[i].TryGetProperty("mesh",out var meshId))foreach(var primitive in root.GetProperty("meshes")[meshId.GetInt32()].GetProperty("primitives").EnumerateArray()) {
                 if(primitive.TryGetProperty("mode",out var mode)&&mode.GetInt32()!=4)throw new NotSupportedException("Triangle meshes required.");
                 var a=primitive.GetProperty("attributes");float[] p=Read(a.GetProperty("POSITION").GetInt32()),n=Read(a.GetProperty("NORMAL").GetInt32());
                 float[] uv=a.TryGetProperty("TEXCOORD_0",out var v)?Read(v.GetInt32()):new float[p.Length/3*2];
                 int skin=nodes[i].TryGetProperty("skin",out v)?v.GetInt32():-1;
                 if(skin>=model.Skins.Length)throw new InvalidDataException("Mesh skin.");
                 float[] joints=skin>=0?Read(a.GetProperty("JOINTS_0").GetInt32()):null,weights=skin>=0?Read(a.GetProperty("WEIGHTS_0").GetInt32()):null;
+                ReservePayload((long)p.Length / 3 * 16 * sizeof(float));
                 var mesh=new Mesh{Node=i,Skin=skin,Vertices=new float[p.Length/3*16]};
                 for(int vertex=0;vertex<p.Length/3;vertex++) {
                     Array.Copy(p,vertex*3,mesh.Vertices,vertex*16,3);Array.Copy(n,vertex*3,mesh.Vertices,vertex*16+3,3);Array.Copy(uv,vertex*2,mesh.Vertices,vertex*16+6,2);
-                    if(skin>=0){float sum=0;for(int j=0;j<4;j++){int joint=(int)joints[vertex*4+j];if(joint<0||joint>=model.Skins[skin].Joints.Length||weights[vertex*4+j]<0)throw new InvalidDataException("Vertex joint/weight.");mesh.Vertices[vertex*16+8+j]=joint;sum+=weights[vertex*4+j];}if(sum<=0)throw new InvalidDataException("Zero skin weights.");for(int j=0;j<4;j++)mesh.Vertices[vertex*16+12+j]=weights[vertex*4+j]/sum;}
+                    if(skin>=0){double sum=0;for(int j=0;j<4;j++){int joint=(int)joints[vertex*4+j];if(joint<0||joint>=model.Skins[skin].Joints.Length||weights[vertex*4+j]<0)throw new InvalidDataException("Vertex joint/weight.");mesh.Vertices[vertex*16+8+j]=joint;sum+=weights[vertex*4+j];}if(sum<=0)throw new InvalidDataException("Zero skin weights.");for(int j=0;j<4;j++)mesh.Vertices[vertex*16+12+j]=(float)(weights[vertex*4+j]/sum);}
                 }
                 Vector3 min=new(float.MaxValue),max=new(float.MinValue);
                 for(int vertex=0;vertex<p.Length;vertex+=3) {
@@ -121,7 +166,7 @@ namespace ForesTycoon.Models
                     min=Vector3.ComponentMin(min,point);max=Vector3.ComponentMax(max,point);
                 }
                 mesh.Center=(min+max)*0.5f;
-                float[] indices=Read(primitive.GetProperty("indices").GetInt32());mesh.Indices=new uint[indices.Length];
+                float[] indices=Read(primitive.GetProperty("indices").GetInt32());ReservePayload((long)indices.Length * sizeof(uint));mesh.Indices=new uint[indices.Length];
                 if(indices.Length%3!=0)throw new InvalidDataException("Triangle indices.");
                 for(int j=0;j<indices.Length;j++){if(indices[j]<0||indices[j]>=p.Length/3||indices[j]!=(int)indices[j])throw new InvalidDataException("Index bounds.");mesh.Indices[j]=(uint)indices[j];}
                 if(primitive.TryGetProperty("material",out var materialId)) {
@@ -135,7 +180,11 @@ namespace ForesTycoon.Models
                     if(material.TryGetProperty("extensions",out v)&&v.TryGetProperty("KHR_materials_pbrSpecularGlossiness",out var spec))diffuse=spec;
                     else if(material.TryGetProperty("pbrMetallicRoughness",out v))diffuse=v;
                     if(diffuse.ValueKind!=JsonValueKind.Undefined) {
-                        if(diffuse.TryGetProperty("diffuseFactor",out v)||diffuse.TryGetProperty("baseColorFactor",out v))mesh.Color=Vector(v);
+                        if(diffuse.TryGetProperty("diffuseFactor",out v)||diffuse.TryGetProperty("baseColorFactor",out v)) {
+                            if (v.GetArrayLength() != 4) throw new InvalidDataException("Material color must contain four components.");
+                            mesh.Color=Vector(v);
+                            for (int c = 0; c < 4; c++) if (!float.IsFinite(mesh.Color[c]) || mesh.Color[c] < 0 || mesh.Color[c] > 1) throw new InvalidDataException("Material color range.");
+                        }
                         if(diffuse.TryGetProperty("diffuseTexture",out v)||diffuse.TryGetProperty("baseColorTexture",out v))mesh.Image=root.GetProperty("textures")[v.GetProperty("index").GetInt32()].GetProperty("source").GetInt32();
                     }
                     if(mesh.Image < -1 || mesh.Image >= model.Images.Length)throw new InvalidDataException("Material image bounds.");
@@ -153,12 +202,23 @@ namespace ForesTycoon.Models
                         "scale"=>AnimationPath.Scale,_=>throw new NotSupportedException("Morph animation not supported.")};
                     if(node<0||node>=model.Nodes.Length||model.Nodes[node].Matrix.HasValue)throw new InvalidDataException("Animated node must use TRS.");
                     string interpolation=sampler.TryGetProperty("interpolation",out var v)?v.GetString():"LINEAR";
+                    int input = sampler.GetProperty("input").GetInt32(), output = sampler.GetProperty("output").GetInt32();
+                    if (accessors[input].GetProperty("type").GetString() != "SCALAR" || accessors[input].GetProperty("componentType").GetInt32() != 5126
+                        || accessors[output].GetProperty("type").GetString() != (pathId == AnimationPath.Rotation ? "VEC4" : "VEC3")
+                        || accessors[output].GetProperty("componentType").GetInt32() != 5126)
+                        throw new InvalidDataException("Animation accessor shape/component type.");
                     var c=new Channel{Node=node,Path=pathId,Arity=pathId==AnimationPath.Rotation?4:3,
                         Interpolation=interpolation switch {
                             "LINEAR"=>AnimationInterpolation.Linear,"STEP"=>AnimationInterpolation.Step,
                             "CUBICSPLINE"=>AnimationInterpolation.CubicSpline,_=>throw new NotSupportedException("Animation interpolation.")},
-                        Times=Read(sampler.GetProperty("input").GetInt32()),Values=Read(sampler.GetProperty("output").GetInt32())};
+                        Times=Read(input),Values=Read(output)};
                     if(c.Values.Length!=c.Times.Length*c.Arity*(c.Interpolation==AnimationInterpolation.CubicSpline?3:1))throw new InvalidDataException("Animation values.");
+                    if (channels.Exists(existing => existing.Node == node && existing.Path == pathId)) throw new InvalidDataException("Duplicate animation target.");
+                    if (pathId == AnimationPath.Rotation) for (int key = 0; key < c.Times.Length; key++) {
+                        int at = (key * (c.Interpolation == AnimationInterpolation.CubicSpline ? 3 : 1) + (c.Interpolation == AnimationInterpolation.CubicSpline ? 1 : 0)) * 4;
+                        double norm = 0; for (int component = 0; component < 4; component++) norm += (double)c.Values[at + component] * c.Values[at + component];
+                        if (Math.Abs(norm - 1) > .001) throw new InvalidDataException("Animation quaternion must have unit length.");
+                    }
                     for(int j=0;j<c.Times.Length;j++)if(c.Times[j]<0||(j>0&&c.Times[j]<=c.Times[j-1]))throw new InvalidDataException("Animation times.");
                     duration=Math.Max(duration,c.Times[^1]);channels.Add(c);
                 }

@@ -63,6 +63,33 @@ public class ModelRenderBackendTests
     }
 
     [Fact]
+    public void MultiplePosesShareOneRendererButKeepTheirCpuStateIndependent()
+    {
+        var model = Model(); var backend = new RecordingBackend();
+        var first = model.CreatePose(); var second = model.CreatePose();
+        first.Evaluate(null, 0); second.Evaluate(null, 0);
+        Assert.NotSame(first.World, second.World);
+        first.World[0] = Matrix4.CreateTranslation(7, 0, 0);
+        second.Evaluate(null, 1);
+        Assert.Equal(7, first.World[0].M41); Assert.Equal(0, second.World[0].M41);
+        var renderer = new AnimatedModelRenderer(model, backend);
+        renderer.Draw(first, Matrix4.Identity, Frame()); Assert.Same(first, backend.Pose);
+        renderer.Draw(second, Matrix4.Identity, Frame()); Assert.Same(second, backend.Pose);
+        renderer.Dispose(); renderer.Dispose(); Assert.Equal(1, backend.Disposals);
+        // Disposing GPU ownership does not invalidate the shared CPU asset or its poses.
+        first.Evaluate(null, 2); Assert.Equal(0, first.World[0].M41);
+    }
+
+    [Fact]
+    public void ForeignPoseIsRejectedBeforeBackendSubmission()
+    {
+        var backend = new RecordingBackend(); using var renderer = new AnimatedModelRenderer(Model(), backend);
+        var foreign = Model().CreatePose(); foreign.Evaluate(null, 0);
+        Assert.Throws<ArgumentException>(() => renderer.Draw(foreign, Matrix4.Identity, Frame()));
+        Assert.Null(backend.Pose);
+    }
+
+    [Fact]
     public void CpuSubmissionAddsNoPerDrawAllocations()
     {
         var model = Model();

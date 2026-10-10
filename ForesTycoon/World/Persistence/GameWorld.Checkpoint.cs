@@ -4,10 +4,14 @@ namespace ForesTycoon
 {
     sealed partial class GameWorld
     {
-        internal WorldCheckpointData CaptureCheckpoint() => new(1, worldTick, commandJournal.Count - commands.Count,
-            commands.Count, map.Capture(), ecosystem.Capture(), wildlife.Capture(), Logistics.Capture(), vehicles.Capture(),
-            timberCargo.Available, timberCargo.Delivered, effects.Capture(), lastForestryAction, lastForestryArea, Expenses, RuleDocument,
-            Tuning.IsDefault ? null : Tuning.ToOverrides());
+        internal WorldCheckpointData CaptureCheckpoint()
+        {
+            EnsureAvailable();
+            return new(2, worldTick, commandJournal.Count - commands.Count,
+                commands.Count, map.Capture(), ecosystem.Capture(), wildlife.Capture(), Logistics.Capture(), vehicles.Capture(),
+                timberCargo.Available, timberCargo.Delivered, effects.Capture(), lastForestryAction, lastForestryArea, Expenses, RuleDocument,
+                Tuning.IsDefault ? null : Tuning.ToOverrides(), roadWeatherSeconds);
+        }
 
         private void RestoreCheckpoint(WorldCheckpointData s)
         {
@@ -23,10 +27,11 @@ namespace ForesTycoon
             foreach (var v in vehicles.Vehicles)
                 if (v.LocalCargo) CheckpointGuard.Require(Logistics.Mills.Exists(m => m.TileId == v.SawmillTileId), "truck destination");
             CheckpointGuard.NonNegative(s.Expenses, "expenses");
+            CheckpointGuard.Require(double.IsFinite(s.RoadWeatherSeconds) && s.RoadWeatherSeconds >= 0 &&
+                s.RoadWeatherSeconds < 0.5, "road weather remainder");
+            roadWeatherSeconds = s.RoadWeatherSeconds;
             worldTick = s.Tick; lastForestryAction = s.LastAction; lastForestryArea = s.LastArea; Expenses = s.Expenses;
             ApplyTuning(GameTuning.FromOverrides(s.Tuning));
-            terrainRenderer.Dispose();
-            terrainRenderer = new TerrainRenderer(terrain, vehicles, effects, forest, Graphics, Environment, wildlife, Logistics);
         }
 
         private void ReplayTail(WorldSaveData save)

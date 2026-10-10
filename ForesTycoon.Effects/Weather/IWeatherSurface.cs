@@ -24,7 +24,11 @@ namespace ForesTycoon.Effects
         bool AutomaticWeather { get; }
         Ecology.WeatherPreset Preset { get; }
         bool ExperimentalSnow { get; }
+        /// <summary>Maximum submitted particles, 0..65536; zero disables precipitation.</summary>
         int RainBudget { get; }
+        /// <summary>Volume samples per pixel, 0..32; zero disables cloud rendering.</summary>
         int CloudSteps { get; }
+        // Measured CPU target; GPU time is measured by the host render-pass profiler.
+        double EffectCpuBudgetMilliseconds => 2;
     }
 }

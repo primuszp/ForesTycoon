@@ -19,6 +19,7 @@ namespace ForesTycoon
         internal readonly List<Part> Parts=new();
         private readonly List<Part> drawParts = new();
         private int cargoCount;
+        private bool disposed;
         internal int DrawGroupCount => drawParts.Count;
         private void BuildDrawGroups()
         {
@@ -46,7 +47,15 @@ namespace ForesTycoon
         public float AxleMidpoint { get; private set; }
         internal static GlbTruckModel Load(string path)
         {
+            if (new FileInfo(path).Length > AnimatedGlbModel.MaxAssetBytes) throw new NotSupportedException("GLB exceeds the asset budget.");
             byte[] data=File.ReadAllBytes(path);
+            try { return LoadCore(data); }
+            catch (Exception error) when (error is JsonException or KeyNotFoundException or InvalidOperationException
+                or ArgumentException or IndexOutOfRangeException or OverflowException)
+            { throw new InvalidDataException("Malformed vehicle GLB structure or values.", error); }
+        }
+        private static GlbTruckModel LoadCore(byte[] data)
+        {
             if(data.Length<28 || BitConverter.ToUInt32(data,0)!=0x46546c67 || BitConverter.ToUInt32(data,4)!=2
                 || BitConverter.ToUInt32(data,8)!=data.Length) throw new InvalidDataException("Invalid GLB header.");
             int jsonLength=checked((int)BitConverter.ToUInt32(data,12));
@@ -57,6 +66,7 @@ namespace ForesTycoon
             if(BitConverter.ToUInt32(data,chunk+4)!=0x004e4942 || binaryLength!=data.Length-binaryStart)
                 throw new InvalidDataException("Invalid GLB binary.");
             var root=doc.RootElement;
+            AnimatedGlbModel.ValidateDocument(root, binaryLength);
             var accessors=root.GetProperty("accessors");var views=root.GetProperty("bufferViews");
             (int Offset,int Count,int Stride,int Type) Access(int id,int components)
             {
@@ -79,9 +89,16 @@ namespace ForesTycoon
                 return new Vector3(BitConverter.ToSingle(data,o),BitConverter.ToSingle(data,o+4),BitConverter.ToSingle(data,o+8));
             }
             var model=new GlbTruckModel();
+            long decodedPayload = 0;
             foreach(var node in root.GetProperty("nodes").EnumerateArray())
             {
+                if (node.TryGetProperty("skin", out _) || node.TryGetProperty("matrix", out _) || node.TryGetProperty("translation", out _)
+                    || node.TryGetProperty("rotation", out _) || node.TryGetProperty("scale", out _))
+                    throw new NotSupportedException("Vehicle importer requires flattened unskinned nodes.");
                 var extras=node.GetProperty("extras");var pivot=extras.GetProperty("pivot");
+                if (pivot.GetArrayLength() != 3) throw new InvalidDataException("Vehicle pivot.");
+                Vector3 partPivot = new(pivot[0].GetSingle(), pivot[1].GetSingle(), pivot[2].GetSingle());
+                if (!Finite(partPivot)) throw new InvalidDataException("Non-finite vehicle pivot.");
                 foreach(var primitive in root.GetProperty("meshes")[node.GetProperty("mesh").GetInt32()].GetProperty("primitives").EnumerateArray())
                 {
                     if(primitive.GetProperty("mode").GetInt32()!=4)throw new InvalidDataException("Vehicle must use triangles.");
@@ -89,12 +106,14 @@ namespace ForesTycoon
                     int positions=attributes.GetProperty("POSITION").GetInt32(),normals=attributes.GetProperty("NORMAL").GetInt32(),colours=attributes.GetProperty("COLOR_0").GetInt32();
                     var indices=Access(primitive.GetProperty("indices").GetInt32(),1);
                     if(indices.Type!=5125 || indices.Count%3!=0)throw new InvalidDataException("Invalid triangle indices.");
+                    decodedPayload += (long)indices.Count * Vertex.Stride * 2; // Part data plus grouped draw copies.
+                    if (decodedPayload > AnimatedGlbModel.MaxDecodedAssetBytes) throw new NotSupportedException("Vehicle exceeds the decoded asset budget.");
                     var vertices=new Vertex[indices.Count];var c=Access(colours,4);
-                    if(c.Type!=5126)throw new InvalidDataException("Invalid colour accessor.");
+                    if(c.Type!=5126 || c.Count != Access(positions, 3).Count)throw new InvalidDataException("Invalid colour accessor.");
                     for(int i=0;i<vertices.Length;i++){
                         int index=checked((int)BitConverter.ToUInt32(data,indices.Offset+i*indices.Stride));
                         Vector3 p=Read3(positions,index),n=Read3(normals,index),rgb=Read3(colours,index);
-                        if(!float.IsFinite(p.X)||!float.IsFinite(p.Y)||!float.IsFinite(p.Z)||n.LengthSquared<0.001f)throw new InvalidDataException("Invalid vehicle geometry.");
+                        if(!Finite(p)||!Finite(n)||!Finite(rgb)||!float.IsFinite(n.LengthSquared)||n.LengthSquared<0.001f)throw new InvalidDataException("Invalid vehicle geometry.");
                         byte Channel(float value)=>(byte)Math.Clamp((int)(MathF.Pow(Math.Clamp(value,0,1),1/2.2f)*255+0.5f),0,255);
                         // Glass is deliberately opaque tinted geometry in this diorama asset.
                         uint color=(uint)(Channel(rgb.X)|(Channel(rgb.Y)<<8)|(Channel(rgb.Z)<<16)|unchecked((int)0xff000000));
@@ -105,7 +124,7 @@ namespace ForesTycoon
                         vertices[i]=new Vertex(p,n.Normalized(),color);
                     }
                     model.Parts.Add(new Part{Name=node.GetProperty("name").GetString(),Category=extras.GetProperty("category").GetString(),
-                        Pivot=new Vector3(pivot[0].GetSingle(),pivot[1].GetSingle(),pivot[2].GetSingle()),Vertices=vertices});
+                        Pivot=partPivot,Vertices=vertices});
                 }
             }
             float minY=float.MaxValue,maxY=float.MinValue;
@@ -126,13 +145,18 @@ namespace ForesTycoon
             model.BuildDrawGroups();
             return model;
         }
+        private static bool Finite(Vector3 value) => float.IsFinite(value.X) && float.IsFinite(value.Y) && float.IsFinite(value.Z);
         public void Draw(Matrix4 transform,float cargoFill,float wheelAngle,float curvature=0,float scale=1,Matrix4? suspension=null,float outlineWidth=0,float articulation=0,float trailerPitch=0)
         {
-            
+            ObjectDisposedException.ThrowIf(disposed, this);
             int visibleCargo=(int)MathF.Ceiling(Math.Clamp(cargoFill,0,1)*cargoCount),cargoIndex=0;
             foreach(var part in drawParts){
                 if(part.Category=="cargo" && cargoIndex++>=visibleCargo)continue;
-                if(part.Buffer==null){part.Buffer=new VertexBuffer(PrimitiveTopology.Triangles);part.Buffer.SetData(part.Vertices,false);}
+                if(part.Buffer==null){
+                    var candidate = new VertexBuffer(PrimitiveTopology.Triangles);
+                    try { candidate.SetData(part.Vertices,false); part.Buffer = candidate; }
+                    catch { candidate.Dispose(); throw; }
+                }
                 RenderDevice.PushModel();
                 try{
                     float steer=part.Category=="wheel" && part.Name.Contains("Front")?
@@ -157,6 +181,6 @@ namespace ForesTycoon
                 }finally{RenderDevice.PopModel();}
             }
         }
-        public void Dispose(){foreach(var part in drawParts)part.Buffer?.Dispose();}
+        public void Dispose(){if(disposed)return;disposed=true;foreach(var part in drawParts)part.Buffer?.Dispose();}
     }
 }

@@ -70,7 +70,15 @@ namespace ForesTycoon
 
     sealed class WorldSaveData
     {
-        public const int CurrentVersion = 10;
+        public const int CurrentVersion = 12;
+        // Bump whenever native simulation semantics change. Editable graphs and tuning
+        // are stored separately in the checkpoint/journal; this identifies their runtime.
+        public const string CurrentRuntimeRulesVersion = "forestycoon-simulation/2026-10-10.1";
+        public string RuntimeRulesVersion { get; init; } = CurrentRuntimeRulesVersion;
+        public WorldSaveData() { }
+        // Missing JSON must not silently inherit today's runtime identifier.
+        [System.Text.Json.Serialization.JsonConstructor]
+        public WorldSaveData(string runtimeRulesVersion) => RuntimeRulesVersion = runtimeRulesVersion;
         public int Version { get; init; } = CurrentVersion;
         public double TickRate { get; init; } = 30.0;
         public double ForestYearSeconds { get; init; } = EnvironmentSystem.SecondsPerForestYear;
@@ -92,8 +100,10 @@ namespace ForesTycoon
 
         public void Validate()
         {
-            if (Version != 4 && Version != 5 && Version != 6 && Version != 7 && Version != 8 && Version != 9 && Version != CurrentVersion)
+            if (Version != 4 && Version != 5 && Version != 6 && Version != 7 && Version != 8 && Version != 9 && Version != 10 && Version != 11 && Version != CurrentVersion)
                 throw new NotSupportedException($"Save version {Version} is not supported; expected {CurrentVersion}.");
+            if (Version >= 12 && !string.Equals(RuntimeRulesVersion, CurrentRuntimeRulesVersion, StringComparison.Ordinal))
+                throw new NotSupportedException($"Simulation rules runtime '{RuntimeRulesVersion ?? "missing"}' is not supported; expected '{CurrentRuntimeRulesVersion}'.");
             if (!EnvironmentSystem.IsValidForestYearSeconds(ReplayForestYearSeconds))
                 throw new InvalidOperationException("Save forest year duration must be between 120 and 1200 seconds.");
             if (!double.IsFinite(TickRate) || TickRate <= 0.0)
@@ -106,7 +116,10 @@ namespace ForesTycoon
                 if (Checkpoint.Rules != null) { var rules = new CompiledRoadRule(Checkpoint.Rules); rules.ValidateRange(); }
                 if (Version >= 10 && Checkpoint.Rules == null) throw new InvalidOperationException("Save has no rule model.");
                 if (Checkpoint.Tuning != null) _ = GameTuning.FromOverrides(Checkpoint.Tuning);
-                CheckpointGuard.Require(Version >= 8 && Checkpoint.Version == 1, "world snapshot version");
+                CheckpointGuard.Require(Version >= 8 && Checkpoint.Version is 1 or 2 &&
+                    (Version < 11 || Checkpoint.Version == 2), "world snapshot version");
+                CheckpointGuard.Require(double.IsFinite(Checkpoint.RoadWeatherSeconds) && Checkpoint.RoadWeatherSeconds >= 0 &&
+                    Checkpoint.RoadWeatherSeconds < 0.5, "road weather remainder");
                 CheckpointGuard.Require(Checkpoint.Tick <= Tick && Checkpoint.CommandCursor >= 0 && Checkpoint.PendingCommands >= 0 &&
                     (long)Checkpoint.CommandCursor + Checkpoint.PendingCommands <= Commands.Count, "world snapshot cursor");
                 CheckpointGuard.Require(Checkpoint.Terrain != null && Checkpoint.Ecology != null && Checkpoint.Wildlife != null &&

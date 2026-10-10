@@ -9,6 +9,8 @@ namespace ForesTycoon
     // the production renderer never waits for a query or creates these objects.
     internal sealed class RenderPassProfiler : IDisposable
     {
+        private readonly RenderEnvironment owner = RenderDevice.Environment;
+        private bool disposed;
         internal readonly record struct Timing(string Name, double CpuMs, double GpuMs);
         private sealed class Pass
         {
@@ -20,10 +22,17 @@ namespace ForesTycoon
         private readonly Dictionary<string, Pass> passes = new();
         private readonly List<Pass> frame = new();
         private readonly Action<string, bool> previous = RenderPipeline.PassProbe;
-        internal RenderPassProfiler() => RenderPipeline.PassProbe = Probe;
-        internal void BeginFrame() => frame.Clear();
+        internal RenderPassProfiler() { owner.VerifyAccess(); RenderPipeline.PassProbe = Probe; }
+        internal void BeginFrame() { VerifyAccess(); frame.Clear(); }
+        internal int[] CaptureQueries() {
+            var result = new int[passes.Count * 2]; int i = 0;
+            foreach (var pass in passes.Values) { result[i++] = pass.StartQuery; result[i++] = pass.EndQuery; }
+            return result;
+        }
+        private void VerifyAccess() { ObjectDisposedException.ThrowIf(disposed, this); owner.VerifyAccess(); }
         private void Probe(string name, bool begin)
         {
+            VerifyAccess();
             previous?.Invoke(name, begin);
             if (!passes.TryGetValue(name, out var pass))
                 passes.Add(name, pass = new Pass { Name = name });
@@ -41,6 +50,7 @@ namespace ForesTycoon
         }
         internal Timing[] ReadCompletedFrame()
         {
+            VerifyAccess();
             var result = new Timing[frame.Count];
             for (int i = 0; i < frame.Count; i++)
             {
@@ -53,11 +63,14 @@ namespace ForesTycoon
         }
         public void Dispose()
         {
+            if (disposed) return; VerifyAccess();
+            if (RenderPipeline.PassProbe != Probe) throw new InvalidOperationException("Render pass profilers must close in reverse order.");
             RenderPipeline.PassProbe = previous;
             foreach (var pass in passes.Values)
             {
                 GL.DeleteQuery(pass.StartQuery); GL.DeleteQuery(pass.EndQuery);
             }
+            passes.Clear(); frame.Clear(); disposed = true;
         }
     }
 }

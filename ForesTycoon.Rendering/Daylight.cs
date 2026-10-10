@@ -91,8 +91,11 @@ namespace ForesTycoon.Rendering
             new(135, 48, Vector3.One, Vector3.One, Vector3.One, 0);
 
         /// <summary>The light of the frame being drawn; every lit shader reads its tints from here.</summary>
-        internal static DaylightState Current { get; set; } = Neutral;
+        private sealed class FrameLight { internal DaylightState Current = Neutral; internal DaylightState? Override; }
+        private static readonly object lightKey = new();
+        private static FrameLight State => RenderDevice.GetState(lightKey, () => new FrameLight());
+        internal static DaylightState Current { get => State.Current; set => State.Current = value; }
         /// <summary>Diagnostics: a fixed light instead of the calendar's.</summary>
-        internal static DaylightState? Override { get; set; }
+        internal static DaylightState? Override { get => State.Override; set => State.Override = value; }
     }
 }

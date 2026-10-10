@@ -135,6 +135,26 @@ public class FleetTests
     private const double TimberPriceOak = 55;
 
     [Fact]
+    public void TruckFuelIsChargedAcrossApproachShuttleAndReturnVehicles()
+    {
+        var s = Build();
+        s.Logistics.Tuning = GameTuning.FromOverrides(new Dictionary<string, double>
+        { ["WearPerSecond"] = 0, ["BreakdownHazard"] = 0, ["WearFuelPenalty"] = 0 });
+        var truck = s.Logistics.Trucks[0];
+        var source = s.Logistics.StackAt(RoadStack)!; source.Add(20, 20 * 30);
+        Assert.True(s.Logistics.AssignTruck(truck, source, Mill), s.Logistics.Status);
+        var usedVehicles = new HashSet<Vehicle>();
+        for (int i = 0; i < 30000 && truck.Phase != TruckPhase.Parked; i++)
+        {
+            if (truck.Vehicle != null) usedVehicles.Add(truck.Vehicle);
+            s.Logistics.Update(1.0 / 30); s.Vehicles.Update(1.0 / 30);
+        }
+        Assert.Equal(TruckPhase.Parked, truck.Phase); Assert.Equal(3, usedVehicles.Count);
+        Assert.All(usedVehicles, v => Assert.True(v.FuelUsed > 0));
+        Assert.Equal(usedVehicles.Sum(v => v.FuelUsed) * s.Logistics.Tuning[Tune.DieselPrice], s.Logistics.RunningCosts, 8);
+    }
+
+    [Fact]
     public void ForwarderCanTakeAStackStraightToTheMill()
     {
         var s = Build();

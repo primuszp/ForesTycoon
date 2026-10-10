@@ -6,43 +6,55 @@ namespace ForesTycoon.Effects.OpenGl
 {
     internal sealed class OpenGlWeatherRenderer : IWeatherRenderBackend
     {
+        private readonly RenderResourceOwner owner = new();
         private int program, vao, heightTexture;
         private float[] heights;
         private ulong surfaceRevision = ulong.MaxValue;
+        private IWeatherSurface cachedSurface;
+        private int heightColumns, heightRows, particles;
+        private bool disposed;
+        internal (int Program, int VertexArray, int HeightTexture) CaptureResources() => (program, vao, heightTexture);
+        public EffectMetrics Metrics => new(particles, 0, (long)(heights?.Length ?? 0) * sizeof(float), (long)heightColumns * heightRows * sizeof(float), 0);
 
         public void Draw(IWeatherSurface surface, WeatherVisualState weather, RenderContext context, IWeatherSettings settings)
         {
-            float intensity = Math.Max(weather.Rain, weather.Snowfall);
-            if (intensity < 0.01f) return;
+            ObjectDisposedException.ThrowIf(disposed, this);
+            owner.Check();
+            ArgumentNullException.ThrowIfNull(surface); ArgumentNullException.ThrowIfNull(weather); ArgumentNullException.ThrowIfNull(settings);
+            particles = 0;
             surface.GetVisibleBounds(out Vector2 visibleMin, out Vector2 visibleMax);
-            if (visibleMax.X <= visibleMin.X || visibleMax.Y <= visibleMin.Y) return;
+            var plan = WeatherParticlePlan.Create(visibleMin, visibleMax, settings.RainBudget);
+            float intensity = Math.Max(weather.Rain, weather.Snowfall);
+            if (!settings.Weather || intensity < 0.01f || plan.Count == 0) return;
+            long samples = (long)surface.Columns * surface.Rows;
+            if (surface.Columns <= 0 || surface.Rows <= 0 || samples > WeatherParticlePlan.MaxHeightSamples)
+                throw new ArgumentOutOfRangeException(nameof(surface), "Weather height field exceeds its 16 MiB payload budget.");
             if (program == 0) Initialize();
-            if (heights == null || surfaceRevision != surface.Revision)
+            if (heights == null || !ReferenceEquals(surface, cachedSurface) || surfaceRevision != surface.Revision
+                || heightColumns != surface.Columns || heightRows != surface.Rows)
             {
-                heights ??= new float[surface.Columns * surface.Rows];
-                surface.FillHeights(heights);
+                GL.GetInteger(GetPName.MaxTextureSize, out int maxSize);
+                if (surface.Columns > maxSize || surface.Rows > maxSize) throw new NotSupportedException("Weather height field exceeds the device texture limit.");
+                var candidate = heights?.Length == samples ? heights : new float[(int)samples];
+                surface.FillHeights(candidate);
+                foreach (float height in candidate) if (!float.IsFinite(height)) throw new InvalidOperationException("Weather surface contains a non-finite height.");
                 GL.ActiveTexture(TextureUnit.Texture2);
                 GL.BindTexture(TextureTarget.Texture2D, heightTexture);
                 GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.R32f,
-                    surface.Columns, surface.Rows, 0, PixelFormat.Red, PixelType.Float, heights);
+                    surface.Columns, surface.Rows, 0, PixelFormat.Red, PixelType.Float, candidate);
+                var error = GL.GetError();
+                if (error != ErrorCode.NoError) { cachedSurface = null; throw new InvalidOperationException("Weather texture allocation failed: " + error); }
+                heights = candidate; heightColumns = surface.Columns; heightRows = surface.Rows; cachedSurface = surface;
                 surfaceRevision = surface.Revision;
             }
             surface.GetBounds(out Vector3 min, out Vector3 max);
             float snow = weather.Snowfall > weather.Rain ? 1 : 0;
             float zoom = Math.Max(1, context.PixelsPerWorldUnit);
             // World cells keep drops anchored while the camera pans.
-            float cell = 8;
-            Vector2 extent = visibleMax - visibleMin;
-            while((MathF.Ceiling(extent.X / cell) + 5) * (MathF.Ceiling(extent.Y / cell) + 5) > settings.RainBudget / 2) cell *= 2;
-            Vector2 origin = new Vector2(MathF.Floor(visibleMin.X / cell) - 2, MathF.Floor(visibleMin.Y / cell) - 2);
-            int columns = (int)MathF.Ceiling(visibleMax.X / cell) - (int)origin.X + 2;
-            int rows = (int)MathF.Ceiling(visibleMax.Y / cell) - (int)origin.Y + 2;
-            int perCell = Math.Clamp(settings.RainBudget / Math.Max(1, columns * rows), 1, 24);
-            int count = columns * rows * perCell;
             GL.UseProgram(program);
-            GL.Uniform4(GlProgram.Uniform(program, "grid"), origin.X, origin.Y, columns, perCell);
+            GL.Uniform4(GlProgram.Uniform(program, "grid"), plan.Origin.X, plan.Origin.Y, plan.Columns, plan.PerCell);
             GL.Uniform2(GlProgram.Uniform(program, "wind"), weather.Wind);
-            GL.Uniform1(GlProgram.Uniform(program, "cell_size"), cell);
+            GL.Uniform1(GlProgram.Uniform(program, "cell_size"), plan.CellSize);
             Matrix4 matrix = RenderDevice.ViewProjection;
             GL.UniformMatrix4(GlProgram.Uniform(program, "camera"), false, ref matrix);
             GL.Uniform4(GlProgram.Uniform(program, "footprint"), min.X, min.Y, max.X - min.X, max.Y - min.Y);
@@ -56,14 +68,20 @@ namespace ForesTycoon.Effects.OpenGl
             using (RenderDevice.CreateStateScope().Enable(RenderCapability.DepthTest).Disable(RenderCapability.CullFace).AlphaBlend().DepthWrite(false))
             {
                 GL.BindVertexArray(vao);
-                GL.DrawArraysInstanced(PrimitiveType.Triangles, 0, 6, count);
-                RenderMetrics.RecordDraw(count * 6);
+                GL.DrawArraysInstanced(PrimitiveType.Triangles, 0, 6, plan.Count);
+                particles = plan.Count;
+                RenderMetrics.RecordDraw(plan.Count * 6);
                 GL.BindVertexArray(0);
             }
             GL.ActiveTexture(TextureUnit.Texture0);
         }
 
         private void Initialize()
+        {
+            try { InitializeCore(); }
+            catch { ReleaseResources(); throw; }
+        }
+        private void InitializeCore()
         {
             program = GlProgram.Create(@"#version 330 core
 uniform mat4 camera;
@@ -121,10 +139,15 @@ void main(){
 
         public void Dispose()
         {
+            if (disposed) return; owner.CheckIfBound(); disposed = true; ReleaseResources();
+        }
+        private void ReleaseResources()
+        {
             if(program != 0) GlProgram.Delete(program);
             if(vao != 0) GL.DeleteVertexArray(vao);
             if(heightTexture != 0) GL.DeleteTexture(heightTexture);
             program = vao = heightTexture = 0;
+            heights = null; cachedSurface = null; heightColumns = heightRows = particles = 0;
         }
     }
 }

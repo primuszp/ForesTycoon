@@ -19,8 +19,10 @@ namespace ForesTycoon.Models
         /// </param>
         internal ImportedSceneAsset(string path,float width,bool centerHeight=false,float footprint=0)
         {
+            if (!float.IsFinite(width) || width <= 0) throw new ArgumentOutOfRangeException(nameof(width));
+            if (!float.IsFinite(footprint) || footprint < 0) throw new ArgumentOutOfRangeException(nameof(footprint));
             Model=AnimatedGlbModel.Load(Path.Combine(AppContext.BaseDirectory,path));
-            Pose=Model.CreatePose();Pose.Evaluate(null,0);renderer=new AnimatedModelRenderer(Model);
+            Pose=Model.CreatePose();Pose.Evaluate(null,0);
             Matrix4 axis=Matrix4.CreateRotationX(MathF.PI/2);
             var nodes=new Dictionary<int,(Vector3 Min,Vector3 Max)>();
             Vector3 min=new(float.MaxValue),max=new(float.MinValue);
@@ -43,7 +45,10 @@ namespace ForesTycoon.Models
                 foreach(var b in nodes.Values)if(b.Max.Z>tall){coreMin=Vector3.ComponentMin(coreMin,b.Min);coreMax=Vector3.ComponentMax(coreMax,b.Max);}
                 if(coreMin.X<=coreMax.X){fitMin=new(coreMin.X,coreMin.Y,min.Z);fitMax=new(coreMax.X,coreMax.Y,max.Z);}
             }
-            float scale=width/Math.Max(fitMax.X-fitMin.X,fitMax.Y-fitMin.Y);
+            float extent=Math.Max(fitMax.X-fitMin.X,fitMax.Y-fitMin.Y);
+            if (!float.IsFinite(extent) || extent <= 0) throw new InvalidDataException("Imported scene has no finite horizontal extent.");
+            float scale=width/extent;
+            if (!float.IsFinite(scale)) throw new InvalidDataException("Imported scene scale is not finite.");
             Vector3 center=(fitMin+fitMax)*0.5f;center.Z=centerHeight?center.Z:min.Z;
             if(footprint>0){
                 // Low props outside the footprint slide inward until they touch its edge.
@@ -63,6 +68,7 @@ namespace ForesTycoon.Models
             }
             Normalization=axis*Matrix4.CreateTranslation(-center)*Matrix4.CreateScale(scale);
             if(centerHeight&&max.Y-min.Y>max.X-min.X)Normalization*=Matrix4.CreateRotationZ(-MathF.PI/2);
+            renderer=new AnimatedModelRenderer(Model);
         }
         internal IModelRenderBatch BeginBatch()=>renderer.BeginBatch();
         internal void Draw(Matrix4 placement,IShadingSettings settings,IModelRenderBatch sharedState=null)

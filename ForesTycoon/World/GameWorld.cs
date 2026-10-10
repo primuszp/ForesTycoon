@@ -14,14 +14,14 @@ namespace ForesTycoon
     {
         private Terrain terrain;
         /// <summary>The ground model; the <see cref="Terrain"/> scene only draws it.</summary>
-        private TerrainMap map => terrain.Map;
+        private TerrainMap map;
         private WildlifeSystem wildlife = new WildlifeSystem();
         internal ForestryLogistics Logistics { get; private set; }
         private TerrainRenderer terrainRenderer;
-        private readonly WorldCommandQueue commands = new WorldCommandQueue();
+        private WorldCommandQueue commands = new WorldCommandQueue();
         private WorldSystemCollection systems = new WorldSystemCollection();
         private BackgroundJobScheduler backgroundJobs = new BackgroundJobScheduler();
-        private readonly List<WorldCommandRecord> commandJournal = new List<WorldCommandRecord>();
+        private List<WorldCommandRecord> commandJournal = new List<WorldCommandRecord>();
         private VehicleSystem vehicles;
         private WorldEffectSystem effects;
         private Ecosystem ecosystem;
@@ -42,37 +42,83 @@ namespace ForesTycoon
         internal const double VehicleTimeScale = 4;
         private ForestryAreaSummary lastForestryArea;
         internal GraphicsSettings Graphics { get; }
+        internal TerrainMap Map => map;
+        internal bool HasPresentation => terrainRenderer != null;
+        private bool disposed, faulted;
+        internal bool IsFaulted => faulted;
+
+        private void EnsureAvailable(bool allowFaulted = false)
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+            if (faulted && !allowFaulted)
+                throw new InvalidOperationException("The world update failed; load a validated save or regenerate before continuing.");
+        }
 
         public GameWorld(TerrainSettings settings, double forestYearSeconds = EcologyTime.DefaultGameSecondsPerYear,
-            SoilLandscapeDefinition soils = null, ClimateDefinition climate = null)
+            SoilLandscapeDefinition soils = null, ClimateDefinition climate = null, bool enableRendering = true)
             : this(settings, new GraphicsSettings { AutomaticWeather = true }, forestYearSeconds, soils ?? SoilLandscapeDefinition.Default,
-                climate ?? ClimateDefinition.Default) { }
+                climate ?? ClimateDefinition.Default, enableRendering) { }
 
         private GameWorld(TerrainSettings settings, GraphicsSettings graphics, double forestYearSeconds, SoilLandscapeDefinition soilModel,
-            ClimateDefinition climate)
+            ClimateDefinition climate, bool enableRendering = false)
+            : this(CreateMap(settings, forestYearSeconds), graphics, forestYearSeconds, soilModel, climate, enableRendering) { }
+
+        private static TerrainMap CreateMap(TerrainSettings settings, double forestYearSeconds)
         {
-            // Validate before allocating terrain/GPU resources, including direct diagnostic callers.
             if (!EcologyTime.IsValidForestYearSeconds(forestYearSeconds))
                 throw new ArgumentOutOfRangeException(nameof(forestYearSeconds));
+            return new TerrainMap(settings ?? throw new ArgumentNullException(nameof(settings)));
+        }
+
+        // Direct model injection also supports flat and otherwise controlled simulation fixtures.
+        internal GameWorld(TerrainMap map, double forestYearSeconds = EcologyTime.DefaultGameSecondsPerYear)
+            : this(map, new GraphicsSettings { AutomaticWeather = true }, forestYearSeconds,
+                SoilLandscapeDefinition.Default, ClimateDefinition.Default, false) { }
+
+        private GameWorld(TerrainMap map, GraphicsSettings graphics, double forestYearSeconds, SoilLandscapeDefinition soilModel,
+            ClimateDefinition climate, bool enableRendering)
+        {
             Graphics = graphics;
-            terrain = new Terrain(settings ?? throw new ArgumentNullException(nameof(settings)));
-            ecosystem = new Ecosystem(map, forestYearSeconds, soilModel, climate);
-            timberCargo = systems.Add(new TimberCargoSystem());
-            vehicles = systems.Add(new VehicleSystem(timberCargo, route => VehicleRoadRoute.Create(map, route)) { TimeScale = VehicleTimeScale });
-            effects = systems.Add(new WorldEffectSystem());
-            InitializeLogistics();
-            terrainRenderer = new TerrainRenderer(terrain, vehicles, effects, forest, Graphics, Environment, wildlife, Logistics);
+            this.map = map ?? throw new ArgumentNullException(nameof(map));
+            try
+            {
+                ecosystem = new Ecosystem(map, forestYearSeconds, soilModel, climate);
+                timberCargo = systems.Add(new TimberCargoSystem());
+                vehicles = systems.Add(new VehicleSystem(timberCargo, route => VehicleRoadRoute.Create(this.map, route)) { TimeScale = VehicleTimeScale });
+                effects = systems.Add(new WorldEffectSystem());
+                InitializeLogistics();
+                if (enableRendering) AttachRendering();
+            }
+            catch { Dispose(); throw; }
+        }
+
+        internal void AttachRendering()
+        {
+            EnsureAvailable();
+            if (terrainRenderer != null) { terrainRenderer.VerifyAccess(); return; }
+            var scene = new Terrain(map);
+            try
+            {
+                var renderer = new TerrainRenderer(scene, vehicles, effects, forest, Graphics, Environment, wildlife, Logistics);
+                terrain = scene;
+                terrainRenderer = renderer;
+            }
+            catch { scene.Dispose(); throw; }
         }
 
         public Tile HoveredTile => map.HoveredTile;
         public int HoveredTileId => map.HoveredTile?.Id ?? -1;
         public int SelectedNodeId => map.SelectedNodeId;
         public int RoadCount => map.RoadCount;
-        public int RoadPreviewCount => terrain.RoadPreviewCount;
+        public int RoadPreviewCount => terrain?.RoadPreviewCount ?? 0;
         public int VehicleCount => vehicles.Count;
-        internal int FishCount=>terrainRenderer.FishCount;
-        internal int WildlifeCount => terrainRenderer.WildlifeCount;
-        internal bool TryGetWildlifePosition(out Vector3 position) => terrainRenderer.TryGetWildlifePosition(out position);
+        internal int FishCount=>terrainRenderer?.FishCount ?? 0;
+        internal int WildlifeCount => terrainRenderer?.WildlifeCount ?? 0;
+        internal bool TryGetWildlifePosition(out Vector3 position)
+        {
+            if (terrainRenderer != null) return terrainRenderer.TryGetWildlifePosition(out position);
+            position = default; return false;
+        }
         internal System.Collections.Generic.IReadOnlyList<Vehicle> Vehicles => vehicles.Vehicles;
         public ForestStatistics ForestStatistics => forest.Statistics;
         internal int ForestTreeCount => forest.IndividualTreeCount;
@@ -90,7 +136,7 @@ namespace ForesTycoon
             ForestManagementSurvey.Recommend(forest.Habitat, tileId);
         internal bool TryGetTileCenter(int tileId, out Vector3 centre) => map.TryGetTileCenter(tileId, out centre);
         /// <summary>Per-tile RGBA tint of the active management lens drawn onto the terrain; null clears it.</summary>
-        internal void SetManagementOverlay(uint[] colours) => terrain.SetManagementOverlay(colours);
+        internal void SetManagementOverlay(uint[] colours) => terrain?.SetManagementOverlay(colours);
 
         /// <summary>
         /// Review-capture helper: finds the densest 5×5 block of forest, clears its western half
@@ -99,7 +145,7 @@ namespace ForesTycoon
         /// </summary>
         internal bool DiagnosticFellForestBlock(out Vector3 centre)
         {
-            int rows = terrain.Settings.TileRows, columns = terrain.Settings.TileColumns;
+            int rows = map.Settings.TileRows, columns = map.Settings.TileColumns;
             int bestU = -1, bestV = -1, bestScore = 0;
             for (int u = 3; u < columns - 3; u++)
                 for (int v = 3; v < rows - 3; v++)
@@ -122,13 +168,31 @@ namespace ForesTycoon
                 }
             return map.TryGetTileCenter(bestU * rows + bestV, out centre);
         }
-        public int VisibleChunkCount => terrain.VisibleChunkCount;
-        public int ForestChunkRebuilds => terrain.ForestChunkRebuilds;
-        public int TotalChunkCount => terrain.TotalChunkCount;
-        public int TileWidth => terrain.TileWidth;
-        public int TileHeight => terrain.TileHeight;
-        public int MapTileColumns => terrain.Settings.TileColumns;
-        public ForestPattern InitialForestPattern => terrain.Settings.ForestPattern;
+        public int VisibleChunkCount => terrain?.VisibleChunkCount ?? 0;
+        public int ForestChunkRebuilds => terrain?.ForestChunkRebuilds ?? 0;
+        public long ForestGpuPayloadBytes => terrain?.ForestGpuPayloadBytes ?? 0;
+        public long ForestCpuPayloadBytes => terrain?.ForestCpuPayloadBytes ?? 0;
+        public long ForestBudgetExcessBytes => terrain?.ForestBudgetExcessBytes ?? 0;
+        public int ForestResidentLods => terrain?.ForestResidentLods ?? 0;
+        public int ForestCacheEvictions => terrain?.ForestCacheEvictions ?? 0;
+        public long StaticGpuPayloadBytes => terrain?.StaticGpuPayloadBytes ?? 0;
+        public long StaticCpuPayloadBytes => terrain?.StaticCpuPayloadBytes ?? 0;
+        public long StaticBudgetExcessBytes => terrain?.StaticBudgetExcessBytes ?? 0;
+        public int WeatherParticleCount => terrainRenderer?.WeatherParticleCount ?? 0;
+        public int WeatherCloudSteps => terrainRenderer?.WeatherCloudSteps ?? 0;
+        public long WeatherCpuPayloadBytes => terrainRenderer?.WeatherCpuPayloadBytes ?? 0;
+        public long WeatherGpuPayloadBytes => terrainRenderer?.WeatherGpuPayloadBytes ?? 0;
+        public double WeatherCpuMilliseconds => terrainRenderer?.WeatherCpuMilliseconds ?? 0;
+        public int FogParticleCount => terrainRenderer?.FogParticleCount ?? 0;
+        public bool FogDepthFallback => terrainRenderer?.FogDepthFallback ?? false;
+        public int MarkerRenderedCount => terrainRenderer?.MarkerRenderedCount ?? 0;
+        public int ActiveMarkerCount => effects.Count;
+        public long DroppedMarkers => effects.DroppedEffects;
+        public int TotalChunkCount => map.Chunks.Chunks.Count;
+        public int TileWidth => map.Settings.TileWidth;
+        public int TileHeight => map.Settings.TileHeight;
+        public int MapTileColumns => map.Settings.TileColumns;
+        public ForestPattern InitialForestPattern => map.Settings.ForestPattern;
         public ulong SimulationTick => worldTick;
         internal ulong LastLoadReplayedTicks { get; private set; }
         internal bool ProfileUpdates { get; set; }
@@ -136,28 +200,42 @@ namespace ForesTycoon
 
         public void Update(double fixedDeltaSeconds)
         {
-            long start = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
-            ecosystem.Update(fixedDeltaSeconds);
-            long environmentUpdated = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
-            // Vehicles and machines keep their own clock, faster than the calendar (see VehicleTimeScale).
-            Logistics?.Update(fixedDeltaSeconds * Tuning[Tune.VehicleTimeScale]);
-            WeatherRoads(fixedDeltaSeconds);
-            long logisticsUpdated = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
-            wildlife.Update(fixedDeltaSeconds, map, forest, Environment);
-            long wildlifeUpdated = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
-            systems.Update(fixedDeltaSeconds);
-            worldTick++;
-            if (ProfileUpdates)
-                LastUpdateProfile = new(Stopwatch.GetElapsedTime(start, environmentUpdated).TotalMilliseconds,
-                    Stopwatch.GetElapsedTime(environmentUpdated, logisticsUpdated).TotalMilliseconds,
-                    Stopwatch.GetElapsedTime(logisticsUpdated, wildlifeUpdated).TotalMilliseconds,
-                    Stopwatch.GetElapsedTime(wildlifeUpdated).TotalMilliseconds);
+            EnsureAvailable();
+            terrainRenderer?.VerifyAccess();
+            if (!double.IsFinite(fixedDeltaSeconds) || fixedDeltaSeconds < 0)
+                throw new ArgumentOutOfRangeException(nameof(fixedDeltaSeconds));
+            try
+            {
+                long start = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
+                ecosystem.Update(fixedDeltaSeconds);
+                long environmentUpdated = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
+                // Vehicles and machines keep their own clock, faster than the calendar (see VehicleTimeScale).
+                Logistics?.Update(fixedDeltaSeconds * Tuning[Tune.VehicleTimeScale]);
+                WeatherRoads(fixedDeltaSeconds);
+                long logisticsUpdated = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
+                wildlife.Update(fixedDeltaSeconds, map, forest, Environment);
+                long wildlifeUpdated = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
+                systems.Update(fixedDeltaSeconds);
+                worldTick++;
+                if (ProfileUpdates)
+                    LastUpdateProfile = new(Stopwatch.GetElapsedTime(start, environmentUpdated).TotalMilliseconds,
+                        Stopwatch.GetElapsedTime(environmentUpdated, logisticsUpdated).TotalMilliseconds,
+                        Stopwatch.GetElapsedTime(logisticsUpdated, wildlifeUpdated).TotalMilliseconds,
+                        Stopwatch.GetElapsedTime(wildlifeUpdated).TotalMilliseconds);
+            }
+            catch { faulted = true; throw; }
         }
 
         public int ExecutePendingCommands()
         {
-            backgroundJobs.PublishCompleted();
-            return commands.ExecutePending(this);
+            EnsureAvailable();
+            terrainRenderer?.VerifyAccess();
+            try
+            {
+                backgroundJobs.PublishCompleted();
+                return commands.ExecutePending(this);
+            }
+            catch { faulted = true; throw; }
         }
         public void QueueElevationEdit(int nodeId, int delta, int radius, int strength) =>
             Enqueue(new EditElevationCommand(nodeId, delta, radius, strength));
@@ -169,13 +247,13 @@ namespace ForesTycoon
         public void QueueSkidTrailPath(int startTileId, int endTileId, bool remove) =>
             Enqueue(new SkidTrailPathCommand(startTileId, endTileId, remove));
         public void SetSkidTrailPreview(int startTileId, int endTileId, bool remove) =>
-            terrain.SetSkidTrailPreview(startTileId, endTileId, remove);
+            terrain?.SetSkidTrailPreview(startTileId, endTileId, remove);
         internal bool IsSkidTrail(int tileId) => map.IsSkidTrail(tileId);
         internal float GetSkidTrailWear(int tileId) => map.GetSkidTrailWear(tileId);
         internal int SkidTrailCount => map.SkidTrailCount;
         /// <summary>Order-tool marks drawn on the ground (targets, cursor tile, routes).</summary>
-        internal OrderOverlay Orders => terrain.Orders;
-        public void SetRoadRepairPreview(int startTileId, int endTileId) => terrain.SetRoadRepairPreview(startTileId, endTileId);
+        internal OrderOverlay Orders => terrain?.Orders ?? throw new InvalidOperationException("Attach rendering before using visual overlays.");
+        public void SetRoadRepairPreview(int startTileId, int endTileId) => terrain?.SetRoadRepairPreview(startTileId, endTileId);
         internal RoadPaving GetRoadPaving(int tileId) => map.GetRoadPaving(tileId);
         internal float GetRoadCondition(int tileId) => map.GetRoadCondition(tileId);
         internal bool IsRoadTile(int tileId) => map.IsRoadTile(tileId);
@@ -250,12 +328,13 @@ namespace ForesTycoon
             Enqueue(new HarvestForestAreaCommand(startTileId, endTileId));
 
         public void SetForestryPreview(int startTileId, int endTileId, bool removal) =>
-            terrain.SetForestryPreview(startTileId, endTileId, removal);
-        public void ClearForestryPreview() => terrain.ClearForestryPreview();
-        public int ForestryPreviewCount => terrain.ForestryPreviewCount;
+            terrain?.SetForestryPreview(startTileId, endTileId, removal);
+        public void ClearForestryPreview() => terrain?.ClearForestryPreview();
+        public int ForestryPreviewCount => terrain?.ForestryPreviewCount ?? 0;
 
         private void Enqueue(IWorldCommand command)
         {
+            EnsureAvailable();
             commandJournal.Add(command.ToRecord(worldTick));
             commands.Enqueue(command);
         }
@@ -392,6 +471,8 @@ namespace ForesTycoon
 
         public void Draw(RenderContext context)
         {
+            EnsureAvailable();
+            if (terrainRenderer == null) throw new InvalidOperationException("Attach rendering before drawing a headless world.");
             terrainRenderer.Draw(context);
         }
         public void GetWorldBounds(out Vector3 min, out Vector3 max) => map.GetWorldBounds(out min, out max);
@@ -407,24 +488,25 @@ namespace ForesTycoon
         public void ClearHover() => map.ClearHover();
         public void ClearTileHover() => map.ClearTileHover();
         public void SetRoadPreview(int startTileId, int endTileId, bool remove) =>
-            terrain.SetRoadPreview(startTileId, endTileId, remove);
-        public void ClearRoadPreview() => terrain.ClearRoadPreview();
+            terrain?.SetRoadPreview(startTileId, endTileId, remove);
+        public void ClearRoadPreview() => terrain?.ClearRoadPreview();
 
         public void Regenerate(TerrainSettings settings)
         {
-            vehicles.UseRoadPhysics = true; vehicles.UseCargoStops = true;
-            commands.Clear();
-            commandJournal.Clear();
-            systems.Clear();
-            roadRule = new CompiledRoadRule(RuleModel.Default());
+            EnsureAvailable(allowFaulted: true);
+            terrainRenderer?.VerifyAccess();
+            using var candidate = new GameWorld(settings, Graphics, EcologyTime.DefaultGameSecondsPerYear,
+                SoilLandscapeDefinition.Default, ClimateDefinition.Default);
+            candidate.ApplyTuning(Tuning);
+            if (HasPresentation) candidate.AttachRendering();
+            Adopt(candidate);
             LastRuleSample = "Még nem történt közúti áthaladás.";
-            worldTick = 0;
-            lastForestryAction = ForestryActionResult.None;
-            ReplaceTerrain(settings, EcologyTime.DefaultGameSecondsPerYear);
+            LastLoadReplayedTicks = 0;
         }
 
         public void Save(Stream destination, double tickRate = 30.0)
         {
+            EnsureAvailable();
             WorldSaveSerializer.Write(destination, new WorldSaveData
             {
                 TickRate = tickRate,
@@ -432,7 +514,7 @@ namespace ForesTycoon
                 SoilModel = SoilModelData.From(Soils.Definition),
                 Climate = Environment.Climate.Definition,
                 Tick = worldTick,
-                Terrain = TerrainSettingsData.From(terrain.Settings),
+                Terrain = TerrainSettingsData.From(map.Settings),
                 Commands = new List<WorldCommandRecord>(commandJournal),
                 Checkpoint = CaptureCheckpoint()
             });
@@ -440,6 +522,8 @@ namespace ForesTycoon
 
         public void Load(Stream source)
         {
+            EnsureAvailable(allowFaulted: true);
+            terrainRenderer?.VerifyAccess();
             WorldSaveData save = WorldSaveSerializer.Read(source);
             save.ValidateReplay();
             var settings = save.Terrain.ToSettings();
@@ -449,6 +533,17 @@ namespace ForesTycoon
             if (save.Checkpoint == null) candidate.Replay(save);
             else { candidate.RestoreCheckpoint(save.Checkpoint); candidate.ReplayTail(save); }
 
+            foreach (var record in save.Commands) candidate.commandJournal.Add(save.ReplayCommand(record));
+            if (HasPresentation) candidate.AttachRendering();
+            ulong replayedTicks = candidate.worldTick - startTick;
+            Adopt(candidate);
+            LastRuleSample = "Betöltött szabálymodell; várakozás a következő áthaladásra.";
+            LastLoadReplayedTicks = replayedTicks;
+        }
+
+        private void Adopt(GameWorld candidate)
+        {
+            (map, candidate.map) = (candidate.map, map);
             (terrain, candidate.terrain) = (candidate.terrain, terrain);
             (terrainRenderer, candidate.terrainRenderer) = (candidate.terrainRenderer, terrainRenderer);
             (ecosystem, candidate.ecosystem) = (candidate.ecosystem, ecosystem);
@@ -459,22 +554,22 @@ namespace ForesTycoon
             (timberCargo, candidate.timberCargo) = (candidate.timberCargo, timberCargo);
             (systems, candidate.systems) = (candidate.systems, systems);
             (backgroundJobs, candidate.backgroundJobs) = (candidate.backgroundJobs, backgroundJobs);
+            (commands, candidate.commands) = (candidate.commands, commands);
+            (commandJournal, candidate.commandJournal) = (candidate.commandJournal, commandJournal);
             // Route creation must follow this world's terrain after the ownership transfer.
             vehicles.RoadRouteFactory = route => VehicleRoadRoute.Create(map, route);
             roadRule = candidate.roadRule;
             Expenses = candidate.Expenses;
+            roadWeatherSeconds = candidate.roadWeatherSeconds;
             BindRoadRules();
             ApplyTuning(candidate.Tuning);
             foreach (var vehicle in vehicles.Vehicles) { vehicle.RoadState = vehicles.RoadState; vehicle.RoadWear = vehicles.RoadWear; }
-            LastRuleSample = "Betöltött szabálymodell; várakozás a következő áthaladásra.";
-            commands.Clear();
-            foreach (var pending in candidate.commands.Snapshot()) commands.Enqueue(pending);
-            commandJournal.Clear();
-            foreach (var record in save.Commands) commandJournal.Add(save.ReplayCommand(record));
             worldTick = candidate.worldTick;
             lastForestryAction = candidate.lastForestryAction;
             lastForestryArea = candidate.lastForestryArea;
-            LastLoadReplayedTicks = candidate.worldTick - startTick;
+            LastUpdateProfile = default;
+            LastRoadBuildProfile = "";
+            faulted = candidate.faulted;
         }
 
         private void Replay(WorldSaveData save)
@@ -489,16 +584,6 @@ namespace ForesTycoon
                 if (tick == save.Tick) break;
                 Update(fixedDelta);
             }
-        }
-        private void ReplaceTerrain(TerrainSettings settings, double forestYearSeconds)
-        {
-            terrainRenderer.Dispose();
-            terrain.Dispose();
-            terrain = new Terrain(settings ?? throw new ArgumentNullException(nameof(settings)));
-            ecosystem.Reset(map, forestYearSeconds, SoilLandscapeDefinition.Default, ClimateDefinition.Default);
-            wildlife = new WildlifeSystem();
-            InitializeLogistics();
-            terrainRenderer = new TerrainRenderer(terrain, vehicles, effects, forest, Graphics, Environment, wildlife, Logistics);
         }
 
         private void DesignateHarvest(int start,int end)
@@ -523,6 +608,9 @@ namespace ForesTycoon
 
         public void Dispose()
         {
+            if (disposed) return;
+            terrainRenderer?.VerifyAccess();
+            disposed = true;
             backgroundJobs.Dispose();
             terrainRenderer?.Dispose();
             terrain?.Dispose();

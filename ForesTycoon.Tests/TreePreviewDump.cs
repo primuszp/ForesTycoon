@@ -41,7 +41,7 @@ public class TreePreviewDump
     [Fact]
     public void DumpPhases()
     {
-        string dir = Environment.GetEnvironmentVariable("TREE_PREVIEW_DIR");
+        string? dir = Environment.GetEnvironmentVariable("TREE_PREVIEW_DIR");
         if (string.IsNullOrEmpty(dir)) return;
         Directory.CreateDirectory(dir);
         foreach (var species in new[] { ForestSpecies.Spruce, ForestSpecies.Birch, ForestSpecies.Oak, ForestSpecies.Beech })
@@ -68,7 +68,7 @@ public class TreePreviewDump
     [Fact]
     public void DumpStates()
     {
-        string dir = Environment.GetEnvironmentVariable("TREE_PREVIEW_DIR");
+        string? dir = Environment.GetEnvironmentVariable("TREE_PREVIEW_DIR");
         if (string.IsNullOrEmpty(dir)) return;
         foreach (var species in new[] { ForestSpecies.Oak, ForestSpecies.Beech })
         {
@@ -86,7 +86,7 @@ public class TreePreviewDump
     [Fact]
     public void DumpSpruceStands()
     {
-        string dir = Environment.GetEnvironmentVariable("TREE_PREVIEW_DIR");
+        string? dir = Environment.GetEnvironmentVariable("TREE_PREVIEW_DIR");
         if (string.IsNullOrEmpty(dir)) return;
         var profile = ForestSpeciesProfile.For(ForestSpecies.Spruce);
         foreach (float light in new[] { 1f, 0.1f })
@@ -106,9 +106,9 @@ public class TreePreviewDump
     [Fact]
     public void DumpArbaroReference()
     {
-        string dir = Environment.GetEnvironmentVariable("TREE_PREVIEW_DIR");
-        string src = Environment.GetEnvironmentVariable("ARBARO_DIR");
-        string set = Environment.GetEnvironmentVariable("ARBARO_SET");
+        string? dir = Environment.GetEnvironmentVariable("TREE_PREVIEW_DIR");
+        string? src = Environment.GetEnvironmentVariable("ARBARO_DIR");
+        string? set = Environment.GetEnvironmentVariable("ARBARO_SET");
         if (string.IsNullOrEmpty(dir) || string.IsNullOrEmpty(src) || string.IsNullOrEmpty(set)) return;
         foreach (var entry in set.Split(','))
         {
@@ -135,7 +135,7 @@ public class TreePreviewDump
     [Fact]
     public void DumpAllSpecies()
     {
-        string dir = Environment.GetEnvironmentVariable("TREE_PREVIEW_DIR");
+        string? dir = Environment.GetEnvironmentVariable("TREE_PREVIEW_DIR");
         if (string.IsNullOrEmpty(dir)) return;
         foreach (var species in ForestSpeciesTraits.Playable)
         {

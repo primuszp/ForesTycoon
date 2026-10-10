@@ -7,7 +7,12 @@ namespace ForesTycoon.Rendering
     {
         private readonly List<RenderPass> passes = new List<RenderPass>();
         private bool sorted = true;
-        internal static Action<string, bool> PassProbe;
+        private sealed class ProbeState { internal Action<string, bool> Callback; }
+        private static readonly object probeKey = new();
+        internal static Action<string, bool> PassProbe {
+            get => RenderDevice.GetState(probeKey, () => new ProbeState()).Callback;
+            set => RenderDevice.GetState(probeKey, () => new ProbeState()).Callback = value;
+        }
 
         public void Add(RenderLayer layer, string name, Action<RenderContext> draw)
         {

@@ -7,15 +7,26 @@ namespace ForesTycoon.Effects.OpenGl
     // A bounded low-cost volume above the diorama; no geometry-cache mutations.
     internal sealed class OpenGlCloudRenderer : ICloudRenderBackend
     {
+        private readonly RenderResourceOwner owner = new();
+        internal (int Program, int VertexArray) CaptureResources() => (program, vao);
         private int program, vao;
+        private bool disposed;
+        private int steps;
+        public EffectMetrics Metrics => new(0, steps, 0, 0, 0);
         public void Draw(IWeatherSurface surface, WeatherVisualState weather, IWeatherSettings settings)
         {
-            if(weather.Cloud < 0.01f) return;
+            ObjectDisposedException.ThrowIf(disposed, this);
+            owner.Check();
+            ArgumentNullException.ThrowIfNull(surface); ArgumentNullException.ThrowIfNull(weather); ArgumentNullException.ThrowIfNull(settings);
+            steps = 0;
+            if (settings.CloudSteps < 0 || settings.CloudSteps > 32) throw new ArgumentOutOfRangeException(nameof(settings), "Cloud steps must be between 0 and 32.");
+            if(!settings.Weather || settings.CloudSteps == 0 || weather.Cloud < 0.01f) return;
             if(program == 0) Initialize();
             surface.GetBounds(out Vector3 min, out Vector3 max);
             Matrix4 inverse = RenderDevice.ViewProjection.Inverted();
             GL.UseProgram(program);
             GL.Uniform1(GlProgram.Uniform(program,"steps"),settings.CloudSteps);
+            steps = settings.CloudSteps;
             GL.UniformMatrix4(GlProgram.Uniform(program, "inverse_camera"), false, ref inverse);
             GL.Uniform4(GlProgram.Uniform(program, "climate"), weather.Cloud, weather.Storm, weather.Flash, (float)(weather.Time % 4096));
             GL.Uniform1(GlProgram.Uniform(program, "height"), max.Z + 18);
@@ -28,6 +39,11 @@ namespace ForesTycoon.Effects.OpenGl
             }
         }
         private void Initialize()
+        {
+            try { InitializeCore(); }
+            catch { ReleaseResources(); throw; }
+        }
+        private void InitializeCore()
         {
             program = GlProgram.Create(@"#version 330 core
 out vec2 uv;
@@ -83,9 +99,14 @@ void main(){
         }
         public void Dispose()
         {
+            if (disposed) return; owner.CheckIfBound(); disposed = true; ReleaseResources();
+        }
+        private void ReleaseResources()
+        {
             if(program != 0) GlProgram.Delete(program);
             if(vao != 0) GL.DeleteVertexArray(vao);
             program=vao=0;
+            steps = 0;
         }
     }
 }

@@ -1,0 +1,52 @@
+name: Engine validation
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  headless:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Release build and headless tests
+        shell: pwsh
+        run: ./tools/verify-engine.ps1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tests-${{ matrix.os }}
+          path: artifacts/engine-validation
+
+  native-linux:
+    needs: headless
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      LIBGL_ALWAYS_SOFTWARE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Install virtual display and software OpenGL
+        run: sudo apt-get update && sudo apt-get install -y xvfb libgl1-mesa-dri libglfw3 fonts-dejavu-core
+      - name: Native rendering, pixels, persistence and editor
+        run: xvfb-run -a pwsh -NoProfile -File ./tools/verify-engine.ps1 -Native
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-linux-captures
+          path: artifacts

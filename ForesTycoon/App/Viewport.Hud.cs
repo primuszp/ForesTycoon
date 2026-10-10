@@ -859,10 +859,19 @@ namespace ForesTycoon
             {
                 HudTheme.KeyValue("FPS", $"{ImGui.GetIO().Framerate:F0}");
                 HudTheme.KeyValue("Képkocka", $"{performance.FrameMilliseconds:F1} ms");
+                HudTheme.KeyValue("Kihagyott szimulációs idő", $"{performance.DroppedSimulationSeconds:F2} s");
                 HudTheme.KeyValue("Szimuláció", $"{performance.SimulationMilliseconds:F2} ms · tick {simulationClock.Tick}");
                 HudTheme.KeyValue("Renderelés", $"{performance.RenderMilliseconds:F1} ms · {performance.DrawCalls} draw");
                 HudTheme.KeyValue("GC / képkocka", $"{performance.AllocatedBytes / 1024.0:F1} KiB");
                 HudTheme.KeyValue("Chunkok", $"{world.VisibleChunkCount}/{world.TotalChunkCount} · erdő újraépítés {world.ForestChunkRebuilds}");
+                HudTheme.KeyValue("Erdő cache", $"CPU {world.ForestCpuPayloadBytes / 1048576.0:F1} MiB · GPU {world.ForestGpuPayloadBytes / 1048576.0:F1} MiB");
+                HudTheme.KeyValue("LOD-cache", $"{world.ForestResidentLods} réteg · {world.ForestCacheEvictions} ürítés · kerettúllépés {world.ForestBudgetExcessBytes / 1048576.0:F1} MiB");
+                HudTheme.KeyValue("Terep cache", $"CPU {world.StaticCpuPayloadBytes / 1048576.0:F1} MiB · GPU {world.StaticGpuPayloadBytes / 1048576.0:F1} MiB · túllépés {world.StaticBudgetExcessBytes / 1048576.0:F1} MiB");
+                HudTheme.KeyValue("Időjárási effekt", $"{world.WeatherParticleCount}/{g.RainBudget} részecske · {world.WeatherCloudSteps} felhőlépés");
+                HudTheme.KeyValue("Effekt CPU / keret", $"{world.WeatherCpuMilliseconds:F2}/{g.EffectCpuBudgetMilliseconds:F2} ms · {(world.WeatherCpuMilliseconds > g.EffectCpuBudgetMilliseconds ? "túllépés" : "kereten belül")}");
+                HudTheme.KeyValue("Effekt adat", $"CPU {world.WeatherCpuPayloadBytes / 1048576.0:F1} MiB · GPU {world.WeatherGpuPayloadBytes / 1048576.0:F1} MiB");
+                HudTheme.KeyValue("Köd", $"{world.FogParticleCount}/{g.FogSourceBudget * g.FogLayers} részecske · {(world.FogDepthFallback ? "egyszerű metszés" : "lágy metszés")}");
+                HudTheme.KeyValue("Akciójelölők", $"{world.MarkerRenderedCount}/{world.ActiveMarkerCount} rajzolt/aktív · {world.DroppedMarkers} kapacitás miatti csere");
                 HudTheme.KeyValue("Objektumok", $"{world.VehicleCount} jármű · {world.WildlifeCount} szarvas · {world.FishCount} hal");
             }
 

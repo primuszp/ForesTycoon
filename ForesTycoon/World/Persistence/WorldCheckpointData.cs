@@ -36,5 +36,5 @@ namespace ForesTycoon
         TerrainCheckpoint Terrain, EcologyCheckpoint Ecology, WildlifeCheckpoint Wildlife, LogisticsCheckpoint Logistics,
         VehiclesCheckpoint Vehicles, float AvailableTimber, float DeliveredTimber, EffectCheckpoint[] Effects,
         ForestryActionResult LastAction, ForestryAreaSummary LastArea, double Expenses = 0, RuleModel Rules = null,
-        Dictionary<string, double> Tuning = null);
+        Dictionary<string, double> Tuning = null, double RoadWeatherSeconds = 0);
 }

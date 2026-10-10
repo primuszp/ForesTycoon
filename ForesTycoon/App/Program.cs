@@ -7,6 +7,7 @@ namespace ForesTycoon
         static void Main(string[] args)
         {
             RenderBackendSelection.UseOpenGl();
+            if (Array.Exists(args, a => a == "--render-environment-smoke-test")) { RenderEnvironmentSmokeTest.Run(); return; }
             if (Array.Exists(args, a => a == "--oak-study-preview")) { OakStudyPreview.Run(Array.Exists(args, a => a == "--before")); return; }
             if (Array.Exists(args, a => a == "--broadleaf-canopy-preview")) { BroadleafCanopyPreview.Run(Array.Exists(args, a => a == "--before")); return; }
             int gallery = Array.FindIndex(args, a => a == "--tree-gallery");

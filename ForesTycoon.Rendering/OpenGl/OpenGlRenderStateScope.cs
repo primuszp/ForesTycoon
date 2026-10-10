@@ -5,6 +5,7 @@ namespace ForesTycoon.Rendering.OpenGl
 {
     internal class OpenGlRenderStateScope : RenderStateScope
     {
+        private readonly RenderResourceOwner owner = new();
         private readonly bool depthTest;
         private readonly bool blend;
         private readonly bool cullFace;
@@ -23,6 +24,7 @@ namespace ForesTycoon.Rendering.OpenGl
 
         public OpenGlRenderStateScope()
         {
+            owner.Check();
             depthTest = GL.IsEnabled(EnableCap.DepthTest);
             blend = GL.IsEnabled(EnableCap.Blend);
             cullFace = GL.IsEnabled(EnableCap.CullFace);
@@ -32,18 +34,21 @@ namespace ForesTycoon.Rendering.OpenGl
 
         public override RenderStateScope Enable(RenderCapability cap)
         {
+            VerifyAccess();
             GL.Enable(OpenGlConversions.Capability(cap));
             return this;
         }
 
         public override RenderStateScope Disable(RenderCapability cap)
         {
+            VerifyAccess();
             GL.Disable(OpenGlConversions.Capability(cap));
             return this;
         }
 
         public override RenderStateScope AlphaBlend()
         {
+            VerifyAccess();
             // Solid-only scopes need no additional driver state queries.
             if(!blendFunctionCaptured) {
                 GL.GetInteger(GetPName.BlendSrcRgb,out blendSourceRgb);
@@ -63,12 +68,14 @@ namespace ForesTycoon.Rendering.OpenGl
 
         public override RenderStateScope DepthWrite(bool enabled)
         {
+            VerifyAccess();
             GL.DepthMask(enabled);
             return this;
         }
 
         public override RenderStateScope ThinLines()
         {
+            VerifyAccess();
             // Apple core profiles commonly expose only 1px hardware lines.
             // Wide outlines must be represented as geometry, not driver state.
             if (!lineWidthCaptured)
@@ -82,6 +89,7 @@ namespace ForesTycoon.Rendering.OpenGl
 
         public override RenderStateScope PolygonOffset(float factor, float units)
         {
+            VerifyAccess();
             if (!polygonOffsetCaptured)
             {
                 GL.GetFloat(GetPName.PolygonOffsetFactor, out polygonOffsetFactor);
@@ -95,6 +103,7 @@ namespace ForesTycoon.Rendering.OpenGl
 
         public override RenderStateScope Cull(RenderCullFace face)
         {
+            VerifyAccess();
             if (!cullModeCaptured) { GL.GetInteger(GetPName.CullFaceMode, out cullMode); cullModeCaptured = true; }
             GL.Enable(EnableCap.CullFace);
             GL.CullFace(face == RenderCullFace.Front ? TriangleFace.Front : TriangleFace.Back);
@@ -104,6 +113,7 @@ namespace ForesTycoon.Rendering.OpenGl
         public override void Dispose()
         {
             if (disposed) return;
+            owner.CheckIfBound();
             disposed = true;
 
             Restore(EnableCap.DepthTest, depthTest);
@@ -121,6 +131,7 @@ namespace ForesTycoon.Rendering.OpenGl
             if (polygonOffsetCaptured) GL.PolygonOffset(polygonOffsetFactor, polygonOffsetUnits);
         }
 
+        internal void VerifyAccess() { ObjectDisposedException.ThrowIf(disposed, this); owner.Check(); }
         private static void Restore(EnableCap cap, bool enabled)
         {
             if (enabled) GL.Enable(cap);

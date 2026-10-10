@@ -8,14 +8,24 @@ namespace ForesTycoon.Rendering
 {
     internal static class DynamicPrimitiveBatch
     {
-        private static readonly List<ColoredVertex> source = new List<ColoredVertex>(4096);
-        private static readonly List<ColoredVertex> expanded = new List<ColoredVertex>(6144);
-        private static uint currentColor = 0xffffffff;
-        private static bool drawing;
+        private sealed class BatchState
+        {
+            internal readonly List<ColoredVertex> Source = new(4096), Expanded = new(6144);
+            internal uint Color = 0xffffffff;
+            internal bool Drawing;
+        }
+        private static readonly object stateKey = new();
+        private static BatchState State => RenderDevice.GetState(stateKey, () => new BatchState());
+        private static List<ColoredVertex> source => State.Source;
+        private static List<ColoredVertex> expanded => State.Expanded;
+        private static uint currentColor { get => State.Color; set => State.Color = value; }
+        private static bool drawing { get => State.Drawing; set => State.Drawing = value; }
 
         // Capture the existing procedural emitters without a GL context or a draw call.
         internal static Vertex[] BuildGeometry(PrimitiveTopology primitiveType, Action draw)
         {
+            var owner = RenderDevice.Environment;
+            var state = State;
             if (draw == null) throw new ArgumentNullException(nameof(draw));
             if (drawing) throw new InvalidOperationException("Primitive batches cannot be nested.");
             drawing = true;
@@ -25,6 +35,7 @@ namespace ForesTycoon.Rendering
             try
             {
                 draw();
+                if (!ReferenceEquals(RenderDevice.Environment, owner)) throw new InvalidOperationException("A primitive emitter cannot change render environments.");
                 Expand(primitiveType);
                 var result = new Vertex[expanded.Count];
                 for (int i = 0; i < result.Length; i++)
@@ -33,12 +44,14 @@ namespace ForesTycoon.Rendering
             }
             finally
             {
-                drawing = false;
+                state.Drawing = false;
             }
         }
 
         public static void Draw(PrimitiveTopology primitiveType, Action draw)
         {
+            var owner = RenderDevice.Environment;
+            var state = State;
             if (draw == null) throw new ArgumentNullException(nameof(draw));
             if (drawing) throw new InvalidOperationException("DynamicPrimitiveBatch.Draw cannot be nested.");
 
@@ -49,6 +62,7 @@ namespace ForesTycoon.Rendering
             try
             {
                 draw();
+                owner.VerifyAccess();
                 Expand(primitiveType);
                 if (expanded.Count == 0) return;
 
@@ -58,7 +72,7 @@ namespace ForesTycoon.Rendering
             }
             finally
             {
-                drawing = false;
+                state.Drawing = false;
             }
         }
 

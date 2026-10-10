@@ -7,10 +7,13 @@ namespace ForesTycoon.OpenGl
     // Kept separate from the terrain material: only crown buffers use this shader.
     internal sealed class OpenGlForestMaterial : IForestMaterialBackend
     {
+        private readonly RenderResourceOwner owner = new();
+        private bool disposed;
         private int program;
         private int matrixLocation, widthLocation;
         public void Use(float outlineWorldWidth = 0)
         {
+            ObjectDisposedException.ThrowIf(disposed, this); owner.Check();
             if (RenderDevice.Visuals?.Active == true)
             {
                 RenderDevice.Visuals.Kind = SurfaceKind.Foliage;
@@ -58,6 +61,6 @@ void main() { lodMask();
             }
             catch { Dispose(); throw; }
         }
-        public void Dispose() { if (program != 0) GlProgram.Delete(program); program = 0; }
+        public void Dispose() { if (disposed) return; owner.CheckIfBound(); disposed = true; if (program != 0) GlProgram.Delete(program); program = 0; }
     }
 }

@@ -2,6 +2,18 @@ namespace ForesTycoon.Tests;
 
 public class FixedStepClockTests
 {
+    [Fact]
+    public void DroppedTimeAccountsForCapAndWorkBudgetAndReset()
+    {
+        var clock = new FixedStepClock(10, 8);
+        Assert.Equal(2, clock.Advance(2.05, _ => { }, () => clock.Tick < 2));
+        Assert.Equal(1.85, clock.DroppedSimulationSeconds + clock.InterpolationAlpha * clock.StepSeconds, 10);
+        double dropped = clock.DroppedSimulationSeconds;
+        clock.IsPaused = true; clock.Advance(10, _ => { });
+        Assert.Equal(dropped, clock.DroppedSimulationSeconds); Assert.Equal(0, clock.LastDroppedSimulationSeconds);
+        clock.Reset(); Assert.Equal(0, clock.DroppedSimulationSeconds);
+    }
+
     [Theory]
     [InlineData(8)]
     [InlineData(32)]

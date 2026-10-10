@@ -6,6 +6,7 @@ namespace ForesTycoon.Rendering.OpenGl
 {
     internal sealed class OpenGlVertexBuffer : IGeometryBufferBackend
     {
+        private readonly RenderResourceOwner owner = new();
         private int vboId;
         private int eboId;
         private int vaoId;
@@ -149,6 +150,7 @@ namespace ForesTycoon.Rendering.OpenGl
                 GL.BufferSubData(BufferTarget.ArrayBuffer, (IntPtr)(offset * Vertex.Stride), length * Vertex.Stride, page);
                 yield return true;
             }
+            ThrowIfDisposed();
             if (growthVbo == 0) growthVbo = GL.GenBuffer();
             GL.BindVertexArray(VaoId);
             GL.BindBuffer(BufferTarget.ArrayBuffer, growthVbo);
@@ -167,7 +169,7 @@ namespace ForesTycoon.Rendering.OpenGl
                 GL.BufferSubData(BufferTarget.ArrayBuffer, (IntPtr)(offset * ForestVertexGrowth.Stride), length * ForestVertexGrowth.Stride, growthPage);
                 yield return true;
             }
-            vertexCount = count;
+            ThrowIfDisposed(); vertexCount = count;
         }
 
         // Both direct uploads and page uploads must use the same shader layout.
@@ -222,6 +224,7 @@ namespace ForesTycoon.Rendering.OpenGl
         public void Dispose()
         {
             if (disposed) return;
+            owner.CheckIfBound();
             disposed = true;
             if (vboId != 0) { GL.DeleteBuffers(1, ref vboId); vboId = 0; }
             if (eboId != 0) { GL.DeleteBuffers(1, ref eboId); eboId = 0; }
@@ -258,6 +261,7 @@ namespace ForesTycoon.Rendering.OpenGl
         private void ThrowIfDisposed()
         {
             if (disposed) throw new ObjectDisposedException(nameof(VertexBuffer));
+            owner.Check();
         }
     }
 }

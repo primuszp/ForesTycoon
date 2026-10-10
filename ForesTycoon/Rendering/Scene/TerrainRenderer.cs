@@ -4,10 +4,13 @@ namespace ForesTycoon
 {
     /// <summary>
     /// Owns terrain-specific GPU draw ordering and transient render state.
-    /// Terrain remains the authoritative simulation model; this class is its rendering adapter.
+    /// Terrain presents the independently owned TerrainMap; this class orders its rendering.
     /// </summary>
     sealed class TerrainRenderer : IDisposable
     {
+        private readonly RenderEnvironment owner = RenderDevice.Environment;
+        private bool disposed;
+        internal void VerifyAccess() { ObjectDisposedException.ThrowIf(disposed, this); owner.VerifyAccess(); }
         private readonly Terrain terrain;
         private readonly VehicleSystem vehicles;
         private readonly WorldEffectSystem effects;
@@ -22,6 +25,14 @@ namespace ForesTycoon
         private readonly WorldContentRenderer content=new WorldContentRenderer();
         private readonly ForestMachineRenderer machines=new ForestMachineRenderer();
         internal int FishCount=>content.FishCount;
+        internal int WeatherParticleCount => precipitation.Metrics.Particles;
+        internal int WeatherCloudSteps => clouds.Metrics.CloudSteps;
+        internal long WeatherCpuPayloadBytes => precipitation.Metrics.CpuPayloadBytes + clouds.Metrics.CpuPayloadBytes + forestWeather.Metrics.CpuPayloadBytes;
+        internal long WeatherGpuPayloadBytes => precipitation.Metrics.GpuPayloadBytes + clouds.Metrics.GpuPayloadBytes + forestWeather.Metrics.GpuPayloadBytes;
+        internal double WeatherCpuMilliseconds => precipitation.Metrics.CpuMilliseconds + clouds.Metrics.CpuMilliseconds + forestWeather.Metrics.CpuMilliseconds;
+        internal int FogParticleCount => forestWeather.Metrics.FogParticles;
+        internal bool FogDepthFallback => forestWeather.Metrics.DepthFallback;
+        internal int MarkerRenderedCount { get; private set; }
         private readonly ForestWeatherRenderer forestWeather = new ForestWeatherRenderer();
         private readonly CloudRenderer clouds = new CloudRenderer();
         private readonly WildlifeRenderer wildlife;
@@ -46,14 +57,20 @@ namespace ForesTycoon
             this.forest = forest ?? throw new ArgumentNullException(nameof(forest));
             this.graphics = graphics ?? new GraphicsSettings { Enhanced = false };
             weatherSurface = new TerrainWeatherSurface(terrain, forest);
-            surfaces = new SurfaceVisualRenderer(this.graphics, weather,environment,terrain);
-            terrain.WarmStaticGeometry();
-            terrain.WarmIndividualForest(forest, this.graphics);
-            RegisterPasses();
+            try
+            {
+                surfaces = new SurfaceVisualRenderer(this.graphics, weather,environment,terrain);
+                // Geometry is requested by visible chunks at draw time; construction never warms a whole map.
+                terrain.StreamGeometry = true;
+                RegisterPasses();
+            }
+            catch { Dispose(); throw; }
         }
 
         public void Draw(RenderContext context)
         {
+            VerifyAccess();
+            precipitation.BeginFrame(); clouds.BeginFrame(); forestWeather.BeginFrame(graphics); MarkerRenderedCount=0;
             RenderPipeline.PassProbe?.Invoke("frame-preparation", true);
             try
             {
@@ -155,7 +172,7 @@ namespace ForesTycoon
             pipeline.Add(RenderLayer.Effects, "order-overlay", context =>
                 DrawSurface(SurfaceKind.Plain, () => terrain.DrawOrderOverlay(context.SimulationTimeSeconds)));
             pipeline.Add(RenderLayer.Effects, "world-effects", context =>
-                DrawSurface(SurfaceKind.Plain, () => EffectRenderer.Draw(effects, context.InterpolationAlpha)));
+                DrawSurface(SurfaceKind.Plain, () => { MarkerRenderedCount = EffectRenderer.Draw(effects, context.InterpolationAlpha, graphics.MarkerBudget); }));
             pipeline.Add(RenderLayer.Weather, "weather", context =>
             {
                 if (graphics.Enhanced && graphics.Weather)
@@ -187,7 +204,9 @@ namespace ForesTycoon
 
         public void Dispose()
         {
-            EndDecals(); content.Dispose(); machines.Dispose(); wildlife.Dispose(); forestWeather.Dispose(); clouds.Dispose(); precipitation.Dispose(); surfaces.Dispose();
+            if (disposed) return; VerifyAccess();
+            EndDecals(); content.Dispose(); machines.Dispose(); wildlife?.Dispose(); forestWeather.Dispose(); clouds.Dispose(); precipitation.Dispose(); surfaces?.Dispose();
+            disposed = true;
         }
     }
 }

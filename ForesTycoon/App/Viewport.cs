@@ -17,7 +17,7 @@ namespace ForesTycoon
     /// Jobb egér: pan (eltolás).
     /// Görgő: zoom.
     /// </summary>
-    sealed partial class Viewport : GameWindow
+    sealed partial class Viewport : RenderGameWindow
     {
         // ── Vetítési paraméterek ─────────────────────────────────────────────
         private const double Z_NEAR = -1000.0;
@@ -70,7 +70,8 @@ namespace ForesTycoon
         private bool         isLoaded     = false;
         private bool glResourcesDisposed;
         private ImGuiController imgui;
-        private readonly DioramaPostProcess postProcess = new DioramaPostProcess();
+        private DioramaPostProcess postProcess;
+        protected override ImGuiController UiController => imgui;
         private readonly FrameClock frameClock = new FrameClock();
         private readonly SimulationFrameRunner simulation = new SimulationFrameRunner(
             ticksPerSecond: 30.0, maximumTicksPerFrame: 2048, maximumWorkMilliseconds: 8);
@@ -219,29 +220,23 @@ namespace ForesTycoon
         private static readonly Color BG_COLOR = Color.FromArgb(44, 53, 64);
 
         // ────────────────────────────────────────────────────────────────────
-        public Viewport(ulong? smokeTestFrameLimit = null, string captureDirectory = null) : base(
+        public Viewport(ulong? smokeTestFrameLimit = null, string captureDirectory = null, bool visible = true) : base(
             new GameWindowSettings
             {
                 UpdateFrequency = 0
             },
-            RenderBackendSelection.Window.CreateSettings("ForesTycoon", new Vector2i(1280,720), true))
+            RenderBackendSelection.Window.CreateSettings("ForesTycoon", new Vector2i(1280,720), visible))
         {
             this.smokeTestFrameLimit = smokeTestFrameLimit;
             this.captureDirectory = captureDirectory;
         }
 
-        protected override void OnLoad()
+        protected override void LoadScene()
         {
-            base.OnLoad();
-
             try
             {
-                RenderBackendSelection.Window.MakeCurrent(this);
                 RenderBackendSelection.Window.SetSwapInterval(this, 0);   // vsync ki (OpenTK 3 VSync=false megfelelője)
-
-                RenderDevice.Initialize();
-                RenderDevice.InitializeFrameState();
-
+                postProcess = new DioramaPostProcess();
                 world = new GameWorld(TerrainSettings.Default);
                 interaction = new WorldInteractionController(world) { TargetPicked = SendTargetPicked };
                 GameSpeed = 1;   // start at the slow 1×
@@ -364,14 +359,13 @@ namespace ForesTycoon
             try
             {
                 performance.BeginFrame();
-                RenderBackendSelection.Window.MakeCurrent(this);
                 frameClock.Tick();
                 RefreshPointerHover();
                 UpdateCameraFrame();
                 performance.BeginSimulation();
                 SimulationFrameResult result = simulation.Advance(
                     frameClock.DeltaTimeSeconds, world.ExecutePendingCommands, world.Update);
-                performance.EndSimulation(result.Commands, result.Ticks);
+                performance.EndSimulation(result.Commands, result.Ticks, simulationClock.DroppedSimulationSeconds);
                 SetupViewport();
                 performance.BeginRender();
                 Render();
@@ -579,9 +573,8 @@ namespace ForesTycoon
             return true;
         }
 
-        protected override void OnRenderFrame(FrameEventArgs e)
+        protected override void RenderScene(FrameEventArgs e)
         {
-            base.OnRenderFrame(e);
             RunFrame();
             if (smokeTestFrameLimit.HasValue)
             {
@@ -594,52 +587,27 @@ namespace ForesTycoon
             }
         }
 
-        protected override void OnUnload()
+        protected override void UnloadScene()
         {
             DisposeGlResources();
-            base.OnUnload();
         }
 
         private void DisposeGlResources()
         {
             if (glResourcesDisposed) return;
-            glResourcesDisposed = true;
-
-            if (!isLoaded) return;
-
-            try
-            {
-                RenderBackendSelection.Window.MakeCurrent(this);
-
-                imgui?.Dispose();
-                postProcess.Dispose();
-                world?.Dispose();
-                RenderDevice.Dispose();
-            }
-            catch
-            {
-                // The WinForms handle may already be invalid during shutdown; do not
-                // turn cleanup into an application crash.
-            }
-            finally
-            {
-                imgui = null;
-                world = null;
-                isLoaded = false;
-            }
+            imgui?.Dispose(); postProcess?.Dispose(); world?.Dispose();
+            imgui = null; postProcess = null; world = null; isLoaded = false; glResourcesDisposed = true;
         }
 
-        protected override void OnResize(ResizeEventArgs e)
+        protected override void ResizeScene(ResizeEventArgs e)
         {
-            base.OnResize(e);
             if (!isLoaded) return;
             SetupViewport();
             RequestFrame();
         }
 
-        protected override void OnMouseMove(MouseMoveEventArgs e)
+        protected override void MouseMoveScene(MouseMoveEventArgs e)
         {
-            base.OnMouseMove(e);
             if (!isLoaded) return;
 
             int x = (int)Math.Round(e.Position.X);
@@ -683,9 +651,8 @@ namespace ForesTycoon
             RequestFrame();
         }
 
-        protected override void OnMouseUp(MouseButtonEventArgs e)
+        protected override void MouseUpScene(MouseButtonEventArgs e)
         {
-            base.OnMouseUp(e);
             if (isLoaded) imgui?.MouseButton(MapMouseButton(e.Button), false);
             PointerButton released = MapPointerButton(e.Button);
             if (activeButton == released) activeButton = PointerButton.None;
@@ -711,9 +678,8 @@ namespace ForesTycoon
             RequestFrame();
         }
 
-        protected override void OnKeyDown(KeyboardKeyEventArgs e)
+        protected override void KeyDownScene(KeyboardKeyEventArgs e)
         {
-            base.OnKeyDown(e);
             if (!isLoaded) return;
 
             if (HandleHotkey(e)) { RequestFrame(); return; }
@@ -737,9 +703,8 @@ namespace ForesTycoon
             }
         }
 
-        protected override void OnMouseDown(MouseButtonEventArgs e)
+        protected override void MouseDownScene(MouseButtonEventArgs e)
         {
-            base.OnMouseDown(e);
             if (!isLoaded) return;
 
             imgui?.MouseButton(MapMouseButton(e.Button), true);
@@ -763,9 +728,8 @@ namespace ForesTycoon
                 interaction.BeginPrimaryGesture();
         }
 
-        protected override void OnMouseWheel(MouseWheelEventArgs e)
+        protected override void MouseWheelScene(MouseWheelEventArgs e)
         {
-            base.OnMouseWheel(e);
             if (!isLoaded) return;
 
             imgui?.MouseScroll(e.OffsetY);

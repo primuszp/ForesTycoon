@@ -77,20 +77,26 @@ namespace ForesTycoon.Map
         }
 
         /// <summary>Cheapest path over the network (Dijkstra); empty when not connected.</summary>
-        public int[] FindNetworkPath(int start, int end)
+        public int[] FindNetworkPath(int start, int end) => FindNetworkPath(start, end, out _);
+
+        public int[] FindNetworkPath(int start, int end, out float totalCost)
         {
+            totalCost = float.PositiveInfinity;
             if (!IsNetworkTile(start) || !IsNetworkTile(end)) return Array.Empty<int>();
-            if (start == end) return new[] { start };
+            if (start == end) { totalCost = 0; return new[] { start }; }
             var cost = new Dictionary<int, float> { [start] = 0 };
             var previous = new Dictionary<int, int> { [start] = -1 };
-            var open = new PriorityQueue<int, float>();
-            open.Enqueue(start, 0);
+            // Tile id breaks equal-cost ties independently of heap implementation details.
+            var open = new PriorityQueue<int, (float Cost, int Tile)>();
+            open.Enqueue(start, (0, start));
             Span<int> next = stackalloc int[4];
-            while (open.TryDequeue(out int tile, out float c))
+            while (open.TryDequeue(out int tile, out var priority))
             {
+                float c = priority.Cost;
                 if (c > cost[tile]) continue;
                 if (tile == end)
                 {
+                    totalCost = c;
                     var path = new List<int>();
                     for (int t = end; t >= 0; t = previous[t]) path.Add(t);
                     path.Reverse();
@@ -101,7 +107,7 @@ namespace ForesTycoon.Map
                 {
                     float nc = c + NetworkCost(next[i]);
                     if (cost.TryGetValue(next[i], out float known) && known <= nc) continue;
-                    cost[next[i]] = nc; previous[next[i]] = tile; open.Enqueue(next[i], nc);
+                    cost[next[i]] = nc; previous[next[i]] = tile; open.Enqueue(next[i], (nc, next[i]));
                 }
             }
             return Array.Empty<int>();

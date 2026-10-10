@@ -5,11 +5,17 @@ namespace ForesTycoon.Models.OpenGl
 {
     internal sealed class OpenGlModelRenderer : IModelRenderBackend
     {
+        private readonly RenderResourceOwner owner = new();
         private readonly AnimatedGlbModel model;
         private readonly int[] vaos,vbos,ebos,textures;
         private readonly float[] palette=new float[64*16];
         private int program, boneBuffer;
         private bool disposed;
+        internal bool HasGpuResources => program != 0 || boneBuffer != 0 || Array.Exists(vaos, id => id != 0)
+            || Array.Exists(vbos, id => id != 0) || Array.Exists(ebos, id => id != 0) || Array.Exists(textures, id => id != 0);
+        // Explicit diagnostic snapshot; ordinary draws allocate no handle arrays.
+        internal (int Program, int BoneBuffer, int[] VertexArrays, int[] VertexBuffers, int[] IndexBuffers, int[] Textures) CaptureResources()
+            => (program, boneBuffer, (int[])vaos.Clone(), (int[])vbos.Clone(), (int[])ebos.Clone(), (int[])textures.Clone());
         private ModelSceneParameters? sceneUniforms;
         private readonly record struct MaterialUniforms(AnimatedGlbModel.AlphaMode Alpha, float Cutoff,
             bool HasAlbedo, bool Skinned, Vector4 Tint, Vector3 FlatColor, bool Textured);
@@ -22,6 +28,7 @@ namespace ForesTycoon.Models.OpenGl
         public IModelRenderBatch BeginBatch()
         {
             ObjectDisposedException.ThrowIf(disposed, this);
+            owner.Check();
             return new OpenGlModelRenderBatch();
         }
 
@@ -29,6 +36,7 @@ namespace ForesTycoon.Models.OpenGl
             ReadOnlySpan<int> drawOrder,IModelRenderBatch batch)
         {
             ObjectDisposedException.ThrowIf(disposed,this);
+            owner.Check();
             if (batch != null && batch is not OpenGlModelRenderBatch)
                 throw new ArgumentException("Model batch belongs to another backend.", nameof(batch));
             if (batch is OpenGlModelRenderBatch suppliedBatch) suppliedBatch.ThrowIfDisposed();
@@ -118,11 +126,22 @@ namespace ForesTycoon.Models.OpenGl
         }
         private void Initialize()
         {
+            try { InitializeCore(); }
+            catch { ReleaseGpuResources(); throw; }
+        }
+        private static void RequireAllocation()
+        {
+            var error = GL.GetError();
+            if (error != ErrorCode.NoError) throw new InvalidOperationException("Model GPU allocation failed: " + error);
+        }
+        private void InitializeCore()
+        {
             program=GlProgram.Create(OpenGlModelShaders.Vertex,OpenGlModelShaders.Fragment);
             boneBuffer=GL.GenBuffer();
             GL.BindBuffer(BufferTarget.UniformBuffer,boneBuffer);
             GL.BufferData(BufferTarget.UniformBuffer,palette.Length*sizeof(float),IntPtr.Zero,BufferUsageHint.StreamDraw);
             GL.UniformBlockBinding(program,GL.GetUniformBlockIndex(program,"JointPalette"),2);
+            RequireAllocation();
             GL.ActiveTexture(TextureUnit.Texture4);
             for(int i=0;i<textures.Length;i++) {
                 textures[i]=GL.GenTexture();GL.BindTexture(TextureTarget.Texture2D,textures[i]);var image=model.Images[i];
@@ -132,6 +151,7 @@ namespace ForesTycoon.Models.OpenGl
                 GL.TexParameter(TextureTarget.Texture2D,TextureParameterName.TextureWrapS,(int)TextureWrapMode.Repeat);
                 GL.TexParameter(TextureTarget.Texture2D,TextureParameterName.TextureWrapT,(int)TextureWrapMode.Repeat);
                 GL.GenerateMipmap(GenerateMipmapTarget.Texture2D);
+                RequireAllocation();
             }
             GL.ActiveTexture(TextureUnit.Texture0);
             for(int i=0;i<vaos.Length;i++) {
@@ -141,11 +161,15 @@ namespace ForesTycoon.Models.OpenGl
                 GL.BindBuffer(BufferTarget.ElementArrayBuffer,ebos[i]);GL.BufferData(BufferTarget.ElementArrayBuffer,mesh.Indices.Length*sizeof(uint),mesh.Indices,BufferUsageHint.StaticDraw);
                 int[] sizes={3,3,2,4,4},offsets={0,3,6,8,12};
                 for(int a=0;a<5;a++){GL.EnableVertexAttribArray(a);GL.VertexAttribPointer(a,sizes[a],VertexAttribPointerType.Float,false,16*sizeof(float),offsets[a]*sizeof(float));}
+                RequireAllocation();
             }
             GL.BindVertexArray(0);
         }
         public void Dispose() {
-            if(disposed)return;disposed=true;
+            if(disposed)return;owner.CheckIfBound();disposed=true;
+            ReleaseGpuResources();
+        }
+        private void ReleaseGpuResources() {
             if(program!=0)GlProgram.Delete(program);
             foreach(int id in vaos)if(id!=0)GL.DeleteVertexArray(id);
             foreach(int id in vbos)if(id!=0)GL.DeleteBuffer(id);
@@ -153,6 +177,8 @@ namespace ForesTycoon.Models.OpenGl
             foreach(int id in textures)if(id!=0)GL.DeleteTexture(id);
             if(boneBuffer!=0)GL.DeleteBuffer(boneBuffer);
             program=boneBuffer=0;
+            Array.Clear(vaos); Array.Clear(vbos); Array.Clear(ebos); Array.Clear(textures);
+            sceneUniforms = null; materialUniforms = null;
         }
     }
 }

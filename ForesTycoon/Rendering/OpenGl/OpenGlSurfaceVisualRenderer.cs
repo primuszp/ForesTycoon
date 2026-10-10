@@ -6,6 +6,8 @@ namespace ForesTycoon.OpenGl
 {
     internal sealed class OpenGlSurfaceVisualRenderer : ISurfaceRenderBackend
     {
+        private readonly RenderResourceOwner owner = new();
+        private bool disposed;
         private int program, depthProgram, textures, shadowTexture, shadowFramebuffer;
         private int environmentTexture;
         private float[] environmentPixels;
@@ -32,6 +34,7 @@ namespace ForesTycoon.OpenGl
 
         public void BeginFrame()
         {
+            ObjectDisposedException.ThrowIf(disposed, this); owner.Check();
             float az = MathHelper.DegreesToRadians(settings.SunAzimuth), el = MathHelper.DegreesToRadians(settings.SunElevation);
             sun = new Vector3(MathF.Cos(az) * MathF.Cos(el), MathF.Sin(az) * MathF.Cos(el), MathF.Sin(el));
             shadowsReady = false;
@@ -49,6 +52,7 @@ namespace ForesTycoon.OpenGl
 
         public void RenderShadows(Terrain terrain, Action draw)
         {
+            ObjectDisposedException.ThrowIf(disposed, this); owner.Check();
             if (!settings.Enhanced || !settings.Lighting || !settings.Shadows) return;
             terrain.GetWeatherBounds(out Vector3 min, out Vector3 max);
             Vector3 center = (min + max) * 0.5f;
@@ -79,6 +83,7 @@ namespace ForesTycoon.OpenGl
 
         public void Use(float outlineWidth = 0)
         {
+            ObjectDisposedException.ThrowIf(disposed, this); owner.Check();
             int shader = ShadowPass ? depthProgram : program;
             GL.UseProgram(shader);
             GL.Uniform2(GlProgram.Uniform(shader,"lod_range"),RenderDevice.LodRange);
@@ -395,6 +400,7 @@ void main(){lodMask(); }");
 
         public void Dispose()
         {
+            if (disposed) return; owner.CheckIfBound(); disposed = true;
             if(program != 0) GlProgram.Delete(program);
             if(depthProgram != 0) GlProgram.Delete(depthProgram);
             if(textures != 0) GL.DeleteTexture(textures);
@@ -402,6 +408,7 @@ void main(){lodMask(); }");
             if(shadowFramebuffer != 0) GL.DeleteFramebuffer(shadowFramebuffer);
             if(environmentTexture!=0)GL.DeleteTexture(environmentTexture);environmentTexture=0;
             program = depthProgram = textures = shadowTexture = shadowFramebuffer = 0;
+            environmentPixels = null; shadowsReady = ShadowPass = false;
         }
     }
 }

@@ -53,8 +53,8 @@ namespace ForesTycoon.Models
         public void Dispose()
         {
             if (disposed) return;
-            disposed = true;
             backend.Dispose();
+            disposed = true;
         }
     }
 }

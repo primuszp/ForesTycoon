@@ -91,6 +91,9 @@ namespace ForesTycoon
                 CheckPagedForestUpload();
                 CheckDeadTreeLodState();
                 CheckGrowingForestLodState();
+                CheckStreamingForest();
+                CheckColdWorldScaling();
+                CheckStaticCacheEviction();
                 Console.WriteLine($"Forest GL smoke test passed: near={near}, medium={medium}, far={far} vertices; stable frames rebuild 0 chunks.");
             }
             finally
@@ -108,6 +111,108 @@ namespace ForesTycoon
             RenderMetrics.BeginFrame();
             terrain.DrawTrees(forest, context);
             return RenderMetrics.SubmittedVertices;
+        }
+
+        private static void CheckStreamingForest()
+        {
+            using var terrain = new Terrain(TerrainSettings.Default.WithNodeSize(33, 42));
+            var forest = new ForestSystem(terrain.Map);
+            Require(forest.Count > 0, "Streaming test map has no forest.");
+            terrain.StreamGeometry = true;
+            Require(terrain.ForestResidentLods == 0, "Cold streaming terrain allocated forest meshes.");
+            int first = Draw(terrain, forest, 12);
+            Require(first == 0 && terrain.ForestChunkRebuilds == 0 && terrain.HasPendingForestBuild,
+                "Cold streaming published partial geometry or built trees synchronously.");
+            int frames = 0;
+            while (terrain.TotalForestChunkRebuilds < terrain.VisibleChunkCount && frames++ < 2000)
+                Draw(terrain, forest, 12);
+            Require(terrain.TotalForestChunkRebuilds >= terrain.VisibleChunkCount, "Visible Far coverage never completed.");
+            Require(terrain.ForestGpuPayloadBytes > 0 && terrain.ForestCpuPayloadBytes > 0,
+                "Streaming payload accounting omitted resident geometry.");
+            // Populate all levels as an explicit diagnostic, then enforce a deliberately
+            // smaller-than-visible budget. Only continuity meshes and one build may remain.
+            terrain.WarmIndividualForest(forest, new GraphicsSettings { Enhanced = false });
+            int warmCount = terrain.ForestResidentLods;
+            terrain.ForestCacheBudgetBytes = 1;
+            int farVertices = Draw(terrain, forest, 1);
+            Require(farVertices > 0, "Budget pressure removed visible trees.");
+            Require(terrain.ForestResidentLods < warmCount && terrain.ForestCacheEvictions > 0,
+                "Budget pressure did not evict unused LODs.");
+            Require(terrain.ForestResidentLods <= terrain.VisibleChunkCount + 1,
+                "Budget pressure retained unused forest levels.");
+            Require(terrain.ForestBudgetExcessBytes == terrain.ForestCpuPayloadBytes + terrain.ForestGpuPayloadBytes - 1,
+                "Visible working-set excess was not reported exactly.");
+            Require(Draw(terrain, forest, 12) == farVertices,
+                "Budget pressure rebuilt expensive detail instead of preserving Far coverage.");
+            var offscreen = new RenderContext(0, 0, 0, 0, 0, 0, false, false, 1,
+                -60, -45, 100000, 100000, 100032, 100032, 12);
+            terrain.UpdateVisibleTiles(offscreen);
+            terrain.DrawTrees(forest, offscreen);
+            Require(terrain.VisibleChunkCount == 0 && terrain.ForestResidentLods == 0 && terrain.ForestGpuPayloadBytes == 0,
+                "Panning away retained offscreen forest GPU resources under pressure.");
+            Require(!terrain.HasPendingForestBuild, "Offscreen build was not cancelled.");
+            Require(Draw(terrain, forest, 12) == 0 && terrain.HasPendingForestBuild,
+                "Returning to an evicted region did not restart a complete streaming build.");
+            bool returned = false;
+            for (int frame = 0; frame < 500 && !returned; frame++) returned = Draw(terrain, forest, 12) > 0;
+            Require(returned, "Returning to an evicted region never restored visible trees.");
+            forest.Clear();
+            for (int frame = 0; frame < 8; frame++)
+                Require(Draw(terrain, forest, 12) == 0, "Streaming cancellation resurrected cleared trees.");
+            Require(GL.GetError() == ErrorCode.NoError, "Streaming/cache eviction produced an OpenGL error.");
+            Console.WriteLine($"Streaming forest: cold frame submitted 0 vertices; Far coverage in {frames} frames; unused LOD eviction and visible-budget excess passed.");
+        }
+
+        private static void CheckColdWorldScaling()
+        {
+            foreach (int nodes in new[] { 65, 129 })
+            {
+                long allocated = GC.GetAllocatedBytesForCurrentThread();
+                var timer = System.Diagnostics.Stopwatch.StartNew();
+                using var world = new GameWorld(TerrainSettings.Default.WithNodeSize(nodes, 42));
+                double constructionMs = timer.Elapsed.TotalMilliseconds;
+                Require(world.ForestResidentLods == 0 && world.ForestGpuPayloadBytes == 0,
+                    "World construction warmed forest meshes before its camera was known.");
+                world.Graphics.Enhanced = false;
+                RenderDevice.SetCamera(Matrix4.Identity);
+                var context = new RenderContext(0, 0, 0, 0, 0, 0, false, false, 1,
+                    -60, -45, -32, -32, 32, 32, 12);
+                timer.Restart();
+                world.Draw(context);
+                GL.Finish();
+                Require(world.ForestChunkRebuilds == 0, "Cold world synchronously built forest geometry.");
+                Require(world.VisibleChunkCount < world.TotalChunkCount,
+                    "Scaling test failed to restrict the initial viewport.");
+                Require(world.ForestResidentLods <= world.VisibleChunkCount,
+                    "Cold world allocated offscreen forest levels.");
+                Require(GL.GetError() == ErrorCode.NoError, "Cold world scaling produced an OpenGL error.");
+                Console.WriteLine($"Cold world {nodes - 1}x{nodes - 1}: constructor {constructionMs:F1} ms; first draw {timer.Elapsed.TotalMilliseconds:F1} ms; thread allocations {(GC.GetAllocatedBytesForCurrentThread() - allocated) / 1048576.0:F1} MiB; visible {world.VisibleChunkCount}/{world.TotalChunkCount}, resident forest levels {world.ForestResidentLods}.");
+            }
+        }
+
+        private static void CheckStaticCacheEviction()
+        {
+            using var terrain = new Terrain(TerrainSettings.Default.WithNodeSize(33, 42));
+            terrain.StreamGeometry = true;
+            terrain.StaticCacheBudgetBytes = 1;
+            var visible = new RenderContext(0, 0, 0, 0, 0, 0, false, false, 1,
+                -60, -45, -10000, -10000, 10000, 10000, 12);
+            terrain.UpdateVisibleTiles(visible);
+            terrain.DrawTerrainBase(); terrain.DrawTerrainDecals();
+            Require(terrain.StaticResidentChunks == terrain.VisibleChunkCount && terrain.StaticGpuPayloadBytes > 0,
+                "Static cache budget discarded visible terrain.");
+            Require(terrain.StaticBudgetExcessBytes == terrain.StaticCpuPayloadBytes + terrain.StaticGpuPayloadBytes - 1,
+                "Static cache omitted its visible working-set excess.");
+            var offscreen = new RenderContext(0, 0, 0, 0, 0, 0, false, false, 1,
+                -60, -45, 100000, 100000, 100032, 100032, 12);
+            terrain.UpdateVisibleTiles(offscreen); terrain.DrawTerrainBase();
+            Require(terrain.StaticResidentChunks == 0 && terrain.StaticGpuPayloadBytes == 0 && terrain.StaticCacheEvictions > 0,
+                "Static cache retained unused GPU resources under pressure.");
+            terrain.UpdateVisibleTiles(visible); terrain.DrawTerrainBase(); terrain.DrawTerrainDecals();
+            Require(terrain.StaticTerrainRebuilds == terrain.VisibleChunkCount && terrain.CachedGridHasAllTileBoundaries(),
+                "Evicted terrain/grid did not rebuild correctly on return.");
+            Require(GL.GetError() == ErrorCode.NoError, "Static cache eviction produced an OpenGL error.");
+            Console.WriteLine("Static cache: visible continuity, exact payload excess, offscreen eviction and rebuilt grid passed.");
         }
 
         private static void CheckGrowingForestLodState()
