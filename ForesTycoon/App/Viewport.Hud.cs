@@ -19,6 +19,8 @@ namespace ForesTycoon
         private bool showVehicles, showForestry, showGraphics, showDeveloper, showHelp;
         private bool showEnvironment, showManagement;
         private readonly ManagementView management = new();
+        private string ruleModelPath = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ForesTycoon", "rules", "road-wear.json");
+        private string ruleImportStatus = "";
         private int ecologyRasterLayer, ecologyRasterSelection = -1;
         private int environmentPreset, environmentIntensity = 12, environmentDuration = 90;
         private float toolbarBottom = 60f;
@@ -828,6 +830,30 @@ namespace ForesTycoon
         {
             if (!BeginGameWindow("Fejlesztői eszközök", ref showDeveloper, new NVec2(12, toolbarBottom + 10), 380)) return;
             var g = world.Graphics;
+            if (ImGui.CollapsingHeader("Szabálymodell"))
+            {
+                ImGui.TextWrapped("A ForesTycoon.Editorban mentett útkopási modell vagy teljes katalógus (gráf + hangolás) itt alkalmazható.");
+                ImGui.TextWrapped($"Aktív modell: {world.ActiveRuleName}");
+                ImGui.InputText("JSON-fájl", ref ruleModelPath, 1024);
+                if (ImGui.Button("Szabálymodell alkalmazása"))
+                {
+                    try
+                    {
+                        string json = System.IO.File.ReadAllText(ruleModelPath);
+                        if (json.Contains("\"forest-current-rules\"", StringComparison.Ordinal))
+                        {
+                            var catalog = GameRuleCatalog.FromJson(json);
+                            world.QueueRuleModel(catalog.RoadTrafficModel); world.QueueTuning(catalog.TuningOverrides());
+                            ruleImportStatus = $"Katalógus naplózva: útkopási gráf és {catalog.TuningOverrides().Count} hangolt érték.";
+                        }
+                        else { world.QueueRuleModel(RuleModel.FromJson(json)); ruleImportStatus = "Modellváltás naplózva."; }
+                    }
+                    catch (Exception e) when (e is System.IO.IOException or System.Text.Json.JsonException or ArgumentException or InvalidOperationException or UnauthorizedAccessException or NotSupportedException)
+                    { ruleImportStatus = e.Message; }
+                }
+                if (ruleImportStatus.Length > 0) ImGui.TextWrapped(ruleImportStatus);
+                ImGui.TextWrapped(world.LastRuleSample);
+            }
 
             if (ImGui.CollapsingHeader("Teljesítmény", ImGuiTreeNodeFlags.DefaultOpen))
             {

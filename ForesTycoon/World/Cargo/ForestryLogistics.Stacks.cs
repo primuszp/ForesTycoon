@@ -100,6 +100,6 @@ namespace ForesTycoon
 
         internal Sawmill MillAt(int tile) => Mills.Find(m => Array.IndexOf(m.Footprint, tile) >= 0);
 
-        private void Burn(double litres) { if (litres > 0) RunningCosts += litres * DieselPrice; }
+        private void Burn(double litres) { if (litres > 0) RunningCosts += litres * Tuning[Tune.DieselPrice]; }
     }
 }

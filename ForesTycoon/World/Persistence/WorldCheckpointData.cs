@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace ForesTycoon
 {
@@ -34,5 +35,6 @@ namespace ForesTycoon
     internal sealed record WorldCheckpointData(int Version, ulong Tick, int CommandCursor, int PendingCommands,
         TerrainCheckpoint Terrain, EcologyCheckpoint Ecology, WildlifeCheckpoint Wildlife, LogisticsCheckpoint Logistics,
         VehiclesCheckpoint Vehicles, float AvailableTimber, float DeliveredTimber, EffectCheckpoint[] Effects,
-        ForestryActionResult LastAction, ForestryAreaSummary LastArea, double Expenses = 0);
+        ForestryActionResult LastAction, ForestryAreaSummary LastArea, double Expenses = 0, RuleModel Rules = null,
+        Dictionary<string, double> Tuning = null);
 }

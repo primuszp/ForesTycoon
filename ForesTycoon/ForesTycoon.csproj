@@ -12,6 +12,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Using Include="ForesTycoon.Rules" />
     <EmbeddedResource Include="Assets/UI/forest-icons-transport.png" LogicalName="ForesTycoon.ForestIconsTransport.png" />
     <Using Include="ForesTycoon.Engine" />
     <Using Include="ForesTycoon.Ecology" />
@@ -24,6 +25,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../ForesTycoon.Engine/ForesTycoon.Engine.csproj" />
+    <ProjectReference Include="../ForesTycoon.Rules/ForesTycoon.Rules.csproj" />
     <ProjectReference Include="../ForesTycoon.Ecology/ForesTycoon.Ecology.csproj" />
     <ProjectReference Include="../ForesTycoon.TreeModels/ForesTycoon.TreeModels.csproj" />
     <ProjectReference Include="../ForesTycoon.Rendering/ForesTycoon.Rendering.csproj" />

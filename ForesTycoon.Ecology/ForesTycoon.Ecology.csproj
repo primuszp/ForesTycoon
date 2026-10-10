@@ -25,6 +25,7 @@
     <EmbeddedResource Include="Soil/profiles.json" />
     <EmbeddedResource Include="Climate/default.json" />
     <InternalsVisibleTo Include="ForesTycoon" />
+    <InternalsVisibleTo Include="ForesTycoon.Editor" />
     <InternalsVisibleTo Include="ForesTycoon.TreeModels" />
     <InternalsVisibleTo Include="ForesTycoon.Effects" />
     <InternalsVisibleTo Include="ForesTycoon.Map" />

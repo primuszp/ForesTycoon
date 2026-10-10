@@ -18,6 +18,10 @@ namespace ForesTycoon
         float IdleFuelPerHour = 2.5f, float Braking = 2.5f)
     {
         internal static TruckSpec Default { get; } = new();
+        internal float RollingAsphalt { get; init; } = VehicleDynamics.DefaultRollingAsphalt;
+        internal float RollingGravel { get; init; } = VehicleDynamics.DefaultRollingGravel;
+        internal float RollingDirt { get; init; } = VehicleDynamics.DefaultRollingDirt;
+        internal float RoughnessRolling { get; init; } = VehicleDynamics.DefaultRoughnessRolling;
     }
 
     /// <summary>
@@ -29,9 +33,12 @@ namespace ForesTycoon
     {
         internal const float Gravity = 9.81f, AirDensity = 1.2f;
 
-        internal static float RollingCoefficient(RoadSurface surface, float roughness) =>
-            surface switch { RoadSurface.Asphalt => 0.008f, RoadSurface.Gravel => 0.02f, _ => 0.04f }
-            * (1 + 1.5f * Math.Clamp(roughness, 0, 1));
+        internal const float DefaultRollingAsphalt = 0.008f, DefaultRollingGravel = 0.02f, DefaultRollingDirt = 0.04f, DefaultRoughnessRolling = 1.5f;
+
+        internal static float RollingCoefficient(RoadSurface surface, float roughness) => RollingCoefficient(TruckSpec.Default, surface, roughness);
+        internal static float RollingCoefficient(TruckSpec spec, RoadSurface surface, float roughness) =>
+            surface switch { RoadSurface.Asphalt => spec.RollingAsphalt, RoadSurface.Gravel => spec.RollingGravel, _ => spec.RollingDirt }
+            * (1 + spec.RoughnessRolling * Math.Clamp(roughness, 0, 1));
 
         internal static float Mass(TruckSpec spec, float cargoCubicMetres) => spec.EmptyMass + Math.Max(0, cargoCubicMetres) * spec.TimberDensity;
 
@@ -39,7 +46,7 @@ namespace ForesTycoon
         internal static float Resistance(TruckSpec spec, float mass, float speed, float grade, RoadSurface surface, float roughness)
         {
             float angle = MathF.Atan(grade);
-            return RollingCoefficient(surface, roughness) * mass * Gravity * MathF.Cos(angle)
+            return RollingCoefficient(spec, surface, roughness) * mass * Gravity * MathF.Cos(angle)
                 + mass * Gravity * MathF.Sin(angle)
                 + 0.5f * AirDensity * spec.DragArea * speed * speed;
         }

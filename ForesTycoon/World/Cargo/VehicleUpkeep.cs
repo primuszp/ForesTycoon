@@ -21,10 +21,13 @@ namespace ForesTycoon
 
         internal const float WearPerSecond = 0.00025f, RepairSeconds = 40f, FieldRepairRelief = 0.3f, ServicePerSecond = 0.02f;
         internal const double RepairBaseCost = 150, RepairWearCost = 300, ServiceCostPerWear = 200;
+        internal const double BreakdownHazard = 0.004, WearFuelPenalty = 0.5, WearPacePenalty = 0.3;
 
-        /// <summary>Fuel, and slowdown of work and driving, grow with the wear.</summary>
-        internal double FuelFactor => 1 + 0.5 * Wear;
-        internal float PaceFactor => 1 - 0.3f * Wear;
+        /// <summary>Fuel, and slowdown of work and driving, grow with the wear (default tuning).</summary>
+        internal double FuelFactor => Fuel(GameTuning.Default);
+        internal float PaceFactor => Pace(GameTuning.Default);
+        internal double Fuel(GameTuning t) => 1 + t[Tune.WearFuelPenalty] * Wear;
+        internal float Pace(GameTuning t) => 1 - t.F(Tune.WearPacePenalty) * Wear;
 
         /// <param name="seed">Any number; it is scrambled first so small ids do not start with tiny draws.</param>
         internal VehicleUpkeep(uint seed)
@@ -48,35 +51,37 @@ namespace ForesTycoon
         /// One working step of <paramref name="seconds"/> under a strain factor (1 normal; rough ground and loads more).
         /// Returns false while broken (the step is spent waiting for the mechanic); the repair cost is returned when it ends.
         /// </summary>
-        internal bool Operate(double seconds, float strain, out double repairCost)
+        internal bool Operate(double seconds, float strain, out double repairCost, GameTuning t = null)
         {
+            t ??= GameTuning.Default;
             repairCost = 0;
             if (Broken)
             {
                 RepairLeft -= (float)seconds;
                 if (RepairLeft > 0) return false;
-                repairCost = RepairBaseCost + RepairWearCost * Wear;
-                Broken = false; RepairLeft = 0; Wear = Math.Max(0, Wear - FieldRepairRelief);
+                repairCost = t[Tune.RepairBaseCost] + t[Tune.RepairWearCost] * Wear;
+                Broken = false; RepairLeft = 0; Wear = Math.Max(0, Wear - t.F(Tune.FieldRepairRelief));
                 return true;
             }
-            Wear = Math.Min(1, Wear + (float)(WearPerSecond * strain * seconds));
+            Wear = Math.Min(1, Wear + (float)(t[Tune.WearPerSecond] * strain * seconds));
             // Hazard rises steeply with wear: a new vehicle almost never stops, a worn-out one every few minutes.
-            double hazard = 0.004 * Wear * Wear * strain;
+            double hazard = t[Tune.BreakdownHazard] * Wear * Wear * strain;
             if (NextUnit() < hazard * seconds)
             {
-                Broken = true; RepairLeft = RepairSeconds; Breakdowns++;
+                Broken = true; RepairLeft = t.F(Tune.RepairSeconds); Breakdowns++;
                 return false;
             }
             return true;
         }
 
         /// <summary>Servicing at the depot: wear comes off over time. Returns the cost of this step.</summary>
-        internal double Service(double seconds)
+        internal double Service(double seconds, GameTuning t = null)
         {
+            t ??= GameTuning.Default;
             if (Broken || Wear <= 0) return 0;
-            float relief = Math.Min(Wear, (float)(ServicePerSecond * seconds));
+            float relief = Math.Min(Wear, (float)(t[Tune.ServicePerSecond] * seconds));
             Wear -= relief;
-            return relief * ServiceCostPerWear;
+            return relief * t[Tune.ServiceCostPerWear];
         }
     }
 }

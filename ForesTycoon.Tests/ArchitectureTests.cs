@@ -22,6 +22,15 @@ public class ArchitectureTests
         Assert.Equal(new[] { "OpenTK.Mathematics" }, References(Engine).OrderBy(n => n));
 
     [Fact]
+    public void RuleRuntimeIsIndependentAndTheGameNeverReferencesTheEditor()
+    {
+        Assert.Empty(References(typeof(ForesTycoon.Rules.CompiledRoadRule).Assembly));
+        Assert.Contains("ForesTycoon.Rules", References(Game));
+        Assert.DoesNotContain("ForesTycoon.Editor", References(Game));
+        Assert.DoesNotContain(Game.GetTypes(), t => t.Name == "RuleEditorView");
+    }
+
+    [Fact]
     public void EcologyDependsOnlyOnTheEngine() =>
         Assert.Equal(new[] { "ForesTycoon.Engine", "OpenTK.Mathematics" }, References(Ecology).OrderBy(n => n));
 

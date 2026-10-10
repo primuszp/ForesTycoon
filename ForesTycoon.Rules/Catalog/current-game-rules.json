@@ -1,0 +1,3897 @@
+{
+  "schema": "forest-current-rules",
+  "version": 1,
+  "name": "ForesTycoon jelenlegi szab\u00E1lyrendszere",
+  "rules": [
+    {
+      "id": "time.world",
+      "name": "Szimul\u00E1ci\u00F3s \u00F3r\u00E1k \u00E9s sorrend",
+      "module": "Id\u0151 \u00E9s vez\u00E9rl\u00E9s",
+      "scope": "Vil\u00E1g",
+      "schedule": "Fix vil\u00E1gl\u00E9p\u00E9s",
+      "execution": "NativeCode",
+      "description": "\u00D6kosziszt\u00E9ma, logisztika, \u00FAt\u00F6reged\u00E9s, vadak, majd a regisztr\u00E1lt rendszerek. A j\u00E1rm\u0171vek k\u00FCl\u00F6n, gyorsabb \u00F3r\u00E1t kapnak.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "commands"
+      ],
+      "writes": [
+        "calendar.time",
+        "vehicle.time"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/GameWorld.cs",
+          "symbol": "VehicleTimeScale"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "Erd\u0151\u00E9v",
+          "value": 900,
+          "unit": "j\u00E1t\u00E9k-s",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "J\u00E1rm\u0171id\u0151 szorz\u00F3",
+          "value": 4,
+          "unit": "\u00D7",
+          "key": "VehicleTimeScale",
+          "min": 1,
+          "max": 20,
+          "default": 4
+        }
+      ],
+      "x": 25,
+      "y": 30
+    },
+    {
+      "id": "time.ecology",
+      "name": "\u00D6kol\u00F3giai t\u00F6bb\u00FCtem\u0171 futtat\u00E1s",
+      "module": "Id\u0151 \u00E9s vez\u00E9rl\u00E9s",
+      "scope": "Vil\u00E1g / h\u00F3naphat\u00E1r",
+      "schedule": "0,5 s; havi hat\u00E1rra bontva",
+      "execution": "NativeCode",
+      "description": "El\u0151k\u00E9sz\u00EDt\u00E9s \u2192 v\u00EDz \u00E9s id\u0151j\u00E1r\u00E1s \u2192 havi n\u00F6v\u00E9nyzet \u2192 havi integr\u00E1lok t\u00F6rl\u00E9se. A sorrend befoly\u00E1solja az eredm\u00E9nyt.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "calendar.time",
+        "forest.trees",
+        "water.root"
+      ],
+      "writes": [
+        "ecology.steps",
+        "forest.month"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Ecology/Water/ForestEnvironmentCoordinator.cs",
+          "symbol": "ForestEnvironmentCoordinator"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "Alapl\u00E9p\u00E9s",
+          "value": 0.5,
+          "unit": "j\u00E1t\u00E9k-s",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        }
+      ],
+      "x": 270,
+      "y": 30
+    },
+    {
+      "id": "commands.apply",
+      "name": "J\u00E1t\u00E9kosparancsok",
+      "module": "Id\u0151 \u00E9s vez\u00E9rl\u00E9s",
+      "scope": "Vil\u00E1g \u00E9s kijel\u00F6lt objektum",
+      "schedule": "Parancssor v\u00E9grehajt\u00E1sakor",
+      "execution": "NativeCode",
+      "description": "\u00C9p\u00EDt\u00E9s, bont\u00E1s, jav\u00EDt\u00E1s, \u00FCltet\u00E9s, kitermel\u00E9s kijel\u00F6l\u00E9se, j\u00E1rm\u0171utas\u00EDt\u00E1s \u00E9s id\u0151j\u00E1r\u00E1si beavatkoz\u00E1s napl\u00F3zhat\u00F3 parancs.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "player.input"
+      ],
+      "writes": [
+        "commands"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/Commands/WorldCommandQueue.cs",
+          "symbol": "ExecutePending"
+        }
+      ],
+      "parameters": [],
+      "x": 515,
+      "y": 30
+    },
+    {
+      "id": "save.restore",
+      "name": "Checkpoint \u00E9s visszaj\u00E1tsz\u00E1s",
+      "module": "Id\u0151 \u00E9s vez\u00E9rl\u00E9s",
+      "scope": "Vil\u00E1g",
+      "schedule": "Ment\u00E9s / bet\u00F6lt\u00E9s",
+      "execution": "NativeCode",
+      "description": "Akt\u00EDv szab\u00E1lymodell, talaj \u00E9s kl\u00EDma, k\u00E9szletek, egyedek, v\u00E9letlengener\u00E1torok \u00E9s f\u00FCgg\u0151 parancsok meg\u0151rz\u00E9se; hib\u00E1n\u00E1l izol\u00E1lt bet\u00F6lt\u00E9s.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "commands",
+        "calendar.time",
+        "forest.trees",
+        "water.root",
+        "road.condition",
+        "vehicle.cargo",
+        "economy.income"
+      ],
+      "writes": [
+        "save.snapshot"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/GameWorld.cs",
+          "symbol": "Load"
+        }
+      ],
+      "parameters": [],
+      "x": 25,
+      "y": 160
+    },
+    {
+      "id": "terrain.generate",
+      "name": "Terep \u00E9s v\u00EDzmedenc\u00E9k",
+      "module": "Terep",
+      "scope": "Node-r\u00E1cs / t\u00E9rk\u00E9pcella",
+      "schedule": "\u00DAj vil\u00E1g",
+      "execution": "NativeCode",
+      "description": "Seedb\u0151l indul\u00F3 domborzat \u00E9s hidrol\u00F3gia. A t\u00E9rk\u00E9pi nedvess\u00E9g nem azonos az \u00F6kol\u00F3giai gy\u00F6k\u00E9rz\u00F3nav\u00EDz-k\u00E9szlettel.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "world.seed",
+        "terrain.settings"
+      ],
+      "writes": [
+        "terrain.height",
+        "terrain.moisture",
+        "terrain.water"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Map/Generation/TerrainGenerator.cs",
+          "symbol": "TerrainGenerator"
+        }
+      ],
+      "parameters": [],
+      "x": 25,
+      "y": 30
+    },
+    {
+      "id": "terrain.hydrology",
+      "name": "Foly\u00F3k, medenc\u00E9k \u00E9s kifoly\u00F3k",
+      "module": "Terep",
+      "scope": "T\u00E9rk\u00E9pr\u00E1cs",
+      "schedule": "Gener\u00E1l\u00E1s / terepv\u00E1ltoz\u00E1s",
+      "execution": "NativeCode",
+      "description": "Terepb\u0151l sz\u00E1rmaz\u00F3 \u00E1ll\u00F3v\u00EDz, foly\u00F3k, nedvess\u00E9g \u00E9s a k\u00F6rnyezeti lefoly\u00E1s hat\u00E1rfelt\u00E9telei.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "terrain.height"
+      ],
+      "writes": [
+        "terrain.moisture",
+        "terrain.water",
+        "terrain.outlets"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Map/Generation/Hydrology.cs",
+          "symbol": "Hydrology"
+        }
+      ],
+      "parameters": [],
+      "x": 270,
+      "y": 30
+    },
+    {
+      "id": "terrain.edit",
+      "name": "Helyi terepszerkeszt\u00E9s",
+      "module": "Terep",
+      "scope": "\u00C9rintett node-ok \u00E9s cell\u00E1k",
+      "schedule": "J\u00E1t\u00E9kosparancs",
+      "execution": "NativeCode",
+      "description": "Csak t\u00E9nylegesen megv\u00E1ltozott cell\u00E1k n\u00F6v\u00E9nyzete v\u00E9sz el, kitermelt k\u00E9szlet n\u00E9lk\u00FCl. \u00DAt- \u00E9s \u00E9p\u00FCletmagass\u00E1g v\u00E9dett; a t\u00F6bbi erd\u0151 \u00E9s a szimul\u00E1ci\u00F3s id\u0151 megmarad.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "commands",
+        "terrain.height",
+        "buildings.footprint",
+        "road.network"
+      ],
+      "writes": [
+        "terrain.height",
+        "forest.trees",
+        "water.routing"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/GameWorld.cs",
+          "symbol": "ExecuteElevationEdit"
+        }
+      ],
+      "parameters": [],
+      "x": 515,
+      "y": 30
+    },
+    {
+      "id": "soil.catalog",
+      "name": "Talajprofilok \u00E9s term\u0151hely",
+      "module": "Talaj \u00E9s kl\u00EDma",
+      "scope": "T\u00E9rk\u00E9pcella",
+      "schedule": "\u00DAj vil\u00E1g",
+      "execution": "NativeCode",
+      "description": "T\u00E9rben \u00F6sszef\u00FCgg\u0151, seedelt talajprofilok; tel\u00EDtetts\u00E9g, szabadf\u00F6ldi v\u00EDzkapacit\u00E1s, hervad\u00E1spont, besziv\u00E1rg\u00E1s, dr\u00E9nez\u00E9s \u00E9s term\u00E9kenys\u00E9g.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "world.seed",
+        "terrain.height",
+        "terrain.moisture"
+      ],
+      "writes": [
+        "soil.profile",
+        "soil.fertility"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Ecology/Soil/SoilLandscape.cs",
+          "symbol": "SoilLandscape"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "Homokos talaj: tel\u00EDt\u00E9si k\u00E9szlet",
+          "value": 100,
+          "unit": "mm",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Homokos talaj: szabadf\u00F6ldi v\u00EDzkapacit\u00E1s",
+          "value": 55,
+          "unit": "mm",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Homokos talaj: hervad\u00E1spont",
+          "value": 10,
+          "unit": "mm",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Homokos talaj: besziv\u00E1rg\u00E1s",
+          "value": 28,
+          "unit": "mm/k\u00F6rnyezeti \u00F3ra",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Homokos talaj: dr\u00E9nez\u00E9s",
+          "value": 7,
+          "unit": "mm/k\u00F6rnyezeti \u00F3ra",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Homokos talaj: term\u00E9kenys\u00E9g",
+          "value": 0.6499999761581421,
+          "unit": "1",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "V\u00E1lyogtalaj: tel\u00EDt\u00E9si k\u00E9szlet",
+          "value": 180,
+          "unit": "mm",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "V\u00E1lyogtalaj: szabadf\u00F6ldi v\u00EDzkapacit\u00E1s",
+          "value": 130,
+          "unit": "mm",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "V\u00E1lyogtalaj: hervad\u00E1spont",
+          "value": 25,
+          "unit": "mm",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "V\u00E1lyogtalaj: besziv\u00E1rg\u00E1s",
+          "value": 12,
+          "unit": "mm/k\u00F6rnyezeti \u00F3ra",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "V\u00E1lyogtalaj: dr\u00E9nez\u00E9s",
+          "value": 2,
+          "unit": "mm/k\u00F6rnyezeti \u00F3ra",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "V\u00E1lyogtalaj: term\u00E9kenys\u00E9g",
+          "value": 1,
+          "unit": "1",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Agyagos talaj: tel\u00EDt\u00E9si k\u00E9szlet",
+          "value": 240,
+          "unit": "mm",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Agyagos talaj: szabadf\u00F6ldi v\u00EDzkapacit\u00E1s",
+          "value": 180,
+          "unit": "mm",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Agyagos talaj: hervad\u00E1spont",
+          "value": 70,
+          "unit": "mm",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Agyagos talaj: besziv\u00E1rg\u00E1s",
+          "value": 4,
+          "unit": "mm/k\u00F6rnyezeti \u00F3ra",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Agyagos talaj: dr\u00E9nez\u00E9s",
+          "value": 0.5,
+          "unit": "mm/k\u00F6rnyezeti \u00F3ra",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Agyagos talaj: term\u00E9kenys\u00E9g",
+          "value": 0.8500000238418579,
+          "unit": "1",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Szerves, nedves talaj: tel\u00EDt\u00E9si k\u00E9szlet",
+          "value": 320,
+          "unit": "mm",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Szerves, nedves talaj: szabadf\u00F6ldi v\u00EDzkapacit\u00E1s",
+          "value": 220,
+          "unit": "mm",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Szerves, nedves talaj: hervad\u00E1spont",
+          "value": 40,
+          "unit": "mm",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Szerves, nedves talaj: besziv\u00E1rg\u00E1s",
+          "value": 8,
+          "unit": "mm/k\u00F6rnyezeti \u00F3ra",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Szerves, nedves talaj: dr\u00E9nez\u00E9s",
+          "value": 0.3,
+          "unit": "mm/k\u00F6rnyezeti \u00F3ra",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Szerves, nedves talaj: term\u00E9kenys\u00E9g",
+          "value": 0.800000011920929,
+          "unit": "1",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        }
+      ],
+      "x": 25,
+      "y": 30
+    },
+    {
+      "id": "climate.regional",
+      "name": "Region\u00E1lis kl\u00EDma",
+      "module": "Talaj \u00E9s kl\u00EDma",
+      "scope": "T\u00E9rk\u00E9pcella",
+      "schedule": "Indul\u00F3 mez\u0151k \u002B minden k\u00F6rnyezeti l\u00E9p\u00E9s",
+      "execution": "NativeCode",
+      "description": "Sim\u00EDtott region\u00E1lis h\u0151m\u00E9rs\u00E9klet-, p\u00E1ratartalom- \u00E9s es\u0151elt\u00E9r\u00E9sek. Magass\u00E1g \u00E9l\u0151ben h\u0171ti a helyi leveg\u0151t; terraform nem gener\u00E1l \u00FAj kl\u00EDmamagot.",
+      "formula": "T_helyi = T \u002B elt\u00E9r\u00E9s - normaliz\u00E1lt_magass\u00E1g \u00D7 h\u0171t\u00E9s",
+      "notes": "",
+      "reads": [
+        "world.seed",
+        "terrain.height",
+        "weather.forcing"
+      ],
+      "writes": [
+        "climate.local",
+        "climate.rainMultiplier"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Ecology/Climate/RegionalClimate.cs",
+          "symbol": "Cell"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "R\u00E9gi\u00F3m\u00E9ret",
+          "value": 24,
+          "unit": "csempe",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "H\u0151m\u00E9rs\u00E9kleti kontraszt",
+          "value": 4,
+          "unit": "\u00B0C",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Csapad\u00E9kkontraszt",
+          "value": 0.35,
+          "unit": "1",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Magass\u00E1gi h\u0171t\u00E9s",
+          "value": 6.5,
+          "unit": "\u00B0C",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "P\u00E1ratartalom-kontraszt",
+          "value": 0.1,
+          "unit": "1",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        }
+      ],
+      "x": 270,
+      "y": 30
+    },
+    {
+      "id": "weather.events",
+      "name": "Seedelt id\u0151j\u00E1r\u00E1si esem\u00E9nyek",
+      "module": "Talaj \u00E9s kl\u00EDma",
+      "scope": "Vil\u00E1g",
+      "schedule": "Esem\u00E9nyhat\u00E1rok \u00E9s k\u00F6rnyezeti l\u00E9p\u00E9s",
+      "execution": "NativeCode",
+      "description": "Napos, borult, es\u0151 \u00E9s vihar \u00E1llapotok; seedelt \u00E1tmenetek, szezon\u00E1lis h\u0151m\u00E9rs\u00E9klet, felh\u0151zet, p\u00E1ratartalom \u00E9s sz\u00E9l. A csapad\u00E9k r\u00E1mp\u00E1inak integr\u00E1l\u00E1sa pontos.",
+      "formula": "T = 12 \u002B 9 \u00D7 sin(2\u03C0 \u00D7 id\u0151 / erd\u0151\u00E9v); sug\u00E1rz\u00E1s = 1 - 0,75 \u00D7 felh\u0151zet",
+      "notes": "",
+      "reads": [
+        "world.seed",
+        "calendar.time",
+        "commands"
+      ],
+      "writes": [
+        "weather.rain",
+        "weather.forcing"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Ecology/Climate/WeatherSystem.cs",
+          "symbol": "NextEvent"
+        }
+      ],
+      "parameters": [],
+      "x": 515,
+      "y": 30
+    },
+    {
+      "id": "weather.evaporation",
+      "name": "L\u00E9gk\u00F6ri p\u00E1rologtat\u00F3 ig\u00E9ny",
+      "module": "Talaj \u00E9s kl\u00EDma",
+      "scope": "T\u00E9rk\u00E9pcella",
+      "schedule": "K\u00F6rnyezeti l\u00E9p\u00E9s",
+      "execution": "NativeCode",
+      "description": "A talajp\u00E1rolg\u00E1s \u00E9s a n\u00F6v\u00E9nyzeti v\u00EDzig\u00E9ny ugyanabb\u00F3l a helyi l\u00E9gk\u00F6ri k\u00E9nyszerb\u0151l sz\u00E1rmazik.",
+      "formula": "E = (0,12 \u002B max(0,T) \u00D7 0,015) \u00D7 sug\u00E1rz\u00E1s \u00D7 (1 - 0,5 \u00D7 p\u00E1ra) \u00D7 (1 \u002B 0,035 \u00D7 sz\u00E9l)",
+      "notes": "",
+      "reads": [
+        "climate.local",
+        "weather.forcing"
+      ],
+      "writes": [
+        "water.potential"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Ecology/Climate/WeatherSystem.cs",
+          "symbol": "PotentialEvaporationPerHour"
+        }
+      ],
+      "parameters": [],
+      "x": 25,
+      "y": 160
+    },
+    {
+      "id": "water.interception",
+      "name": "Csapad\u00E9k \u00E9s lombkorona-v\u00EDz",
+      "module": "V\u00EDzh\u00E1ztart\u00E1s",
+      "scope": "T\u00E9rk\u00E9pcella",
+      "schedule": "K\u00F6rnyezeti l\u00E9p\u00E9s",
+      "execution": "NativeCode",
+      "description": "A lombkorona kapacit\u00E1s\u00E1ig felfogja az es\u0151t, a t\u00F6bbi a felsz\u00EDnre jut. Koronaveszt\u00E9skor a t\u00F6bblet lecsepeg, a v\u00EDzm\u00E9rleg megmarad.",
+      "formula": "felfog\u00E1s = min(es\u0151, max(0, kapacit\u00E1s - lombv\u00EDz))",
+      "notes": "",
+      "reads": [
+        "weather.rain",
+        "climate.rainMultiplier",
+        "forest.canopy",
+        "water.canopy"
+      ],
+      "writes": [
+        "water.canopy",
+        "water.surface"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Ecology/Water/EnvironmentSystem.cs",
+          "symbol": "WaterStep"
+        }
+      ],
+      "parameters": [],
+      "x": 25,
+      "y": 30
+    },
+    {
+      "id": "water.infiltration",
+      "name": "Besziv\u00E1rg\u00E1s",
+      "module": "V\u00EDzh\u00E1ztart\u00E1s",
+      "scope": "T\u00E9rk\u00E9pcella",
+      "schedule": "K\u00F6rnyezeti l\u00E9p\u00E9s",
+      "execution": "NativeCode",
+      "description": "A felsz\u00EDni v\u00EDz a talaj szabad kapacit\u00E1s\u00E1ig sziv\u00E1rog. A burkolt felsz\u00EDnek besziv\u00E1rg\u00E1sa 0,5 mm/k\u00F6rnyezeti \u00F3ra.",
+      "formula": "I = min(felsz\u00EDni v\u00EDz, besziv\u00E1rg\u00E1si r\u00E1ta \u00D7 id\u0151, tel\u00EDt\u00E9si k\u00E9szlet - gy\u00F6k\u00E9rz\u00F3nav\u00EDz)",
+      "notes": "",
+      "reads": [
+        "water.surface",
+        "water.root",
+        "soil.profile",
+        "road.network",
+        "buildings.footprint"
+      ],
+      "writes": [
+        "water.surface",
+        "water.root"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Ecology/Water/EnvironmentSystem.cs",
+          "symbol": "infiltration"
+        }
+      ],
+      "parameters": [],
+      "x": 270,
+      "y": 30
+    },
+    {
+      "id": "water.evaporation",
+      "name": "Lomb-, felsz\u00EDn- \u00E9s talajp\u00E1rolg\u00E1s",
+      "module": "V\u00EDzh\u00E1ztart\u00E1s",
+      "scope": "T\u00E9rk\u00E9pcella",
+      "schedule": "K\u00F6rnyezeti l\u00E9p\u00E9s",
+      "execution": "NativeCode",
+      "description": "A p\u00E1rolg\u00E1si keret sorrendben a lombv\u00EDzb\u0151l, felsz\u00EDni v\u00EDzb\u0151l \u00E9s a hervad\u00E1spont feletti talajv\u00EDzb\u0151l fogy. A lombbor\u00EDt\u00E1s m\u00E9rs\u00E9kli a talajp\u00E1rolg\u00E1st.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "water.potential",
+        "water.canopy",
+        "water.surface",
+        "water.root",
+        "soil.profile",
+        "forest.canopy"
+      ],
+      "writes": [
+        "water.canopy",
+        "water.surface",
+        "water.root",
+        "water.evaporated"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Ecology/Water/EnvironmentSystem.cs",
+          "symbol": "Evaporated"
+        }
+      ],
+      "parameters": [],
+      "x": 515,
+      "y": 30
+    },
+    {
+      "id": "water.uptake",
+      "name": "Gy\u00F6k\u00E9rv\u00EDz felv\u00E9tele \u00E9s ig\u00E9nyeloszt\u00E1s",
+      "module": "V\u00EDzh\u00E1ztart\u00E1s",
+      "scope": "Cell\u00E1n bel\u00FCli \u00E9l\u0151 f\u00E1k",
+      "schedule": "K\u00F6rnyezeti l\u00E9p\u00E9s",
+      "execution": "NativeCode",
+      "description": "A lev\u00E9lfel\u00FClet ar\u00E1ny\u00E1ban k\u00E9r vizet; minden fa ugyanazt a teljes\u00EDtett ig\u00E9nyh\u00E1nyadot kapja. Burkolt felsz\u00EDnen nincs n\u00F6v\u00E9nyzeti ig\u00E9ny.",
+      "formula": "ig\u00E9ny = E \u00D7 LAI \u00D7 0,8; felv\u00E9tel = min(el\u00E9rhet\u0151 v\u00EDz, ig\u00E9ny \u00D7 talajv\u00EDz-ell\u00E1totts\u00E1g)",
+      "notes": "",
+      "reads": [
+        "water.potential",
+        "water.root",
+        "soil.profile",
+        "forest.canopy",
+        "road.network",
+        "buildings.footprint"
+      ],
+      "writes": [
+        "water.root",
+        "water.transpired",
+        "water.monthBudget"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Ecology/Water/EnvironmentSystem.cs",
+          "symbol": "uptake"
+        }
+      ],
+      "parameters": [],
+      "x": 25,
+      "y": 160
+    },
+    {
+      "id": "water.drainage",
+      "name": "M\u00E9lyv\u00EDz \u00E9s alaplefoly\u00E1s",
+      "module": "V\u00EDzh\u00E1ztart\u00E1s",
+      "scope": "T\u00E9rk\u00E9pcella",
+      "schedule": "K\u00F6rnyezeti l\u00E9p\u00E9s",
+      "execution": "NativeCode",
+      "description": "Szabadf\u00F6ldi v\u00EDzkapacit\u00E1s felett a dr\u00E9nez\u00E9si r\u00E1ta szerint m\u00E9lyv\u00EDzbe jut a v\u00EDz; a m\u00E9lyv\u00EDzb\u0151l 0,15 mm/k\u00F6rnyezeti \u00F3ra t\u00E1vozik.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "water.root",
+        "water.deep",
+        "soil.profile"
+      ],
+      "writes": [
+        "water.root",
+        "water.deep",
+        "water.outflow"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Ecology/Water/EnvironmentSystem.cs",
+          "symbol": "drainage"
+        }
+      ],
+      "parameters": [],
+      "x": 270,
+      "y": 160
+    },
+    {
+      "id": "water.runoff",
+      "name": "T\u00E9rbeli felsz\u00EDni lefoly\u00E1s",
+      "module": "V\u00EDzh\u00E1ztart\u00E1s",
+      "scope": "Szomsz\u00E9dos cell\u00E1k \u00E9s kifoly\u00F3k",
+      "schedule": "K\u00F6rnyezeti l\u00E9p\u00E9s",
+      "execution": "NativeCode",
+      "description": "Cell\u00E1nk\u00E9nt egy lejt\u0151ir\u00E1ny\u00FA fluxus. Bej\u00F6v\u0151 v\u00EDz egy\u00FCtt ker\u00FCl publik\u00E1l\u00E1sra, egy l\u00E9p\u00E9sben nem folyhat \u00E1t t\u00F6bb cell\u00E1n. K\u00FCls\u0151 vesztes\u00E9g csak kifoly\u00F3n.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "water.surface",
+        "water.routing",
+        "terrain.height",
+        "terrain.outlets"
+      ],
+      "writes": [
+        "water.surface",
+        "water.outflow"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Ecology/Water/SurfaceWaterFlux.cs",
+          "symbol": "Schedule"
+        }
+      ],
+      "parameters": [],
+      "x": 515,
+      "y": 160
+    },
+    {
+      "id": "water.stress",
+      "name": "Asz\u00E1ly, v\u00EDzt\u00F6bblet \u00E9s havi v\u00EDzv\u00E1lasz",
+      "module": "V\u00EDzh\u00E1ztart\u00E1s",
+      "scope": "Cell\u00E1nk\u00E9nt / fafajonk\u00E9nt",
+      "schedule": "K\u00F6rnyezeti l\u00E9p\u00E9s \u002B erd\u0151h\u00F3nap",
+      "execution": "NativeCode",
+      "description": "Sim\u00EDtott sz\u00E1razs\u00E1g \u00E9s v\u00EDzt\u00F6bblet; a havi ig\u00E9ny/felv\u00E9tel integr\u00E1lja adja a n\u00F6veked\u00E9si v\u00EDzell\u00E1t\u00E1st. Fafajf\u00FCgg\u0151 sz\u00E1razs\u00E1g\u00E9rz\u00E9kenys\u00E9g.",
+      "formula": "v\u00EDzv\u00E1lasz = clamp(ell\u00E1totts\u00E1g ^ sz\u00E1razs\u00E1g\u00E9rz\u00E9kenys\u00E9g \u00D7 (1 - v\u00EDzt\u00F6bblet \u00D7 0,65), 0, 1)",
+      "notes": "",
+      "reads": [
+        "water.root",
+        "water.monthBudget",
+        "soil.profile",
+        "forest.species"
+      ],
+      "writes": [
+        "water.growthFactor"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Ecology/Water/EnvironmentSystem.cs",
+          "symbol": "WaterResponse"
+        }
+      ],
+      "parameters": [],
+      "x": 25,
+      "y": 290
+    },
+    {
+      "id": "water.balance",
+      "name": "V\u00EDzm\u00E9rleg \u00E9s havi integr\u00E1lz\u00E1r\u00E1s",
+      "module": "V\u00EDzh\u00E1ztart\u00E1s",
+      "scope": "Vil\u00E1g / cella",
+      "schedule": "\u00D6sszegz\u00E9s; h\u00F3napz\u00E1r\u00E1s",
+      "execution": "NativeCode",
+      "description": "A havi n\u00F6v\u00E9nyzetfriss\u00EDt\u00E9s ut\u00E1n t\u00F6rl\u0151dnek a felv\u00E9teli, ig\u00E9ny- \u00E9s sug\u00E1rz\u00E1si integr\u00E1lok; a v\u00EDzk\u00E9szletek megmaradnak.",
+      "formula": "m\u00E9rleghiba = t\u00E1rolt v\u00EDz - (indul\u00F3 v\u00EDz \u002B es\u0151 - p\u00E1rolg\u00E1s - transzspir\u00E1ci\u00F3 - kifoly\u00E1s)",
+      "notes": "",
+      "reads": [
+        "water.canopy",
+        "water.surface",
+        "water.root",
+        "water.deep",
+        "weather.rain",
+        "water.evaporated",
+        "water.transpired",
+        "water.outflow",
+        "forest.month"
+      ],
+      "writes": [
+        "water.balance",
+        "water.monthBudget"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Ecology/Water/EnvironmentSystem.cs",
+          "symbol": "BalanceError"
+        }
+      ],
+      "parameters": [],
+      "x": 270,
+      "y": 290
+    },
+    {
+      "id": "forest.species",
+      "name": "Fafajkatal\u00F3gus",
+      "module": "Erd\u0151",
+      "scope": "Fafaj",
+      "schedule": "\u00DAj vil\u00E1g / fajlek\u00E9rdez\u00E9s",
+      "execution": "NativeCode",
+      "description": "Fajonk\u00E9nt m\u00E9retek, koronaar\u00E1ny, n\u00F6veked\u00E9si r\u00E1ta, kapacit\u00E1s, sz\u00E1razs\u00E1g\u00E9rz\u00E9kenys\u00E9g, \u00E1rny\u00E9kt\u0171r\u00E9s, \u00E9letkor \u00E9s modellpreset. F\u00E1k \u00E9s cserj\u00E9k is szerepelnek.",
+      "formula": "",
+      "notes": "",
+      "reads": [],
+      "writes": [
+        "forest.species"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Ecology/Species/ForestSpeciesCatalog.cs",
+          "symbol": "Playable"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "Lucfeny\u0151: magass\u00E1gi plafon",
+          "value": 40,
+          "unit": "m",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Lucfeny\u0151: radi\u00E1lis r\u00E1ta",
+          "value": 0.004999999888241291,
+          "unit": "m/n\u00F6veked\u00E9si egys\u00E9g",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Lucfeny\u0151: \u00E9rett kor",
+          "value": 30,
+          "unit": "erd\u0151\u00E9v",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Lucfeny\u0151: maxim\u00E1lis kor",
+          "value": 190,
+          "unit": "erd\u0151\u00E9v",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Lucfeny\u0151: sz\u00E1razs\u00E1g\u00E9rz\u00E9kenys\u00E9g",
+          "value": 1,
+          "unit": "1",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Lucfeny\u0151: faanyag\u00E1r",
+          "value": 32,
+          "unit": "eFt/m\u00B3",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Ny\u00EDr: magass\u00E1gi plafon",
+          "value": 28,
+          "unit": "m",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Ny\u00EDr: radi\u00E1lis r\u00E1ta",
+          "value": 0.005499999970197678,
+          "unit": "m/n\u00F6veked\u00E9si egys\u00E9g",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Ny\u00EDr: \u00E9rett kor",
+          "value": 15,
+          "unit": "erd\u0151\u00E9v",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Ny\u00EDr: maxim\u00E1lis kor",
+          "value": 90,
+          "unit": "erd\u0151\u00E9v",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Ny\u00EDr: sz\u00E1razs\u00E1g\u00E9rz\u00E9kenys\u00E9g",
+          "value": 0.8500000238418579,
+          "unit": "1",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Ny\u00EDr: faanyag\u00E1r",
+          "value": 22,
+          "unit": "eFt/m\u00B3",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "T\u00F6lgy: magass\u00E1gi plafon",
+          "value": 35,
+          "unit": "m",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "T\u00F6lgy: radi\u00E1lis r\u00E1ta",
+          "value": 0.0044999998062849045,
+          "unit": "m/n\u00F6veked\u00E9si egys\u00E9g",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "T\u00F6lgy: \u00E9rett kor",
+          "value": 45,
+          "unit": "erd\u0151\u00E9v",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "T\u00F6lgy: maxim\u00E1lis kor",
+          "value": 320,
+          "unit": "erd\u0151\u00E9v",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "T\u00F6lgy: sz\u00E1razs\u00E1g\u00E9rz\u00E9kenys\u00E9g",
+          "value": 0.6000000238418579,
+          "unit": "1",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "T\u00F6lgy: faanyag\u00E1r",
+          "value": 55,
+          "unit": "eFt/m\u00B3",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "B\u00FCkk: magass\u00E1gi plafon",
+          "value": 38,
+          "unit": "m",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "B\u00FCkk: radi\u00E1lis r\u00E1ta",
+          "value": 0.004999999888241291,
+          "unit": "m/n\u00F6veked\u00E9si egys\u00E9g",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "B\u00FCkk: \u00E9rett kor",
+          "value": 40,
+          "unit": "erd\u0151\u00E9v",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "B\u00FCkk: maxim\u00E1lis kor",
+          "value": 240,
+          "unit": "erd\u0151\u00E9v",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "B\u00FCkk: sz\u00E1razs\u00E1g\u00E9rz\u00E9kenys\u00E9g",
+          "value": 0.8500000238418579,
+          "unit": "1",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "B\u00FCkk: faanyag\u00E1r",
+          "value": 35,
+          "unit": "eFt/m\u00B3",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Hegyi juhar: magass\u00E1gi plafon",
+          "value": 36,
+          "unit": "m",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Hegyi juhar: radi\u00E1lis r\u00E1ta",
+          "value": 0.004999999888241291,
+          "unit": "m/n\u00F6veked\u00E9si egys\u00E9g",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Hegyi juhar: \u00E9rett kor",
+          "value": 35,
+          "unit": "erd\u0151\u00E9v",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Hegyi juhar: maxim\u00E1lis kor",
+          "value": 250,
+          "unit": "erd\u0151\u00E9v",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Hegyi juhar: sz\u00E1razs\u00E1g\u00E9rz\u00E9kenys\u00E9g",
+          "value": 0.8500000238418579,
+          "unit": "1",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Hegyi juhar: faanyag\u00E1r",
+          "value": 38,
+          "unit": "eFt/m\u00B3",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Magas k\u0151ris: magass\u00E1gi plafon",
+          "value": 38,
+          "unit": "m",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Magas k\u0151ris: radi\u00E1lis r\u00E1ta",
+          "value": 0.004999999888241291,
+          "unit": "m/n\u00F6veked\u00E9si egys\u00E9g",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Magas k\u0151ris: \u00E9rett kor",
+          "value": 35,
+          "unit": "erd\u0151\u00E9v",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Magas k\u0151ris: maxim\u00E1lis kor",
+          "value": 250,
+          "unit": "erd\u0151\u00E9v",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Magas k\u0151ris: sz\u00E1razs\u00E1g\u00E9rz\u00E9kenys\u00E9g",
+          "value": 0.8500000238418579,
+          "unit": "1",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Magas k\u0151ris: faanyag\u00E1r",
+          "value": 40,
+          "unit": "eFt/m\u00B3",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Kocs\u00E1nytalan t\u00F6lgy: magass\u00E1gi plafon",
+          "value": 36,
+          "unit": "m",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Kocs\u00E1nytalan t\u00F6lgy: radi\u00E1lis r\u00E1ta",
+          "value": 0.0044999998062849045,
+          "unit": "m/n\u00F6veked\u00E9si egys\u00E9g",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Kocs\u00E1nytalan t\u00F6lgy: \u00E9rett kor",
+          "value": 50,
+          "unit": "erd\u0151\u00E9v",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Kocs\u00E1nytalan t\u00F6lgy: maxim\u00E1lis kor",
+          "value": 400,
+          "unit": "erd\u0151\u00E9v",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Kocs\u00E1nytalan t\u00F6lgy: sz\u00E1razs\u00E1g\u00E9rz\u00E9kenys\u00E9g",
+          "value": 0.6000000238418579,
+          "unit": "1",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Kocs\u00E1nytalan t\u00F6lgy: faanyag\u00E1r",
+          "value": 50,
+          "unit": "eFt/m\u00B3",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Csert\u00F6lgy: magass\u00E1gi plafon",
+          "value": 32,
+          "unit": "m",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Csert\u00F6lgy: radi\u00E1lis r\u00E1ta",
+          "value": 0.004999999888241291,
+          "unit": "m/n\u00F6veked\u00E9si egys\u00E9g",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Csert\u00F6lgy: \u00E9rett kor",
+          "value": 35,
+          "unit": "erd\u0151\u00E9v",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Csert\u00F6lgy: maxim\u00E1lis kor",
+          "value": 200,
+          "unit": "erd\u0151\u00E9v",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Csert\u00F6lgy: sz\u00E1razs\u00E1g\u00E9rz\u00E9kenys\u00E9g",
+          "value": 0.6000000238418579,
+          "unit": "1",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Csert\u00F6lgy: faanyag\u00E1r",
+          "value": 28,
+          "unit": "eFt/m\u00B3",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Erdeifeny\u0151: magass\u00E1gi plafon",
+          "value": 34,
+          "unit": "m",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Erdeifeny\u0151: radi\u00E1lis r\u00E1ta",
+          "value": 0.0044999998062849045,
+          "unit": "m/n\u00F6veked\u00E9si egys\u00E9g",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Erdeifeny\u0151: \u00E9rett kor",
+          "value": 30,
+          "unit": "erd\u0151\u00E9v",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Erdeifeny\u0151: maxim\u00E1lis kor",
+          "value": 300,
+          "unit": "erd\u0151\u00E9v",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Erdeifeny\u0151: sz\u00E1razs\u00E1g\u00E9rz\u00E9kenys\u00E9g",
+          "value": 0.5,
+          "unit": "1",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Erdeifeny\u0151: faanyag\u00E1r",
+          "value": 28,
+          "unit": "eFt/m\u00B3",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "V\u00F6r\u00F6sfeny\u0151: magass\u00E1gi plafon",
+          "value": 42,
+          "unit": "m",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "V\u00F6r\u00F6sfeny\u0151: radi\u00E1lis r\u00E1ta",
+          "value": 0.004999999888241291,
+          "unit": "m/n\u00F6veked\u00E9si egys\u00E9g",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "V\u00F6r\u00F6sfeny\u0151: \u00E9rett kor",
+          "value": 35,
+          "unit": "erd\u0151\u00E9v",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "V\u00F6r\u00F6sfeny\u0151: maxim\u00E1lis kor",
+          "value": 300,
+          "unit": "erd\u0151\u00E9v",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "V\u00F6r\u00F6sfeny\u0151: sz\u00E1razs\u00E1g\u00E9rz\u00E9kenys\u00E9g",
+          "value": 0.8500000238418579,
+          "unit": "1",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "V\u00F6r\u00F6sfeny\u0151: faanyag\u00E1r",
+          "value": 34,
+          "unit": "eFt/m\u00B3",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Jegenyefeny\u0151: magass\u00E1gi plafon",
+          "value": 48,
+          "unit": "m",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Jegenyefeny\u0151: radi\u00E1lis r\u00E1ta",
+          "value": 0.005499999970197678,
+          "unit": "m/n\u00F6veked\u00E9si egys\u00E9g",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Jegenyefeny\u0151: \u00E9rett kor",
+          "value": 45,
+          "unit": "erd\u0151\u00E9v",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Jegenyefeny\u0151: maxim\u00E1lis kor",
+          "value": 400,
+          "unit": "erd\u0151\u00E9v",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Jegenyefeny\u0151: sz\u00E1razs\u00E1g\u00E9rz\u00E9kenys\u00E9g",
+          "value": 1,
+          "unit": "1",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Jegenyefeny\u0151: faanyag\u00E1r",
+          "value": 30,
+          "unit": "eFt/m\u00B3",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Mogyor\u00F3: magass\u00E1gi plafon",
+          "value": 6.5,
+          "unit": "m",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Mogyor\u00F3: radi\u00E1lis r\u00E1ta",
+          "value": 0.0012000000569969416,
+          "unit": "m/n\u00F6veked\u00E9si egys\u00E9g",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Mogyor\u00F3: \u00E9rett kor",
+          "value": 10,
+          "unit": "erd\u0151\u00E9v",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Mogyor\u00F3: maxim\u00E1lis kor",
+          "value": 80,
+          "unit": "erd\u0151\u00E9v",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Mogyor\u00F3: sz\u00E1razs\u00E1g\u00E9rz\u00E9kenys\u00E9g",
+          "value": 0.8500000238418579,
+          "unit": "1",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Mogyor\u00F3: faanyag\u00E1r",
+          "value": 8,
+          "unit": "eFt/m\u00B3",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Galagonya: magass\u00E1gi plafon",
+          "value": 7.5,
+          "unit": "m",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Galagonya: radi\u00E1lis r\u00E1ta",
+          "value": 0.001500000013038516,
+          "unit": "m/n\u00F6veked\u00E9si egys\u00E9g",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Galagonya: \u00E9rett kor",
+          "value": 15,
+          "unit": "erd\u0151\u00E9v",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Galagonya: maxim\u00E1lis kor",
+          "value": 150,
+          "unit": "erd\u0151\u00E9v",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Galagonya: sz\u00E1razs\u00E1g\u00E9rz\u00E9kenys\u00E9g",
+          "value": 0.699999988079071,
+          "unit": "1",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Galagonya: faanyag\u00E1r",
+          "value": 8,
+          "unit": "eFt/m\u00B3",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "K\u00F6k\u00E9ny: magass\u00E1gi plafon",
+          "value": 4.5,
+          "unit": "m",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "K\u00F6k\u00E9ny: radi\u00E1lis r\u00E1ta",
+          "value": 0.0010000000474974513,
+          "unit": "m/n\u00F6veked\u00E9si egys\u00E9g",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "K\u00F6k\u00E9ny: \u00E9rett kor",
+          "value": 8,
+          "unit": "erd\u0151\u00E9v",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "K\u00F6k\u00E9ny: maxim\u00E1lis kor",
+          "value": 60,
+          "unit": "erd\u0151\u00E9v",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "K\u00F6k\u00E9ny: sz\u00E1razs\u00E1g\u00E9rz\u00E9kenys\u00E9g",
+          "value": 0.6000000238418579,
+          "unit": "1",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "K\u00F6k\u00E9ny: faanyag\u00E1r",
+          "value": 8,
+          "unit": "eFt/m\u00B3",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Fekete bodza: magass\u00E1gi plafon",
+          "value": 6.5,
+          "unit": "m",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Fekete bodza: radi\u00E1lis r\u00E1ta",
+          "value": 0.0020000000949949026,
+          "unit": "m/n\u00F6veked\u00E9si egys\u00E9g",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Fekete bodza: \u00E9rett kor",
+          "value": 8,
+          "unit": "erd\u0151\u00E9v",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Fekete bodza: maxim\u00E1lis kor",
+          "value": 60,
+          "unit": "erd\u0151\u00E9v",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Fekete bodza: sz\u00E1razs\u00E1g\u00E9rz\u00E9kenys\u00E9g",
+          "value": 0.8999999761581421,
+          "unit": "1",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Fekete bodza: faanyag\u00E1r",
+          "value": 8,
+          "unit": "eFt/m\u00B3",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Bor\u00F3ka: magass\u00E1gi plafon",
+          "value": 6,
+          "unit": "m",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Bor\u00F3ka: radi\u00E1lis r\u00E1ta",
+          "value": 0.0010000000474974513,
+          "unit": "m/n\u00F6veked\u00E9si egys\u00E9g",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Bor\u00F3ka: \u00E9rett kor",
+          "value": 20,
+          "unit": "erd\u0151\u00E9v",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Bor\u00F3ka: maxim\u00E1lis kor",
+          "value": 200,
+          "unit": "erd\u0151\u00E9v",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Bor\u00F3ka: sz\u00E1razs\u00E1g\u00E9rz\u00E9kenys\u00E9g",
+          "value": 0.5,
+          "unit": "1",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Bor\u00F3ka: faanyag\u00E1r",
+          "value": 8,
+          "unit": "eFt/m\u00B3",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        }
+      ],
+      "x": 25,
+      "y": 30
+    },
+    {
+      "id": "forest.initial",
+      "name": "Indul\u00F3 erd\u0151 eloszl\u00E1sa",
+      "module": "Erd\u0151",
+      "scope": "T\u00E9rk\u00E9pcella / egyed",
+      "schedule": "\u00DAj vil\u00E1g",
+      "execution": "NativeCode",
+      "description": "Term\u0151helyb\u0151l \u00E9s seedb\u0151l indul\u00F3 term\u00E9szetes vagy v\u00E1lasztott erd\u0151minta; egyedi \u00E9letkor, m\u00E9ret, hely \u00E9s v\u00E1ltozatoss\u00E1g.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "world.seed",
+        "terrain.height",
+        "terrain.moisture",
+        "soil.profile",
+        "forest.species"
+      ],
+      "writes": [
+        "forest.trees"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Ecology/Forest/ForestSystem.cs",
+          "symbol": "GenerateInitialForest"
+        }
+      ],
+      "parameters": [],
+      "x": 270,
+      "y": 30
+    },
+    {
+      "id": "forest.site",
+      "name": "Term\u0151helyi alkalmass\u00E1g",
+      "module": "Erd\u0151",
+      "scope": "Cella / fafaj",
+      "schedule": "Telep\u00EDt\u00E9s \u00E9s r\u00E1tafriss\u00EDt\u00E9s",
+      "execution": "NativeCode",
+      "description": "Bek\u00F6t\u00F6tt k\u00F6rnyezet mellett a talajterm\u00E9kenys\u00E9g \u00E9s fajf\u00FCgg\u0151 magass\u00E1gi alkalmass\u00E1g adja a term\u0151helyet. A nedvess\u00E9g k\u00FCl\u00F6n v\u00EDzv\u00E1laszon kereszt\u00FCl hat; k\u00F6rnyezet n\u00E9lk\u00FCli r\u00E9gi tesztm\u00F3dban a Fitness nedvess\u00E9get is olvas.",
+      "formula": "alkalmass\u00E1g = term\u00E9kenys\u00E9g \u00D7 (0,45 \u002B magass\u00E1gi alkalmass\u00E1g \u00D7 0,55)",
+      "notes": "",
+      "reads": [
+        "terrain.height",
+        "soil.fertility",
+        "forest.species"
+      ],
+      "writes": [
+        "forest.fitness"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Ecology/Forest/ForestSystem.cs",
+          "symbol": "Suitability"
+        }
+      ],
+      "parameters": [],
+      "x": 515,
+      "y": 30
+    },
+    {
+      "id": "forest.competition",
+      "name": "F\u00E9ny- \u00E9s koronat\u00E9r-verseng\u00E9s",
+      "module": "Erd\u0151",
+      "scope": "Faegyed \u00E9s k\u00E9t szomsz\u00E9ds\u00E1gi gy\u0171r\u0171",
+      "schedule": "Havi el\u0151k\u00E9sz\u00EDt\u00E9s / helyi beavatkoz\u00E1s",
+      "execution": "NativeCode",
+      "description": "K\u00F6z\u00F6s geometriapillanatk\u00E9p, koronafed\u00E9s \u00E9s magass\u00E1gi dominancia alapj\u00E1n f\u00E9ny \u00E9s t\u00E9r. K\u00F6rnyezeti v\u00EDzeloszt\u00E1s mellett nincs m\u00E1sodik gy\u00F6k\u00E9rverseny-b\u00FCntet\u00E9s.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "forest.trees",
+        "weather.forcing",
+        "water.growthFactor",
+        "forest.species"
+      ],
+      "writes": [
+        "forest.resources"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Ecology/Forest/ForestCompetition.cs",
+          "symbol": "Evaluate"
+        }
+      ],
+      "parameters": [],
+      "x": 25,
+      "y": 160
+    },
+    {
+      "id": "forest.growth",
+      "name": "Egyedi fan\u00F6veked\u00E9s",
+      "module": "Erd\u0151",
+      "scope": "Faegyed",
+      "schedule": "Havi r\u00E1t\u00E1k; folytonos m\u00E9retinterpol\u00E1ci\u00F3",
+      "execution": "NativeCode",
+      "description": "\u00C1tm\u00E9r\u0151, magass\u00E1g \u00E9s korona n\u0151. Magass\u00E1g fajf\u00FCgg\u0151 plafonhoz k\u00F6zel\u00EDt, az \u00E9rett fa tov\u00E1bb vastagodik.",
+      "formula": "n\u00F6veked\u00E9si t\u00E9nyez\u0151 = alkalmass\u00E1g \u00D7 f\u00E9nyv\u00E1lasz \u00D7 v\u00EDzv\u00E1lasz \u00D7 sqrt(t\u00E9r) \u00D7 eg\u00E9szs\u00E9g \u00D7 \u00E9vszak",
+      "notes": "",
+      "reads": [
+        "forest.fitness",
+        "forest.resources",
+        "water.growthFactor",
+        "forest.health",
+        "calendar.time",
+        "forest.species"
+      ],
+      "writes": [
+        "forest.trees",
+        "forest.volume"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Ecology/Species/ForestTree.cs",
+          "symbol": "Factor"
+        }
+      ],
+      "parameters": [],
+      "x": 270,
+      "y": 160
+    },
+    {
+      "id": "forest.health",
+      "name": "Eg\u00E9szs\u00E9g \u00E9s tart\u00F3s stressz",
+      "module": "Erd\u0151",
+      "scope": "Faegyed",
+      "schedule": "Erd\u0151h\u00F3nap",
+      "execution": "NativeCode",
+      "description": "Eg\u00E9szs\u00E9g a term\u0151hely \u00E9s a legsz\u0171k\u00F6sebb er\u0151forr\u00E1s c\u00E9l\u00E9rt\u00E9ke fel\u00E9 l\u00E9p; tart\u00F3s elnyom\u00E1sn\u00E1l n\u0151 a stressz, javul\u00E1sn\u00E1l cs\u00F6kken.",
+      "formula": "c\u00E9l = clamp(alkalmass\u00E1g \u00D7 (0,15 \u002B 0,85 \u00D7 min(t\u00E9r, v\u00EDz, f\u00E9nyv\u00E1lasz)), 0, 1); havi eg\u00E9szs\u00E9gl\u00E9p\u00E9s: 0,035",
+      "notes": "",
+      "reads": [
+        "forest.resources",
+        "forest.fitness",
+        "forest.species",
+        "forest.health"
+      ],
+      "writes": [
+        "forest.health",
+        "forest.stress"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Ecology/Forest/ForestSystem.Individuals.cs",
+          "symbol": "stressThreshold"
+        }
+      ],
+      "parameters": [],
+      "x": 515,
+      "y": 160
+    },
+    {
+      "id": "forest.mortality",
+      "name": "\u00D6nritkul\u00E1s, elhal\u00E1s \u00E9s holtfa",
+      "module": "Erd\u0151",
+      "scope": "Faegyed",
+      "schedule": "Erd\u0151h\u00F3nap",
+      "execution": "NativeCode",
+      "description": "Legal\u00E1bb 4 stressz\u00E9v \u00E9s alacsony eg\u00E9szs\u00E9g, vagy a faj maxim\u00E1lis kora okoz elhal\u00E1st. Holtfa 8 \u00E9v ut\u00E1n elt\u0171nik; \u00E1ll\u00F3/fekv\u0151 megjelen\u00EDt\u00E9s k\u00FCl\u00F6n szab\u00E1ly.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "forest.stress",
+        "forest.health",
+        "forest.species",
+        "calendar.time",
+        "forest.trees"
+      ],
+      "writes": [
+        "forest.trees",
+        "forest.deadwood"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Ecology/Forest/ForestSystem.Individuals.cs",
+          "symbol": "DeadTrees"
+        }
+      ],
+      "parameters": [],
+      "x": 25,
+      "y": 290
+    },
+    {
+      "id": "forest.regeneration",
+      "name": "Term\u00E9szetes \u00FAjulat",
+      "module": "Erd\u0151",
+      "scope": "\u00DCres cella \u00E9s magsz\u00F3r\u00F3 szomsz\u00E9dok",
+      "schedule": "Erd\u0151h\u00F3nap",
+      "execution": "NativeCode",
+      "description": "Alkalmas \u00FCres cell\u00E1kon a szomsz\u00E9dos magad\u00F3 \u00E1llom\u00E1nyok \u00E9s determinisztikus sorsol\u00E1s alapj\u00E1n jelenik meg \u00FAjulat.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "forest.trees",
+        "forest.species",
+        "forest.fitness",
+        "world.seed",
+        "calendar.time",
+        "road.network",
+        "buildings.footprint"
+      ],
+      "writes": [
+        "forest.trees"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Ecology/Forest/ForestSystem.cs",
+          "symbol": "TryRegenerate"
+        }
+      ],
+      "parameters": [],
+      "x": 270,
+      "y": 290
+    },
+    {
+      "id": "forest.canopy",
+      "name": "Lombbor\u00EDt\u00E1s \u00E9s v\u00EDzig\u00E9ny visszacsatol\u00E1sa",
+      "module": "Erd\u0151",
+      "scope": "T\u00E9rk\u00E9pcella",
+      "schedule": "Erd\u0151rev\u00EDzi\u00F3-v\u00E1ltoz\u00E1s",
+      "execution": "NativeCode",
+      "description": "Koronafel\u00FClet \u00E9s eg\u00E9szs\u00E9g \u00F6sszeg\u00E9b\u0151l lombbor\u00EDt\u00E1s, intercepti\u00F3s kapacit\u00E1s \u00E9s LAI. A kiv\u00E1g\u00E1s megv\u00E1ltoztatja a k\u00F6vetkez\u0151 v\u00EDzl\u00E9p\u00E9s ig\u00E9ny\u00E9t \u00E9s es\u0151felfog\u00E1s\u00E1t.",
+      "formula": "bor\u00EDt\u00E1s = 1 - exp(-koronafel\u00FClet / cellater\u00FClet); LAI legfeljebb 6",
+      "notes": "",
+      "reads": [
+        "forest.trees",
+        "forest.health",
+        "forest.species"
+      ],
+      "writes": [
+        "forest.canopy"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Ecology/Forest/ForestHydrology.cs",
+          "symbol": "HydrologyInputs"
+        }
+      ],
+      "parameters": [],
+      "x": 515,
+      "y": 290
+    },
+    {
+      "id": "forest.plant",
+      "name": "Telep\u00EDt\u00E9s \u00E9s \u00FCltetv\u00E9ny-nyilv\u00E1ntart\u00E1s",
+      "module": "Erd\u00E9szeti beavatkoz\u00E1s",
+      "scope": "Kijel\u00F6lt cell\u00E1k",
+      "schedule": "J\u00E1t\u00E9kosparancs",
+      "execution": "NativeCode",
+      "description": "\u00C9rv\u00E9nyes term\u0151helyen v\u00E1lasztott fajb\u00F3l csemet\u00E9k; ter\u00FCletazonos\u00EDt\u00F3, telep\u00EDt\u00E9si \u00E9v \u00E9s kezd\u0151 egyedsz\u00E1m. A jelenlegi telep\u00EDt\u00E9s nem sz\u00E1mol p\u00E9nz\u00FCgyi k\u00F6lts\u00E9get.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "commands",
+        "terrain.height",
+        "terrain.water",
+        "road.network",
+        "buildings.footprint",
+        "forest.species",
+        "forest.fitness"
+      ],
+      "writes": [
+        "forest.trees",
+        "forest.plantations"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Ecology/Forest/ForestSystem.cs",
+          "symbol": "PlantInArea"
+        }
+      ],
+      "parameters": [],
+      "x": 25,
+      "y": 30
+    },
+    {
+      "id": "forest.designate",
+      "name": "Kitermel\u00E9s kijel\u00F6l\u00E9se",
+      "module": "Erd\u00E9szeti beavatkoz\u00E1s",
+      "scope": "Kijel\u00F6lt cell\u00E1k",
+      "schedule": "J\u00E1t\u00E9kosparancs",
+      "execution": "NativeCode",
+      "description": "A kijel\u00F6l\u00E9s megjegyzi a kitermelhet\u0151 t\u00E9rfogatot; \u00F6nmag\u00E1ban nem v\u00E1gja ki a f\u00E1kat.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "commands",
+        "forest.volume"
+      ],
+      "writes": [
+        "harvest.sites"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/Cargo/ForestryLogistics.cs",
+          "symbol": "Designate"
+        }
+      ],
+      "parameters": [],
+      "x": 270,
+      "y": 30
+    },
+    {
+      "id": "forest.fell",
+      "name": "Eg\u00E9sz f\u00E1k kiv\u00E1g\u00E1sa \u00E9s helyi dep\u00F3",
+      "module": "Erd\u00E9szeti beavatkoz\u00E1s",
+      "scope": "Faegyed / cella",
+      "schedule": "Processzor-munka vagy kitermel\u00E9si m\u0171velet",
+      "execution": "NativeCode",
+      "description": "Eg\u00E9sz f\u00E1k ker\u00FClnek a helyi r\u00F6nkdep\u00F3ba. R\u00E9szrakod\u00E1s nem zsugor\u00EDtja a megmaradt f\u00E1kat; a f\u00E1k t\u00E9rfogata \u00E9s a t\u00F6nk m\u00E9rete megmarad.",
+      "formula": "V = \u03C0 \u00D7 \u00E1tm\u00E9r\u0151\u00B2 / 4 \u00D7 magass\u00E1g \u00D7 0,45",
+      "notes": "",
+      "reads": [
+        "harvest.sites",
+        "forest.trees",
+        "machine.work"
+      ],
+      "writes": [
+        "forest.trees",
+        "forest.stumps",
+        "timber.localDepot"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Ecology/Forest/ForestSystem.Individuals.cs",
+          "symbol": "FellIndividual"
+        }
+      ],
+      "parameters": [],
+      "x": 515,
+      "y": 30
+    },
+    {
+      "id": "forest.stumps",
+      "name": "T\u00F6nk\u00F6k leboml\u00E1sa",
+      "module": "Erd\u00E9szeti beavatkoz\u00E1s",
+      "scope": "Kiv\u00E1gott fa helye",
+      "schedule": "Erd\u0151h\u00F3nap / megjelen\u00EDt\u00E9s",
+      "execution": "NativeCode",
+      "description": "A t\u00F6nk hat erd\u0151\u00E9v alatt lebomlik; a telep\u00EDt\u00E9st nem akad\u00E1lyozza.",
+      "formula": "boml\u00E1s = clamp((\u00E9v - kiv\u00E1g\u00E1s \u00E9ve) / 6, 0, 1)",
+      "notes": "",
+      "reads": [
+        "forest.stumps",
+        "calendar.time"
+      ],
+      "writes": [
+        "forest.stumps"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Ecology/Species/ForestTree.cs",
+          "symbol": "LifetimeYears"
+        }
+      ],
+      "parameters": [],
+      "x": 25,
+      "y": 160
+    },
+    {
+      "id": "road.build",
+      "name": "\u00DAt\u00E9p\u00EDt\u00E9s \u00E9s h\u00E1l\u00F3zat",
+      "module": "Utak \u00E9s nyomok",
+      "scope": "\u00DAtvonal cell\u00E1i",
+      "schedule": "J\u00E1t\u00E9kosparancs",
+      "execution": "NativeCode",
+      "description": "Aszfalt/makad\u00E1m \u00FAt, r\u00F6gz\u00EDtett \u00FAttestmagass\u00E1g \u00E9s k\u00F6lcs\u00F6n\u00F6s csatlakoz\u00E1sok. Csak t\u00E9nylegesen l\u00E9trehozott vagy m\u00F3dos\u00EDtott \u00FAtcsemp\u00E9k n\u00F6velik az \u00E9p\u00EDt\u00E9si k\u00F6lts\u00E9get.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "commands",
+        "terrain.height",
+        "terrain.water",
+        "buildings.footprint"
+      ],
+      "writes": [
+        "road.network",
+        "economy.expenses",
+        "forest.trees",
+        "water.routing"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/GameWorld.cs",
+          "symbol": "ExecuteRoadPath"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "Aszfalt",
+          "value": 650,
+          "unit": "eFt/csempe",
+          "key": "AsphaltBuild",
+          "min": 0,
+          "max": 100000,
+          "default": 650
+        },
+        {
+          "name": "Makad\u00E1m",
+          "value": 200,
+          "unit": "eFt/csempe",
+          "key": "MacadamBuild",
+          "min": 0,
+          "max": 100000,
+          "default": 200
+        }
+      ],
+      "x": 25,
+      "y": 30
+    },
+    {
+      "id": "road.repair",
+      "name": "\u00DAtjav\u00EDt\u00E1s",
+      "module": "Utak \u00E9s nyomok",
+      "scope": "\u00DAtvonal cell\u00E1i",
+      "schedule": "J\u00E1t\u00E9kosparancs",
+      "execution": "NativeCode",
+      "description": "A kopott \u00FAtcsemp\u00E9k \u00E1llapota 1-re \u00E1ll; a k\u00F6lts\u00E9g a burkolat \u00E9p\u00EDt\u00E9si \u00E1ra \u00E9s a s\u00E9r\u00FCl\u00E9s szerint sz\u00E1mol\u00F3dik.",
+      "formula": "jav\u00EDt\u00E1s = \u00E9p\u00EDt\u00E9si \u00E1r \u00D7 0,8 \u00D7 s\u00E9r\u00FCl\u00E9s",
+      "notes": "",
+      "reads": [
+        "commands",
+        "road.condition",
+        "road.network"
+      ],
+      "writes": [
+        "road.condition",
+        "economy.expenses"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/GameWorld.cs",
+          "symbol": "ExecuteRoadRepair"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "Jav\u00EDt\u00E1s az \u00E9p\u00EDt\u00E9si \u00E1r ar\u00E1ny\u00E1ban",
+          "value": 0.8,
+          "unit": "\u00D7 teljes k\u00E1r",
+          "key": "RoadRepairShare",
+          "min": 0,
+          "max": 5,
+          "default": 0.8
+        }
+      ],
+      "x": 270,
+      "y": 30
+    },
+    {
+      "id": "road.weather",
+      "name": "Id\u0151j\u00E1r\u00E1si \u00FAtroml\u00E1s",
+      "module": "Utak \u00E9s nyomok",
+      "scope": "K\u00F6z\u00FAti csempe",
+      "schedule": "Legal\u00E1bb 0,5 j\u00E1t\u00E9k-s \u00F6sszegz\u00E9se",
+      "execution": "NativeCode",
+      "description": "A t\u00E9rk\u00E9pi hidrol\u00F3giai nedvess\u00E9get olvassa, nem a dinamikus gy\u00F6k\u00E9rz\u00F3navizet. Makad\u00E1m er\u0151sebben romlik es\u0151ben; id\u0151t erd\u0151\u00E9vre v\u00E1ltja.",
+      "formula": "makad\u00E1m: 0,10 \u00D7 (1 \u002B 2,5 \u00D7 nedvess\u00E9g) \u002B 1,6 \u00D7 es\u0151 \u00D7 (0,4 \u002B nedvess\u00E9g); aszfalt: 0,015 \u00D7 (1 \u002B nedvess\u00E9g) \u002B 0,08 \u00D7 es\u0151; \u00E1llapot -= r\u00E1ta \u00D7 \u00E9vek",
+      "notes": "",
+      "reads": [
+        "terrain.moisture",
+        "weather.rain",
+        "calendar.time",
+        "road.condition",
+        "road.network"
+      ],
+      "writes": [
+        "road.condition"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Map/Terrain/TerrainMap.Roads.cs",
+          "symbol": "WeatherRoads"
+        }
+      ],
+      "parameters": [],
+      "x": 515,
+      "y": 30
+    },
+    {
+      "id": "road.trafficWear",
+      "name": "Forgalmi \u00FAtkop\u00E1s \u2013 gr\u00E1f",
+      "module": "Utak \u00E9s nyomok",
+      "scope": "K\u00F6z\u00FAti csempe",
+      "schedule": "Teheraut\u00F3 csempev\u00E1lt\u00E1s",
+      "execution": "EditableGraph",
+      "description": "A jelenleg szerkeszthet\u0151 \u00E9s a j\u00E1t\u00E9kba bek\u00F6t\u00F6tt gr\u00E1f. \u00C1thalad\u00E1si terhel\u00E9s, burkolati szorz\u00F3, \u00E1llapot \u00E9s szerkesztett egyenletek.",
+      "formula": "alapmodell: 0,0015 \u00D7 \u00F6sszt\u00F6meg / 36000 \u00D7 burkolati szorz\u00F3 \u00D7 kop\u00E1si szorz\u00F3",
+      "notes": "",
+      "reads": [
+        "vehicle.mass",
+        "road.network",
+        "road.condition",
+        "vehicle.position"
+      ],
+      "writes": [
+        "road.condition"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/GameWorld.Rules.cs",
+          "symbol": "ApplyTrafficWear"
+        },
+        {
+          "file": "ForesTycoon/World/Vehicles/RoadTrafficParameters.cs",
+          "symbol": "RoadTrafficParameters"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "Referencia \u00E1thalad\u00E1si kop\u00E1s",
+          "value": 0.001500000013038516,
+          "unit": "\u00E1llapotvesztes\u00E9g/\u00E1thalad\u00E1s",
+          "key": "ReferenceWear",
+          "min": 0,
+          "max": 0.2,
+          "default": 0.001500000013038516
+        },
+        {
+          "name": "Referencia \u00F6sszt\u00F6meg",
+          "value": 36000,
+          "unit": "kg",
+          "key": "ReferenceMass",
+          "min": 1000,
+          "max": 200000,
+          "default": 36000
+        },
+        {
+          "name": "Aszfalt szorz\u00F3",
+          "value": 0.20000000298023224,
+          "unit": "1",
+          "key": "AsphaltFactor",
+          "min": 0,
+          "max": 10,
+          "default": 0.20000000298023224
+        },
+        {
+          "name": "Makad\u00E1m szorz\u00F3",
+          "value": 1,
+          "unit": "1",
+          "key": "MacadamFactor",
+          "min": 0,
+          "max": 10,
+          "default": 1
+        }
+      ],
+      "x": 25,
+      "y": 160
+    },
+    {
+      "id": "trail.build",
+      "name": "K\u00F6zel\u00EDt\u0151nyom kijel\u00F6l\u00E9se",
+      "module": "Utak \u00E9s nyomok",
+      "scope": "\u00DAtvonal cell\u00E1i",
+      "schedule": "J\u00E1t\u00E9kosparancs",
+      "execution": "NativeCode",
+      "description": "Ideiglenes nyom sz\u00E1raz, \u00E9p\u00FClet n\u00E9lk\u00FCli talajon, az \u00FAth\u00E1l\u00F3zathoz csatlakozva; a n\u00F6v\u00E9nyzet nem teljes \u00FAt\u00E9p\u00EDt\u00E9sk\u00E9nt kezel\u0151dik.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "commands",
+        "terrain.water",
+        "buildings.footprint",
+        "road.network"
+      ],
+      "writes": [
+        "trail.network",
+        "economy.expenses"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/GameWorld.cs",
+          "symbol": "ExecuteSkidTrailPath"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "Nyomkijel\u00F6l\u00E9s",
+          "value": 30,
+          "unit": "eFt/csempe",
+          "key": "TrailCost",
+          "min": 0,
+          "max": 10000,
+          "default": 30
+        }
+      ],
+      "x": 270,
+      "y": 160
+    },
+    {
+      "id": "trail.traffic",
+      "name": "Nyomv\u00E1ly\u00FA \u00E9s haszn\u00E1lat",
+      "module": "Utak \u00E9s nyomok",
+      "scope": "Nyomcsempe",
+      "schedule": "G\u00E9p vagy teheraut\u00F3 \u00E1thalad\u00E1sa",
+      "execution": "NativeCode",
+      "description": "A v\u00E1ly\u00FA fokozatosan m\u00E9ly\u00FCl, az \u00FCresj\u00E1rati id\u0151 null\u00E1z\u00F3dik. A teheraut\u00F3 nyomterhel\u00E9se a k\u00F6z\u00FAti alapkop\u00E1s h\u00FAszszorosa.",
+      "formula": "v\u00E1ly\u00FA = clamp(v\u00E1ly\u00FA \u002B terhel\u00E9s \u00D7 (1 - v\u00E1ly\u00FA), 0, 1)",
+      "notes": "",
+      "reads": [
+        "vehicle.mass",
+        "vehicle.position",
+        "machine.position",
+        "trail.wear"
+      ],
+      "writes": [
+        "trail.wear",
+        "trail.idle"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Map/Terrain/TerrainMap.SkidTrails.cs",
+          "symbol": "DriveSkidTrail"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "Nyomterhel\u00E9si szorz\u00F3",
+          "value": 20,
+          "unit": "\u00D7 \u00FAtkop\u00E1s",
+          "key": "TrailLoadMultiplier",
+          "min": 0,
+          "max": 500,
+          "default": 20
+        }
+      ],
+      "x": 515,
+      "y": 160
+    },
+    {
+      "id": "trail.age",
+      "name": "Nyom regener\u00E1ci\u00F3ja \u00E9s ben\u00F6v\u00E9se",
+      "module": "Utak \u00E9s nyomok",
+      "scope": "Nyomcsempe",
+      "schedule": "\u00DAt-id\u0151j\u00E1r\u00E1si friss\u00EDt\u00E9s",
+      "execution": "NativeCode",
+      "description": "A v\u00E1ly\u00FA \u00E9vente 0,4-et enyh\u00FCl; 3 \u00E9v haszn\u00E1latlans\u00E1g \u00E9s szinte elt\u0171nt v\u00E1ly\u00FA ut\u00E1n a nyom megsz\u0171nik. Az \u00FAtvonalak \u00FAjraellen\u0151rz\u0151dnek.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "trail.wear",
+        "trail.idle",
+        "calendar.time"
+      ],
+      "writes": [
+        "trail.wear",
+        "trail.idle",
+        "trail.network"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Map/Terrain/TerrainMap.SkidTrails.cs",
+          "symbol": "AgeSkidTrails"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "Ben\u00F6v\u00E9si id\u0151",
+          "value": 3,
+          "unit": "erd\u0151\u00E9v",
+          "key": "SkidTrailOvergrowYears",
+          "min": 0.1,
+          "max": 50,
+          "default": 3
+        }
+      ],
+      "x": 25,
+      "y": 290
+    },
+    {
+      "id": "route.find",
+      "name": "H\u00E1l\u00F3zati \u00FAtvonalkeres\u00E9s",
+      "module": "J\u00E1rm\u0171vek",
+      "scope": "H\u00E1l\u00F3zat / forr\u00E1s \u00E9s c\u00E9l",
+      "schedule": "Utas\u00EDt\u00E1s / h\u00E1l\u00F3zatv\u00E1ltoz\u00E1s",
+      "execution": "NativeCode",
+      "description": "K\u00F6z\u00F6s \u00FAt- \u00E9s nyomh\u00E1l\u00F3zat, k\u00F6lcs\u00F6n\u00F6s csatlakoz\u00E1sok, burkolat \u00E9s nyomv\u00E1ly\u00FA szerinti k\u00F6lts\u00E9g. A flott\u00E1ban t\u00F6bb dokkp\u00E1r \u00FAtvonalai k\u00F6z\u00FCl a legr\u00F6videbb elemsz\u00E1m\u00FA nyertes \u00FAt v\u00E1laszt\u00F3dik.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "road.network",
+        "trail.network",
+        "trail.wear",
+        "buildings.footprint",
+        "timber.stacks"
+      ],
+      "writes": [
+        "vehicle.route"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Map/Terrain/TerrainMap.Network.cs",
+          "symbol": "FindNetworkPath"
+        }
+      ],
+      "parameters": [],
+      "x": 25,
+      "y": 30
+    },
+    {
+      "id": "vehicle.mass",
+      "name": "Rakom\u00E1ny \u00E9s \u00F6sszt\u00F6meg",
+      "module": "J\u00E1rm\u0171vek",
+      "scope": "Teheraut\u00F3",
+      "schedule": "Mozg\u00E1si l\u00E9p\u00E9s",
+      "execution": "NativeCode",
+      "description": "A rakom\u00E1ny t\u00E9rfogatb\u00F3l a r\u00F6gz\u00EDtett frissfa-s\u0171r\u0171s\u00E9g alapj\u00E1n t\u00F6meg lesz. Ez a s\u0171r\u0171s\u00E9g jelenleg nem fajf\u00FCgg\u0151.",
+      "formula": "t\u00F6meg = \u00FCres t\u00F6meg \u002B m\u00B3 \u00D7 fas\u0171r\u0171s\u00E9g",
+      "notes": "",
+      "reads": [
+        "vehicle.cargo"
+      ],
+      "writes": [
+        "vehicle.mass"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/Vehicles/VehicleDynamics.cs",
+          "symbol": "Mass"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "\u00DCres t\u00F6meg",
+          "value": 16000,
+          "unit": "kg",
+          "key": "EmptyMass",
+          "min": 2000,
+          "max": 60000,
+          "default": 16000
+        },
+        {
+          "name": "Fas\u0171r\u0171s\u00E9g",
+          "value": 800,
+          "unit": "kg/m\u00B3",
+          "key": "TimberDensity",
+          "min": 300,
+          "max": 1300,
+          "default": 800
+        }
+      ],
+      "x": 270,
+      "y": 30
+    },
+    {
+      "id": "vehicle.resistance",
+      "name": "Lejt\u00E9s \u00E9s menetellen\u00E1ll\u00E1s",
+      "module": "J\u00E1rm\u0171vek",
+      "scope": "Teheraut\u00F3 / aktu\u00E1lis \u00FAtszakasz",
+      "schedule": "Legfeljebb 1/30 j\u00E1rm\u0171-s",
+      "execution": "NativeCode",
+      "description": "G\u00F6rd\u00FCl\u00E9s, el\u0151jeles lejt\u0151ellen\u00E1ll\u00E1s \u00E9s l\u00E9gellen\u00E1ll\u00E1s; durva, kopott fel\u00FClet n\u00F6veli a g\u00F6rd\u00FCl\u00E9st.",
+      "formula": "F = Crr \u00D7 m \u00D7 g \u00D7 cos(atan(lejt\u00E9s)) \u002B m \u00D7 g \u00D7 sin(atan(lejt\u00E9s)) \u002B 0,5 \u00D7 leveg\u0151s\u0171r\u0171s\u00E9g \u00D7 l\u00E9gellen\u00E1ll\u00E1si fel\u00FClet \u00D7 v\u00B2",
+      "notes": "",
+      "reads": [
+        "vehicle.mass",
+        "vehicle.speed",
+        "terrain.height",
+        "road.condition",
+        "road.network",
+        "trail.wear"
+      ],
+      "writes": [
+        "vehicle.resistance"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/Vehicles/VehicleDynamics.cs",
+          "symbol": "Resistance"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "L\u00E9gellen\u00E1ll\u00E1si fel\u00FClet",
+          "value": 7.5,
+          "unit": "m\u00B2",
+          "key": "DragArea",
+          "min": 0,
+          "max": 30,
+          "default": 7.5
+        },
+        {
+          "name": "Aszfalt Crr",
+          "value": 0.00800000037997961,
+          "unit": "1",
+          "key": "RollingAsphalt",
+          "min": 0,
+          "max": 0.3,
+          "default": 0.00800000037997961
+        },
+        {
+          "name": "Makad\u00E1m Crr",
+          "value": 0.019999999552965164,
+          "unit": "1",
+          "key": "RollingGravel",
+          "min": 0,
+          "max": 0.3,
+          "default": 0.019999999552965164
+        },
+        {
+          "name": "F\u00F6ld Crr",
+          "value": 0.03999999910593033,
+          "unit": "1",
+          "key": "RollingDirt",
+          "min": 0,
+          "max": 0.5,
+          "default": 0.03999999910593033
+        },
+        {
+          "name": "Egyenetlens\u00E9g hat\u00E1sa",
+          "value": 1.5,
+          "unit": "\u00D7 Crr teljes k\u00E1rn\u00E1l",
+          "key": "RoughnessRolling",
+          "min": 0,
+          "max": 10,
+          "default": 1.5
+        }
+      ],
+      "x": 515,
+      "y": 30
+    },
+    {
+      "id": "vehicle.motion",
+      "name": "Gyorsul\u00E1s, kanyar \u00E9s f\u00E9kez\u00E9s",
+      "module": "J\u00E1rm\u0171vek",
+      "scope": "Teheraut\u00F3",
+      "schedule": "Legfeljebb 1/30 j\u00E1rm\u0171-s",
+      "execution": "NativeCode",
+      "description": "Teljes\u00EDtm\u00E9ny- \u00E9s tapad\u00E1skorl\u00E1tos von\u00F3er\u0151, terhel\u00E9s \u00E9s kanyar szerinti c\u00E9lsebess\u00E9g, v\u00E9gponti f\u00E9kez\u00E9s. Kop\u00E1s lass\u00EDt, meghib\u00E1sod\u00E1s meg\u00E1ll\u00EDt.",
+      "formula": "c\u00E9lsebess\u00E9g szorz\u00F3ja: 1 - 0,55 \u00D7 \u00FAts\u00E9r\u00FCl\u00E9s; \u00FCzemanyag a t\u00E9nyleges motor-munk\u00E1b\u00F3l \u00E9s alapj\u00E1ratb\u00F3l",
+      "notes": "",
+      "reads": [
+        "vehicle.time",
+        "vehicle.route",
+        "vehicle.resistance",
+        "vehicle.mass",
+        "road.condition",
+        "vehicle.broken"
+      ],
+      "writes": [
+        "vehicle.position",
+        "vehicle.speed",
+        "vehicle.fuel"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/Vehicles/Vehicle.cs",
+          "symbol": "VehicleDynamics.Step"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "Motorteljes\u00EDtm\u00E9ny",
+          "value": 330000,
+          "unit": "W",
+          "key": "Power",
+          "min": 50000,
+          "max": 1000000,
+          "default": 330000
+        },
+        {
+          "name": "Legnagyobb von\u00F3er\u0151",
+          "value": 170000,
+          "unit": "N",
+          "key": "MaxTractiveForce",
+          "min": 10000,
+          "max": 600000,
+          "default": 170000
+        },
+        {
+          "name": "Hajt\u00E1sl\u00E1nc hat\u00E1sfoka",
+          "value": 0.8999999761581421,
+          "unit": "1",
+          "key": "Drivetrain",
+          "min": 0.3,
+          "max": 1,
+          "default": 0.8999999761581421
+        },
+        {
+          "name": "F\u00E9kez\u0151 lassul\u00E1s",
+          "value": 2.5,
+          "unit": "m/s\u00B2",
+          "key": "Braking",
+          "min": 0.3,
+          "max": 10,
+          "default": 2.5
+        }
+      ],
+      "x": 25,
+      "y": 160
+    },
+    {
+      "id": "vehicle.fuel",
+      "name": "Motorfogyaszt\u00E1s",
+      "module": "J\u00E1rm\u0171vek",
+      "scope": "Teheraut\u00F3",
+      "schedule": "Mozg\u00E1si l\u00E9p\u00E9s",
+      "execution": "NativeCode",
+      "description": "A dinamika \u00E1ltal t\u00E9nylegesen kifejtett teljes\u00EDtm\u00E9ny \u00E9s alapj\u00E1rat alapj\u00E1n sz\u00E1molt liter. Lejt\u0151n f\u00E9kez\u00E9s nem termel negat\u00EDv fogyaszt\u00E1st.",
+      "formula": "liter = motorteljes\u00EDtm\u00E9ny_kW \u00D7 \u00F3r\u00E1k \u00D7 fajlagos fogyaszt\u00E1s \u002B alapj\u00E1rati l/h \u00D7 \u00F3r\u00E1k",
+      "notes": "",
+      "reads": [
+        "vehicle.speed",
+        "vehicle.resistance",
+        "vehicle.mass"
+      ],
+      "writes": [
+        "vehicle.fuel"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/Vehicles/VehicleDynamics.cs",
+          "symbol": "FuelPerKilowattHour"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "Fajlagos fogyaszt\u00E1s",
+          "value": 0.23499999940395355,
+          "unit": "l/kWh",
+          "key": "FuelPerKilowattHour",
+          "min": 0.05,
+          "max": 1,
+          "default": 0.23499999940395355
+        },
+        {
+          "name": "Alapj\u00E1rat",
+          "value": 2.5,
+          "unit": "l/h",
+          "key": "IdleFuelPerHour",
+          "min": 0,
+          "max": 30,
+          "default": 2.5
+        }
+      ],
+      "x": 270,
+      "y": 160
+    },
+    {
+      "id": "vehicle.transfer",
+      "name": "Rakod\u00E1si \u00E9s sz\u00E1ll\u00EDt\u00E1si \u00E1llapotg\u00E9p",
+      "module": "J\u00E1rm\u0171vek",
+      "scope": "Teheraut\u00F3 / forr\u00E1s / c\u00E9l",
+      "schedule": "J\u00E1rm\u0171id\u0151",
+      "execution": "NativeCode",
+      "description": "Rakod\u00E1s, fuvar, lerakod\u00E1s, vissza\u00FAt, v\u00E1rakoz\u00E1s. Hi\u00E1nyz\u00F3 k\u00E9szletn\u00E9l v\u00E1r; megszakadt \u00FAtvonaln\u00E1l meg\u0151rzi a rakom\u00E1nyt \u00E9s meg\u00E1ll.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "vehicle.route",
+        "timber.stacks",
+        "vehicle.cargo",
+        "vehicle.broken"
+      ],
+      "writes": [
+        "vehicle.cargo",
+        "vehicle.transportState",
+        "timber.stacks",
+        "mill.stock"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/Vehicles/VehicleSystem.cs",
+          "symbol": "Update"
+        }
+      ],
+      "parameters": [],
+      "x": 515,
+      "y": 160
+    },
+    {
+      "id": "upkeep.wear",
+      "name": "G\u00E9p- \u00E9s j\u00E1rm\u0171kop\u00E1s, meghib\u00E1sod\u00E1s",
+      "module": "Fenntart\u00E1s",
+      "scope": "Flottaj\u00E1rm\u0171",
+      "schedule": "Munka / mozg\u00E1s",
+      "execution": "NativeCode",
+      "description": "Terhel\u00E9si szorz\u00F3val kopik; saj\u00E1t seedelt xorshift-gener\u00E1torb\u00F3l sorsolt meghib\u00E1sod\u00E1s. Teheraut\u00F3-terhel\u00E9s: nyomon 2, \u00FAton 1, rakom\u00E1nyt\u00E9nyez\u0151 1 \u002B 0,5 \u00D7 tel\u00EDtetts\u00E9g.",
+      "formula": "kop\u00E1s \u002B= 0,00025 \u00D7 ig\u00E9nybev\u00E9tel \u00D7 s; meghib\u00E1sod\u00E1s-es\u00E9ly = 0,004 \u00D7 kop\u00E1s\u00B2 \u00D7 ig\u00E9nybev\u00E9tel \u00D7 s",
+      "notes": "",
+      "reads": [
+        "machine.work",
+        "vehicle.cargo",
+        "trail.network",
+        "vehicle.speed",
+        "vehicle.wear",
+        "vehicle.time"
+      ],
+      "writes": [
+        "vehicle.wear",
+        "vehicle.broken"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/Cargo/VehicleUpkeep.cs",
+          "symbol": "Operate"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "Kop\u00E1si r\u00E1ta",
+          "value": 0.0002500000118743628,
+          "unit": "1/j\u00E1rm\u0171-s",
+          "key": "WearPerSecond",
+          "min": 0,
+          "max": 0.02,
+          "default": 0.0002500000118743628
+        },
+        {
+          "name": "Meghib\u00E1sod\u00E1si hajlam",
+          "value": 0.004,
+          "unit": "1/j\u00E1rm\u0171-s teljes kop\u00E1sn\u00E1l",
+          "key": "BreakdownHazard",
+          "min": 0,
+          "max": 0.5,
+          "default": 0.004
+        }
+      ],
+      "x": 25,
+      "y": 30
+    },
+    {
+      "id": "upkeep.effects",
+      "name": "Kop\u00E1s hat\u00E1sa a munk\u00E1ra \u00E9s k\u00F6lts\u00E9gre",
+      "module": "Fenntart\u00E1s",
+      "scope": "Flottaj\u00E1rm\u0171",
+      "schedule": "Munka / k\u00F6lts\u00E9gelsz\u00E1mol\u00E1s",
+      "execution": "NativeCode",
+      "description": "G\u00E9pek munkaidej\u00E9t \u00E9s mozg\u00E1s\u00E1t a PaceFactor lass\u00EDtja. A teheraut\u00F3 PaceFactor jelenleg nincs bek\u00F6tve a mozg\u00E1sba; a fogyaszt\u00E1si szorz\u00F3 a k\u00F6lts\u00E9gelsz\u00E1mol\u00E1sban hat.",
+      "formula": "\u00FCzemanyag-szorz\u00F3 = 1 \u002B 0,5 \u00D7 kop\u00E1s; g\u00E9ptemp\u00F3 = 1 - 0,3 \u00D7 kop\u00E1s",
+      "notes": "",
+      "reads": [
+        "vehicle.wear"
+      ],
+      "writes": [
+        "machine.pace",
+        "economy.fuelFactor"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/Cargo/VehicleUpkeep.cs",
+          "symbol": "FuelFactor"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "T\u00F6bbletfogyaszt\u00E1s teljes kop\u00E1sn\u00E1l",
+          "value": 0.5,
+          "unit": "\u00D7",
+          "key": "WearFuelPenalty",
+          "min": 0,
+          "max": 5,
+          "default": 0.5
+        },
+        {
+          "name": "Lassul\u00E1s teljes kop\u00E1sn\u00E1l",
+          "value": 0.3,
+          "unit": "ar\u00E1ny",
+          "key": "WearPacePenalty",
+          "min": 0,
+          "max": 0.9,
+          "default": 0.3
+        }
+      ],
+      "x": 270,
+      "y": 30
+    },
+    {
+      "id": "upkeep.repair",
+      "name": "Helysz\u00EDni szerel\u00E9s",
+      "module": "Fenntart\u00E1s",
+      "scope": "Meghib\u00E1sodott flottaj\u00E1rm\u0171",
+      "schedule": "J\u00E1rm\u0171id\u0151",
+      "execution": "NativeCode",
+      "description": "Szerel\u00E9si v\u00E1rakoz\u00E1s ut\u00E1n r\u00E9szben enyh\u00FCl a kop\u00E1s; alap- \u00E9s kop\u00E1sar\u00E1nyos k\u00F6lts\u00E9g keletkezik.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "vehicle.broken",
+        "vehicle.wear",
+        "vehicle.time"
+      ],
+      "writes": [
+        "vehicle.broken",
+        "vehicle.wear",
+        "economy.runningCosts"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/Cargo/VehicleUpkeep.cs",
+          "symbol": "RepairLeft"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "Jav\u00EDt\u00E1si id\u0151",
+          "value": 40,
+          "unit": "j\u00E1rm\u0171-s",
+          "key": "RepairSeconds",
+          "min": 1,
+          "max": 1200,
+          "default": 40
+        },
+        {
+          "name": "Kop\u00E1senyh\u00EDt\u00E9s",
+          "value": 0.30000001192092896,
+          "unit": "kop\u00E1s",
+          "key": "FieldRepairRelief",
+          "min": 0,
+          "max": 1,
+          "default": 0.30000001192092896
+        },
+        {
+          "name": "Alapk\u00F6lts\u00E9g",
+          "value": 150,
+          "unit": "eFt",
+          "key": "RepairBaseCost",
+          "min": 0,
+          "max": 10000,
+          "default": 150
+        },
+        {
+          "name": "Kop\u00E1sk\u00F6lts\u00E9g",
+          "value": 300,
+          "unit": "eFt/teljes kop\u00E1s",
+          "key": "RepairWearCost",
+          "min": 0,
+          "max": 10000,
+          "default": 300
+        }
+      ],
+      "x": 515,
+      "y": 30
+    },
+    {
+      "id": "upkeep.service",
+      "name": "Telephelyi karbantart\u00E1s",
+      "module": "Fenntart\u00E1s",
+      "scope": "Parkol\u00F3 flottaj\u00E1rm\u0171",
+      "schedule": "J\u00E1rm\u0171id\u0151",
+      "execution": "NativeCode",
+      "description": "A telephelyen \u00E1ll\u00F3, nem meghib\u00E1sodott g\u00E9p \u00E9s teheraut\u00F3 kop\u00E1sa id\u0151vel cs\u00F6kken, a jav\u00EDtott kop\u00E1smennyis\u00E9g\u00E9rt k\u00F6lts\u00E9get sz\u00E1mol.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "vehicle.wear",
+        "fleet.state",
+        "vehicle.time"
+      ],
+      "writes": [
+        "vehicle.wear",
+        "economy.runningCosts"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/Cargo/VehicleUpkeep.cs",
+          "symbol": "Service"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "Karbantart\u00E1si r\u00E1ta",
+          "value": 0.019999999552965164,
+          "unit": "1/j\u00E1rm\u0171-s",
+          "key": "ServicePerSecond",
+          "min": 0,
+          "max": 1,
+          "default": 0.019999999552965164
+        },
+        {
+          "name": "Kop\u00E1segys\u00E9g \u00E1ra",
+          "value": 200,
+          "unit": "eFt",
+          "key": "ServiceCostPerWear",
+          "min": 0,
+          "max": 10000,
+          "default": 200
+        }
+      ],
+      "x": 25,
+      "y": 160
+    },
+    {
+      "id": "fleet.depot",
+      "name": "Telephely \u00E9s indul\u00F3 flotta",
+      "module": "Faanyag \u00E9s logisztika",
+      "scope": "2\u00D72 cella",
+      "schedule": "J\u00E1t\u00E9kosparancs",
+      "execution": "NativeCode",
+      "description": "S\u00EDk, sz\u00E1raz, \u00FCres, \u00FAt melletti telephely. Az els\u0151 egy processzort, forwardert \u00E9s r\u00F6nksz\u00E1ll\u00EDt\u00F3t ad. Jelenleg nincs telephely\u00E9p\u00EDt\u00E9si vagy j\u00E1rm\u0171v\u00E1s\u00E1rl\u00E1si k\u00F6lts\u00E9g.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "commands",
+        "terrain.height",
+        "terrain.water",
+        "road.network",
+        "forest.trees",
+        "harvest.sites",
+        "buildings.footprint"
+      ],
+      "writes": [
+        "buildings.footprint",
+        "fleet.state"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/Cargo/ForestryLogistics.Fleet.cs",
+          "symbol": "PlaceDepot"
+        }
+      ],
+      "parameters": [],
+      "x": 25,
+      "y": 30
+    },
+    {
+      "id": "fleet.orders",
+      "name": "Munk\u00E1ra k\u00FCld\u00E9s \u00E9s hazah\u00EDv\u00E1s",
+      "module": "Faanyag \u00E9s logisztika",
+      "scope": "Flottaj\u00E1rm\u0171 / c\u00E9l",
+      "schedule": "J\u00E1t\u00E9kosparancs \u00E9s \u00E1llapotv\u00E1lt\u00E1s",
+      "execution": "NativeCode",
+      "description": "Forr\u00E1s \u00E9s c\u00E9l kijel\u00F6l\u00E9se, megk\u00F6zel\u00EDt\u00E9s, munka \u00E9s hazat\u00E9r\u00E9s. A teheraut\u00F3 \u00FCresen t\u00E1vozik a forr\u00E1st\u00F3l, a g\u00E9p el\u0151bb leadja a rakom\u00E1nyt.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "commands",
+        "fleet.state",
+        "vehicle.route",
+        "timber.stacks",
+        "harvest.sites",
+        "mill.stock"
+      ],
+      "writes": [
+        "fleet.state",
+        "vehicle.route",
+        "machine.work"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/Cargo/ForestryLogistics.Fleet.cs",
+          "symbol": "AssignTruck"
+        }
+      ],
+      "parameters": [],
+      "x": 270,
+      "y": 30
+    },
+    {
+      "id": "machine.processor",
+      "name": "Processzor: v\u00E1g\u00E1s \u00E9s kihord\u00E1s",
+      "module": "Faanyag \u00E9s logisztika",
+      "scope": "Kitermel\u00E9si cella / sarang",
+      "schedule": "1/30 j\u00E1rm\u0171-s al-l\u00E9p\u00E9s",
+      "execution": "NativeCode",
+      "description": "Kiv\u00E1g\u00E1s, r\u00F6nkfelv\u00E9tel \u00E9s sarangra hord\u00E1s \u00E1llapotg\u00E9pe; kop\u00E1s szerinti temp\u00F3val, rakom\u00E1nykapacit\u00E1ssal \u00E9s m\u0171veleti \u00FCzemanyag-r\u00E1t\u00E1kkal.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "harvest.sites",
+        "forest.volume",
+        "timber.localDepot",
+        "timber.stacks",
+        "machine.pace",
+        "machine.work",
+        "vehicle.broken",
+        "vehicle.time"
+      ],
+      "writes": [
+        "machine.work",
+        "machine.cargo",
+        "timber.localDepot",
+        "timber.stacks",
+        "machine.fuel"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/Cargo/ForestryLogistics.Machines.cs",
+          "symbol": "UpdateProcessor"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "Rakom\u00E1nykapacit\u00E1s",
+          "value": 3,
+          "unit": "m\u00B3",
+          "key": "ProcessorCapacity",
+          "min": 0.5,
+          "max": 20,
+          "default": 3
+        },
+        {
+          "name": "Kitermel\u00E9si r\u00E1ta",
+          "value": 1.2000000476837158,
+          "unit": "m\u00B3/j\u00E1rm\u0171-s",
+          "key": "FellingRate",
+          "min": 0.05,
+          "max": 20,
+          "default": 1.2000000476837158
+        },
+        {
+          "name": "Lerakod\u00E1si r\u00E1ta",
+          "value": 2,
+          "unit": "m\u00B3/j\u00E1rm\u0171-s",
+          "key": "ProcessorUnloadRate",
+          "min": 0.05,
+          "max": 20,
+          "default": 2
+        },
+        {
+          "name": "V\u00E1g\u00E1si \u00FCzemanyag",
+          "value": 1,
+          "unit": "l/j\u00E1rm\u0171-s",
+          "key": "FuelFelling",
+          "min": 0,
+          "max": 10,
+          "default": 1
+        },
+        {
+          "name": "Halad\u00E1si sebess\u00E9g",
+          "value": 0.44999998807907104,
+          "unit": "csempe/j\u00E1rm\u0171-s",
+          "key": "HarvesterSpeed",
+          "min": 0.02,
+          "max": 5,
+          "default": 0.44999998807907104
+        }
+      ],
+      "x": 515,
+      "y": 30
+    },
+    {
+      "id": "machine.forwarder",
+      "name": "Forwarder: sarangok k\u00F6z\u00F6tti k\u00F6zel\u00EDt\u00E9s",
+      "module": "Faanyag \u00E9s logisztika",
+      "scope": "G\u00E9p / sarangp\u00E1r",
+      "schedule": "1/30 j\u00E1rm\u0171-s al-l\u00E9p\u00E9s",
+      "execution": "NativeCode",
+      "description": "Forr\u00E1sb\u00F3l felvesz, c\u00E9lba lerak; terhel\u00E9s szerint v\u00E1ltoz\u00F3 sebess\u00E9g, \u00FAton/nyomon \u00E9s kitermel\u00E9si ter\u00FCleten k\u00F6zlekedik.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "timber.stacks",
+        "machine.pace",
+        "vehicle.route",
+        "vehicle.broken",
+        "vehicle.time"
+      ],
+      "writes": [
+        "machine.cargo",
+        "timber.stacks",
+        "machine.position",
+        "machine.fuel"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/Cargo/ForestryLogistics.Machines.cs",
+          "symbol": "UpdateForwarder"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "Rakom\u00E1nykapacit\u00E1s",
+          "value": 14,
+          "unit": "m\u00B3",
+          "key": "ForwarderCapacity",
+          "min": 1,
+          "max": 60,
+          "default": 14
+        },
+        {
+          "name": "Rakod\u00E1si r\u00E1ta",
+          "value": 2.5,
+          "unit": "m\u00B3/j\u00E1rm\u0171-s",
+          "key": "ForwarderLoadRate",
+          "min": 0.05,
+          "max": 30,
+          "default": 2.5
+        },
+        {
+          "name": "Lerakod\u00E1si r\u00E1ta",
+          "value": 3.5,
+          "unit": "m\u00B3/j\u00E1rm\u0171-s",
+          "key": "ForwarderUnloadRate",
+          "min": 0.05,
+          "max": 30,
+          "default": 3.5
+        },
+        {
+          "name": "\u00DCres sebess\u00E9g",
+          "value": 0.6000000238418579,
+          "unit": "csempe/j\u00E1rm\u0171-s",
+          "key": "ForwarderSpeed",
+          "min": 0.02,
+          "max": 5,
+          "default": 0.6000000238418579
+        },
+        {
+          "name": "Rakott sebess\u00E9g",
+          "value": 0.4000000059604645,
+          "unit": "csempe/j\u00E1rm\u0171-s",
+          "key": "ForwarderLoadedSpeed",
+          "min": 0.02,
+          "max": 5,
+          "default": 0.4000000059604645
+        }
+      ],
+      "x": 25,
+      "y": 160
+    },
+    {
+      "id": "machine.movement",
+      "name": "Erd\u00E9szeti g\u00E9pek mozg\u00E1sa \u00E9s nyomterhel\u00E9se",
+      "module": "Faanyag \u00E9s logisztika",
+      "scope": "G\u00E9p / \u00FAtvonal",
+      "schedule": "1/30 j\u00E1rm\u0171-s al-l\u00E9p\u00E9s",
+      "execution": "NativeCode",
+      "description": "Elt\u00E9r\u0151 \u00FCres/rakott sebess\u00E9g, \u00FAtvonalj\u00E1rhat\u00F3s\u00E1g ellen\u0151rz\u00E9se, nyomv\u00E1ly\u00FA \u00E9s m\u0171velethez tartoz\u00F3 fogyaszt\u00E1s. A g\u00E9pek k\u00FCl\u00F6n kinematik\u00E1val futnak, a teheraut\u00F3 fizikai modellj\u00E9t nem haszn\u00E1lj\u00E1k.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "vehicle.route",
+        "road.network",
+        "trail.network",
+        "trail.wear",
+        "machine.pace",
+        "machine.cargo",
+        "machine.work"
+      ],
+      "writes": [
+        "machine.position",
+        "trail.wear",
+        "machine.fuel"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/Cargo/ForestryLogistics.Machines.cs",
+          "symbol": "Advance"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "\u00DCres menet \u00FCzemanyaga",
+          "value": 0.5,
+          "unit": "l/j\u00E1rm\u0171-s",
+          "key": "FuelDriving",
+          "min": 0,
+          "max": 10,
+          "default": 0.5
+        },
+        {
+          "name": "Rakott menet \u00FCzemanyaga",
+          "value": 0.8,
+          "unit": "l/j\u00E1rm\u0171-s",
+          "key": "FuelDrivingLoaded",
+          "min": 0,
+          "max": 10,
+          "default": 0.8
+        },
+        {
+          "name": "Darumunka \u00FCzemanyaga",
+          "value": 0.35,
+          "unit": "l/j\u00E1rm\u0171-s",
+          "key": "FuelCrane",
+          "min": 0,
+          "max": 10,
+          "default": 0.35
+        }
+      ],
+      "x": 270,
+      "y": 160
+    },
+    {
+      "id": "timber.stack",
+      "name": "Sarang t\u00E9rfogat- \u00E9s \u00E9rt\u00E9km\u00E9rlege",
+      "module": "Faanyag \u00E9s logisztika",
+      "scope": "Sarang",
+      "schedule": "Rakod\u00E1s / lerakod\u00E1s",
+      "execution": "NativeCode",
+      "description": "A kivett mennyis\u00E9g ar\u00E1ny\u00E1ban egy\u00FCtt mozog az \u00E9rt\u00E9k. \u00DCres sarang null\u00E1z\u00F3dik; foglalt vagy nem \u00FCres sarang nem t\u00F6r\u00F6lhet\u0151.",
+      "formula": "\u00E1tadott \u00E9rt\u00E9k = k\u00E9szlet\u00E9rt\u00E9k \u00D7 kivett t\u00E9rfogat / k\u00E9szlett\u00E9rfogat",
+      "notes": "",
+      "reads": [
+        "machine.cargo",
+        "vehicle.cargo",
+        "timber.stacks"
+      ],
+      "writes": [
+        "timber.stacks",
+        "timber.cargoValue"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/Cargo/ForestryLogistics.Stacks.cs",
+          "symbol": "Take"
+        }
+      ],
+      "parameters": [],
+      "x": 515,
+      "y": 160
+    },
+    {
+      "id": "timber.deliver",
+      "name": "\u00C1tad\u00E1s \u00E9s faanyag elad\u00E1sa",
+      "module": "Faanyag \u00E9s logisztika",
+      "scope": "Teheraut\u00F3 / sarang vagy malom",
+      "schedule": "Lerakod\u00E1s",
+      "execution": "NativeCode",
+      "description": "Sarangra \u00E9rt\u00E9kkel egy\u00FCtt ker\u00FCl a fa; malomba \u00E9rkez\u00E9skor azonnal hozz\u00E1ad\u00F3dik a bev\u00E9tel. Nem a feldolgoz\u00E1s pillanat\u00E1ban t\u00F6rt\u00E9nik az elad\u00E1s.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "vehicle.cargo",
+        "timber.cargoValue",
+        "buildings.footprint"
+      ],
+      "writes": [
+        "timber.stacks",
+        "mill.stock",
+        "economy.income"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/Cargo/ForestryLogistics.Stacks.cs",
+          "symbol": "Receive"
+        }
+      ],
+      "parameters": [],
+      "x": 25,
+      "y": 290
+    },
+    {
+      "id": "mill.place",
+      "name": "F\u0171r\u00E9szmalom elhelyez\u00E9se",
+      "module": "Faanyag \u00E9s logisztika",
+      "scope": "2\u00D72 cella",
+      "schedule": "J\u00E1t\u00E9kosparancs",
+      "execution": "NativeCode",
+      "description": "S\u00EDk, sz\u00E1raz, \u00FCres, erd\u0151 \u00E9s kitermel\u00E9s n\u00E9lk\u00FCli telek; \u00FAt \u00E9s erd\u0151 k\u00E9s\u0151bb nem \u00E9p\u00EDthet\u0151 a l\u00E1bnyom\u00E1ra. Jelenleg nincs malom\u00E9p\u00EDt\u00E9si k\u00F6lts\u00E9g.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "commands",
+        "terrain.height",
+        "terrain.water",
+        "forest.trees",
+        "harvest.sites",
+        "buildings.footprint"
+      ],
+      "writes": [
+        "buildings.footprint",
+        "mill.stock"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/Cargo/ForestryLogistics.cs",
+          "symbol": "PlaceMill"
+        }
+      ],
+      "parameters": [],
+      "x": 270,
+      "y": 290
+    },
+    {
+      "id": "mill.process",
+      "name": "F\u0171r\u00E9szmalom feldolgoz\u00E1sa",
+      "module": "Faanyag \u00E9s logisztika",
+      "scope": "Malom",
+      "schedule": "J\u00E1rm\u0171id\u0151",
+      "execution": "NativeCode",
+      "description": "A k\u00E9szletb\u0151l korl\u00E1tozott \u00FCtemben feldolgozott mennyis\u00E9g lesz; jelenleg nincs \u00FAj term\u00E9kl\u00E1nc vagy feldolgoz\u00E1si bev\u00E9tel.",
+      "formula": "feldolgoz\u00E1s = min(k\u00E9szlet, 0,25 \u00D7 j\u00E1rm\u0171-s) m\u00B3",
+      "notes": "",
+      "reads": [
+        "mill.stock",
+        "vehicle.time"
+      ],
+      "writes": [
+        "mill.stock",
+        "mill.processed"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/Cargo/ForestryLogistics.cs",
+          "symbol": "Processed"
+        }
+      ],
+      "parameters": [],
+      "x": 515,
+      "y": 290
+    },
+    {
+      "id": "economy.fuel",
+      "name": "\u00DCzemanyag-k\u00F6lts\u00E9g",
+      "module": "Gazdas\u00E1g",
+      "scope": "Flottaj\u00E1rm\u0171 / v\u00E1llalat",
+      "schedule": "G\u00E9pmunka vagy teheraut\u00F3 elsz\u00E1mol\u00E1s",
+      "execution": "NativeCode",
+      "description": "A t\u00E9nyleges fogyaszt\u00E1s \u00E9s a kop\u00E1si szorz\u00F3 alapj\u00E1n k\u00F6lts\u00E9get sz\u00E1mol; a modellnek jelenleg nincs k\u00FCl\u00F6n \u00FCzemanyagk\u00E9szlete.",
+      "formula": "k\u00F6lts\u00E9g \u002B= liter \u00D7 d\u00EDzel\u00E1r",
+      "notes": "",
+      "reads": [
+        "vehicle.fuel",
+        "machine.fuel",
+        "economy.fuelFactor"
+      ],
+      "writes": [
+        "economy.runningCosts"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/Cargo/ForestryLogistics.Stacks.cs",
+          "symbol": "Burn"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "D\u00EDzel\u00E1r",
+          "value": 0.62,
+          "unit": "eFt/l",
+          "key": "DieselPrice",
+          "min": 0,
+          "max": 20,
+          "default": 0.62
+        }
+      ],
+      "x": 25,
+      "y": 30
+    },
+    {
+      "id": "economy.balance",
+      "name": "Bev\u00E9tel, kiad\u00E1s \u00E9s eredm\u00E9ny",
+      "module": "Gazdas\u00E1g",
+      "scope": "V\u00E1llalat",
+      "schedule": "M\u0171veleti elsz\u00E1mol\u00E1s",
+      "execution": "NativeCode",
+      "description": "Bev\u00E9tel m\u00EDnusz \u00E9p\u00EDt\u00E9si/jav\u00EDt\u00E1si \u00E9s \u00FCzemeltet\u00E9si k\u00F6lts\u00E9gek. Nincs szigor\u00FA fizet\u0151k\u00E9pess\u00E9gi korl\u00E1t, hitel, dinamikus piac vagy erd\u0151\u00E1pol\u00E1si kiad\u00E1s.",
+      "formula": "eredm\u00E9ny = bev\u00E9tel - \u00E9p\u00EDt\u00E9si kiad\u00E1sok - m\u0171k\u00F6d\u00E9si k\u00F6lts\u00E9gek",
+      "notes": "",
+      "reads": [
+        "economy.income",
+        "economy.expenses",
+        "economy.runningCosts"
+      ],
+      "writes": [
+        "economy.result"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/GameWorld.cs",
+          "symbol": "Balance"
+        }
+      ],
+      "parameters": [],
+      "x": 270,
+      "y": 30
+    },
+    {
+      "id": "wildlife.habitat",
+      "name": "Vad\u00E1llom\u00E1ny \u00E9l\u0151helye",
+      "module": "Vadak",
+      "scope": "T\u00E9rk\u00E9pcella / \u00E1llat",
+      "schedule": "Erd\u0151- vagy tereprev\u00EDzi\u00F3 v\u00E1ltoz\u00E1s",
+      "execution": "NativeCode",
+      "description": "J\u00E1rhat\u00F3 \u00E9l\u0151helyb\u0151l indul\u00F3 \u00E1llatok; \u00E9l\u0151hely n\u00E9lk\u00FCl elt\u0171nnek. Nincs demogr\u00E1fiai vagy erdei vadk\u00E1rmodell.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "forest.trees",
+        "terrain.height",
+        "terrain.water",
+        "road.network"
+      ],
+      "writes": [
+        "wildlife.state"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/WildlifeSystem.cs",
+          "symbol": "CollectWildlifeSpots"
+        }
+      ],
+      "parameters": [],
+      "x": 25,
+      "y": 30
+    },
+    {
+      "id": "wildlife.forage",
+      "name": "\u00C9hs\u00E9g \u00E9s helyi t\u00E1pl\u00E1l\u00E9kfogy\u00E1s",
+      "module": "Vadak",
+      "scope": "\u00C1llat / cella",
+      "schedule": "Vil\u00E1gl\u00E9p\u00E9s",
+      "execution": "NativeCode",
+      "description": "\u00C9hs\u00E9g n\u0151, \u00E1llva t\u00E1pl\u00E1lkozva cs\u00F6kken; helyi t\u00E1pl\u00E1l\u00E9k fogy \u00E9s id\u0151vel regener\u00E1l\u00F3dik. Ez nem \u00EDrja a faegyedek eg\u00E9szs\u00E9g\u00E9t.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "wildlife.state",
+        "terrain.moisture",
+        "calendar.time"
+      ],
+      "writes": [
+        "wildlife.state",
+        "wildlife.forage"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/WildlifeSystem.cs",
+          "symbol": "Hunger"
+        }
+      ],
+      "parameters": [],
+      "x": 270,
+      "y": 30
+    },
+    {
+      "id": "wildlife.movement",
+      "name": "B\u00FAv\u00F3hely \u00E9s mozg\u00E1sv\u00E1laszt\u00E1s",
+      "module": "Vadak",
+      "scope": "\u00C1llat / szomsz\u00E9dos cell\u00E1k",
+      "schedule": "Vil\u00E1gl\u00E9p\u00E9s",
+      "execution": "NativeCode",
+      "description": "\u00C9hs\u00E9g, nedvess\u00E9g, es\u0151 alatti \u00E9rett erd\u0151, v\u00E1ndorl\u00E1si ig\u00E9ny \u00E9s fordul\u00E1si korl\u00E1tok alapj\u00E1n v\u00E1laszt c\u00E9lpontot; a j\u00E1r\u00E1st a talajhoz illeszti.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "wildlife.state",
+        "wildlife.forage",
+        "forest.trees",
+        "weather.rain",
+        "terrain.height",
+        "terrain.water",
+        "road.network"
+      ],
+      "writes": [
+        "wildlife.state"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/WildlifeSystem.cs",
+          "symbol": "TargetTile"
+        }
+      ],
+      "parameters": [],
+      "x": 515,
+      "y": 30
+    },
+    {
+      "id": "visual.tree",
+      "name": "Fa\u00E1llapotb\u00F3l procedur\u00E1lis modell",
+      "module": "Megjelen\u00EDt\u00E9s",
+      "scope": "Faegyed",
+      "schedule": "Megjelen\u00EDt\u00E9si friss\u00EDt\u00E9s",
+      "execution": "Presentation",
+      "description": "Faj, \u00E9letf\u00E1zis, m\u00E9ret, f\u00E9ny, \u00E9leter\u0151 \u00E9s fenol\u00F3gia v\u00E1lasztj\u00E1k a koron\u00E1t \u00E9s \u00E1gszerkezetet. A modellm\u00E9ret a szimul\u00E1ci\u00F3t k\u00F6veti; a renderer nem n\u00F6veszti a f\u00E1t.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "forest.trees",
+        "forest.species",
+        "forest.health",
+        "forest.resources",
+        "visual.foliage",
+        "calendar.time"
+      ],
+      "writes": [
+        "visual.tree"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Ecology/Shape/TreeShapeSpec.cs",
+          "symbol": "TreeShapeSpec"
+        }
+      ],
+      "parameters": [],
+      "x": 25,
+      "y": 30
+    },
+    {
+      "id": "visual.truck",
+      "name": "Teheraut\u00F3modell \u00E9s l\u00E1that\u00F3 rakom\u00E1ny",
+      "module": "Megjelen\u00EDt\u00E9s",
+      "scope": "Teheraut\u00F3",
+      "schedule": "Renderk\u00E9pkocka",
+      "execution": "Presentation",
+      "description": "Import\u00E1lt modell, ker\u00E9kmozg\u00E1s, rakom\u00E1ny \u00E9s \u00FAtfel\u00FCletet k\u00F6vet\u0151 d\u0151l\u00E9s. A megjelen\u00EDt\u00E9s olvassa a szimul\u00E1ci\u00F3t.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "vehicle.position",
+        "vehicle.speed",
+        "vehicle.cargo",
+        "terrain.height"
+      ],
+      "writes": [
+        "visual.truck"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/Rendering/Models/GlbTruckModel.cs",
+          "symbol": "GlbTruckModel"
+        }
+      ],
+      "parameters": [],
+      "x": 270,
+      "y": 30
+    },
+    {
+      "id": "visual.weather",
+      "name": "Id\u0151j\u00E1r\u00E1si l\u00E1tv\u00E1ny",
+      "module": "Megjelen\u00EDt\u00E9s",
+      "scope": "Vil\u00E1g / fel\u00FClet",
+      "schedule": "Renderk\u00E9pkocka",
+      "execution": "Presentation",
+      "description": "Es\u0151, felh\u0151, vill\u00E1ml\u00E1s, nedves fel\u00FCletek, utak \u00E9s erd\u0151. K\u00E9zi h\u00F3/id\u0151j\u00E1r\u00E1si l\u00E1tv\u00E1nyteszt k\u00FCl\u00F6n be\u00E1ll\u00EDt\u00E1s; nem v\u00E1ltja \u00E1t a kl\u00EDma v\u00EDzm\u00E9rleg\u00E9t.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "weather.rain",
+        "weather.forcing",
+        "water.surface",
+        "forest.trees",
+        "road.condition"
+      ],
+      "writes": [
+        "visual.weather"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/Rendering/Scene/TerrainRenderer.cs",
+          "symbol": "TerrainRenderer"
+        }
+      ],
+      "parameters": [],
+      "x": 515,
+      "y": 30
+    },
+    {
+      "id": "visual.phenology",
+      "name": "Lombf\u00E1zis \u00E9s fajf\u00FCgg\u0151 \u00E9letf\u00E1zis",
+      "module": "Megjelen\u00EDt\u00E9s",
+      "scope": "Faegyed",
+      "schedule": "Erd\u0151\u00E9v t\u00F6rt r\u00E9sze",
+      "execution": "Presentation",
+      "description": "R\u00FCgyfakad\u00E1s, teljes lomb, \u0151szi sz\u00EDn \u00E9s lombhull\u00E1s fajonk\u00E9nti napt\u00E1rb\u00F3l, egyedi seedelt eltol\u00E1ssal. A jelenlegi HydrologyInputs lev\u00E9lfel\u00FClet\u00E9ben ez a lombf\u00E1zis m\u00E9g nem szerepel.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "forest.trees",
+        "forest.species",
+        "calendar.time",
+        "world.seed"
+      ],
+      "writes": [
+        "visual.foliage"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Ecology/Species/TreePhenology.cs",
+          "symbol": "At"
+        }
+      ],
+      "parameters": [],
+      "x": 25,
+      "y": 160
+    },
+    {
+      "id": "visual.deadwood",
+      "name": "Holtfa \u00E9s t\u00F6nk megjelen\u00EDt\u00E9se",
+      "module": "Megjelen\u00EDt\u00E9s",
+      "scope": "Elhalt vagy kiv\u00E1gott egyed",
+      "schedule": "Renderfriss\u00EDt\u00E9s",
+      "execution": "Presentation",
+      "description": "Kiv\u00E1gott fa m\u00E9ret\u0171, \u00F6reged\u0151 t\u00F6nk\u00F6k \u00E9s elhal\u00E1s ut\u00E1n id\u0151vel fekv\u0151 holtfa. \u00C1llapotb\u00F3l \u00E9s korb\u00F3l k\u00F6vetkezik a l\u00E1tv\u00E1ny, LOD-v\u00E1lt\u00E1skor is.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "forest.stumps",
+        "forest.deadwood",
+        "calendar.time"
+      ],
+      "writes": [
+        "visual.deadwood"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/Terrain/Forest/Terrain.ForestStumps.cs",
+          "symbol": "Stump"
+        },
+        {
+          "file": "ForesTycoon/Terrain/Forest/Terrain.ForestIndividuals.cs",
+          "symbol": "DeathYear"
+        }
+      ],
+      "parameters": [],
+      "x": 270,
+      "y": 160
+    },
+    {
+      "id": "visual.machines",
+      "name": "Erd\u00E9szeti g\u00E9pmodellek",
+      "module": "Megjelen\u00EDt\u00E9s",
+      "scope": "Processzor / forwarder",
+      "schedule": "Renderk\u00E9pkocka",
+      "execution": "Presentation",
+      "description": "\u00DAtvonalhoz illesztett g\u00E9pmodellek, rakom\u00E1ny \u00E9s darumozg\u00E1s; licencelt GLB-k eset\u00E9n anim\u00E1ci\u00F3, hi\u00E1nyukban egyszer\u0171 helyettes\u00EDt\u0151 modell.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "machine.position",
+        "machine.work",
+        "machine.cargo",
+        "terrain.height",
+        "trail.wear"
+      ],
+      "writes": [
+        "visual.machines"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/Rendering/Scene/ForestMachineRenderer.cs",
+          "symbol": "ForestMachineRenderer"
+        }
+      ],
+      "parameters": [],
+      "x": 515,
+      "y": 160
+    },
+    {
+      "id": "visual.buildings",
+      "name": "\u00C9p\u00FCletek \u00E9s sarangok modelljei",
+      "module": "Megjelen\u00EDt\u00E9s",
+      "scope": "Malom / telephely / sarang",
+      "schedule": "Renderk\u00E9pkocka",
+      "execution": "Presentation",
+      "description": "A l\u00E1bnyomhoz \u00E9s terepszinthez illesztett malommodell, telephely \u00E9s sarang-l\u00E1tv\u00E1ny; a k\u00E9szlet a r\u00F6nkhalom megjelen\u00E9s\u00E9t vez\u00E9rli.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "buildings.footprint",
+        "terrain.height",
+        "timber.stacks"
+      ],
+      "writes": [
+        "visual.buildings"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/Rendering/Scene/WorldContentRenderer.cs",
+          "symbol": "WorldContentRenderer"
+        },
+        {
+          "file": "ForesTycoon/Rendering/Scene/ForestMachineRenderer.cs",
+          "symbol": "DrawDepots"
+        }
+      ],
+      "parameters": [],
+      "x": 25,
+      "y": 290
+    },
+    {
+      "id": "visual.animals",
+      "name": "Vadmodellek \u00E9s j\u00E1r\u00E1sanim\u00E1ci\u00F3",
+      "module": "Megjelen\u00EDt\u00E9s",
+      "scope": "\u00C1llat",
+      "schedule": "Renderk\u00E9pkocka",
+      "execution": "Presentation",
+      "description": "A szimul\u00E1lt hely, fordul\u00E1s, j\u00E1r\u00E1skever\u00E9s \u00E9s l\u00E9p\u00E9shossz hajtja az import\u00E1lt szarvasmodell anim\u00E1ci\u00F3j\u00E1t.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "wildlife.state",
+        "terrain.height"
+      ],
+      "writes": [
+        "visual.animals"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/Rendering/Scene/WildlifeRenderer.cs",
+          "symbol": "WildlifeRenderer"
+        }
+      ],
+      "parameters": [],
+      "x": 270,
+      "y": 290
+    },
+    {
+      "id": "visual.fish",
+      "name": "Hal\u00E9l\u0151hely \u00E9s \u00FAsz\u00F3 modellek",
+      "module": "Megjelen\u00EDt\u00E9s",
+      "scope": "\u00C1ll\u00F3v\u00EDzmedence",
+      "schedule": "V\u00EDzt\u00E9rk\u00E9p v\u00E1ltoz\u00E1sa / renderk\u00E9pkocka",
+      "execution": "Presentation",
+      "description": "El\u00E9g m\u00E9ly medenc\u00E9kben dekorat\u00EDv, seedelt halhelyek. Nagy, t\u00E9rk\u00E9psz\u00E9li tenger 8\u2013120 hal; kis bels\u0151 v\u00EDz legfeljebb 2. Nincs halpopul\u00E1ci\u00F3s anyagm\u00E9rleg.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "terrain.water",
+        "terrain.height",
+        "calendar.time",
+        "world.seed"
+      ],
+      "writes": [
+        "visual.fish"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Map/Terrain/TerrainMap.Fish.cs",
+          "symbol": "CollectFishHabitats"
+        }
+      ],
+      "parameters": [],
+      "x": 515,
+      "y": 290
+    },
+    {
+      "id": "visual.terrain",
+      "name": "Terep- \u00E9s v\u00EDzgeometria",
+      "module": "Megjelen\u00EDt\u00E9s",
+      "scope": "T\u00E9rk\u00E9pchunk",
+      "schedule": "Tereprev\u00EDzi\u00F3 / l\u00E1that\u00F3s\u00E1g",
+      "execution": "Presentation",
+      "description": "A node- \u00E9s csempeadatokb\u00F3l terep- \u00E9s v\u00EDzfel\u00FClet \u00E9p\u00FCl; helyi v\u00E1ltoz\u00E1sok chunkonk\u00E9nt friss\u00EDtik a geometri\u00E1t.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "terrain.height",
+        "terrain.water",
+        "terrain.moisture"
+      ],
+      "writes": [
+        "visual.terrain"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/Terrain/Render/Terrain.Mesh.cs",
+          "symbol": "Terrain"
+        }
+      ],
+      "parameters": [],
+      "x": 25,
+      "y": 420
+    },
+    {
+      "id": "visual.roads",
+      "name": "\u00DAtburkolat, k\u00E1ty\u00FA \u00E9s nyomv\u00E1ly\u00FA",
+      "module": "Megjelen\u00EDt\u00E9s",
+      "scope": "\u00DAt- vagy nyomcsempe",
+      "schedule": "Renderk\u00E9pkocka",
+      "execution": "Presentation",
+      "description": "Burkolatf\u00FCgg\u0151 fel\u00FClet, s\u00E9r\u00FClts\u00E9g szerinti k\u00E1ty\u00FAk, terephez illesztett nyomv\u00E1ly\u00FAk \u00E9s csatlakoz\u00F3 lej\u00E1r\u00F3k. A l\u00E1tv\u00E1ny az \u00FAt \u00E9s nyom \u00E1llapot\u00E1t k\u00F6veti.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "road.network",
+        "road.condition",
+        "trail.network",
+        "trail.wear",
+        "terrain.height",
+        "weather.forcing"
+      ],
+      "writes": [
+        "visual.roads"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/Terrain/Render/Terrain.RoadRender.cs",
+          "symbol": "DrawRoadPotholes"
+        }
+      ],
+      "parameters": [],
+      "x": 270,
+      "y": 420
+    }
+  ],
+  "gaps": [
+    "A nat\u00EDv folyamatok k\u00E9plete a jelenlegi C# implement\u00E1ci\u00F3 le\u00EDr\u00E1sa; a sz\u00E1maik (kulccsal jel\u00F6lt param\u00E9terek) hangolhat\u00F3k, a k\u00E9plet szerkezete csak road.trafficWear eset\u00E9n szerkeszthet\u0151 gr\u00E1fk\u00E9nt.",
+    "A talaj-, kl\u00EDma- \u00E9s fafajparam\u00E9terek egyel\u0151re csak t\u00E1j\u00E9koztat\u00F3 adatok: a vil\u00E1g l\u00E9trehoz\u00E1sakor r\u00F6gz\u00FClnek, a szerkeszt\u0151b\u0151l nem hangolhat\u00F3k.",
+    "Talajt\u00F6m\u00F6r\u00F6d\u00E9s, er\u00F3zi\u00F3 \u00E9s \u00FAtkialak\u00EDt\u00E1s miatti r\u00E9szletes v\u00EDzelvezet\u0151 m\u0171t\u00E1rgyak nincsenek k\u00FCl\u00F6n folyamatk\u00E9nt megval\u00F3s\u00EDtva.",
+    "A vadak nem r\u00E1gj\u00E1k a csemet\u00E9ket; k\u00E1rtev\u0151-, fert\u0151z\u00E9s- \u00E9s t\u0171zterjed\u00E9si rendszer m\u00E9g nincs.",
+    "Gy\u00E9r\u00EDt\u00E9s, \u00E1pol\u00E1s \u00E9s ezek p\u00E9nz\u00FCgyi k\u00F6lts\u00E9ge m\u00E9g nem k\u00FCl\u00F6n j\u00E1t\u00E9kosparancs; telep\u00EDt\u00E9s \u00E9s kitermel\u00E9s van.",
+    "Nincs p\u00E9nzk\u00E9szlet alapj\u00E1n tiltott \u00E9p\u00EDt\u00E9s, j\u00E1rm\u0171v\u00E1s\u00E1rl\u00E1s, hitel vagy dinamikus faanyagpiac.",
+    "A fa t\u00E9rfogat\u00E1nak p\u00E9nzbeli \u00E9rt\u00E9k\u00E9t a logisztikai TimberPrice adja; a teheraut\u00F3 fas\u0171r\u0171s\u00E9ge minden fajra azonos.",
+    "A nat\u00EDv folyamatok t\u00F6bb \u00EDr\u00F3ja \u00E9s visszacsatol\u00E1sa a megl\u00E9v\u0151 futtat\u00E1si sorrend szerint m\u0171k\u00F6dik; a katal\u00F3gus \u00E9lei nem \u00FAj v\u00E9grehajt\u00E1si sorrendet jelentenek."
+  ],
+  "roadTrafficModel": {
+    "version": 1,
+    "name": "\u00DAtkop\u00E1s",
+    "binding": "road.trafficWear",
+    "output": "wear",
+    "nodes": [
+      {
+        "id": "traffic",
+        "name": "\u00C1thalad\u00E1si terhel\u00E9s",
+        "operation": "TrafficWear",
+        "value": 1,
+        "a": "",
+        "b": "",
+        "x": 20,
+        "y": 30
+      },
+      {
+        "id": "surface",
+        "name": "Burkolati szorz\u00F3",
+        "operation": "SurfaceFactor",
+        "value": 1,
+        "a": "",
+        "b": "",
+        "x": 20,
+        "y": 150
+      },
+      {
+        "id": "base",
+        "name": "Burkolati kop\u00E1s",
+        "operation": "Multiply",
+        "value": 1,
+        "a": "traffic",
+        "b": "surface",
+        "x": 260,
+        "y": 70
+      },
+      {
+        "id": "scale",
+        "name": "Kop\u00E1si szorz\u00F3",
+        "operation": "Constant",
+        "value": 1,
+        "a": "",
+        "b": "",
+        "x": 260,
+        "y": 210
+      },
+      {
+        "id": "wear",
+        "name": "\u00DAt\u00E1llapot cs\u00F6kken\u00E9se",
+        "operation": "Multiply",
+        "value": 1,
+        "a": "base",
+        "b": "scale",
+        "x": 500,
+        "y": 90
+      }
+    ]
+  }
+}

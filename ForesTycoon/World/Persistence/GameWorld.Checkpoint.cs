@@ -6,10 +6,13 @@ namespace ForesTycoon
     {
         internal WorldCheckpointData CaptureCheckpoint() => new(1, worldTick, commandJournal.Count - commands.Count,
             commands.Count, map.Capture(), ecosystem.Capture(), wildlife.Capture(), Logistics.Capture(), vehicles.Capture(),
-            timberCargo.Available, timberCargo.Delivered, effects.Capture(), lastForestryAction, lastForestryArea, Expenses);
+            timberCargo.Available, timberCargo.Delivered, effects.Capture(), lastForestryAction, lastForestryArea, Expenses, RuleDocument,
+            Tuning.IsDefault ? null : Tuning.ToOverrides());
 
         private void RestoreCheckpoint(WorldCheckpointData s)
         {
+            roadRule = new CompiledRoadRule(s.Rules ?? RuleModel.Default());
+            roadRule.ValidateRange();
             CheckpointGuard.Require(Enum.IsDefined(s.LastAction) && s.LastArea.TileCount >= 0 && s.LastArea.Applied >= 0 &&
                 s.LastArea.Applied <= s.LastArea.TileCount, "forestry UI state");
             CheckpointGuard.NonNegative(s.LastArea.TimberVolume, "forestry volume");
@@ -21,6 +24,7 @@ namespace ForesTycoon
                 if (v.LocalCargo) CheckpointGuard.Require(Logistics.Mills.Exists(m => m.TileId == v.SawmillTileId), "truck destination");
             CheckpointGuard.NonNegative(s.Expenses, "expenses");
             worldTick = s.Tick; lastForestryAction = s.LastAction; lastForestryArea = s.LastArea; Expenses = s.Expenses;
+            ApplyTuning(GameTuning.FromOverrides(s.Tuning));
             terrainRenderer.Dispose();
             terrainRenderer = new TerrainRenderer(terrain, vehicles, effects, forest, Graphics, Environment, wildlife, Logistics);
         }

@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Using Include="ForesTycoon.Rules" />
     <Using Include="ForesTycoon.Engine" />
     <Using Include="ForesTycoon.Ecology" />
     <Using Include="ForesTycoon.TreeModels" />

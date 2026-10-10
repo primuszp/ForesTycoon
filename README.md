@@ -1,5 +1,19 @@
 # ForesTycoon
 
+## Szabályrendszer editor
+
+Külön alkalmazás: `dotnet run --project ForesTycoon.Editor`. Indításkor a jelenlegi játék
+74 szabályának, 13 moduljának és 553 mezőkapcsolatának áttekintése nyílik meg, forráskódhoz
+kötött képletekkel, paraméterekkel és ütemezéssel. A natív folyamatok leírása olvasható,
+az elrendezés és megjegyzések menthetők. A [verziózott katalógus](ForesTycoon.Rules/Catalog/current-game-rules.json)
+grafika nélkül exportálható a `--export-current-rules` kapcsolóval.
+Az útkopási nézetben vizuális gráf, szerkeszthető
+kapcsolatok és paraméterek, JSON-mentés/betöltés, próbaszámítás és saját tesztvilág.
+A játékban **F12 → Szabálymodell → Szabálymodell alkalmazása** tölti be a mentett JSON-t. A jármű-áthaladások a gráf
+kimenetével módosítják a térképi útállapotot, amely visszahat a haladásra és fogyasztásra.
+Az aktív modell és a szabályváltások játékmentésben és parancsnaplóban is megmaradnak.
+Használat, korlátok és ellenőrzés: [szabályeditor](docs/rule-editor.md).
+
 ## Úthálózat és időjárási felületek
 
 Az aszfalt, a makadám és a közelítő nyom közös közlekedési hálózatot alkot. A nyomok útcsatlakozásai látható lejárót kapnak; a felületük az út rögzített magasságához illeszkedik. Az erdészeti gépek és a teherautók a tényleges csatlakozásokat követik, megszakadt útvonalon megállnak. A nyom úttá fejlesztése megőrzi a bekötéseket.

@@ -64,7 +64,7 @@ namespace ForesTycoon
                 {
                     int machineId = nextMachineId++;
                     Machines.Add(new ForestMachine { Id = machineId, Kind = kind, Home = depot, Path = new[] { depot.TileId },
-                        Upkeep = new VehicleUpkeep((uint)machineId * 2654435761u) });
+                        Upkeep = new VehicleUpkeep((uint)machineId * 2654435761u), Tuning = Tuning });
                 }
                 int truckId = nextTruckId++;
                 Trucks.Add(new FleetTruck { Id = truckId, Home = depot, Upkeep = new VehicleUpkeep((uint)truckId * 2246822519u + 1) });
@@ -132,7 +132,7 @@ namespace ForesTycoon
             {
                 if (truck.Vehicle != null)
                 {
-                    double burnt = (truck.Vehicle.FuelUsed - truck.FuelCharged) * truck.Upkeep.FuelFactor;
+                    double burnt = (truck.Vehicle.FuelUsed - truck.FuelCharged) * truck.Upkeep.Fuel(Tuning);
                     if (burnt > 0) { Burn(burnt); truck.FuelCharged = truck.Vehicle.FuelUsed; }
                     // Wear while on the move; a broken truck stands where it is until the mechanic is done.
                     var road = truck.Vehicle;
@@ -141,13 +141,13 @@ namespace ForesTycoon
                     bool moving = road.CurrentSpeed > 0.01 || road.TransportState is VehicleTransportState.Loading or VehicleTransportState.Unloading;
                     if (moving || truck.Upkeep.Broken)
                     {
-                        bool running = truck.Upkeep.Operate(seconds, strain, out double repair);
+                        bool running = truck.Upkeep.Operate(seconds, strain, out double repair, Tuning);
                         if (repair > 0) { RunningCosts += repair; Status = $"A rönkszállító #{truck.Id} megjavítva ({repair:N0} eFt)."; }
                         if (!running && !road.Broken) Status = $"A rönkszállító #{truck.Id} elromlott: a szerelő úton van.";
                         road.Broken = !running;
                     }
                 }
-                else if (truck.Phase == TruckPhase.Parked) RunningCosts += truck.Upkeep.Service(seconds);
+                else if (truck.Phase == TruckPhase.Parked) RunningCosts += truck.Upkeep.Service(seconds, Tuning);
                 // The road under it was removed: the truck is taken back to its yard.
                 if (truck.Vehicle != null && !Vehicles.Contains(truck.Vehicle)) { Park(truck); continue; }
                 switch (truck.Phase)

@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>ForesTycoon.Editor</RootNamespace>
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The editor hosts the game runtime for previews; the game never references the editor. -->
+    <ProjectReference Include="../ForesTycoon/ForesTycoon.csproj" />
+    <ProjectReference Include="../ForesTycoon.Rules/ForesTycoon.Rules.csproj" />
+    <Using Include="ForesTycoon.Engine" />
+    <Using Include="ForesTycoon.Ecology" />
+    <Using Include="ForesTycoon.Map" />
+    <Using Include="ForesTycoon.Rendering" />
+  </ItemGroup>
+</Project>

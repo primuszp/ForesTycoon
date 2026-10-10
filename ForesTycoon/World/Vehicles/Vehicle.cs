@@ -25,7 +25,9 @@ namespace ForesTycoon
         private readonly bool useRoadPhysics;
         public VehicleRoadRoute RoadRoute { get; }
         public double CurrentSpeed { get; private set; }
-        internal TruckSpec Spec { get; } = TruckSpec.Default;
+        internal TruckSpec Spec { get; set; } = TruckSpec.Default;
+        /// <summary>Road load of one pass at a gross mass; the world supplies its tuned version.</summary>
+        internal Func<float, float> RoadLoad;
         internal Func<int, (RoadSurface Surface, float Condition)> RoadState;
         internal Action<int, float> RoadWear;
         /// <summary>Wear of the road under the truck (0 new … 1 ruined): it slows the truck and shakes it.</summary>
@@ -151,7 +153,7 @@ namespace ForesTycoon
             if (tile != wornTile)
             {
                 // Each tile entered is one pass: heavier trucks wear the road more.
-                if (wornTile >= 0) RoadWear?.Invoke(tile, 0.0015f * Mass / 36000f);
+                if (wornTile >= 0) RoadWear?.Invoke(tile, RoadLoad?.Invoke(Mass) ?? RoadTrafficParameters.Load(Mass));
                 wornTile = tile;
             }
             if (RoadState == null) { RoadDamage = 0; return (RoadRoute.Surface, 0); }

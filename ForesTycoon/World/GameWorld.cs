@@ -140,7 +140,7 @@ namespace ForesTycoon
             ecosystem.Update(fixedDeltaSeconds);
             long environmentUpdated = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
             // Vehicles and machines keep their own clock, faster than the calendar (see VehicleTimeScale).
-            Logistics?.Update(fixedDeltaSeconds * VehicleTimeScale);
+            Logistics?.Update(fixedDeltaSeconds * Tuning[Tune.VehicleTimeScale]);
             WeatherRoads(fixedDeltaSeconds);
             long logisticsUpdated = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
             wildlife.Update(fixedDeltaSeconds, map, forest, Environment);
@@ -184,7 +184,7 @@ namespace ForesTycoon
         {
             double cost = 0;
             foreach (var (tile, damage) in map.PlanRoadRepair(startTileId, endTileId))
-                cost += RoadCosts.Repair(map.GetRoadPaving(tile), damage);
+                cost += RoadCosts.Repair(map.GetRoadPaving(tile), damage, Tuning);
             return cost;
         }
         public void QueuePlaceSawmill(int tileId) => Enqueue(new PlaceSawmillCommand(tileId));
@@ -284,7 +284,7 @@ namespace ForesTycoon
         void IWorldCommandTarget.ExecuteRoadRepair(int startTileId, int endTileId)
         {
             foreach (var (tile, damage) in map.RepairRoadTilePath(startTileId, endTileId))
-                Expenses += RoadCosts.Repair(map.GetRoadPaving(tile), damage);
+                Expenses += RoadCosts.Repair(map.GetRoadPaving(tile), damage, Tuning);
             if (map.TryGetRoadTileCenter(endTileId, out Vector3 position)) effects.Spawn(WorldEffectKind.RoadChanged, position);
         }
 
@@ -308,7 +308,7 @@ namespace ForesTycoon
         {
             int[] changed = remove ? map.RemoveSkidTrailPath(startTileId, endTileId) : map.MarkSkidTrailPath(startTileId, endTileId);
             if (changed.Length == 0) return;
-            if (!remove) Expenses += changed.Length * RoadCosts.Trail;
+            if (!remove) Expenses += changed.Length * Tuning[Tune.TrailCost];
             Logistics?.TrailsChanged();
             if (remove) vehicles.RemoveInvalidRoutes(map.IsNetworkTile); else vehicles.RefreshLogisticsRoutes(map.IsNetworkTile);
             if (map.TryGetTileCenter(endTileId, out Vector3 position)) effects.Spawn(WorldEffectKind.RoadChanged, position);
@@ -320,7 +320,7 @@ namespace ForesTycoon
             int[] changed = remove ? map.RemoveRoadTilePath(startTileId, endTileId)
                 : map.BuildRoadTilePath(startTileId, endTileId, surface);
             if (changed.Length == 0) return;
-            if (!remove) Expenses += changed.Length * RoadCosts.Build(surface);
+            if (!remove) Expenses += changed.Length * RoadCosts.Build(surface, Tuning);
             long t1 = System.Diagnostics.Stopwatch.GetTimestamp();
             forest.RefreshHabitat(changed);
             long t2 = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -416,6 +416,8 @@ namespace ForesTycoon
             commands.Clear();
             commandJournal.Clear();
             systems.Clear();
+            roadRule = new CompiledRoadRule(RuleModel.Default());
+            LastRuleSample = "Még nem történt közúti áthaladás.";
             worldTick = 0;
             lastForestryAction = ForestryActionResult.None;
             ReplaceTerrain(settings, EcologyTime.DefaultGameSecondsPerYear);
@@ -459,6 +461,12 @@ namespace ForesTycoon
             (backgroundJobs, candidate.backgroundJobs) = (candidate.backgroundJobs, backgroundJobs);
             // Route creation must follow this world's terrain after the ownership transfer.
             vehicles.RoadRouteFactory = route => VehicleRoadRoute.Create(map, route);
+            roadRule = candidate.roadRule;
+            Expenses = candidate.Expenses;
+            BindRoadRules();
+            ApplyTuning(candidate.Tuning);
+            foreach (var vehicle in vehicles.Vehicles) { vehicle.RoadState = vehicles.RoadState; vehicle.RoadWear = vehicles.RoadWear; }
+            LastRuleSample = "Betöltött szabálymodell; várakozás a következő áthaladásra.";
             commands.Clear();
             foreach (var pending in candidate.commands.Snapshot()) commands.Enqueue(pending);
             commandJournal.Clear();
@@ -509,14 +517,8 @@ namespace ForesTycoon
             vehicles.RouteValidator = Logistics.RouteConnected;
             Logistics.Vehicles = vehicles;
             // A skid trail is bare, rutted ground: trucks crawl and pitch on it, the deeper the ruts the worse.
-            vehicles.RoadState = id => map.IsRoadTile(id)
-                ? (map.GetRoadPaving(id) == RoadPaving.Asphalt ? RoadSurface.Asphalt : RoadSurface.Gravel, map.GetRoadCondition(id))
-                : (RoadSurface.Dirt, 0.2f - 0.2f * map.GetSkidTrailWear(id));
-            vehicles.RoadWear = (id, amount) =>
-            {
-                if (map.IsSkidTrail(id)) map.DriveSkidTrail(id, amount * 20);
-                else map.WearRoad(id, amount * (map.GetRoadPaving(id) == RoadPaving.Macadam ? 1f : 0.2f));
-            };
+            BindRoadRules();
+            ApplyTuning(Tuning);
         }
 
         public void Dispose()

@@ -21,7 +21,9 @@ namespace ForesTycoon.Map
         }
 
         /// <summary>A trail unused this long, with its ruts faded, grows over and disappears.</summary>
-        internal const float SkidTrailOvergrowYears = 3f;
+        internal const float DefaultSkidTrailOvergrowYears = 3f;
+        /// <summary>Idle forest years after which an unused trail without ruts is overgrown (set from the world's tuning).</summary>
+        internal float SkidTrailOvergrowYears = DefaultSkidTrailOvergrowYears;
         private readonly Dictionary<int, SkidTrail> skidTrails = new();
 
         public int SkidTrailCount => skidTrails.Count;

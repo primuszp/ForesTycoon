@@ -20,6 +20,9 @@ namespace ForesTycoon
         internal Func<int,(RoadSurface Surface,float Condition)> RoadState;
         /// <summary>Wears a road tile; the amount is for one pass of a loaded truck on macadam.</summary>
         internal Action<int,float> RoadWear;
+        /// <summary>Truck physics and road load every vehicle uses (the world's tuning).</summary>
+        internal TruckSpec Spec = TruckSpec.Default;
+        internal Func<float,float> RoadLoad;
         internal Vehicle SpawnLogistics(int[] route,int[] sources,int mill)
         {
             var vehicle=new Vehicle(nextId++,route,1.5,roadRoute:RoadRouteFactory?.Invoke(route),roadPhysics:UseRoadPhysics);
@@ -74,7 +77,7 @@ namespace ForesTycoon
         private void UpdateVehicle(Vehicle vehicle, double deltaSeconds)
         {
             {
-                vehicle.RoadState = RoadState; vehicle.RoadWear = RoadWear;
+                vehicle.RoadState = RoadState; vehicle.RoadWear = RoadWear; vehicle.Spec = Spec; vehicle.RoadLoad = RoadLoad;
                 if(vehicle.RouteBlocked||vehicle.Broken){vehicle.Hold();return;}
                 if(vehicle.Transit){
                     if(!vehicle.TransitArrived){vehicle.Update(deltaSeconds);if(vehicle.RoutePosition>=vehicle.Route.Length-1-1e-6){vehicle.TransitArrived=true;vehicle.Hold();}}

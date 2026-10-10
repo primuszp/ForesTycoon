@@ -6,6 +6,8 @@ namespace ForesTycoon
     {
         public static IWorldCommand Create(WorldCommandRecord record) => record.Kind switch
         {
+            WorldCommandKind.SetRuleModel => new SetRuleModelCommand(record.RuleJson),
+            WorldCommandKind.SetTuning => new SetTuningCommand(record.RuleJson),
             WorldCommandKind.EditElevation => new EditElevationCommand(record.A, record.B, record.C, record.D, record.Flag),
             // C carries the surface; old saves have 0, the asphalt every earlier road was built with.
             WorldCommandKind.RoadPath => new RoadPathCommand(record.A, record.B, record.Flag,

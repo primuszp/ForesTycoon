@@ -96,7 +96,7 @@ namespace ForesTycoon
                     double.IsFinite(m.PreviousPosition) && m.PreviousPosition >= 0 && m.PreviousPosition <= m.Path.Length - 1, "forest machine position");
                 CheckpointGuard.NonNegative(m.Cargo, "forest machine cargo"); CheckpointGuard.NonNegative(m.WorkTime, "forest machine work time");
                 CheckpointGuard.NonNegative(m.CargoValue, "forest machine cargo value"); CheckpointGuard.NonNegative(m.FuelUsed, "forest machine fuel");
-                CheckpointGuard.Require(m.Cargo <= ForestMachine.ForwarderCapacity + 0.001f && m.Destination >= -1 && m.Destination < terrain.Tiles.Count, "forest machine cargo");
+                CheckpointGuard.Require(m.Cargo <= GameTuning.Spec(Tune.ForwarderCapacity).Max + 0.001f && m.Destination >= -1 && m.Destination < terrain.Tiles.Count, "forest machine cargo");
                 machines.Add(new ForestMachine { Id = m.Id, Kind = m.Kind, Site = m.Site < 0 ? null : sites[m.Site], Path = (int[])m.Path.Clone(),
                     Home = m.Home < 0 ? null : depots[m.Home], HomeRequested = m.HomeRequested, Source = Stack(m.Source), Target = Stack(m.Target),
                     Destination = m.Destination, PathPosition = m.Position, PreviousPathPosition = m.PreviousPosition, State = m.State, Goal = m.Goal,
@@ -117,7 +117,7 @@ namespace ForesTycoon
         {
             if (u == null) return new VehicleUpkeep(seed);
             CheckpointGuard.Unit(u.Wear, "vehicle wear"); CheckpointGuard.NonNegative(u.RepairLeft, "vehicle repair");
-            CheckpointGuard.Require(u.Breakdowns >= 0 && u.RepairLeft <= VehicleUpkeep.RepairSeconds, "vehicle breakdowns");
+            CheckpointGuard.Require(u.Breakdowns >= 0 && u.RepairLeft <= GameTuning.Spec(Tune.RepairSeconds).Max, "vehicle breakdowns");
             var restored = VehicleUpkeep.FromState(u.Seed);
             restored.Wear = u.Wear; restored.Broken = u.Broken; restored.RepairLeft = u.RepairLeft; restored.Breakdowns = u.Breakdowns;
             return restored;
