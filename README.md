@@ -1,87 +1,89 @@
 # ForesTycoon
 
-**Erdőgazdálkodási játék egy élő, izometrikus diorámában.** Nevelj változatos erdőt, kövesd az évszakokat, építs utakat, és szervezd meg a kitermelést és a faanyag szállítását.
+**English** | [Magyar](README.hu.md)
 
-A ForesTycoon aktív fejlesztés alatt álló, később **fizetős játéknak tervezett** projekt. A GitHub a fejlesztés, a hibajelentések és a technikai dokumentáció helye; a megjelenés időpontja és ára még nincs meghirdetve. A pénzügyi támogatási lehetőség előkészítés alatt áll.
+**A forestry management game in a living isometric diorama.** Grow a varied forest, follow the seasons, build roads, and organize harvesting and timber transport.
 
-![A ForesTycoon jelenlegi nyári diorámája](images/preview/current-summer.png)
+ForesTycoon is in active development, with a **paid game release planned**. GitHub hosts development, issue reporting, and technical documentation; a release date and price have not been announced. Financial support options are being prepared.
 
-| Őszi lombszínek | Téli erdő |
+![ForesTycoon's current summer diorama](images/preview/current-summer.png)
+
+| Autumn foliage | Winter forest |
 | --- | --- |
-| ![Fafajonként eltérő, tömör őszi koronák](images/preview/current-autumn.png) | ![Csupasz lombhullatók, havas örökzöldek és szürke rács](images/preview/current-winter.png) |
+| ![Solid autumn crowns with species-specific colors](images/preview/current-autumn.png) | ![Bare deciduous trees, snowy evergreens, and a gray grid](images/preview/current-winter.png) |
 
-A képek a valódi játékablakból, ugyanarról a közeli nézetről származnak, 256× időgyorsítás mellett. A dioráma megjelenítése aktív.
+These screenshots come from the actual game window, using the same close-up view at 256× simulation speed. Diorama rendering is enabled.
 
-## Jelenlegi játék és szimuláció
+## Current gameplay and simulation
 
-- **Élő erdő:** 16 fa- és cserjefaj, egyedi faazonosítók, kor, törzsátmérő, magasság, koronaméret, fény- és vízellátás. Növekedés, lombkorona-versengés, természetes újulat, önritkulás, tönkök és holtfa.
-- **Évszakos dioráma:** fafajspecifikus koronák és felületi minták, eltérő arany, okker, réz és vöröses őszi lombszínek. Az egészséges tavaszi és őszi korona tömör marad; lombhullás végén eltűnik a lomb, télen a részletes ágrendszer látszik. Az örökzöldek megtartják tűleveleiket, a vörösfenyő lombhullató.
-- **Időjárás és hó:** ősszel gyakoribb, tartós eső; nyáron rövid záporok és erős viharok; télen szállingózó, széllel sodródó hópelyhek. Csempénként változó hókészlet, szél által átrendezett hó és olvadásból származó víz.
-- **Terep és víz:** procedurális térkép, folyók és állóvizek, helyi talaj- és klímaviszonyok, terepszerkesztés. A csemperács alapból bekapcsolt, télen és havas tájon hűvös szürke.
-- **Erdészet és szállítás:** kitermelési terület kijelölése, soros telepítések, rönkdepók, fűrészmalom, rakodás és teherautós szállítás. A járművek a valódi úthálózaton haladnak; útmegszakadáskor megőrzik rakományukat.
-- **Utak:** aszfalt, makadám és közelítő nyom, csatlakozások, kopás és javítás, nedves és havas útfelületek.
-- **Vadállatok:** élőhelyhez igazodó szarvasmozgás, járási és legelési animáció; a vízben úszó halak.
-- **Megfigyelés és mentés:** birtoktérkép, gazdálkodási nézetek, környezeti adatok, játékmentés és determinisztikus szimulációs folytatás.
+- **Living forest:** 16 tree and shrub species; individual tree IDs, age, trunk diameter, height, crown size, light, and water supply. Growth, canopy competition, natural regeneration, self-thinning, stumps, and deadwood.
+- **Seasonal diorama:** species-specific crowns and surface patterns, with distinct gold, ochre, copper, and reddish autumn colors. Healthy spring and autumn crowns remain solid; foliage disappears when leaf fall finishes, revealing detailed winter branches. Evergreens retain their needles; larch is deciduous.
+- **Weather and snow:** more frequent, sustained autumn rain; brief summer showers and severe storms; drifting, gently falling winter snowflakes. Snow storage varies by tile, wind redistributes snow, and meltwater enters the water system.
+- **Terrain and water:** procedural maps, rivers and standing water, local soils and climate, and terrain editing. The tile grid is enabled by default and turns cool gray in winter and on snowy terrain.
+- **Forestry and transport:** designated harvesting areas, row plantations, log depots, sawmills, loading, and truck transport. Vehicles follow the actual road network and retain their cargo if a route breaks.
+- **Roads:** asphalt, gravel, and skid trails; connections, wear and repair, and wet and snowy road surfaces.
+- **Wildlife:** deer movement adapted to habitat, walking and grazing animations, and fish swimming in the water.
+- **Observation and saves:** estate map, management views, environmental data, game saves, and deterministic simulation continuation.
 
-Az alap 1× időben a szarvasok és járművek természetes mozgási ütemet kapnak. Új világban egy erdőév 900 szimulációs másodperc: a játék 1× naptárórájával ez körülbelül egy valós óra, 256× mellett elméletileg 14,06 másodperc. A tényleges előrehaladást a gép terhelése is befolyásolhatja.
+At the default 1× speed, deer and vehicles move at a natural pace. In a new world, one forest year spans 900 simulated seconds: approximately one real hour at the game's 1× calendar pace, or a theoretical 14.06 seconds at 256×. Actual progress can also depend on machine load.
 
-Közeli nézetben a háttérben készülő új famodell nem cserélheti le a látható részletes modellt egy durvább LOD-ra. Az évszakos lombszín és lombtalanság a GPU-n követi az aktuális évet, modell-újraépítésre várakozás nélkül. A legutóbbi játékbeli próba két teljes év és 1633 képkocka alatt minden látható chunkot Near részletességen tartott 256× mellett.
+In close-up views, a tree model being built in the background must not replace an already visible detailed model with a coarser LOD. Seasonal foliage colors and leaflessness follow the current year on the GPU without waiting for mesh rebuilds. The latest in-game check kept every visible chunk at Near detail for two complete years and 1,633 frames at 256×.
 
-## Fejlesztői indítás
+## Development setup
 
-Szükséges: **.NET 8 SDK**, OpenGL 3.3 core megjelenítés és Windows, Linux vagy macOS. Linuxon a használt ImGui.NET natív könyvtárhoz glibc 2.38 vagy újabb kell, például Ubuntu 24.04. A jelenlegi automatizált platformellenőrzések Windowsra és Linuxra készülnek.
+Requirements: **.NET 8 SDK**, OpenGL 3.3 core support, and Windows, Linux, or macOS. On Linux, the bundled ImGui.NET native library requires glibc 2.38 or newer, for example Ubuntu 24.04. Current automated platform checks target Windows and Linux.
 
 ```sh
 dotnet restore ForesTycoon.sln
 dotnet run --project ForesTycoon -c Release
 ```
 
-A solution Visual Studióban is megnyitható. A megvásárolt, helyileg telepített modellek opcionálisak: nélkülük a játék a repóban szereplő modellekkel vagy helyettesítő geometriával fut. A megvásárolt modellek nincsenek a nyilvános repóban; részletek: [helyi assetek](docs/logging-facility-assets.md).
+You can also open the solution in Visual Studio. Purchased models installed locally are optional: without them, the game uses repository models or fallback geometry. Purchased source models are excluded from the public repository; see the [local asset policy](docs/logging-facility-assets.md).
 
-## Kezelés
+## Controls
 
-| Művelet | Vezérlés |
+| Action | Control |
 | --- | --- |
-| Kamera forgatása megfigyelő módban | Bal egérhúzás; bal/jobb nyíl |
-| Kamera mozgatása / nagyítás | Jobb egérhúzás / egérgörgő |
-| Kameradöntés / alapnézet | Fel/le nyíl / Home |
-| Szünet / időgyorsítás | Space / a HUD sebességválasztója, 1×–256× |
-| Megfigyelés / gondozás / építés | Q / W / R |
-| Termelés / szállítás | E / T |
-| Járművek / erdészet | V / F |
-| Környezet / gazdálkodás / grafika | K / M / G |
-| Mentés / betöltés | Ctrl vagy Cmd + S / L |
-| Súgó / fejlesztői eszközök | F1 / F12 |
+| Rotate camera in observation mode | Left-drag; left/right arrow |
+| Pan / zoom | Right-drag / mouse wheel |
+| Camera tilt / reset view | Up/down arrow / Home |
+| Pause / simulation speed | Space / HUD speed selector, 1×–256× |
+| Observe / tend / build | Q / W / R |
+| Produce / transport | E / T |
+| Vehicles / forestry | V / F |
+| Environment / management / graphics | K / M / G |
+| Save / load | Ctrl or Cmd + S / L |
+| Help / developer tools | F1 / F12 |
 
-A gyorsmentés az operációs rendszer helyi alkalmazásadat-könyvtárának `ForesTycoon/quicksave.json` fájljába kerül. A részletes eszközök és gyorsbillentyűk a játék súgójában találhatók.
+Quicksaves are stored in `ForesTycoon/quicksave.json` under the operating system's local application-data directory. The in-game help lists detailed tools and shortcuts.
 
-## Motor és szabályeditor
+## Engine and rule editor
 
-C# és .NET 8, OpenTK 4.9.4, OpenGL 3.3 core, GLSL és ImGui.NET. A fix lépéses szimuláció grafika nélkül is futtatható; a megjelenítés külön erőforrás-környezetet és háttérben épülő chunkgeometriát használ.
+C# and .NET 8, OpenTK 4.9.4, OpenGL 3.3 core, GLSL, and ImGui.NET. The fixed-step simulation can run without graphics; rendering uses separate resource environments and chunk geometry built in the background.
 
-| Projekt | Feladat |
+| Project | Responsibility |
 | --- | --- |
-| [ForesTycoon](ForesTycoon) | Játékablak, HUD, interakciók, világ, mentés, erdészet és szállítás |
-| [ForesTycoon.Engine](ForesTycoon.Engine) | Órák, fix lépések, rendszerek, feladatütemezés és animációs időzítés |
-| [ForesTycoon.Ecology](ForesTycoon.Ecology) | Erdő, fajok, növekedés, talaj, víz, regionális klíma és időjárás |
-| [ForesTycoon.Map](ForesTycoon.Map) | Terepadatok, generálás, hidrológia, utak és szerkesztési szabályok |
-| [ForesTycoon.TreeModels](ForesTycoon.TreeModels) | Fafajspecifikus ágváz, törzs, korona és részletességi szintek |
-| [ForesTycoon.Rendering](ForesTycoon.Rendering) | GPU-eszközök, shaderek, bufferek és renderelési környezetek |
-| [ForesTycoon.Models](ForesTycoon.Models) | glTF/GLB modellek, csontvázak, animáció és megjelenítés |
-| [ForesTycoon.Effects](ForesTycoon.Effects) | Csapadék, felhőzet, köd, villámlás és vizuális effektek |
-| [ForesTycoon.Rules](ForesTycoon.Rules) | Verziózott szabálykatalógus és szerkeszthető szabálymodellek |
-| [ForesTycoon.Editor](ForesTycoon.Editor) | Önálló szabályrendszer-editor |
-| [ForesTycoon.Tests](ForesTycoon.Tests) | Szimulációs, architektúra-, mentési és erőforrás-tesztek |
+| [ForesTycoon](ForesTycoon) | Game window, HUD, interactions, world, saves, forestry, and transport |
+| [ForesTycoon.Engine](ForesTycoon.Engine) | Clocks, fixed steps, systems, job scheduling, and animation timing |
+| [ForesTycoon.Ecology](ForesTycoon.Ecology) | Forest, species, growth, soil, water, regional climate, and weather |
+| [ForesTycoon.Map](ForesTycoon.Map) | Terrain data, generation, hydrology, roads, and editing rules |
+| [ForesTycoon.TreeModels](ForesTycoon.TreeModels) | Species-specific skeletons, trunks, crowns, and levels of detail |
+| [ForesTycoon.Rendering](ForesTycoon.Rendering) | GPU devices, shaders, buffers, and rendering environments |
+| [ForesTycoon.Models](ForesTycoon.Models) | glTF/GLB models, skeletons, animation, and rendering |
+| [ForesTycoon.Effects](ForesTycoon.Effects) | Precipitation, clouds, fog, lightning, and visual effects |
+| [ForesTycoon.Rules](ForesTycoon.Rules) | Versioned rule catalog and editable rule models |
+| [ForesTycoon.Editor](ForesTycoon.Editor) | Standalone rule-system editor |
+| [ForesTycoon.Tests](ForesTycoon.Tests) | Simulation, architecture, save, and resource tests |
 
 ```sh
 dotnet run --project ForesTycoon.Editor -c Release
 ```
 
-Az editor a játék szabályait, képleteit és kapcsolatainak katalógusát mutatja. Az útkopási modell paraméterei és kapcsolatai szerkeszthetők, saját tesztvilágban kipróbálhatók és JSON-ként menthetők. A játékban **F12 → Szabálymodell → Szabálymodell alkalmazása** tölti be a modellt. [Editor használata](docs/rule-editor.md).
+The editor displays the game's rules, formulas, and catalog of relationships. Road-wear parameters and connections can be edited, tried in a separate test world, and saved as JSON. In the game, **F12 → Szabálymodell → Szabálymodell alkalmazása** loads the model. See the [editor guide](docs/rule-editor.md).
 
-## Ellenőrzés és dokumentáció
+## Validation and documentation
 
-Az [Engine validation](https://github.com/primuszp/ForesTycoon/actions/workflows/engine-validation.yml) Windows/Linux buildet, egységteszteket és Linux Mesa/Xvfb natív grafikai próbákat futtat. A külön [hardveres ellenőrzés](https://github.com/primuszp/ForesTycoon/actions/workflows/engine-hardware-validation.yml) Windows natív és teljesítményvizsgálatokra szolgál.
+[Engine validation](https://github.com/primuszp/ForesTycoon/actions/workflows/engine-validation.yml) runs Windows/Linux builds, unit tests, and native graphics checks on Linux Mesa/Xvfb. The separate [hardware validation workflow](https://github.com/primuszp/ForesTycoon/actions/workflows/engine-hardware-validation.yml) provides Windows native and performance checks.
 
 ```sh
 dotnet build ForesTycoon.sln -c Release -warnaserror
@@ -89,41 +91,39 @@ dotnet test ForesTycoon.Tests -c Release
 dotnet run --project ForesTycoon -c Release -- --smoke-test
 ```
 
-PowerShellben a teljes ellenőrzőcsomag:
+Run the complete validation suite in PowerShell:
 
 ```powershell
 ./tools/verify-engine.ps1 -Native
 ```
 
-A közeli, két erdőéves, valódi 256× játékbeli évszakpróba képkockánként ellenőrzi a részletességet és képeket ment:
+The actual in-game seasonal check runs for two forest years at 256× in close-up, verifies detail every frame, and saves screenshots:
 
 ```sh
 dotnet run --project ForesTycoon -c Release -- --capture-seasons artifacts/seasonal-256x
 ```
 
-A legutóbbi helyi ellenőrzésben **1589 egységteszt és a teljes Windows natív csomag sikeres**, a Release build figyelmeztetés és hiba nélkül készült. A tiszta GPU-n futó új teljesítménykapu-mérés még hátralévő feladat; a vizuális próba nem helyettesíti azt.
+The latest local validation passed **1,589 unit tests and the complete Windows native suite**, with no Release build warnings or errors. A new performance-gate run with an otherwise idle GPU remains pending; visual validation does not replace it.
 
-- [Architektúra és projektfüggőségek](docs/architecture.md)
-- [Játékmotor code review és javítások](docs/engine-review-2026-10-10.md)
-- [Nagy térképek teljesítményterve és mérési kapuk](docs/large-world-performance.md)
-- [Ökoszisztéma és regionális folyamatok](docs/ecosystem-simulation-design.md)
-- [Faegyedek életciklusa](docs/tree-individual-lifecycle-plan.md)
-- [Fagenerálási irodalom és fajmodellek](docs/tree-generation-literature.md)
-- [Időjárás, vihar és hó kutatási alapjai](docs/rain-storm-cloud-research.md)
-- [Modellimport és GPU-erőforrások](docs/model-import-contract.md)
+- [Architecture and project dependencies](docs/architecture.md)
+- [Game-engine code review and fixes](docs/engine-review-2026-10-10.md)
+- [Large-world performance plan and measurement gates](docs/large-world-performance.md)
+- [Ecosystem and regional processes](docs/ecosystem-simulation-design.md)
+- [Individual tree lifecycle](docs/tree-individual-lifecycle-plan.md)
+- [Tree-generation literature and species models](docs/tree-generation-literature.md)
+- [Research behind weather, storms, and snow](docs/rain-storm-cloud-research.md)
+- [Model import and GPU resources](docs/model-import-contract.md)
 
-## Támogatás és visszajelzés
+## Support and feedback
 
-A pénzügyi támogatási oldal még nincs létrehozva; ide kerül a hivatalos link, amikor elérhetővé válik. Addig a projekt követésével, GitHub-csillaggal, valamint reprodukálható [hibajelentésekkel és ötletekkel](https://github.com/primuszp/ForesTycoon/issues) segítheted a fejlesztést. Hibajelentéshez add meg az operációs rendszert, a videókártyát, a használt revíziót és a reprodukálási lépéseket.
+A financial support page has not yet been created; its official link will be added here when available. For now, you can help by following the project, starring the repository, and submitting reproducible [bug reports and ideas](https://github.com/primuszp/ForesTycoon/issues). For bug reports, include your operating system, GPU, revision, and reproduction steps.
 
-## Licenc és a tervezett fizetős kiadás
+## Licensing and the planned paid release
 
-A cél az, hogy a ForesTycoon saját kódját mások ne használhassák engedély nélkül kereskedelmi termékben vagy bevételszerző szolgáltatásban. Ehhez a kiválasztott **PolyForm Noncommercial 1.0.0** licenc [változatlan tervezete](docs/licensing/PolyForm-Noncommercial-1.0.0.md) elkészült. **Ez még nem a teljes játék hatályos licence.**
+The goal is to prevent others from using ForesTycoon's own code in commercial products or revenue-generating services without permission. An [unmodified proposal](docs/licensing/PolyForm-Noncommercial-1.0.0.md) for **PolyForm Noncommercial 1.0.0** has been prepared. **It is not yet the effective license for the integrated game.**
 
-A jelenlegi fagenerátor közvetlenül befordított DendroKit/Arbaro GPL-kódot és GPL-es származtatott paraméterkészleteket használ. A teljes összekapcsolt játékra ezért nem vezethető be egyszerűen kereskedelmi tiltás: előbb a GPL-függőséget kell megfelelően kiváltani vagy külön jogosultsággal rendezni. A harmadik felek licencei megmaradnak; a tervezet nem korlátozza az általuk megadott jogokat.
+The current tree generator directly incorporates DendroKit/Arbaro GPL code and GPL-derived parameter sets. A commercial-use restriction therefore cannot simply be applied to the combined game: the GPL dependency must first be replaced appropriately or covered by sufficient separate permissions. Third-party licenses remain applicable; the proposal does not restrict rights granted by them.
 
-Az aktuális jogállás, a kivételek és a fizetős kiadás előfeltételei: **[LICENSING.md](LICENSING.md)**. A nyilvános forrás önmagában nem jelent szabad kereskedelmi felhasználási engedélyt.
+For the current status, exceptions, and paid-release requirements, see **[LICENSING.md](LICENSING.md)**. Public availability of source code does not, by itself, grant unrestricted commercial-use permission.
 
-## English summary
-
-ForesTycoon is a forestry management game in development, built around a living isometric diorama, individual trees, seasonal weather, terrain and water simulation, and timber logistics. A paid release is planned; financial support options are not yet available. See the licensing status above and [LICENSING.md](LICENSING.md): the proposed noncommercial license is not yet in force for the integrated game because GPL components remain linked into it.
+Replacing the tree generator is a separate, deferred task. This update addresses documentation and the licensing proposal.
