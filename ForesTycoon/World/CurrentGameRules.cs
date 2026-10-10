@@ -6,6 +6,27 @@ namespace ForesTycoon
     /// <summary>Inventory of implemented behavior. Values with public constants are read from the runtime itself.</summary>
     internal static class CurrentGameRules
     {
+        // File descriptions are historical; only authoring choices survive a refresh from runtime metadata.
+        internal static GameRuleCatalog Refresh(GameRuleCatalog saved, GameRuleCatalog current)
+        {
+            saved.Validate();
+            var tuning = GameTuning.FromOverrides(saved.TuningOverrides());
+            current.RoadTrafficModel = saved.RoadTrafficModel.Clone();
+            current.Name = saved.Name;
+            foreach (var rule in current.Rules)
+            {
+                var previous = saved.Rules.Find(r => r.Id == rule.Id);
+                if (previous != null) { rule.Notes = previous.Notes; rule.X = previous.X; rule.Y = previous.Y; }
+                for (int i = 0; i < rule.Parameters.Count; i++)
+                {
+                    var parameter = rule.Parameters[i];
+                    if (parameter.Tunable) rule.Parameters[i] = parameter with { Value = tuning[GameTuning.Spec(parameter.Key).Key] };
+                }
+            }
+            current.Validate();
+            return current;
+        }
+
         internal static GameRuleCatalog Build(double forestYearSeconds = EcologyTime.DefaultGameSecondsPerYear,
             ClimateDefinition climate = null, SoilLandscapeDefinition soils = null, RuleModel roadTraffic = null, GameTuning tuning = null)
         {
@@ -29,8 +50,9 @@ namespace ForesTycoon
             const string upkeep = "ForesTycoon/World/Cargo/VehicleUpkeep.cs", logistics = "ForesTycoon/World/Cargo/ForestryLogistics.cs";
 
             var clock = Add("time.world", "Szimulációs órák és sorrend", "Idő és vezérlés", "Világ", "Fix világlépés", game, "VehicleTimeScale",
-                "commands", "calendar.time|vehicle.time", "Ökoszisztéma, logisztika, útöregedés, vadak, majd a regisztrált rendszerek. A járművek és vadak külön, gyorsabb órát kapnak: alap 1× mellett természetes tempóban mozognak.");
+                "commands", "calendar.time|vehicle.time|wildlife.time", "Ökoszisztéma, logisztika, útöregedés, vadak, majd a regisztrált rendszerek (rakomány, járművek, effektek). A járművek hangolható órát, a vadak külön rögzített időszorzót kapnak.");
             Param(clock, "Erdőév", forestYearSeconds, "játék-s");
+            Param(clock, "Vadak időszorzója", GameWorld.WildlifeTimeScale, "×");
             var phases = Add("time.ecology", "Ökológiai többütemű futtatás", "Idő és vezérlés", "Világ / hónaphatár", "0,5 s; havi határra bontva",
                 "ForesTycoon.Ecology/Water/ForestEnvironmentCoordinator.cs", "ForestEnvironmentCoordinator",
                 "calendar.time|forest.trees|water.root", "ecology.steps|forest.month", "Előkészítés → víz és időjárás → havi növényzet → havi integrálok törlése. A sorrend befolyásolja az eredményt.");
@@ -39,8 +61,20 @@ namespace ForesTycoon
                 "ForesTycoon/World/Commands/WorldCommandQueue.cs", "ExecutePending", "player.input", "commands",
                 "Építés, bontás, javítás, ültetés, kitermelés kijelölése, járműutasítás és időjárási beavatkozás naplózható parancs.");
             Add("save.restore", "Checkpoint és visszajátszás", "Idő és vezérlés", "Világ", "Mentés / betöltés", game, "Load",
-                "commands|calendar.time|forest.trees|water.root|road.condition|vehicle.cargo|economy.income", "save.snapshot",
+                "commands|rules.behaviors|machine.controllerState|calendar.time|forest.trees|water.root|water.snow|road.condition|vehicle.cargo|machine.grapple|economy.income", "save.snapshot",
                 "Aktív szabálymodell, talaj és klíma, készletek, egyedek, véletlengenerátorok és függő parancsok megőrzése; hibánál izolált betöltés.");
+            Add("rules.behaviors", "Viselkedésgráfok és objektumkötések", "Idő és vezérlés", "Típus / stabil objektumazonosító", "Naplózott parancs; a kötött folyamat meghívásakor",
+                "ForesTycoon/World/GameWorld.Behaviors.cs", "ExecuteBehaviors", "commands", "rules.behaviors",
+                "Ellenőrzött számítási gráfok a támogatott folyamatkimenetekhez és hangolási paraméterekhez. Az egyedi kötés a típuskötés helyére lép; kötés nélkül az eredeti C# eredmény érvényes. Hibás számtan esetén a beépített érték marad, látható hibajelzéssel.");
+            Add("machine.controller", "Gép- és teherautó-vezérlési állapotgráf", "Faanyag és logisztika", "Forwarder / processzor / teherautó típusa vagy egyedi flotta-ID", "Gép al-lépés; teherautó: logisztikai lépés",
+                "ForesTycoon.Rules/BehaviorController.cs", "CompiledBehaviorControllers", "rules.behaviors|machine.work|machine.cargo|vehicle.broken|vehicle.transportState|fleet.state",
+                "machine.controllerState|machine.state", "Szerkeszthető állapotok, sorrendezett ÉS-feltételek, időzítő és egyszeri események. Műveletek: automatikus munka, várakozás, hazatérés; forwardernél és teherautónál külön felrakodás, lerakodás, haladás és részrakománnyal indulás. A szállítási ciklussablon ezeket szerkeszthető állapotokra bontja. Mentett időzítő és eseményállapot; fizikai átadás csak a megfelelő helyen.", execution: GameRuleExecution.EditableController);
+            Add("route.policy", "Útvonalköltség és szakaszengedély gráfjai", "Járművek", "Flottatípus / egyedi flotta-ID", "Minden új útkeresés",
+                "ForesTycoon/World/Cargo/ForestryLogistics.Behaviors.cs", "RouteCost", "rules.behaviors|road.condition|road.network|trail.network|trail.wear|machine.cargo|vehicle.cargo", "vehicle.route",
+                "A route.allow kizárhat egy járható szakaszt; a route.cost pozitív súlyt ad. Bemenet a kiinduló és célcsempe, burkolat, sérültség, rakomány és kapacitás. A gráf szerinti Dijkstra-költség a dokkpár kiválasztását is befolyásolja. A már folyamatban lévő út nem cserélődik le menet közben.", execution: GameRuleExecution.EditableExpressions);
+            Add("loading.policy", "Rakodási mennyiség, időzítés és indulás gráfjai", "Faanyag és logisztika", "Forwarder / processzor / teherautó típusa vagy egyedi flotta-ID", "Rakodási al-lépés / rönkciklus",
+                "ForesTycoon/World/Cargo/ForwarderLoading.cs", "ForwarderLoading", "rules.behaviors|timber.stacks|machine.cargo|vehicle.cargo|machine.controllerState",
+                "machine.cargo|machine.grapple|machine.work|vehicle.cargo|vehicle.transportState|timber.stacks", "Szerkeszthető fel- és lerakott mennyiség, részrakománnyal indulás, forwarder rönkciklus-idő, megfogás és elengedés. A ciklus időzítése rögzítve és mentve; az animáció ugyanazt követi. A készlet-, kapacitás- és rönkkorlát, valamint a térfogat–érték megőrzése kötelező.", execution: GameRuleExecution.EditableExpressions);
 
             Add("terrain.generate", "Terep és vízmedencék", "Terep", "Node-rács / térképcella", "Új világ", "ForesTycoon.Map/Generation/TerrainGenerator.cs", "TerrainGenerator",
                 "world.seed|terrain.settings", "terrain.height|terrain.moisture|terrain.water", "Seedből induló domborzat és hidrológia. A térképi nedvesség nem azonos az ökológiai gyökérzónavíz-készlettel.");
@@ -70,7 +104,7 @@ namespace ForesTycoon
             Param(regional, "Csapadékkontraszt", climate.RainContrast, "1"); Param(regional, "Magassági hűtés", climate.ElevationCooling, "°C");
             Param(regional, "Páratartalom-kontraszt", climate.HumidityContrast, "1");
             Add("weather.events", "Seedelt időjárási események", "Talaj és klíma", "Világ", "Eseményhatárok és környezeti lépés",
-                "ForesTycoon.Ecology/Climate/WeatherSystem.cs", "NextEvent", "world.seed|calendar.time|commands", "weather.rain|weather.forcing",
+                "ForesTycoon.Ecology/Climate/WeatherSystem.cs", "NextEvent", "world.seed|calendar.time|commands", "weather.rain|weather.snowfall|weather.forcing",
                 "Évszakos, seedelt átmenetek: ősszel gyakori tartós eső, nyáron rövid zápor és erős vihar, télen havazás. A hó menthető vízkészlet, melegedéskor olvad. A csapadék rámpáinak integrálása pontos.",
                 "T = 10 + 15 × sin(2π × (idő / erdőév - 0,125)); havazáskor T ≤ -1 °C; sugárzás = 1 - 0,75 × felhőzet");
             Add("weather.evaporation", "Légköri párologtató igény", "Talaj és klíma", "Térképcella", "Környezeti lépés",
@@ -78,6 +112,18 @@ namespace ForesTycoon
                 "A talajpárolgás és a növényzeti vízigény ugyanabból a helyi légköri kényszerből származik.",
                 "E = (0,12 + max(0,T) × 0,015) × sugárzás × (1 - 0,5 × pára) × (1 + 0,035 × szél)");
 
+            Add("water.snowfall", "Hó felhalmozódása", "Vízháztartás", "Térképcella", "Környezeti lépés, olvadás előtt", water, "interval.Snow",
+                "weather.snowfall|climate.rainMultiplier", "water.snow",
+                "A havazás vízegyenértéke a helyi hókészletbe kerül, nem a lombvízbe. A készlet menthető és része a vízmérlegnek.", "hó += csapadék × helyi csapadékszorzó");
+            var thaw = Add("water.snowmelt", "Hótorlaszok olvadása", "Vízháztartás", "Térképcella", "Környezeti lépés, beszivárgás előtt", water, "SnowMeltDepthRate",
+                "water.snow|climate.local", "water.snow|water.surface",
+                "Pozitív helyi hőmérsékleten a mély hótorlasz is olvad. Az olvadék teljes egészében felszíni víz lesz; nincs eltüntetett víztömeg.",
+                "olvadék = min(hó, (hó + alapráta / mélységi ráta) × (1 - exp(-mélységi ráta × max(0,T) × környezeti órák)))");
+            Param(thaw, "Olvadási alapráta", EnvironmentSystem.SnowMeltBaseRate, "mm/(°C·környezeti óra)");
+            Param(thaw, "Mélységfüggő olvadási ráta", EnvironmentSystem.SnowMeltDepthRate, "1/(°C·környezeti óra)");
+            Add("water.snowdrift", "Szél általi hóátrendezés", "Vízháztartás", "Szomszédos cellák", "Vízlépés után, fagyban", water, "RedistributeSnow",
+                "water.snow|weather.forcing|terrain.height|forest.canopy", "water.snow",
+                "A szél a következő szélirányú cellába hordja a havat; növényzet és domborzat mérsékli az áthordást. Zárt térképszélen megmarad a hó, a fluxusok együtt kerülnek publikálásra.");
             Add("water.interception", "Csapadék és lombkorona-víz", "Vízháztartás", "Térképcella", "Környezeti lépés", water, "WaterStep",
                 "weather.rain|climate.rainMultiplier|forest.canopy|water.canopy", "water.canopy|water.surface",
                 "A lombkorona kapacitásáig felfogja az esőt, a többi a felszínre jut. Koronavesztéskor a többlet lecsepeg, a vízmérleg megmarad.", "felfogás = min(eső, max(0, kapacitás - lombvíz))");
@@ -101,8 +147,8 @@ namespace ForesTycoon
                 "Simított szárazság és víztöbblet; a havi igény/felvétel integrálja adja a növekedési vízellátást. Fafajfüggő szárazságérzékenység.",
                 "vízválasz = clamp(ellátottság ^ szárazságérzékenység × (1 - víztöbblet × 0,65), 0, 1)");
             Add("water.balance", "Vízmérleg és havi integrálzárás", "Vízháztartás", "Világ / cella", "Összegzés; hónapzárás", water, "BalanceError",
-                "water.canopy|water.surface|water.root|water.deep|weather.rain|water.evaporated|water.transpired|water.outflow|forest.month", "water.balance|water.monthBudget",
-                "A havi növényzetfrissítés után törlődnek a felvételi, igény- és sugárzási integrálok; a vízkészletek megmaradnak.", "mérleghiba = tárolt víz - (induló víz + eső - párolgás - transzspiráció - kifolyás)");
+                "water.canopy|water.surface|water.root|water.deep|water.snow|weather.rain|weather.snowfall|water.evaporated|water.transpired|water.outflow|forest.month", "water.balance|water.monthBudget",
+                "A havi növényzetfrissítés után törlődnek a felvételi, igény- és sugárzási integrálok; a víz- és hókészletek megmaradnak.", "mérleghiba = tárolt víz (hóval együtt) - (induló víz + összes csapadék - párolgás - transzspiráció - kifolyás)");
 
             var species = Add("forest.species", "Fafajkatalógus", "Erdő", "Fafaj", "Új világ / fajlekérdezés",
                 "ForesTycoon.Ecology/Species/ForestSpeciesCatalog.cs", "Playable", "", "forest.species",
@@ -153,7 +199,7 @@ namespace ForesTycoon
 
             var build = Add("road.build", "Útépítés és hálózat", "Utak és nyomok", "Útvonal cellái", "Játékosparancs", game, "ExecuteRoadPath",
                 "commands|terrain.height|terrain.water|buildings.footprint", "road.network|economy.expenses|forest.trees|water.routing",
-                "Aszfalt/makadám út, rögzített úttestmagasság és kölcsönös csatlakozások. Csak ténylegesen létrehozott vagy módosított útcsempék növelik az építési költséget.");
+                "Aszfalt/makadám út, rögzített úttestmagasság és kölcsönös csatlakozások. Az érintett növényzet azonnal törlődik, a látvány a következő kirajzolás előtt frissül. Csak ténylegesen létrehozott vagy módosított útcsempék növelik az építési költséget.");
             Add("road.repair", "Útjavítás", "Utak és nyomok", "Útvonal cellái", "Játékosparancs", game, "ExecuteRoadRepair",
                 "commands|road.condition|road.network", "road.condition|economy.expenses",
                 "A kopott útcsempék állapota 1-re áll; a költség a burkolat építési ára és a sérülés szerint számolódik.", "javítás = építési ár × 0,8 × sérülés");
@@ -176,7 +222,7 @@ namespace ForesTycoon
                 "A vályú évente 0,4-et enyhül; 3 év használatlanság és szinte eltűnt vályú után a nyom megszűnik. Az útvonalak újraellenőrződnek.");
             Add("route.find", "Hálózati útvonalkeresés", "Járművek", "Hálózat / forrás és cél", "Utasítás / hálózatváltozás",
                 "ForesTycoon.Map/Terrain/TerrainMap.Network.cs", "FindNetworkPath", "road.network|trail.network|trail.wear|buildings.footprint|timber.stacks", "vehicle.route",
-                "Közös út- és nyomhálózat, kölcsönös csatlakozások, burkolat és nyomvályú szerinti költség. A flottában több dokkpár útvonalai közül a legrövidebb elemszámú nyertes út választódik.");
+                "Közös út- és nyomhálózat, kölcsönös csatlakozások, burkolat és nyomvályú szerinti költség. A flottában a dokkpárok útvonalai közül a legkisebb összesített költségű nyer; azonos költségnél a rendezett dokksorrend dönt.");
             var mass = Add("vehicle.mass", "Rakomány és össztömeg", "Járművek", "Teherautó", "Mozgási lépés", dynamics, "Mass",
                 "vehicle.cargo", "vehicle.mass", "A rakomány térfogatból a rögzített frissfa-sűrűség alapján tömeg lesz. Ez a sűrűség jelenleg nem fajfüggő.", "tömeg = üres tömeg + m³ × fasűrűség");
             var resistance = Add("vehicle.resistance", "Lejtés és menetellenállás", "Járművek", "Teherautó / aktuális útszakasz", "Legfeljebb 1/30 jármű-s", dynamics, "Resistance",
@@ -213,6 +259,13 @@ namespace ForesTycoon
                 "Kivágás, rönkfelvétel és sarangra hordás állapotgépe; kopás szerinti tempóval, rakománykapacitással és műveleti üzemanyag-rátákkal.");
             var forwarder = Add("machine.forwarder", "Forwarder: sarangok közötti közelítés", "Faanyag és logisztika", "Gép / sarangpár", "1/30 jármű-s al-lépés", machine, "UpdateForwarder",
                 "timber.stacks|machine.pace|vehicle.route|vehicle.broken|vehicle.time", "machine.cargo|timber.stacks|machine.position|machine.fuel", "Úton vagy nyomon állva, rönkönként rakodik. A markoló megfogáskor kiveszi, elengedéskor átadja a térfogatot és értéket; az alap ciklus 8 másodperc. A rakomány alulról épül és felülről fogy.");
+            var loading = Add("machine.logTransfer", "Rönk és érték átadása a markolóval", "Faanyag és logisztika", "Forwarder / sarang / markoló", "Rakodási al-lépés", "ForesTycoon/World/Cargo/ForwarderLoading.cs", "Step",
+                "machine.cargo|timber.stacks|machine.pace|vehicle.time|machine.work", "machine.cargo|machine.grapple|timber.stacks|timber.cargoValue|machine.work",
+                "A ciklus elején rögzül a hangolt rakodási rátából számolt idő. Megfogáskor a forrásból a markolóba, elengedéskor a célba kerül a térfogat és érték. A folyamatban levő ciklust és a markoló tartalmát a mentés megőrzi.",
+                "ciklusidő = rönktérfogat / rakodási ráta; fázis = munkaidő / ciklusidő");
+            Param(loading, "Rönktérfogat", ForwarderLoading.LogVolume, "m³");
+            Param(loading, "Megfogás fázisa", ForwarderLoading.Grip, "1");
+            Param(loading, "Elengedés fázisa", ForwarderLoading.Release, "1");
             Add("machine.movement", "Erdészeti gépek mozgása és nyomterhelése", "Faanyag és logisztika", "Gép / útvonal", "1/30 jármű-s al-lépés", machine, "Advance",
                 "vehicle.route|road.network|trail.network|trail.wear|machine.pace|machine.cargo|machine.work", "machine.position|trail.wear|machine.fuel",
                 "Eltérő üres/rakott sebesség, útvonaljárhatóság ellenőrzése, nyomvályú és művelethez tartozó fogyasztás. A gépek külön kinematikával futnak, a teherautó fizikai modelljét nem használják.");
@@ -234,10 +287,10 @@ namespace ForesTycoon
                 "ForesTycoon/World/WildlifeSystem.cs", "CollectWildlifeSpots", "forest.trees|terrain.height|terrain.water|road.network", "wildlife.state",
                 "Járható élőhelyből induló állatok; élőhely nélkül eltűnnek. Nincs demográfiai vagy erdei vadkármodell.");
             Add("wildlife.forage", "Éhség és helyi táplálékfogyás", "Vadak", "Állat / cella", "Világlépés",
-                "ForesTycoon/World/WildlifeSystem.cs", "Hunger", "wildlife.state|terrain.moisture|calendar.time", "wildlife.state|wildlife.forage",
+                "ForesTycoon/World/WildlifeSystem.cs", "Hunger", "wildlife.state|terrain.moisture|wildlife.time", "wildlife.state|wildlife.forage",
                 "Éhség nő, állva táplálkozva csökken; helyi táplálék fogy és idővel regenerálódik. Ez nem írja a faegyedek egészségét.");
             Add("wildlife.movement", "Búvóhely és mozgásválasztás", "Vadak", "Állat / szomszédos cellák", "Világlépés",
-                "ForesTycoon/World/WildlifeSystem.cs", "TargetTile", "wildlife.state|wildlife.forage|forest.trees|weather.rain|terrain.height|terrain.water|road.network", "wildlife.state",
+                "ForesTycoon/World/WildlifeSystem.cs", "TargetTile", "wildlife.time|wildlife.state|wildlife.forage|forest.trees|weather.rain|terrain.height|terrain.water|road.network", "wildlife.state",
                 "Éhség, nedvesség, eső alatti érett erdő, vándorlási igény és fordulási korlátok alapján választ célpontot; a járást a talajhoz illeszti.");
             Add("visual.tree", "Faállapotból procedurális modell", "Megjelenítés", "Faegyed", "Megjelenítési frissítés",
                 "ForesTycoon.Ecology/Shape/TreeShapeSpec.cs", "TreeShapeSpec", "forest.trees|forest.species|forest.health|forest.resources|visual.foliage|calendar.time", "visual.tree",
@@ -246,8 +299,8 @@ namespace ForesTycoon
                 "ForesTycoon/Rendering/Models/GlbTruckModel.cs", "GlbTruckModel", "vehicle.position|vehicle.speed|vehicle.cargo|terrain.height", "visual.truck",
                 "Importált modell, kerékmozgás, rakomány és útfelületet követő dőlés. A megjelenítés olvassa a szimulációt.", "", GameRuleExecution.Presentation);
             Add("visual.weather", "Időjárási látvány", "Megjelenítés", "Világ / felület", "Renderképkocka",
-                "ForesTycoon/Rendering/Scene/TerrainRenderer.cs", "TerrainRenderer", "weather.rain|weather.forcing|water.surface|forest.trees|road.condition", "visual.weather",
-                "Eső, felhő, villámlás, nedves felületek, utak és erdő. Kézi hó/időjárási látványteszt külön beállítás; nem váltja át a klíma vízmérlegét.", "", GameRuleExecution.Presentation);
+                "ForesTycoon/Rendering/Scene/TerrainRenderer.cs", "TerrainRenderer", "weather.rain|weather.snowfall|weather.forcing|water.snow|water.surface|forest.trees|road.condition", "visual.weather",
+                "Eső, hóesés, felhő, villámlás és nedves felületek. A talaj, utak és fák hóborítása a helyi szimulált hókészletet követi, olvadáskor eltűnik. A kézi látványteszt külön beállítás.", "", GameRuleExecution.Presentation);
             Add("visual.phenology", "Lombfázis és fajfüggő életfázis", "Megjelenítés", "Faegyed", "Erdőév tört része",
                 "ForesTycoon.Ecology/Species/TreePhenology.cs", "At", "forest.trees|forest.species|calendar.time|world.seed", "visual.foliage",
                 "Rügyfakadás, teljes lomb, őszi szín és lombhullás fajonkénti naptárból, egyedi seedelt eltolással. A jelenlegi HydrologyInputs levélfelületében ez a lombfázis még nem szerepel.", "", GameRuleExecution.Presentation);
@@ -256,7 +309,7 @@ namespace ForesTycoon
                 "Kivágott fa méretű, öregedő tönkök és elhalás után idővel fekvő holtfa. Állapotból és korból következik a látvány, LOD-váltáskor is.", "", GameRuleExecution.Presentation);
             deadwoodVisual.Sources.Add(new("ForesTycoon/Terrain/Forest/Terrain.ForestIndividuals.cs", "DeathYear"));
             Add("visual.machines", "Erdészeti gépmodellek", "Megjelenítés", "Processzor / forwarder", "Renderképkocka",
-                "ForesTycoon/Rendering/Scene/ForestMachineRenderer.cs", "ForestMachineRenderer", "machine.position|machine.work|machine.cargo|terrain.height|trail.wear", "visual.machines",
+                "ForesTycoon/Rendering/Scene/ForestMachineRenderer.cs", "ForestMachineRenderer", "machine.position|machine.work|machine.cargo|machine.grapple|terrain.height|trail.wear", "visual.machines",
                 "Útvonalhoz illesztett gépmodellek, rakomány és darumozgás; licencelt GLB-k esetén animáció, hiányukban egyszerű helyettesítő modell.", "", GameRuleExecution.Presentation);
             var buildingVisual = Add("visual.buildings", "Épületek és sarangok modelljei", "Megjelenítés", "Malom / telephely / sarang", "Renderképkocka",
                 "ForesTycoon/Rendering/Scene/WorldContentRenderer.cs", "WorldContentRenderer", "buildings.footprint|terrain.height|timber.stacks", "visual.buildings",
@@ -278,10 +331,16 @@ namespace ForesTycoon
             foreach (var spec in GameTuning.Specs)
             {
                 var owner = catalog.Rules.Find(r => r.Id == spec.Rule) ?? throw new InvalidOperationException("Tuning rule missing: " + spec.Rule);
-                owner.Parameters.Add(new(spec.Name, tuning[spec.Key], spec.Unit, spec.Id, spec.Min, spec.Max, spec.Default));
+                owner.Parameters.Add(new(spec.Name, tuning.BaseValue(spec.Key), spec.Unit, spec.Id, spec.Min, spec.Max, spec.Default));
             }
+            var behaviorRules = WorldBehaviorPolicy.Hooks.Select(h => h.Id).Concat(GameTuning.Specs.Select(s => s.Rule))
+                .Append("machine.forwarder").Append("machine.processor").ToHashSet();
+            foreach (var rule in catalog.Rules.Where(r => behaviorRules.Contains(r.Id)))
+                rule.Reads = rule.Reads.Append("rules.behaviors").Distinct().ToArray();
+            foreach (var rule in catalog.Rules.Where(r => r.Id is "machine.forwarder" or "machine.processor" or "vehicle.transfer" or "fleet.orders"))
+                rule.Reads = rule.Reads.Append("machine.controllerState").ToArray();
             catalog.Gaps.AddRange(new[] {
-                "A natív folyamatok képlete a jelenlegi C# implementáció leírása; a számaik (kulccsal jelölt paraméterek) hangolhatók, a képlet szerkezete csak road.trafficWear esetén szerkeszthető gráfként.",
+                "A teljes natív állapotgépek még C#-ban futnak. A Viselkedések nézet a felsorolt folyamatkimeneteket és minden hangolási paramétert szerkeszti gráfként; tetszőleges eseménysorrend, új állapotmező és saját játékosparancs még nem hozható létre.",
                 "A talaj-, klíma- és fafajparaméterek egyelőre csak tájékoztató adatok: a világ létrehozásakor rögzülnek, a szerkesztőből nem hangolhatók.",
                 "Talajtömörödés, erózió és útkialakítás miatti részletes vízelvezető műtárgyak nincsenek külön folyamatként megvalósítva.",
                 "A vadak nem rágják a csemetéket; kártevő-, fertőzés- és tűzterjedési rendszer még nincs.",

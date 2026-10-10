@@ -91,6 +91,7 @@ namespace ForesTycoon
         };
 
         private static readonly Dictionary<string, TuningSpec> byId = Specs.ToDictionary(s => s.Id, StringComparer.Ordinal);
+        private static readonly string[] behaviorKeys = Specs.Select(s => "tuning." + s.Id).ToArray();
         internal static readonly GameTuning Default = new(Specs.Select(s => s.Default).ToArray());
 
         static GameTuning()
@@ -102,10 +103,13 @@ namespace ForesTycoon
         }
 
         private readonly double[] values;
-        private GameTuning(double[] values) { this.values = values; Truck = BuildTruck(); }
+        private readonly IBehaviorPolicy behaviors;
+        private GameTuning(double[] values, IBehaviorPolicy behaviors = null) { this.values = values; this.behaviors = behaviors; Truck = BuildTruck(); }
+        internal GameTuning WithBehaviors(IBehaviorPolicy policy) => new(values, policy);
 
-        internal double this[Tune key] => values[(int)key];
-        internal float F(Tune key) => (float)values[(int)key];
+        internal double BaseValue(Tune key) => values[(int)key];
+        internal double this[Tune key] => behaviors?.Evaluate(new(behaviorKeys[(int)key], "world", 0, values[(int)key])) ?? values[(int)key];
+        internal float F(Tune key) => (float)this[key];
         internal static TuningSpec Spec(string id) => byId.TryGetValue(id, out var spec) ? spec : null;
         internal static TuningSpec Spec(Tune key) => Specs[(int)key];
 

@@ -63,8 +63,9 @@ namespace ForesTycoon.Editor
             catalog.RoadTrafficModel = draft;
         }
 
-        internal void Load(GameRuleCatalog loaded, string file = null)
+        internal void Load(GameRuleCatalog loaded, string file = null, GameRuleCatalog current = null)
         {
+            loaded = CurrentGameRules.Refresh(loaded, current ?? (file != null ? CurrentGameRules.Build() : loaded));
             var nextIndex = new GameRuleIndex(loaded);
             catalog = loaded; index = nextIndex;
             groups = Domains.Select(d => (d, d.Modules.Where(m => index.Modules.Contains(m)).ToArray()))
@@ -125,7 +126,7 @@ namespace ForesTycoon.Editor
 
         private static Vec4 ExecutionColour(GameRuleExecution e) => e switch
         {
-            GameRuleExecution.EditableGraph => EditorStyle.GraphKind,
+            GameRuleExecution.EditableGraph or GameRuleExecution.EditableController or GameRuleExecution.EditableExpressions => EditorStyle.GraphKind,
             GameRuleExecution.Presentation => EditorStyle.PresentationKind,
             _ => EditorStyle.NativeKind
         };
@@ -133,6 +134,8 @@ namespace ForesTycoon.Editor
         private static string Status(GameRuleExecution execution) => execution switch
         {
             GameRuleExecution.EditableGraph => "Szerkeszthető gráf",
+            GameRuleExecution.EditableController => "Szerkeszthető vezérlés",
+            GameRuleExecution.EditableExpressions => "Viselkedésképletek",
             GameRuleExecution.Presentation => "Megjelenítés",
             _ => "Natív C#"
         };
@@ -140,6 +143,8 @@ namespace ForesTycoon.Editor
         private static string StatusHelp(GameRuleExecution execution) => execution switch
         {
             GameRuleExecution.EditableGraph => "Az editor egyenlete fut a játékban; a gráf nézetben módosítható.",
+            GameRuleExecution.EditableController => "Az editor állapotgráfja vezérli a gépet; a Viselkedések fülön módosítható.",
+            GameRuleExecution.EditableExpressions => "A folyamat döntéseit és mennyiségeit a Viselkedések fül képletgráfjai adják.",
             GameRuleExecution.Presentation => "Csak megjelenítés: a szimuláció állapotát olvassa, nem változtatja.",
             _ => "A meglévő C# folyamat futtatja; a képlet és a paraméterek az implementációból feltérképezett adatok."
         };
@@ -157,13 +162,13 @@ namespace ForesTycoon.Editor
                 Message = "Katalógus, elrendezés és tervezői megjegyzések mentve.";
             });
             if (ImGui.IsItemHovered()) ImGui.SetTooltip("A katalógus az elrendezést, a megjegyzéseket és az útkopási gráfot is tartalmazza.");
-            if (ImGui.MenuItem("Megnyitás")) Try(() => { Load(GameRuleCatalog.FromJson(File.ReadAllText(path))); Message = "Katalógus betöltve."; });
+            if (ImGui.MenuItem("Megnyitás")) Try(() => { Load(GameRuleCatalog.FromJson(File.ReadAllText(path)), current: world.DescribeCurrentRules()); Message = "Katalógus betöltve, a folyamatleírások a jelenlegi kódhoz frissítve."; });
             ImGui.Separator();
-            if (ImGui.MenuItem("Újraépítés a játék kódjából")) { Load(world.DescribeCurrentRules()); Message = "A jelenlegi implementáció és a tesztvilág profiljai betöltve."; }
+            if (ImGui.MenuItem("Frissítés a játék kódjából")) Try(() => { Load(catalog, current: world.DescribeCurrentRules()); Message = "Folyamatok frissítve; a hangolások, gráf, megjegyzések és elrendezés megmaradtak."; });
         }
 
         // ── Layout ───────────────────────────────────────────────────────────
-        internal void Draw(GameWorld world, Action<RuleModel> editGraph)
+        internal void Draw(GameWorld world, Action<RuleModel> editGraph, Action<BehaviorHook> editBehavior = null, Action<string> editController = null)
         {
             if (catalog == null) Load(world.DescribeCurrentRules());
             float height = Math.Max(260, ImGui.GetContentRegionAvail().Y);
@@ -175,7 +180,7 @@ namespace ForesTycoon.Editor
             if (module == "gaps") Gaps(); else Canvas();
             ImGui.EndChild(); ImGui.SameLine();
             ImGui.BeginChild("rules-inspector", new Vec2(0, height), ImGuiChildFlags.Borders);
-            Inspector(world, editGraph);
+            Inspector(world, editGraph, editBehavior, editController);
             ImGui.EndChild();
         }
 
@@ -329,8 +334,8 @@ namespace ForesTycoon.Editor
                 float pull = (sameColumn ? 60 : Math.Max(50, Math.Abs(b.X - a.X) / zoom * 0.45f)) * zoom;
                 Vec2 c1 = a + new Vec2(backwards ? -pull : pull, 0), c2 = b + new Vec2(sameColumn || backwards ? pull : -pull, 0);
                 uint u = EditorStyle.U(colour);
-                draw.AddBezierCubic(a, c1, c2, b, u, width);
-                if (over != null) EditorStyle.Arrow(draw, b, b - c2, 8 * zoom + width, u);
+                if (over != null) EditorStyle.BezierArrow(draw, a, c1, c2, b, 8 * zoom + width, u, width);
+                else draw.AddBezierCubic(a, c1, c2, b, u, width);
             }
 
             string clicked = null;
@@ -427,8 +432,7 @@ namespace ForesTycoon.Editor
                 }
                 Vec4 colour = focused ? (from == focus ? HudTheme.AmberAccent : HudTheme.Info) : EditorStyle.Fade(HudTheme.Muted, focus == null ? 0.3f : 0.08f);
                 uint u = EditorStyle.U(colour);
-                draw.AddBezierCubic(a, c1, c2, b, u, focused ? 2.2f : 1.2f);
-                EditorStyle.Arrow(draw, b, b - c2, (focused ? 9 : 6) * zoom, u);
+                EditorStyle.BezierArrow(draw, a, c1, c2, b, (focused ? 9 : 6) * zoom, u, focused ? 2.2f : 1.2f);
                 if (focused && zoom > 0.45f)
                 {
                     string label = fields.Length <= 2 ? string.Join(", ", fields) : $"{fields[0]} +{fields.Length - 1}";
@@ -534,10 +538,10 @@ namespace ForesTycoon.Editor
         }
 
         // ── Inspector ────────────────────────────────────────────────────────
-        private void Inspector(GameWorld world, Action<RuleModel> editGraph)
+        private void Inspector(GameWorld world, Action<RuleModel> editGraph, Action<BehaviorHook> editBehavior, Action<string> editController)
         {
             var rule = index.Find(selected);
-            if (rule != null) { RuleDetails(world, rule, editGraph); return; }
+            if (rule != null) { RuleDetails(world, rule, editGraph, editBehavior, editController); return; }
             if (module.Length > 0 && module != "gaps") { ModuleSummary(); return; }
 
             EditorStyle.Title(catalog.Name);
@@ -591,7 +595,7 @@ namespace ForesTycoon.Editor
             }
         }
 
-        private void RuleDetails(GameWorld world, GameRuleDefinition rule, Action<RuleModel> editGraph)
+        private void RuleDetails(GameWorld world, GameRuleDefinition rule, Action<RuleModel> editGraph, Action<BehaviorHook> editBehavior, Action<string> editController)
         {
             var domain = DomainOf(rule.Module);
             if (EditorStyle.Chip(rule.Module, domain.Colour, "rule-module", true)) { search = ""; string id = rule.Id; SelectModule(rule.Module); selected = id; }
@@ -599,6 +603,17 @@ namespace ForesTycoon.Editor
             EditorStyle.Chip(Status(rule.Execution), ExecutionColour(rule.Execution), "rule-exec");
             if (ImGui.IsItemHovered()) ImGui.SetTooltip(StatusHelp(rule.Execution));
             EditorStyle.Title(rule.Name);
+            if (editController != null && rule.Id is "machine.controller" or "machine.forwarder" or "machine.processor" or "vehicle.transfer" or "fleet.orders")
+                foreach (string kind in new[] { "forwarder", "processor", "truck" })
+                    if ((rule.Id == "machine.controller" || rule.Id == "machine." + kind || kind == "truck" && rule.Id is "vehicle.transfer" or "fleet.orders")
+                        && ImGui.Button("Állapotgráf: " + kind)) editController(kind);
+            if (editBehavior != null)
+                foreach (var hook in WorldBehaviorPolicy.Hooks.Where(h => h.Id == rule.Id
+                    || h.Id.StartsWith("tuning.") && GameTuning.Spec(h.Id[7..])?.Rule == rule.Id
+                    || h.Id.StartsWith("route.") && rule.Id is "route.find" or "route.policy"
+                    || (h.Id.StartsWith("loading.") || h.Id == "unloading.amount") && (rule.Id == "loading.policy" || rule.Id == "machine.logTransfer" && h.Kind == "forwarder" || rule.Id == "vehicle.transfer" && h.Kind == "truck")
+                    || h.Id == "machine.pace" && rule.Id == (h.Kind == "forwarder" ? "machine.forwarder" : "machine.processor")))
+                    if (ImGui.Button("Viselkedésgráf: " + hook.Name + "##" + hook.Id + hook.Kind)) editBehavior(hook);
             ImGui.PushTextWrapPos(); EditorStyle.Text(HudTheme.Parchment, rule.Description); ImGui.PopTextWrapPos();
             if (rule.Execution == GameRuleExecution.EditableGraph)
             {

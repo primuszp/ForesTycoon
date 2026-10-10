@@ -7,7 +7,7 @@ namespace ForesTycoon.Tests;
 /// The timber chain with the starting fleet: processor fells into a stack beside the skid trail, the forwarder carries
 /// that stack to the roadside, the truck hauls the roadside stack to the mill, where the wood is sold.
 /// </summary>
-public class FleetTests
+public partial class FleetTests
 {
     private static readonly TerrainSettings Settings = TerrainSettings.Default.WithNodeSize(17, 42);
     private static readonly int[] Stand = { 136, 137, 152, 153 };         // tiles (8..9, 8..9)
@@ -53,6 +53,25 @@ public class FleetTests
 
     private static ForestMachine Processor(Scene s) => s.Logistics.Machines.Single(m => m.Kind == ForestMachineKind.Harvester);
     private static ForestMachine Forwarder(Scene s) => s.Logistics.Machines.Single(m => m.Kind == ForestMachineKind.Forwarder);
+
+    [Fact]
+    public void ControllerHomeActionFinishesHeldLogAndDeliversBeforeReturningToDepot()
+    {
+        var scene = Build(); var forwarder = Forwarder(scene);
+        var source = scene.Logistics.StackAt(ForestStack); var destination = scene.Logistics.StackAt(RoadStack);
+        source.Volume = 4; source.Value = 400;
+        Assert.True(scene.Logistics.AssignForwarder(forwarder, source, RoadStack));
+        for (int i = 0; i < 6000 && forwarder.LogTransferVolume == 0; i++) Run(scene, 1.0 / 30);
+        Assert.True(forwarder.LogTransferVolume > 0);
+        var controller = new ForesTycoon.Rules.BehaviorController { Id = "home", Kind = "forwarder" };
+        controller.States[0].Action = ForesTycoon.Rules.BehaviorAction.ReturnHome;
+        scene.Logistics.Controllers = new(new() { Controllers = new() { controller } });
+        Run(scene, 240);
+        Assert.False(forwarder.Working); Assert.Equal(Depot, forwarder.Tile); Assert.Equal(ForestMachineState.Parked, forwarder.State);
+        Assert.True(source.Volume > 0); Assert.True(destination.Volume > 0);
+        Assert.Equal(0, forwarder.LogTransferVolume); Assert.Equal(0, forwarder.Cargo);
+        Assert.Equal(4, source.Volume + destination.Volume, 4); Assert.Equal(400, source.Value + destination.Value, 4);
+    }
 
     [Theory]
     [InlineData(false)]

@@ -29,6 +29,7 @@ namespace ForesTycoon.Ecology
         internal double ForestYear => month / 12.0 + accumulatedSeconds / secondsPerYear;
         internal int IndividualTreeCount => IndividualTrees.TreeCount;
         private double currentYearGrowth, lastYearGrowth;
+        internal IBehaviorPolicy Behaviors { get; set; }
         internal float LastAnnualGrowthCubicMetres => (float)lastYearGrowth;
         // Diagnostic fixtures only. Normal edits go through planting/harvest operations.
         internal void NotifyIndividualVisualEdit() {
@@ -113,10 +114,14 @@ namespace ForesTycoon.Ecology
                 float lightResponse = resources.LightResponse(tree.Species);
                 float limit = Math.Min(resources.Space, Math.Min(resources.Water, lightResponse));
                 float target = Math.Clamp(fitness * (0.15f + 0.85f * limit), 0, 1);
+                if (Behaviors != null) target = (float)Behaviors.Evaluate(new("forest.health", "tree", tree.Id, target,
+                    YearsPerStep, year, tree.Health, tree.Age(year)));
                 if (updateHealth) tree = tree with { Health = MoveTowards(tree.Health, target, 0.035f) };
+                float growth = ForestTreeGrowth.Factor(fitness, lightResponse, resources.Water, geometry.SpaceResponse, tree.Health, season);
+                if (Behaviors != null) growth = (float)Behaviors.Evaluate(new("forest.growth", "tree", tree.Id, growth,
+                    YearsPerStep, year, tree.Health, tree.Age(year)));
                 patch.Trees[i] = tree with { Resources = resources,
-                    AnnualGrowth = geometry.Growth.Apply(ForestTreeGrowth.Factor(fitness, lightResponse,
-                        resources.Water, geometry.SpaceResponse, tree.Health, season)) };
+                    AnnualGrowth = geometry.Growth.Apply(growth) };
             }
             patch.Revision++;
         }

@@ -24,6 +24,9 @@ public class CurrentGameRulesTests
         }
         Assert.Single(catalog.Rules, r => r.Execution == GameRuleExecution.EditableGraph);
         Assert.Equal("road.trafficWear", catalog.Rules.Single(r => r.Execution == GameRuleExecution.EditableGraph).Id);
+        Assert.Equal("machine.controller", catalog.Rules.Single(r => r.Execution == GameRuleExecution.EditableController).Id);
+        Assert.Contains(catalog.Rules, r => r.Id == "route.policy" && r.Execution == GameRuleExecution.EditableExpressions);
+        Assert.Contains(catalog.Rules, r => r.Id == "loading.policy" && r.Execution == GameRuleExecution.EditableExpressions);
     }
 
     [Fact]
@@ -75,6 +78,61 @@ public class CurrentGameRulesTests
     }
 
     [Fact]
+    public void SnowAndGrappleAreConnectedToConservationPersistenceAndPresentation()
+    {
+        var catalog = CurrentGameRules.Build(); var links = catalog.Connections();
+        Assert.Contains(new("water.snowfall", "water.snowmelt", "water.snow"), links);
+        Assert.Contains(new("water.snowdrift", "visual.weather", "water.snow"), links);
+        Assert.Contains(new("water.snowmelt", "water.infiltration", "water.surface"), links);
+        Assert.Contains(new("water.snowmelt", "water.balance", "water.snow"), links);
+        Assert.Contains(new("water.snowmelt", "save.restore", "water.snow"), links);
+        Assert.Contains(new("machine.logTransfer", "save.restore", "machine.grapple"), links);
+        Assert.Contains(new("machine.logTransfer", "visual.machines", "machine.grapple"), links);
+        Assert.Contains(catalog.Rules.Single(r => r.Id == "water.snowmelt").Parameters,
+            p => p.Value == EnvironmentSystem.SnowMeltDepthRate);
+    }
+
+    [Fact]
+    public void RefreshReplacesHistoricalDescriptionsButPreservesAuthoringChoices()
+    {
+        var saved = CurrentGameRules.Build();
+        saved.Rules.RemoveAll(r => r.Id.StartsWith("water.snow"));
+        var oldRoute = saved.Rules.Single(r => r.Id == "route.find");
+        oldRoute.Description = "Old shortest route"; oldRoute.Notes = "My route experiment"; oldRoute.X = 987;
+        var fuel = saved.Rules.Single(r => r.Id == "economy.fuel");
+        int i = fuel.Parameters.FindIndex(p => p.Key == "DieselPrice");
+        fuel.Parameters[i] = fuel.Parameters[i] with { Value = 1.2 };
+        saved.RoadTrafficModel.Nodes.Single(n => n.Id == "scale").Value = 3;
+        var current = CurrentGameRules.Build(240, new ClimateDefinition(1, 12, 2, .3, 4, .1));
+        string description = current.Rules.Single(r => r.Id == "route.find").Description;
+        var refreshed = CurrentGameRules.Refresh(saved, current);
+        var route = refreshed.Rules.Single(r => r.Id == "route.find");
+        Assert.Equal(description, route.Description);
+        Assert.Equal("My route experiment", route.Notes); Assert.Equal(987, route.X);
+        Assert.Equal(3, refreshed.Rules.Count(r => r.Id.StartsWith("water.snow")));
+        Assert.Equal(1.2, refreshed.TuningOverrides()["DieselPrice"]);
+        Assert.Equal(3, refreshed.RoadTrafficModel.Nodes.Single(n => n.Id == "scale").Value);
+        Assert.Contains(new RuleParameter("Erdőév", 240, "játék-s"), refreshed.Rules.Single(r => r.Id == "time.world").Parameters);
+        refreshed.RoadTrafficModel.Nodes.Single(n => n.Id == "scale").Value = 4;
+        Assert.Equal(3, saved.RoadTrafficModel.Nodes.Single(n => n.Id == "scale").Value);
+    }
+
+    [Fact]
+    public void InvalidTuningCannotPartiallyQueueAnEditorModel()
+    {
+        using var world = new GameWorld(TerrainSettings.Default.WithNodeSize(9, 42), enableRendering: false);
+        string original = world.RuleDocument.ToJson();
+        var changed = RuleModel.Default(); changed.Nodes.Single(n => n.Id == "scale").Value = 2;
+        Assert.Throws<ArgumentException>(() => world.QueueRuleConfiguration(changed, new Dictionary<string, double> { ["DieselPrice"] = -1 }));
+        world.ExecutePendingCommands();
+        Assert.Equal(original, world.RuleDocument.ToJson());
+        world.QueueRuleConfiguration(changed, new Dictionary<string, double> { ["DieselPrice"] = 1.2 });
+        world.ExecutePendingCommands();
+        Assert.Equal(changed.ToJson(), world.RuleDocument.ToJson());
+        Assert.Equal(1.2, world.Tuning[Tune.DieselPrice]);
+    }
+
+    [Fact]
     public void ValidationRejectsBrokenCatalogDocuments()
     {
         var catalog = CurrentGameRules.Build(); catalog.Rules[1].Id = catalog.Rules[0].Id;
@@ -82,6 +140,10 @@ public class CurrentGameRulesTests
         catalog = CurrentGameRules.Build(); catalog.Rules[0].Sources.Clear();
         Assert.Throws<InvalidDataException>(catalog.Validate);
         catalog = CurrentGameRules.Build(); catalog.RoadTrafficModel.Output = "missing";
+        Assert.Throws<InvalidDataException>(catalog.Validate);
+        catalog = CurrentGameRules.Build();
+        var parameter = catalog.Rules.SelectMany(r => r.Parameters).First(p => p.Tunable);
+        catalog.Rules[0].Parameters.Add(parameter);
         Assert.Throws<InvalidDataException>(catalog.Validate);
     }
 }

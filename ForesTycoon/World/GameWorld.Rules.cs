@@ -14,11 +14,20 @@ namespace ForesTycoon
         internal GameTuning Tuning { get; private set; } = GameTuning.Default;
         internal void QueueTuning(IReadOnlyDictionary<string, double> overrides) =>
             Enqueue(new SetTuningCommand(GameTuning.FromOverrides(overrides).ToJson()));
+        internal void QueueRuleConfiguration(RuleModel model, IReadOnlyDictionary<string, double> overrides)
+        {
+            // Validate the entire editor document before queuing either change.
+            var compiled = new CompiledRoadRule(model);
+            compiled.ValidateRange();
+            var tuning = GameTuning.FromOverrides(overrides);
+            QueueRuleModel(compiled.Document);
+            QueueTuning(tuning.ToOverrides());
+        }
         void IWorldCommandTarget.ExecuteTuning(string json) => ApplyTuning(GameTuning.FromJson(json));
 
         private void ApplyTuning(GameTuning tuning)
         {
-            Tuning = tuning ?? GameTuning.Default;
+            Tuning = (tuning ?? GameTuning.Default).WithBehaviors(behaviorPolicy.HasGraphs ? behaviorPolicy : null);
             if (Logistics != null) Logistics.Tuning = Tuning;
             vehicles.TimeScale = Tuning[Tune.VehicleTimeScale];
             vehicles.Spec = Tuning.Truck;
@@ -32,7 +41,9 @@ namespace ForesTycoon
             "forest.volume" => $"Előző évi növedék: {LastAnnualForestGrowth:F3} m³ (nem teljes készlet)",
             "road.network" => $"Útcsempék: {RoadCount}",
             "trail.network" => $"Nyomcsempék: {map.SkidTrailCount}",
-            "weather.rain" => $"Esőintenzitás: {Environment.RainRate:F3} mm/környezeti óra",
+            "weather.rain" => $"Esőintenzitás: {Environment.LiquidRainRate:F3} mm/környezeti óra",
+            "weather.snowfall" => $"Havazás: {Environment.SnowfallRate:F3} mm vízegyenérték/környezeti óra",
+            "water.snow" => $"Hókészlet: {Environment.SnowWater:F3} mm-cella; átlagos hóborítás: {Environment.MeanSnowCover:P1}",
             "weather.forcing" => $"Hőmérséklet: {Environment.Temperature:F2} °C; sugárzás: {Environment.Radiation:F3}",
             "water.balance" => $"Vízmérleghiba: {Environment.BalanceError:G6}; teljes tárolt víz: {Environment.StoredWater:F3} mm-cella",
             "water.evaporated" => $"Összes elpárolgott víz: {Environment.Evaporated:F3} mm-cella",
@@ -44,6 +55,7 @@ namespace ForesTycoon
             "economy.result" => $"Eredmény: {Balance:F3} eFt",
             "timber.stacks" => $"Sarangok: {Logistics.Stacks.Count}",
             "fleet.state" => $"Telephely: {Logistics.Depots.Count}; gép: {Logistics.Machines.Count}; teherautó: {Logistics.Trucks.Count}",
+            "machine.controllerState" => $"Aktív gépvezérlési példányok: {BehaviorStates.Length}",
             "wildlife.state" => $"Állatok: {wildlife.Animals.Count}",
             _ => null
         };
@@ -76,6 +88,8 @@ namespace ForesTycoon
             float factor = RoadTrafficParameters.SurfaceFactor(map.GetRoadPaving(id), Tuning);
             float before = map.GetRoadCondition(id);
             float wear = roadRule.Evaluate(new(amount, factor, 1 - before));
+            wear = (float)behaviorPolicy.Evaluate(new("road.trafficWear", "road", (ulong)id, wear,
+                Time: forest.ForestYear, State: 1 - before, Amount: amount));
             map.WearRoad(id, wear);
             // Store numeric diagnostics; format text only when a panel reads it.
             trafficSample = (id, amount, factor, wear, before, map.GetRoadCondition(id));

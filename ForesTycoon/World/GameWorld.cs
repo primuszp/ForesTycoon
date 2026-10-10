@@ -569,6 +569,8 @@ namespace ForesTycoon
             // Route creation must follow this world's terrain after the ownership transfer.
             vehicles.RoadRouteFactory = route => VehicleRoadRoute.Create(map, route);
             roadRule = candidate.roadRule;
+            behaviorPolicy = candidate.behaviorPolicy;
+            BindBehaviors();
             Expenses = candidate.Expenses;
             roadWeatherSeconds = candidate.roadWeatherSeconds;
             BindRoadRules();

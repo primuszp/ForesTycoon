@@ -79,7 +79,7 @@ namespace ForesTycoon.Map
         /// <summary>Cheapest path over the network (Dijkstra); empty when not connected.</summary>
         public int[] FindNetworkPath(int start, int end) => FindNetworkPath(start, end, out _);
 
-        public int[] FindNetworkPath(int start, int end, out float totalCost)
+        public int[] FindNetworkPath(int start, int end, out float totalCost, Func<int, int, float, float> edgeCost = null)
         {
             totalCost = float.PositiveInfinity;
             if (!IsNetworkTile(start) || !IsNetworkTile(end)) return Array.Empty<int>();
@@ -105,7 +105,11 @@ namespace ForesTycoon.Map
                 int count = GetNetworkNeighbours(tile, next);
                 for (int i = 0; i < count; i++)
                 {
-                    float nc = c + NetworkCost(next[i]);
+                    float step = NetworkCost(next[i]);
+                    if (edgeCost != null) step = edgeCost(tile, next[i], step);
+                    if (float.IsPositiveInfinity(step)) continue;
+                    if (!float.IsFinite(step) || step <= 0) throw new InvalidOperationException("Route costs must be finite and positive, or positive infinity to forbid an edge.");
+                    float nc = c + step;
                     if (cost.TryGetValue(next[i], out float known) && known <= nc) continue;
                     cost[next[i]] = nc; previous[next[i]] = tile; open.Enqueue(next[i], (nc, next[i]));
                 }

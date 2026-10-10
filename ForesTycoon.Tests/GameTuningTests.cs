@@ -71,6 +71,19 @@ public class GameTuningTests
     }
 
     [Fact]
+    public void MaximumLegalTrafficTuningIsAcceptedByTheExecutableGraph()
+    {
+        var tuning = GameTuning.FromOverrides(new Dictionary<string, double> {
+            ["ReferenceWear"] = GameTuning.Spec(Tune.ReferenceWear).Max,
+            ["ReferenceMass"] = GameTuning.Spec(Tune.ReferenceMass).Min,
+            ["MacadamFactor"] = GameTuning.Spec(Tune.MacadamFactor).Max
+        });
+        var rule = new CompiledRoadRule(RuleModel.Default()); rule.ValidateRange();
+        float result = rule.Evaluate(new(RoadTrafficParameters.Load(100000, tuning), RoadTrafficParameters.SurfaceFactor(RoadPaving.Macadam, tuning), 0));
+        Assert.Equal(1, result);
+    }
+
+    [Fact]
     public void CatalogCarriesEditedTunablesOnly()
     {
         var catalog = CurrentGameRules.Build();

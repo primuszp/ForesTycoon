@@ -32,6 +32,7 @@ public class WorldLifecycleTests
     {
         using var world = Create(); world.Update(.3);
         var legacy = JsonNode.Parse(Save(world))!;
+        legacy["version"] = 13;
         legacy["runtimeRulesVersion"] = "forestycoon-simulation/2026-10-10.2";
         foreach (var animal in legacy["checkpoint"]!["wildlife"]!["animals"]!.AsArray()) {
             animal!.AsObject().Remove("previousAge"); animal.AsObject().Remove("previousWalkTime");
@@ -217,7 +218,7 @@ public class WorldLifecycleTests
         restored.Update(1.0 / 30);
         using var currentStream = new MemoryStream(Save(restored));
         var current = WorldSaveSerializer.Read(currentStream);
-        Assert.Equal(13, current.Version);
+        Assert.Equal(WorldSaveData.CurrentVersion, current.Version);
         Assert.Equal(WorldSaveData.CurrentRuntimeRulesVersion, current.RuntimeRulesVersion);
     }
 }

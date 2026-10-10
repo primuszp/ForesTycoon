@@ -7,7 +7,7 @@ using System.Text.Json.Serialization;
 
 namespace ForesTycoon.Rules
 {
-    public enum GameRuleExecution { NativeCode, EditableGraph, Presentation }
+    public enum GameRuleExecution { NativeCode, EditableGraph, Presentation, EditableController, EditableExpressions }
     public sealed record RuleSource(string File, string Symbol);
     /// <summary>A number of a rule. With a <see cref="Key"/> it is tunable within [Min, Max]; without one it is information only.</summary>
     public sealed record RuleParameter(string Name, double Value, string Unit, string Key = null, double Min = 0, double Max = 0, double Default = 0)
@@ -71,6 +71,7 @@ namespace ForesTycoon.Rules
             if (Schema != "forest-current-rules" || Version != 1 || string.IsNullOrWhiteSpace(Name) || Rules == null || Rules.Count == 0 || Rules.Count > 512 || Gaps == null)
                 throw new InvalidDataException("Érvénytelen játékszabály-katalógus.");
             var ids = new HashSet<string>();
+            var tuningKeys = new HashSet<string>(StringComparer.Ordinal);
             foreach (var rule in Rules)
             {
                 if (rule == null || string.IsNullOrWhiteSpace(rule.Id) || !ids.Add(rule.Id) || string.IsNullOrWhiteSpace(rule.Name)
@@ -82,6 +83,8 @@ namespace ForesTycoon.Rules
                     || rule.Parameters == null || rule.Parameters.Any(p => p == null || string.IsNullOrWhiteSpace(p.Name) || !double.IsFinite(p.Value) || string.IsNullOrWhiteSpace(p.Unit)
                         || (p.Tunable && !(p.Min <= p.Value && p.Value <= p.Max)))
                     || !float.IsFinite(rule.X) || !float.IsFinite(rule.Y)) throw new InvalidDataException("Érvénytelen szabály: " + rule?.Id);
+                foreach (var parameter in rule.Parameters.Where(p => p.Tunable))
+                    if (!tuningKeys.Add(parameter.Key)) throw new InvalidDataException("Ismétlődő hangolási kulcs: " + parameter.Key);
             }
             if (RoadTrafficModel == null || Gaps.Any(string.IsNullOrWhiteSpace))
                 throw new InvalidDataException("Hiányzó útkopási modell vagy érvénytelen hiánylista.");

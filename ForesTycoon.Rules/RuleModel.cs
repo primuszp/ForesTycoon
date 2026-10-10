@@ -62,6 +62,7 @@ namespace ForesTycoon.Rules
     /// <summary>Acyclic equations inside one event; feedback passes through world state between events.</summary>
     public sealed class CompiledRoadRule
     {
+        public const double MaximumTrafficWear = 100, MaximumSurfaceFactor = 10;
         private readonly RuleModel model;
         private readonly RuleNode[] ordered;
         private readonly int[] left, right;
@@ -123,8 +124,8 @@ namespace ForesTycoon.Rules
 
         public float Evaluate(RoadRuleInputs input)
         {
-            if (!double.IsFinite(input.TrafficWear) || input.TrafficWear < 0 || input.TrafficWear > 1 ||
-                !double.IsFinite(input.SurfaceFactor) || input.SurfaceFactor < 0 || input.SurfaceFactor > 1 ||
+            if (!double.IsFinite(input.TrafficWear) || input.TrafficWear < 0 || input.TrafficWear > MaximumTrafficWear ||
+                !double.IsFinite(input.SurfaceFactor) || input.SurfaceFactor < 0 || input.SurfaceFactor > MaximumSurfaceFactor ||
                 !double.IsFinite(input.RoadDamage) || input.RoadDamage < 0 || input.RoadDamage > 1)
                 throw new ArgumentOutOfRangeException(nameof(input));
             for (int i = 0; i < ordered.Length; i++)
@@ -148,7 +149,7 @@ namespace ForesTycoon.Rules
         }
 
         // Nonnegative operators are monotone; unit upper bounds prove bounded-input arithmetic stays finite.
-        public void ValidateRange() => Evaluate(new(1, 1, 1));
+        public void ValidateRange() => Evaluate(new(MaximumTrafficWear, MaximumSurfaceFactor, 1));
         private static void Fail(string message) => throw new InvalidDataException(message);
     }
 }

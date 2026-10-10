@@ -10,15 +10,17 @@
       "scope": "Vil\u00E1g",
       "schedule": "Fix vil\u00E1gl\u00E9p\u00E9s",
       "execution": "NativeCode",
-      "description": "\u00D6kosziszt\u00E9ma, logisztika, \u00FAt\u00F6reged\u00E9s, vadak, majd a regisztr\u00E1lt rendszerek. A j\u00E1rm\u0171vek \u00E9s vadak k\u00FCl\u00F6n, gyorsabb \u00F3r\u00E1t kapnak: alap 1\u00D7 mellett term\u00E9szetes temp\u00F3ban mozognak.",
+      "description": "\u00D6kosziszt\u00E9ma, logisztika, \u00FAt\u00F6reged\u00E9s, vadak, majd a regisztr\u00E1lt rendszerek (rakom\u00E1ny, j\u00E1rm\u0171vek, effektek). A j\u00E1rm\u0171vek hangolhat\u00F3 \u00F3r\u00E1t, a vadak k\u00FCl\u00F6n r\u00F6gz\u00EDtett id\u0151szorz\u00F3t kapnak.",
       "formula": "",
       "notes": "",
       "reads": [
-        "commands"
+        "commands",
+        "rules.behaviors"
       ],
       "writes": [
         "calendar.time",
-        "vehicle.time"
+        "vehicle.time",
+        "wildlife.time"
       ],
       "sources": [
         {
@@ -31,6 +33,15 @@
           "name": "Erd\u0151\u00E9v",
           "value": 900,
           "unit": "j\u00E1t\u00E9k-s",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Vadak id\u0151szorz\u00F3ja",
+          "value": 4,
+          "unit": "\u00D7",
           "key": null,
           "min": 0,
           "max": 0,
@@ -126,11 +137,15 @@
       "notes": "",
       "reads": [
         "commands",
+        "rules.behaviors",
+        "machine.controllerState",
         "calendar.time",
         "forest.trees",
         "water.root",
+        "water.snow",
         "road.condition",
         "vehicle.cargo",
+        "machine.grapple",
         "economy.income"
       ],
       "writes": [
@@ -145,6 +160,131 @@
       "parameters": [],
       "x": 25,
       "y": 160
+    },
+    {
+      "id": "rules.behaviors",
+      "name": "Viselked\u00E9sgr\u00E1fok \u00E9s objektumk\u00F6t\u00E9sek",
+      "module": "Id\u0151 \u00E9s vez\u00E9rl\u00E9s",
+      "scope": "T\u00EDpus / stabil objektumazonos\u00EDt\u00F3",
+      "schedule": "Napl\u00F3zott parancs; a k\u00F6t\u00F6tt folyamat megh\u00EDv\u00E1sakor",
+      "execution": "NativeCode",
+      "description": "Ellen\u0151rz\u00F6tt sz\u00E1m\u00EDt\u00E1si gr\u00E1fok a t\u00E1mogatott folyamatkimenetekhez \u00E9s hangol\u00E1si param\u00E9terekhez. Az egyedi k\u00F6t\u00E9s a t\u00EDpusk\u00F6t\u00E9s hely\u00E9re l\u00E9p; k\u00F6t\u00E9s n\u00E9lk\u00FCl az eredeti C# eredm\u00E9ny \u00E9rv\u00E9nyes. Hib\u00E1s sz\u00E1mtan eset\u00E9n a be\u00E9p\u00EDtett \u00E9rt\u00E9k marad, l\u00E1that\u00F3 hibajelz\u00E9ssel.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "commands"
+      ],
+      "writes": [
+        "rules.behaviors"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/GameWorld.Behaviors.cs",
+          "symbol": "ExecuteBehaviors"
+        }
+      ],
+      "parameters": [],
+      "x": 270,
+      "y": 160
+    },
+    {
+      "id": "machine.controller",
+      "name": "G\u00E9p- \u00E9s teheraut\u00F3-vez\u00E9rl\u00E9si \u00E1llapotgr\u00E1f",
+      "module": "Faanyag \u00E9s logisztika",
+      "scope": "Forwarder / processzor / teheraut\u00F3 t\u00EDpusa vagy egyedi flotta-ID",
+      "schedule": "G\u00E9p al-l\u00E9p\u00E9s; teheraut\u00F3: logisztikai l\u00E9p\u00E9s",
+      "execution": "EditableController",
+      "description": "Szerkeszthet\u0151 \u00E1llapotok, sorrendezett \u00C9S-felt\u00E9telek, id\u0151z\u00EDt\u0151 \u00E9s egyszeri esem\u00E9nyek. M\u0171veletek: automatikus munka, v\u00E1rakoz\u00E1s, hazat\u00E9r\u00E9s; forwardern\u00E9l \u00E9s teheraut\u00F3n\u00E1l k\u00FCl\u00F6n felrakod\u00E1s, lerakod\u00E1s, halad\u00E1s \u00E9s r\u00E9szrakom\u00E1nnyal indul\u00E1s. A sz\u00E1ll\u00EDt\u00E1si ciklussablon ezeket szerkeszthet\u0151 \u00E1llapotokra bontja. Mentett id\u0151z\u00EDt\u0151 \u00E9s esem\u00E9ny\u00E1llapot; fizikai \u00E1tad\u00E1s csak a megfelel\u0151 helyen.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "rules.behaviors",
+        "machine.work",
+        "machine.cargo",
+        "vehicle.broken",
+        "vehicle.transportState",
+        "fleet.state"
+      ],
+      "writes": [
+        "machine.controllerState",
+        "machine.state"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Rules/BehaviorController.cs",
+          "symbol": "CompiledBehaviorControllers"
+        }
+      ],
+      "parameters": [],
+      "x": 25,
+      "y": 30
+    },
+    {
+      "id": "route.policy",
+      "name": "\u00DAtvonalk\u00F6lts\u00E9g \u00E9s szakaszenged\u00E9ly gr\u00E1fjai",
+      "module": "J\u00E1rm\u0171vek",
+      "scope": "Flottat\u00EDpus / egyedi flotta-ID",
+      "schedule": "Minden \u00FAj \u00FAtkeres\u00E9s",
+      "execution": "EditableExpressions",
+      "description": "A route.allow kiz\u00E1rhat egy j\u00E1rhat\u00F3 szakaszt; a route.cost pozit\u00EDv s\u00FAlyt ad. Bemenet a kiindul\u00F3 \u00E9s c\u00E9lcsempe, burkolat, s\u00E9r\u00FClts\u00E9g, rakom\u00E1ny \u00E9s kapacit\u00E1s. A gr\u00E1f szerinti Dijkstra-k\u00F6lts\u00E9g a dokkp\u00E1r kiv\u00E1laszt\u00E1s\u00E1t is befoly\u00E1solja. A m\u00E1r folyamatban l\u00E9v\u0151 \u00FAt nem cser\u00E9l\u0151dik le menet k\u00F6zben.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "rules.behaviors",
+        "road.condition",
+        "road.network",
+        "trail.network",
+        "trail.wear",
+        "machine.cargo",
+        "vehicle.cargo"
+      ],
+      "writes": [
+        "vehicle.route"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/Cargo/ForestryLogistics.Behaviors.cs",
+          "symbol": "RouteCost"
+        }
+      ],
+      "parameters": [],
+      "x": 25,
+      "y": 30
+    },
+    {
+      "id": "loading.policy",
+      "name": "Rakod\u00E1si mennyis\u00E9g, id\u0151z\u00EDt\u00E9s \u00E9s indul\u00E1s gr\u00E1fjai",
+      "module": "Faanyag \u00E9s logisztika",
+      "scope": "Forwarder / processzor / teheraut\u00F3 t\u00EDpusa vagy egyedi flotta-ID",
+      "schedule": "Rakod\u00E1si al-l\u00E9p\u00E9s / r\u00F6nkciklus",
+      "execution": "EditableExpressions",
+      "description": "Szerkeszthet\u0151 fel- \u00E9s lerakott mennyis\u00E9g, r\u00E9szrakom\u00E1nnyal indul\u00E1s, forwarder r\u00F6nkciklus-id\u0151, megfog\u00E1s \u00E9s elenged\u00E9s. A ciklus id\u0151z\u00EDt\u00E9se r\u00F6gz\u00EDtve \u00E9s mentve; az anim\u00E1ci\u00F3 ugyanazt k\u00F6veti. A k\u00E9szlet-, kapacit\u00E1s- \u00E9s r\u00F6nkkorl\u00E1t, valamint a t\u00E9rfogat\u2013\u00E9rt\u00E9k meg\u0151rz\u00E9se k\u00F6telez\u0151.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "rules.behaviors",
+        "timber.stacks",
+        "machine.cargo",
+        "vehicle.cargo",
+        "machine.controllerState"
+      ],
+      "writes": [
+        "machine.cargo",
+        "machine.grapple",
+        "machine.work",
+        "vehicle.cargo",
+        "vehicle.transportState",
+        "timber.stacks"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/Cargo/ForwarderLoading.cs",
+          "symbol": "ForwarderLoading"
+        }
+      ],
+      "parameters": [],
+      "x": 270,
+      "y": 30
     },
     {
       "id": "terrain.generate",
@@ -572,6 +712,7 @@
       ],
       "writes": [
         "weather.rain",
+        "weather.snowfall",
         "weather.forcing"
       ],
       "sources": [
@@ -612,6 +753,110 @@
       "y": 160
     },
     {
+      "id": "water.snowfall",
+      "name": "H\u00F3 felhalmoz\u00F3d\u00E1sa",
+      "module": "V\u00EDzh\u00E1ztart\u00E1s",
+      "scope": "T\u00E9rk\u00E9pcella",
+      "schedule": "K\u00F6rnyezeti l\u00E9p\u00E9s, olvad\u00E1s el\u0151tt",
+      "execution": "NativeCode",
+      "description": "A havaz\u00E1s v\u00EDzegyen\u00E9rt\u00E9ke a helyi h\u00F3k\u00E9szletbe ker\u00FCl, nem a lombv\u00EDzbe. A k\u00E9szlet menthet\u0151 \u00E9s r\u00E9sze a v\u00EDzm\u00E9rlegnek.",
+      "formula": "h\u00F3 \u002B= csapad\u00E9k \u00D7 helyi csapad\u00E9kszorz\u00F3",
+      "notes": "",
+      "reads": [
+        "weather.snowfall",
+        "climate.rainMultiplier"
+      ],
+      "writes": [
+        "water.snow"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Ecology/Water/EnvironmentSystem.cs",
+          "symbol": "interval.Snow"
+        }
+      ],
+      "parameters": [],
+      "x": 25,
+      "y": 30
+    },
+    {
+      "id": "water.snowmelt",
+      "name": "H\u00F3torlaszok olvad\u00E1sa",
+      "module": "V\u00EDzh\u00E1ztart\u00E1s",
+      "scope": "T\u00E9rk\u00E9pcella",
+      "schedule": "K\u00F6rnyezeti l\u00E9p\u00E9s, besziv\u00E1rg\u00E1s el\u0151tt",
+      "execution": "NativeCode",
+      "description": "Pozit\u00EDv helyi h\u0151m\u00E9rs\u00E9kleten a m\u00E9ly h\u00F3torlasz is olvad. Az olvad\u00E9k teljes eg\u00E9sz\u00E9ben felsz\u00EDni v\u00EDz lesz; nincs elt\u00FCntetett v\u00EDzt\u00F6meg.",
+      "formula": "olvad\u00E9k = min(h\u00F3, (h\u00F3 \u002B alapr\u00E1ta / m\u00E9lys\u00E9gi r\u00E1ta) \u00D7 (1 - exp(-m\u00E9lys\u00E9gi r\u00E1ta \u00D7 max(0,T) \u00D7 k\u00F6rnyezeti \u00F3r\u00E1k)))",
+      "notes": "",
+      "reads": [
+        "water.snow",
+        "climate.local",
+        "rules.behaviors"
+      ],
+      "writes": [
+        "water.snow",
+        "water.surface"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Ecology/Water/EnvironmentSystem.cs",
+          "symbol": "SnowMeltDepthRate"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "Olvad\u00E1si alapr\u00E1ta",
+          "value": 0.18,
+          "unit": "mm/(\u00B0C\u00B7k\u00F6rnyezeti \u00F3ra)",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "M\u00E9lys\u00E9gf\u00FCgg\u0151 olvad\u00E1si r\u00E1ta",
+          "value": 0.35,
+          "unit": "1/(\u00B0C\u00B7k\u00F6rnyezeti \u00F3ra)",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        }
+      ],
+      "x": 270,
+      "y": 30
+    },
+    {
+      "id": "water.snowdrift",
+      "name": "Sz\u00E9l \u00E1ltali h\u00F3\u00E1trendez\u00E9s",
+      "module": "V\u00EDzh\u00E1ztart\u00E1s",
+      "scope": "Szomsz\u00E9dos cell\u00E1k",
+      "schedule": "V\u00EDzl\u00E9p\u00E9s ut\u00E1n, fagyban",
+      "execution": "NativeCode",
+      "description": "A sz\u00E9l a k\u00F6vetkez\u0151 sz\u00E9lir\u00E1ny\u00FA cell\u00E1ba hordja a havat; n\u00F6v\u00E9nyzet \u00E9s domborzat m\u00E9rs\u00E9kli az \u00E1thord\u00E1st. Z\u00E1rt t\u00E9rk\u00E9psz\u00E9len megmarad a h\u00F3, a fluxusok egy\u00FCtt ker\u00FClnek publik\u00E1l\u00E1sra.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "water.snow",
+        "weather.forcing",
+        "terrain.height",
+        "forest.canopy"
+      ],
+      "writes": [
+        "water.snow"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Ecology/Water/EnvironmentSystem.cs",
+          "symbol": "RedistributeSnow"
+        }
+      ],
+      "parameters": [],
+      "x": 515,
+      "y": 30
+    },
+    {
       "id": "water.interception",
       "name": "Csapad\u00E9k \u00E9s lombkorona-v\u00EDz",
       "module": "V\u00EDzh\u00E1ztart\u00E1s",
@@ -639,7 +884,7 @@
       ],
       "parameters": [],
       "x": 25,
-      "y": 30
+      "y": 160
     },
     {
       "id": "water.infiltration",
@@ -656,7 +901,8 @@
         "water.root",
         "soil.profile",
         "road.network",
-        "buildings.footprint"
+        "buildings.footprint",
+        "rules.behaviors"
       ],
       "writes": [
         "water.surface",
@@ -670,7 +916,7 @@
       ],
       "parameters": [],
       "x": 270,
-      "y": 30
+      "y": 160
     },
     {
       "id": "water.evaporation",
@@ -704,7 +950,7 @@
       ],
       "parameters": [],
       "x": 515,
-      "y": 30
+      "y": 160
     },
     {
       "id": "water.uptake",
@@ -737,7 +983,7 @@
       ],
       "parameters": [],
       "x": 25,
-      "y": 160
+      "y": 290
     },
     {
       "id": "water.drainage",
@@ -767,7 +1013,7 @@
       ],
       "parameters": [],
       "x": 270,
-      "y": 160
+      "y": 290
     },
     {
       "id": "water.runoff",
@@ -797,7 +1043,7 @@
       ],
       "parameters": [],
       "x": 515,
-      "y": 160
+      "y": 290
     },
     {
       "id": "water.stress",
@@ -826,7 +1072,7 @@
       ],
       "parameters": [],
       "x": 25,
-      "y": 290
+      "y": 420
     },
     {
       "id": "water.balance",
@@ -835,15 +1081,17 @@
       "scope": "Vil\u00E1g / cella",
       "schedule": "\u00D6sszegz\u00E9s; h\u00F3napz\u00E1r\u00E1s",
       "execution": "NativeCode",
-      "description": "A havi n\u00F6v\u00E9nyzetfriss\u00EDt\u00E9s ut\u00E1n t\u00F6rl\u0151dnek a felv\u00E9teli, ig\u00E9ny- \u00E9s sug\u00E1rz\u00E1si integr\u00E1lok; a v\u00EDzk\u00E9szletek megmaradnak.",
-      "formula": "m\u00E9rleghiba = t\u00E1rolt v\u00EDz - (indul\u00F3 v\u00EDz \u002B es\u0151 - p\u00E1rolg\u00E1s - transzspir\u00E1ci\u00F3 - kifoly\u00E1s)",
+      "description": "A havi n\u00F6v\u00E9nyzetfriss\u00EDt\u00E9s ut\u00E1n t\u00F6rl\u0151dnek a felv\u00E9teli, ig\u00E9ny- \u00E9s sug\u00E1rz\u00E1si integr\u00E1lok; a v\u00EDz- \u00E9s h\u00F3k\u00E9szletek megmaradnak.",
+      "formula": "m\u00E9rleghiba = t\u00E1rolt v\u00EDz (h\u00F3val egy\u00FCtt) - (indul\u00F3 v\u00EDz \u002B \u00F6sszes csapad\u00E9k - p\u00E1rolg\u00E1s - transzspir\u00E1ci\u00F3 - kifoly\u00E1s)",
       "notes": "",
       "reads": [
         "water.canopy",
         "water.surface",
         "water.root",
         "water.deep",
+        "water.snow",
         "weather.rain",
+        "weather.snowfall",
         "water.evaporated",
         "water.transpired",
         "water.outflow",
@@ -861,7 +1109,7 @@
       ],
       "parameters": [],
       "x": 270,
-      "y": 290
+      "y": 420
     },
     {
       "id": "forest.species",
@@ -1855,7 +2103,8 @@
         "water.growthFactor",
         "forest.health",
         "calendar.time",
-        "forest.species"
+        "forest.species",
+        "rules.behaviors"
       ],
       "writes": [
         "forest.trees",
@@ -1885,7 +2134,8 @@
         "forest.resources",
         "forest.fitness",
         "forest.species",
-        "forest.health"
+        "forest.health",
+        "rules.behaviors"
       ],
       "writes": [
         "forest.health",
@@ -2116,14 +2366,15 @@
       "scope": "\u00DAtvonal cell\u00E1i",
       "schedule": "J\u00E1t\u00E9kosparancs",
       "execution": "NativeCode",
-      "description": "Aszfalt/makad\u00E1m \u00FAt, r\u00F6gz\u00EDtett \u00FAttestmagass\u00E1g \u00E9s k\u00F6lcs\u00F6n\u00F6s csatlakoz\u00E1sok. Csak t\u00E9nylegesen l\u00E9trehozott vagy m\u00F3dos\u00EDtott \u00FAtcsemp\u00E9k n\u00F6velik az \u00E9p\u00EDt\u00E9si k\u00F6lts\u00E9get.",
+      "description": "Aszfalt/makad\u00E1m \u00FAt, r\u00F6gz\u00EDtett \u00FAttestmagass\u00E1g \u00E9s k\u00F6lcs\u00F6n\u00F6s csatlakoz\u00E1sok. Az \u00E9rintett n\u00F6v\u00E9nyzet azonnal t\u00F6rl\u0151dik, a l\u00E1tv\u00E1ny a k\u00F6vetkez\u0151 kirajzol\u00E1s el\u0151tt friss\u00FCl. Csak t\u00E9nylegesen l\u00E9trehozott vagy m\u00F3dos\u00EDtott \u00FAtcsemp\u00E9k n\u00F6velik az \u00E9p\u00EDt\u00E9si k\u00F6lts\u00E9get.",
       "formula": "",
       "notes": "",
       "reads": [
         "commands",
         "terrain.height",
         "terrain.water",
-        "buildings.footprint"
+        "buildings.footprint",
+        "rules.behaviors"
       ],
       "writes": [
         "road.network",
@@ -2173,7 +2424,8 @@
       "reads": [
         "commands",
         "road.condition",
-        "road.network"
+        "road.network",
+        "rules.behaviors"
       ],
       "writes": [
         "road.condition",
@@ -2243,7 +2495,8 @@
         "vehicle.mass",
         "road.network",
         "road.condition",
-        "vehicle.position"
+        "vehicle.position",
+        "rules.behaviors"
       ],
       "writes": [
         "road.condition"
@@ -2313,7 +2566,8 @@
         "commands",
         "terrain.water",
         "buildings.footprint",
-        "road.network"
+        "road.network",
+        "rules.behaviors"
       ],
       "writes": [
         "trail.network",
@@ -2353,7 +2607,8 @@
         "vehicle.mass",
         "vehicle.position",
         "machine.position",
-        "trail.wear"
+        "trail.wear",
+        "rules.behaviors"
       ],
       "writes": [
         "trail.wear",
@@ -2392,7 +2647,8 @@
       "reads": [
         "trail.wear",
         "trail.idle",
-        "calendar.time"
+        "calendar.time",
+        "rules.behaviors"
       ],
       "writes": [
         "trail.wear",
@@ -2426,7 +2682,7 @@
       "scope": "H\u00E1l\u00F3zat / forr\u00E1s \u00E9s c\u00E9l",
       "schedule": "Utas\u00EDt\u00E1s / h\u00E1l\u00F3zatv\u00E1ltoz\u00E1s",
       "execution": "NativeCode",
-      "description": "K\u00F6z\u00F6s \u00FAt- \u00E9s nyomh\u00E1l\u00F3zat, k\u00F6lcs\u00F6n\u00F6s csatlakoz\u00E1sok, burkolat \u00E9s nyomv\u00E1ly\u00FA szerinti k\u00F6lts\u00E9g. A flott\u00E1ban t\u00F6bb dokkp\u00E1r \u00FAtvonalai k\u00F6z\u00FCl a legr\u00F6videbb elemsz\u00E1m\u00FA nyertes \u00FAt v\u00E1laszt\u00F3dik.",
+      "description": "K\u00F6z\u00F6s \u00FAt- \u00E9s nyomh\u00E1l\u00F3zat, k\u00F6lcs\u00F6n\u00F6s csatlakoz\u00E1sok, burkolat \u00E9s nyomv\u00E1ly\u00FA szerinti k\u00F6lts\u00E9g. A flott\u00E1ban a dokkp\u00E1rok \u00FAtvonalai k\u00F6z\u00FCl a legkisebb \u00F6sszes\u00EDtett k\u00F6lts\u00E9g\u0171 nyer; azonos k\u00F6lts\u00E9gn\u00E9l a rendezett dokksorrend d\u00F6nt.",
       "formula": "",
       "notes": "",
       "reads": [
@@ -2446,7 +2702,7 @@
         }
       ],
       "parameters": [],
-      "x": 25,
+      "x": 270,
       "y": 30
     },
     {
@@ -2460,7 +2716,8 @@
       "formula": "t\u00F6meg = \u00FCres t\u00F6meg \u002B m\u00B3 \u00D7 fas\u0171r\u0171s\u00E9g",
       "notes": "",
       "reads": [
-        "vehicle.cargo"
+        "vehicle.cargo",
+        "rules.behaviors"
       ],
       "writes": [
         "vehicle.mass"
@@ -2491,7 +2748,7 @@
           "default": 800
         }
       ],
-      "x": 270,
+      "x": 515,
       "y": 30
     },
     {
@@ -2510,7 +2767,8 @@
         "terrain.height",
         "road.condition",
         "road.network",
-        "trail.wear"
+        "trail.wear",
+        "rules.behaviors"
       ],
       "writes": [
         "vehicle.resistance"
@@ -2568,8 +2826,8 @@
           "default": 1.5
         }
       ],
-      "x": 515,
-      "y": 30
+      "x": 25,
+      "y": 160
     },
     {
       "id": "vehicle.motion",
@@ -2587,7 +2845,8 @@
         "vehicle.resistance",
         "vehicle.mass",
         "road.condition",
-        "vehicle.broken"
+        "vehicle.broken",
+        "rules.behaviors"
       ],
       "writes": [
         "vehicle.position",
@@ -2638,7 +2897,7 @@
           "default": 2.5
         }
       ],
-      "x": 25,
+      "x": 270,
       "y": 160
     },
     {
@@ -2654,7 +2913,8 @@
       "reads": [
         "vehicle.speed",
         "vehicle.resistance",
-        "vehicle.mass"
+        "vehicle.mass",
+        "rules.behaviors"
       ],
       "writes": [
         "vehicle.fuel"
@@ -2685,7 +2945,7 @@
           "default": 2.5
         }
       ],
-      "x": 270,
+      "x": 515,
       "y": 160
     },
     {
@@ -2702,7 +2962,8 @@
         "vehicle.route",
         "timber.stacks",
         "vehicle.cargo",
-        "vehicle.broken"
+        "vehicle.broken",
+        "machine.controllerState"
       ],
       "writes": [
         "vehicle.cargo",
@@ -2717,8 +2978,8 @@
         }
       ],
       "parameters": [],
-      "x": 515,
-      "y": 160
+      "x": 25,
+      "y": 290
     },
     {
       "id": "upkeep.wear",
@@ -2736,7 +2997,8 @@
         "trail.network",
         "vehicle.speed",
         "vehicle.wear",
-        "vehicle.time"
+        "vehicle.time",
+        "rules.behaviors"
       ],
       "writes": [
         "vehicle.wear",
@@ -2782,7 +3044,8 @@
       "formula": "\u00FCzemanyag-szorz\u00F3 = 1 \u002B 0,5 \u00D7 kop\u00E1s; g\u00E9ptemp\u00F3 = 1 - 0,3 \u00D7 kop\u00E1s",
       "notes": "",
       "reads": [
-        "vehicle.wear"
+        "vehicle.wear",
+        "rules.behaviors"
       ],
       "writes": [
         "machine.pace",
@@ -2830,7 +3093,8 @@
       "reads": [
         "vehicle.broken",
         "vehicle.wear",
-        "vehicle.time"
+        "vehicle.time",
+        "rules.behaviors"
       ],
       "writes": [
         "vehicle.broken",
@@ -2897,7 +3161,8 @@
       "reads": [
         "vehicle.wear",
         "fleet.state",
-        "vehicle.time"
+        "vehicle.time",
+        "rules.behaviors"
       ],
       "writes": [
         "vehicle.wear",
@@ -2962,7 +3227,7 @@
         }
       ],
       "parameters": [],
-      "x": 25,
+      "x": 515,
       "y": 30
     },
     {
@@ -2981,7 +3246,8 @@
         "vehicle.route",
         "timber.stacks",
         "harvest.sites",
-        "mill.stock"
+        "mill.stock",
+        "machine.controllerState"
       ],
       "writes": [
         "fleet.state",
@@ -2995,8 +3261,8 @@
         }
       ],
       "parameters": [],
-      "x": 270,
-      "y": 30
+      "x": 25,
+      "y": 160
     },
     {
       "id": "machine.processor",
@@ -3016,7 +3282,9 @@
         "machine.pace",
         "machine.work",
         "vehicle.broken",
-        "vehicle.time"
+        "vehicle.time",
+        "rules.behaviors",
+        "machine.controllerState"
       ],
       "writes": [
         "machine.work",
@@ -3078,8 +3346,8 @@
           "default": 0.44999998807907104
         }
       ],
-      "x": 515,
-      "y": 30
+      "x": 270,
+      "y": 160
     },
     {
       "id": "machine.forwarder",
@@ -3096,7 +3364,9 @@
         "machine.pace",
         "vehicle.route",
         "vehicle.broken",
-        "vehicle.time"
+        "vehicle.time",
+        "rules.behaviors",
+        "machine.controllerState"
       ],
       "writes": [
         "machine.cargo",
@@ -3157,8 +3427,70 @@
           "default": 0.4000000059604645
         }
       ],
-      "x": 25,
+      "x": 515,
       "y": 160
+    },
+    {
+      "id": "machine.logTransfer",
+      "name": "R\u00F6nk \u00E9s \u00E9rt\u00E9k \u00E1tad\u00E1sa a markol\u00F3val",
+      "module": "Faanyag \u00E9s logisztika",
+      "scope": "Forwarder / sarang / markol\u00F3",
+      "schedule": "Rakod\u00E1si al-l\u00E9p\u00E9s",
+      "execution": "NativeCode",
+      "description": "A ciklus elej\u00E9n r\u00F6gz\u00FCl a hangolt rakod\u00E1si r\u00E1t\u00E1b\u00F3l sz\u00E1molt id\u0151. Megfog\u00E1skor a forr\u00E1sb\u00F3l a markol\u00F3ba, elenged\u00E9skor a c\u00E9lba ker\u00FCl a t\u00E9rfogat \u00E9s \u00E9rt\u00E9k. A folyamatban lev\u0151 ciklust \u00E9s a markol\u00F3 tartalm\u00E1t a ment\u00E9s meg\u0151rzi.",
+      "formula": "ciklusid\u0151 = r\u00F6nkt\u00E9rfogat / rakod\u00E1si r\u00E1ta; f\u00E1zis = munkaid\u0151 / ciklusid\u0151",
+      "notes": "",
+      "reads": [
+        "machine.cargo",
+        "timber.stacks",
+        "machine.pace",
+        "vehicle.time",
+        "machine.work"
+      ],
+      "writes": [
+        "machine.cargo",
+        "machine.grapple",
+        "timber.stacks",
+        "timber.cargoValue",
+        "machine.work"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/Cargo/ForwarderLoading.cs",
+          "symbol": "Step"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "R\u00F6nkt\u00E9rfogat",
+          "value": 0.6283185482025146,
+          "unit": "m\u00B3",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Megfog\u00E1s f\u00E1zisa",
+          "value": 0.32,
+          "unit": "1",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        },
+        {
+          "name": "Elenged\u00E9s f\u00E1zisa",
+          "value": 0.77,
+          "unit": "1",
+          "key": null,
+          "min": 0,
+          "max": 0,
+          "default": 0
+        }
+      ],
+      "x": 25,
+      "y": 290
     },
     {
       "id": "machine.movement",
@@ -3177,7 +3509,8 @@
         "trail.wear",
         "machine.pace",
         "machine.cargo",
-        "machine.work"
+        "machine.work",
+        "rules.behaviors"
       ],
       "writes": [
         "machine.position",
@@ -3220,7 +3553,7 @@
         }
       ],
       "x": 270,
-      "y": 160
+      "y": 290
     },
     {
       "id": "timber.stack",
@@ -3249,7 +3582,7 @@
       ],
       "parameters": [],
       "x": 515,
-      "y": 160
+      "y": 290
     },
     {
       "id": "timber.deliver",
@@ -3279,7 +3612,7 @@
       ],
       "parameters": [],
       "x": 25,
-      "y": 290
+      "y": 420
     },
     {
       "id": "mill.place",
@@ -3311,7 +3644,7 @@
       ],
       "parameters": [],
       "x": 270,
-      "y": 290
+      "y": 420
     },
     {
       "id": "mill.process",
@@ -3325,7 +3658,8 @@
       "notes": "",
       "reads": [
         "mill.stock",
-        "vehicle.time"
+        "vehicle.time",
+        "rules.behaviors"
       ],
       "writes": [
         "mill.stock",
@@ -3339,7 +3673,7 @@
       ],
       "parameters": [],
       "x": 515,
-      "y": 290
+      "y": 420
     },
     {
       "id": "economy.fuel",
@@ -3354,7 +3688,8 @@
       "reads": [
         "vehicle.fuel",
         "machine.fuel",
-        "economy.fuelFactor"
+        "economy.fuelFactor",
+        "rules.behaviors"
       ],
       "writes": [
         "economy.runningCosts"
@@ -3449,7 +3784,7 @@
       "reads": [
         "wildlife.state",
         "terrain.moisture",
-        "calendar.time"
+        "wildlife.time"
       ],
       "writes": [
         "wildlife.state",
@@ -3476,6 +3811,7 @@
       "formula": "",
       "notes": "",
       "reads": [
+        "wildlife.time",
         "wildlife.state",
         "wildlife.forage",
         "forest.trees",
@@ -3564,12 +3900,14 @@
       "scope": "Vil\u00E1g / fel\u00FClet",
       "schedule": "Renderk\u00E9pkocka",
       "execution": "Presentation",
-      "description": "Es\u0151, felh\u0151, vill\u00E1ml\u00E1s, nedves fel\u00FCletek, utak \u00E9s erd\u0151. K\u00E9zi h\u00F3/id\u0151j\u00E1r\u00E1si l\u00E1tv\u00E1nyteszt k\u00FCl\u00F6n be\u00E1ll\u00EDt\u00E1s; nem v\u00E1ltja \u00E1t a kl\u00EDma v\u00EDzm\u00E9rleg\u00E9t.",
+      "description": "Es\u0151, h\u00F3es\u00E9s, felh\u0151, vill\u00E1ml\u00E1s \u00E9s nedves fel\u00FCletek. A talaj, utak \u00E9s f\u00E1k h\u00F3bor\u00EDt\u00E1sa a helyi szimul\u00E1lt h\u00F3k\u00E9szletet k\u00F6veti, olvad\u00E1skor elt\u0171nik. A k\u00E9zi l\u00E1tv\u00E1nyteszt k\u00FCl\u00F6n be\u00E1ll\u00EDt\u00E1s.",
       "formula": "",
       "notes": "",
       "reads": [
         "weather.rain",
+        "weather.snowfall",
         "weather.forcing",
+        "water.snow",
         "water.surface",
         "forest.trees",
         "road.condition"
@@ -3662,6 +4000,7 @@
         "machine.position",
         "machine.work",
         "machine.cargo",
+        "machine.grapple",
         "terrain.height",
         "trail.wear"
       ],
@@ -3827,7 +4166,7 @@
     }
   ],
   "gaps": [
-    "A nat\u00EDv folyamatok k\u00E9plete a jelenlegi C# implement\u00E1ci\u00F3 le\u00EDr\u00E1sa; a sz\u00E1maik (kulccsal jel\u00F6lt param\u00E9terek) hangolhat\u00F3k, a k\u00E9plet szerkezete csak road.trafficWear eset\u00E9n szerkeszthet\u0151 gr\u00E1fk\u00E9nt.",
+    "A teljes nat\u00EDv \u00E1llapotg\u00E9pek m\u00E9g C#-ban futnak. A Viselked\u00E9sek n\u00E9zet a felsorolt folyamatkimeneteket \u00E9s minden hangol\u00E1si param\u00E9tert szerkeszti gr\u00E1fk\u00E9nt; tetsz\u0151leges esem\u00E9nysorrend, \u00FAj \u00E1llapotmez\u0151 \u00E9s saj\u00E1t j\u00E1t\u00E9kosparancs m\u00E9g nem hozhat\u00F3 l\u00E9tre.",
     "A talaj-, kl\u00EDma- \u00E9s fafajparam\u00E9terek egyel\u0151re csak t\u00E1j\u00E9koztat\u00F3 adatok: a vil\u00E1g l\u00E9trehoz\u00E1sakor r\u00F6gz\u00FClnek, a szerkeszt\u0151b\u0151l nem hangolhat\u00F3k.",
     "Talajt\u00F6m\u00F6r\u00F6d\u00E9s, er\u00F3zi\u00F3 \u00E9s \u00FAtkialak\u00EDt\u00E1s miatti r\u00E9szletes v\u00EDzelvezet\u0151 m\u0171t\u00E1rgyak nincsenek k\u00FCl\u00F6n folyamatk\u00E9nt megval\u00F3s\u00EDtva.",
     "A vadak nem r\u00E1gj\u00E1k a csemet\u00E9ket; k\u00E1rtev\u0151-, fert\u0151z\u00E9s- \u00E9s t\u0171zterjed\u00E9si rendszer m\u00E9g nincs.",

@@ -11,7 +11,7 @@ namespace ForesTycoon
             Mills.Select(m => new MillCheckpoint(m.TileId, (int[])m.Footprint.Clone(), new(m.Position), m.Received, m.Stock, m.Processed)).ToArray(), Status,
             Machines.Select(m => new ForestMachineCheckpoint(m.Id, m.Kind, m.Site == null ? -1 : Sites.IndexOf(m.Site), (int[])m.Path.Clone(), m.PathPosition,
                 m.PreviousPathPosition, m.State, m.Goal, m.Cargo, m.WorkTime, m.Home == null ? -1 : Depots.IndexOf(m.Home), m.HomeRequested,
-                m.Source?.Id ?? -1, m.Target?.Id ?? -1, m.Destination, m.CargoValue, m.FuelUsed, m.UnitPrice, Capture(m.Upkeep), m.HasWork, m.LogTransferVolume, m.LogTransferValue, m.LogCycleDuration)).ToArray(), nextMachineId,
+                m.Source?.Id ?? -1, m.Target?.Id ?? -1, m.Destination, m.CargoValue, m.FuelUsed, m.UnitPrice, Capture(m.Upkeep), m.HasWork, m.LogTransferVolume, m.LogTransferValue, m.LogCycleDuration, m.LogGripPhase, m.LogReleasePhase)).ToArray(), nextMachineId,
             Depots.Select(d => new DepotCheckpoint(d.TileId, (int[])d.Footprint.Clone(), new(d.Position))).ToArray(),
             Trucks.Select(t => new TruckCheckpoint(t.Id, Depots.IndexOf(t.Home), t.Phase, t.Vehicle?.Id ?? -1, t.Source?.Id ?? -1, t.Destination,
                 t.HomeRequested, t.Target?.Id ?? -1, t.CargoValue, t.FuelCharged, Capture(t.Upkeep))).ToArray(), nextTruckId,
@@ -96,6 +96,8 @@ namespace ForesTycoon
                     double.IsFinite(m.PreviousPosition) && m.PreviousPosition >= 0 && m.PreviousPosition <= m.Path.Length - 1, "forest machine position");
                 CheckpointGuard.NonNegative(m.Cargo, "forest machine cargo"); CheckpointGuard.NonNegative(m.WorkTime, "forest machine work time");
                 CheckpointGuard.NonNegative(m.LogTransferVolume, "grapple volume"); CheckpointGuard.NonNegative(m.LogTransferValue, "grapple value"); CheckpointGuard.NonNegative(m.LogCycleDuration, "log cycle duration");
+                CheckpointGuard.Require(double.IsFinite(m.LogGripPhase) && double.IsFinite(m.LogReleasePhase) && m.LogGripPhase >= .01 &&
+                    m.LogReleasePhase > m.LogGripPhase && m.LogReleasePhase <= .99, "grapple timing");
                 CheckpointGuard.Require(m.LogTransferVolume <= ForwarderLoading.LogVolume + .001f && (m.LogTransferVolume == 0 || (m.Kind == ForestMachineKind.Forwarder && m.LogCycleDuration > 0 && m.State is ForestMachineState.Loading or ForestMachineState.Unloading)), "grapple state");
                 CheckpointGuard.NonNegative(m.CargoValue, "forest machine cargo value"); CheckpointGuard.NonNegative(m.FuelUsed, "forest machine fuel");
                 CheckpointGuard.Require(m.Cargo <= GameTuning.Spec(Tune.ForwarderCapacity).Max + 0.001f && m.Destination >= -1 && m.Destination < terrain.Tiles.Count, "forest machine cargo");
@@ -103,7 +105,8 @@ namespace ForesTycoon
                     Home = m.Home < 0 ? null : depots[m.Home], HomeRequested = m.HomeRequested, Source = Stack(m.Source), Target = Stack(m.Target),
                     Destination = m.Destination, PathPosition = m.Position, PreviousPathPosition = m.PreviousPosition, State = m.State, Goal = m.Goal,
                     Cargo = m.Cargo, CargoValue = m.CargoValue, WorkTime = m.WorkTime, FuelUsed = m.FuelUsed, UnitPrice = Math.Max(0, m.UnitPrice),
-                    Upkeep = Restore(m.Upkeep, (uint)m.Id * 2654435761u), HasWork = m.HasWork, LogTransferVolume = m.LogTransferVolume, LogTransferValue = m.LogTransferValue, LogCycleDuration = m.LogCycleDuration });
+                    Upkeep = Restore(m.Upkeep, (uint)m.Id * 2654435761u), HasWork = m.HasWork, LogTransferVolume = m.LogTransferVolume, LogTransferValue = m.LogTransferValue, LogCycleDuration = m.LogCycleDuration,
+                    LogGripPhase = m.LogGripPhase, LogReleasePhase = m.LogReleasePhase });
             }
             CheckpointGuard.NonNegative(s.Income, "income"); CheckpointGuard.NonNegative(s.RunningCosts, "running costs");
             Sites.Clear(); Sites.AddRange(sites); Mills.Clear(); Mills.AddRange(mills); Status = s.Status;

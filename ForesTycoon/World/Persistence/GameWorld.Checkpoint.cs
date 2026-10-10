@@ -10,7 +10,7 @@ namespace ForesTycoon
             return new(2, worldTick, commandJournal.Count - commands.Count,
                 commands.Count, map.Capture(), ecosystem.Capture(), wildlife.Capture(), Logistics.Capture(), vehicles.Capture(),
                 timberCargo.Available, timberCargo.Delivered, effects.Capture(), lastForestryAction, lastForestryArea, Expenses, RuleDocument,
-                Tuning.IsDefault ? null : Tuning.ToOverrides(), roadWeatherSeconds);
+                Tuning.IsDefault ? null : Tuning.ToOverrides(), roadWeatherSeconds, BehaviorDocument, BehaviorStates);
         }
 
         private void RestoreCheckpoint(WorldCheckpointData s)
@@ -25,12 +25,20 @@ namespace ForesTycoon
             vehicles.Restore(s.Vehicles, map.Tiles.Count); Logistics.BindVehicles(vehicles);
             wildlife.Restore(s.Wildlife, map.Tiles.Count); effects.Restore(s.Effects);
             foreach (var v in vehicles.Vehicles)
-                if (v.LocalCargo) CheckpointGuard.Require(Logistics.Mills.Exists(m => m.TileId == v.SawmillTileId), "truck destination");
+                if (v.LocalCargo) CheckpointGuard.Require(Logistics.Mills.Exists(m => m.TileId == v.SawmillTileId)
+                    || Logistics.StackAt(v.SawmillTileId) != null, "truck destination");
             CheckpointGuard.NonNegative(s.Expenses, "expenses");
             CheckpointGuard.Require(double.IsFinite(s.RoadWeatherSeconds) && s.RoadWeatherSeconds >= 0 &&
                 s.RoadWeatherSeconds < 0.5, "road weather remainder");
             roadWeatherSeconds = s.RoadWeatherSeconds;
             worldTick = s.Tick; lastForestryAction = s.LastAction; lastForestryArea = s.LastArea; Expenses = s.Expenses;
+            behaviorPolicy = new WorldBehaviorPolicy(s.Behaviors ?? new BehaviorModel());
+            behaviorPolicy.Controllers.Restore(s.BehaviorStates ?? Array.Empty<BehaviorControllerSnapshot>());
+            foreach (var state in BehaviorStates)
+                CheckpointGuard.Require(state.Kind == "truck" ? Logistics.Trucks.Exists(t => (ulong)t.Id == state.ObjectId)
+                    : Logistics.Machines.Exists(m => (ulong)m.Id == state.ObjectId &&
+                    (m.Kind == ForestMachineKind.Harvester ? "processor" : "forwarder") == state.Kind), "controller target");
+            BindBehaviors();
             ApplyTuning(GameTuning.FromOverrides(s.Tuning));
         }
 

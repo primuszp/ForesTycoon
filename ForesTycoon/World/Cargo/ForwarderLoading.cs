@@ -22,27 +22,43 @@ namespace ForesTycoon
         internal static double Duration(ForestMachine m) => m.LogCycleDuration > 0 ? m.LogCycleDuration :
             LogVolume / m.Tuning[m.State == ForestMachineState.Unloading ? Tune.ForwarderUnloadRate : Tune.ForwarderLoadRate];
         internal static double Phase(ForestMachine m) => Math.Clamp(m.WorkTime / Duration(m), 0, 1);
+        private static double Rule(ForestMachine m, string hook, double native, double dt = 0, bool departure = false) =>
+            m.Behaviors?.Evaluate(new(hook, "forwarder", (ulong)m.Id, native, dt,
+                State: departure ? m.CargoFill : m.State == ForestMachineState.Unloading ? 1 : 0, Amount: m.Cargo,
+                Capacity: m.Capacity, Available: m.State == ForestMachineState.Unloading ? m.Cargo : m.Source?.Volume ?? 0)) ?? native;
+        internal static float AnimationPhase(ForestMachine m)
+        {
+            double phase = Phase(m), grip = m.LogGripPhase, release = m.LogReleasePhase;
+            return (float)(phase <= grip ? phase / grip * Grip : phase <= release ? Grip + (phase - grip) / (release - grip) * (Release - Grip)
+                : Release + (phase - release) / (1 - release) * (1 - Release));
+        }
 
         // Reserve at grasp, deliver at release; volume and value in the grapple are part of the save state.
         internal static bool Step(ForestMachine m, double dt, Action<float, double> receive)
         {
             bool unloading = m.State == ForestMachineState.Unloading;
-            if (m.LogCycleDuration == 0) { m.LogCycleDuration = Duration(m); m.WorkTime = 0; }
+            if (!unloading && m.Control == BehaviorAction.DepartLoaded && m.Cargo > .0001f && m.WorkTime == 0 && m.LogTransferVolume == 0) return true;
+            if (m.LogCycleDuration == 0) {
+                m.LogCycleDuration = Rule(m, "loading.cycleSeconds", Duration(m)); m.WorkTime = 0;
+                m.LogGripPhase = Rule(m, "loading.gripPhase", Grip);
+                m.LogReleasePhase = Math.Max(m.LogGripPhase + .01, Rule(m, "loading.releasePhase", Release));
+            }
             if (m.WorkTime == 0 && (unloading ? m.Cargo <= .0001f : m.Source.Volume <= .0001f || m.Cargo >= m.Capacity - .0001f)) return true;
             double before = Phase(m);
             m.WorkTime = Math.Min(m.LogCycleDuration, m.WorkTime + dt);
             if (m.LogCycleDuration - m.WorkTime < .000001) m.WorkTime = m.LogCycleDuration;
             double after = Phase(m);
-            if (before < Grip && after >= Grip)
+            if (before < m.LogGripPhase && after >= m.LogGripPhase)
             {
                 float amount = unloading ? Math.Min(LogVolume, m.Cargo - Math.Max(0, (Count(m.Cargo)-1)*LogVolume)) :
                     Math.Min(LogVolume, m.Capacity - m.Cargo);
+                amount = Math.Min(amount, (float)Rule(m, unloading ? "unloading.amount" : "loading.amount", amount, dt));
                 if (unloading) {
                     m.LogTransferVolume = amount; m.LogTransferValue = m.Cargo > 0 ? m.CargoValue * amount / m.Cargo : 0;
                     m.Cargo -= amount; m.CargoValue -= m.LogTransferValue;
                 } else (m.LogTransferVolume, m.LogTransferValue) = m.Source.Take(amount);
             }
-            if (before < Release && after >= Release)
+            if (before < m.LogReleasePhase && after >= m.LogReleasePhase)
             {
                 if (unloading) receive(m.LogTransferVolume, m.LogTransferValue);
                 else { m.Cargo += m.LogTransferVolume; m.CargoValue += m.LogTransferValue; }
@@ -50,7 +66,10 @@ namespace ForesTycoon
             }
             if (after < 1) return false;
             m.WorkTime = 0; m.LogCycleDuration = 0;
-            return unloading ? m.Cargo <= .0001f : m.HomeRequested || m.Cargo >= m.Capacity - .0001f || m.Source.Volume <= .0001f;
+            if (unloading) return m.Cargo <= .0001f;
+            bool finished = m.HomeRequested || m.Cargo >= m.Capacity - .0001f || m.Source.Volume <= .0001f;
+            // Forced completion and stock/capacity constraints cannot strand a held log or suppress a home request.
+            return finished || m.Cargo > .0001f && (m.Control == BehaviorAction.DepartLoaded || Rule(m, "loading.depart", 0, dt, true) >= .5);
         }
         internal static Vector3 Target(Vector3 pick, Vector3 drop, float phase, out float jaw)
         {

@@ -13,6 +13,8 @@ namespace ForesTycoon.Ecology
         internal static bool IsValidForestYearSeconds(double seconds) => EcologyTime.IsValidForestYearSeconds(seconds);
         internal const double HoursPerSecond = EcologyTime.HoursPerSecond;
         internal const double StepSeconds = EcologyTime.StepSeconds;
+        internal const double SnowMeltBaseRate = .18, SnowMeltDepthRate = .35;
+        internal IBehaviorPolicy Behaviors { get; set; }
         private readonly IForestHabitat habitat;
         private readonly IForestCanopy forest;
         private readonly double[] canopy, surface, soil, deep, drought, wet, wetIntegral, snow;
@@ -190,7 +192,9 @@ namespace ForesTycoon.Ecology
                 // depth-dependent thaw so these gameplay drifts do not survive the warm season.
                 // Integrate ds/d(degree-hour) = -0.18 - 0.35*s exactly; all melt becomes water.
                 double thaw = Math.Max(0, local.Forcing.Temperature) * hours;
-                double melt = (snow[id] + .18 / .35) * (1 - Math.Exp(-.35 * thaw));
+                double melt = (snow[id] + SnowMeltBaseRate / SnowMeltDepthRate) * (1 - Math.Exp(-SnowMeltDepthRate * thaw));
+                if (Behaviors != null) melt = Behaviors.Evaluate(new("water.snowmelt", "tile", (ulong)id, melt,
+                    dt, Time, local.Forcing.Temperature, snow[id]));
                 surface[id] += StockFlows.Withdraw(ref snow[id], melt);
                 var profile = soils[id];
                 var trees = vegetation[id];
@@ -202,6 +206,8 @@ namespace ForesTycoon.Ecology
                 bool sealedSurface = habitat.IsImpervious(id);
                 double infiltration = Math.Min(surface[id], Math.Min(
                     (sealedSurface ? 0.5 : profile.InfiltrationPerHour) * hours, Math.Max(0, profile.Saturation - soil[id])));
+                if (Behaviors != null) infiltration = Math.Min(surface[id], Math.Min(Math.Max(0, profile.Saturation - soil[id]),
+                    Behaviors.Evaluate(new("water.infiltration", "tile", (ulong)id, infiltration, dt, Time, soil[id], surface[id]))));
                 StockFlows.Transfer(ref surface[id], ref soil[id], infiltration);
 
                 double budget = potential;

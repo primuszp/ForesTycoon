@@ -326,14 +326,14 @@ namespace ForesTycoon
             Matrix4 stackFrame=Placement(terrain.Map,at,heading,.8f);
             int stackCount=ForwarderLoading.Count(unloading?(logistics.StackAt(tile)?.Volume??0):machine.Source.Volume);
             int cargoCount=ForwarderLoading.Count(machine.Cargo);
-            bool held=machine.LogTransferVolume>0, released=phase>=ForwarderLoading.Release;
+            bool held=machine.LogTransferVolume>0, released=phase>=machine.LogReleasePhase;
             int stackIndex=unloading?Math.Max(0,stackCount-(released?1:0)):Math.Max(0,stackCount-(held||released?0:1));
             int cargoIndex=unloading?Math.Max(0,cargoCount-(held||released?0:1)):Math.Max(0,cargoCount-(released?1:0));
             Vector3 ground=Vector3.TransformPosition(ForwarderLoading.Slot(Math.Clamp(stackIndex,0,125),false)*MetreScale,stackFrame);
             Vector3 bunk=Vector3.TransformPosition(ForwarderLoading.Slot(cargoIndex,true)*MetreScale,placement);
             Matrix4 modelFrame=Axis*Matrix4.CreateScale(MetreScale)*placement;
             Vector3 ToModel(Vector3 world) {var g=Vector3.TransformPosition(world,placement.Inverted())/MetreScale;return g;}
-            Vector3 target=ForwarderLoading.Target(ToModel(unloading?bunk:ground),ToModel(unloading?ground:bunk),(float)phase,out float jaw);
+            Vector3 target=ForwarderLoading.Target(ToModel(unloading?bunk:ground),ToModel(unloading?ground:bunk),ForwarderLoading.AnimationPhase(machine),out float jaw);
             Vector3 actual=m.Rig.Solve(m.Pose,new Vector3(target.X,target.Z,-target.Y),jaw,machine.Id);
             if(held) {
                 Vector3 world=Vector3.TransformPosition(actual,modelFrame);

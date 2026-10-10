@@ -137,7 +137,57 @@ namespace ForesTycoon.Editor
                 Require(catalogView.UnappliedTuning(world) == 0, "Applied tuning still reported as pending.");
                 using var tunedSave = new MemoryStream(); world.Save(tunedSave); tunedSave.Position = 0; restored.Load(tunedSave);
                 Require(restored.Tuning.ToJson() == world.Tuning.ToJson(), "Save lost the tuning.");
-                Console.WriteLine($"Rule editor smoke passed: terrain binding, snapshot, pending commands, journal replay, UI. Capture: {output}");
+                var behaviorView = new BehaviorEditorView();
+                var behavior = new ForesTycoon.Rules.BehaviorModel();
+                behavior.Graphs.Add(new() { Id = "mill-example", Name = "Malom feldolgozása", Hook = "mill.process", Kind = "mill" });
+                behavior.Graphs[0].Nodes.Add(new() { Id = "scale", Name = "Termelési szorzó", Operation = BehaviorOperation.Constant, Value = 2, X = 30, Y = 190 });
+                behavior.Graphs[0].Nodes.Add(new() { Id = "result", Name = "Feldolgozott térfogat", Operation = BehaviorOperation.Multiply, A = "native", B = "scale", X = 300, Y = 120 });
+                behavior.Graphs[0].Output = "result";
+                behaviorView.Load(behavior);
+                for (int frame = 0; frame < 3; frame++) {
+                    ui.Update(width, height, width, height, Vec2.One, 1f / 60);
+                    ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 900));
+                    ImGui.Begin("Viselkedések", ImGuiWindowFlags.NoSavedSettings); behaviorView.Draw(world); ImGui.End();
+                    GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit); ui.Render(); GL.Finish();
+                }
+                Require(GL.GetError() == ErrorCode.NoError, "Behavior editor OpenGL error.");
+                FramebufferCapture.SavePng(Path.Combine(output, "behaviors.png"), width, height);
+                var controller = BehaviorController.TimedPause("forwarder");
+                controller.States[1].Transitions.Add(new() { Target = "wait", Conditions = new() { new() { Trigger = BehaviorTrigger.Elapsed, Value = 20 } } });
+                behaviorView.Load(new() { Controllers = new() { controller } });
+                for (int frame = 0; frame < 3; frame++) {
+                    ui.Update(width, height, width, height, Vec2.One, 1f / 60);
+                    ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 900));
+                    ImGui.Begin("Gépvezérlés", ImGuiWindowFlags.NoSavedSettings); behaviorView.Draw(world); ImGui.End();
+                    GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit); ui.Render(); GL.Finish();
+                }
+                Require(GL.GetError() == ErrorCode.NoError, "Controller editor OpenGL error.");
+                FramebufferCapture.SavePng(Path.Combine(output, "controllers.png"), width, height);
+                var transport = new BehaviorModel { Controllers = new() { BehaviorController.TransportCycle("truck"), BehaviorController.TransportCycle("forwarder") } };
+                File.WriteAllText(Path.Combine(output, "transport-behaviors.json"), transport.ToJson());
+                behaviorView.Load(transport);
+                for (int frame = 0; frame < 3; frame++) {
+                    ui.Update(width, height, width, height, Vec2.One, 1f / 60);
+                    ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 900));
+                    ImGui.Begin("Szállítási gráf", ImGuiWindowFlags.NoSavedSettings); behaviorView.Draw(world); ImGui.End();
+                    GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit); ui.Render(); GL.Finish();
+                }
+                Require(GL.GetError() == ErrorCode.NoError, "Truck controller editor OpenGL error.");
+                FramebufferCapture.SavePng(Path.Combine(output, "truck-controller.png"), width, height);
+                var route = new BehaviorGraph { Id = "route-example", Hook = "route.cost", Kind = "truck", Name = "Sérült utak büntetése" };
+                route.Nodes.Add(new() { Id = "damage", Name = "Útsérültség", Operation = BehaviorOperation.State, X = 30, Y = 190 });
+                route.Nodes.Add(new() { Id = "cost", Name = "Költség + sérültség", Operation = BehaviorOperation.Add, A = "native", B = "damage", X = 300, Y = 120 }); route.Output = "cost";
+                transport.Graphs.Add(route); File.WriteAllText(Path.Combine(output, "transport-behaviors.json"), transport.ToJson());
+                behaviorView.Load(transport);
+                for (int frame = 0; frame < 3; frame++) {
+                    ui.Update(width, height, width, height, Vec2.One, 1f / 60);
+                    ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 900));
+                    ImGui.Begin("Útvonalszabály", ImGuiWindowFlags.NoSavedSettings); behaviorView.Draw(world); ImGui.End();
+                    GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit); ui.Render(); GL.Finish();
+                }
+                Require(GL.GetError() == ErrorCode.NoError, "Route graph editor OpenGL error.");
+                FramebufferCapture.SavePng(Path.Combine(output, "route-policy.png"), width, height);
+                Console.WriteLine($"Rule editor smoke passed: terrain binding, snapshot, pending commands, journal replay, UI and behavior editor. Capture: {output}");
             }
             finally { RenderDevice.Dispose(); }
         }

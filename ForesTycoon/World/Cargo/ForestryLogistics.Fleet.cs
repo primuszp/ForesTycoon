@@ -35,6 +35,7 @@ namespace ForesTycoon
         /// <summary>Fuel already charged to the running costs, litres (the vehicle counts what it burns).</summary>
         internal double FuelCharged;
         internal VehicleUpkeep Upkeep = new(0);
+        internal BehaviorAction Control;
     }
 
     internal sealed partial class ForestryLogistics
@@ -43,7 +44,19 @@ namespace ForesTycoon
         internal readonly List<FleetTruck> Trucks = new();
         private int nextTruckId = 1;
         /// <summary>The road vehicles the trucks of the fleet run as; set by the world.</summary>
-        internal VehicleSystem Vehicles;
+        private VehicleSystem vehicles;
+        internal VehicleSystem Vehicles
+        {
+            get => vehicles;
+            set {
+                vehicles = value;
+                if (value == null) return;
+                value.BehaviorPause = v => { var truck = TruckOf(v); return truck != null && TruckWait(truck); };
+                value.BehaviorRule = TruckRule;
+                value.BehaviorDepart = v => TruckOf(v)?.Control == BehaviorAction.DepartLoaded;
+                value.SourceStock = v => TruckOf(v)?.Source?.Volume ?? 0;
+            }
+        }
 
         /// <summary>
         /// Places a depot on a 2×2 flat, dry, empty spot beside a road. The first depot receives the starting fleet: a
@@ -77,7 +90,7 @@ namespace ForesTycoon
         private int DepotDock(Depot depot) { var docks = terrain.FindRoadDocks(depot.Footprint); return docks.Count > 0 ? docks[0] : -1; }
 
         /// <summary>The cheapest network route between any dock of the source and any dock of the destination.</summary>
-        private int[] TruckRoute(int sourceTile, int destination)
+        private int[] TruckRoute(FleetTruck truck, int sourceTile, int destination)
         {
             var mill = MillAt(destination);
             var ends = terrain.FindNetworkDocks(mill != null ? mill.Footprint : new[] { destination });
@@ -86,7 +99,7 @@ namespace ForesTycoon
             foreach (int start in terrain.FindNetworkDocks(new[] { sourceTile }))
                 foreach (int end in ends)
                 {
-                    int[] route = terrain.FindNetworkPath(start, end, out float cost);
+                    int[] route = TruckPath(truck, start, end, out float cost);
                     // Docks are sorted; preserve their order for equal-cost routes.
                     if (route.Length >= 2 && cost < bestCost) { best = route; bestCost = cost; }
                 }
@@ -99,10 +112,10 @@ namespace ForesTycoon
             if (truck.Phase != TruckPhase.Parked) { Status = "A rönkszállító épp úton van: előbb hívd haza."; return false; }
             bool mill = MillAt(destination) != null;
             if (!mill && StackAt(destination) == null && !CanPlaceStack(destination)) { Status = "Ide nem rakható le a fa."; return false; }
-            int[] route = TruckRoute(source.Tile, destination);
+            int[] route = TruckRoute(truck, source.Tile, destination);
             if (route == null) { Status = "A sarangtól nem vezet út a célig: a teherautó csak úton és nyomon jár."; return false; }
             int dock = DepotDock(truck.Home);
-            int[] approach = dock < 0 ? Array.Empty<int>() : terrain.FindNetworkPath(dock, route[0]);
+            int[] approach = dock < 0 ? Array.Empty<int>() : TruckPath(truck, dock, route[0], out _);
             if (dock != route[0] && approach.Length < 2) { Status = "A telephelyről nem vezet út a sarangig."; return false; }
             truck.Source = source; truck.Destination = destination; truck.Target = mill ? null : StackAt(destination); truck.HomeRequested = false;
             if (truck.Target == null && !mill) { truck.Target = new TimberStack { Id = nextStackId++, Tile = destination }; Stacks.Add(truck.Target); }
@@ -143,6 +156,10 @@ namespace ForesTycoon
         {
             foreach (var truck in Trucks)
             {
+                truck.Control = Controllers?.Step("truck", (ulong)truck.Id, new(seconds, truck.Vehicle?.CargoAmount ?? 0,
+                    TruckState(truck), truck.Phase is TruckPhase.ToWork or TruckPhase.Working, truck.Upkeep.Broken)) ?? BehaviorAction.Autonomous;
+                if (truck.Control == BehaviorAction.ReturnHome) SendHome(truck);
+                bool wait = TruckWait(truck);
                 if (truck.Vehicle != null)
                 {
                     ChargeTruckFuel(truck);
@@ -151,7 +168,7 @@ namespace ForesTycoon
                     road.GetSegment(road.RoutePosition, out int from, out _, out _);
                     float strain = (terrain.IsSkidTrail(from) ? 2f : 1f) * (1 + 0.5f * road.CargoFill);
                     bool moving = road.CurrentSpeed > 0.01 || road.TransportState is VehicleTransportState.Loading or VehicleTransportState.Unloading;
-                    if (moving || truck.Upkeep.Broken)
+                    if (moving && !wait || truck.Upkeep.Broken)
                     {
                         bool running = truck.Upkeep.Operate(seconds, strain, out double repair, Tuning);
                         if (repair > 0) { RunningCosts += repair; Status = $"A rönkszállító #{truck.Id} megjavítva ({repair:N0} eFt)."; }
@@ -162,11 +179,12 @@ namespace ForesTycoon
                 else if (truck.Phase == TruckPhase.Parked) RunningCosts += truck.Upkeep.Service(seconds, Tuning);
                 // The road under it was removed: the truck is taken back to its yard.
                 if (truck.Vehicle != null && !Vehicles.Contains(truck.Vehicle)) { Park(truck); continue; }
+                if (wait) continue;
                 switch (truck.Phase)
                 {
                     case TruckPhase.ToWork when truck.Vehicle.TransitArrived:
                     {
-                        int[] route = truck.HomeRequested ? null : TruckRoute(truck.Source.Tile, truck.Destination);
+                        int[] route = truck.HomeRequested ? null : TruckRoute(truck, truck.Source.Tile, truck.Destination);
                         if (route == null) { Return(truck, truck.Vehicle.Route[^1]); break; }
                         StartShuttle(truck, route);
                         break;
@@ -191,7 +209,9 @@ namespace ForesTycoon
         {
             ChargeTruckFuel(truck);
             int dock = DepotDock(truck.Home);
-            int[] path = dock < 0 ? Array.Empty<int>() : terrain.FindNetworkPath(from, dock);
+            int[] path = dock < 0 ? Array.Empty<int>() : TruckPath(truck, from, dock, out _);
+            // No route means wait at the current location, not teleport to the depot.
+            if (dock != from && path.Length < 2) { Status = "A teherautó nem talál engedélyezett hazautat."; return; }
             if (truck.Vehicle != null) Vehicles.Remove(truck.Vehicle);
             truck.Vehicle = null; truck.FuelCharged = 0;
             if (path.Length < 2) { Park(truck); return; }

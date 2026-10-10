@@ -16,6 +16,9 @@ namespace ForesTycoon
         internal Func<Vehicle,float,float> SourceLoader;
         internal Action<Vehicle,float> DestinationReceiver;
         internal Func<Vehicle,bool> RouteValidator;
+        internal Func<Vehicle, bool> BehaviorPause, BehaviorDepart;
+        internal Func<Vehicle, float> SourceStock;
+        internal Func<Vehicle, string, double, double, double> BehaviorRule;
         /// <summary>Surface and condition (1 new … 0 ruined) of a road tile.</summary>
         internal Func<int,(RoadSurface Surface,float Condition)> RoadState;
         /// <summary>Wears a road tile; the amount is for one pass of a loaded truck on macadam.</summary>
@@ -78,7 +81,7 @@ namespace ForesTycoon
         {
             {
                 vehicle.RoadState = RoadState; vehicle.RoadWear = RoadWear; vehicle.Spec = Spec; vehicle.RoadLoad = RoadLoad;
-                if(vehicle.RouteBlocked||vehicle.Broken){vehicle.Hold();return;}
+                if(vehicle.RouteBlocked||vehicle.Broken||BehaviorPause?.Invoke(vehicle)==true){vehicle.Hold();return;}
                 if(vehicle.Transit){
                     if(!vehicle.TransitArrived){vehicle.Update(deltaSeconds);if(vehicle.RoutePosition>=vehicle.Route.Length-1-1e-6){vehicle.TransitArrived=true;vehicle.Hold();}}
                     else vehicle.Hold();
@@ -121,17 +124,23 @@ namespace ForesTycoon
         private void UpdateLogistics(Vehicle vehicle,double seconds)
         {
             while(seconds>1e-9){double dt=Math.Min(seconds,1.0/30);seconds-=dt;
+                if (BehaviorPause?.Invoke(vehicle) == true) { vehicle.Hold(); return; }
                 switch(vehicle.TransportState){
                     case VehicleTransportState.Waiting:
                     case VehicleTransportState.Loading:
                         vehicle.Hold();
-                        float amount=SourceLoader?.Invoke(vehicle,Math.Min(vehicle.CargoCapacity-vehicle.CargoAmount,(float)dt*vehicle.CargoCapacity/3))??0;
+                        if (BehaviorDepart?.Invoke(vehicle) == true && vehicle.CargoAmount > 0) { vehicle.TransportState = VehicleTransportState.Hauling; break; }
+                        float request = Math.Min(vehicle.CargoCapacity-vehicle.CargoAmount, (float)(BehaviorRule?.Invoke(vehicle, "loading.amount", dt*vehicle.CargoCapacity/3, dt) ?? dt*vehicle.CargoCapacity/3));
+                        float amount=SourceLoader?.Invoke(vehicle,request)??0;
                         vehicle.Load(amount);
-                        if(vehicle.CargoAmount>=vehicle.CargoCapacity-0.001f||(amount<0.000001f&&vehicle.CargoAmount>0))vehicle.TransportState=VehicleTransportState.Hauling;
+                        bool full = vehicle.CargoAmount >= vehicle.CargoCapacity-0.001f;
+                        bool nativeDepart = full || amount < .000001f && vehicle.CargoAmount > 0 && (request > 0 || (SourceStock?.Invoke(vehicle) ?? 0) <= 0);
+                        bool depart = (BehaviorRule?.Invoke(vehicle, "loading.depart", nativeDepart ? 1 : 0, dt) ?? (nativeDepart ? 1 : 0)) >= .5;
+                        if(vehicle.CargoAmount > 0 && (full || depart))vehicle.TransportState=VehicleTransportState.Hauling;
                         else vehicle.TransportState=amount>0?VehicleTransportState.Loading:VehicleTransportState.Waiting;
                         break;
                     case VehicleTransportState.Unloading:
-                        vehicle.Hold();float delivered=vehicle.TakeCargo((float)dt*vehicle.CargoCapacity/3);
+                        vehicle.Hold();float delivered=vehicle.TakeCargo((float)(BehaviorRule?.Invoke(vehicle, "unloading.amount", dt*vehicle.CargoCapacity/3, dt) ?? dt*vehicle.CargoCapacity/3));
                         DestinationReceiver?.Invoke(vehicle,delivered);timberCargo.Deliver(delivered);
                         if(vehicle.CargoAmount<=0)vehicle.TransportState=VehicleTransportState.Returning;
                         break;

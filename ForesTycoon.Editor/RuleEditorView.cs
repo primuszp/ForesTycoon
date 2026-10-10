@@ -16,7 +16,7 @@ namespace ForesTycoon.Editor
     /// </summary>
     internal sealed class RuleEditorView
     {
-        private enum View { Overview, Tuning, Graph }
+        private enum View { Overview, Tuning, Graph, Behaviors }
 
         private RuleModel draft;
         private string selected = "wear", message = "";
@@ -27,6 +27,8 @@ namespace ForesTycoon.Editor
         private bool panned, fitRequested = true;
         private Vec2 contextPosition;
         private readonly CurrentRulesView currentRules = new();
+        private readonly BehaviorEditorView behaviors = new();
+        internal void AdvanceSandbox(GameWorld world, double elapsed) => behaviors.Advance(world, elapsed);
         private readonly RoadRuleDraftCompiler compiler = new();
         private View view = View.Overview;
         private readonly Dictionary<string, double> values = new(StringComparer.Ordinal);
@@ -52,6 +54,8 @@ namespace ForesTycoon.Editor
             if (modelPath == null) return;
             path = Path.GetFullPath(modelPath);
             using var document = JsonDocument.Parse(File.ReadAllText(path));
+            if (document.RootElement.TryGetProperty("schema", out var behaviorSchema) && behaviorSchema.GetString() == "forest-behaviors")
+            { behaviors.Load(BehaviorModel.FromJson(document.RootElement.GetRawText()), path); view = View.Behaviors; return; }
             if (document.RootElement.TryGetProperty("schema", out var schema) && schema.GetString() == "forest-current-rules")
             { currentRules.Load(GameRuleCatalog.FromJson(document.RootElement.GetRawText()), path); return; }
             draft = RuleModel.FromJson(document.RootElement.GetRawText());
@@ -64,7 +68,7 @@ namespace ForesTycoon.Editor
         internal void Draw(GameWorld world, ref bool open, bool standalone = false)
         {
             if (!open) return;
-            draft ??= world.RuleDocument;
+            draft ??= currentRules.RoadTrafficModel ?? world.RuleDocument;
             var flags = ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse;
             if (standalone) flags |= ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoTitleBar;
             if (!standalone) ImGui.SetNextWindowSize(new Vec2(1280, 820), ImGuiCond.FirstUseEver);
@@ -74,12 +78,15 @@ namespace ForesTycoon.Editor
             float statusHeight = ImGui.GetFrameHeightWithSpacing() + 6;
             ImGui.BeginChild("editor-body", new Vec2(0, -statusHeight), ImGuiChildFlags.None, ImGuiWindowFlags.NoScrollbar);
             if (view == View.Overview)
-                currentRules.Draw(world, model => { draft = model; selected = draft.Output; view = View.Graph; fitRequested = true; });
+                currentRules.Draw(world, model => { draft = model; selected = draft.Output; view = View.Graph; fitRequested = true; },
+                    hook => { behaviors.SelectHook(hook); view = View.Behaviors; },
+                    kind => { behaviors.SelectController(kind); view = View.Behaviors; });
             else if (view == View.Tuning)
             {
                 currentRules.DrawTuning(world);
                 if (currentRules.OverviewRequested) { currentRules.OverviewRequested = false; view = View.Overview; }
             }
+            else if (view == View.Behaviors) behaviors.Draw(world);
             else GraphView(world, compiled);
             ImGui.EndChild();
             StatusBar(world, compiled);
@@ -106,6 +113,10 @@ namespace ForesTycoon.Editor
                 view = View.Graph;
             }
             float right = headerRight;
+            ImGui.SameLine(0, 4);
+            if (ViewTab("Viselkedések", view == View.Behaviors, "Futtatható képletek, típusszintű és egyedi objektumkötések."))
+            { if (view == View.Graph) currentRules.SetRoadTrafficModel(world, draft); view = View.Behaviors; }
+            if (view == View.Behaviors) { ImGui.Separator(); return; }
             float fileWidth = ImGui.CalcTextSize("Fájl").X + 20;
             float applyWidth = ImGui.CalcTextSize("Alkalmazás a tesztvilágban").X + 24;
             ImGui.SameLine(right - fileWidth - applyWidth - 8);
@@ -120,8 +131,8 @@ namespace ForesTycoon.Editor
                 Try(() =>
                 {
                     var overrides = currentRules.TuningOverrides(world);
-                    world.QueueRuleModel(model); world.QueueTuning(overrides);
-                    message = $"Alkalmazva: útkopási gráf és {overrides.Count} hangolt szám. A játékba: Fájl » Mentés, majd F12 » Szabálymodell.";
+                    world.QueueRuleConfiguration(model, overrides);
+                    message = $"Alkalmazás naplózva: útkopási gráf és {overrides.Count} hangolt szám. A játékba: Fájl » Mentés, majd F12 » Szabálymodell.";
                 });
             ImGui.Separator();
         }

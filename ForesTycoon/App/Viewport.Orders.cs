@@ -27,9 +27,11 @@ namespace ForesTycoon
         private ulong routeCacheRevision;
         private (int Tile, string Reason) hoverCheck = (-1, null);
 
-        private int[] CachedRoute(int from, int to, bool truck)
+        private int[] CachedRoute(int from, int to, bool truck, ForestMachine machine = null, FleetTruck unit = null)
         {
             var logistics = world.Logistics;
+            if (logistics.Behaviors != null) return truck ? logistics.PreviewTruckRoute(from, to, unit ?? SendTruckUnit)
+                : logistics.PreviewMachinePath(from, to, machine ?? SendMachine);
             ulong revision = (ulong)world.RoadCount * 7919 + (ulong)world.SkidTrailCount * 31 + (ulong)logistics.Stacks.Count;
             if (revision != routeCacheRevision) { routeCache.Clear(); routeCacheRevision = revision; }
             if (!routeCache.TryGetValue((from, to, truck), out var route))
@@ -58,8 +60,8 @@ namespace ForesTycoon
             var logistics = world.Logistics;
             if (tile < 0) return "";
             if (!sendNeedsDestination) return SendMachine is { } m ? logistics.CheckProcessorStack(m, tile) : "";
-            if (sendSource < 0) return logistics.CheckSource(tile, sendTruck, SendVehicleTile());
-            return logistics.CheckDestination(sendSource, tile, sendTruck);
+            if (sendSource < 0) return logistics.CheckSource(tile, sendTruck, SendVehicleTile(), SendMachine);
+            return logistics.CheckDestination(sendSource, tile, sendTruck, SendMachine, SendTruckUnit);
         }
 
         /// <summary>Rebuilds what the ground shows for orders; called once per frame before the world is drawn.</summary>
@@ -75,7 +77,7 @@ namespace ForesTycoon
                 foreach (var stack in logistics.Stacks) if (stack.Tile != sendSource) o.Candidates.Add(stack.Tile);
                 if (sendNeedsDestination && sendSource >= 0) foreach (var mill in logistics.Mills) o.Candidates.AddRange(mill.Footprint);
                 int hover = world.HoveredTileId;
-                if (hover != hoverCheck.Tile) hoverCheck = (hover, CheckPick(hover));
+                if (hover != hoverCheck.Tile || logistics.Behaviors != null) hoverCheck = (hover, CheckPick(hover));
                 o.Hover = hover; o.HoverValid = hover >= 0 && hoverCheck.Reason == null;
                 Color colour = sendTruck ? TruckColour : SendMachine?.Kind == ForestMachineKind.Harvester ? ProcessorColour : ForwarderColour;
                 if (sendSource >= 0)
@@ -104,14 +106,14 @@ namespace ForesTycoon
                 }
                 else if (m.Source != null)
                 {
-                    var route = CachedRoute(m.Source.Tile, m.Destination, false);
+                    var route = CachedRoute(m.Source.Tile, m.Destination, false, machine: m);
                     if (route != null) o.Routes.Add((route, ForwarderColour, strong));
                 }
             }
             foreach (var t in logistics.Trucks)
             {
                 if (t.Source == null) continue;
-                var route = CachedRoute(t.Source.Tile, t.Destination, true);
+                var route = CachedRoute(t.Source.Tile, t.Destination, true, unit: t);
                 if (route != null) o.Routes.Add((route, TruckColour, hoveredFleetRow == "t" + t.Id));
             }
         }

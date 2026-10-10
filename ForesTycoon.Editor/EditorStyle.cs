@@ -149,6 +149,30 @@ namespace ForesTycoon.Editor
             }
         }
 
+        /// <summary>Stop the shaft at the head's base: its antialiased stroke must not round off the tip.</summary>
+        internal static void BezierArrow(ImDrawListPtr draw, Vec2 start, Vec2 control1, Vec2 control2, Vec2 tip,
+            float headSize, uint colour, float width, Vec2? headDirection = null)
+        {
+            Vec2 direction = headDirection ?? tip - control2;
+            float length = direction.Length();
+            if (length < 1e-4f) return;
+            Vec2 unit = direction / length;
+            // Keep the original curve until the last head-sized section (de Casteljau subdivision).
+            // The extra half-stroke accounts for the rounded/antialiased end of the line.
+            float setback = headSize + width * .5f;
+            float low = 0, high = 1;
+            for (int i = 0; i < 18; i++) {
+                float t = (low + high) * .5f, s = 1 - t;
+                Vec2 point = s * s * s * start + 3 * s * s * t * control1 + 3 * s * t * t * control2 + t * t * t * tip;
+                if (Vec2.Dot(tip - point, unit) > setback) low = t; else high = t;
+            }
+            float end = low;
+            Vec2 a = Vec2.Lerp(start, control1, end), b = Vec2.Lerp(control1, control2, end), c = Vec2.Lerp(control2, tip, end);
+            Vec2 d = Vec2.Lerp(a, b, end), e = Vec2.Lerp(b, c, end);
+            if (end > 0) draw.AddBezierCubic(start, a, d, Vec2.Lerp(d, e, end), colour, width);
+            Arrow(draw, tip, direction, headSize, colour);
+        }
+
         /// <summary>An arrowhead at <paramref name="tip"/> pointing along <paramref name="direction"/>.</summary>
         internal static void Arrow(ImDrawListPtr draw, Vec2 tip, Vec2 direction, float size, uint colour)
         {

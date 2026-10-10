@@ -62,6 +62,7 @@ namespace ForesTycoon.Editor
         protected override void RenderScene(FrameEventArgs args)
         {
             sandbox.ExecutePendingCommands();
+            editor.AdvanceSandbox(sandbox, args.Time);
             Vec2 scale = new((float)FramebufferSize.X / Math.Max(1, ClientSize.X), (float)FramebufferSize.Y / Math.Max(1, ClientSize.Y));
             ui.Update(ClientSize.X, ClientSize.Y, FramebufferSize.X, FramebufferSize.Y, scale, (float)Math.Max(0.001, args.Time));
             ImGui.SetNextWindowPos(Vec2.Zero);

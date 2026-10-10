@@ -21,7 +21,8 @@ namespace ForesTycoon
         SendHome,
         StackSite,
         SetRuleModel,
-        SetTuning
+        SetTuning,
+        SetBehaviors
     }
 
     readonly record struct WorldCommandRecord(
@@ -70,10 +71,10 @@ namespace ForesTycoon
 
     sealed class WorldSaveData
     {
-        public const int CurrentVersion = 13;
+        public const int CurrentVersion = 16;
         // Bump whenever native simulation semantics change. Editable graphs and tuning
         // are stored separately in the checkpoint/journal; this identifies their runtime.
-        public const string CurrentRuntimeRulesVersion = "forestycoon-simulation/2026-10-10.3";
+        public const string CurrentRuntimeRulesVersion = "forestycoon-simulation/2026-10-10.6";
         public string RuntimeRulesVersion { get; init; } = CurrentRuntimeRulesVersion;
         public WorldSaveData() { }
         // Missing JSON must not silently inherit today's runtime identifier.
@@ -100,10 +101,12 @@ namespace ForesTycoon
 
         public void Validate()
         {
-            if (Version != 4 && Version != 5 && Version != 6 && Version != 7 && Version != 8 && Version != 9 && Version != 10 && Version != 11 && Version != 12 && Version != CurrentVersion)
+            if (Version != 4 && Version != 5 && Version != 6 && Version != 7 && Version != 8 && Version != 9 && Version != 10 && Version != 11 && Version != 12 && Version != 13 && Version != 14 && Version != 15 && Version != CurrentVersion)
                 throw new NotSupportedException($"Save version {Version} is not supported; expected {CurrentVersion}.");
             bool migratedRuntime = (Version == 12 && RuntimeRulesVersion == "forestycoon-simulation/2026-10-10.1")
-                || (Version == 13 && RuntimeRulesVersion == "forestycoon-simulation/2026-10-10.2");
+                || (Version == 13 && RuntimeRulesVersion is "forestycoon-simulation/2026-10-10.2" or "forestycoon-simulation/2026-10-10.3")
+                || (Version == 14 && RuntimeRulesVersion == "forestycoon-simulation/2026-10-10.4")
+                || (Version == 15 && RuntimeRulesVersion == "forestycoon-simulation/2026-10-10.5");
             if (Version >= 12 && !migratedRuntime && !string.Equals(RuntimeRulesVersion, CurrentRuntimeRulesVersion, StringComparison.Ordinal))
                 throw new NotSupportedException($"Simulation rules runtime '{RuntimeRulesVersion ?? "missing"}' is not supported; expected '{CurrentRuntimeRulesVersion}'.");
             if (!EnvironmentSystem.IsValidForestYearSeconds(ReplayForestYearSeconds))
@@ -119,6 +122,9 @@ namespace ForesTycoon
                 if (Checkpoint.Rules != null) { var rules = new CompiledRoadRule(Checkpoint.Rules); rules.ValidateRange(); }
                 if (Version >= 10 && Checkpoint.Rules == null) throw new InvalidOperationException("Save has no rule model.");
                 if (Checkpoint.Tuning != null) _ = GameTuning.FromOverrides(Checkpoint.Tuning);
+                if (Version >= 14 && Checkpoint.Behaviors == null) throw new InvalidOperationException("Save has no behavior model.");
+                if (Checkpoint.Behaviors != null) _ = new WorldBehaviorPolicy(Checkpoint.Behaviors);
+                if (Version >= 15 && Checkpoint.BehaviorStates == null) throw new InvalidOperationException("Save has no controller state.");
                 CheckpointGuard.Require(Version >= 8 && Checkpoint.Version is 1 or 2 &&
                     (Version < 11 || Checkpoint.Version == 2), "world snapshot version");
                 CheckpointGuard.Require(double.IsFinite(Checkpoint.RoadWeatherSeconds) && Checkpoint.RoadWeatherSeconds >= 0 &&

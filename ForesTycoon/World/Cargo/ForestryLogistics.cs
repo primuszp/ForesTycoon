@@ -17,6 +17,8 @@ namespace ForesTycoon
     }
     internal sealed partial class ForestryLogistics
     {
+        internal IBehaviorPolicy Behaviors { get; set; }
+        internal CompiledBehaviorControllers Controllers { get; set; }
         private readonly TerrainMap terrain;
         private readonly ForestSystem forest;
         internal readonly List<HarvestSite> Sites=new();
@@ -65,6 +67,7 @@ namespace ForesTycoon
         {
             var truck=TruckOf(vehicle);
             if(truck!=null){
+                if (truck.HomeRequested) return 0;
                 var (taken,value)=truck.Source.Take(requested);truck.CargoValue+=value;return taken;
             }
             if(MachinesEnabled)return 0;
@@ -86,7 +89,10 @@ namespace ForesTycoon
             throw new InvalidOperationException("Missing sawmill destination.");
         }
         internal void Update(double seconds){
-            foreach(var mill in Mills){float cut=Math.Min(mill.Stock,(float)seconds*0.25f);mill.Stock-=cut;mill.Processed+=cut;}
+            foreach(var mill in Mills){float cut=Math.Min(mill.Stock,(float)seconds*0.25f);
+                if (Behaviors != null) cut = Math.Min(mill.Stock, (float)Behaviors.Evaluate(new("mill.process", "mill", (ulong)mill.TileId,
+                    cut, seconds, forest.ForestYear, mill.Processed, mill.Stock)));
+                mill.Stock-=cut;mill.Processed+=cut;}
             if(MachinesEnabled)UpdateMachines(seconds);
             if(Vehicles!=null)UpdateTrucks(seconds);
         }

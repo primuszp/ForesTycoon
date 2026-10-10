@@ -7,6 +7,7 @@ public class RuleModelTests
     [InlineData(0.0015, 1)]
     [InlineData(0.003, 0.2)]
     [InlineData(0, 1)]
+    [InlineData(0.0015, 10)]
     public void DefaultModelPreservesTrafficWear(double traffic, double surface)
     {
         var rule = new CompiledRoadRule(RuleModel.Default());
@@ -84,7 +85,8 @@ public class RuleModelTests
 
     [Theory]
     [InlineData(-1, 1, 0)]
-    [InlineData(0.01, 2, 0)]
+    [InlineData(0.01, 11, 0)]
+    [InlineData(101, 1, 0)]
     [InlineData(0.01, 1, 2)]
     public void RejectsInvalidWorldInputs(double traffic, double surface, double damage) =>
         Assert.Throws<ArgumentOutOfRangeException>(() => new CompiledRoadRule(RuleModel.Default()).Evaluate(new(traffic, surface, damage)));

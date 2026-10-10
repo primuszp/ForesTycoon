@@ -6,6 +6,7 @@ namespace ForesTycoon
     {
         public static IWorldCommand Create(WorldCommandRecord record) => record.Kind switch
         {
+            WorldCommandKind.SetBehaviors => new SetBehaviorsCommand(record.RuleJson),
             WorldCommandKind.SetRuleModel => new SetRuleModelCommand(record.RuleJson),
             WorldCommandKind.SetTuning => new SetTuningCommand(record.RuleJson),
             WorldCommandKind.EditElevation => new EditElevationCommand(record.A, record.B, record.C, record.D, record.Flag),

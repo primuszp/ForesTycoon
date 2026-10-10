@@ -832,7 +832,7 @@ namespace ForesTycoon
             var g = world.Graphics;
             if (ImGui.CollapsingHeader("Szabálymodell"))
             {
-                ImGui.TextWrapped("A ForesTycoon.Editorban mentett útkopási modell vagy teljes katalógus (gráf + hangolás) itt alkalmazható.");
+                ImGui.TextWrapped("Az Editorban mentett útkopási modell, katalógus vagy objektumokhoz kötött viselkedésgráf itt alkalmazható.");
                 ImGui.TextWrapped($"Aktív modell: {world.ActiveRuleName}");
                 ImGui.InputText("JSON-fájl", ref ruleModelPath, 1024);
                 if (ImGui.Button("Szabálymodell alkalmazása"))
@@ -840,10 +840,17 @@ namespace ForesTycoon
                     try
                     {
                         string json = System.IO.File.ReadAllText(ruleModelPath);
-                        if (json.Contains("\"forest-current-rules\"", StringComparison.Ordinal))
+                        using var document = System.Text.Json.JsonDocument.Parse(json);
+                        string schema = document.RootElement.TryGetProperty("schema", out var schemaValue) ? schemaValue.GetString() : null;
+                        if (schema == "forest-behaviors")
+                        {
+                            var behaviors = BehaviorModel.FromJson(json); world.QueueBehaviors(behaviors);
+                            ruleImportStatus = $"Viselkedésváltás naplózva: {behaviors.Graphs.Count} gráf és objektumkötés.";
+                        }
+                        else if (schema == "forest-current-rules")
                         {
                             var catalog = GameRuleCatalog.FromJson(json);
-                            world.QueueRuleModel(catalog.RoadTrafficModel); world.QueueTuning(catalog.TuningOverrides());
+                            world.QueueRuleConfiguration(catalog.RoadTrafficModel, catalog.TuningOverrides());
                             ruleImportStatus = $"Katalógus naplózva: útkopási gráf és {catalog.TuningOverrides().Count} hangolt érték.";
                         }
                         else { world.QueueRuleModel(RuleModel.FromJson(json)); ruleImportStatus = "Modellváltás naplózva."; }
@@ -853,6 +860,7 @@ namespace ForesTycoon
                 }
                 if (ruleImportStatus.Length > 0) ImGui.TextWrapped(ruleImportStatus);
                 ImGui.TextWrapped(world.LastRuleSample);
+                if (world.BehaviorError != null) ImGui.TextWrapped(world.BehaviorError);
             }
 
             if (ImGui.CollapsingHeader("Teljesítmény", ImGuiTreeNodeFlags.DefaultOpen))
