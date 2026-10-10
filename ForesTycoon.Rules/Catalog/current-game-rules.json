@@ -10,7 +10,7 @@
       "scope": "Vil\u00E1g",
       "schedule": "Fix vil\u00E1gl\u00E9p\u00E9s",
       "execution": "NativeCode",
-      "description": "\u00D6kosziszt\u00E9ma, logisztika, \u00FAt\u00F6reged\u00E9s, vadak, majd a regisztr\u00E1lt rendszerek. A j\u00E1rm\u0171vek k\u00FCl\u00F6n, gyorsabb \u00F3r\u00E1t kapnak.",
+      "description": "\u00D6kosziszt\u00E9ma, logisztika, \u00FAt\u00F6reged\u00E9s, vadak, majd a regisztr\u00E1lt rendszerek. A j\u00E1rm\u0171vek \u00E9s vadak k\u00FCl\u00F6n, gyorsabb \u00F3r\u00E1t kapnak: alap 1\u00D7 mellett term\u00E9szetes temp\u00F3ban mozognak.",
       "formula": "",
       "notes": "",
       "reads": [

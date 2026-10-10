@@ -16,7 +16,7 @@ namespace ForesTycoon.Ecology
         private readonly IForestHabitat habitat;
         private readonly IForestCanopy forest;
         private readonly double[] canopy, surface, soil, deep, drought, wet, wetIntegral, snow;
-        private readonly SurfaceWaterFlux surfaceFlux;
+        private readonly SurfaceWaterFlux surfaceFlux, snowFlux;
         private readonly double[] demandIntegral, uptakeIntegral, uptakeRate, demandRate;
         private readonly SoilProperties[] soils;
         private readonly ForestHydrologyInputs[] vegetation;
@@ -55,6 +55,8 @@ namespace ForesTycoon.Ecology
         internal double MeanSoil { get; private set; }
         internal double MeanSnowCover { get; private set; }
         internal double SnowWater => System.Linq.Enumerable.Sum(snow);
+        internal double SnowWaterAt(int id) => snow[id];
+        internal double SnowCoverAt(int id) => Math.Clamp(snow[id] / 6, 0, 1);
         internal double LiquidRainRate => Preset == WeatherPreset.Snow ? 0 : RainRate;
         internal double SnowfallRate => Preset == WeatherPreset.Snow ? RainRate : 0;
         internal double StoredWater
@@ -84,6 +86,7 @@ namespace ForesTycoon.Ecology
             canopy = new double[n]; surface = new double[n]; soil = new double[n]; deep = new double[n];
             snow = new double[n];
             drought = new double[n]; wet = new double[n]; wetIntegral = new double[n]; surfaceFlux = new SurfaceWaterFlux(n);
+            snowFlux = new SurfaceWaterFlux(n);
             destinations = new int[n];
             demandIntegral = new double[n]; uptakeIntegral = new double[n];
             uptakeRate = new double[n]; demandRate = new double[n];
@@ -229,6 +232,39 @@ namespace ForesTycoon.Ecology
                 if (exported != 0) Outflow += exported;
             }
             surfaceFlux.Commit(surface);
+            if (interval.Snow || MeanSnowCover > 0) RedistributeSnow(interval.Forcing, hours);
+        }
+
+        // Conserved downwind transport; cover and upwind relief shelter retained snow.
+        // Inspired by SnowTran-3D's terrain/vegetation coupling, with gameplay coefficients.
+        private void RedistributeSnow(WeatherForcing forcing, double hours)
+        {
+            if (forcing.Temperature > 0 || forcing.Wind <= .8) return;
+            snowFlux.BeginStep();
+            Span<int> adjacent = stackalloc int[4];
+            for (int id = 0; id < CellCount; id++)
+            {
+                if (snow[id] <= .25) continue;
+                var cell = habitat.GetForestTileGeometry(id);
+                double height = habitat.GetNormalizedElevation(id), lee = 0;
+                int target = -1, count = habitat.GetAdjacentTileIds(id, adjacent);
+                double best = 0;
+                for (int j = 0; j < count; j++) {
+                    int next = adjacent[j]; var neighbour = habitat.GetForestTileGeometry(next);
+                    double dx = neighbour.X - cell.X, dy = neighbour.Y - cell.Y;
+                    double length = Math.Sqrt(dx * dx + dy * dy);
+                    if (length <= 0) continue;
+                    double downwind = (dx + .35 * dy) / length;
+                    if (downwind < 0) lee = Math.Max(lee, habitat.GetNormalizedElevation(next) - height);
+                    if (downwind > best) { best = downwind; target = next; }
+                }
+                if (target < 0) continue; // Closed map edge: retain the snow, never discard water.
+                double shelter = Math.Clamp(vegetation[id].Cover + lee * 8, 0, 1);
+                var step = new SurfaceRunoffStep(.25 + shelter * 3,
+                    1 - Math.Exp(-hours * (forcing.Wind - .8) * 4 * (1 - shelter * .85)));
+                snowFlux.Schedule(id, target, false, snow[id], step);
+            }
+            snowFlux.Commit(snow);
         }
 
         private void Summarize()

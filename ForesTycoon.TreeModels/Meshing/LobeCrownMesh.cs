@@ -222,8 +222,8 @@ namespace ForesTycoon.TreeModels
             bool large = !shrub && DendroCrownMesh.Sides(crownRadius, ForestLod.Near, 6, 12) >= 8;
             return lod switch
             {
-                ForestLod.Near => large ? 96 : shrub ? 48 : 40,
-                ForestLod.Medium => large ? 40 : 24,
+                ForestLod.Near => large ? 192 : shrub ? 96 : 80,
+                ForestLod.Medium => large ? 80 : 40,
                 _ => 17
             };
         }
@@ -246,7 +246,7 @@ namespace ForesTycoon.TreeModels
                     d[i] = new(MathF.Cos(i * golden) * r, MathF.Sin(i * golden) * r, z);
                 }
                 // Points on a sphere: their convex hull is their spherical Delaunay triangulation. Brute
-                // force is fine for under a hundred points, once per lattice size.
+                // force is bounded to the supported lattice sizes, once per size.
                 var faces = new List<int>();
                 for (int a = 0; a < count; a++)
                     for (int b = a + 1; b < count; b++)

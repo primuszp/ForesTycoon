@@ -5,6 +5,47 @@ namespace ForesTycoon.Tests;
 
 public class WorldLifecycleTests
 {
+    [Fact]
+    public void OneTimesPaceKeepsWildlifeAndVehicleClocksInRealTimeAndPauseStopsThem()
+    {
+        using var world = Create();
+        var clock = new FixedStepClock { Speed = Viewport.GamePace };
+        for (int frame = 0; frame < 240; frame++) clock.Advance(1.0 / 60, world.Update);
+        var state = world.CaptureCheckpoint();
+        Assert.NotEmpty(state.Wildlife.Animals);
+        double elapsedRealSeconds = clock.SimulationTimeSeconds / Viewport.GamePace;
+        Assert.InRange(elapsedRealSeconds, 3.8, 4.01);
+        foreach (var animal in state.Wildlife.Animals) {
+            Assert.Equal(elapsedRealSeconds, animal.Age, 8);
+            Assert.Equal(4.0 / 30, animal.Age - animal.PreviousAge!.Value, 8);
+            Assert.True(animal.PreviousWalkTime <= animal.WalkTime);
+        }
+        Assert.Equal(1, Viewport.GamePace * world.Tuning[Tune.VehicleTimeScale], 8);
+        string before = State(world);
+        clock.IsPaused = true;
+        for (int frame = 0; frame < 60; frame++) clock.Advance(1.0 / 60, world.Update);
+        Assert.Equal(before, State(world));
+    }
+
+    [Fact]
+    public void PreviousSeasonalRuntimeLoadsAndUsesTheNaturalWildlifeClock()
+    {
+        using var world = Create(); world.Update(.3);
+        var legacy = JsonNode.Parse(Save(world))!;
+        legacy["runtimeRulesVersion"] = "forestycoon-simulation/2026-10-10.2";
+        foreach (var animal in legacy["checkpoint"]!["wildlife"]!["animals"]!.AsArray()) {
+            animal!.AsObject().Remove("previousAge"); animal.AsObject().Remove("previousWalkTime");
+        }
+        using var restored = Create();
+        using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(legacy.ToJsonString()));
+        restored.Load(stream);
+        var before = restored.CaptureCheckpoint().Wildlife.Animals;
+        restored.Update(1.0 / 30);
+        var after = restored.CaptureCheckpoint().Wildlife.Animals;
+        Assert.NotEmpty(before);
+        for (int i = 0; i < before.Length; i++) Assert.Equal(before[i].Age + 4.0 / 30, after[i].Age, 8);
+    }
+
     private static readonly TerrainSettings Settings = TerrainSettings.Default.WithNodeSize(17, 42);
     private static GameWorld Create() => new(Settings, enableRendering: false);
     private static byte[] Save(GameWorld world)

@@ -145,7 +145,7 @@ namespace ForesTycoon.OpenGl
                     environmentPixels[offset]=(float)Math.Clamp(cell.Surface/2+cell.Canopy/4,0,1);
                     environmentPixels[offset+1]=(float)(cell.Soil/cell.Capacity);
                     environmentPixels[offset+2]=(float)cell.Drought;
-                    environmentPixels[offset+3]=(float)cell.Waterlogging;
+                    environmentPixels[offset+3]=(float)(environment.SnowWaterAt(id)/6);
                 }
                 GL.TexImage2D(TextureTarget.Texture2D,0,PixelInternalFormat.Rgba32f,columns,rows,0,PixelFormat.Rgba,PixelType.Float,environmentPixels);
                 environmentRevision=environment.Revision;
@@ -316,14 +316,24 @@ void main() {
     float snow = 0;
     if(kind != 2 && kind != 5 && kind != 7) {
         float up = smoothstep(0.25,0.8,n.z);
-        snow = smoothstep(0.12,0.85,climate.z - (1-materialPatch)*0.25) * up;
+        float depth=environment_active!=0?local_environment.a:climate.z;
+        float cover=clamp(depth,0,1);
+        // World-space wind-shaped ripples keep neighbouring tile depths visually distinct.
+        float drift=surfaceNoise2(vec2(dot(world.xy,vec2(1,0.35))*0.16,dot(world.xy,vec2(-0.35,1))*0.55));
+        snow = smoothstep(0.08,0.8,cover - (1-materialPatch)*0.2 - drift*0.12) * up;
         if(kind == 8) snow *= 0.55;
         // Compacted snow/slush leaves the road alignment legible against untouched snowy ground.
         if(kind == 3 || kind == 11) snow *= 0.86;
         // The compressed wheel ruts retain dark slush under accumulating snow.
         if(kind == 12) snow *= 0.48;
         puddle *= 1-snow;
-        base = mix(base,vec3(0.83,0.88,0.93) * (textured != 0 ? texture(materials,vec3(world.xy/3,4)).r : 1),snow);
+        vec3 snowColor=mix(vec3(0.70,0.79,0.86),vec3(0.91,0.94,0.97),clamp(depth*0.5,0,1));
+        if(kind==1||kind==3||kind==8||kind>=11){
+            float ripple=dot(world.xy,vec2(-0.35,1))*1.5+surfaceNoise2(world.xy*0.12)*4;
+            n=normalize(n+vec3(0.35,-1,0)*cos(ripple)*snow*min(depth,2)*0.28);
+            snowColor*=0.93+0.07*cos(ripple);
+        }
+        base = mix(base,snowColor * (textured != 0 ? texture(materials,vec3(world.xy/3,4)).r : 1),snow);
     }
     if(lit != 0) {
         float direct = max(dot(n,sun),0);

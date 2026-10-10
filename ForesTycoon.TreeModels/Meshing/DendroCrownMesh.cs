@@ -102,7 +102,7 @@ namespace ForesTycoon.TreeModels
             float bottom = height * (1 - fraction), crownHeight = height * fraction * (1 - shaping.TopLoss);
             float topZ = bottom + crownHeight;
             int sides = form == CrownForm.Spruce
-                ? Sides(radius, lod, lod == ForestLod.Far ? 4 : 5, lod == ForestLod.Far ? 5 : lod == ForestLod.Medium ? 6 : 8)
+                ? Sides(radius, lod, lod == ForestLod.Far ? 4 : lod == ForestLod.Medium ? 6 : 8, lod == ForestLod.Far ? 5 : lod == ForestLod.Medium ? 10 : 16)
                 : Sides(radius, lod, lod == ForestLod.Far ? 4 : 5, lod == ForestLod.Far ? 5 : lod == ForestLod.Medium ? 9 : 12);
             var rings = Rings(form, sides, crownHeight, radius, lod);
             int ringCount = rings.Count;
@@ -302,7 +302,7 @@ namespace ForesTycoon.TreeModels
             if (form == CrownForm.Spruce)
             {
                 // Show a tier only when it is at least ~5 px tall at the LOD reference zoom.
-                int tiers = Math.Clamp((int)(crownHeight * ReferencePixels(lod) / 5), 0, lod == ForestLod.Near ? 5 : lod == ForestLod.Medium ? 3 : 0);
+                int tiers = Math.Clamp((int)(crownHeight * ReferencePixels(lod) / 5), 0, lod == ForestLod.Near ? 8 : lod == ForestLod.Medium ? 5 : 0);
                 if (tiers < 2)
                 {
                     rings.Add((0.08f, 1)); rings.Add((0.45f, 1));

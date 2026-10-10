@@ -50,7 +50,7 @@ public class BroadleafCanopyTests
         double shaded = mid.Where(v => v.Position.X < 0 && Math.Abs(v.Position.Y) < -.6f * v.Position.X).Average(Brightness);
         Assert.True(open > shaded, $"{species}: open {open}, shaded {shaded}");
         Assert.Equal(form.Height, mesh.Crown.Max(v => v.Position.Z), 5);
-        Assert.InRange(mesh.Crown.Length / 3, 1, 188);
+        Assert.InRange(mesh.Crown.Length / 3, 1, 380);
     }
 
     [Theory]

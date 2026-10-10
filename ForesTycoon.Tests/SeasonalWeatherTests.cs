@@ -5,6 +5,22 @@ namespace ForesTycoon.Tests;
 public class SeasonalWeatherTests
 {
     [Fact]
+    public void WindRedistributesSnowByTileWithoutCreatingWaterAndReloadContinuesExactly()
+    {
+        var map = new TerrainMap(TerrainSettings.Default.WithNodeSize(17, 42), (_, _) => 4);
+        var environment = new EnvironmentSystem(map, null);
+        environment.ForceWeather(WeatherPreset.Snow, 10, 120);
+        environment.Update(60);
+        var amounts = Enumerable.Range(0, environment.CellCount).Select(environment.SnowWaterAt).ToArray();
+        Assert.True(amounts.Max() > amounts.Min() * 1.2, "Wind failed to vary snow depth across tiles.");
+        Assert.All(amounts, value => Assert.True(value >= 0));
+        Assert.InRange(Math.Abs(environment.BalanceError), 0, 1e-6);
+        var restored = new EnvironmentSystem(map, null); restored.Restore(environment.Capture());
+        environment.Update(10); restored.Update(10);
+        Assert.Equal(JsonSerializer.Serialize(environment.Capture()), JsonSerializer.Serialize(restored.Capture()));
+    }
+
+    [Fact]
     public void AutumnIsWetterSummerHasShortStrongStormsAndWinterSnow()
     {
         double summerWet = 0, autumnWet = 0, winterSnow = 0;

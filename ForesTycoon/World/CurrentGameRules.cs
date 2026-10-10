@@ -29,7 +29,7 @@ namespace ForesTycoon
             const string upkeep = "ForesTycoon/World/Cargo/VehicleUpkeep.cs", logistics = "ForesTycoon/World/Cargo/ForestryLogistics.cs";
 
             var clock = Add("time.world", "Szimulációs órák és sorrend", "Idő és vezérlés", "Világ", "Fix világlépés", game, "VehicleTimeScale",
-                "commands", "calendar.time|vehicle.time", "Ökoszisztéma, logisztika, útöregedés, vadak, majd a regisztrált rendszerek. A járművek külön, gyorsabb órát kapnak.");
+                "commands", "calendar.time|vehicle.time", "Ökoszisztéma, logisztika, útöregedés, vadak, majd a regisztrált rendszerek. A járművek és vadak külön, gyorsabb órát kapnak: alap 1× mellett természetes tempóban mozognak.");
             Param(clock, "Erdőév", forestYearSeconds, "játék-s");
             var phases = Add("time.ecology", "Ökológiai többütemű futtatás", "Idő és vezérlés", "Világ / hónaphatár", "0,5 s; havi határra bontva",
                 "ForesTycoon.Ecology/Water/ForestEnvironmentCoordinator.cs", "ForestEnvironmentCoordinator",

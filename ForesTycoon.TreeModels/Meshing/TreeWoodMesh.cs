@@ -127,8 +127,8 @@ namespace ForesTycoon.TreeModels
 
         private static int Sides(bool root, int level, float radius, ForestLod lod, bool shrub)
         {
-            int max = shrub ? 4 : root ? (lod == ForestLod.Near ? 7 : lod == ForestLod.Medium ? 5 : 3)
-                : level == 0 ? (lod == ForestLod.Near ? 5 : 3) : level <= 1 ? (lod == ForestLod.Near ? 5 : 4) : 3;
+            int max = shrub ? 4 : root ? (lod == ForestLod.Near ? 10 : lod == ForestLod.Medium ? 7 : 3)
+                : level == 0 ? (lod == ForestLod.Near ? 8 : 5) : level <= 1 ? (lod == ForestLod.Near ? 6 : 4) : 3;
             // Spend sides on the exposed bole, where a triangular silhouette remains
             // visible even with smooth lighting. Thin branches keep their cheap tubes.
             int min = root && !shrub ? (lod == ForestLod.Near ? 5 : lod == ForestLod.Medium ? 4 : 3) : 3;

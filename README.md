@@ -227,6 +227,8 @@ dotnet run --project ForesTycoon/ForesTycoon.csproj -- --truck-smoke-test
 
 A Nézet menüben az Új grafikai megjelenítés kapcsolóval az eredeti színalapú mód is visszaállítható. A Textúrázás, Napfény, Vetett árnyékok és Csemperács külön kapcsolható; a nap iránya és magassága állítható. Ezek a beállítások a futó játékban megmaradnak térképcsere közben.
 
+A csemperács alapból bekapcsolt. A közeli lombkoronák finomabb, nagy fáknál 192 pontból álló zárt hálót használnak; a közepes nézet is részletesebb, a fenyők több koronaréteget és körirányú szegmenst kapnak. A fafajspecifikus formák és textúrák megmaradnak.
+
 Új világokban a látvány a Környezet 1.0 rendszer évszakos eseményeit követi: ősszel gyakori, tartós eső, nyáron rövid záporok és erős viharok, télen havazás. A hópelyhek lassan süllyednek, billegnek, forognak és széllel sodródnak; a felhalmozódó hó melegedéskor a talaj vízkészletét táplálja. A Nézet / Időjárási kép menü külön látványteszt; a Szimulált időjárás látványa kapcsolóval visszaállítható a környezet hiteles időjárása. A Felhőzet és Villámlás külön kapcsolható. Az eső nedvesíti a talajt, amely utána fokozatosan szárad; a szünet megállítja az effekteket. A normál téli havazáshoz nem kell bekapcsolni a kísérleti hóelőnézetet.
 
 A vihar szélirányba dőlő, világkoordinátákhoz rögzített esőt, térfogati felhőhátteret, puha mozgó felhőárnyékot, villámfényt és procedurális vízgyűrűket használ. A [grafikai terv](docs/graphics-weather-plan.md) és a [kutatási jegyzet](docs/rain-storm-cloud-research.md) ismerteti a technikákat és a közelítéseket.
@@ -234,6 +236,8 @@ A vihar szélirányba dőlő, világkoordinátákhoz rögzített esőt, térfoga
 Ellenőrzés: dotnet test ForesTycoon.sln --no-restore; a lefordított játék --graphics-smoke-test kapcsolója PNG-ket ment az artifacts/graphics-weather mappába, és ellenőrzi a grafikai kapcsolókat, a cache megőrzését és az eredeti kép visszaállítását.
 
 Évszakos ellenőrzés: `--seasonal-weather-smoke-test` természetes nyári vihart, őszi esőt és téli havazást rajzol, továbbá ellenőrzi a hópelyhek megállását szünetben és mozgását folytatáskor. A képek az `artifacts/seasonal-weather` mappába kerülnek. A v13-as mentés a hó vízegyenértékét is tárolja; a korábbi v12-es mentés üres hókészlettel áttér az évszakos rendszerre.
+
+A szél csempék között hordja át a havat: a növényzet és a szél felőli domborzat védett hófelhalmozódásokat ad. A helyi hókészlet eltérő fedést, hóárnyalatot és szélirányú felületi hullámokat rajzol. A hullámok árnyalási közelítések; a terep geometriája nem változik. A hó áthelyezése megőrzi a vízmérleget és mentés után is ugyanúgy folytatódik.
 
 
 Viharban most elágazó, fényudvarral rajzolt villámcsatornák is megjelennek: a kisülések végpontja egy látható fa koronája. A **Talajköd** kapcsoló és **Köd sűrűsége** csúszka az erdő alacsony, lassan sodródó ködfoltjait szabályozza. A talajköd alapból engedélyezett, és a helyi körülmények alapján foltokban jelenik meg. A Villám most gomb azonnali kisülést indít, akár szünet alatt is. A villám csak látványelem, nem károsítja a fákat.
@@ -265,6 +269,8 @@ A Nézet menüben választható alacsony, közepes vagy magas effektminőség. A
 ### Animált erdei szarvasok
 
 A Nézet → Erdei szarvasok kapcsolóval legelő és lassan sétáló szarvasok jelennek meg az erdők tisztásain/szélein. A Szarvas megkeresése menüpont rájuk közelít. Az importált GLB valódi csontvázas animációt, textúrákat és árnyékot használ, a szünetet követi. A [betöltő, animáció és ellenőrzések leírása](docs/animated-models.md) tartalmazza a támogatott formátumrészhalmazt; a `--wildlife-smoke-test` képi ellenőrzést futtat.
+
+Alap 1× tempónál a szarvasok és a járművek órája valós időben halad, miközben a naptár lassabb marad. A szarvasok járása és legelése a képkockák között interpolált, ezért a lassú naptár nem teszi darabossá az animációt. Gyorsításkor a mozgás is gyorsul, szünetben megáll.
 
 
 ## Időjárás, talaj, víz és faegyedek

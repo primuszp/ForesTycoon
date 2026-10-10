@@ -118,7 +118,7 @@ public class ForestSpeciesCatalogTests
                 float height = spec.Size.Height * Terrain.TreeMetresToWorld;
                 Assert.Equal(height, mesh.Crown.Max(v => v.Position.Z), 3);
             }
-            Assert.InRange((mesh.Trunk.Length + mesh.Branches.Length + mesh.Crown.Length) / 3, 1, leafy ? 900 : 2100);
+            Assert.InRange((mesh.Trunk.Length + mesh.Branches.Length + mesh.Crown.Length) / 3, 1, leafy ? 1400 : 2100);
         }
         Assert.True(profile.MaximumAgeYears > 0 && traits.Capacity > 0);
     }

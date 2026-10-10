@@ -66,7 +66,7 @@ namespace ForesTycoon
     {
         internal WildlifeCheckpoint Capture() => new(Animals.Select(a => new AnimalCheckpoint(a.Id, a.TileId, a.TargetTile,
             new(a.Position), new(a.PreviousPosition), new(a.Target), a.Yaw, a.PreviousYaw, a.Blend, a.Hunger, a.WanderNeed,
-            a.WalkTime, a.Age, a.Seed)).ToArray(), forageTiles.Select(id => new ForageCheckpoint(id, forage[id])).ToArray(), revision, surfaceRevision);
+            a.WalkTime, a.Age, a.Seed, a.PreviousWalkTime, a.PreviousAge)).ToArray(), forageTiles.Select(id => new ForageCheckpoint(id, forage[id])).ToArray(), revision, surfaceRevision);
         internal void Restore(WildlifeCheckpoint s, int tileCount)
         {
             CheckpointGuard.Require(s != null && s.Animals != null && s.Forage != null, "wildlife system");
@@ -78,9 +78,14 @@ namespace ForesTycoon
                 CheckpointGuard.Require(float.IsFinite(a.Yaw) && float.IsFinite(a.PreviousYaw), "animal yaw");
                 CheckpointGuard.Unit(a.Blend, "animal gait"); CheckpointGuard.Unit(a.Hunger, "animal hunger"); CheckpointGuard.Unit(a.WanderNeed, "animal wander");
                 CheckpointGuard.NonNegative(a.WalkTime, "animal walk clock"); CheckpointGuard.NonNegative(a.Age, "animal age");
+                double previousWalk = a.PreviousWalkTime ?? a.WalkTime, previousAge = a.PreviousAge ?? a.Age;
+                CheckpointGuard.NonNegative(previousWalk, "previous animal walk clock");
+                CheckpointGuard.NonNegative(previousAge, "previous animal age");
+                CheckpointGuard.Require(previousWalk <= a.WalkTime && previousAge <= a.Age, "animal interpolation clocks");
                 restored.Add(new Animal { Id = a.Id, TileId = a.Tile, TargetTile = a.TargetTile, Position = a.Position.Vector,
                     PreviousPosition = a.PreviousPosition.Vector, Target = a.Target.Vector, Yaw = a.Yaw, PreviousYaw = a.PreviousYaw,
-                    Blend = a.Blend, Hunger = a.Hunger, WanderNeed = a.WanderNeed, WalkTime = a.WalkTime, Age = a.Age, Seed = a.Seed });
+                    Blend = a.Blend, Hunger = a.Hunger, WanderNeed = a.WanderNeed, WalkTime = a.WalkTime, Age = a.Age, Seed = a.Seed,
+                    PreviousWalkTime = previousWalk, PreviousAge = previousAge });
             }
             foreach (var f in s.Forage) {
                 CheckpointGuard.Require(f != null && (uint)f.Tile < (uint)tileCount && food.TryAdd(f.Tile, f.Depletion), "forage tile");

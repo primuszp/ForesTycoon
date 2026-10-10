@@ -18,7 +18,7 @@ namespace ForesTycoon
             internal Vector3 Position, PreviousPosition, Target;
             internal float Yaw, PreviousYaw, Blend, Hunger = 0.5f;
             internal float WanderNeed = 0.35f;
-            internal double WalkTime, Age;
+            internal double WalkTime, Age, PreviousWalkTime, PreviousAge;
             internal uint Seed;
         }
         internal readonly List<Animal> Animals = new();
@@ -48,6 +48,7 @@ namespace ForesTycoon
             foreach (var animal in Animals)
             {
                 animal.PreviousPosition = animal.Position; animal.PreviousYaw = animal.Yaw;
+                animal.PreviousWalkTime = animal.WalkTime; animal.PreviousAge = animal.Age;
                 animal.Age += seconds;
                 if (!terrain.TryGetWildlifeDestination(animal.TargetTile, out _)) { animal.Target = animal.Position; animal.TargetTile = animal.TileId; }
                 animal.Hunger = Math.Clamp(animal.Hunger + dt * 0.014f, 0, 1);

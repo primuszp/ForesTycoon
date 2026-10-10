@@ -40,6 +40,8 @@ namespace ForesTycoon
         /// real time, while the year runs slowly enough to plan.
         /// </summary>
         internal const double VehicleTimeScale = 4;
+        /// <summary>Wildlife gait, roaming and feeding run in real time at the viewport's 1× pace.</summary>
+        internal const double WildlifeTimeScale = VehicleTimeScale;
         private ForestryAreaSummary lastForestryArea;
         internal GraphicsSettings Graphics { get; }
         internal TerrainMap Map => map;
@@ -214,7 +216,7 @@ namespace ForesTycoon
                 Logistics?.Update(fixedDeltaSeconds * Tuning[Tune.VehicleTimeScale]);
                 WeatherRoads(fixedDeltaSeconds);
                 long logisticsUpdated = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
-                wildlife.Update(fixedDeltaSeconds, map, forest, Environment);
+                wildlife.Update(fixedDeltaSeconds * WildlifeTimeScale, map, forest, Environment);
                 long wildlifeUpdated = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
                 systems.Update(fixedDeltaSeconds);
                 worldTick++;

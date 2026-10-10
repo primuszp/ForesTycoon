@@ -12,7 +12,8 @@ namespace ForesTycoon
     internal sealed record VehiclesCheckpoint(int NextId, bool RoadPhysics, bool CargoStops, VehicleCheckpoint[] Vehicles);
     internal sealed record AnimalCheckpoint(int Id, int Tile, int TargetTile, CheckpointPosition Position,
         CheckpointPosition PreviousPosition, CheckpointPosition Target, float Yaw, float PreviousYaw, float Blend,
-        float Hunger, float WanderNeed, double WalkTime, double Age, uint Seed);
+        float Hunger, float WanderNeed, double WalkTime, double Age, uint Seed,
+        double? PreviousWalkTime = null, double? PreviousAge = null);
     internal sealed record ForageCheckpoint(int Tile, float Depletion);
     internal sealed record WildlifeCheckpoint(AnimalCheckpoint[] Animals, ForageCheckpoint[] Forage,
         ulong ForestRevision, ulong SurfaceRevision);

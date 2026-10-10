@@ -46,6 +46,16 @@ namespace ForesTycoon
                     Draw();
                     FramebufferCapture.SavePng(Path.Combine(output, $"motion-{i:D3}.png"), 1100, 800);
                 }
+                environment.ForceWeather(WeatherPreset.Snow, 10, 120);
+                environment.Update(40);
+                Capture("05-winter-drifts");
+                float minSnow = float.MaxValue, maxSnow = 0;
+                for (int id = 0; id < environment.CellCount; id++) {
+                    float depth = (float)environment.SnowWaterAt(id);
+                    minSnow = Math.Min(minSnow, depth); maxSnow = Math.Max(maxSnow, depth);
+                }
+                Require(maxSnow - minSnow > .1f, "Winter snow depth is uniform across tiles.");
+                Console.WriteLine($"Winter tile snow range: {minSnow:F2}–{maxSnow:F2} mm water equivalent.");
                 Console.WriteLine($"Seasonal weather smoke passed: natural summer storm, autumn rain, winter snow/cover, paused flakes and animation. Seed {seed}. Captures: {output}");
 
                 byte[] DrawFlakes()

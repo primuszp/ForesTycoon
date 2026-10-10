@@ -41,8 +41,10 @@ namespace ForesTycoon
                 if(RenderDevice.Visuals?.ShadowPass!=true&&!RenderVisibility.SphereVisible(position+new Vector3(0,0,1.5f),3.5f,RenderDevice.ViewProjection))continue;
                 if(!poses.TryGetValue(animal.Id,out var pose))poses.Add(animal.Id,pose=model.CreatePose());
                 // Cross-fade per-node TRS; rigid antlers follow their animated parent too.
-                pose.Evaluate("Stand_Eating_01",animal.Age+animal.Seed%100,
-                    "WalkSlow",animal.WalkTime,animal.Blend,inPlaceRoot:motionRoot);
+                double age = animal.PreviousAge + (animal.Age - animal.PreviousAge) * alpha;
+                double walkTime = animal.PreviousWalkTime + (animal.WalkTime - animal.PreviousWalkTime) * alpha;
+                pose.Evaluate("Stand_Eating_01",age+animal.Seed%100,
+                    "WalkSlow",walkTime,animal.Blend,inPlaceRoot:motionRoot);
                 Vector3 forward=new(MathF.Cos(yaw),MathF.Sin(yaw),0),left=new(-MathF.Sin(yaw),MathF.Cos(yaw),0);
                 if(terrain.Map.TryGetSurfaceZ(position.X+forward.X*0.8f,position.Y+forward.Y*0.8f,out float front)&&
                     terrain.Map.TryGetSurfaceZ(position.X-forward.X*0.8f,position.Y-forward.Y*0.8f,out float back))forward.Z=(front-back)/1.6f;

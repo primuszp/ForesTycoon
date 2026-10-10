@@ -28,9 +28,11 @@ namespace ForesTycoon
                 int[] route = terrain.Map.FindDemoRoadRoute();
                 Require(route.Length >= 2, "Graphics fixture has no road.");
                 vehicles.Spawn(route);
-                Require(!new GraphicsSettings().ShowGrid, "The opening diorama is obscured by the editing grid.");
+                Require(new GraphicsSettings().ShowGrid, "The default tile grid is disabled.");
                 // Toggle comparisons intentionally start with the grid disabled.
                 var settings = new GraphicsSettings { Enhanced = false, Fog = false, Wildlife = false, ShowGrid = false };
+                // Pixel comparisons must not race background LOD publication.
+                terrain.WarmIndividualForest(forest, settings);
                 using var renderer = new TerrainRenderer(terrain, vehicles, new WorldEffectSystem(), forest, settings);
                 string output = Path.GetFullPath("artifacts/graphics-weather"); Directory.CreateDirectory(output);
                 GL.Enable(EnableCap.DepthTest); GL.Viewport(0, 0, 1100, 800);
