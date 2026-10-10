@@ -12,7 +12,6 @@ uniform float forest_year;
 uniform samplerBuffer forest_state;
 uniform int forest_dynamic;
 out float forest_foliage;
-out vec3 forest_leaf_position;
 bool forestCrown(vec4 c){
     int code=int(c.a*255.0+0.5);
     return forest_dynamic!=0 && forest_tree>=0 && forest_rate.x > -1.5 && code>=226 && code<=241;
@@ -59,10 +58,9 @@ vec3 forestDeadVector(vec3 v){
 }
 bool forestFallen(){return forest_rate.x < -1.5 && forest_year >= forest_rate.y + 2;}
 vec3 forestPoint(vec3 p){
-    forest_leaf_position=forestFallen()
+    return forestFallen()
         ? forest_origin + forestDeadVector(p-forest_origin) + vec3(0,0,forest_rate.z)
         : forest_origin + (p - forest_origin) * forestScale();
-    return forest_leaf_position;
 }
 vec3 forestNormal(vec3 n){
     vec3 v=forestFallen() ? forestDeadVector(n) : n / forestScale();
@@ -73,19 +71,10 @@ vec3 forestNormal(vec3 n){
         // Shared by textured, plain, outline and shadow passes: bare crowns cast no leaf shadow.
         internal const string FragmentShader = @"
 in float forest_foliage;
-in vec3 forest_leaf_position;
-float forestLeafHash(vec3 p){return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453);}
 void forestLeafMask(){
-    if(forest_foliage>=1.0) return;
+    // Seasonal crowns keep their complete silhouette until leaf fall is finished.
+    // Partial coverage must never perforate healthy spring or autumn foliage.
     if(forest_foliage<=0.0) discard;
-    // Continuous world-space patches open gaps between remaining leaf clusters. The same
-    // patches appear at every zoom and in the shadow map, without screen-space stippling.
-    vec3 p=forest_leaf_position*3.0, i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
-    float a=mix(mix(forestLeafHash(i),forestLeafHash(i+vec3(1,0,0)),f.x),
-        mix(forestLeafHash(i+vec3(0,1,0)),forestLeafHash(i+vec3(1,1,0)),f.x),f.y);
-    float b=mix(mix(forestLeafHash(i+vec3(0,0,1)),forestLeafHash(i+vec3(1,0,1)),f.x),
-        mix(forestLeafHash(i+vec3(0,1,1)),forestLeafHash(i+vec3(1,1,1)),f.x),f.y);
-    if(mix(a,b,f.z)>=forest_foliage) discard;
 }
 ";
     }

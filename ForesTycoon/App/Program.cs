@@ -84,7 +84,11 @@ namespace ForesTycoon
                 string.Equals(argument, "--smoke-test", StringComparison.OrdinalIgnoreCase));
             int captureFrame = Array.FindIndex(args, argument => argument == "--capture-frame");
             if (captureFrame >= 0 && captureFrame + 1 >= args.Length) throw new ArgumentException("--capture-frame requires an output directory.");
-            using Viewport game = new Viewport(smokeTest ? 120UL : null, captureFrame >= 0 ? args[captureFrame + 1] : null);
+            int captureSeasons = Array.FindIndex(args, argument => argument == "--capture-seasons");
+            if (captureSeasons >= 0 && captureSeasons + 1 >= args.Length) throw new ArgumentException("--capture-seasons requires an output directory.");
+            using Viewport game = new Viewport(smokeTest ? 120UL : null,
+                captureSeasons >= 0 ? args[captureSeasons + 1] : captureFrame >= 0 ? args[captureFrame + 1] : null,
+                captureSeasons: captureSeasons >= 0);
             game.Run();
         }
     }

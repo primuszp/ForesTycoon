@@ -147,6 +147,23 @@ namespace ForesTycoon
                     byte[] summer = Frame(.3f, true);
                     byte[] autumn = Frame(.56f, true);
                     bool evergreen = TreePhenology.Evergreen(species);
+                    var calendar = TreePhenology.RenderCalendar(species, 42);
+                    float Cycle(float phase) => (calendar.Start + phase + 1) % 1;
+                    // Sample both partial budding and partial leaf fall. Every interior pixel
+                    // must remain opaque: normal phenology is not insect damage.
+                    foreach (float phase in new[] { .1f, .5f, .9f })
+                    foreach (bool enhanced in new[] { true, false })
+                    {
+                        foreach (float year in evergreen ? new[] { .05f, .65f } : new[] {
+                            Cycle(calendar.Budding * phase),
+                            Cycle(calendar.Autumn + (calendar.Falling - calendar.Autumn) * phase) })
+                        {
+                            // Late-winter buds are deliberately hidden until spring.
+                            if (year >= .75f) continue;
+                            Require(Count(Frame(year, enhanced)) == size * size,
+                                $"{species} seasonal crown has holes at {year}, enhanced={enhanced}.");
+                        }
+                    }
                     if (!evergreen)
                     {
                         Require(!summer.AsSpan().SequenceEqual(autumn), $"{species} did not change autumn foliage colour.");
@@ -160,28 +177,34 @@ namespace ForesTycoon
                         Require(Count(pixels) == (evergreen ? size * size : 0),
                             $"{species} winter foliage coverage is wrong at {winter}, enhanced={enhanced}.");
                     }
-                    settings.Enhanced = true; settings.Lighting = true; visuals.BeginFrame();
-                    quad.ForestCurrentYear = .85f;
-                    int shadowPixels = -1;
-                    visuals.RenderShadows(terrain, () => {
-                        RenderDevice.SetModel(visuals.ShadowCamera.Inverted());
-                        material.Use(); quad.DrawArray(false);
-                        GL.GetInteger(GetPName.DrawFramebufferBinding, out int framebuffer);
-                        GL.GetInteger(GetPName.ReadFramebufferBinding, out int previous);
-                        GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, framebuffer);
-                        try {
-                            float[] depth = new float[settings.ShadowResolution * settings.ShadowResolution];
-                            GL.ReadPixels(0, 0, settings.ShadowResolution, settings.ShadowResolution, PixelFormat.DepthComponent, PixelType.Float, depth);
-                            shadowPixels = depth.Count(d => d < .99f);
-                        }
-                        finally { GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, previous); RenderDevice.SetModel(Matrix4.Identity); }
-                    });
-                    Require(shadowPixels == (evergreen ? settings.ShadowResolution * settings.ShadowResolution : 0),
-                        $"{species} leafless winter crown cast a leaf shadow.");
+                    foreach (float shadowYear in new[] { .85f,
+                        evergreen ? .05f : Cycle(calendar.Budding * .5f),
+                        evergreen ? .65f : Cycle((calendar.Autumn + calendar.Falling) * .5f) })
+                    {
+                        settings.Enhanced = true; settings.Lighting = true; visuals.BeginFrame();
+                        quad.ForestCurrentYear = shadowYear;
+                        int shadowPixels = -1;
+                        visuals.RenderShadows(terrain, () => {
+                            RenderDevice.SetModel(visuals.ShadowCamera.Inverted());
+                            material.Use(); quad.DrawArray(false);
+                            GL.GetInteger(GetPName.DrawFramebufferBinding, out int framebuffer);
+                            GL.GetInteger(GetPName.ReadFramebufferBinding, out int previous);
+                            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, framebuffer);
+                            try {
+                                float[] depth = new float[settings.ShadowResolution * settings.ShadowResolution];
+                                GL.ReadPixels(0, 0, settings.ShadowResolution, settings.ShadowResolution, PixelFormat.DepthComponent, PixelType.Float, depth);
+                                shadowPixels = depth.Count(d => d < .99f);
+                            }
+                            finally { GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, previous); RenderDevice.SetModel(Matrix4.Identity); }
+                        });
+                        bool leafless = !evergreen && shadowYear >= .75f;
+                        Require(shadowPixels == (leafless ? 0 : settings.ShadowResolution * settings.ShadowResolution),
+                            $"{species} seasonal shadow coverage is wrong at {shadowYear}.");
+                    }
                     Require(summer.AsSpan().SequenceEqual(Frame(1.3f, true)), $"{species} foliage did not return identically next summer.");
                 }
                 Require(GL.GetError() == ErrorCode.NoError, "Seasonal GPU foliage OpenGL error.");
-                Console.WriteLine("GPU phenology: 16 species, distinct autumn colours, all-winter leaflessness, evergreen needles, matching shadows and exact next-summer restoration without mesh changes passed.");
+                Console.WriteLine("GPU phenology: 16 species, solid spring/autumn crowns, distinct autumn colours, all-winter leaflessness, evergreen needles, matching shadows and exact next-summer restoration without mesh changes passed.");
             }
             finally { RenderDevice.Visuals = null; }
 

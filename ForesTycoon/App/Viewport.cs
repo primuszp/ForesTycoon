@@ -220,7 +220,7 @@ namespace ForesTycoon
         private static readonly Color BG_COLOR = Color.FromArgb(44, 53, 64);
 
         // ────────────────────────────────────────────────────────────────────
-        public Viewport(ulong? smokeTestFrameLimit = null, string captureDirectory = null, bool visible = true) : base(
+        public Viewport(ulong? smokeTestFrameLimit = null, string captureDirectory = null, bool visible = true, bool captureSeasons = false) : base(
             new GameWindowSettings
             {
                 UpdateFrequency = 0
@@ -229,6 +229,7 @@ namespace ForesTycoon
         {
             this.smokeTestFrameLimit = smokeTestFrameLimit;
             this.captureDirectory = captureDirectory;
+            this.captureSeasons = captureSeasons;
         }
 
         protected override void LoadScene()
