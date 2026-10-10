@@ -9,7 +9,7 @@ namespace ForesTycoon.Rendering.OpenGl
     {
         private int program;
         private readonly int[] viewport = new int[4];
-        internal void Use(float widthPixels)
+        internal void Use(float widthPixels, Vector4 colorOverride)
         {
             if (program == 0) program = GlProgram.Create(VertexSource, FragmentSource, GeometrySource);
             GL.UseProgram(program);
@@ -19,6 +19,7 @@ namespace ForesTycoon.Rendering.OpenGl
             GL.GetInteger(GetPName.Viewport, viewport);
             GL.Uniform2(GlProgram.Uniform(program, "viewport_size"), (float)Math.Max(1, viewport[2]), (float)Math.Max(1, viewport[3]));
             GL.Uniform1(GlProgram.Uniform(program, "half_width"), widthPixels * .5f);
+            GL.Uniform4(GlProgram.Uniform(program, "color_override"), colorOverride);
         }
         public void Dispose() { if (program != 0) GlProgram.Delete(program); program = 0; }
         private const string VertexSource = @"#version 330 core
@@ -57,10 +58,12 @@ void main(){
 in vec4 color;
 noperspective in float distance_pixels;
 uniform float half_width;
+uniform vec4 color_override;
 out vec4 output_color;
 void main(){
     float coverage=1.0-smoothstep(half_width-0.25,half_width+0.75,abs(distance_pixels));
-    output_color=vec4(color.rgb,color.a*coverage);
+    vec4 tint=color_override.a>0.0?color_override:color;
+    output_color=vec4(tint.rgb,tint.a*coverage);
 }";
     }
 }

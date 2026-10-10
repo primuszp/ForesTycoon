@@ -153,7 +153,11 @@ namespace ForesTycoon
             pipeline.Add(RenderLayer.RiverFallback, "river-fallback", context => DrawSurface(SurfaceKind.Water, () => terrain.DrawRivers(context)));
             pipeline.Add(RenderLayer.Foundations, "road-foundations", _ => DrawSurface(SurfaceKind.Road, terrain.DrawRoadFoundations));
             pipeline.Add(RenderLayer.DecalBegin, "decal-state-begin", _ => BeginDecals());
-            pipeline.Add(RenderLayer.Grid, "terrain-grid", context => { if (!graphics.Enhanced || graphics.ShowGrid) DrawSurface(SurfaceKind.Plain, () => terrain.DrawTerrainDecals(context)); });
+            pipeline.Add(RenderLayer.Grid, "terrain-grid", context => {
+                bool winter = environment != null && (int)Math.Floor(environment.Time / environment.ForestYearSeconds * 4 + 1e-9) % 4 == 3;
+                if (!graphics.Enhanced || graphics.ShowGrid)
+                    DrawSurface(SurfaceKind.Plain, () => terrain.DrawTerrainDecals(context, winter || weather.SnowCover > .05f));
+            });
             pipeline.Add(RenderLayer.Roads, "roads", _ => DrawSurface(SurfaceKind.Road, terrain.DrawRoads));
             pipeline.Add(RenderLayer.Roads, "skid-trails", _ => DrawSurface(SurfaceKind.SkidTrail, terrain.DrawSkidTrails));
             pipeline.Add(RenderLayer.HoverOverlay, "hover-overlay", context =>

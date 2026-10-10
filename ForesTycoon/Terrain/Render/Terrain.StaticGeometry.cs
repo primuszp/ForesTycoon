@@ -107,10 +107,11 @@ namespace ForesTycoon
         /// Screen-space ribbons keep a 1.6-pixel core at every zoom and camera angle.
         /// The shader supplies a soft coverage fringe and a small depth bias.
         /// </summary>
-        private void DrawCachedGrid()
+        private void DrawCachedGrid(bool winter)
         {
             using var state = RenderDevice.CreateStateScope().AlphaBlend().DepthWrite(false);
-            RenderDevice.UseScreenLineShader(1.6f);
+            // Recolour cached endpoints without rebuilding terrain on a season boundary.
+            RenderDevice.UseScreenLineShader(1.6f, winter ? new Vector4(.27f, .30f, .33f, 115f / 255) : default);
             foreach (TerrainChunk chunk in visibleChunks) staticTerrain[chunk].Grid.DrawArray(useGeometryShader: false);
         }
         internal bool CachedGridHasAllTileBoundaries()

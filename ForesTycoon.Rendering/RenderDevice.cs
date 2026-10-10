@@ -51,7 +51,7 @@ namespace ForesTycoon.Rendering
         public static void SetCamera(Matrix4 camera) { EnsureInitialized(); transforms.SetCamera(camera); }
         internal static void SetViewProjection(Matrix4 camera) => transforms.SetViewProjection(camera);
         public static void UseGeometryShader() { EnsureInitialized(); Backend.UseGeometryShader(); }
-        internal static void UseScreenLineShader(float widthPixels) => Backend.UseScreenLineShader(widthPixels);
+        internal static void UseScreenLineShader(float widthPixels, Vector4 colorOverride = default) => Backend.UseScreenLineShader(widthPixels, colorOverride);
         public static void PushModel() => transforms.PushModel();
         public static void PopModel() => transforms.PopModel();
         internal static void SetModel(Matrix4 model) => transforms.SetModel(model);

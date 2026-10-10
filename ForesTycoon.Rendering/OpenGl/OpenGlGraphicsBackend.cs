@@ -14,7 +14,7 @@ namespace ForesTycoon.Rendering.OpenGl
 
         public void Initialize() { owner.Check(); geometry.Initialize(); }
         public void UseGeometryShader() { owner.Check(); geometry.Use(); }
-        public void UseScreenLineShader(float widthPixels) { owner.Check(); screenLines.Use(widthPixels); }
+        public void UseScreenLineShader(float widthPixels, Vector4 colorOverride = default) { owner.Check(); screenLines.Use(widthPixels, colorOverride); }
         public IGeometryBufferBackend CreateGeometryBuffer(PrimitiveTopology topology, GeometryBufferUsage usage)
             { owner.Check(); return new OpenGlVertexBuffer(topology, usage); }
         public IForestStateBuffer CreateForestStateBuffer() { owner.Check(); return new OpenGlForestStateBuffer(); }

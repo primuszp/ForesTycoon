@@ -88,6 +88,7 @@ namespace ForesTycoon
                 CheckLocalRoadEdit();
                 CheckTerraformForestStability();
                 CheckDeferredForestBuild();
+                CheckFastForwardDetail();
                 CheckPagedForestUpload();
                 CheckDeadTreeLodState();
                 CheckGrowingForestLodState();
@@ -111,6 +112,27 @@ namespace ForesTycoon
             RenderMetrics.BeginFrame();
             terrain.DrawTrees(forest, context);
             return RenderMetrics.SubmittedVertices;
+        }
+
+        private static void CheckFastForwardDetail()
+        {
+            using var terrain = new Terrain(TerrainSettings.Default.WithNodeSize(17, 42), (_, _) => 4);
+            var stands = new ForestStand[256];
+            stands[34] = new ForestStand(ForestSpecies.Spruce, 30, .6f, 1);
+            var forest = new ForestSystem(terrain.Map, stands);
+            terrain.WarmIndividualForest(forest, new GraphicsSettings { Enhanced = false });
+            terrain.StreamGeometry = true;
+            Draw(terrain, forest, 12);
+            for (int frame = 0; frame < 180; frame++)
+            {
+                forest.Update(256 * Viewport.GamePace / 60);
+                Draw(terrain, forest, 12);
+                Require(terrain.ReadyVisibleForestChunks(ForestLod.Near) == terrain.VisibleChunkCount,
+                    $"256x fast-forward downgraded detailed crowns at frame {frame}.");
+            }
+            for (int frame = 0; frame < 500 && terrain.HasPendingForestBuild; frame++) Draw(terrain, forest, 12);
+            Require(!terrain.HasPendingForestBuild, "Forest updates did not settle after fast-forward stopped.");
+            Console.WriteLine("256x fast-forward: detailed spruce crowns retained through growth and background LOD publication.");
         }
 
         private static void CheckStreamingForest()
@@ -471,6 +493,16 @@ namespace ForesTycoon
                 widths[i++] = width;
             }
             Require(Math.Abs(widths[0] - widths[2]) < .02, "Grid line width changed with zoom.");
+            RenderDevice.Clear(new Vector4(1, 1, 1, 1));
+            using (RenderDevice.CreateStateScope().AlphaBlend().DepthWrite(false))
+            {
+                RenderDevice.UseScreenLineShader(1.6f, new Vector4(.27f, .30f, .33f, 115f / 255));
+                line.DrawArray(false);
+            }
+            var winterPixels = new byte[256 * 4];
+            GL.ReadPixels(0, 128, 256, 1, PixelFormat.Rgba, PixelType.UnsignedByte, winterPixels);
+            Require(winterPixels[127 * 4] < winterPixels[127 * 4 + 1]
+                && winterPixels[127 * 4 + 1] < winterPixels[127 * 4 + 2], "Winter grid did not use the cool grey palette.");
             Require(GL.GetError() == ErrorCode.NoError, "Screen line GL error.");
             Console.WriteLine($"Grid pixel coverage: {widths[0]:F2}/{widths[1]:F2}/{widths[2]:F2} at 0.5/1/4 zoom; stable antialiased width passed.");
         }

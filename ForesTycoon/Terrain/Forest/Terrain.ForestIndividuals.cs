@@ -329,9 +329,8 @@ namespace ForesTycoon
         }
 
         /// <summary>
-        /// The level of detail to draw for one chunk. A level that is not current yet is never shown in
-        /// place of a current one: trees would pop to an old season, size or stand while the new mesh
-        /// is built, so the chunk keeps its current level until the wanted one is ready.
+        /// Keep the displayed detail while its replacement builds. A freshly built coarse mesh must
+        /// not replace a detailed crown merely because fast-forward invalidated its morphology.
         /// </summary>
         private ForestLod ResolveForestLod(TerrainChunk chunk, ForestSystem forest, GraphicsSettings graphics, ForestLod target)
         {
@@ -343,6 +342,12 @@ namespace ForesTycoon
             }
             ForestLod? fallback = null;
             int bestDistance = int.MaxValue;
+            if (displayedForestLods.TryGetValue(chunk, out var retained) && retained <= target
+                && individualForestChunks.TryGetValue((chunk, retained), out var retainedGeometry) && retainedGeometry.Initialized)
+            {
+                fallback = retained;
+                bestDistance = (int)target - (int)retained;
+            }
             foreach (var lod in Enum.GetValues<ForestLod>())
             {
                 if (lod == target || !individualForestChunks.TryGetValue((chunk, lod), out var other)) continue;

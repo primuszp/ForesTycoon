@@ -25,9 +25,9 @@ namespace ForesTycoon
             DynamicPrimitiveBatch.Vertex3(n);
         }
 
-        internal void DrawTerrainDecals(RenderContext context = default)
+        internal void DrawTerrainDecals(RenderContext context = default, bool winter = false)
         {
-            DrawCachedGrid();
+            DrawCachedGrid(winter);
         }
 
         private void DrawTileGrid(Tile tile, Color terrainLine)
