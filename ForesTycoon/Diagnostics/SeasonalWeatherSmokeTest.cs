@@ -20,6 +20,7 @@ namespace ForesTycoon
                 int seed = FindSeed();
                 using var terrain = new Terrain(TerrainSettings.Default.WithNodeSize(17, seed), ForestVisualFixture.Height);
                 var forest = new ForestSystem(terrain.Map, ForestVisualFixture.CreateStands());
+                forest.UseEnvironmentTempo(900);
                 var environment = new EnvironmentSystem(terrain.Map, forest, 900, ClimateDefinition.Default);
                 var settings = new GraphicsSettings { AutomaticWeather = true, Wildlife = false };
                 Require(!settings.ExperimentalSnow, "Normal winter must not depend on the experimental preview switch.");
@@ -28,10 +29,14 @@ namespace ForesTycoon
                 string output = Path.GetFullPath("artifacts/seasonal-weather"); Directory.CreateDirectory(output);
                 GL.Viewport(0, 0, 1100, 800);
                 ulong frame = 0;
+                bool closeUp = false;
                 Capture("01-spring");
+                while (environment.Time < 900 * .30) Advance(.5);
+                closeUp = true; Capture("07-close-up-summer"); closeUp = false;
                 Seek(1, WeatherPreset.Storm); Capture("02-summer-storm");
                 Seek(2, WeatherPreset.Rain); Capture("03-autumn-rain");
-                Seek(3, WeatherPreset.Snow); environment.Update(10); Capture("04-winter-snow");
+                closeUp = true; Capture("08-close-up-autumn"); closeUp = false;
+                Seek(3, WeatherPreset.Snow); Advance(10); Capture("04-winter-snow");
                 Require(environment.MeanSnowCover > 0 && renderer.WeatherParticleCount > 0,
                     "Automatic winter snow or its accumulated cover is missing.");
                 using var flakes = new WeatherRenderer();
@@ -39,15 +44,15 @@ namespace ForesTycoon
                 var snowSurface = new SnowSurface();
                 byte[] paused = DrawFlakes();
                 Require(paused.AsSpan().SequenceEqual(DrawFlakes()), "Paused snowfall must retain exactly the same flakes.");
-                environment.Update(.5);
+                Advance(.5);
                 Require(!paused.AsSpan().SequenceEqual(DrawFlakes()), "Snowfall did not animate.");
                 for (int i = 0; i < 48; i++) {
-                    environment.Update(1.0 / 12);
+                    Advance(1.0 / 12);
                     Draw();
                     FramebufferCapture.SavePng(Path.Combine(output, $"motion-{i:D3}.png"), 1100, 800);
                 }
                 environment.ForceWeather(WeatherPreset.Snow, 10, 120);
-                environment.Update(40);
+                Advance(40);
                 Capture("05-winter-drifts");
                 float minSnow = float.MaxValue, maxSnow = 0;
                 for (int id = 0; id < environment.CellCount; id++) {
@@ -55,6 +60,8 @@ namespace ForesTycoon
                     minSnow = Math.Min(minSnow, depth); maxSnow = Math.Max(maxSnow, depth);
                 }
                 Require(maxSnow - minSnow > .1f, "Winter snow depth is uniform across tiles.");
+                closeUp = true;
+                Capture("06-close-up-winter");
                 Console.WriteLine($"Winter tile snow range: {minSnow:F2}–{maxSnow:F2} mm water equivalent.");
                 Console.WriteLine($"Seasonal weather smoke passed: natural summer storm, autumn rain, winter snow/cover, paused flakes and animation. Seed {seed}. Captures: {output}");
 
@@ -76,31 +83,37 @@ namespace ForesTycoon
                 void Seek(int season, WeatherPreset preset)
                 {
                     while (environment.Time < 900 && !((int)(environment.Time / 225) == season
-                        && environment.Preset == preset && environment.RainRate > 2)) environment.Update(.5);
+                        && environment.Preset == preset && environment.RainRate > 2)) Advance(.5);
                     Require(environment.Time < 900, $"Missing seasonal event: {season}, {preset}.");
                 }
                 void Capture(string name)
                 {
-                    for (int i = 0; i < 120; i++) Draw();
+                    for (int i = 0; i < 240; i++) Draw();
+                    if (closeUp)
+                        for (int i = 0; i < 2000 && terrain.ReadyVisibleForestChunks(ForestLod.Near) != terrain.VisibleChunkCount; i++) Draw();
+                    if (closeUp) Require(terrain.ReadyVisibleForestChunks(ForestLod.Near) == terrain.VisibleChunkCount,
+                        $"Close-up diorama still displays coarse fallback trees: Near={terrain.ReadyVisibleForestChunks(ForestLod.Near)}/{terrain.VisibleChunkCount}, builds={terrain.TotalForestChunkRebuilds}, pending={terrain.HasPendingForestBuild}.");
                     FramebufferCapture.SavePng(Path.Combine(output, name + ".png"), 1100, 800);
                     Console.WriteLine($"{name}: t={environment.Time:F1}, {environment.Preset}, precipitation={environment.RainRate:F2}, snow cover={environment.MeanSnowCover:F3}");
                 }
                 byte[] Draw()
                 {
                     var context = new RenderContext(environment.Time, 0, ++frame, environment.Time,
-                        (ulong)(environment.Time * 30), 0, false, false, 1, -45, -45, -100, -100, 100, 100, 8);
+                        (ulong)(environment.Time * 30), 0, false, false, 1, -45, -45, -100, -100, 100, 100, closeUp ? 16 : 8);
                     bool diorama = postProcess.Begin(settings, 1100, 800);
                     RenderDevice.Clear(new Vector4(.55f, .65f, .8f, 1));
                     if (diorama) postProcess.DrawBackdrop(settings, new Vector3(.55f, .65f, .8f));
                     RenderDevice.SetCamera(Matrix4.CreateRotationZ(-MathF.PI / 4) * Matrix4.CreateRotationX(-MathF.PI / 4)
-                        * Matrix4.CreateOrthographicOffCenter(-65, 65, -43, 51, -1000, 1000));
+                        * (closeUp ? Matrix4.CreateOrthographicOffCenter(-35, 35, -22, 38, -1000, 1000)
+                            : Matrix4.CreateOrthographicOffCenter(-65, 65, -43, 51, -1000, 1000)));
                     renderer.Draw(context);
-                    if (diorama) postProcess.End(settings, 8, 1, (float)environment.Time);
+                    if (diorama) postProcess.End(settings, closeUp ? 16 : 8, 1, (float)environment.Time);
                     GL.Finish(); Require(GL.GetError() == ErrorCode.NoError, "Seasonal weather OpenGL error.");
                     var pixels = new byte[1100 * 800 * 4];
                     GL.ReadPixels(0, 0, 1100, 800, PixelFormat.Rgba, PixelType.UnsignedByte, pixels);
                     return pixels;
                 }
+                void Advance(double seconds) { environment.Update(seconds); forest.Update(seconds); }
             }
             finally { RenderDevice.Dispose(); }
         }

@@ -13,7 +13,7 @@ namespace ForesTycoon.Ecology
         internal static bool Evergreen(ForestSpecies species) => ForestSpeciesTraits.For(species).Evergreen;
 
         // Segment ends within the cycle that starts at bud burst: budding, full, autumn colour, leaf fall.
-        private readonly record struct Calendar(float Start, float Budding, float Full, float Autumn, float Falling);
+        internal readonly record struct Calendar(float Start, float Budding, float Full, float Autumn, float Falling);
         private static Calendar For(ForestSpecies species) => species switch
         {
             ForestSpecies.Birch => new(0.95f, 0.07f, 0.49f, 0.60f, 0.69f),
@@ -31,6 +31,13 @@ namespace ForesTycoon.Ecology
 
         // Individuals differ by a few days; the offset is part of the tree, not of the weather.
         private static float Offset(uint seed) => (ForestTreeStore.Unit(ForestTreeStore.Random(seed + 4027)) - 0.5f) * 0.03f;
+
+        // Static rendering metadata; the GPU evaluates the same individual calendar at the live year.
+        internal static Calendar RenderCalendar(ForestSpecies species, uint seed)
+        {
+            var calendar = For(species);
+            return calendar with { Start = Evergreen(species) ? -1 : calendar.Start + Offset(seed) };
+        }
 
         private static float Phase(ForestSpecies species, uint seed, double year)
         {

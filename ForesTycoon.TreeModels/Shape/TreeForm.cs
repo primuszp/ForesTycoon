@@ -180,12 +180,16 @@ namespace ForesTycoon.TreeModels
                 {
                     ForestSpecies.Birch => Color.FromArgb(214, 180, 50),
                     ForestSpecies.Beech => Color.FromArgb(190, 110, 40),
-                    ForestSpecies.Maple => Color.FromArgb(204, 120, 30),
+                    ForestSpecies.Maple => Color.FromArgb(222, 95, 35),
+                    ForestSpecies.Oak => Color.FromArgb(195, 133, 52),
+                    ForestSpecies.SessileOak => Color.FromArgb(185, 114, 61),
                     ForestSpecies.Ash => Color.FromArgb(170, 160, 60),
                     ForestSpecies.Larch => Color.FromArgb(214, 164, 44),
                     ForestSpecies.TurkeyOak => Color.FromArgb(164, 118, 52),
-                    ForestSpecies.Hazel or ForestSpecies.Elder => Color.FromArgb(196, 172, 54),
-                    ForestSpecies.Hawthorn or ForestSpecies.Blackthorn => Color.FromArgb(180, 90, 48),
+                    ForestSpecies.Hazel => Color.FromArgb(208, 174, 56),
+                    ForestSpecies.Elder => Color.FromArgb(177, 165, 62),
+                    ForestSpecies.Hawthorn => Color.FromArgb(180, 90, 48),
+                    ForestSpecies.Blackthorn => Color.FromArgb(191, 119, 57),
                     _ => Color.FromArgb(176, 112, 40)
                 },
                 _ => crown
@@ -196,6 +200,15 @@ namespace ForesTycoon.TreeModels
             float weak = TreeShapeBands.VigorBand(spec.Vigor) switch
             { TreeVigorBand.Reduced => 0.08f, TreeVigorBand.Declining => 0.25f, TreeVigorBand.Dying => 0.4f, _ => 0f };
             return Lerp(c, Color.FromArgb(140, 130, 70), weak);
+        }
+
+        internal static Vector3 AutumnMultiplier(in TreeShapeSpec spec)
+        {
+            Color baseColor = ForestSpeciesTraits.For(spec.Species).Crown;
+            Color summer = LeafTint(baseColor, spec with { Leaves = LeafState.Full });
+            Color autumn = LeafTint(baseColor, spec with { Leaves = LeafState.Autumn });
+            return new(autumn.R / (float)Math.Max(1, (int)summer.R), autumn.G / (float)Math.Max(1, (int)summer.G),
+                autumn.B / (float)Math.Max(1, (int)summer.B));
         }
 
         private static Color Lerp(Color a, Color b, float t) => Color.FromArgb(

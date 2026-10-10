@@ -147,8 +147,13 @@ namespace ForesTycoon
                 "Cold streaming published partial geometry or built trees synchronously.");
             int frames = 0;
             while (terrain.TotalForestChunkRebuilds < terrain.VisibleChunkCount && frames++ < 2000)
+            {
                 Draw(terrain, forest, 12);
-            Require(terrain.TotalForestChunkRebuilds >= terrain.VisibleChunkCount, "Visible Far coverage never completed.");
+                Require(terrain.ReadyVisibleForestChunks(ForestLod.Far) == 0,
+                    "Cold close-up displayed a distant proxy before its detailed trees.");
+            }
+            Require(terrain.ReadyVisibleForestChunks(ForestLod.Near) == terrain.VisibleChunkCount,
+                "Cold close-up streaming did not build the requested detailed models directly.");
             Require(terrain.ForestGpuPayloadBytes > 0 && terrain.ForestCpuPayloadBytes > 0,
                 "Streaming payload accounting omitted resident geometry.");
             // Populate all levels as an explicit diagnostic, then enforce a deliberately
@@ -185,7 +190,7 @@ namespace ForesTycoon
             for (int frame = 0; frame < 8; frame++)
                 Require(Draw(terrain, forest, 12) == 0, "Streaming cancellation resurrected cleared trees.");
             Require(GL.GetError() == ErrorCode.NoError, "Streaming/cache eviction produced an OpenGL error.");
-            Console.WriteLine($"Streaming forest: cold frame submitted 0 vertices; Far coverage in {frames} frames; unused LOD eviction and visible-budget excess passed.");
+            Console.WriteLine($"Streaming forest: cold frame submitted 0 vertices; requested Near coverage in {frames} frames; unused LOD eviction and visible-budget excess passed.");
         }
 
         private static void CheckColdWorldScaling()

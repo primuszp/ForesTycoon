@@ -22,7 +22,8 @@ void main()
     gl_Position = view_projection * model * vec4(forestPoint(in_position), 1.0);
     vertex_color = forestTint(in_color);
 }";
-            const string fragmentSource = @"#version 330 core
+            string fragmentSource = @"#version 330 core
+" + OpenGlForestGrowthShader.FragmentShader + @"
 in vec4 vertex_color;
 out vec4 output_color;
 uniform vec2 lod_range;
@@ -33,6 +34,7 @@ void lodMask(){
 void main()
 {
     lodMask();
+    forestLeafMask();
     output_color = vertex_color;
 }";
 

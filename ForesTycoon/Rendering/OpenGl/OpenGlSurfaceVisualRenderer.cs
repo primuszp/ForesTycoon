@@ -172,6 +172,7 @@ void main() {
     gl_Position = camera * p;
 }";
             string fragment = @"#version 330 core
+" + OpenGlForestGrowthShader.FragmentShader + @"
 in vec3 world, smooth_normal;
 in vec4 tint, light_position;
 out vec4 output_color;
@@ -267,6 +268,7 @@ float cloudDensity(vec2 p){
 }
 void main() {
     lodMask();
+    forestLeafMask();
 
     if(kind == 0) { output_color = tint; return; }
     if(outline_width > 0 && (kind == 4 || kind == 9 || kind == 10)) { output_color = vec4(0.07,0.085,0.09,1); return; }
@@ -389,9 +391,9 @@ layout(location=2) in vec3 normal;
 uniform mat4 model, camera;
 out vec4 tint;
 " + OpenGlForestGrowthShader.Shader + @"
-void main(){gl_Position=camera*model*vec4(forestPoint(position),1);
+void main(){gl_Position=camera*model*vec4(forestPoint(position),1); tint=forestTint(color);
 }",
-                "#version 330 core\n" + @"uniform vec2 lod_range;
+                "#version 330 core\n" + OpenGlForestGrowthShader.FragmentShader + @"uniform vec2 lod_range;
 uniform int kind;
 in vec4 tint;
 
@@ -399,7 +401,7 @@ void lodMask(){
     float rank=fract(52.9829189*fract(dot(floor(gl_FragCoord.xy),vec2(0.06711056,0.00583715))));
     if(rank<lod_range.x||rank>=lod_range.y)discard;
 }
-void main(){lodMask(); }");
+void main(){lodMask(); forestLeafMask(); }");
             textures = ProceduralSurfaceTextures.Upload();
             shadowTexture = GL.GenTexture();
             shadowSize = settings.ShadowResolution;

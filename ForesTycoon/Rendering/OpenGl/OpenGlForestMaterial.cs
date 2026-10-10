@@ -39,10 +39,12 @@ out vec4 tint;
 " + OpenGlForestGrowthShader.Shader + @"
 void main() {
     gl_Position = matrix * vec4(forestPoint(position) + forestNormal(normal) * outline_width, 1);
-    tint = outline_width > 0 ? vec4(0.075, 0.12, 0.045, 1) : forestTint(color);
+    vec4 leaf_tint = forestTint(color);
+    tint = outline_width > 0 ? vec4(0.075, 0.12, 0.045, 1) : leaf_tint;
     tint.a=color.a;
 }";
             string fragmentSource = @"#version 330 core
+" + OpenGlForestGrowthShader.FragmentShader + @"
 in vec4 tint;
 out vec4 output_color;
 uniform vec2 lod_range;
@@ -51,7 +53,7 @@ void lodMask(){
     float rank=fract(52.9829189*fract(dot(floor(gl_FragCoord.xy),vec2(0.06711056,0.00583715))));
     if(rank<lod_range.x||rank>=lod_range.y)discard;
 }
-void main() { lodMask();
+void main() { lodMask(); forestLeafMask();
     output_color = vec4(tint.rgb,1); }";
             try
             {

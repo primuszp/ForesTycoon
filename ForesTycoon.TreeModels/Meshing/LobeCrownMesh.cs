@@ -219,10 +219,10 @@ namespace ForesTycoon.TreeModels
         internal static int Lattice(float crownRadius, ForestLod lod, bool shrub = false)
         {
             // Crowns only a few pixels wide do not need the full lattice; shrubs stay cheap.
-            bool large = !shrub && DendroCrownMesh.Sides(crownRadius, ForestLod.Near, 6, 12) >= 8;
+            bool large = !shrub && crownRadius >= .5f;
             return lod switch
             {
-                ForestLod.Near => large ? 192 : shrub ? 96 : 80,
+                ForestLod.Near => large ? 384 : shrub ? 128 : 192,
                 ForestLod.Medium => large ? 80 : 40,
                 _ => 17
             };

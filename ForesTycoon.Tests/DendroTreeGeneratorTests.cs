@@ -20,10 +20,10 @@ public class DendroTreeGeneratorTests
         // Sub-pixel limbs are culled; broad-leaved scaffold limbs stay visible under the crown.
         if (species is ForestSpecies.Oak or ForestSpecies.Beech && stage is TreeLifeStage.Mature or TreeLifeStage.Old)
             Assert.NotEmpty(mesh.Branches);
-        // Detailed Near crowns retain a bounded mesh: 192-point broadleaf lattices,
+        // Detailed Near crowns retain a bounded mesh: 384-point broadleaf lattices,
         // or up to 16 sides across conifer whorl rings; roots and visible wood are separate.
-        Assert.InRange(mesh.Crown.Length / 3, 1, 640);
-        Assert.InRange((mesh.Trunk.Length + mesh.Branches.Length + mesh.Crown.Length) / 3, 1, 1400);
+        Assert.InRange(mesh.Crown.Length / 3, 1, 900);
+        Assert.InRange((mesh.Trunk.Length + mesh.Branches.Length + mesh.Crown.Length) / 3, 1, 1800);
         var edges = new Dictionary<(Vector3, Vector3), int>();
         var neighbours = new Dictionary<Vector3, HashSet<Vector3>>();
         for (int i = 0; i < mesh.Crown.Length; i += 3)
@@ -131,7 +131,7 @@ public class DendroTreeGeneratorTests
         Vertex[] Build(float yaw) => DendroTreeGenerator.Generate(ForestSpecies.Oak, 42,
             TreeLifeStage.Mature, 1, size, yaw, ForestLod.Near).Crown;
         var source = Build(0); var rotated = Build(1.2f);
-        Assert.Equal((2 * 192 - 4) * 3, source.Length); // one closed detailed lattice
+        Assert.Equal((2 * 384 - 4) * 3, source.Length); // one closed detailed lattice
         Assert.Equal(source.Length, rotated.Length);
         float c = MathF.Cos(1.2f), s = MathF.Sin(1.2f);
         for (int i = 0; i < source.Length; i++)
@@ -206,7 +206,7 @@ public class DendroTreeGeneratorTests
         Assert.NotEmpty(mesh.Trunk);
         Assert.True(mesh.Crown.Min(v => v.Position.Z) < size.Height * Terrain.TreeMetresToWorld * 0.15f);
         Assert.True(mesh.Crown.Max(v => v.Position.Xy.Length) * 2 > mesh.Crown.Max(v => v.Position.Z));
-        Assert.InRange((mesh.Trunk.Length + mesh.Branches.Length + mesh.Crown.Length) / 3, 1, 480);
+        Assert.InRange((mesh.Trunk.Length + mesh.Branches.Length + mesh.Crown.Length) / 3, 1, 640);
         Assert.Equal(mesh.Crown, DendroTreeGenerator.GenerateShrub(42, TreeLifeStage.Mature, 1, size, 0, ForestLod.Near).Crown);
     }
 

@@ -13,7 +13,9 @@ namespace ForesTycoon
         {
             using var window = new NativeWindow(new NativeWindowSettings
             {
-                StartVisible = false, ClientSize = new Vector2i(1100, 800), NumberOfSamples = 4,
+                // Exact toggle comparisons use a single-sample target; the seasonal diorama
+                // fixture separately verifies the actual four-sample presentation.
+                StartVisible = false, ClientSize = new Vector2i(1100, 800), NumberOfSamples = 0,
                 API = ContextAPI.OpenGL, APIVersion = new Version(3, 3), Profile = ContextProfile.Core
             });
             window.Context.MakeCurrent(); RenderDevice.Initialize();
@@ -31,9 +33,12 @@ namespace ForesTycoon
                 Require(new GraphicsSettings().ShowGrid, "The default tile grid is disabled.");
                 // Toggle comparisons intentionally start with the grid disabled.
                 var settings = new GraphicsSettings { Enhanced = false, Fog = false, Wildlife = false, ShowGrid = false };
-                // Pixel comparisons must not race background LOD publication.
+                // This fixture compares display toggles at an exact LOD. Streaming publication
+                // and eviction are covered separately by ForestRenderSmokeTest.
                 terrain.WarmIndividualForest(forest, settings);
+                Require(terrain.CheckForestLodConsistency(forest, settings) > 0, "Pixel fixture did not warm consistent LODs.");
                 using var renderer = new TerrainRenderer(terrain, vehicles, new WorldEffectSystem(), forest, settings);
+                terrain.StreamGeometry = false; // Retain the three explicitly warmed diagnostic LODs.
                 string output = Path.GetFullPath("artifacts/graphics-weather"); Directory.CreateDirectory(output);
                 GL.Enable(EnableCap.DepthTest); GL.Viewport(0, 0, 1100, 800);
                 Matrix4 matrix = Matrix4.CreateRotationZ(-MathF.PI / 4) * Matrix4.CreateRotationX(-MathF.PI / 4) *
@@ -123,7 +128,7 @@ namespace ForesTycoon
                 CheckRestored(sunny, Frame("weather-disabled"));
                 settings.Enhanced = false;
                 byte[] restored = Frame("original-restored");
-                // MSAA/driver rounding can differ by one 8-bit channel value after shader switches.
+                // Driver rounding can differ by one 8-bit channel value after shader switches.
                 CheckRestored(original, restored);
                 Require(terrain.StaticTerrainRebuilds == 0 && terrain.ForestChunkRebuilds == 0, "Graphics toggles rebuilt static geometry.");
                 Console.WriteLine("Graphics/weather smoke passed: texture toggle, sunlight/shadows, rain/storm/clouds, paused frame, drying, cache reuse, original mode restoration (1/255 channel tolerance).");
@@ -268,7 +273,8 @@ namespace ForesTycoon
                 void CheckRestored(byte[] expected, byte[] actual)
                 {
                     for(int i = 0; i < expected.Length; i++)
-                        Require(Math.Abs(expected[i] - actual[i]) <= (i%4==3?2:1), "Display toggle failed to restore its baseline image.");
+                        Require(Math.Abs(expected[i] - actual[i]) <= (i%4==3?2:1),
+                            $"Display toggle failed to restore its baseline image: channel {i % 4}, pixel {i / 4}, {expected[i]} -> {actual[i]}.");
                 }
 
                 byte[] Frame(string name = null,float pixelsPerWorldUnit=8)

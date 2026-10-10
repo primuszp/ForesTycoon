@@ -35,6 +35,19 @@ namespace ForesTycoon.TreeModels
 
         internal static Mesh Generate(in TreeShapeSpec spec, ForestLod lod, TreeSkeleton skeleton = null) => Build(new TreeForm(spec, skeleton), lod);
 
+        // Cached runtime trees keep both their leafy envelope and their winter branch structure.
+        // Leaf coverage/colour follows the live GPU calendar, independently of background meshing.
+        internal static Mesh GenerateSeasonal(in TreeShapeSpec spec, ForestLod lod)
+        {
+            var form = new TreeForm(spec with { Leaves = LeafState.Full });
+            var mesh = Build(form, lod);
+            if (TreePhenology.Evergreen(spec.Species) || spec.Dead) return mesh;
+            var winterForm = new TreeForm(spec with { Leaves = LeafState.Bare }, form.Skeleton);
+            var trunk = new List<Vertex>(); var branches = new List<Vertex>();
+            TreeWoodMesh.Build(winterForm, lod, false, trunk, branches);
+            return mesh with { Trunk = trunk.ToArray(), Branches = branches.ToArray() };
+        }
+
         internal static Mesh Build(TreeForm form, ForestLod lod)
         {
             var spec = form.Spec; var sk = form.Skeleton;

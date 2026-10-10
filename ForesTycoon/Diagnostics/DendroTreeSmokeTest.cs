@@ -93,6 +93,7 @@ namespace ForesTycoon
                     "Crown shadow and color pass coverage diverged.");
                 Require(GL.GetError() == ErrorCode.NoError, "Dendro crown OpenGL error.");
                 RenderDevice.Visuals = null;
+                CheckSeasonalGpuCrowns();
                 CheckLightRebuilds();
                 Console.WriteLine($"Dendro crown GL smoke passed: {main.Count(v => !v)} uncovered pixels; opaque color/legacy coverage, depth writes and solid shadow.");
                 Vertex V(float x, float y) => new(new(x, y, 0), Vector3.UnitZ, green);
@@ -118,6 +119,85 @@ namespace ForesTycoon
             }
             finally { RenderDevice.Visuals = null; RenderDevice.Dispose(); }
         }
+        private static void CheckSeasonalGpuCrowns()
+        {
+            const int size = 256;
+            using var quad = new VertexBuffer(PrimitiveTopology.Triangles);
+            using var state = RenderDevice.CreateForestStateBuffer();
+            using var material = new ForestMaterial();
+            var settings = new GraphicsSettings { Weather = false, Lighting = false, Shadows = true,
+                Quality = GraphicsQuality.Low, Textures = true };
+            using var visuals = new SurfaceVisualRenderer(settings, new WeatherVisualState());
+            using var terrain = new Terrain(TerrainSettings.Default.WithNodeSize(17, 42), (_, _) => 4);
+            var autumnColours = new System.Collections.Generic.HashSet<string>();
+            try
+            {
+                RenderDevice.Visuals = visuals; RenderDevice.SetCamera(Matrix4.Identity);
+                foreach (var species in Enum.GetValues<ForestSpecies>().Where(s => s != ForestSpecies.None))
+                {
+                    var spec = new TreeShapeSpec(species, 42, TreeLifePhase.Mature,
+                        ForestTreeGrowth.Initial(species, 40, 1), 1, TreeSite.Open, LeafState.Full, 0);
+                    uint colour = new TreeForm(spec).CrownColor;
+                    Vertex V(float x, float y) => new(new Vector3(x, y, 0), Vector3.UnitZ, colour);
+                    quad.SetData(new[] { V(-1, -1), V(1, -1), V(1, 1), V(-1, -1), V(1, 1), V(-1, 1) });
+                    quad.SetForestGrowth(Enumerable.Repeat(new ForestVertexGrowth(Vector3.Zero, new Vector3(-1, 0, 0), 0), 6).ToArray());
+                    var season = ForestSeasonRenderState.Create(spec);
+                    state.SetData(new[] { Vector4.One, new Vector4(0, 0, 0, 1), season.Tint, season.Bounds }, 4);
+                    quad.ForestState = state;
+                    byte[] summer = Frame(.3f, true);
+                    byte[] autumn = Frame(.56f, true);
+                    bool evergreen = TreePhenology.Evergreen(species);
+                    if (!evergreen)
+                    {
+                        Require(!summer.AsSpan().SequenceEqual(autumn), $"{species} did not change autumn foliage colour.");
+                        Require(autumnColours.Add(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(autumn))),
+                            $"{species} did not have a distinct autumn appearance.");
+                    }
+                    foreach (float winter in new[] { .75f, .85f, .97f })
+                    foreach (bool enhanced in new[] { true, false })
+                    {
+                        byte[] pixels = Frame(winter, enhanced);
+                        Require(Count(pixels) == (evergreen ? size * size : 0),
+                            $"{species} winter foliage coverage is wrong at {winter}, enhanced={enhanced}.");
+                    }
+                    settings.Enhanced = true; settings.Lighting = true; visuals.BeginFrame();
+                    quad.ForestCurrentYear = .85f;
+                    int shadowPixels = -1;
+                    visuals.RenderShadows(terrain, () => {
+                        RenderDevice.SetModel(visuals.ShadowCamera.Inverted());
+                        material.Use(); quad.DrawArray(false);
+                        GL.GetInteger(GetPName.DrawFramebufferBinding, out int framebuffer);
+                        GL.GetInteger(GetPName.ReadFramebufferBinding, out int previous);
+                        GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, framebuffer);
+                        try {
+                            float[] depth = new float[settings.ShadowResolution * settings.ShadowResolution];
+                            GL.ReadPixels(0, 0, settings.ShadowResolution, settings.ShadowResolution, PixelFormat.DepthComponent, PixelType.Float, depth);
+                            shadowPixels = depth.Count(d => d < .99f);
+                        }
+                        finally { GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, previous); RenderDevice.SetModel(Matrix4.Identity); }
+                    });
+                    Require(shadowPixels == (evergreen ? settings.ShadowResolution * settings.ShadowResolution : 0),
+                        $"{species} leafless winter crown cast a leaf shadow.");
+                    Require(summer.AsSpan().SequenceEqual(Frame(1.3f, true)), $"{species} foliage did not return identically next summer.");
+                }
+                Require(GL.GetError() == ErrorCode.NoError, "Seasonal GPU foliage OpenGL error.");
+                Console.WriteLine("GPU phenology: 16 species, distinct autumn colours, all-winter leaflessness, evergreen needles, matching shadows and exact next-summer restoration without mesh changes passed.");
+            }
+            finally { RenderDevice.Visuals = null; }
+
+            byte[] Frame(float year, bool enhanced)
+            {
+                settings.Enhanced = enhanced; settings.Lighting = false; visuals.BeginFrame();
+                quad.ForestCurrentYear = year; GL.Viewport(0, 0, size, size);
+                RenderDevice.Clear(new Vector4(0, 0, 0, 1)); material.Use(); quad.DrawArray(false);
+                var pixels = new byte[size * size * 4];
+                GL.ReadPixels(0, 0, size, size, PixelFormat.Rgba, PixelType.UnsignedByte, pixels);
+                return pixels;
+            }
+            static int Count(byte[] pixels) => Enumerable.Range(0, pixels.Length / 4)
+                .Count(i => pixels[i * 4] != 0 || pixels[i * 4 + 1] != 0 || pixels[i * 4 + 2] != 0);
+        }
+
         private static void CheckLightRebuilds()
         {
             using var terrain = new Terrain(TerrainSettings.Default.WithNodeSize(33, 42), (_, _) => 4);

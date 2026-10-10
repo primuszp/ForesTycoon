@@ -35,7 +35,7 @@ namespace ForesTycoon.TreeModels
         // Reference zoom (pixels per world unit) at the fine end of each LOD band.
         // Tessellation is chosen so the silhouette chord error stays below one pixel there.
         internal static float ReferencePixels(ForestLod lod) =>
-            lod == ForestLod.Near ? 24 : lod == ForestLod.Medium ? 9 : 3.5f;
+            lod == ForestLod.Near ? 64 : lod == ForestLod.Medium ? 9 : 3.5f;
 
         // Fewest polygon sides whose chord error r(1-cos(pi/n)) stays within the tolerance.
         internal static int Sides(float radiusWorld, ForestLod lod, int min, int max, float tolerancePixels = 1)
@@ -102,8 +102,9 @@ namespace ForesTycoon.TreeModels
             float bottom = height * (1 - fraction), crownHeight = height * fraction * (1 - shaping.TopLoss);
             float topZ = bottom + crownHeight;
             int sides = form == CrownForm.Spruce
-                ? Sides(radius, lod, lod == ForestLod.Far ? 4 : lod == ForestLod.Medium ? 6 : 8, lod == ForestLod.Far ? 5 : lod == ForestLod.Medium ? 10 : 16)
-                : Sides(radius, lod, lod == ForestLod.Far ? 4 : 5, lod == ForestLod.Far ? 5 : lod == ForestLod.Medium ? 9 : 12);
+                ? Sides(radius, lod, lod == ForestLod.Far ? 4 : lod == ForestLod.Medium ? 6 : 12, lod == ForestLod.Far ? 5 : lod == ForestLod.Medium ? 10 : 24)
+                : Sides(radius, lod, lod == ForestLod.Far ? 4 : lod == ForestLod.Near ? 12 : 5,
+                    lod == ForestLod.Far ? 5 : lod == ForestLod.Medium ? 9 : 24);
             var rings = Rings(form, sides, crownHeight, radius, lod);
             int ringCount = rings.Count;
             var points = new Vector3[2 + ringCount * sides];
