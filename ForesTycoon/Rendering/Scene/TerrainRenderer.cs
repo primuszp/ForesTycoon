@@ -13,6 +13,13 @@ namespace ForesTycoon
         internal void VerifyAccess() { ObjectDisposedException.ThrowIf(disposed, this); owner.VerifyAccess(); }
         private readonly Terrain terrain;
         private bool openingForestPrepared;
+        internal bool MapGeometryPrepared { get; private set; }
+        internal System.Collections.Generic.IEnumerable<float> PrepareMapGeometry()
+        {
+            VerifyAccess();
+            foreach (float progress in terrain.PrepareMapGeometry(forest, graphics)) yield return progress;
+            openingForestPrepared = MapGeometryPrepared = true;
+        }
         private readonly VehicleSystem vehicles;
         private readonly WorldEffectSystem effects;
         private readonly ForestSystem forest;

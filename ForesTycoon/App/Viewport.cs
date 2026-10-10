@@ -238,12 +238,10 @@ namespace ForesTycoon
             {
                 RenderBackendSelection.Window.SetSwapInterval(this, 0);   // vsync ki (OpenTK 3 VSync=false megfelelője)
                 postProcess = new DioramaPostProcess();
-                world = new GameWorld(TerrainSettings.Default);
-                interaction = new WorldInteractionController(world) { TargetPicked = SendTargetPicked };
                 GameSpeed = 1;   // start at the slow 1×
                 imgui = new ImGuiController();
                 HudTheme.Apply();
-                isLoaded = true;
+                isLoaded = false;
                 frameClock.Reset();
                 simulationClock.Reset();
                 SetupViewport();
@@ -576,6 +574,11 @@ namespace ForesTycoon
 
         protected override void RenderScene(FrameEventArgs e)
         {
+            if (world == null || !world.MapGeometryPrepared)
+            {
+                RenderLoadingFrame();
+                return;
+            }
             RunFrame();
             if (smokeTestFrameLimit.HasValue)
             {
@@ -596,6 +599,7 @@ namespace ForesTycoon
         private void DisposeGlResources()
         {
             if (glResourcesDisposed) return;
+            mapPreparation?.Dispose(); mapPreparation = null;
             imgui?.Dispose(); postProcess?.Dispose(); world?.Dispose();
             imgui = null; postProcess = null; world = null; isLoaded = false; glResourcesDisposed = true;
         }

@@ -95,6 +95,7 @@ namespace ForesTycoon
                 CheckStreamingForest();
                 CheckColdWorldScaling();
                 CheckStaticCacheEviction();
+                CheckPreparedMapContinuity();
                 Console.WriteLine($"Forest GL smoke test passed: near={near}, medium={medium}, far={far} vertices; stable frames rebuild 0 chunks.");
             }
             finally
@@ -191,6 +192,43 @@ namespace ForesTycoon
                 Require(Draw(terrain, forest, 12) == 0, "Streaming cancellation resurrected cleared trees.");
             Require(GL.GetError() == ErrorCode.NoError, "Streaming/cache eviction produced an OpenGL error.");
             Console.WriteLine($"Streaming forest: cold frame submitted 0 vertices; requested Near coverage in {frames} frames; unused LOD eviction and visible-budget excess passed.");
+        }
+
+        private static void CheckPreparedMapContinuity()
+        {
+            using var terrain = new Terrain(TerrainSettings.Default.WithNodeSize(33, 42));
+            var forest = new ForestSystem(terrain.Map);
+            var graphics = new GraphicsSettings { Enhanced = false };
+            terrain.StreamGeometry = true;
+            terrain.ForestCacheBudgetBytes = terrain.StaticCacheBudgetBytes = 1;
+            float progress = 0;
+            foreach (float next in terrain.PrepareMapGeometry(forest, graphics))
+            {
+                Require(next >= progress && next <= 1, "Map loading progress regressed.");
+                progress = next;
+            }
+            Require(progress == 1, "Map preparation did not finish.");
+            int resident = terrain.ForestResidentLods, ground = terrain.StaticResidentChunks;
+            Require(resident == ground * 3 && ground > 0, "Preparation missed terrain or a tree LOD.");
+            long rebuilds = terrain.TotalForestChunkRebuilds;
+            foreach (float scale in new[] { 12f, 1f, 5f, 20f, 2f, 12f })
+            {
+                var away = new RenderContext(0, 0, 0, 0, 0, 0, false, false, 1,
+                    -60, -45, 100000, 100000, 100032, 100032, scale);
+                terrain.UpdateVisibleTiles(away);
+                terrain.DrawTerrainBase(); terrain.DrawTrees(forest, away, graphics);
+                Require(Draw(terrain, forest, scale) > 0, "Prepared forest disappeared after a camera jump.");
+                terrain.DrawTerrainBase(); terrain.DrawTerrainDecals();
+                Require(terrain.StaticTerrainRebuilds == 0 && terrain.TotalForestChunkRebuilds == rebuilds,
+                    "Pan/zoom rebuilt prepared geometry.");
+                Require(!terrain.HasPendingForestBuild, "Pan/zoom queued a cold model load.");
+                Require(terrain.ReadyVisibleForestChunks(ForestLodPolicy.Select(scale, null)) == terrain.VisibleChunkCount,
+                    "Prepared map did not immediately display the requested detail.");
+            }
+            Require(terrain.ForestResidentLods == resident && terrain.StaticResidentChunks == ground &&
+                terrain.ForestCacheEvictions == 0 && terrain.StaticCacheEvictions == 0,
+                "Camera movement evicted prepared map geometry.");
+            Console.WriteLine($"Prepared map continuity: {ground} chunks, all 3 LODs, no rebuilds or evictions; CPU/GPU {(terrain.ForestCpuPayloadBytes + terrain.ForestGpuPayloadBytes) / 1048576.0:F1} MiB.");
         }
 
         private static void CheckColdWorldScaling()

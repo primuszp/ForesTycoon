@@ -80,7 +80,11 @@ namespace ForesTycoon
             staticTerrainScratch.Clear();
             if ((long)staticTerrainScratch.Capacity * Vertex.Stride > 1024 * 1024) staticTerrainScratch.TrimExcess();
             Measure();
-            if (!StreamGeometry) return; // Explicit geometry diagnostics retain their warm-up.
+            if (!StreamGeometry || RetainPreparedGeometry)
+            {
+                StaticBudgetExcessBytes = Math.Max(0, StaticCpuPayloadBytes + StaticGpuPayloadBytes - StaticCacheBudgetBytes);
+                return;
+            }
             while (StaticCpuPayloadBytes + StaticGpuPayloadBytes > StaticCacheBudgetBytes)
             {
                 TerrainChunk victim = null;

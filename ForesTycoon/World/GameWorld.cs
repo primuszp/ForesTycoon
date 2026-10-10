@@ -478,6 +478,13 @@ namespace ForesTycoon
             if (terrainRenderer == null) throw new InvalidOperationException("Attach rendering before drawing a headless world.");
             terrainRenderer.Draw(context);
         }
+        internal bool MapGeometryPrepared => terrainRenderer?.MapGeometryPrepared == true;
+        internal System.Collections.Generic.IEnumerable<float> PrepareMapGeometry()
+        {
+            EnsureAvailable();
+            if (terrainRenderer == null) throw new InvalidOperationException("Attach rendering before preparing a map.");
+            return terrainRenderer.PrepareMapGeometry();
+        }
         public void GetWorldBounds(out Vector3 min, out Vector3 max) => map.GetWorldBounds(out min, out max);
         internal int TilesPerSide => map.TilesPerSide;
         /// <summary>Per-step timings of the last road edit (diagnostics).</summary>

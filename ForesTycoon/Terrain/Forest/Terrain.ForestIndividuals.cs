@@ -61,6 +61,9 @@ namespace ForesTycoon
         internal bool SynchronousForestBuilds { get; set; }
         // Direct geometry tools can still request synchronous first builds; the game host streams them.
         internal bool StreamGeometry { get; set; }
+        // Interactive maps keep their prepared geometry across camera moves. Streaming
+        // still budgets replacements after simulation changes and player edits.
+        internal bool RetainPreparedGeometry { get; private set; }
         internal long ForestCacheBudgetBytes { get; set; } = 128L * 1024 * 1024;
         internal long ForestGpuPayloadBytes { get; private set; }
         internal long ForestCpuPayloadBytes { get; private set; }
@@ -114,7 +117,11 @@ namespace ForesTycoon
                 ReleaseLarge(individualWoodGrowth); ReleaseLarge(individualCrownGrowth); ReleaseLarge(individualFloorGrowth);
             }
             MeasureForestPayload();
-            if (!StreamGeometry) return; // Explicit warm-up tools preserve all requested levels.
+            if (!StreamGeometry || RetainPreparedGeometry)
+            {
+                ForestBudgetExcessBytes = Math.Max(0, ForestCpuPayloadBytes + ForestGpuPayloadBytes - ForestCacheBudgetBytes);
+                return;
+            }
             while (ForestCpuPayloadBytes + ForestGpuPayloadBytes > ForestCacheBudgetBytes)
             {
                 (TerrainChunk Chunk, ForestLod Lod) victim = default;
@@ -178,6 +185,38 @@ namespace ForesTycoon
                     foreach (var lod in Enum.GetValues<ForestLod>()) GetIndividualForestChunk(chunk, forest, graphics, lod, false, out _);
             }
             finally { SynchronousForestBuilds = synchronous; }
+        }
+
+        internal IEnumerable<float> PrepareMapGeometry(ForestSystem forest, GraphicsSettings graphics)
+        {
+            RetainPreparedGeometry = true;
+            CancelForestBuild();
+            int completed = 0, total = chunkIndex.Chunks.Count * 4;
+            foreach (var chunk in chunkIndex.Chunks)
+            {
+                DrawCachedTerrain(new[] { chunk }, false);
+                yield return (float)++completed / total;
+                foreach (var lod in Enum.GetValues<ForestLod>())
+                {
+                    if (!individualForestChunks.TryGetValue((chunk, lod), out var geometry))
+                        individualForestChunks.Add((chunk, lod), geometry = new(chunk.TileIds.Length));
+                    if (!IsFresh(geometry, chunk, forest, graphics))
+                    {
+                        foreach (var step in BuildIndividualForestChunk(chunk, geometry, forest, graphics, lod))
+                            yield return (float)completed / total;
+                        geometry.Initialized = true;
+                        UpdateIndividualForestState(geometry, forest);
+                        geometry.ForestRevision = forest.Revision;
+                        SetIndividualForestElapsed(geometry, forest.ForestYear);
+                        TotalForestChunkRebuilds++;
+                    }
+                    // Also retain a fallback before this chunk has ever been visible.
+                    displayedForestLods[chunk] = lod;
+                    yield return (float)++completed / total;
+                }
+            }
+            TrimForestCache();
+            TrimStaticCache();
         }
 
         // Restore the complete opening diorama at the camera's actual detail level.
