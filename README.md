@@ -27,7 +27,7 @@ These screenshots come from the actual game window, using the same close-up view
 
 At the default 1× speed, deer and vehicles move at a natural pace. In a new world, one forest year spans 900 simulated seconds: approximately one real hour at the game's 1× calendar pace, or a theoretical 14.06 seconds at 256×. Actual progress can also depend on machine load.
 
-In close-up views, a tree model being built in the background must not replace an already visible detailed model with a coarser LOD. Seasonal foliage colors and leaflessness follow the current year on the GPU without waiting for mesh rebuilds. The latest in-game check kept every visible chunk at Near detail for two complete years and 1,633 frames at 256×.
+Close-up views retain detailed tree models while background geometry is prepared. Seasonal colors and leaflessness follow the calendar on the GPU. The recorded `0caaa28` check kept all visible chunks at Near detail for two years and 1,633 frames at 256×; it did not exercise mesh rebuilds. Actual model-transition checks are included in the [generator replacement plan](docs/own-tree-generator-plan.md).
 
 ## Development setup
 
@@ -103,16 +103,14 @@ The actual in-game seasonal check runs for two forest years at 256× in close-up
 dotnet run --project ForesTycoon -c Release -- --capture-seasons artifacts/seasonal-256x
 ```
 
-The latest local validation passed **1,589 unit tests and the complete Windows native suite**, with no Release build warnings or errors. A new performance-gate run with an otherwise idle GPU remains pending; visual validation does not replace it.
+The recorded `0caaa28` validation on 2026-10-10 passed **1,589 unit tests and the Windows native suite**, with no Release build warnings or errors. For later revisions, use the linked CI runs and the commands above. A performance-gate run with an otherwise idle GPU remains pending.
 
-- [Architecture and project dependencies](docs/architecture.md)
-- [Game-engine code review and fixes](docs/engine-review-2026-10-10.md)
-- [Large-world performance plan and measurement gates](docs/large-world-performance.md)
-- [Ecosystem and regional processes](docs/ecosystem-simulation-design.md)
-- [Individual tree lifecycle](docs/tree-individual-lifecycle-plan.md)
-- [Tree-generation literature and species models](docs/tree-generation-literature.md)
-- [Research behind weather, storms, and snow](docs/rain-storm-cloud-research.md)
-- [Model import and GPU resources](docs/model-import-contract.md)
+The [documentation index](docs/README.md) groups current guides, reviews, plans and generated-file cleanup. Preview or run the cleanup from the repository root:
+
+```powershell
+./tools/clean-generated.ps1 -WhatIf
+./tools/clean-generated.ps1
+```
 
 ## Support and feedback
 

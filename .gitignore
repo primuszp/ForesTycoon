@@ -10,6 +10,7 @@
 **/bin/
 **/obj/
 **/__pycache__/
+**/TestResults/
 artifacts/
 
 # Logs

@@ -27,7 +27,7 @@ A képek a valódi játékablakból, ugyanarról a közeli nézetről származna
 
 Az alap 1× időben a szarvasok és járművek természetes mozgási ütemet kapnak. Új világban egy erdőév 900 szimulációs másodperc: a játék 1× naptárórájával ez körülbelül egy valós óra, 256× mellett elméletileg 14,06 másodperc. A tényleges előrehaladást a gép terhelése is befolyásolhatja.
 
-Közeli nézetben a háttérben készülő új famodell nem cserélheti le a látható részletes modellt egy durvább LOD-ra. Az évszakos lombszín és lombtalanság a GPU-n követi az aktuális évet, modell-újraépítésre várakozás nélkül. A legutóbbi játékbeli próba két teljes év és 1633 képkocka alatt minden látható chunkot Near részletességen tartott 256× mellett.
+Közeli nézetben a háttérben készülő geometria mellett is megmaradnak a részletes famodellek. Az évszakos lombszín és lombtalanság a GPU-n követi a naptárat. A `0caaa28` revízió rögzített próbája két év és 1633 képkocka alatt minden látható chunkot Near részletességen tartott 256× mellett, de nem történt közben háló-újraépítés. A tényleges modellváltások próbája szerepel a [generátorkiváltási tervben](docs/own-tree-generator-plan.md).
 
 ## Fejlesztői indítás
 
@@ -103,16 +103,14 @@ A közeli, két erdőéves, valódi 256× játékbeli évszakpróba képkockánk
 dotnet run --project ForesTycoon -c Release -- --capture-seasons artifacts/seasonal-256x
 ```
 
-A legutóbbi helyi ellenőrzésben **1589 egységteszt és a teljes Windows natív csomag sikeres**, a Release build figyelmeztetés és hiba nélkül készült. A tiszta GPU-n futó új teljesítménykapu-mérés még hátralévő feladat; a vizuális próba nem helyettesíti azt.
+A `0caaa28` revízió 2026. október 10-i ellenőrzésében **1589 egységteszt és a Windows natív csomag sikeres**, a Release build figyelmeztetés és hiba nélkül készült. Az újabb revízióknál a hivatkozott CI-futások és a fenti parancsok mérvadók. A tiszta GPU-n futó új teljesítménykapu-mérés még hátralévő feladat.
 
-- [Architektúra és projektfüggőségek](docs/architecture.md)
-- [Játékmotor code review és javítások](docs/engine-review-2026-10-10.md)
-- [Nagy térképek teljesítményterve és mérési kapuk](docs/large-world-performance.md)
-- [Ökoszisztéma és regionális folyamatok](docs/ecosystem-simulation-design.md)
-- [Faegyedek életciklusa](docs/tree-individual-lifecycle-plan.md)
-- [Fagenerálási irodalom és fajmodellek](docs/tree-generation-literature.md)
-- [Időjárás, vihar és hó kutatási alapjai](docs/rain-storm-cloud-research.md)
-- [Modellimport és GPU-erőforrások](docs/model-import-contract.md)
+A [dokumentációs tartalomjegyzék](docs/README.md) rendezi az aktuális útmutatókat, review-kat, terveket és a generált fájlok takarítását. Előnézet és takarítás a repó gyökeréből:
+
+```powershell
+./tools/clean-generated.ps1 -WhatIf
+./tools/clean-generated.ps1
+```
 
 ## Támogatás és visszajelzés
 

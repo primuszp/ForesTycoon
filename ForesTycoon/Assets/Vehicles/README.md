@@ -6,5 +6,13 @@ A log-truck.glb kizárólag ezt a járművet tartalmazza: 33 rész, 8877 hároms
 
 A gyűjtemény kisméretű JPEG színpalettáját a kivágó script lineáris COLOR_0 csúcsszínekké alakítja. A játék ezért az eredeti színalapú módban is megtartja a modell színeit. Ez az import nem általános textúrás/PBR glTF renderelő: a palettás anyagok csúcsszínként jelennek meg, az üvegek sötét, fedő felületek.
 
-Újragenerálás a repo gyökeréből: python tools/inspect_trucks.py D:/Personal/Downloads/trucks_collection.glb
-A scripthez numpy, Pillow és matplotlib szükséges. A játék futásához Python nem szükséges.
+Újragenerálás a repó gyökeréből, a helyi forrásfájl elérési útjával:
+
+```sh
+python tools/inspect_trucks.py "<helyi-modellek>/trucks_collection.glb"
+```
+
+A script felülírja az itt található `log-truck.glb` fájlt. A forrásgyűjtemény nem része
+a repónak. A scripthez numpy, Pillow és matplotlib szükséges; a játék futásához Python
+nem kell. A megvásárolt gépek kezelését a [helyi assetútmutató](../../../docs/logging-facility-assets.md)
+írja le; a [licencállapot](../../../LICENSING.md) külön ellenőrzést igényel a fizetős kiadás előtt.
