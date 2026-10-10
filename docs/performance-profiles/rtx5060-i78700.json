@@ -1,0 +1,52 @@
+{
+  "Protocol": "large-world-v1",
+  "CompetingGpuProcessNames": ["python.exe", "python", "dotnet.exe", "dotnet"],
+  "Hardware": {
+    "Vendor": "NVIDIA Corporation",
+    "Renderer": "NVIDIA GeForce RTX 5060/PCIe/SSE2",
+    "Driver": "3.3.0 NVIDIA 616.92",
+    "OS": "Microsoft Windows 10.0.26300",
+    "Runtime": ".NET 8.0.31",
+    "Architecture": "X64",
+    "LogicalProcessors": 12,
+    "Cpu": "Intel(R) Core(TM) i7-8700 CPU @ 3.20GHz"
+  },
+  "Cases": [
+    {
+      "Tiles": 64,
+      "Weather": "Sunny",
+      "Limits": {
+        "StationaryP95Ms": 25, "MovingP95Ms": 20, "MaxFrameMs": 75, "MonthBoundaryMs": 35,
+        "ConstructorMs": 500, "FirstDrawMs": 500, "TransactionLoadMs": 500, "LoadedFirstDrawMs": 250,
+        "ProcessPeakWorkingSetBytes": 805306368, "LoadPeakWorkingSetBytes": 402653184
+      }
+    },
+    {
+      "Tiles": 64,
+      "Weather": "Storm",
+      "Limits": {
+        "StationaryP95Ms": 25, "MovingP95Ms": 20, "MaxFrameMs": 75, "MonthBoundaryMs": 35,
+        "ConstructorMs": 500, "FirstDrawMs": 500, "TransactionLoadMs": 500, "LoadedFirstDrawMs": 250,
+        "ProcessPeakWorkingSetBytes": 805306368, "LoadPeakWorkingSetBytes": 402653184
+      }
+    },
+    {
+      "Tiles": 128,
+      "Weather": "Sunny",
+      "Limits": {
+        "StationaryP95Ms": 30, "MovingP95Ms": 30, "MaxFrameMs": 100, "MonthBoundaryMs": 45,
+        "ConstructorMs": 800, "FirstDrawMs": 800, "TransactionLoadMs": 1000, "LoadedFirstDrawMs": 400,
+        "ProcessPeakWorkingSetBytes": 805306368, "LoadPeakWorkingSetBytes": 402653184
+      }
+    },
+    {
+      "Tiles": 128,
+      "Weather": "Storm",
+      "Limits": {
+        "StationaryP95Ms": 30, "MovingP95Ms": 30, "MaxFrameMs": 100, "MonthBoundaryMs": 45,
+        "ConstructorMs": 800, "FirstDrawMs": 800, "TransactionLoadMs": 1000, "LoadedFirstDrawMs": 400,
+        "ProcessPeakWorkingSetBytes": 805306368, "LoadPeakWorkingSetBytes": 402653184
+      }
+    }
+  ]
+}

@@ -192,9 +192,9 @@ uniform vec3 sun, sun_tint, sky_tint, ground_tint;
 uniform vec4 climate;
 
 float shadow(vec3 n) {
-    if(shadowed == 0) return 1;
+    if(shadowed == 0) return 1.0;
     vec3 p = light_position.xyz / light_position.w * 0.5 + 0.5;
-    if(p.z <= 0 || p.z >= 1 || any(lessThan(p.xy, vec2(0))) || any(greaterThan(p.xy, vec2(1)))) return 1;
+    if(p.z <= 0 || p.z >= 1 || any(lessThan(p.xy, vec2(0))) || any(greaterThan(p.xy, vec2(1)))) return 1.0;
     float bias = max(0.00025, 0.0012 * (1 - max(dot(n, sun), 0)));
     float s = 0;
     for(int y=-1;y<=1;y++) for(int x=-1;x<=1;x++)

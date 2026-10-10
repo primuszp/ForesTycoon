@@ -1,0 +1,44 @@
+name: Engine hardware validation
+
+# Dispatch on a reviewed revision. The runner needs a desktop session, OpenGL 3.3,
+# and the exact CPU/GPU/driver/runtime recorded by the committed profile.
+on:
+  workflow_dispatch:
+    inputs:
+      performance:
+        description: Run the performance gate (requires an idle GPU)
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: forestycoon-hardware-validation
+  cancel-in-progress: false
+
+jobs:
+  native-and-performance-windows:
+    runs-on: [self-hosted, Windows, X64, forestycoon-rtx5060-i78700]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.425
+      - name: Release, tests, native pixels and window lifecycle
+        shell: pwsh
+        run: ./tools/verify-engine.ps1 -Native
+      - name: Fixed hardware large world performance gate
+        if: inputs.performance
+        shell: pwsh
+        run: ./tools/verify-performance.ps1 -Profile docs/performance-profiles/rtx5060-i78700.json -SkipBuild
+      - name: Validate performance gate rejection contracts
+        if: inputs.performance
+        shell: pwsh
+        run: ./tools/test-performance-gate.ps1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-native-and-performance
+          path: artifacts

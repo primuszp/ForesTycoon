@@ -12,6 +12,7 @@ namespace ForesTycoon
         void Present(GameWindow window);
         IDisposable Activate(GameWindow window);
         void VerifyCurrent(GameWindow window);
+        IDisposable PreserveCurrentContext();
     }
 
     /// <summary>One coherent graphics implementation, installed before constructing any render resources.</summary>

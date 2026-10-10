@@ -9,6 +9,7 @@ namespace ForesTycoon
     // No external URIs, scripts, skins, or extension execution.
     internal sealed class GlbTruckModel : ITruckModel
     {
+        private readonly RenderResourceOwner owner = new();
         internal sealed class Part
         {
             internal string Name,Category;
@@ -149,6 +150,7 @@ namespace ForesTycoon
         public void Draw(Matrix4 transform,float cargoFill,float wheelAngle,float curvature=0,float scale=1,Matrix4? suspension=null,float outlineWidth=0,float articulation=0,float trailerPitch=0)
         {
             ObjectDisposedException.ThrowIf(disposed, this);
+            owner.Check();
             int visibleCargo=(int)MathF.Ceiling(Math.Clamp(cargoFill,0,1)*cargoCount),cargoIndex=0;
             foreach(var part in drawParts){
                 if(part.Category=="cargo" && cargoIndex++>=visibleCargo)continue;
@@ -181,6 +183,6 @@ namespace ForesTycoon
                 }finally{RenderDevice.PopModel();}
             }
         }
-        public void Dispose(){if(disposed)return;disposed=true;foreach(var part in drawParts)part.Buffer?.Dispose();}
+        public void Dispose(){if(disposed)return;owner.CheckIfBound();foreach(var part in drawParts)part.Buffer?.Dispose();disposed=true;}
     }
 }

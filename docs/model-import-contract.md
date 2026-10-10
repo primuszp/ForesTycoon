@@ -23,7 +23,7 @@ A dekódolt asset adatkerete 256 MiB. Az accessorok dekódolt tárolását, a cs
 
 Egy CPU-modellből több egymástól független `Pose` készülhet. Egy `AnimatedModelRenderer` egy backendet birtokol, és annak GPU-geometriáját több póz rajzolásához használja. A renderer felszabadítása nem érvényteleníti a CPU-modellt. Másik modellhez tartozó póz nem rajzolható vele. Az injektált backend tulajdona átkerül a rendererhez; ugyanazt a backendpéldányt ne adjuk több tulajdonosnak.
 
-Az OpenGL backend késleltetve foglal. Félbeszakadt feltöltés után minden addig létrehozott objektumot töröl, és ugyanaz a renderer újrapróbálhatja a feltöltést. A felszabadítás idempotens. A natív életciklusteszt a program-, buffer-, VAO- és textúrahandle-ek tényleges megszűnését is lekérdezi a drivertől. Az OpenGL-objektumok létrehozása, használata és törlése a megfelelő aktuális kontextusban szükséges; a több renderkörnyezet tulajdonlása külön motorfeladat.
+Az OpenGL backend késleltetve foglal. Félbeszakadt feltöltés után minden addig létrehozott objektumot töröl, és ugyanaz a renderer újrapróbálhatja a feltöltést. A felszabadítás idempotens. A natív életciklusteszt a program-, buffer-, VAO- és textúrahandle-ek tényleges megszűnését is lekérdezi a drivertől. Az OpenGL-objektumok létrehozása, használata és törlése a megfelelő aktuális kontextusban szükséges; a renderer első backendhasználata rögzíti a renderkörnyezeti tulajdonost, és idegen környezetből a használat és törlés elutasított. Ugyanaz a CPU-asset több környezetben külön GPU-renderelőt kaphat; a [kétkontextusos próba](render-environments.md) ezt és a külön felszabadítást is ellenőrzi.
 
 ## A régi színezett teherautó
 

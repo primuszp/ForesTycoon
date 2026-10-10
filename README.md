@@ -105,6 +105,7 @@ The project is still in prototype stage. Right now the emphasis is on terrain te
 Requirements:
 
 - macOS, Windows or Linux with OpenGL 3.3 core support
+- Linux: glibc 2.38 or newer (for example Ubuntu 24.04), required by the bundled ImGui.NET native library
 - .NET 8 or newer SDK
 
 From the repository root:
@@ -289,6 +290,8 @@ dotnet run --project ForesTycoon/ForesTycoon.csproj -- --world-benchmark
 ```
 
 A világbenchmark a valódi világfrissítést és a befejezett GPU-kirajzolást méri egy hónapváltáson át, napsütésben és viharban. Képkockánkénti adatok: `artifacts/world-benchmark`. A havi profil külön méri az erdő/környezet, logisztika és vadállatok költségét; a renderprofil fázisonként CPU- és GPU-időbélyeg-adatokat ment. UI, diorama utófeldolgozás és aktív járműforgalom nincs a mérésben; [eredmények és mérési korlátok](docs/engine-performance.md#játékvilág-és-havi-élőhely-ellenőrzés), [adagolt erdőmesh-feltöltés](docs/engine-performance.md#erdőmesh-feltöltése-adagokban-és-renderfázisok-mérése).
+
+A külön [nagy térképes teljesítménykapu](docs/large-world-performance.md) 64×64 és 128×128 világot, álló/mozgó kamerát, tranzakciós betöltést és memóriacsúcsot is mér, diorama utófeldolgozással. Rögzített hardverprofilon: `pwsh -File tools/verify-performance.ps1 -Profile docs/performance-profiles/rtx5060-i78700.json`. A keretek regressziót fognak meg; nem jelentenek stabil 60 FPS-es minősítést.
 
 ```sh
 dotnet run --project ForesTycoon/ForesTycoon.csproj -- --environment-smoke-test

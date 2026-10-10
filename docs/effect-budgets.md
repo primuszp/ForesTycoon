@@ -26,4 +26,4 @@ A `WeatherParticlePlanTests` a 0/1/25/49 és a minőségi kereteket több nézet
 
 A ködpróba valódi OpenGL-handle lekérdezésekkel ellenőrzi a mélységadat kerethatárát, felszabadítását, újralétrehozását és idempotens törlését. A forrásgyűjtés nagy térképen is korlátos. A jelölőtesztek telített körpuffert, lejáratot, sorrendtartó mentést, régi túlméretes állapot migrációját és rajzolási keretet vizsgálnak; az allokációmérés a többi teszttől elkülönítve fut.
 
-A payloadszámlálók nem mérik a teljes processzmemóriát, a megosztott rajzolási infrastruktúra és a driver belső költségét. A több renderkörnyezet tulajdonlása és a rögzített GPU-n mért teljesítménykapu továbbra is nyitott motorfeladat.
+A payloadszámlálók nem mérik a teljes processzmemóriát, a megosztott rajzolási infrastruktúra és a driver belső költségét. Az effektek környezeti tulajdonlása és a többablakos host [natívan ellenőrzött](render-environments.md). A rögzített GPU-n mért teljesítménykapu továbbra is nyitott motorfeladat.

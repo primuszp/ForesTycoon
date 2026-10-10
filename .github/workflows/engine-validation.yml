@@ -13,7 +13,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-22.04]
+        # ImGui.NET 1.91.6.1's Linux native binary requires glibc >= 2.38.
+        os: [windows-latest, ubuntu-24.04]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
@@ -32,7 +33,7 @@ jobs:
 
   native-linux:
     needs: headless
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       LIBGL_ALWAYS_SOFTWARE: '1'

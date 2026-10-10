@@ -41,6 +41,12 @@ namespace ForesTycoon.Editor
             game.InspectForSmoke(() => { RenderDevice.UseGeometryShader(); GL.GetInteger(GetPName.CurrentProgram, out gameProgram); gameUi = ImGui.GetCurrentContext(); }); Restored();
             editor.InspectForSmoke(() => editorUi = ImGui.GetCurrentContext()); Restored();
             Require(gameUi != IntPtr.Zero && editorUi != IntPtr.Zero && gameUi != editorUi, "Game/editor share a UI context.");
+            game.InspectForSmoke(() => {
+                using var child = new EditorWindow(null, visible: false);
+                Require(game.Context.IsCurrent && ImGui.GetCurrentContext() == gameUi, "Constructing a child window changed the caller's context.");
+                child.LoadForSmoke(); child.FrameForSmoke(); child.InputForSmoke(); child.UnloadForSmoke();
+                Require(game.Context.IsCurrent && ImGui.GetCurrentContext() == gameUi, "Child window lifecycle did not restore its parent context.");
+            }); Restored();
             preview.UnloadForSmoke(); preview.UnloadForSmoke(); Restored(); RequireDisposed(preview);
             game.FrameForSmoke(); Restored();
             game.InspectForSmoke(() => Require(GL.IsProgram(gameProgram), "Closing preview deleted the game's shader.")); Restored();

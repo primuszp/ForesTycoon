@@ -7,6 +7,8 @@ namespace ForesTycoon
         static void Main(string[] args)
         {
             RenderBackendSelection.UseOpenGl();
+            int largeBenchmark = Array.FindIndex(args, argument => argument == "--large-world-benchmark");
+            if (largeBenchmark >= 0) { LargeWorldBenchmark.Run(args, largeBenchmark); return; }
             if (Array.Exists(args, a => a == "--render-environment-smoke-test")) { RenderEnvironmentSmokeTest.Run(); return; }
             if (Array.Exists(args, a => a == "--oak-study-preview")) { OakStudyPreview.Run(Array.Exists(args, a => a == "--before")); return; }
             if (Array.Exists(args, a => a == "--broadleaf-canopy-preview")) { BroadleafCanopyPreview.Run(Array.Exists(args, a => a == "--before")); return; }

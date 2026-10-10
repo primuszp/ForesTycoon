@@ -13,13 +13,26 @@ namespace ForesTycoon
         private bool loaded, released;
         protected virtual ImGuiController UiController => null;
         internal RenderEnvironment OwnedEnvironment => environment;
-        protected RenderGameWindow(GameWindowSettings game, NativeWindowSettings native) : base(game, native)
+        private sealed class ConstructionState : IDisposable
+        {
+            internal readonly RenderBackendBundle Bundle = RenderBackendSelection.CreateWindowBundle();
+            private readonly IDisposable nativeSnapshot;
+            internal ConstructionState() {
+                ArgumentNullException.ThrowIfNull(Bundle); ArgumentNullException.ThrowIfNull(Bundle.Graphics);
+                ArgumentNullException.ThrowIfNull(Bundle.Window);
+                nativeSnapshot = Bundle.Window.PreserveCurrentContext();
+            }
+            public void Dispose() => nativeSnapshot.Dispose();
+        }
+        protected RenderGameWindow(GameWindowSettings game, NativeWindowSettings native) : this(game, native, new ConstructionState()) { }
+        private RenderGameWindow(GameWindowSettings game, NativeWindowSettings native, ConstructionState construction) : base(game, native)
         {
             try {
-                bundle = RenderBackendSelection.CreateWindowBundle();
+                bundle = construction.Bundle;
                 environment = new RenderEnvironment(bundle.Graphics, () => bundle.Window.VerifyCurrent(this));
             }
             catch { base.Dispose(); throw; }
+            finally { construction.Dispose(); }
         }
 
         private void Dispatch(Action action)

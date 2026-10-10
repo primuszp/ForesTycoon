@@ -11,6 +11,7 @@ namespace ForesTycoon
     {
         internal static void Run()
         {
+            var sharedModel = AnimatedGlbModel.Load(System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "Vehicles", "log-truck.glb"));
             using var first = Window(); using var second = Window();
             var a = new RenderEnvironment(new OpenGlGraphicsBackend(), () => Require(first.Context.IsCurrent, "First native context is not current."));
             var b = new RenderEnvironment(new OpenGlGraphicsBackend(), () => Require(second.Context.IsCurrent, "Second native context is not current."));
@@ -22,7 +23,7 @@ namespace ForesTycoon
                 RenderDevice.SetCamera(Matrix4.Identity);
                 var red = Buffer(0xff0000ff);
                 Draw(red, 0); var firstHandles = CurrentHandles();
-                var fixtureA = new SceneFixture(); fixtureA.Draw(); var modelA = fixtureA.ModelHandles;
+                var fixtureA = new SceneFixture(sharedModel); fixtureA.Draw(); var modelA = fixtureA.ModelHandles;
                 second.Context.MakeCurrent();
                 using (b.Activate()) {
                     int programB = GlProgram.Create(VertexShader, "#version 330 core\nout vec4 color; void main(){color=vec4(1);}");
@@ -31,7 +32,7 @@ namespace ForesTycoon
                     RenderDevice.Initialize(); RenderDevice.InitializeFrameState(); RenderDevice.SetViewport(32, 32);
                     RenderDevice.SetCamera(Matrix4.Identity);
                     var green = Buffer(0xff00ff00); Draw(green, 1);
-                    var fixtureB = new SceneFixture(); fixtureB.Draw(); var modelB = fixtureB.ModelHandles;
+                    var fixtureB = new SceneFixture(sharedModel); fixtureB.Draw(); var modelB = fixtureB.ModelHandles;
                     RequireRejected(() => red.DrawArray()); RequireRejected(() => red.Dispose());
                     fixtureA.RejectForeignAccess();
                     RenderDevice.SetCamera(Matrix4.Identity); Draw(green, 1); var secondHandles = CurrentHandles();
@@ -55,7 +56,9 @@ namespace ForesTycoon
         private sealed class SceneFixture : IDisposable
         {
             private readonly GameWorld world = new(TerrainSettings.Default.WithNodeSize(5, 42));
-            private readonly AnimatedGlbModel model = AnimatedGlbModel.Load(System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "Vehicles", "log-truck.glb"));
+            private readonly AnimatedGlbModel model;
+            private readonly GlbTruckModel legacyTruck = GlbTruckModel.Load(System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "Vehicles", "log-truck.glb"));
+            private int legacyBuffer;
             private readonly ForesTycoon.Models.OpenGl.OpenGlModelRenderer modelBackend;
             private readonly AnimatedModelRenderer modelRenderer;
             private readonly AnimatedGlbModel.Pose pose;
@@ -71,8 +74,9 @@ namespace ForesTycoon
             private readonly RenderPassProfiler profiler = new();
             private readonly RenderContext context = new(9, 0, 0, 9, 0, 0, false, false, 1, -60, -45, -1000, -1000, 1000, 1000, 16);
             internal (int Program, int BoneBuffer, int[] VertexArrays, int[] VertexBuffers, int[] IndexBuffers, int[] Textures) ModelHandles => modelBackend.CaptureResources();
-            internal SceneFixture()
+            internal SceneFixture(AnimatedGlbModel model)
             {
+                this.model = model;
                 rain = new(rainBackend); clouds = new(cloudBackend);
                 world.Graphics.Enhanced = true; world.Graphics.Quality = GraphicsQuality.Low;
                 world.Graphics.Lighting = false; world.Graphics.AutomaticWeather = false; world.Graphics.Preset = WeatherPreset.Storm;
@@ -89,6 +93,7 @@ namespace ForesTycoon
                 RenderDevice.SetCamera(Matrix4.CreateScale(.1f)); world.Draw(context);
                 RenderMetrics.BeginFrame(); modelRenderer.Draw(pose, Matrix4.Identity, world.Graphics, sharedState: batch);
                 Require(RenderMetrics.DrawCalls > 0 && modelBackend.HasGpuResources, "Model fixture did not submit GPU draws.");
+                legacyTruck.Draw(Matrix4.Identity, 1, 0); GL.GetInteger(GetPName.ArrayBufferBinding, out legacyBuffer);
                 rain.Draw(surface, weather, context, world.Graphics); clouds.Draw(surface, weather, world.Graphics);
                 Require(rain.Metrics.Particles > 0 && clouds.Metrics.CloudSteps > 0, "Weather fixture did not submit its effects.");
                 post.End(world.Graphics, 16, 1, 9);
@@ -102,6 +107,7 @@ namespace ForesTycoon
                 RequireRejected(() => world.Draw(context)); RequireRejected(() => world.Update(.1)); RequireRejected(() => world.Dispose());
                 RequireRejected(() => modelRenderer.Draw(pose, Matrix4.Identity, world.Graphics, sharedState: batch));
                 RequireRejected(() => modelRenderer.Dispose()); RequireRejected(() => batch.Dispose());
+                RequireRejected(() => legacyTruck.Draw(Matrix4.Identity, 1, 0)); RequireRejected(() => legacyTruck.Dispose());
                 RequireRejected(() => rain.Draw(surface, weather, context, world.Graphics)); RequireRejected(() => rain.Dispose());
                 RequireRejected(() => clouds.Draw(surface, weather, world.Graphics)); RequireRejected(() => clouds.Dispose());
                 RequireRejected(() => post.Begin(world.Graphics, 32, 32)); RequireRejected(() => post.Dispose()); RequireRejected(() => ui.Dispose());
@@ -111,6 +117,7 @@ namespace ForesTycoon
                 var rainHandles = rainBackend.CaptureResources(); var cloudHandles = cloudBackend.CaptureResources();
                 var queries = profiler.CaptureQueries(); profiler.Dispose(); profiler.Dispose();
                 ui.Dispose(); batch.Dispose(); modelRenderer.Dispose(); rain.Dispose(); clouds.Dispose(); post.Dispose(); world.Dispose();
+                legacyTruck.Dispose(); legacyTruck.Dispose(); Require(!GL.IsBuffer(legacyBuffer), "Legacy truck retained its drawn buffer.");
                 Require(!GL.IsProgram(rainHandles.Program) && !GL.IsVertexArray(rainHandles.VertexArray) && !GL.IsTexture(rainHandles.HeightTexture), "Rain retained native resources.");
                 Require(!GL.IsProgram(cloudHandles.Program) && !GL.IsVertexArray(cloudHandles.VertexArray), "Clouds retained native resources.");
                 Require(rain.Metrics.GpuPayloadBytes == 0 && clouds.Metrics.GpuPayloadBytes == 0, "Disposed weather retained its metrics.");

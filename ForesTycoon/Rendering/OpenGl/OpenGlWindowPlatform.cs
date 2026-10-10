@@ -20,6 +20,14 @@ namespace ForesTycoon.OpenGl
             if (!window.Context.IsCurrent) throw new InvalidOperationException("The owning window's OpenGL context must be current.");
         }
         public IDisposable Activate(GameWindow window) => new ContextScope(window);
+        public IDisposable PreserveCurrentContext() => new ContextSnapshot();
+        private sealed unsafe class ContextSnapshot : IDisposable
+        {
+            private readonly Window* previous;
+            private bool disposed;
+            internal ContextSnapshot() { GLFWProvider.EnsureInitialized(); previous = GLFW.GetCurrentContext(); }
+            public void Dispose() { if (disposed) return; GLFW.MakeContextCurrent(previous); disposed = true; }
+        }
         private sealed unsafe class ContextScope : IDisposable
         {
             private readonly Window* previous;
