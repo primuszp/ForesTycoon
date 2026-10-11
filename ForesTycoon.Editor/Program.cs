@@ -1,4 +1,5 @@
 using System;
+using ForesTycoon.Rules;
 using ImGuiNET;
 using OpenTK.Graphics.OpenGL;
 using OpenTK.Windowing.Common;
@@ -12,6 +13,7 @@ namespace ForesTycoon.Editor
     {
         private static void Main(string[] args)
         {
+            if (RuleProjectCli.Run(args)) return;
             if (args.Length == 1 && args[0] == "--rules-benchmark") { RuleOptimizationBenchmark.Run(); return; }
             if (args.Length == 2 && args[0] == "--export-current-rules")
             {
@@ -27,13 +29,14 @@ namespace ForesTycoon.Editor
                 RuleEditorSmokeTest.Run();
                 using var smokeWindow = new EditorWindow(null, true); smokeWindow.Run(); return;
             }
-            string file = null;
-            if (args.Length > 0)
-            {
-                if (args.Length != 2 || args[0] != "--model") throw new ArgumentException("Használat: ForesTycoon.Editor [--model modell.json] vagy --smoke-test");
-                file = args[1];
+            string file = System.IO.File.Exists(RuleProject.DefaultPath) ? RuleProject.DefaultPath : null, worldFile = null;
+            for (int i = 0; i < args.Length; i += 2) {
+                if (i + 1 >= args.Length) throw new ArgumentException("Használat: ForesTycoon.Editor [--model projekt.json] [--world játékmentés.json]");
+                if (args[i] is "--model" or "--project") file = args[i + 1];
+                else if (args[i] == "--world") worldFile = args[i + 1];
+                else throw new ArgumentException("Ismeretlen kapcsoló: " + args[i]);
             }
-            using var window = new EditorWindow(file); window.Run();
+            using var window = new EditorWindow(file, worldFile: worldFile); window.Run();
         }
     }
 
@@ -47,16 +50,18 @@ namespace ForesTycoon.Editor
         private bool open = true;
         private readonly bool smoke;
         private int frames;
-        internal EditorWindow(string file, bool smoke = false, bool visible = true) : base(GameWindowSettings.Default, new NativeWindowSettings
+        private readonly string worldFile;
+        internal EditorWindow(string file, bool smoke = false, bool visible = true, string worldFile = null) : base(GameWindowSettings.Default, new NativeWindowSettings
         {
             Title = "ForesTycoon – Szabályrendszer editor", ClientSize = new(1280, 900),
             API = ContextAPI.OpenGL, APIVersion = new(3, 3), Profile = ContextProfile.Core, StartVisible = !smoke && visible
-        }) { editor = new RuleEditorView(file); this.smoke = smoke; }
+        }) { editor = new RuleEditorView(file); this.smoke = smoke; this.worldFile = worldFile; }
 
         protected override void LoadScene()
         {
             VSync = VSyncMode.On;
             sandbox = new GameWorld(TerrainSettings.Default.WithNodeSize(17, 42), enableRendering: false);
+            if (worldFile != null) { EditorWorldLoader.Load(sandbox, worldFile); editor.UseWorldFile(worldFile); }
             ui = new ImGuiController(); HudTheme.Apply();
         }
         protected override void RenderScene(FrameEventArgs args)
@@ -113,6 +118,7 @@ namespace ForesTycoon.Editor
         }
         protected override void UnloadScene()
         {
+            editor?.StopBackgroundOperations(sandbox);
             ui?.Dispose(); sandbox?.Dispose(); ui = null; sandbox = null; }
     }
 }

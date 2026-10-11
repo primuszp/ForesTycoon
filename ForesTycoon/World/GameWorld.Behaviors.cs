@@ -19,7 +19,12 @@ namespace ForesTycoon
             "Nem használt", "Nem használt", "Paraméter lekérdezése; járműspecifikáció alkalmazáskor", false))).ToArray();
         private readonly CompiledBehaviorModel model;
         internal CompiledBehaviorControllers Controllers { get; }
-        internal WorldBehaviorPolicy(BehaviorModel document) { model = new(document, Hooks); Controllers = new(document); }
+        internal WorldBehaviorPolicy(BehaviorModel document, IReadOnlySet<string> keys = null, Func<string, double> read = null)
+        { model = new(document, Hooks, keys, read); Controllers = new(document); }
+        internal static BehaviorGraph DefaultGraph(BehaviorHook hook) => new() {
+            Id = "default." + hook.Kind + "." + hook.Id, Name = hook.Name, Hook = hook.Id, Kind = hook.Kind
+        };
+        internal static BehaviorModel DefaultDocument() => new() { Graphs = Hooks.Select(DefaultGraph).ToList() };
         internal BehaviorModel Document => model.Document;
         internal string LastError => model.LastError;
         internal bool HasGraphs => model.HasGraphs;
@@ -50,7 +55,8 @@ namespace ForesTycoon
         internal BehaviorControllerSnapshot[] BehaviorStates => behaviorPolicy.Controllers.Capture();
         internal IEnumerable<(ulong Id, string Label)> BehaviorTargets(string kind)
         {
-            if (kind == "tree") {
+            if (kind == "world") { yield return (0, "Teljes játékvilág"); }
+            else if (kind == "tree") {
                 foreach (var entry in forest.IndividualTrees.Patches)
                     for (int i = 0; i < entry.Value.Count; i++) {
                         var tree = entry.Value.Trees[i]; yield return (tree.Id, $"Fa #{tree.Id} · {tree.Species} · csempe {entry.Key}");
@@ -63,27 +69,39 @@ namespace ForesTycoon
                 foreach (var mill in Logistics.Mills) yield return ((ulong)mill.TileId, $"Malom · csempe {mill.TileId}");
             } else if (kind == "truck") {
                 foreach (var truck in Logistics.Trucks) yield return ((ulong)truck.Id, $"Teherautó #{truck.Id} · {truck.Phase}");
+            } else if (kind == "wildlife") {
+                foreach (var animal in wildlife.Animals) yield return ((ulong)animal.Id, $"Vad #{animal.Id} · csempe {animal.TileId}");
+            } else if (kind == "depot") {
+                foreach (var depot in Logistics.Depots) yield return ((ulong)depot.TileId, $"Telephely · csempe {depot.TileId}");
+            } else if (kind == "stack") {
+                foreach (var stack in Logistics.Stacks) yield return ((ulong)stack.Id, $"Rakat #{stack.Id} · csempe {stack.Tile}");
             } else {
                 for (int i = 0; i < map.Tiles.Count; i++)
                     if (kind == "tile" || kind == "road" && map.IsRoadTile(i)) yield return ((ulong)i, $"{kind} #{i}");
             }
         }
+        internal static string[] RuleObjectKinds => WorldBehaviorPolicy.Hooks.Select(h => h.Kind).Concat(new[] { "wildlife", "depot", "stack" }).Distinct().ToArray();
         internal void QueueBehaviors(BehaviorModel model) => Enqueue(new SetBehaviorsCommand(model.ToJson()));
         void IWorldCommandTarget.ExecuteBehaviors(string json) => ApplyBehaviors(BehaviorModel.FromJson(json));
         private void ApplyBehaviors(BehaviorModel model)
         {
-            static string ForestRules(BehaviorModel value) => new BehaviorModel { Graphs = value.Graphs.Where(g => g.Kind == "tree").ToList() }.ToJson();
-            bool refreshForest = ForestRules(BehaviorDocument) != ForestRules(model);
-            var replacement = new WorldBehaviorPolicy(model);
+            bool refreshForest = ForestBehaviorSignature(BehaviorDocument) != ForestBehaviorSignature(model);
+            var replacement = new WorldBehaviorPolicy(model, DynamicsRuntime.Keys(dynamics.Document, RuleWorldFields), ReadRuleValue);
             replacement.Controllers.PreserveUnchanged(behaviorPolicy.Controllers);
             behaviorPolicy = replacement;
             BindBehaviors();
             ApplyTuning(Tuning);
             if (refreshForest) forest.RefreshEnvironmentRates();
         }
+        private static string ForestBehaviorSignature(BehaviorModel value) => System.Text.Json.JsonSerializer.Serialize(
+            value.Graphs.Where(g => g.Kind == "tree" && (g.Nodes.Find(n => n.Id == g.Output)?.Operation != BehaviorOperation.Native
+                || g.ObjectId.HasValue && value.Graphs.Any(type => type.Kind == "tree" && type.Hook == g.Hook && !type.ObjectId.HasValue
+                    && type.Nodes.Find(n => n.Id == type.Output)?.Operation != BehaviorOperation.Native)))
+                .OrderBy(g => g.Hook).ThenBy(g => g.ObjectId).Select(g => new { g.Hook, g.Kind, g.ObjectId, g.Output,
+                    Nodes = g.Nodes.OrderBy(n => n.Id).Select(n => new { n.Id, n.Operation, n.Value, n.Key, n.A, n.B, n.C }) }));
         private void BindBehaviors()
         {
-            IBehaviorPolicy active = behaviorPolicy.HasGraphs ? behaviorPolicy : null;
+            IBehaviorPolicy active = behaviorPolicy;
             Environment.Behaviors = active;
             forest.Behaviors = active;
             Logistics.Behaviors = active;

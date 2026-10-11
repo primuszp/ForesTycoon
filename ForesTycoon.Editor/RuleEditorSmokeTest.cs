@@ -76,6 +76,25 @@ namespace ForesTycoon.Editor
                 Require(GL.GetError() == ErrorCode.NoError, "Editor OpenGL error.");
                 string output = Path.GetFullPath("artifacts/rule-editor"); Directory.CreateDirectory(output);
                 FramebufferCapture.SavePng(Path.Combine(output, "editor.png"), width, height);
+                string workshopActive = world.RuleProjectDocument.ToJson();
+                foreach (var screen in new[] {
+                    ("forest.growth", WorkshopPhase.Understand, "workshop-growth"),
+                    ("forest.growth", WorkshopPhase.Edit, "workshop-growth-edit"),
+                    ("water.stress", WorkshopPhase.Understand, "workshop-water"),
+                    ("road.trafficWear", WorkshopPhase.Edit, "workshop-road-edit"),
+                    ("machine.controller", WorkshopPhase.Edit, "workshop-controller"),
+                    ("forest.growth", WorkshopPhase.Trial, "workshop-trial"),
+                    ("forest.growth", WorkshopPhase.Apply, "workshop-apply") }) {
+                    editor.ShowWorkshopRule(screen.Item1, screen.Item2);
+                    for (int frame = 0; frame < 2; frame++) {
+                        ui.Update(width, height, width, height, Vec2.One, 1f / 60);
+                        ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 900)); editor.Draw(world, ref open);
+                        GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit); ui.Render(); GL.Finish();
+                    }
+                    Require(world.RuleProjectDocument.ToJson() == workshopActive, "Browsing workshop phases changed the running project.");
+                    Require(GL.GetError() == ErrorCode.NoError, "Workshop UI OpenGL error: " + screen.Item3);
+                    FramebufferCapture.SavePng(Path.Combine(output, screen.Item3 + ".png"), width, height);
+                }
                 File.WriteAllText(Path.Combine(output, "road-wear.json"), model.ToJson());
                 var graphEditor = new RuleEditorView(Path.Combine(output, "road-wear.json"));
                 for (int frame = 0; frame < 3; frame++)
@@ -138,6 +157,13 @@ namespace ForesTycoon.Editor
                 using var tunedSave = new MemoryStream(); world.Save(tunedSave); tunedSave.Position = 0; restored.Load(tunedSave);
                 Require(restored.Tuning.ToJson() == world.Tuning.ToJson(), "Save lost the tuning.");
                 var behaviorView = new BehaviorEditorView();
+                var starter = new BehaviorModel { Graphs = new() { new() { Id = "starter-growth", Hook = "forest.growth", Kind = "tree" } } };
+                behaviorView.Load(starter); behaviorView.AddOutputMultiplier();
+                var multiplied = behaviorView.Document;
+                Require(multiplied.Graphs[0].Nodes.Count == 3 && starter.Graphs[0].Nodes.Count == 1, "Starter multiplier did not create an independent connected graph.");
+                Require(new CompiledBehaviorModel(multiplied, WorldBehaviorPolicy.Hooks).Evaluate("forest.growth", "tree", 1, new(2, 1, 0, 0, 0)) == 2, "Starter multiplier changed the default result.");
+                multiplied.Graphs[0].Nodes.Single(n => n.Operation == BehaviorOperation.Constant).Value = 1.1;
+                Require(Math.Abs(new CompiledBehaviorModel(multiplied, WorldBehaviorPolicy.Hooks).Evaluate("forest.growth", "tree", 1, new(2, 1, 0, 0, 0)) - 2.2) < 1e-10, "Editing starter scale did not change the real graph output.");
                 var behavior = new ForesTycoon.Rules.BehaviorModel();
                 behavior.Graphs.Add(new() { Id = "mill-example", Name = "Malom feldolgozása", Hook = "mill.process", Kind = "mill" });
                 behavior.Graphs[0].Nodes.Add(new() { Id = "scale", Name = "Termelési szorzó", Operation = BehaviorOperation.Constant, Value = 2, X = 30, Y = 190 });
@@ -187,6 +213,98 @@ namespace ForesTycoon.Editor
                 }
                 Require(GL.GetError() == ErrorCode.NoError, "Route graph editor OpenGL error.");
                 FramebufferCapture.SavePng(Path.Combine(output, "route-policy.png"), width, height);
+                // Unified project and stock-flow editor: exercise the actual integration and NamedValue node UI.
+                var project = GameWorld.DefaultRuleProject(); project.Name = "Visszacsatolási próba";
+                project.Dynamics.Stocks.Add(new() { Id = "wearMultiplier", Name = "Útkopási szorzó", Initial = 1, Maximum = 4 });
+                project.Dynamics.Flows.Add(new() { Id = "increase", Name = "Terhelés felhalmozása", To = "wearMultiplier",
+                    Rate = new() { Id = "rate", Hook = "flow.increase", Kind = "dynamics", Output = "rate",
+                        Nodes = new() { new() { Id = "rate", Name = "Növekedés / s", Operation = BehaviorOperation.Constant, Value = .1 } } } });
+                var roadBehavior = project.Behaviors.Graphs.Single(g => g.Hook == "road.trafficWear");
+                roadBehavior.Nodes.Add(new() { Id = "stock", Name = "Útkopási szorzó", Operation = BehaviorOperation.NamedValue, Key = "stock.wearMultiplier", X = 30, Y = 190 });
+                roadBehavior.Nodes.Add(new() { Id = "result", Name = "Kopás × készlet", Operation = BehaviorOperation.Multiply, A = "native", B = "stock", X = 300, Y = 120 }); roadBehavior.Output = "result";
+                project.Authoring.Templates.Add(AuthoringOperations.Template(roadBehavior));
+                project.Authoring.Entries["stock.wearMultiplier"] = new() { Topic = 3, Notes = "Útállapot és terhelés visszacsatolása" };
+                world.QueueRuleProject(project); world.ExecutePendingCommands(); world.Update(1);
+                Require(Math.Abs(world.DynamicsValues["wearMultiplier"] - 1.1) < 1e-9, "Dynamics stock did not integrate.");
+                using var projectSave = new MemoryStream(); world.Save(projectSave); projectSave.Position = 0; restored.Load(projectSave);
+                Require(restored.DynamicsValues["wearMultiplier"] == world.DynamicsValues["wearMultiplier"], "Save lost dynamics state.");
+                string projectFile = Path.Combine(output, "feedback-project.json"); RuleProject.WriteAtomic(projectFile, project.ToJson());
+                var projectEditor = new RuleEditorView(projectFile); projectEditor.ShowDynamics();
+                for (int frame = 0; frame < 3; frame++) {
+                    ui.Update(width, height, width, height, Vec2.One, 1f / 60);
+                    ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 900)); projectEditor.Draw(world, ref open);
+                    GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit); ui.Render(); GL.Finish();
+                }
+                Require(GL.GetError() == ErrorCode.NoError, "Dynamics editor OpenGL error.");
+                FramebufferCapture.SavePng(Path.Combine(output, "dynamics.png"), width, height);
+                foreach (var screen in new (Action Select, string Name)[] {
+                    (projectEditor.ShowRuleLibrary, "workshop-library"), (projectEditor.ShowGuidedStart, "workshop-guided"),
+                    (() => projectEditor.ShowThematicStock("wearMultiplier", 3), "workshop-thematic-stock"), (projectEditor.ShowCreationDialog, "workshop-create") }) {
+                    screen.Select();
+                    for (int frame = 0; frame < 3; frame++) {
+                        ui.Update(width, height, width, height, Vec2.One, 1f / 60);
+                        ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 900)); projectEditor.Draw(world, ref open);
+                        GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit); ui.Render(); GL.Finish();
+                    }
+                    Require(GL.GetError() == ErrorCode.NoError, "Full workshop UI error: " + screen.Name);
+                    FramebufferCapture.SavePng(Path.Combine(output, screen.Name + ".png"), width, height);
+                }
+                projectEditor.DismissAuthoringPopups();
+                projectEditor.ShowObjects();
+                for (int frame = 0; frame < 3; frame++) {
+                    ui.Update(width, height, width, height, Vec2.One, 1f / 60);
+                    ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 900)); projectEditor.Draw(world, ref open);
+                    GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit); ui.Render(); GL.Finish();
+                }
+                Require(GL.GetError() == ErrorCode.NoError, "Object browser OpenGL error.");
+                FramebufferCapture.SavePng(Path.Combine(output, "objects.png"), width, height);
+                var algorithmView = new AlgorithmEditorView();
+                string workspace = ForesTycoon.RuleCompiler.AlgorithmBuild.FindWorkspace();
+                var algorithmBundle = new ForesTycoon.RuleCompiler.AlgorithmBundle();
+                algorithmBundle.Files.Add(ForesTycoon.RuleCompiler.AlgorithmBundle.Import("ForesTycoon/World/GameWorld.cs", File.ReadAllText(Path.Combine(workspace, "ForesTycoon/World/GameWorld.cs"))));
+                algorithmView.LoadDocument(algorithmBundle, workspace);
+                algorithmView.SelectSource(new("ForesTycoon/World/GameWorld.cs", "GameWorld.Update"));
+                for (int frame = 0; frame < 3; frame++) {
+                    ui.Update(width, height, width, height, Vec2.One, 1f / 60);
+                    ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 900));
+                    ImGui.Begin("Teljes algoritmusgráf", ImGuiWindowFlags.NoSavedSettings); algorithmView.Draw(); ImGui.End();
+                    GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit); ui.Render(); GL.Finish();
+                }
+                Require(GL.GetError() == ErrorCode.NoError, "Algorithm graph editor OpenGL error.");
+                FramebufferCapture.SavePng(Path.Combine(output, "algorithms.png"), width, height);
+                // Incomplete projects can be reopened for repair without mutating the running world.
+                project.Road.Nodes.Clear(); project.Dynamics.Flows[0].Rate.Nodes.Clear();
+                string incompleteFile = Path.Combine(output, "feedback-draft.json"); RuleProject.WriteAtomic(incompleteFile, project.ToJson());
+                string activeBeforeDraft = world.RuleProjectDocument.ToJson();
+                var incompleteEditor = new RuleEditorView(incompleteFile); incompleteEditor.ShowDynamics();
+                ui.Update(width, height, width, height, Vec2.One, 1f / 60);
+                ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 900)); incompleteEditor.Draw(world, ref open);
+                ui.Render(); GL.Finish();
+                Require(world.RuleProjectDocument.ToJson() == activeBeforeDraft, "Opening an incomplete draft changed the active project.");
+                Require(GL.GetError() == ErrorCode.NoError, "Incomplete draft editor OpenGL error.");
+                // Run both native runtimes from one checkpoint: changed stock flow must produce a measured difference without touching this world.
+                string comparisonFolder = Path.Combine(output, "workshop-comparison"); Directory.CreateDirectory(comparisonFolder);
+                string comparisonSave = Path.Combine(comparisonFolder, "world.json");
+                world.ExecutePendingCommands(); using (var state = File.Create(comparisonSave)) world.Save(state);
+                var baselineProject = world.RuleProjectDocument; var editedProject = baselineProject.Clone();
+                editedProject.Dynamics.Flows.Single(f => f.Id == "increase").Rate.Nodes.Single(n => n.Id == "rate").Value = .2;
+                string beforeComparison = world.RuleProjectDocument.ToJson(); double beforeStock = world.DynamicsValues["wearMultiplier"];
+                var comparison = RuleTrialRunner.Run(baselineProject, editedProject, comparisonSave, comparisonFolder,
+                    "smoke-snapshot", "Smoke checkpoint", 30, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+                var comparedStock = comparison.Measures.Single(m => m.Key == "stock.wearMultiplier");
+                Require(Math.Abs(comparedStock.After - comparedStock.Before - .1) < 1e-8, "Comparison did not measure the edited stock-flow rule.");
+                Require(world.RuleProjectDocument.ToJson() == beforeComparison && world.DynamicsValues["wearMultiplier"] == beforeStock,
+                    "Comparison changed the editor world.");
+                Require(world.ExportRuleWorld("smoke").ProjectRevision == world.RuleProjectDocument.ContentRevision(), "Runtime did not identify its actual project.");
+                projectEditor.ShowWorkshopComparison(comparison);
+                for (int frame = 0; frame < 2; frame++) {
+                    GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
+                    ui.Update(width, height, width, height, Vec2.One, 1f / 60);
+                    ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 900)); projectEditor.Draw(world, ref open);
+                    ui.Render(); GL.Finish();
+                }
+                Require(GL.GetError() == ErrorCode.NoError, "Measured trial result UI OpenGL error.");
+                FramebufferCapture.SavePng(Path.Combine(output, "workshop-comparison.png"), width, height);
                 Console.WriteLine($"Rule editor smoke passed: terrain binding, snapshot, pending commands, journal replay, UI and behavior editor. Capture: {output}");
             }
             finally { RenderDevice.Dispose(); }

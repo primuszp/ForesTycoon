@@ -11,8 +11,39 @@ namespace ForesTycoon.Editor
     internal sealed partial class BehaviorEditorView
     {
         private BehaviorModel model = new();
+        private BehaviorHook[] availableHooks = WorldBehaviorPolicy.Hooks;
+        private HashSet<string> namedKeys = new(GameWorld.RuleWorldFields);
+        private Func<string, double> namedReader = _ => 0;
+        internal Func<string, System.Collections.Generic.IEnumerable<(ulong Id, string Label)>> ObjectSource { get; set; }
+        internal Action ApplyProject { get; set; }
+        internal Action<BehaviorGraph> StoreGraphTemplate { get; set; }
+        internal Action<BehaviorController> StoreControllerTemplate { get; set; }
+        internal void SelectGraph(string id) { selectedController = null; selectedGraph = id; selectedNode = model.Graphs.Find(g => g.Id == id)?.Output; }
+        internal void RestoreDefault(string hook, string kind, ulong? id) { Remember(); model.Graphs.RemoveAll(g => g.Hook == hook && g.Kind == kind && g.ObjectId == id); selectedGraph = null; }
+        internal void UseTemplate(RuleTemplate template, ulong? objectId) { Remember(); AuthoringOperations.Instantiate(model, template, objectId); if (template.Graph != null) SelectGraph(model.Graphs.Last().Id); else SelectControllerById(model.Controllers.Last().Id); }
+        internal void Configure(BehaviorHook[] hooks, HashSet<string> keys, Func<string, double> read)
+        {
+            if (!namedKeys.SetEquals(keys) || !availableHooks.SequenceEqual(hooks)) validatedJson = null;
+            availableHooks = hooks; namedKeys = keys; namedReader = read;
+            hookIndex = Math.Clamp(hookIndex, 0, Math.Max(0, hooks.Length - 1));
+        }
+        internal void DrawEquation(GameWorld world)
+        {
+            Validate();
+            if (ImGui.Button("Vissza##equation")) History(undo, redo);
+            ImGui.SameLine(); if (ImGui.Button("Újra##equation")) History(redo, undo);
+            ImGui.TextWrapped(error ?? "Ráta másodpercenként; készlet- és világmezők a futó modellből.");
+            var graph = model.Graphs.FirstOrDefault();
+            if (graph == null) return;
+            float inspectorWidth = Math.Min(300, ImGui.GetContentRegionAvail().X * .43f);
+            ImGui.BeginChild("flow-canvas", new Vec2(Math.Max(100, ImGui.GetContentRegionAvail().X - inspectorWidth - 8), 0), ImGuiChildFlags.Borders, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
+            Canvas(graph); ImGui.EndChild(); ImGui.SameLine();
+            ImGui.BeginChild("flow-inspector", new Vec2(0, 0), ImGuiChildFlags.Borders);
+            Inspector(world, graph, true); ImGui.EndChild();
+        }
         private readonly Stack<string> undo = new(), redo = new();
         private string selectedGraph, selectedNode, message = "", targetId = "", dragging, linking;
+        private string targetSearch = "";
         private string path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ForesTycoon", "rules", "behaviors.json");
         private int hookIndex;
         private Vec2 pan = new(20, 20);
@@ -24,14 +55,31 @@ namespace ForesTycoon.Editor
         private float sampleCapacity = 25, sampleAvailable = 100, sampleFrom, sampleTo = 1, sampleSurface = 1;
         private readonly FixedStepClock clock = new() { IsPaused = true };
         internal void Advance(GameWorld world, double elapsed) => clock.Advance(Math.Min(elapsed, .25), world.Update);
+        internal bool IsPaused => clock.IsPaused;
+        internal void TogglePause() => clock.IsPaused = !clock.IsPaused;
+        internal void Step(GameWorld world) { world.ExecutePendingCommands(); world.Update(clock.StepSeconds); }
         private static readonly string[] Names = { "Állandó", "Beépített eredmény", "Időlépés", "Szimulációs idő", "Állapot", "Mennyiség",
             "Összeadás", "Kivonás", "Szorzás", "Osztás", "Minimum", "Maximum", "Nagyobb", "Kisebb", "Feltételes választás", "Abszolút érték", "Negálás",
-            "Kapacitás", "Elérhető készlet", "Kiinduló csempe", "Célcsempe", "Burkolattípus" };
+            "Kapacitás", "Elérhető készlet", "Kiinduló csempe", "Célcsempe", "Burkolattípus", "Készlet / világmező" };
         internal BehaviorModel Document => model.Clone();
+        internal string ScopeSummary {
+            get {
+                var controller = model.Controllers.Find(c => c.Id == selectedController);
+                var graph = model.Graphs.Find(g => g.Id == selectedGraph);
+                string kind = controller?.Kind ?? graph?.Kind;
+                ulong? id = controller != null ? controller.ObjectId : graph?.ObjectId;
+                return kind == null ? "Nincs kiválasztott kötés" : RuleWorkshopModel.KindName(kind) + (id.HasValue ? " · egyedi objektum #" + id : " · típusszintű kötés");
+            }
+        }
+        internal void LoadDraft(BehaviorModel value)
+        {
+            model = value.Clone(); selectedGraph = model.Graphs.FirstOrDefault()?.Id; selectedNode = null;
+            selectedController = null; undo.Clear(); redo.Clear(); validatedJson = null;
+        }
         internal void SelectHook(BehaviorHook hook)
         {
             selectedController = null;
-            hookIndex = Array.IndexOf(WorldBehaviorPolicy.Hooks, hook);
+            hookIndex = Array.IndexOf(availableHooks, hook);
             var graph = model.Graphs.Find(g => g.Hook == hook.Id && g.Kind == hook.Kind && g.ObjectId == null);
             if (graph == null) {
                 Remember(); graph = new() { Id = Guid.NewGuid().ToString("N"), Name = hook.Name, Hook = hook.Id, Kind = hook.Kind };
@@ -39,13 +87,27 @@ namespace ForesTycoon.Editor
             }
             selectedGraph = graph.Id; selectedNode = graph.Output;
         }
+        internal void SelectObjectHook(BehaviorHook hook, ulong objectId)
+        {
+            if (!hook.SupportsObjects) { SelectHook(hook); return; }
+            var graph = model.Graphs.Find(g => g.Hook == hook.Id && g.Kind == hook.Kind && g.ObjectId == objectId);
+            if (graph == null) {
+                Remember();
+                graph = model.Clone().Graphs.Find(g => g.Hook == hook.Id && g.Kind == hook.Kind && g.ObjectId == null)
+                    ?? new BehaviorGraph { Name = hook.Name, Hook = hook.Id, Kind = hook.Kind };
+                graph.Id = Guid.NewGuid().ToString("N"); graph.ObjectId = objectId; graph.Name += " #" + objectId;
+                model.Graphs.Add(graph);
+            }
+            selectedController = null; selectedGraph = graph.Id; selectedNode = graph.Output;
+            targetId = objectId.ToString(); hookIndex = Array.IndexOf(availableHooks, hook);
+        }
         internal void Load(BehaviorModel value, string file = null)
         {
-            _ = new CompiledBehaviorModel(value, WorldBehaviorPolicy.Hooks);
+            _ = new CompiledBehaviorModel(value, availableHooks, namedKeys, key => namedReader(key));
             model = value.Clone(); model.Version = 3; selectedGraph = model.Graphs.FirstOrDefault()?.Id; selectedNode = null;
             selectedController = model.Graphs.Count == 0 ? model.Controllers.FirstOrDefault()?.Id : null;
             selectedState = model.Controllers.Find(c => c.Id == selectedController)?.InitialState;
-            if (model.Graphs.Count > 0) hookIndex = Array.FindIndex(WorldBehaviorPolicy.Hooks, h => h.Id == model.Graphs[0].Hook && h.Kind == model.Graphs[0].Kind);
+            if (model.Graphs.Count > 0) hookIndex = Array.FindIndex(availableHooks, h => h.Id == model.Graphs[0].Hook && h.Kind == model.Graphs[0].Kind);
             undo.Clear(); redo.Clear(); validatedJson = null;
             if (file != null) path = file;
         }
@@ -60,8 +122,45 @@ namespace ForesTycoon.Editor
         {
             string json = model.ToJson(); if (json == validatedJson) return;
             validatedJson = json;
-            try { compiled = new CompiledBehaviorModel(model, WorldBehaviorPolicy.Hooks); error = null; }
+            try { compiled = new CompiledBehaviorModel(model, availableHooks, namedKeys, key => namedReader(key)); error = null; }
             catch (Exception e) { compiled = null; error = e.Message; }
+        }
+        internal void DrawEmbedded(GameWorld world)
+        {
+            Validate();
+            if (ImGui.Button("Visszavonás##embedded")) History(undo, redo);
+            ImGui.SameLine(); if (ImGui.Button("Újra##embedded")) History(redo, undo);
+            if (error != null) ImGui.TextWrapped(error);
+            var controller = model.Controllers.Find(c => c.Id == selectedController);
+            var graph = model.Graphs.Find(g => g.Id == selectedGraph);
+            if (controller == null && graph != null) {
+                ImGui.TextWrapped("Kezdés: jelölj ki egy csomópontot, majd módosítsd jobb oldalt. A szorzó új, összekötött csomópontokat ad az eredményhez; 1 = változatlan, 1,1 = +10%, 0,9 = -10%, a szabály korlátain belül.");
+                ImGui.BeginDisabled(graph.Nodes.Count > 254 || !graph.Nodes.Any(n => n.Id == graph.Output));
+                if (ImGui.Button("Szorzó hozzáadása az eredményhez")) AddOutputMultiplier();
+                ImGui.EndDisabled();
+            }
+            float inspectorWidth = Math.Min(330, ImGui.GetContentRegionAvail().X * .42f);
+            ImGui.BeginChild("embedded-behavior-canvas", new Vec2(-inspectorWidth - 8, 0), ImGuiChildFlags.Borders, ImGuiWindowFlags.NoScrollbar);
+            if (controller != null) ControllerCanvas(controller, world);
+            else if (graph != null) Canvas(graph);
+            else ImGui.TextWrapped("Válassz egy szabálykötést a szerkesztéshez.");
+            ImGui.EndChild(); ImGui.SameLine();
+            ImGui.BeginChild("embedded-behavior-inspector", new Vec2(0, 0), ImGuiChildFlags.Borders);
+            if (controller != null) ControllerInspector(controller, world);
+            else if (graph != null) Inspector(world, graph);
+            ImGui.EndChild();
+        }
+        internal void AddOutputMultiplier()
+        {
+            if (selectedController != null) return;
+            var graph = model.Graphs.Find(g => g.Id == selectedGraph);
+            var output = graph?.Nodes.Find(n => n.Id == graph.Output);
+            if (output == null || graph.Nodes.Count > 254) return;
+            Remember();
+            var scale = new BehaviorNode { Id = Guid.NewGuid().ToString("N"), Name = "Szorzó · ezt az értéket állítsd", Operation = BehaviorOperation.Constant, Value = 1, X = output.X, Y = output.Y + 140 };
+            var product = new BehaviorNode { Id = Guid.NewGuid().ToString("N"), Name = "Szorzott eredmény", Operation = BehaviorOperation.Multiply, A = output.Id, B = scale.Id, X = output.X + 250, Y = output.Y + 60 };
+            graph.Nodes.Add(scale); graph.Nodes.Add(product); graph.Output = product.Id; selectedNode = scale.Id;
+            pan = new(20 - output.X * zoom, 20 - output.Y * zoom);
         }
         internal void Draw(GameWorld world)
         {
@@ -76,7 +175,7 @@ namespace ForesTycoon.Editor
             ImGui.SameLine(); if (ImGui.Button("Vissza##behavior")) History(undo, redo);
             ImGui.SameLine(); if (ImGui.Button("Újra##behavior")) History(redo, undo);
             if (EditorStyle.PrimaryButton("Viselkedések alkalmazása a tesztvilágban", compiled != null, "Naplózott parancs: a következő események már ezeket a gráfokat használják."))
-                Try(() => { world.QueueBehaviors(model); message = "Viselkedésváltás naplózva."; });
+                Try(() => { if (ApplyProject != null) ApplyProject(); else world.QueueBehaviors(model); message = "Szabályváltás naplózva."; });
             ImGui.SameLine(); if (ImGui.Button("Aktív viselkedések átvétele")) { Remember(); model = world.BehaviorDocument; selectedGraph = model.Graphs.FirstOrDefault()?.Id; }
             if (ImGui.Button(clock.IsPaused ? "Tesztvilág indítása" : "Szünet")) clock.IsPaused = !clock.IsPaused;
             ImGui.SameLine(); if (ImGui.Button("Egy szimulációs lépés")) { world.ExecutePendingCommands(); world.Update(clock.StepSeconds); }
@@ -86,16 +185,12 @@ namespace ForesTycoon.Editor
             ImGui.BeginChild("behavior-bindings", new Vec2(270, 0), ImGuiChildFlags.Borders);
             ImGui.TextWrapped("Világkötések · az egyedi kötés felülírja a típusszintű gráfot.");
             ImGui.TextWrapped("Képletgráfok és gépvezérlési állapotgráfok. Az alacsony szintű rakodás és útkeresés beépített művelet.");
-            if (ImGui.BeginCombo("Folyamat", WorldBehaviorPolicy.Hooks[hookIndex].Name)) {
-                for (int i = 0; i < WorldBehaviorPolicy.Hooks.Length; i++)
-                    if (ImGui.Selectable(WorldBehaviorPolicy.Hooks[i].Name, hookIndex == i)) hookIndex = i;
+            if (ImGui.BeginCombo("Folyamat", availableHooks[hookIndex].Name)) {
+                for (int i = 0; i < availableHooks.Length; i++)
+                    if (ImGui.Selectable(availableHooks[i].Name, hookIndex == i)) hookIndex = i;
                 ImGui.EndCombo();
             }
-            if (ImGui.Button("Új típusszintű gráf")) {
-                Remember(); var hook = WorldBehaviorPolicy.Hooks[hookIndex];
-                var graph = new BehaviorGraph { Id = Guid.NewGuid().ToString("N"), Name = hook.Name, Hook = hook.Id, Kind = hook.Kind };
-                model.Graphs.Add(graph); selectedGraph = graph.Id; selectedNode = "native"; selectedController = null;
-            }
+            if (ImGui.Button("Típusszintű gráf megnyitása")) SelectHook(availableHooks[hookIndex]);
             ImGui.Separator();
             foreach (var g in model.Graphs)
                 if (ImGui.Selectable($"{g.Name} · {(g.ObjectId.HasValue ? "#" + g.ObjectId : g.Kind)}##{g.Id}", selectedGraph == g.Id && selectedController == null)) { selectedGraph = g.Id; selectedNode = null; selectedController = null; }
@@ -165,30 +260,33 @@ namespace ForesTycoon.Editor
             if (!ImGui.IsMouseDown(ImGuiMouseButton.Left)) dragging = null;
             draw.PopClipRect();
         }
-        private void Inspector(GameWorld world, BehaviorGraph graph)
+        private void Inspector(GameWorld world, BehaviorGraph graph, bool equation = false)
         {
-            var hook = WorldBehaviorPolicy.Hooks.Single(h => h.Id == graph.Hook && h.Kind == graph.Kind);
+            var hook = availableHooks.Single(h => h.Id == graph.Hook && h.Kind == graph.Kind);
             ImGui.TextWrapped(hook.Schedule + " · " + hook.Unit);
             string name = graph.Name;
             if (ImGui.InputText("Név", ref name, 120)) { Remember(); graph.Name = name; }
             bool specific = graph.ObjectId.HasValue;
             if (hook.SupportsObjects && ImGui.Checkbox("Egyedi objektum", ref specific)) { Remember(); graph.ObjectId = specific ? 0UL : null; targetId = graph.ObjectId?.ToString() ?? ""; }
             if (specific) {
+                ImGui.InputText("Objektum keresése", ref targetSearch, 120);
                 if (!ImGui.IsAnyItemActive()) targetId = graph.ObjectId.Value.ToString();
                 if (ImGui.InputText("Objektumazonosító", ref targetId, 24) && ulong.TryParse(targetId, out ulong id)) { Remember(); graph.ObjectId = id; }
                 if (ImGui.BeginCombo("Világ elemei", "Választás a tesztvilágból")) {
-                    foreach (var target in world.BehaviorTargets(graph.Kind).Take(200))
+                    foreach (var target in (ObjectSource?.Invoke(graph.Kind) ?? world.BehaviorTargets(graph.Kind)).Where(t => targetSearch.Length == 0 || t.Label.Contains(targetSearch, StringComparison.OrdinalIgnoreCase)).Take(200))
                         if (ImGui.Selectable(target.Label)) { Remember(); graph.ObjectId = target.Id; targetId = target.Id.ToString(); }
                     ImGui.EndCombo();
                 }
                 ImGui.TextWrapped("Az ID a célvilágra vonatkozik. Új elemhez külön kötés kell; a típusszintű gráf automatikusan érvényes az új elemekre is.");
             }
-            if (ImGui.Button("Gráf másolása")) { Remember(); var clone = model.Clone().Graphs.Single(g => g.Id == graph.Id); clone.Id = Guid.NewGuid().ToString("N"); clone.Name += " másolat"; model.Graphs.Add(clone); selectedGraph = clone.Id; }
-            ImGui.SameLine(); if (ImGui.Button("Gráf törlése")) { Remember(); model.Graphs.Remove(graph); selectedGraph = null; return; }
+            if (!equation) {
+                if (ImGui.Button("Másolás a szabálytárba")) { if (StoreGraphTemplate != null) StoreGraphTemplate(graph); else message = "A sablonokat a közös Szabályműhely kezeli."; }
+                ImGui.SameLine(); if (ImGui.Button("Gráf törlése")) { Remember(); model.Graphs.Remove(graph); selectedGraph = null; return; }
+            }
             ImGui.Separator();
             if (ImGui.BeginCombo("Új csomópont", "Művelet választása")) {
                 foreach (var op in Enum.GetValues<BehaviorOperation>())
-                    if (hook.Kind != "world" || op is not (>= BehaviorOperation.Delta and <= BehaviorOperation.Amount or >= BehaviorOperation.Capacity))
+                    if (hook.Kind != "world" || op is not (>= BehaviorOperation.Delta and <= BehaviorOperation.Amount or >= BehaviorOperation.Capacity and <= BehaviorOperation.Surface))
                     if (ImGui.Selectable(Names[(int)op])) {
                         Remember(); string id = Guid.NewGuid().ToString("N")[..8];
                         graph.Nodes.Add(new() { Id = id, Name = Names[(int)op], Operation = op, Value = 1,
@@ -204,6 +302,11 @@ namespace ForesTycoon.Editor
                 if (node.Operation == BehaviorOperation.Constant) {
                     double value = node.Value;
                     if (ImGui.InputDouble("Érték", ref value)) { Remember(); node.Value = value; }
+                }
+                if (node.Operation == BehaviorOperation.NamedValue && ImGui.BeginCombo("Készlet / világmező", node.Key)) {
+                    foreach (string key in namedKeys.OrderBy(k => k))
+                        if (ImGui.Selectable(key, node.Key == key)) { Remember(); node.Key = key; }
+                    ImGui.EndCombo();
                 }
                 int count = BehaviorModel.Inputs(node.Operation);
                 if (count > 0) SelectPort("A / feltétel", node.A, graph, value => node.A = value);

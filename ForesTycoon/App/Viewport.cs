@@ -65,6 +65,8 @@ namespace ForesTycoon
         private bool mouseDownCapturedByImGui;
         private bool         nodeHovered  = false;
         private GameWorld    world        = null;
+        private readonly RuleProjectLink ruleProjectLink;
+        private readonly string resumeWorld, runtimeAcknowledgement;
         private WorldInteractionController interaction;
 
         private bool         isLoaded     = false;
@@ -220,7 +222,8 @@ namespace ForesTycoon
         private static readonly Color BG_COLOR = Color.FromArgb(44, 53, 64);
 
         // ────────────────────────────────────────────────────────────────────
-        public Viewport(ulong? smokeTestFrameLimit = null, string captureDirectory = null, bool visible = true, bool captureSeasons = false) : base(
+        public Viewport(ulong? smokeTestFrameLimit = null, string captureDirectory = null, bool visible = true, bool captureSeasons = false,
+            string resumeWorld = null, string runtimeAcknowledgement = null) : base(
             new GameWindowSettings
             {
                 UpdateFrequency = 0
@@ -230,6 +233,8 @@ namespace ForesTycoon
             this.smokeTestFrameLimit = smokeTestFrameLimit;
             this.captureDirectory = captureDirectory;
             this.captureSeasons = captureSeasons;
+            this.resumeWorld = resumeWorld; this.runtimeAcknowledgement = runtimeAcknowledgement;
+            ruleProjectLink = new(closeOldRuntime: Close, bootstrapAlgorithms: !smokeTestFrameLimit.HasValue);
         }
 
         protected override void LoadScene()
@@ -362,7 +367,7 @@ namespace ForesTycoon
                 RefreshPointerHover();
                 UpdateCameraFrame();
                 performance.BeginSimulation();
-                SimulationFrameResult result = simulation.Advance(
+                SimulationFrameResult result = ruleProjectLink.HandoffPending ? new(0, 0) : simulation.Advance(
                     frameClock.DeltaTimeSeconds, world.ExecutePendingCommands, world.Update);
                 performance.EndSimulation(result.Commands, result.Ticks, simulationClock.DroppedSimulationSeconds);
                 SetupViewport();
@@ -579,6 +584,7 @@ namespace ForesTycoon
                 RenderLoadingFrame();
                 return;
             }
+            ruleProjectLink.Poll(world, e.Time);
             RunFrame();
             if (smokeTestFrameLimit.HasValue)
             {
@@ -613,6 +619,7 @@ namespace ForesTycoon
 
         protected override void MouseMoveScene(MouseMoveEventArgs e)
         {
+            if (ruleProjectLink.HandoffPending) return;
             if (!isLoaded) return;
 
             int x = (int)Math.Round(e.Position.X);
@@ -658,6 +665,7 @@ namespace ForesTycoon
 
         protected override void MouseUpScene(MouseButtonEventArgs e)
         {
+            if (ruleProjectLink.HandoffPending) return;
             if (isLoaded) imgui?.MouseButton(MapMouseButton(e.Button), false);
             PointerButton released = MapPointerButton(e.Button);
             if (activeButton == released) activeButton = PointerButton.None;
@@ -685,6 +693,7 @@ namespace ForesTycoon
 
         protected override void KeyDownScene(KeyboardKeyEventArgs e)
         {
+            if (ruleProjectLink.HandoffPending) return;
             if (!isLoaded) return;
 
             if (HandleHotkey(e)) { RequestFrame(); return; }
@@ -710,6 +719,7 @@ namespace ForesTycoon
 
         protected override void MouseDownScene(MouseButtonEventArgs e)
         {
+            if (ruleProjectLink.HandoffPending) return;
             if (!isLoaded) return;
 
             imgui?.MouseButton(MapMouseButton(e.Button), true);

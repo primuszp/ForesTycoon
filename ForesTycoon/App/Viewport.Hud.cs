@@ -41,6 +41,7 @@ namespace ForesTycoon
 
             float scale = DpiScale;
             imgui.Update(Width, Height, FramebufferWidth, FramebufferHeight, new NVec2(scale, scale), frameClock.DeltaTimeSeconds);
+            ImGui.BeginDisabled(ruleProjectLink.HandoffPending);
 
             TrackForestryResult();
             TrackSeason();
@@ -63,6 +64,12 @@ namespace ForesTycoon
             DrawDeveloperWindow();
             DrawHelpWindow();
             DrawSeasonCard();
+            ImGui.EndDisabled();
+            if (ruleProjectLink.HandoffPending) {
+                ImGui.SetNextWindowPos(new NVec2(Width * .5f, Height * .5f), ImGuiCond.Always, new NVec2(.5f));
+                ImGui.Begin("Algoritmusok átadása", ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoCollapse);
+                ImGui.TextWrapped(ruleProjectLink.Error); ImGui.End();
+            }
 
             imgui.Render();
         }
@@ -832,7 +839,10 @@ namespace ForesTycoon
             var g = world.Graphics;
             if (ImGui.CollapsingHeader("Szabálymodell"))
             {
-                ImGui.TextWrapped("Az Editorban mentett útkopási modell, katalógus vagy objektumokhoz kötött viselkedésgráf itt alkalmazható.");
+                ImGui.TextWrapped("Az editor közös szabályprojektje automatikusan frissül; minden váltás naplózott parancs.");
+                ImGui.TextWrapped(ruleProjectLink.Path);
+                if (ruleProjectLink.Error != null) ImGui.TextWrapped("Projekt betöltési hiba: " + ruleProjectLink.Error);
+                if (world.DynamicsError != null) ImGui.TextWrapped(world.DynamicsError);
                 ImGui.TextWrapped($"Aktív modell: {world.ActiveRuleName}");
                 ImGui.InputText("JSON-fájl", ref ruleModelPath, 1024);
                 if (ImGui.Button("Szabálymodell alkalmazása"))
@@ -842,18 +852,23 @@ namespace ForesTycoon
                         string json = System.IO.File.ReadAllText(ruleModelPath);
                         using var document = System.Text.Json.JsonDocument.Parse(json);
                         string schema = document.RootElement.TryGetProperty("schema", out var schemaValue) ? schemaValue.GetString() : null;
-                        if (schema == "forest-behaviors")
+                        var project = world.RuleProjectDocument;
+                        if (schema == "forest-rule-project")
                         {
-                            var behaviors = BehaviorModel.FromJson(json); world.QueueBehaviors(behaviors);
-                            ruleImportStatus = $"Viselkedésváltás naplózva: {behaviors.Graphs.Count} gráf és objektumkötés.";
+                            project = RuleProject.FromJson(json);
+                        }
+                        else if (schema == "forest-behaviors")
+                        {
+                            project.Behaviors = BehaviorModel.FromJson(json);
                         }
                         else if (schema == "forest-current-rules")
                         {
                             var catalog = GameRuleCatalog.FromJson(json);
-                            world.QueueRuleConfiguration(catalog.RoadTrafficModel, catalog.TuningOverrides());
-                            ruleImportStatus = $"Katalógus naplózva: útkopási gráf és {catalog.TuningOverrides().Count} hangolt érték.";
+                            project.Road = catalog.RoadTrafficModel; project.Tuning = catalog.TuningOverrides();
                         }
-                        else { world.QueueRuleModel(RuleModel.FromJson(json)); ruleImportStatus = "Modellváltás naplózva."; }
+                        else project.Road = RuleModel.FromJson(json);
+                        GameWorld.ValidateRuleProject(project); RuleProject.WriteAtomic(ruleProjectLink.Path, project.ToJson());
+                        ruleImportStatus = "A közös szabályprojekt frissült; a játék automatikusan alkalmazza.";
                     }
                     catch (Exception e) when (e is System.IO.IOException or System.Text.Json.JsonException or ArgumentException or InvalidOperationException or UnauthorizedAccessException or NotSupportedException)
                     { ruleImportStatus = e.Message; }

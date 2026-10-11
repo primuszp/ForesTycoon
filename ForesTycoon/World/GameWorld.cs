@@ -90,6 +90,7 @@ namespace ForesTycoon
                 vehicles = systems.Add(new VehicleSystem(timberCargo, route => VehicleRoadRoute.Create(this.map, route)) { TimeScale = VehicleTimeScale });
                 effects = systems.Add(new WorldEffectSystem());
                 InitializeLogistics();
+                InitializeRuleProject();
                 if (enableRendering) AttachRendering();
             }
             catch { Dispose(); throw; }
@@ -210,6 +211,7 @@ namespace ForesTycoon
             try
             {
                 long start = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
+                dynamics.Step(fixedDeltaSeconds, forest.ForestYear * ecosystem.ForestYearSeconds);
                 ecosystem.Update(fixedDeltaSeconds);
                 long environmentUpdated = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
                 // Vehicles and machines keep their own clock, faster than the calendar (see VehicleTimeScale).
@@ -530,18 +532,22 @@ namespace ForesTycoon
             });
         }
 
-        public void Load(Stream source)
+        public void Load(Stream source, bool allowAlgorithmMigration = false)
         {
             EnsureAvailable(allowFaulted: true);
             terrainRenderer?.VerifyAccess();
             WorldSaveData save = WorldSaveSerializer.Read(source);
             save.ValidateReplay();
+            if (!allowAlgorithmMigration) RequireAlgorithmRuntime(save.Checkpoint?.Algorithms);
+            else if (save.Checkpoint == null || save.Checkpoint.Tick != save.Tick || save.Checkpoint.PendingCommands != 0)
+                throw new InvalidOperationException("Algoritmusváltáshoz aktuális, függő parancs nélküli állapotmentés szükséges.");
             var settings = save.Terrain.ToSettings();
             // Replay into an isolated world. Failure leaves the live world and queued commands intact.
             using var candidate = new GameWorld(settings, Graphics, save.ReplayForestYearSeconds, save.ReplaySoilModel, save.ReplayClimate);
             ulong startTick = save.Checkpoint?.Tick ?? 0;
             if (save.Checkpoint == null) candidate.Replay(save);
             else { candidate.RestoreCheckpoint(save.Checkpoint); candidate.ReplayTail(save); }
+            if (allowAlgorithmMigration) candidate.algorithmGraphs = ForesTycoon.RuleCompiler.AlgorithmBuild.CurrentReference;
 
             foreach (var record in save.Commands) candidate.commandJournal.Add(save.ReplayCommand(record));
             if (HasPresentation) candidate.AttachRendering();
@@ -569,7 +575,12 @@ namespace ForesTycoon
             // Route creation must follow this world's terrain after the ownership transfer.
             vehicles.RoadRouteFactory = route => VehicleRoadRoute.Create(map, route);
             roadRule = candidate.roadRule;
-            behaviorPolicy = candidate.behaviorPolicy;
+            ruleProjectName = candidate.ruleProjectName;
+            algorithmGraphs = candidate.algorithmGraphs;
+            dynamics = new(candidate.dynamics.Document, RuleWorldFields, ReadWorldValue);
+            dynamics.Restore(candidate.dynamics.Capture());
+            behaviorPolicy = new(candidate.BehaviorDocument, DynamicsRuntime.Keys(dynamics.Document, RuleWorldFields), ReadRuleValue);
+            behaviorPolicy.Controllers.Restore(candidate.BehaviorStates);
             BindBehaviors();
             Expenses = candidate.Expenses;
             roadWeatherSeconds = candidate.roadWeatherSeconds;

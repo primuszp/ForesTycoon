@@ -54,7 +54,16 @@ namespace ForesTycoon.Editor
 
         /// <summary>The last file operation's result, shown by the editor's status bar.</summary>
         internal string Message { get; set; } = "";
+        internal Action<RuleSource> EditAlgorithm { get; set; }
         internal RuleModel RoadTrafficModel => catalog?.RoadTrafficModel;
+        internal GameRuleCatalog Catalog => catalog;
+        internal GameRuleIndex Index => index;
+        internal void EnsureCatalog(GameWorld world) { if (catalog == null) Load(world.DescribeCurrentRules()); }
+        internal void DrawRuleParameters(GameRuleDefinition rule) {
+            if (!BeginParameterTable("workshop-parameters", true)) return;
+            for (int i = 0; i < rule.Parameters.Count; i++) ParameterRow(rule, i, true);
+            ImGui.EndTable();
+        }
 
         internal void SetRoadTrafficModel(GameWorld world, RuleModel draft)
         {
@@ -670,8 +679,11 @@ namespace ForesTycoon.Editor
             EditorStyle.Section("Forrás a projektben");
             foreach (var source in rule.Sources)
             {
+                ImGui.PushID(source.File + source.Symbol);
                 EditorStyle.Text(HudTheme.Parchment, source.Symbol);
                 EditorStyle.Text(HudTheme.Muted, source.File);
+                if (EditAlgorithm != null && ImGui.Button("Algoritmusgráf szerkesztése")) EditAlgorithm(source);
+                ImGui.PopID();
             }
             EditorStyle.Section("Tervezői megjegyzés");
             string notes = rule.Notes;

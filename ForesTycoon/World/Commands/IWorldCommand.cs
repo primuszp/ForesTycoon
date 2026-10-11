@@ -8,6 +8,7 @@ namespace ForesTycoon
 
     interface IWorldCommandTarget
     {
+        void ExecuteRuleProject(string json) => throw new System.NotSupportedException();
         void ExecuteBehaviors(string json) => throw new System.NotSupportedException();
         void ExecuteRuleModel(string json) => throw new System.NotSupportedException();
         void ExecuteTuning(string json) => throw new System.NotSupportedException();

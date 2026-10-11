@@ -9,15 +9,27 @@ namespace ForesTycoon.Editor
     internal sealed partial class BehaviorEditorView
     {
         private string selectedController, selectedState;
+        internal void SelectControllerById(string id) { selectedController = id; selectedGraph = null; selectedState = model.Controllers.Find(c => c.Id == id)?.InitialState; }
+        internal void SelectObjectController(string kind, ulong id)
+        {
+            var existing = model.Controllers.Find(c => c.Kind == kind && c.ObjectId == id);
+            if (existing == null) {
+                Remember(); var source = model.Clone().Controllers.Find(c => c.Kind == kind && c.ObjectId == null);
+                existing = source ?? (kind is "truck" or "forwarder" ? BehaviorController.TransportCycle(kind) : BehaviorController.TimedPause(kind));
+                existing.Id = Guid.NewGuid().ToString("N"); existing.ObjectId = id; model.Controllers.Add(existing);
+            }
+            SelectControllerById(existing.Id);
+        }
+        internal void RestoreController(string kind, ulong? id) { Remember(); model.Controllers.RemoveAll(c => c.Kind == kind && c.ObjectId == id); selectedController = null; }
         private static readonly string[] ActionNames = { "Automatikus munkavégzés", "Várakozás", "Hazatérés kérése", "Csak felrakodás", "Csak lerakodás", "Csak haladás", "Indulás a rakománnyal" };
         private static readonly string[] TriggerNames = { "Mindig", "Állapotban eltelt idő (s)", "Rakomány legalább (m³)", "Rakomány kisebb (m³)",
             "Gép állapota", "Belépés gépállapotba", "Feladatot kapott", "Feladat befejeződött", "Elromlott", "Megjavult" };
         private static readonly string[] MachineStateNames = { "Parkol", "Halad", "Kitermel", "Rakodik", "Lerakodik" };
         private static readonly string[] TruckStateNames = { "Telephelyen", "Forráshoz tart", "Rakodik", "Rakománnyal halad", "Lerakodik", "Üresen visszatér", "Hazafelé tart", "Készletre vár", "Útvonal megszakadt" };
-        internal void SelectController(string kind)
+        internal void SelectController(string kind, bool useTransportCycle = false)
         {
             var controller = model.Controllers.Find(c => c.Kind == kind && c.ObjectId == null);
-            if (controller == null) { Remember(); controller = BehaviorController.TimedPause(kind); model.Controllers.Add(controller); }
+            if (controller == null) { Remember(); controller = useTransportCycle && kind is "truck" or "forwarder" ? BehaviorController.TransportCycle(kind) : BehaviorController.TimedPause(kind); model.Controllers.Add(controller); }
             selectedController = controller.Id; selectedState = controller.InitialState;
         }
         private void ControllerList()
@@ -105,14 +117,13 @@ namespace ForesTycoon.Editor
                 if (!ImGui.IsAnyItemActive()) targetId = controller.ObjectId.Value.ToString();
                 if (ImGui.InputText("Gépazonosító", ref targetId, 24) && ulong.TryParse(targetId, out ulong value)) { Remember(); controller.ObjectId = value; }
                 if (ImGui.BeginCombo("Gépek", "Választás a világból")) {
-                    foreach (var target in world.BehaviorTargets(controller.Kind))
+                    foreach (var target in (ObjectSource?.Invoke(controller.Kind) ?? world.BehaviorTargets(controller.Kind)).Take(200))
                         if (ImGui.Selectable(target.Label)) { Remember(); controller.ObjectId = target.Id; }
                     ImGui.EndCombo();
                 }
             }
             if (ImGui.Button("Vezérlés másolása")) {
-                Remember(); var copy = model.Clone().Controllers.Single(c => c.Id == controller.Id);
-                copy.Id = Guid.NewGuid().ToString("N"); copy.Name += " másolat"; model.Controllers.Add(copy); selectedController = copy.Id;
+                if (StoreControllerTemplate != null) StoreControllerTemplate(controller);
             }
             if (ImGui.Button("Vezérlés törlése")) { Remember(); model.Controllers.Remove(controller); selectedController = null; return; }
             StateChoice("Kezdőállapot", controller, controller.InitialState, value => controller.InitialState = value);

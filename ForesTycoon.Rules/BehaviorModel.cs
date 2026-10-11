@@ -8,13 +8,14 @@ using System.Text.Json.Serialization;
 namespace ForesTycoon.Rules
 {
     public enum BehaviorOperation { Constant, Native, Delta, Time, State, Amount, Add, Subtract, Multiply, Divide, Minimum, Maximum, Greater, Less, Select, Absolute, Negate,
-        Capacity, Available, From, To, Surface }
+        Capacity, Available, From, To, Surface, NamedValue }
     public sealed class BehaviorNode
     {
         public string Id { get; set; } = "";
         public string Name { get; set; } = "";
         public BehaviorOperation Operation { get; set; }
         public double Value { get; set; }
+        public string Key { get; set; } = "";
         public string A { get; set; } = "";
         public string B { get; set; } = "";
         public string C { get; set; } = "";
@@ -64,7 +65,9 @@ namespace ForesTycoon.Rules
         public BehaviorModel Document => document.Clone();
         public bool HasGraphs => document.Graphs.Count > 0;
         public string LastError { get; private set; }
-        public CompiledBehaviorModel(BehaviorModel source, IEnumerable<BehaviorHook> available)
+        public void ClearError() => LastError = null;
+        public CompiledBehaviorModel(BehaviorModel source, IEnumerable<BehaviorHook> available,
+            IReadOnlySet<string> namedValues = null, Func<string, double> readValue = null)
         {
             ArgumentNullException.ThrowIfNull(source);
             document = source.Clone();
@@ -78,7 +81,7 @@ namespace ForesTycoon.Rules
                 if (graph == null || string.IsNullOrWhiteSpace(graph.Id) || !ids.Add(graph.Id) || string.IsNullOrWhiteSpace(graph.Name)
                     || !hooks.TryGetValue((graph.Hook, graph.Kind), out var hook)) throw new InvalidDataException("Hibás gráfazonosító vagy nem támogatott világkötés.");
                 if (!hook.SupportsObjects && graph.ObjectId.HasValue) throw new InvalidDataException("Ez a paraméter a teljes világra vonatkozik.");
-                if (!programs.TryAdd((graph.Hook, graph.Kind, graph.ObjectId), new Program(graph, hook)))
+                if (!programs.TryAdd((graph.Hook, graph.Kind, graph.ObjectId), new Program(graph, hook, namedValues, readValue)))
                     throw new InvalidDataException("Egy eseményhez és célhoz csak egy viselkedés köthető.");
             }
         }
@@ -99,16 +102,21 @@ namespace ForesTycoon.Rules
             private readonly bool[] evaluated;
             private readonly int output;
             private readonly BehaviorHook hook;
-            internal Program(BehaviorGraph graph, BehaviorHook hook)
+            private readonly Func<string, double> readValue;
+            internal Program(BehaviorGraph graph, BehaviorHook hook, IReadOnlySet<string> namedValues, Func<string, double> readValue)
             {
                 this.hook = hook;
+                this.readValue = readValue;
                 if (graph.Nodes == null || graph.Nodes.Count is < 1 or > 256) throw new InvalidDataException("1–256 csomópont szükséges.");
                 var byId = new Dictionary<string, BehaviorNode>(StringComparer.Ordinal);
                 foreach (var n in graph.Nodes)
                     if (n == null || string.IsNullOrWhiteSpace(n.Id) || string.IsNullOrWhiteSpace(n.Name) || !Enum.IsDefined(n.Operation)
                         || !double.IsFinite(n.Value) || !float.IsFinite(n.X) || !float.IsFinite(n.Y) || !byId.TryAdd(n.Id, n))
                         throw new InvalidDataException("Érvénytelen vagy ismétlődő csomópont.");
-                if (hook.Kind == "world" && graph.Nodes.Any(n => n.Operation is >= BehaviorOperation.Delta and <= BehaviorOperation.Amount or >= BehaviorOperation.Capacity))
+                foreach (var n in graph.Nodes.Where(n => n.Operation == BehaviorOperation.NamedValue))
+                    if (namedValues == null || !namedValues.Contains(n.Key) || readValue == null)
+                        throw new InvalidDataException("Ismeretlen készlet vagy világmező: " + n.Key);
+                if (hook.Kind == "world" && graph.Nodes.Any(n => n.Operation is >= BehaviorOperation.Delta and <= BehaviorOperation.Amount or >= BehaviorOperation.Capacity and <= BehaviorOperation.Surface))
                     throw new InvalidDataException("A világparaméter gráfjában csak az alapérték és állandók használhatók bemenetként.");
                 var marks = new Dictionary<string, int>(); var ordered = new List<BehaviorNode>();
                 void Visit(string id) {
@@ -147,6 +155,7 @@ namespace ForesTycoon.Rules
                         BehaviorOperation.Delta => input.Delta, BehaviorOperation.Time => input.Time, BehaviorOperation.State => input.State, BehaviorOperation.Amount => input.Amount,
                         BehaviorOperation.Capacity => input.Capacity, BehaviorOperation.Available => input.Available,
                         BehaviorOperation.From => input.From, BehaviorOperation.To => input.To, BehaviorOperation.Surface => input.Surface,
+                        BehaviorOperation.NamedValue => readValue(nodes[i].Key),
                         BehaviorOperation.Add => left + right, BehaviorOperation.Subtract => left - right, BehaviorOperation.Multiply => left * right,
                         BehaviorOperation.Divide => right == 0 ? throw new ArithmeticException("Nullával osztás.") : left / right,
                         BehaviorOperation.Minimum => Math.Min(left, right), BehaviorOperation.Maximum => Math.Max(left, right),

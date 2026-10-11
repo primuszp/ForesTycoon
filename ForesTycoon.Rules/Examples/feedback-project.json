@@ -1,0 +1,159 @@
+{
+  "schema": "forest-rule-project",
+  "version": 1,
+  "name": "Útkopás rendszerdinamikai visszacsatolással",
+  "road": {
+    "version": 1,
+    "name": "Útkopás",
+    "binding": "road.trafficWear",
+    "output": "wear",
+    "nodes": [
+      {
+        "id": "traffic",
+        "name": "Áthaladási terhelés",
+        "operation": "TrafficWear",
+        "value": 1,
+        "a": "",
+        "b": "",
+        "x": 20,
+        "y": 30
+      },
+      {
+        "id": "surface",
+        "name": "Burkolati szorzó",
+        "operation": "SurfaceFactor",
+        "value": 1,
+        "a": "",
+        "b": "",
+        "x": 20,
+        "y": 150
+      },
+      {
+        "id": "base",
+        "name": "Burkolati kopás",
+        "operation": "Multiply",
+        "value": 1,
+        "a": "traffic",
+        "b": "surface",
+        "x": 260,
+        "y": 70
+      },
+      {
+        "id": "scale",
+        "name": "Kopási szorzó",
+        "operation": "Constant",
+        "value": 1,
+        "a": "",
+        "b": "",
+        "x": 260,
+        "y": 210
+      },
+      {
+        "id": "wear",
+        "name": "Útállapot csökkenése",
+        "operation": "Multiply",
+        "value": 1,
+        "a": "base",
+        "b": "scale",
+        "x": 500,
+        "y": 90
+      }
+    ]
+  },
+  "tuning": {},
+  "behaviors": {
+    "schema": "forest-behaviors",
+    "version": 3,
+    "graphs": [
+      {
+        "id": "default.road.road.trafficWear",
+        "name": "Forgalmi útkopás",
+        "hook": "road.trafficWear",
+        "kind": "road",
+        "objectId": null,
+        "output": "result",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          },
+          {
+            "id": "stock",
+            "name": "Útkopási szorzó",
+            "operation": "NamedValue",
+            "value": 0,
+            "key": "stock.wearMultiplier",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 190
+          },
+          {
+            "id": "result",
+            "name": "Kopás × készlet",
+            "operation": "Multiply",
+            "value": 0,
+            "key": "",
+            "a": "native",
+            "b": "stock",
+            "c": "",
+            "x": 300,
+            "y": 120
+          }
+        ]
+      }
+    ],
+    "controllers": []
+  },
+  "dynamics": {
+    "stocks": [
+      {
+        "id": "wearMultiplier",
+        "name": "Útkopási szorzó",
+        "unit": "1",
+        "initial": 1,
+        "minimum": 0,
+        "maximum": 4
+      }
+    ],
+    "flows": [
+      {
+        "id": "increase",
+        "name": "Terhelés felhalmozása",
+        "from": "",
+        "to": "wearMultiplier",
+        "rate": {
+          "id": "rate",
+          "name": "Viselkedés",
+          "hook": "flow.increase",
+          "kind": "dynamics",
+          "objectId": null,
+          "output": "rate",
+          "nodes": [
+            {
+              "id": "rate",
+              "name": "Növekedés / s",
+              "operation": "Constant",
+              "value": 0.1,
+              "key": "",
+              "a": "",
+              "b": "",
+              "c": "",
+              "x": 0,
+              "y": 0
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

@@ -23,6 +23,11 @@ namespace ForesTycoon
                 if (world == null)
                 {
                     world = new GameWorld(TerrainSettings.Default);
+                    if (resumeWorld != null) {
+                        using var input = System.IO.File.OpenRead(resumeWorld); world.Load(input, allowAlgorithmMigration: true);
+                        var project = RuleProject.FromJson(System.IO.File.ReadAllText(RuleProject.DefaultPath));
+                        world.QueueRuleProject(project); world.ExecutePendingCommands();
+                    }
                     interaction = new WorldInteractionController(world) { TargetPicked = SendTargetPicked };
                 }
                 mapPreparation ??= world.PrepareMapGeometry().GetEnumerator();
@@ -37,6 +42,7 @@ namespace ForesTycoon
                         isLoaded = true;
                         frameClock.Reset();
                         SetupViewport();
+                        if (runtimeAcknowledgement != null) RuleProject.WriteAtomic(runtimeAcknowledgement, "ready");
                         break;
                     }
                     loadingProgress = mapPreparation.Current;

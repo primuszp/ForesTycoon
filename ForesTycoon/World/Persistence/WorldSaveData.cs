@@ -22,7 +22,8 @@ namespace ForesTycoon
         StackSite,
         SetRuleModel,
         SetTuning,
-        SetBehaviors
+        SetBehaviors,
+        SetRuleProject
     }
 
     readonly record struct WorldCommandRecord(
@@ -71,7 +72,7 @@ namespace ForesTycoon
 
     sealed class WorldSaveData
     {
-        public const int CurrentVersion = 16;
+        public const int CurrentVersion = 17;
         // Bump whenever native simulation semantics change. Editable graphs and tuning
         // are stored separately in the checkpoint/journal; this identifies their runtime.
         public const string CurrentRuntimeRulesVersion = "forestycoon-simulation/2026-10-10.6";
@@ -101,7 +102,7 @@ namespace ForesTycoon
 
         public void Validate()
         {
-            if (Version != 4 && Version != 5 && Version != 6 && Version != 7 && Version != 8 && Version != 9 && Version != 10 && Version != 11 && Version != 12 && Version != 13 && Version != 14 && Version != 15 && Version != CurrentVersion)
+            if (Version != 4 && Version != 5 && Version != 6 && Version != 7 && Version != 8 && Version != 9 && Version != 10 && Version != 11 && Version != 12 && Version != 13 && Version != 14 && Version != 15 && Version != 16 && Version != CurrentVersion)
                 throw new NotSupportedException($"Save version {Version} is not supported; expected {CurrentVersion}.");
             bool migratedRuntime = (Version == 12 && RuntimeRulesVersion == "forestycoon-simulation/2026-10-10.1")
                 || (Version == 13 && RuntimeRulesVersion is "forestycoon-simulation/2026-10-10.2" or "forestycoon-simulation/2026-10-10.3")
@@ -123,7 +124,11 @@ namespace ForesTycoon
                 if (Version >= 10 && Checkpoint.Rules == null) throw new InvalidOperationException("Save has no rule model.");
                 if (Checkpoint.Tuning != null) _ = GameTuning.FromOverrides(Checkpoint.Tuning);
                 if (Version >= 14 && Checkpoint.Behaviors == null) throw new InvalidOperationException("Save has no behavior model.");
-                if (Checkpoint.Behaviors != null) _ = new WorldBehaviorPolicy(Checkpoint.Behaviors);
+                var dynamics = new DynamicsRuntime(Checkpoint.Dynamics ?? new DynamicsModel(), GameWorld.RuleWorldFields, _ => 0);
+                if (Checkpoint.DynamicsValues != null) dynamics.Restore(Checkpoint.DynamicsValues);
+                if (Version >= 17 && (Checkpoint.Dynamics == null || Checkpoint.DynamicsValues == null)) throw new InvalidOperationException("Save has no dynamics state.");
+                if (Checkpoint.Behaviors != null) _ = new WorldBehaviorPolicy(Checkpoint.Behaviors,
+                    DynamicsRuntime.Keys(dynamics.Document, GameWorld.RuleWorldFields), dynamics.Read);
                 if (Version >= 15 && Checkpoint.BehaviorStates == null) throw new InvalidOperationException("Save has no controller state.");
                 CheckpointGuard.Require(Version >= 8 && Checkpoint.Version is 1 or 2 &&
                     (Version < 11 || Checkpoint.Version == 2), "world snapshot version");

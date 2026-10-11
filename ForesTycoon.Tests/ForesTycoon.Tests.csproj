@@ -26,6 +26,12 @@
     <Using Include="ForesTycoon.Effects" />
     <Using Include="ForesTycoon.Map" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../ForesTycoon.Editor/RuleWorkshopModel.cs" Link="Editor/RuleWorkshopModel.cs" />
+    <Compile Include="../ForesTycoon.Editor/WorkshopDraftStore.cs" Link="Editor/WorkshopDraftStore.cs" />
+    <Compile Include="../ForesTycoon.Editor/AuthoringOperations.cs" Link="Editor/AuthoringOperations.cs" />
+    <Compile Include="../ForesTycoon.Editor/EditorWorldLoader.cs" Link="Editor/EditorWorldLoader.cs" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\ForesTycoon\ForesTycoon.csproj" />

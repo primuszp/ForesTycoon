@@ -10,7 +10,8 @@ namespace ForesTycoon
             return new(2, worldTick, commandJournal.Count - commands.Count,
                 commands.Count, map.Capture(), ecosystem.Capture(), wildlife.Capture(), Logistics.Capture(), vehicles.Capture(),
                 timberCargo.Available, timberCargo.Delivered, effects.Capture(), lastForestryAction, lastForestryArea, Expenses, RuleDocument,
-                Tuning.IsDefault ? null : Tuning.ToOverrides(), roadWeatherSeconds, BehaviorDocument, BehaviorStates);
+                Tuning.IsDefault ? null : Tuning.ToOverrides(), roadWeatherSeconds, BehaviorDocument, BehaviorStates,
+                dynamics.Document, dynamics.Capture(), ruleProjectName, AlgorithmSnapshot());
         }
 
         private void RestoreCheckpoint(WorldCheckpointData s)
@@ -32,7 +33,12 @@ namespace ForesTycoon
                 s.RoadWeatherSeconds < 0.5, "road weather remainder");
             roadWeatherSeconds = s.RoadWeatherSeconds;
             worldTick = s.Tick; lastForestryAction = s.LastAction; lastForestryArea = s.LastArea; Expenses = s.Expenses;
-            behaviorPolicy = new WorldBehaviorPolicy(s.Behaviors ?? new BehaviorModel());
+            dynamics = new(s.Dynamics ?? new DynamicsModel(), RuleWorldFields, ReadWorldValue);
+            if (s.DynamicsValues != null) dynamics.Restore(s.DynamicsValues);
+            ruleProjectName = s.RuleProjectName ?? "ForesTycoon szabályrendszer";
+            algorithmGraphs = s.Algorithms;
+            behaviorPolicy = new WorldBehaviorPolicy(s.Behaviors ?? WorldBehaviorPolicy.DefaultDocument(),
+                DynamicsRuntime.Keys(dynamics.Document, RuleWorldFields), ReadRuleValue);
             behaviorPolicy.Controllers.Restore(s.BehaviorStates ?? Array.Empty<BehaviorControllerSnapshot>());
             foreach (var state in BehaviorStates)
                 CheckpointGuard.Require(state.Kind == "truck" ? Logistics.Trucks.Exists(t => (ulong)t.Id == state.ObjectId)
