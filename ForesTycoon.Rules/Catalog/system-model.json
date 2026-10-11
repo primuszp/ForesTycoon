@@ -1,0 +1,926 @@
+{
+  "schema": "forest-system-model",
+  "version": 1,
+  "name": "ForesTycoon rendszermodell",
+  "subsystems": [
+    {
+      "id": "forest",
+      "name": "Erdő és élővilág",
+      "modules": [
+        "Erdő",
+        "Erdészeti beavatkozás",
+        "Vadak"
+      ],
+      "description": "Faállomány, növekedés, egészség, elhalás, újulat, kitermelési beavatkozás és vadak."
+    },
+    {
+      "id": "environment",
+      "name": "Időjárás, talaj és víz",
+      "modules": [
+        "Talaj és klíma",
+        "Vízháztartás"
+      ],
+      "description": "Klíma, időjárási események, talajprofilok, hó és a vízmérleg tárolói."
+    },
+    {
+      "id": "logistics",
+      "name": "Kitermelés és szállítás",
+      "modules": [
+        "Faanyag és logisztika"
+      ],
+      "description": "Gépi munkaciklus, rakodás, sarangok, depók, malom és a faanyag értéke."
+    },
+    {
+      "id": "roads",
+      "name": "Utak és járművek",
+      "modules": [
+        "Utak és nyomok",
+        "Járművek"
+      ],
+      "description": "Úthálózat, útállapot, nyomok, útvonal, járműmozgás és fogyasztás."
+    },
+    {
+      "id": "economy",
+      "name": "Gazdaság és fenntartás",
+      "modules": [
+        "Gazdaság",
+        "Fenntartás"
+      ],
+      "description": "Bevétel, kiadás, üzemeltetés, kopás, meghibásodás és javítás."
+    },
+    {
+      "id": "world",
+      "name": "Világ és idő",
+      "modules": [
+        "Idő és vezérlés",
+        "Terep"
+      ],
+      "description": "Órák, parancsok, mentés, terep és a világ létrehozása."
+    },
+    {
+      "id": "visual",
+      "name": "Látvány",
+      "modules": [
+        "Megjelenítés"
+      ],
+      "description": "A szimuláció állapotát olvasó megjelenítés; nem hat vissza a modellre."
+    }
+  ],
+  "variables": [
+    {
+      "id": "forest.trees",
+      "name": "Faállomány",
+      "subsystem": "forest",
+      "kind": "Stock",
+      "unit": "",
+      "observe": "world.treeCount",
+      "description": "Az élő fák egyedei méretükkel és fajukkal; a növekedés, elhalás, újulat és kivágás változtatja."
+    },
+    {
+      "id": "forest.health",
+      "name": "Faegészség",
+      "subsystem": "forest",
+      "kind": "Stock",
+      "unit": "0–1",
+      "observe": "",
+      "description": "Egyedi egészségi állapot, amely a tartós stresszből és a termőhelyből halmozódik."
+    },
+    {
+      "id": "forest.stress",
+      "name": "Tartós stressz",
+      "subsystem": "forest",
+      "kind": "Stock",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "forest.deadwood",
+      "name": "Holtfa",
+      "subsystem": "forest",
+      "kind": "Stock",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "forest.stumps",
+      "name": "Tönkök",
+      "subsystem": "forest",
+      "kind": "Stock",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "forest.volume",
+      "name": "Fatérfogat / növedék",
+      "subsystem": "forest",
+      "kind": "Auxiliary",
+      "unit": "m³",
+      "observe": "",
+      "description": "A faállományból származtatott térfogat; a kitermelés kijelölése ezt olvassa."
+    },
+    {
+      "id": "forest.fitness",
+      "name": "Termőhelyi alkalmasság",
+      "subsystem": "forest",
+      "kind": "Auxiliary",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "forest.resources",
+      "name": "Fény és tér",
+      "subsystem": "forest",
+      "kind": "Auxiliary",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "forest.canopy",
+      "name": "Lombborítás",
+      "subsystem": "forest",
+      "kind": "Auxiliary",
+      "unit": "",
+      "observe": "",
+      "description": "A faállományból számolt lombkorona; a csapadék-visszatartást és a párolgást befolyásolja."
+    },
+    {
+      "id": "forest.species",
+      "name": "Fafaj",
+      "subsystem": "forest",
+      "kind": "Parameter",
+      "unit": "",
+      "observe": "",
+      "description": "Fajonkénti biológiai paraméterek."
+    },
+    {
+      "id": "forest.plantations",
+      "name": "Ültetvény-nyilvántartás",
+      "subsystem": "forest",
+      "kind": "Structure",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "harvest.sites",
+      "name": "Kitermelési helyek",
+      "subsystem": "forest",
+      "kind": "Structure",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "wildlife.state",
+      "name": "Vadállomány",
+      "subsystem": "forest",
+      "kind": "Stock",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "wildlife.forage",
+      "name": "Táplálékkészlet",
+      "subsystem": "forest",
+      "kind": "Stock",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "water.snow",
+      "name": "Hókészlet",
+      "subsystem": "environment",
+      "kind": "Stock",
+      "unit": "mm",
+      "observe": "world.snow",
+      "description": ""
+    },
+    {
+      "id": "water.canopy",
+      "name": "Lombkorona-víz",
+      "subsystem": "environment",
+      "kind": "Stock",
+      "unit": "mm",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "water.surface",
+      "name": "Felszíni víz",
+      "subsystem": "environment",
+      "kind": "Stock",
+      "unit": "mm",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "water.root",
+      "name": "Gyökérzónavíz",
+      "subsystem": "environment",
+      "kind": "Stock",
+      "unit": "mm",
+      "observe": "",
+      "description": "A talaj növények által elérhető víztárolója; a fák vízválaszának alapja."
+    },
+    {
+      "id": "water.deep",
+      "name": "Mélyvíz",
+      "subsystem": "environment",
+      "kind": "Stock",
+      "unit": "mm",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "water.evaporated",
+      "name": "Párolgás",
+      "subsystem": "environment",
+      "kind": "Flow",
+      "unit": "mm",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "water.transpired",
+      "name": "Transzspiráció",
+      "subsystem": "environment",
+      "kind": "Flow",
+      "unit": "mm",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "water.outflow",
+      "name": "Lefolyás",
+      "subsystem": "environment",
+      "kind": "Flow",
+      "unit": "mm",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "water.balance",
+      "name": "Vízmérleg",
+      "subsystem": "environment",
+      "kind": "Auxiliary",
+      "unit": "mm",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "water.monthBudget",
+      "name": "Havi vízkeret",
+      "subsystem": "environment",
+      "kind": "Auxiliary",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "water.growthFactor",
+      "name": "Növekedési vízválasz",
+      "subsystem": "environment",
+      "kind": "Auxiliary",
+      "unit": "×",
+      "observe": "",
+      "description": "Aszály- és víztöbblet-tényező, amely a fanövekedést szorozza."
+    },
+    {
+      "id": "water.potential",
+      "name": "Párologtató igény",
+      "subsystem": "environment",
+      "kind": "Auxiliary",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "water.routing",
+      "name": "Vízelvezetés",
+      "subsystem": "environment",
+      "kind": "Structure",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "weather.rain",
+      "name": "Csapadék",
+      "subsystem": "environment",
+      "kind": "Flow",
+      "unit": "",
+      "observe": "world.rain",
+      "description": ""
+    },
+    {
+      "id": "weather.snowfall",
+      "name": "Hóesés",
+      "subsystem": "environment",
+      "kind": "Flow",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "weather.forcing",
+      "name": "Helyi időjárás",
+      "subsystem": "environment",
+      "kind": "Auxiliary",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "climate.local",
+      "name": "Helyi klíma",
+      "subsystem": "environment",
+      "kind": "Auxiliary",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "climate.rainMultiplier",
+      "name": "Regionális csapadékszorzó",
+      "subsystem": "environment",
+      "kind": "Auxiliary",
+      "unit": "×",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "soil.profile",
+      "name": "Talajprofil",
+      "subsystem": "environment",
+      "kind": "Parameter",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "soil.fertility",
+      "name": "Talajtermékenység",
+      "subsystem": "environment",
+      "kind": "Parameter",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "timber.stacks",
+      "name": "Rakatok",
+      "subsystem": "logistics",
+      "kind": "Stock",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "timber.localDepot",
+      "name": "Helyi depó",
+      "subsystem": "logistics",
+      "kind": "Stock",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "timber.cargoValue",
+      "name": "Rakomány értéke",
+      "subsystem": "logistics",
+      "kind": "Auxiliary",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "machine.cargo",
+      "name": "Gép rakománya",
+      "subsystem": "logistics",
+      "kind": "Stock",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "machine.controllerState",
+      "name": "Munkaciklus állapota",
+      "subsystem": "logistics",
+      "kind": "Auxiliary",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "machine.state",
+      "name": "Gépállapot",
+      "subsystem": "logistics",
+      "kind": "Auxiliary",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "machine.work",
+      "name": "Gépi munka",
+      "subsystem": "logistics",
+      "kind": "Auxiliary",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "machine.pace",
+      "name": "Munkatempó",
+      "subsystem": "logistics",
+      "kind": "Auxiliary",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "machine.position",
+      "name": "Gép helyzete",
+      "subsystem": "logistics",
+      "kind": "Auxiliary",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "machine.grapple",
+      "name": "Markoló állapota",
+      "subsystem": "logistics",
+      "kind": "Auxiliary",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "machine.fuel",
+      "name": "Gépek fogyasztása",
+      "subsystem": "logistics",
+      "kind": "Flow",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "mill.stock",
+      "name": "Malomkészlet",
+      "subsystem": "logistics",
+      "kind": "Stock",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "mill.processed",
+      "name": "Feldolgozott faanyag",
+      "subsystem": "logistics",
+      "kind": "Flow",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "fleet.state",
+      "name": "Flotta állapota",
+      "subsystem": "logistics",
+      "kind": "Auxiliary",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "buildings.footprint",
+      "name": "Épületek és sarangok helye",
+      "subsystem": "logistics",
+      "kind": "Structure",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "road.condition",
+      "name": "Útállapot",
+      "subsystem": "roads",
+      "kind": "Stock",
+      "unit": "0–1",
+      "observe": "",
+      "description": "Burkolt csempénként 1 = ép; a forgalom és az időjárás csökkenti, a javítás növeli."
+    },
+    {
+      "id": "road.network",
+      "name": "Úthálózat",
+      "subsystem": "roads",
+      "kind": "Structure",
+      "unit": "",
+      "observe": "world.roadCount",
+      "description": ""
+    },
+    {
+      "id": "trail.wear",
+      "name": "Nyomvályú",
+      "subsystem": "roads",
+      "kind": "Stock",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "trail.idle",
+      "name": "Nyom pihenőideje",
+      "subsystem": "roads",
+      "kind": "Stock",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "trail.network",
+      "name": "Közelítőnyom-hálózat",
+      "subsystem": "roads",
+      "kind": "Structure",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "vehicle.cargo",
+      "name": "Járműrakomány",
+      "subsystem": "roads",
+      "kind": "Stock",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "vehicle.mass",
+      "name": "Jármű össztömege",
+      "subsystem": "roads",
+      "kind": "Auxiliary",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "vehicle.position",
+      "name": "Jármű helyzete",
+      "subsystem": "roads",
+      "kind": "Auxiliary",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "vehicle.speed",
+      "name": "Sebesség",
+      "subsystem": "roads",
+      "kind": "Auxiliary",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "vehicle.resistance",
+      "name": "Menetellenállás",
+      "subsystem": "roads",
+      "kind": "Auxiliary",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "vehicle.route",
+      "name": "Útvonal",
+      "subsystem": "roads",
+      "kind": "Auxiliary",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "vehicle.transportState",
+      "name": "Szállítási állapot",
+      "subsystem": "roads",
+      "kind": "Auxiliary",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "vehicle.fuel",
+      "name": "Járműfogyasztás",
+      "subsystem": "roads",
+      "kind": "Flow",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "economy.result",
+      "name": "Eredmény / egyenleg",
+      "subsystem": "economy",
+      "kind": "Stock",
+      "unit": "",
+      "observe": "world.balance",
+      "description": ""
+    },
+    {
+      "id": "economy.income",
+      "name": "Bevétel",
+      "subsystem": "economy",
+      "kind": "Flow",
+      "unit": "",
+      "observe": "world.income",
+      "description": ""
+    },
+    {
+      "id": "economy.expenses",
+      "name": "Kiadások",
+      "subsystem": "economy",
+      "kind": "Flow",
+      "unit": "",
+      "observe": "world.expenses",
+      "description": ""
+    },
+    {
+      "id": "economy.runningCosts",
+      "name": "Üzemeltetési költség",
+      "subsystem": "economy",
+      "kind": "Flow",
+      "unit": "",
+      "observe": "world.runningCosts",
+      "description": ""
+    },
+    {
+      "id": "economy.fuelFactor",
+      "name": "Üzemanyag-szorzó",
+      "subsystem": "economy",
+      "kind": "Auxiliary",
+      "unit": "×",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "vehicle.wear",
+      "name": "Járműkopás",
+      "subsystem": "economy",
+      "kind": "Stock",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "vehicle.broken",
+      "name": "Meghibásodás",
+      "subsystem": "economy",
+      "kind": "Auxiliary",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "calendar.time",
+      "name": "Naptár és évszak",
+      "subsystem": "world",
+      "kind": "Input",
+      "unit": "",
+      "observe": "world.time",
+      "description": "Az erdőidő; a képletekben world.time néven, erdőévben olvasható."
+    },
+    {
+      "id": "forest.month",
+      "name": "Erdészeti hónap",
+      "subsystem": "world",
+      "kind": "Input",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "vehicle.time",
+      "name": "Járműóra",
+      "subsystem": "world",
+      "kind": "Input",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "wildlife.time",
+      "name": "Vadóra",
+      "subsystem": "world",
+      "kind": "Input",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "world.seed",
+      "name": "Világ seed",
+      "subsystem": "world",
+      "kind": "Input",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "player.input",
+      "name": "Játékos bevitele",
+      "subsystem": "world",
+      "kind": "Input",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "commands",
+      "name": "Játékosparancsok",
+      "subsystem": "world",
+      "kind": "Input",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "ecology.steps",
+      "name": "Ökológiai lépésrend",
+      "subsystem": "world",
+      "kind": "Structure",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "rules.behaviors",
+      "name": "Aktív szabályprojekt",
+      "subsystem": "world",
+      "kind": "Structure",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "save.snapshot",
+      "name": "Mentett állapot",
+      "subsystem": "world",
+      "kind": "Structure",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "terrain.settings",
+      "name": "Terepbeállítások",
+      "subsystem": "world",
+      "kind": "Parameter",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "terrain.height",
+      "name": "Domborzat",
+      "subsystem": "world",
+      "kind": "Structure",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "terrain.moisture",
+      "name": "Térképi nedvesség",
+      "subsystem": "world",
+      "kind": "Structure",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "terrain.water",
+      "name": "Felszíni vizek",
+      "subsystem": "world",
+      "kind": "Structure",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "terrain.outlets",
+      "name": "Vízkifolyók",
+      "subsystem": "world",
+      "kind": "Structure",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "visual.tree",
+      "name": "Famodell",
+      "subsystem": "visual",
+      "kind": "Presentation",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "visual.truck",
+      "name": "Teherautómodell",
+      "subsystem": "visual",
+      "kind": "Presentation",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "visual.weather",
+      "name": "Időjárás látványa",
+      "subsystem": "visual",
+      "kind": "Presentation",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "visual.foliage",
+      "name": "Lombfázis",
+      "subsystem": "visual",
+      "kind": "Presentation",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "visual.deadwood",
+      "name": "Holtfa és tönk látványa",
+      "subsystem": "visual",
+      "kind": "Presentation",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "visual.machines",
+      "name": "Gépmodellek",
+      "subsystem": "visual",
+      "kind": "Presentation",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "visual.buildings",
+      "name": "Épület- és sarangmodellek",
+      "subsystem": "visual",
+      "kind": "Presentation",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "visual.animals",
+      "name": "Vadmodellek",
+      "subsystem": "visual",
+      "kind": "Presentation",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "visual.fish",
+      "name": "Halak",
+      "subsystem": "visual",
+      "kind": "Presentation",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "visual.terrain",
+      "name": "Terep- és vízgeometria",
+      "subsystem": "visual",
+      "kind": "Presentation",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    },
+    {
+      "id": "visual.roads",
+      "name": "Útfelszín látványa",
+      "subsystem": "visual",
+      "kind": "Presentation",
+      "unit": "",
+      "observe": "",
+      "description": ""
+    }
+  ]
+}

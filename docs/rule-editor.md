@@ -9,29 +9,52 @@ dotnet run --project ForesTycoon.Editor
 dotnet run --project ForesTycoon.Editor -- --project projekt.json --world mentés.json
 ```
 
+## Rendszermodell
+
+Az editor a **Rendszermodell** térképpel nyílik: a játék összes mennyisége
+alrendszerenként, az anyagáramlás irányában (időjárás és víz → erdő → kitermelés →
+utak → gazdaság). Szögletes doboz a készlet, lekerekített az áramlás, halványabb a
+segédváltozó. Kattintásra a mennyiség hatásai kiemelődnek (borostyán: amire hat,
+kék: ami rá hat), jobb oldalt látszik a szerepe, egysége, képletkulcsa, a
+be- és kiáramlásai, a felhasználói és a rajta átmenő visszacsatolási körök.
+Kijelölés nélkül az áttekintés az összecsatolt csoportokat, a fő köröket és a
+nyitott készleteket sorolja fel. Egy körre kattintva a kör lépései és szabályai
+látszanak; a szabály neve a műhelybe visz. Az **Adatok és szerkezet is** kapcsoló
+a paramétereket, térképet, órákat és megjelenítést is mutatja.
+
+A mennyiségek szótára `ForesTycoon.Rules/Catalog/system-model.json`; ember és AI is
+bővítheti. A saját készletek, áramlások és a mennyiséget olvasó képletek is a
+térképre kerülnek. A kapcsolat adat-hozzáférés, nem futási sorrend és nem előjel;
+hogy egy kör erősít vagy kiegyenlít, azt a próba mutatja meg. Részletek és
+ütemterv: [rendszermodell-alapú editor](editor-system-model.md).
+
 ## Első próbálkozás
 
 1. Bal oldalt válaszd az **Erdő és élővilág → Egyedi fanövekedés** szabályt.
-2. A **Megértés** megmutatja, kire vonatkozik, mikor fut, miből számol és melyik
-   szabály használja az eredményét. A kapcsolódó szabály nevére kattintva át lehet
-   lépni hozzá, az **Előző szabály** gombbal visszatérni. A részletes kapcsolatok
-   és forráshivatkozások alapból zárva vannak. Az adatkapcsolat nem futási sorrend.
+2. A **Megértés** megmutatja, kire vonatkozik, mikor fut, mely mennyiségekből számol
+   és melyeket változtatja, áramlás-e (melyik készletet tölti vagy apasztja), és
+   mely visszacsatolási körök haladnak át rajta. Egy mennyiség a rendszertérképre,
+   egy kör a kiemelt körhöz visz. A kapcsolódó szabályok mennyiségenként kinyithatók;
+   nevükre kattintva át lehet lépni, az **Előző szabály** gombbal visszatérni.
 3. Nyisd meg a **Szerkesztés** lépést. A választó a növekedési tényező képletét és
    a kapcsolódó belső algoritmusgráfokat is eléri. A **Szorzó hozzáadása az
    eredményhez** valódi állandó- és szorzáscsomópontot hoz létre, összeköti őket,
    kijelöli a szorzót. Jobb oldalt módosítsd az értékét: például 1,1 = +10%.
    A kimeneti tartomány és a fizikai készletkorlát továbbra is érvényes.
 4. A **Mentés / Ctrl+S** külön munkapéldányt ír. Ettől a játék szabálya nem változik.
-5. A **Próba** lépésben válassz tesztvilágot vagy saját világmentést és időtávot.
+5. A felső sáv projektállapot-lánca: **1 · Munkapéldány**, **2 · Próba**, **3 · Játék**.
+   A Próba és az Alkalmazás a teljes projektre vonatkozik, ezért innen (vagy a
+   Szerkesztés alján az **Ellenőrzés és próba** gombbal) nyílik; a **Vissza** gomb a
+   korábbi szabályhoz visz. A **Próba** oldalon válassz tesztvilágot vagy saját világmentést és időtávot.
    Az összehasonlító próba az alap- és a szerkesztett teljes projektet ugyanabból
    a checkpointból futtatja. Az időtáv tickben adott: 30 tick egy szimulációs
    másodperc. A táblázat az erdőév kezdetét és végét is mutatja; havi folyamat
    vizsgálatához megfelelően hosszú időszak kell.
-6. Az **Alkalmazás** áttekinti az eltéréseket az editor tesztvilágának szabályaihoz
+6. Az **Alkalmazás** oldal áttekinti az eltéréseket az editor tesztvilágának szabályaihoz
    képest. Az **Alkalmazás a játékban** ellenőrzi, szükség esetén fordítja, majd
    közzéteszi a teljes projektet. A felső sáv külön jelzi az átvétel visszaigazolását.
 
-A négy lépés között szabadon válthatsz. A próba pillanatfelvételt használ, közben
+A lépések között szabadon válthatsz. A próba pillanatfelvételt használ, közben
 szerkeszthetsz. Az újabb változtatás után a régi eredmény korábbiként jelenik meg.
 A próba megszakítható; eredménye és nyomvonala külön fájlokban megmarad.
 
@@ -84,8 +107,9 @@ Meglévő `forest-behaviors` dokumentum és szabályprojekt is importálható sa
 
 Az **Indulási segítség** játékmeneti célból vezet a megfelelő munkatérbe.
 A közös kereső szabályokat, saját elemeket és a választott világ objektumait is
-keresi. A **További eszközök** a teljes kapcsolattérképet, az összes dinamikai
-elemet és minden belső algoritmusgráfot eléri.
+keresi. A **További eszközök** a szabálykapcsolatok térképét, az összes dinamikai
+elemet és minden belső algoritmusgráfot eléri. A témák ugyanazok az alrendszerek,
+mint a rendszermodellben és a szabálykapcsolatok térképén.
 
 ## Objektumok és projekt
 

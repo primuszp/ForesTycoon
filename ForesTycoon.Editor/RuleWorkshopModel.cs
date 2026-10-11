@@ -13,15 +13,8 @@ internal sealed record WorkshopTopic(string Name, string[] Modules);
 /// <summary>One thematic identity per rule. Other entry points navigate to that identity.</summary>
 internal static class RuleWorkshopModel
 {
-    internal static readonly WorkshopTopic[] Topics = {
-        new("Erdő és élővilág", new[] { "Erdő", "Erdészeti beavatkozás", "Vadak" }),
-        new("Időjárás, talaj és víz", new[] { "Talaj és klíma", "Vízháztartás" }),
-        new("Kitermelés és szállítás", new[] { "Faanyag és logisztika" }),
-        new("Utak és járművek", new[] { "Utak és nyomok", "Járművek" }),
-        new("Gazdaság és fenntartás", new[] { "Gazdaság", "Fenntartás" }),
-        new("Világ és idő", new[] { "Idő és vezérlés", "Terep" }),
-        new("Látvány", new[] { "Megjelenítés" })
-    };
+    // The shared system vocabulary owns the taxonomy; the rule map, the workshop and agents use the same subsystems.
+    internal static readonly WorkshopTopic[] Topics = SystemVocabulary.Default.Subsystems.Select(s => new WorkshopTopic(s.Name, s.Modules)).ToArray();
     internal static int Topic(GameRuleDefinition rule) => Math.Max(0, Array.FindIndex(Topics, t => t.Modules.Contains(rule.Module)));
     internal static GameRuleDefinition[] Search(GameRuleIndex index, int topic, string query) => index.Search("", query.Trim())
         .Where(r => query.Trim().Length > 0 || Topic(r) == topic).ToArray();
@@ -30,19 +23,48 @@ internal static class RuleWorkshopModel
         return full.EndsWith(".draft.json", StringComparison.OrdinalIgnoreCase) ? full[..^11] : full;
     }
     internal static string DraftPath(string published) => PublishedPath(published) + ".draft.json";
+    /// <summary>The catalog rule whose result a formula hook replaces or whose parameter it computes.</summary>
+    internal static bool HookBelongsTo(BehaviorHook h, GameRuleDefinition rule) => h.Id == rule.Id
+        || h.Id.StartsWith("tuning.") && GameTuning.Spec(h.Id[7..])?.Rule == rule.Id
+        || h.Id.StartsWith("route.") && rule.Id is "route.find" or "route.policy"
+        || (h.Id.StartsWith("loading.") || h.Id == "unloading.amount") && (rule.Id == "loading.policy" || rule.Id == "machine.logTransfer" && h.Kind == "forwarder" || rule.Id == "vehicle.transfer" && h.Kind == "truck")
+        || h.Id == "machine.pace" && rule.Id == (h.Kind == "forwarder" ? "machine.forwarder" : "machine.processor");
+
+    /// <summary>
+    /// The game's system model with this project's own stocks, flows and the formulas that read model quantities, so a
+    /// feedback loop authored in a project shows up next to the native ones. Shared by the editor and the agent CLI.
+    /// </summary>
+    internal static SystemModelAnalysis SystemModel(GameRuleCatalog catalog, DynamicsModel dynamics, IEnumerable<BehaviorGraph> graphs, Func<string, int> topicOf)
+    {
+        var vocabulary = SystemVocabulary.Default;
+        string Subsystem(int topic) => vocabulary.Subsystems[Math.Clamp(topic, 0, vocabulary.Subsystems.Count - 1)].Id;
+        // Formula keys name either a project stock or the world quantity they observe.
+        string? Quantity(string key) => key.StartsWith("stock.", StringComparison.Ordinal) ? key : vocabulary.Observed(key)?.Id;
+        string[] Reads(BehaviorGraph graph) => graph.Nodes.Where(n => n.Operation == BehaviorOperation.NamedValue).Select(n => Quantity(n.Key)).OfType<string>().Distinct().ToArray();
+        var stocks = dynamics.Stocks.Select(s => new SystemVariable { Id = "stock." + s.Id, Name = s.Name, Subsystem = Subsystem(topicOf("stock." + s.Id)),
+            Kind = SystemVariableKind.Stock, Unit = s.Unit == "1" ? "" : s.Unit, Observe = "stock." + s.Id, Description = "Saját készlet ebben a projektben." }).ToList();
+        var processes = new List<SystemProcess>();
+        foreach (var flow in dynamics.Flows) {
+            var writes = new[] { flow.From, flow.To }.Where(e => e.Length > 0).Select(e => "stock." + e).ToArray();
+            if (writes.Length > 0) processes.Add(new("flow." + flow.Id, "Áramlás · " + flow.Name, Subsystem(topicOf("flow." + flow.Id)), Reads(flow.Rate), writes));
+        }
+        foreach (var graph in graphs) {
+            // A formula replaces the result of the processes bound to its hook; it adds its readings to theirs.
+            var reads = Reads(graph);
+            var hook = WorldBehaviorPolicy.Hooks.FirstOrDefault(h => h.Id == graph.Hook && h.Kind == graph.Kind);
+            var rules = hook == null ? Array.Empty<GameRuleDefinition>() : catalog.Rules.Where(r => HookBelongsTo(hook, r)).ToArray();
+            if (rules.Length == 0 || reads.Length == 0) continue;
+            processes.Add(new("graph." + graph.Id, graph.Name + " (képlet)", Subsystem(Topic(rules[0])), reads, rules.SelectMany(r => r.Writes).Distinct().ToArray(), rules[0].Id));
+        }
+        return new SystemModelAnalysis(catalog, vocabulary, processes, stocks);
+    }
+
     internal static string KindName(string kind) => kind switch { "tree" => "Fa", "truck" => "Teherautó", "forwarder" => "Forwarder",
         "processor" => "Processzor", "road" => "Út", "tile" => "Csempe", "mill" => "Malom", "world" => "Világ", "wildlife" => "Vad", "depot" => "Telephely", "stack" => "Rakat", _ => kind };
-    internal static string FieldName(string field) => field switch {
-        "forest.fitness" => "Termőhelyi alkalmasság", "forest.resources" => "Fény és tér", "water.growthFactor" => "Növekedési vízválasz",
-        "forest.health" => "Faegészség", "calendar.time" => "Naptár és évszak", "forest.species" => "Fafaj", "forest.trees" => "Faállomány",
-        "forest.volume" => "Fatérfogat / növedék", "forest.stress" => "Tartós stressz", "water.root" => "Gyökérzónavíz",
-        "water.surface" => "Felszíni víz", "soil.profile" => "Talajprofil", "weather.forcing" => "Helyi időjárás", "weather.rain" => "Csapadék",
-        "road.condition" => "Útállapot", "road.network" => "Úthálózat", "vehicle.mass" => "Jármű össztömege", "vehicle.cargo" => "Rakomány",
-        "machine.controllerState" => "Munkaciklus állapota", "machine.state" => "Gépállapot", "vehicle.route" => "Útvonal",
-        "economy.income" => "Bevétel", "economy.expenses" => "Kiadások", "timber.stacks" => "Rakatok", "commands" => "Játékosparancsok",
-        "world.time" => "Erdőév", "world.treeCount" => "Élő fák", "world.roadCount" => "Útcsempék", "world.water" => "Tárolt víz",
-        "world.rain" => "Csapadékráta", "world.temperature" => "Hőmérséklet", "world.snow" => "Hókészlet", "world.balance" => "Egyenleg",
-        "world.income" => "Bevétel", "world.expenses" => "Kiadások", "world.runningCosts" => "Üzemeltetés", _ => field };
+    internal static string FieldName(string field) => SystemVocabulary.Default.Find(field)?.Name ?? SystemVocabulary.Default.Observed(field)?.Name ?? field switch {
+        "world.water" => "Tárolt víz", "world.temperature" => "Hőmérséklet", "forest.totalVolume" => "Élő faállomány térfogata",
+        "forest.meanHeight" => "Átlagmagasság", "forest.meanDiameter" => "Átlagátmérő", "forest.meanHealth" => "Átlagos faegészség",
+        "road.meanCondition" => "Átlagos útállapot", _ => field };
 }
 
 /// <summary>Trial and publish results belong to the captured draft, never to whatever is open on completion.</summary>

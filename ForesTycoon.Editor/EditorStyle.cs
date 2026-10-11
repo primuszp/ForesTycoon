@@ -35,6 +35,14 @@ namespace ForesTycoon.Editor
         internal static readonly Vec4 GraphKind = new(0.93f, 0.72f, 0.33f, 1);
         internal static readonly Vec4 PresentationKind = new(0.55f, 0.62f, 0.82f, 1);
 
+        // One colour per subsystem, in the vocabulary's order: forest, weather/water, harvesting, roads, economy, world, visuals.
+        private static readonly Vec4[] TopicColours =
+        {
+            new(0.47f, 0.70f, 0.38f, 1), new(0.45f, 0.68f, 0.82f, 1), new(0.80f, 0.62f, 0.40f, 1), new(0.88f, 0.55f, 0.32f, 1),
+            new(0.90f, 0.78f, 0.40f, 1), new(0.62f, 0.64f, 0.58f, 1), new(0.62f, 0.60f, 0.85f, 1),
+        };
+        internal static Vec4 TopicColour(int topic) => TopicColours[((topic % TopicColours.Length) + TopicColours.Length) % TopicColours.Length];
+
         internal static Vec4 Dim(Vec4 c, float f) => new(c.X * f, c.Y * f, c.Z * f, c.W);
         internal static Vec4 Fade(Vec4 c, float a) => new(c.X, c.Y, c.Z, a);
 

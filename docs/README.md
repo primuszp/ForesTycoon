@@ -10,6 +10,7 @@
 | Engine systems / Motorrendszerek | [Engine architecture](engine-architecture.md) |
 | Rule editor / Szabályeditor | [Editor guide](rule-editor.md) |
 | Executable rule project / Futtatható szabályprojekt | [System dynamics and AI interface](system-dynamics.md) |
+| System model editor / Rendszermodell-editor | [Assessment, architecture, roadmap](editor-system-model.md) |
 | Model import / Modellimport | [Import contract](model-import-contract.md), [animation](animated-models.md) |
 | Local purchased assets / Helyi megvásárolt modellek | [Asset guide](logging-facility-assets.md) |
 | Tree models / Famodellek | [Shape system](tree-shape-system.md), [generation literature](tree-generation-literature.md) |

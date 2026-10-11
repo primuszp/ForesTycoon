@@ -198,11 +198,11 @@ namespace ForesTycoon
                 "A tönk hat erdőév alatt lebomlik; a telepítést nem akadályozza.", "bomlás = clamp((év - kivágás éve) / 6, 0, 1)");
 
             var build = Add("road.build", "Útépítés és hálózat", "Utak és nyomok", "Útvonal cellái", "Játékosparancs", game, "ExecuteRoadPath",
-                "commands|terrain.height|terrain.water|buildings.footprint", "road.network|economy.expenses|forest.trees|water.routing",
-                "Aszfalt/makadám út, rögzített úttestmagasság és kölcsönös csatlakozások. Az érintett növényzet azonnal törlődik, a látvány a következő kirajzolás előtt frissül. Csak ténylegesen létrehozott vagy módosított útcsempék növelik az építési költséget.");
+                "commands|terrain.height|terrain.water|buildings.footprint|economy.result", "road.network|economy.expenses|forest.trees|water.routing",
+                "Új építés csak a hitelkereten belüli egyenlegnél indul. Aszfalt/makadám út, rögzített úttestmagasság és kölcsönös csatlakozások. Az érintett növényzet azonnal törlődik, a látvány a következő kirajzolás előtt frissül. Csak ténylegesen létrehozott vagy módosított útcsempék növelik az építési költséget.");
             Add("road.repair", "Útjavítás", "Utak és nyomok", "Útvonal cellái", "Játékosparancs", game, "ExecuteRoadRepair",
-                "commands|road.condition|road.network", "road.condition|economy.expenses",
-                "A kopott útcsempék állapota 1-re áll; a költség a burkolat építési ára és a sérülés szerint számolódik.", "javítás = építési ár × 0,8 × sérülés");
+                "commands|road.condition|road.network|economy.result", "road.condition|economy.expenses",
+                "Csak a hitelkereten belüli egyenlegnél indul. A kopott útcsempék állapota 1-re áll; a költség a burkolat építési ára és a sérülés szerint számolódik.", "javítás = építési ár × 0,8 × sérülés");
             Add("road.weather", "Időjárási útromlás", "Utak és nyomok", "Közúti csempe", "Legalább 0,5 játék-s összegzése",
                 "ForesTycoon.Map/Terrain/TerrainMap.Roads.cs", "WeatherRoads", "terrain.moisture|weather.rain|calendar.time|road.condition|road.network", "road.condition",
                 "A térképi hidrológiai nedvességet olvassa, nem a dinamikus gyökérzónavizet. Makadám erősebben romlik esőben; időt erdőévre váltja.",
@@ -213,7 +213,7 @@ namespace ForesTycoon
                 "alapmodell: 0,0015 × össztömeg / 36000 × burkolati szorzó × kopási szorzó", GameRuleExecution.EditableGraph);
             traffic.Sources.Add(new("ForesTycoon/World/Vehicles/RoadTrafficParameters.cs", "RoadTrafficParameters"));
             var trail = Add("trail.build", "Közelítőnyom kijelölése", "Utak és nyomok", "Útvonal cellái", "Játékosparancs", game, "ExecuteSkidTrailPath",
-                "commands|terrain.water|buildings.footprint|road.network", "trail.network|economy.expenses", "Ideiglenes nyom száraz, épület nélküli talajon, az úthálózathoz csatlakozva; a növényzet nem teljes útépítésként kezelődik.");
+                "commands|terrain.water|buildings.footprint|road.network|economy.result", "trail.network|economy.expenses", "Csak a hitelkereten belüli egyenlegnél indul. Ideiglenes nyom száraz, épület nélküli talajon, az úthálózathoz csatlakozva; a növényzet nem teljes útépítésként kezelődik.");
             Add("trail.traffic", "Nyomvályú és használat", "Utak és nyomok", "Nyomcsempe", "Gép vagy teherautó áthaladása",
                 "ForesTycoon.Map/Terrain/TerrainMap.SkidTrails.cs", "DriveSkidTrail", "vehicle.mass|vehicle.position|machine.position|trail.wear", "trail.wear|trail.idle",
                 "A vályú fokozatosan mélyül, az üresjárati idő nullázódik. A teherautó nyomterhelése a közúti alapkopás húszszorosa.", "vályú = clamp(vályú + terhelés × (1 - vályú), 0, 1)");
@@ -272,7 +272,7 @@ namespace ForesTycoon
             Add("timber.stack", "Sarang térfogat- és értékmérlege", "Faanyag és logisztika", "Sarang", "Rakodás / lerakodás", stacks, "Take",
                 "machine.cargo|vehicle.cargo|timber.stacks", "timber.stacks|timber.cargoValue", "A kivett mennyiség arányában együtt mozog az érték. Üres sarang nullázódik; foglalt vagy nem üres sarang nem törölhető.", "átadott érték = készletérték × kivett térfogat / készlettérfogat");
             Add("timber.deliver", "Átadás és faanyag eladása", "Faanyag és logisztika", "Teherautó / sarang vagy malom", "Lerakodás", stacks, "Receive",
-                "vehicle.cargo|timber.cargoValue|buildings.footprint", "timber.stacks|mill.stock|economy.income", "Sarangra értékkel együtt kerül a fa; malomba érkezéskor azonnal hozzáadódik a bevétel. Nem a feldolgozás pillanatában történik az eladás.");
+                "vehicle.cargo|timber.cargoValue|buildings.footprint", "timber.stacks|mill.stock|economy.income", "Sarangra értékkel együtt kerül a fa; malomba érkezéskor azonnal hozzáadódik a bevétel, a piaci árszorzóval. Nem a feldolgozás pillanatában történik az eladás.", "bevétel += rakományérték × piaci árszorzó");
             Add("mill.place", "Fűrészmalom elhelyezése", "Faanyag és logisztika", "2×2 cella", "Játékosparancs", logistics, "PlaceMill",
                 "commands|terrain.height|terrain.water|forest.trees|harvest.sites|buildings.footprint", "buildings.footprint|mill.stock", "Sík, száraz, üres, erdő és kitermelés nélküli telek; út és erdő később nem építhető a lábnyomára. Jelenleg nincs malomépítési költség.");
             Add("mill.process", "Fűrészmalom feldolgozása", "Faanyag és logisztika", "Malom", "Járműidő", logistics, "Processed",
@@ -281,7 +281,7 @@ namespace ForesTycoon
                 "vehicle.fuel|machine.fuel|economy.fuelFactor", "economy.runningCosts", "A tényleges fogyasztás és a kopási szorzó alapján költséget számol; a modellnek jelenleg nincs külön üzemanyagkészlete.", "költség += liter × dízelár");
             Add("economy.balance", "Bevétel, kiadás és eredmény", "Gazdaság", "Vállalat", "Műveleti elszámolás",
                 game, "Balance", "economy.income|economy.expenses|economy.runningCosts", "economy.result",
-                "Bevétel mínusz építési/javítási és üzemeltetési költségek. Nincs szigorú fizetőképességi korlát, hitel, dinamikus piac vagy erdőápolási kiadás.", "eredmény = bevétel - építési kiadások - működési költségek");
+                "Bevétel mínusz építési/javítási és üzemeltetési költségek. A hitelkeret alatt új út, nyom és útjavítás nem indul; az alapértelmezés korlátlan. Erdőápolási kiadás és kamat még nincs.", "eredmény = bevétel - építési kiadások - működési költségek");
 
             Add("wildlife.habitat", "Vadállomány élőhelye", "Vadak", "Térképcella / állat", "Erdő- vagy tereprevízió változás",
                 "ForesTycoon/World/WildlifeSystem.cs", "CollectWildlifeSpots", "forest.trees|terrain.height|terrain.water|road.network", "wildlife.state",
@@ -345,7 +345,7 @@ namespace ForesTycoon
                 "Talajtömörödés, erózió és útkialakítás miatti részletes vízelvezető műtárgyak nincsenek külön folyamatként megvalósítva.",
                 "A vadak nem rágják a csemetéket; kártevő-, fertőzés- és tűzterjedési rendszer még nincs.",
                 "Gyérítés, ápolás és ezek pénzügyi költsége még nem külön játékosparancs; telepítés és kitermelés van.",
-                "Nincs pénzkészlet alapján tiltott építés, járművásárlás, hitel vagy dinamikus faanyagpiac.",
+                "A hitelkeret csak az út- és nyomépítést, valamint az útjavítást korlátozza; alapértéke korlátlan. Járművásárlás, kamat és beépített piaci kereslet–kínálat modell még nincs: a piaci árszorzó képlettel vagy saját készlettel modellezhető.",
                 "A fa térfogatának pénzbeli értékét a logisztikai TimberPrice adja; a teherautó fasűrűsége minden fajra azonos.",
                 "A natív folyamatok több írója és visszacsatolása a meglévő futtatási sorrend szerint működik; a katalógus élei nem új végrehajtási sorrendet jelentenek." });
             catalog.Validate(); return catalog;

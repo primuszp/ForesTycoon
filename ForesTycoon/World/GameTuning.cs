@@ -17,6 +17,7 @@ namespace ForesTycoon
         ReferenceWear, ReferenceMass, AsphaltFactor, MacadamFactor, TrailLoadMultiplier, SkidTrailOvergrowYears,
         EmptyMass, TimberDensity, Power, MaxTractiveForce, Drivetrain, Braking, DragArea,
         RollingAsphalt, RollingGravel, RollingDirt, RoughnessRolling, FuelPerKilowattHour, IdleFuelPerHour,
+        TimberPriceFactor, CreditLimit,
     }
 
     /// <summary>One tunable: which rule it belongs to, how it is shown and the range the game accepts.</summary>
@@ -88,6 +89,10 @@ namespace ForesTycoon
             new(Tune.RoughnessRolling, "vehicle.resistance", "Egyenetlenség hatása", "× Crr teljes kárnál", VehicleDynamics.DefaultRoughnessRolling, 0, 10),
             new(Tune.FuelPerKilowattHour, "vehicle.fuel", "Fajlagos fogyasztás", "l/kWh", TruckSpec.Default.FuelPerKilowattHour, 0.05, 1),
             new(Tune.IdleFuelPerHour, "vehicle.fuel", "Alapjárat", "l/h", TruckSpec.Default.IdleFuelPerHour, 0, 30),
+
+            // Economic feedback. Both are formula hooks, so the market price and the credit line can follow the balance or project stocks.
+            new(Tune.TimberPriceFactor, "timber.deliver", "Faanyag piaci árszorzó", "×", 1, 0, 10),
+            new(Tune.CreditLimit, "economy.balance", "Hitelkeret", "eFt", Economy.UnlimitedCredit, 0, Economy.UnlimitedCredit),
         };
 
         private static readonly Dictionary<string, TuningSpec> byId = Specs.ToDictionary(s => s.Id, StringComparer.Ordinal);

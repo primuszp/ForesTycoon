@@ -18,16 +18,9 @@ namespace ForesTycoon.Editor
     {
         private sealed record Domain(string Name, Vec4 Colour, string[] Modules);
 
-        // Systems grouped by what they model; a module not listed here falls into "Egyéb".
-        private static readonly Domain[] Domains =
-        {
-            new("Alapok", new Vec4(0.62f, 0.64f, 0.58f, 1), new[] { "Idő és vezérlés" }),
-            new("Környezet", new Vec4(0.45f, 0.68f, 0.82f, 1), new[] { "Terep", "Talaj és klíma", "Vízháztartás" }),
-            new("Erdő", new Vec4(0.47f, 0.70f, 0.38f, 1), new[] { "Erdő", "Erdészeti beavatkozás", "Vadak" }),
-            new("Infrastruktúra", new Vec4(0.88f, 0.63f, 0.34f, 1), new[] { "Utak és nyomok", "Járművek", "Fenntartás" }),
-            new("Gazdaság", new Vec4(0.90f, 0.78f, 0.40f, 1), new[] { "Faanyag és logisztika", "Gazdaság" }),
-            new("Megjelenítés", new Vec4(0.62f, 0.60f, 0.85f, 1), new[] { "Megjelenítés" }),
-        };
+        // The same subsystems as the workshop and the system model; a module not listed there falls into "Egyéb".
+        private static readonly Domain[] Domains = RuleWorkshopModel.Topics
+            .Select((t, i) => new Domain(t.Name, EditorStyle.TopicColour(i), t.Modules)).ToArray();
         private static readonly Domain Other = new("Egyéb", new Vec4(0.6f, 0.6f, 0.6f, 1), Array.Empty<string>());
 
         private GameRuleCatalog catalog;
@@ -43,7 +36,6 @@ namespace ForesTycoon.Editor
         private string[] observations = Array.Empty<string>();
         private long observedAt;
         private string module = "", selected = "", search = "", dragging, hovered;
-        private string path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ForesTycoon", "rules", "current-game-rules.json");
         private Vec2 pan = new(10, 10);
         private float zoom = 0.85f;
         private bool fitRequested = true;
@@ -105,7 +97,7 @@ namespace ForesTycoon.Editor
                 if (rules.Select((r, i) => r.X == 25 + i % 3 * 245 && r.Y == 30 + i / 3 * 130).All(x => x)) AutoLayout(m);
             }
             visibleRules = null; observedRule = null; dragging = null;
-            module = selected = ""; fitRequested = true; if (file != null) path = file;
+            module = selected = ""; fitRequested = true;
         }
 
         /// <summary>Columns by data flow inside the system (producers left, at most two columns), stacked and centred.</summary>
@@ -157,24 +149,6 @@ namespace ForesTycoon.Editor
             GameRuleExecution.Presentation => "Csak megjelenítés: a szimuláció állapotát olvassa, nem változtatja.",
             _ => "A meglévő C# folyamat futtatja; a képlet és a paraméterek az implementációból feltérképezett adatok."
         };
-
-        // ── File menu (hosted by the editor's header) ────────────────────────
-        internal void FileMenu(GameWorld world)
-        {
-            if (catalog == null) Load(world.DescribeCurrentRules());
-            EditorStyle.Section("Szabálykatalógus");
-            ImGui.SetNextItemWidth(420); ImGui.InputText("##catalog-path", ref path, 1024);
-            if (ImGui.MenuItem("Mentés")) Try(() =>
-            {
-                string file = Path.GetFullPath(path); Directory.CreateDirectory(Path.GetDirectoryName(file));
-                File.WriteAllText(file + ".tmp", catalog.ToJson()); File.Move(file + ".tmp", file, true);
-                Message = "Katalógus, elrendezés és tervezői megjegyzések mentve.";
-            });
-            if (ImGui.IsItemHovered()) ImGui.SetTooltip("A katalógus az elrendezést, a megjegyzéseket és az útkopási gráfot is tartalmazza.");
-            if (ImGui.MenuItem("Megnyitás")) Try(() => { Load(GameRuleCatalog.FromJson(File.ReadAllText(path)), current: world.DescribeCurrentRules()); Message = "Katalógus betöltve, a folyamatleírások a jelenlegi kódhoz frissítve."; });
-            ImGui.Separator();
-            if (ImGui.MenuItem("Frissítés a játék kódjából")) Try(() => { Load(catalog, current: world.DescribeCurrentRules()); Message = "Folyamatok frissítve; a hangolások, gráf, megjegyzések és elrendezés megmaradtak."; });
-        }
 
         // ── Layout ───────────────────────────────────────────────────────────
         internal void Draw(GameWorld world, Action<RuleModel> editGraph, Action<BehaviorHook> editBehavior = null, Action<string> editController = null)

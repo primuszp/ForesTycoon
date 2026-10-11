@@ -11,8 +11,8 @@ using Vec4 = System.Numerics.Vector4;
 namespace ForesTycoon.Editor
 {
     /// <summary>
-    /// The rule system editor: an overview of the game's rules and a node editor for the executable road-wear graph.
-    /// One header (title, view tabs, file menu, primary action), one canvas with an inspector, one status bar.
+    /// The rule workshop host. This part keeps the window frame and the node editor of the executable road-wear graph;
+    /// the workshop, project, authoring and system model partials provide the rest.
     /// </summary>
     internal sealed partial class RuleEditorView
     {
@@ -20,7 +20,6 @@ namespace ForesTycoon.Editor
 
         private RuleModel draft;
         private string selected = "wear", message = "";
-        private string path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ForesTycoon", "rules", "road-wear.json");
         private Vec2 pan = new(40, 40);
         private float zoom = 1, sampleWear = 0.0015f, sampleSurface = 1, sampleDamage = 0;
         private string dragging, linkingFrom;
@@ -52,7 +51,7 @@ namespace ForesTycoon.Editor
         internal RuleEditorView(string modelPath = null)
         {
             if (modelPath == null) return;
-            path = Path.GetFullPath(modelPath);
+            string path = Path.GetFullPath(modelPath);
             using var document = JsonDocument.Parse(File.ReadAllText(path));
             if (document.RootElement.TryGetProperty("schema", out var projectSchema) && projectSchema.GetString() == "forest-rule-project")
             { pendingProject = RuleProject.FromJson(document.RootElement.GetRawText()); projectPath = RuleWorkshopModel.PublishedPath(path); return; }
@@ -89,43 +88,6 @@ namespace ForesTycoon.Editor
             ImGui.End();
         }
 
-        // ── Header: title, view switch, file menu, primary action ─────────────
-        private void HeaderBar(GameWorld world, CompiledRoadRule compiled)
-        {
-            EditorStyle.Title("Szabályrendszer", true);
-            ImGui.SameLine(0, 18);
-            ImGui.AlignTextToFramePadding();
-            if (ViewTab("Áttekintés", view == View.Overview, "A játék összes szabálya, rendszerenként, a köztük futó adatkapcsolatokkal."))
-            { if (view == View.Graph) currentRules.SetRoadTrafficModel(world, draft); view = View.Overview; }
-            ImGui.SameLine(0, 4);
-            int changedTuning = currentRules.TuningOverrides(world).Count;
-            if (ViewTab(changedTuning > 0 ? $"Hangolás · {changedTuning}" : "Hangolás", view == View.Tuning, "Minden hangolható szám egy listában: kapacitások, ráták, árak, kopás, járműfizika."))
-            { if (view == View.Graph) currentRules.SetRoadTrafficModel(world, draft); view = View.Tuning; }
-            ImGui.SameLine(0, 4);
-            if (ViewTab("Útkopás · gráf", view == View.Graph, "Az útkopás futtatható egyenlete: ezt a játék a jármű minden áthaladásakor számolja."))
-            {
-                if (view != View.Graph) { draft = currentRules.RoadTrafficModel ?? draft; selected = draft.Output; fitRequested = true; }
-                view = View.Graph;
-            }
-            ImGui.SameLine(0, 4);
-            if (ViewTab("Viselkedések", view == View.Behaviors, "Futtatható képletek, típusszintű és egyedi objektumkötések."))
-            { if (view == View.Graph) currentRules.SetRoadTrafficModel(world, draft); view = View.Behaviors; }
-            ImGui.SameLine(0, 4);
-            if (ViewTab("Dinamika", view == View.Dynamics, "Készletek, áramlások és visszacsatolás: a játék fix lépésben futtatja."))
-            { if (view == View.Graph) currentRules.SetRoadTrafficModel(world, draft); view = View.Dynamics; }
-            ImGui.SameLine(0, 4);
-            if (ViewTab("Objektumok", view == View.Objects, "A valódi játékobjektumok és a hozzájuk rendelhető szabályok."))
-            { if (view == View.Graph) currentRules.SetRoadTrafficModel(world, draft); view = View.Objects; }
-            ImGui.SameLine();
-            if (ViewTab("Algoritmusok", view == View.Algorithms, "Teljes algoritmusgráfok: elágazások, ciklusok, állapotok és adatok."))
-            { if (view == View.Graph) currentRules.SetRoadTrafficModel(world, draft); view = View.Algorithms; }
-            if (view is View.Behaviors or View.Dynamics or View.Objects or View.Algorithms) { ImGui.Separator(); return; }
-            ImGui.SameLine(0, 8);
-            if (ImGui.Button("Fájl")) ImGui.OpenPopup("file-menu");
-            FileMenu(world);
-            ImGui.Separator();
-        }
-
         private static bool ViewTab(string label, bool active, string tooltip)
         {
             ImGui.PushStyleColor(ImGuiCol.Button, active ? HudTheme.Moss : new Vec4(0, 0, 0, 0));
@@ -134,65 +96,6 @@ namespace ForesTycoon.Editor
             ImGui.PopStyleColor(2);
             if (ImGui.IsItemHovered()) ImGui.SetTooltip(tooltip);
             return clicked;
-        }
-
-        private void FileMenu(GameWorld world)
-        {
-            if (!ImGui.BeginPopup("file-menu")) return;
-            if (view != View.Graph)
-            {
-                currentRules.FileMenu(world);
-                if (currentRules.Message.Length > 0) { message = currentRules.Message; currentRules.Message = ""; }
-                ImGui.EndPopup(); return;
-            }
-            EditorStyle.Section("Útkopási modell");
-            ImGui.SetNextItemWidth(420); ImGui.InputText("##model-path", ref path, 1024);
-            if (ImGui.MenuItem("Mentés", "Ctrl+S")) Save();
-            if (ImGui.MenuItem("Megnyitás")) Try(() =>
-            {
-                var loaded = RuleModel.FromJson(File.ReadAllText(path));
-                // Incomplete drafts can be saved and reopened; only validated models can be applied.
-                if (loaded.Version != 1 || loaded.Binding != "road.trafficWear" || loaded.Nodes == null || loaded.Nodes.Count > 128 ||
-                    string.IsNullOrWhiteSpace(loaded.Name) ||
-                    loaded.Nodes.Any(n => n == null || string.IsNullOrWhiteSpace(n.Id) || n.Name == null || !Enum.IsDefined(n.Operation) || !float.IsFinite(n.X) || !float.IsFinite(n.Y)))
-                    throw new InvalidDataException("Érvénytelen szerkesztési dokumentum.");
-                draft = loaded; selected = draft.Output; fitRequested = true; message = "Modell megnyitva. Az Alkalmazás gombbal kerül a tesztvilágba.";
-            });
-            ImGui.Separator();
-            if (ImGui.MenuItem("Aktív modell átvétele a tesztvilágból")) { draft = world.RuleDocument; selected = draft.Output; fitRequested = true; message = "Az aktív modell a szerkesztőbe került."; }
-            if (ImGui.MenuItem("Alapmodell visszaállítása")) { draft = RuleModel.Default(); selected = draft.Output; fitRequested = true; message = "Alapmodell betöltve (a tesztvilágba külön kell alkalmazni)."; }
-            ImGui.EndPopup();
-        }
-
-        private void Save() => Try(() =>
-        {
-            string file = Path.GetFullPath(path); Directory.CreateDirectory(Path.GetDirectoryName(file));
-            string temporary = file + ".tmp";
-            File.WriteAllText(temporary, draft.ToJson()); File.Move(temporary, file, true);
-            message = "Mentve: " + file;
-        });
-
-        // ── Status bar ───────────────────────────────────────────────────────
-        private void StatusBar(GameWorld world, CompiledRoadRule compiled)
-        {
-            ImGui.Separator();
-            if (view == View.Graph)
-            {
-                EditorStyle.Pill(compiled != null ? "Érvényes modell" : "Hiba: " + compiler.ValidationMessage, compiled != null);
-                ImGui.SameLine(0, 14);
-            }
-            int unapplied = currentRules.UnappliedTuning(world);
-            if (unapplied > 0) { EditorStyle.Chip($"{unapplied} hangolt szám még nincs alkalmazva", HudTheme.AmberAccent, "unapplied"); ImGui.SameLine(0, 14); }
-            ImGui.AlignTextToFramePadding();
-            EditorStyle.Text(HudTheme.Muted, "Tesztvilág modellje:"); ImGui.SameLine(); ImGui.TextUnformatted(world.ActiveRuleName);
-            if (message.Length > 0) {
-                ImGui.SameLine(0, 18); EditorStyle.Text(HudTheme.Info, message.Split('\n')[0][..Math.Min(message.Split('\n')[0].Length, 100)]);
-                ImGui.SameLine(); if (ImGui.SmallButton("Részletek")) ImGui.OpenPopup("Projektüzenet");
-            }
-            if (ImGui.BeginPopupModal("Projektüzenet", ImGuiWindowFlags.AlwaysAutoResize)) {
-                ImGui.InputTextMultiline("##project-diagnostic", ref message, 20000, new Vec2(900, 440), ImGuiInputTextFlags.ReadOnly);
-                if (ImGui.Button("Bezárás")) ImGui.CloseCurrentPopup(); ImGui.EndPopup();
-            }
         }
 
         // ── Graph view: canvas + inspector ───────────────────────────────────

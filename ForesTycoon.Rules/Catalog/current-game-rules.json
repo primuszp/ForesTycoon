@@ -2366,7 +2366,7 @@
       "scope": "\u00DAtvonal cell\u00E1i",
       "schedule": "J\u00E1t\u00E9kosparancs",
       "execution": "NativeCode",
-      "description": "Aszfalt/makad\u00E1m \u00FAt, r\u00F6gz\u00EDtett \u00FAttestmagass\u00E1g \u00E9s k\u00F6lcs\u00F6n\u00F6s csatlakoz\u00E1sok. Az \u00E9rintett n\u00F6v\u00E9nyzet azonnal t\u00F6rl\u0151dik, a l\u00E1tv\u00E1ny a k\u00F6vetkez\u0151 kirajzol\u00E1s el\u0151tt friss\u00FCl. Csak t\u00E9nylegesen l\u00E9trehozott vagy m\u00F3dos\u00EDtott \u00FAtcsemp\u00E9k n\u00F6velik az \u00E9p\u00EDt\u00E9si k\u00F6lts\u00E9get.",
+      "description": "\u00DAj \u00E9p\u00EDt\u00E9s csak a hitelkereten bel\u00FCli egyenlegn\u00E9l indul. Aszfalt/makad\u00E1m \u00FAt, r\u00F6gz\u00EDtett \u00FAttestmagass\u00E1g \u00E9s k\u00F6lcs\u00F6n\u00F6s csatlakoz\u00E1sok. Az \u00E9rintett n\u00F6v\u00E9nyzet azonnal t\u00F6rl\u0151dik, a l\u00E1tv\u00E1ny a k\u00F6vetkez\u0151 kirajzol\u00E1s el\u0151tt friss\u00FCl. Csak t\u00E9nylegesen l\u00E9trehozott vagy m\u00F3dos\u00EDtott \u00FAtcsemp\u00E9k n\u00F6velik az \u00E9p\u00EDt\u00E9si k\u00F6lts\u00E9get.",
       "formula": "",
       "notes": "",
       "reads": [
@@ -2374,6 +2374,7 @@
         "terrain.height",
         "terrain.water",
         "buildings.footprint",
+        "economy.result",
         "rules.behaviors"
       ],
       "writes": [
@@ -2418,13 +2419,14 @@
       "scope": "\u00DAtvonal cell\u00E1i",
       "schedule": "J\u00E1t\u00E9kosparancs",
       "execution": "NativeCode",
-      "description": "A kopott \u00FAtcsemp\u00E9k \u00E1llapota 1-re \u00E1ll; a k\u00F6lts\u00E9g a burkolat \u00E9p\u00EDt\u00E9si \u00E1ra \u00E9s a s\u00E9r\u00FCl\u00E9s szerint sz\u00E1mol\u00F3dik.",
+      "description": "Csak a hitelkereten bel\u00FCli egyenlegn\u00E9l indul. A kopott \u00FAtcsemp\u00E9k \u00E1llapota 1-re \u00E1ll; a k\u00F6lts\u00E9g a burkolat \u00E9p\u00EDt\u00E9si \u00E1ra \u00E9s a s\u00E9r\u00FCl\u00E9s szerint sz\u00E1mol\u00F3dik.",
       "formula": "jav\u00EDt\u00E1s = \u00E9p\u00EDt\u00E9si \u00E1r \u00D7 0,8 \u00D7 s\u00E9r\u00FCl\u00E9s",
       "notes": "",
       "reads": [
         "commands",
         "road.condition",
         "road.network",
+        "economy.result",
         "rules.behaviors"
       ],
       "writes": [
@@ -2559,7 +2561,7 @@
       "scope": "\u00DAtvonal cell\u00E1i",
       "schedule": "J\u00E1t\u00E9kosparancs",
       "execution": "NativeCode",
-      "description": "Ideiglenes nyom sz\u00E1raz, \u00E9p\u00FClet n\u00E9lk\u00FCli talajon, az \u00FAth\u00E1l\u00F3zathoz csatlakozva; a n\u00F6v\u00E9nyzet nem teljes \u00FAt\u00E9p\u00EDt\u00E9sk\u00E9nt kezel\u0151dik.",
+      "description": "Csak a hitelkereten bel\u00FCli egyenlegn\u00E9l indul. Ideiglenes nyom sz\u00E1raz, \u00E9p\u00FClet n\u00E9lk\u00FCli talajon, az \u00FAth\u00E1l\u00F3zathoz csatlakozva; a n\u00F6v\u00E9nyzet nem teljes \u00FAt\u00E9p\u00EDt\u00E9sk\u00E9nt kezel\u0151dik.",
       "formula": "",
       "notes": "",
       "reads": [
@@ -2567,6 +2569,7 @@
         "terrain.water",
         "buildings.footprint",
         "road.network",
+        "economy.result",
         "rules.behaviors"
       ],
       "writes": [
@@ -3591,13 +3594,14 @@
       "scope": "Teheraut\u00F3 / sarang vagy malom",
       "schedule": "Lerakod\u00E1s",
       "execution": "NativeCode",
-      "description": "Sarangra \u00E9rt\u00E9kkel egy\u00FCtt ker\u00FCl a fa; malomba \u00E9rkez\u00E9skor azonnal hozz\u00E1ad\u00F3dik a bev\u00E9tel. Nem a feldolgoz\u00E1s pillanat\u00E1ban t\u00F6rt\u00E9nik az elad\u00E1s.",
-      "formula": "",
+      "description": "Sarangra \u00E9rt\u00E9kkel egy\u00FCtt ker\u00FCl a fa; malomba \u00E9rkez\u00E9skor azonnal hozz\u00E1ad\u00F3dik a bev\u00E9tel, a piaci \u00E1rszorz\u00F3val. Nem a feldolgoz\u00E1s pillanat\u00E1ban t\u00F6rt\u00E9nik az elad\u00E1s.",
+      "formula": "bev\u00E9tel \u002B= rakom\u00E1ny\u00E9rt\u00E9k \u00D7 piaci \u00E1rszorz\u00F3",
       "notes": "",
       "reads": [
         "vehicle.cargo",
         "timber.cargoValue",
-        "buildings.footprint"
+        "buildings.footprint",
+        "rules.behaviors"
       ],
       "writes": [
         "timber.stacks",
@@ -3610,7 +3614,17 @@
           "symbol": "Receive"
         }
       ],
-      "parameters": [],
+      "parameters": [
+        {
+          "name": "Faanyag piaci \u00E1rszorz\u00F3",
+          "value": 1,
+          "unit": "\u00D7",
+          "key": "TimberPriceFactor",
+          "min": 0,
+          "max": 10,
+          "default": 1
+        }
+      ],
       "x": 25,
       "y": 420
     },
@@ -3721,13 +3735,14 @@
       "scope": "V\u00E1llalat",
       "schedule": "M\u0171veleti elsz\u00E1mol\u00E1s",
       "execution": "NativeCode",
-      "description": "Bev\u00E9tel m\u00EDnusz \u00E9p\u00EDt\u00E9si/jav\u00EDt\u00E1si \u00E9s \u00FCzemeltet\u00E9si k\u00F6lts\u00E9gek. Nincs szigor\u00FA fizet\u0151k\u00E9pess\u00E9gi korl\u00E1t, hitel, dinamikus piac vagy erd\u0151\u00E1pol\u00E1si kiad\u00E1s.",
+      "description": "Bev\u00E9tel m\u00EDnusz \u00E9p\u00EDt\u00E9si/jav\u00EDt\u00E1si \u00E9s \u00FCzemeltet\u00E9si k\u00F6lts\u00E9gek. A hitelkeret alatt \u00FAj \u00FAt, nyom \u00E9s \u00FAtjav\u00EDt\u00E1s nem indul; az alap\u00E9rtelmez\u00E9s korl\u00E1tlan. Erd\u0151\u00E1pol\u00E1si kiad\u00E1s \u00E9s kamat m\u00E9g nincs.",
       "formula": "eredm\u00E9ny = bev\u00E9tel - \u00E9p\u00EDt\u00E9si kiad\u00E1sok - m\u0171k\u00F6d\u00E9si k\u00F6lts\u00E9gek",
       "notes": "",
       "reads": [
         "economy.income",
         "economy.expenses",
-        "economy.runningCosts"
+        "economy.runningCosts",
+        "rules.behaviors"
       ],
       "writes": [
         "economy.result"
@@ -3738,7 +3753,17 @@
           "symbol": "Balance"
         }
       ],
-      "parameters": [],
+      "parameters": [
+        {
+          "name": "Hitelkeret",
+          "value": 1000000000,
+          "unit": "eFt",
+          "key": "CreditLimit",
+          "min": 0,
+          "max": 1000000000,
+          "default": 1000000000
+        }
+      ],
       "x": 270,
       "y": 30
     },
@@ -4171,7 +4196,7 @@
     "Talajt\u00F6m\u00F6r\u00F6d\u00E9s, er\u00F3zi\u00F3 \u00E9s \u00FAtkialak\u00EDt\u00E1s miatti r\u00E9szletes v\u00EDzelvezet\u0151 m\u0171t\u00E1rgyak nincsenek k\u00FCl\u00F6n folyamatk\u00E9nt megval\u00F3s\u00EDtva.",
     "A vadak nem r\u00E1gj\u00E1k a csemet\u00E9ket; k\u00E1rtev\u0151-, fert\u0151z\u00E9s- \u00E9s t\u0171zterjed\u00E9si rendszer m\u00E9g nincs.",
     "Gy\u00E9r\u00EDt\u00E9s, \u00E1pol\u00E1s \u00E9s ezek p\u00E9nz\u00FCgyi k\u00F6lts\u00E9ge m\u00E9g nem k\u00FCl\u00F6n j\u00E1t\u00E9kosparancs; telep\u00EDt\u00E9s \u00E9s kitermel\u00E9s van.",
-    "Nincs p\u00E9nzk\u00E9szlet alapj\u00E1n tiltott \u00E9p\u00EDt\u00E9s, j\u00E1rm\u0171v\u00E1s\u00E1rl\u00E1s, hitel vagy dinamikus faanyagpiac.",
+    "A hitelkeret csak az \u00FAt- \u00E9s nyom\u00E9p\u00EDt\u00E9st, valamint az \u00FAtjav\u00EDt\u00E1st korl\u00E1tozza; alap\u00E9rt\u00E9ke korl\u00E1tlan. J\u00E1rm\u0171v\u00E1s\u00E1rl\u00E1s, kamat \u00E9s be\u00E9p\u00EDtett piaci kereslet\u2013k\u00EDn\u00E1lat modell m\u00E9g nincs: a piaci \u00E1rszorz\u00F3 k\u00E9plettel vagy saj\u00E1t k\u00E9szlettel modellezhet\u0151.",
     "A fa t\u00E9rfogat\u00E1nak p\u00E9nzbeli \u00E9rt\u00E9k\u00E9t a logisztikai TimberPrice adja; a teheraut\u00F3 fas\u0171r\u0171s\u00E9ge minden fajra azonos.",
     "A nat\u00EDv folyamatok t\u00F6bb \u00EDr\u00F3ja \u00E9s visszacsatol\u00E1sa a megl\u00E9v\u0151 futtat\u00E1si sorrend szerint m\u0171k\u00F6dik; a katal\u00F3gus \u00E9lei nem \u00FAj v\u00E9grehajt\u00E1si sorrendet jelentenek."
   ],

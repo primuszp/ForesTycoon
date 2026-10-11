@@ -365,8 +365,17 @@ namespace ForesTycoon
         void IWorldCommandTarget.ExecuteRoadPath(int startTileId, int endTileId, bool remove) =>
             ((IWorldCommandTarget)this).ExecuteRoadPath(startTileId, endTileId, remove, RoadPaving.Asphalt);
 
+        /// <summary>The credit line gates new spending; the refusal is part of the deterministic command result.</summary>
+        private bool Fundable()
+        {
+            if (Economy.CanInvest(Balance, Tuning[Tune.CreditLimit])) return true;
+            if (Logistics != null) Logistics.Status = Economy.NoFunds;
+            return false;
+        }
+
         void IWorldCommandTarget.ExecuteRoadRepair(int startTileId, int endTileId)
         {
+            if (!Fundable()) return;
             foreach (var (tile, damage) in map.RepairRoadTilePath(startTileId, endTileId))
                 Expenses += RoadCosts.Repair(map.GetRoadPaving(tile), damage, Tuning);
             if (map.TryGetRoadTileCenter(endTileId, out Vector3 position)) effects.Spawn(WorldEffectKind.RoadChanged, position);
@@ -390,6 +399,7 @@ namespace ForesTycoon
 
         void IWorldCommandTarget.ExecuteSkidTrailPath(int startTileId, int endTileId, bool remove)
         {
+            if (!remove && !Fundable()) return;
             int[] changed = remove ? map.RemoveSkidTrailPath(startTileId, endTileId) : map.MarkSkidTrailPath(startTileId, endTileId);
             if (changed.Length == 0) return;
             if (!remove) Expenses += changed.Length * Tuning[Tune.TrailCost];
@@ -400,6 +410,7 @@ namespace ForesTycoon
 
         void IWorldCommandTarget.ExecuteRoadPath(int startTileId, int endTileId, bool remove, RoadPaving surface)
         {
+            if (!remove && !Fundable()) return;
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             int[] changed = remove ? map.RemoveRoadTilePath(startTileId, endTileId)
                 : map.BuildRoadTilePath(startTileId, endTileId, surface);

@@ -4,4 +4,7 @@
     <RootNamespace>ForesTycoon.Rules</RootNamespace>
     <RollForward>Major</RollForward>
   </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Catalog\system-model.json" LogicalName="ForesTycoon.Rules.Catalog.system-model.json" />
+  </ItemGroup>
 </Project>

@@ -89,11 +89,25 @@ namespace ForesTycoon.Editor
                     for (int frame = 0; frame < 2; frame++) {
                         ui.Update(width, height, width, height, Vec2.One, 1f / 60);
                         ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 900)); editor.Draw(world, ref open);
-                        GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit); ui.Render(); GL.Finish();
+                        GL.Viewport(0, 0, width, height); GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit); ui.Render(); GL.Finish();
                     }
                     Require(world.RuleProjectDocument.ToJson() == workshopActive, "Browsing workshop phases changed the running project.");
                     Require(GL.GetError() == ErrorCode.NoError, "Workshop UI OpenGL error: " + screen.Item3);
                     FramebufferCapture.SavePng(Path.Combine(output, screen.Item3 + ".png"), width, height);
+                }
+                foreach (var screen in new (Action Show, string Name)[] {
+                    (() => editor.ShowSystemModel(), "workshop-system"),
+                    (() => editor.ShowSystemModel("water.root"), "workshop-system-water"),
+                    (() => editor.ShowSystemLoopThrough("economy.result"), "workshop-system-economy-loop") }) {
+                    screen.Show();
+                    for (int frame = 0; frame < 3; frame++) {
+                        ui.Update(width, height, width, height, Vec2.One, 1f / 60);
+                        ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 900)); editor.Draw(world, ref open);
+                        GL.Viewport(0, 0, width, height); GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit); ui.Render(); GL.Finish();
+                    }
+                    Require(world.RuleProjectDocument.ToJson() == workshopActive, "Browsing the system model changed the running project.");
+                    Require(GL.GetError() == ErrorCode.NoError, "System model OpenGL error: " + screen.Name);
+                    FramebufferCapture.SavePng(Path.Combine(output, screen.Name + ".png"), width, height);
                 }
                 File.WriteAllText(Path.Combine(output, "road-wear.json"), model.ToJson());
                 var graphEditor = new RuleEditorView(Path.Combine(output, "road-wear.json"));

@@ -90,7 +90,7 @@ namespace ForesTycoon
             foreach (var mill in Mills)
                 if (Array.IndexOf(mill.Footprint, tile) >= 0 || mill.TileId == tile)
                 {
-                    mill.Received += volume; mill.Stock += volume; Income += value;
+                    mill.Received += volume; mill.Stock += volume; Income += value * Tuning[Tune.TimberPriceFactor];
                     return;
                 }
             var stack = StackAt(tile);

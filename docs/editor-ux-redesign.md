@@ -1,6 +1,8 @@
 # A szabályeditor új használati terve
 
-Állapot: az első gyakorlati szakasz megvalósult, 2026-10-11. Elkészült a tematikus
+Állapot: a következő lépést, a rendszermodell-alapú átszervezést az [értékelés és ütemterv](editor-system-model.md) írja le; az ott javított pontok felülírják az itteni terv megfelelő részeit (pl. a Próba és az Alkalmazás projektszintű oldal lett).
+
+Korábbi állapot: az első gyakorlati szakasz megvalósult, 2026-10-11. Elkészült a tematikus
 munkatér, a négy közös lépés, a szűkített adatkapcsolati áttekintés, a beágyazott
 gráfszerkesztők, az elkülönített munkapéldány-mentés, a checkpointból végzett
 összehasonlító próba és a játék átvételi visszaigazolása. A képletgráfokhoz szorzó

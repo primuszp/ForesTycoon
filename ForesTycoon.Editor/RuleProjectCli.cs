@@ -57,6 +57,24 @@ internal static class RuleProjectCli
             if (project.Algorithms != null) _ = AlgorithmBuild.Read(project.Algorithms);
             Console.WriteLine($"Valid: {project.Name}; {project.Behaviors.Graphs.Count} expressions; {project.Behaviors.Controllers.Count} controllers; {project.Dynamics.Stocks.Count} stocks; {project.Dynamics.Flows.Count} flows."); return true;
         }
+        if (args[0] == "--export-system-model" && (args.Length == 2 || args.Length == 4 && args[2] == "--project")) {
+            var project = args.Length == 4 ? RuleProject.FromJson(File.ReadAllText(args[3])) : GameWorld.DefaultRuleProject();
+            var topics = project.Authoring?.Entries ?? new();
+            var model = RuleWorkshopModel.SystemModel(CurrentGameRules.Build(), project.Dynamics, project.Behaviors.Graphs,
+                id => topics.TryGetValue(id, out var entry) ? entry.Topic : 5);
+            object Loop(SystemLoop l) => new { variables = l.Variables, steps = l.Steps, subsystems = model.Span(l) };
+            var options = new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase, Converters = { new JsonStringEnumConverter() } };
+            RuleProject.WriteAtomic(args[1], JsonSerializer.Serialize(new {
+                schema = "forest-system-model-analysis", version = 1,
+                note = "Edges are catalogued data access (reads -> writes), not execution order or proven sign. Extend the vocabulary in ForesTycoon.Rules/Catalog/system-model.json.",
+                subsystems = model.Vocabulary.Subsystems, variables = model.Variables,
+                processes = model.Processes.Select(p => new { p.Id, p.Name, p.Subsystem, p.Reads, p.Writes, p.RuleId,
+                    stocksChanged = model.StocksChangedBy(p.Id).Select(v => v.Id), loops = model.LoopsThroughProcess(p.Id).Take(5).Select(Loop) }),
+                influences = model.Influences, coupledGroups = model.CoupledGroups, keyLoops = model.KeyLoops.Select(Loop),
+                openStocks = model.Variables.Where(v => v.Kind == SystemVariableKind.Stock && model.CoupledGroupOf(v.Id) == null).Select(v => v.Id)
+            }, options));
+            Console.WriteLine($"{model.Variables.Count} mennyiség, {model.Processes.Count} folyamat, {model.KeyLoops.Count} fő kör: {Path.GetFullPath(args[1])}"); return true;
+        }
         if (args[0] == "--export-rule-api" && args.Length == 2) {
             var options = new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase, Converters = { new JsonStringEnumConverter() } };
             RuleProject.WriteAtomic(args[1], JsonSerializer.Serialize(new {

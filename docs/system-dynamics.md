@@ -23,7 +23,7 @@ kiegészíti. Az editor a hiányzó algoritmusokat szerkesztési példányként 
 
 Az editor tematikus **Szabályműhely** felületének használatát az
 [editor útmutató](rule-editor.md) írja le. A **Mentés / Ctrl+S** kizárólag külön
-munkapéldányt készít; nem publikál a játékhoz. A **4. Alkalmazás → Alkalmazás
+munkapéldányt készít; nem publikál a játékhoz. A felső sáv **3 · Játék** lépése → **Alkalmazás
 a játékban** ellenőrzi és atomikusan közzéteszi a teljes projektet.
 A képlet- és dinamikai változásokat a tesztvilágban is alkalmazza.
 A teljes algoritmusgráf-változás előbb háttérben fordul; csak sikeres fordítás után
@@ -118,6 +118,19 @@ az adapter beépített eredményére térnek vissza, diagnosztikával. A készle
 állapota projektcserekor azonos ID és egység mellett megmarad, az új
 határokhoz korlátozva; új készlet a kezdőértékével indul.
 
+## Gazdasági visszacsatolás
+
+A **Hitelkeret** (`CreditLimit`, eFt) és a **Faanyag piaci árszorzó**
+(`TimberPriceFactor`, ×) hangolható érték és képletkötés (`tuning.CreditLimit`,
+`tuning.TimberPriceFactor`). Ha az egyenleg túllépte a hitelkeretet, új út,
+közelítőnyom és útjavítás nem indul; a parancs determinisztikusan elutasítódik,
+a játék „Nincs fedezet” üzenetet ad. Az árszorzó a malomnál elszámolt bevételt
+szorozza. Az alapértékek (korlátlan keret, 1-es szorzó) a korábbi játékmenetet
+adják. A képletek olvashatják a `world.balance`, `world.income`, `world.expenses`
+mezőket és saját készleteket, így a piac vagy az adósság készlet–áramlás
+modellként is felépíthető. A hitelkeret-képlet olyan visszacsatolás, amelyben
+a kiadás csökkenti a keretet, amely a további kiadást korlátozza.
+
 ## AI-ügynök felülete
 
 Ezek a parancsok grafika nélkül, ugyanazzal a fordítóval és GameWorlddel futnak:
@@ -125,6 +138,7 @@ Ezek a parancsok grafika nélkül, ugyanazzal a fordítóval és GameWorlddel fu
 ```powershell
 dotnet run --project ForesTycoon.Editor -- --new-project projekt.json
 dotnet run --project ForesTycoon.Editor -- --export-rule-api rule-api.json
+dotnet run --project ForesTycoon.Editor -- --export-system-model rendszermodell.json --project projekt.json
 dotnet run --project ForesTycoon.Editor -- --export-world mentés.json objektumok.json
 dotnet run --project ForesTycoon.Editor -- --validate-project projekt.json
 dotnet run --project ForesTycoon.Editor -- --simulate-project projekt.json 300 eredmény.json
@@ -134,6 +148,12 @@ dotnet run --project ForesTycoon.Editor -- --project-file-revision projekt.json
 # A kiolvasott fájlrevízióval (új fájlnál: missing):
 dotnet run --project ForesTycoon.Editor -- --publish-project projekt.json.draft.json projekt.json --expected <fájlrevízió>
 ```
+
+A rendszermodell-export a mennyiségeket, folyamatokat (mit olvasnak és írnak,
+melyik készlet áramlásai), hatásokat, összecsatolt csoportokat, fő köröket és nyitott
+készleteket tartalmazza, a projekt saját készleteivel és képleteivel együtt.
+A mennyiségszótár `ForesTycoon.Rules/Catalog/system-model.json`; új katalógusmezőhöz
+bejegyzés kell, ezt teszt ellenőrzi.
 
 Az API-leírás tartalmazza az összes támogatott kötést, korlátot, bemeneti
 jelentést, ütemezést, műveletet és egy alapprojektet. Az ügynök szerkeszti a

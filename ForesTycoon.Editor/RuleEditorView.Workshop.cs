@@ -10,10 +10,11 @@ namespace ForesTycoon.Editor;
 
 internal sealed partial class RuleEditorView
 {
-    private enum WorkshopTool { Rules, Objects, ObjectRule, Dynamics, Algorithms, Map, Library, Start }
+    private enum WorkshopTool { Rules, Objects, ObjectRule, Dynamics, Algorithms, Map, Library, Start, System }
     private sealed record RuleBinding(string Label, View Editor, BehaviorHook Hook = null, string Controller = null, RuleSource Source = null);
-    private WorkshopTool workshopTool;
-    private WorkshopPhase workshopPhase;
+    // The workshop opens on the whole model; a rule, object or file argument switches to its own workspace.
+    private WorkshopTool workshopTool = WorkshopTool.System;
+    private WorkshopPhase workshopPhase, projectReturnPhase;
     private readonly WorkshopVersions workshopVersions = new();
     private readonly Stack<string> ruleBack = new();
     private string workshopRule = "forest.growth", workshopSearch = "", bindingSelectedFor, publishedProjectRevision;
@@ -36,7 +37,7 @@ internal sealed partial class RuleEditorView
         workshopVersions.Acknowledge(fresh ? liveObjects.ProjectRevision : null);
         if (workshopStarted) return;
         workshopStarted = true;
-        if (view == View.Graph) { workshopRule = "road.trafficWear"; workshopTopic = 3; workshopPhase = WorkshopPhase.Edit; }
+        if (view == View.Graph) { workshopTool = WorkshopTool.Rules; workshopRule = "road.trafficWear"; workshopTopic = 3; workshopPhase = WorkshopPhase.Edit; }
         else if (view == View.Behaviors && workshopTool == WorkshopTool.Rules) {
             workshopTool = WorkshopTool.ObjectRule; workshopPhase = WorkshopPhase.Edit; objectRuleTitle = "Importált viselkedésgráf";
         }
@@ -51,18 +52,28 @@ internal sealed partial class RuleEditorView
         ImGui.SameLine(); if (ImGui.Button("Indulási segítség")) { workshopTool = WorkshopTool.Start; workshopPhase = WorkshopPhase.Understand; }
         if (ImGui.GetIO().KeyCtrl && ImGui.IsKeyPressed(ImGuiKey.S)) Try(() => SaveProjectDraft(world));
         WorkshopProjectMenu(world);
-        EditorStyle.Text(HudTheme.Muted, workshopVersions.Unsaved ? "Munkapéldány: módosítva, nincs mentve" : "Munkapéldány: nincs mentetlen változás");
-        ImGui.SameLine(0, 20);
+        // The project's way to the game: work copy -> comparison trial -> running in the game. Each step opens its page.
+        bool trialFresh = workshopVersions.TestedCurrent, running = publishedProjectRevision != null && workshopVersions.Running == publishedProjectRevision && liveObjects?.Error == null;
+        EditorStyle.Chip(workshopVersions.Unsaved ? "1 · Munkapéldány: mentetlen" : "1 · Munkapéldány: mentve", workshopVersions.Unsaved ? HudTheme.AmberAccent : HudTheme.Good, "pipe-save");
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("A Mentés (Ctrl+S) csak a külön munkapéldányt írja, a játékot nem változtatja.");
+        ImGui.SameLine(0, 6);
+        if (EditorStyle.Chip("2 · Próba: " + (trialFresh ? "aktuális változat" : trialResult != null ? "korábbi változaté" : "még nincs"),
+            trialFresh ? HudTheme.Good : trialResult != null ? HudTheme.AmberAccent : HudTheme.Muted, "pipe-trial", true)) OpenProjectPhase(WorkshopPhase.Trial);
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("A teljes munkapéldány összehasonlító próbája az alapváltozattal, ugyanabból a világból.");
+        ImGui.SameLine(0, 6);
+        if (EditorStyle.Chip("3 · Játék: " + (publishedProjectRevision == null ? "nem alkalmaztál változást" : running ? "átvette" : "átvételre vár"),
+            running ? HudTheme.Good : publishedProjectRevision != null ? HudTheme.AmberAccent : HudTheme.Muted, "pipe-apply", true)) OpenProjectPhase(WorkshopPhase.Apply);
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("A teljes projekt ellenőrzése, közzététele és a játék visszaigazolása.");
+        ImGui.SameLine(0, 18); ImGui.AlignTextToFramePadding();
         EditorStyle.Text(HudTheme.Info, ObjectSourceLabel(world));
-        EditorStyle.Text(HudTheme.Muted, "Próba: " + (workshopVersions.TestedCurrent ? "aktuális változat tesztelve" : trialResult != null ? "korábbi változatról van eredmény" : "még nincs eredmény")
-            + " · Játék: " + (publishedProjectRevision == null ? "ebből a műhelyből még nem alkalmaztál változást"
-                : workshopVersions.Running == publishedProjectRevision && liveObjects?.Error == null ? "közzétett változat átvétele visszaigazolva" : "átvételi visszaigazolásra vár"));
         ImGui.Separator();
     }
     private void WorkshopBody(GameWorld world, CompiledRoadRule compiled)
     {
         float sidebar = Math.Min(240, ImGui.GetContentRegionAvail().X * .27f);
         ImGui.BeginChild("workshop-navigation", new Vec2(sidebar, 0), ImGuiChildFlags.Borders);
+        if (ImGui.Selectable("Rendszermodell", workshopTool == WorkshopTool.System)) ShowSystemModel();
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Az egész játék készletei, áramlásai és visszacsatolási körei egy térképen.");
         EditorStyle.Section("Témák");
         for (int i = 0; i < RuleWorkshopModel.Topics.Length; i++)
             if (ImGui.Selectable(RuleWorkshopModel.Topics[i].Name, workshopTool == WorkshopTool.Rules && workshopTopic == i)) {
@@ -88,7 +99,7 @@ internal sealed partial class RuleEditorView
         if (ImGui.Button("További eszközök", new Vec2(-1, 0))) ImGui.OpenPopup("workshop-tools");
         if (ImGui.BeginPopup("workshop-tools")) {
             if (ImGui.MenuItem("Saját készletek és áramlások")) ShowDynamics();
-            if (ImGui.MenuItem("Teljes összefüggéstérkép")) { workshopTool = WorkshopTool.Map; workshopPhase = WorkshopPhase.Understand; }
+            if (ImGui.MenuItem("Szabálykapcsolatok térképe")) { workshopTool = WorkshopTool.Map; workshopPhase = WorkshopPhase.Understand; }
             if (ImGui.MenuItem("Összes belső algoritmusgráf")) ShowAlgorithms();
             ImGui.EndPopup();
         }
@@ -98,22 +109,28 @@ internal sealed partial class RuleEditorView
         string title = workshopTool switch { WorkshopTool.Objects => "Játékobjektumok", WorkshopTool.ObjectRule => objectRuleTitle,
             WorkshopTool.Dynamics => thematicDynamics ? dynamicsEditor.Draft.Stocks.FirstOrDefault(s => "stock." + s.Id == thematicItem)?.Name
                 ?? dynamicsEditor.Draft.Flows.FirstOrDefault(f => "flow." + f.Id == thematicItem)?.Name ?? "Saját készletek és áramlások" : "Saját készletek és áramlások", WorkshopTool.Algorithms => "Belső algoritmusgráfok",
-            WorkshopTool.Map => "Teljes összefüggéstérkép", WorkshopTool.Library => "Szabálytár és sablonok", WorkshopTool.Start => "Mit szeretnél módosítani?", _ => selectedRule?.Name ?? "Válassz szabályt" };
-        if (workshopTool == WorkshopTool.Rules) {
+            WorkshopTool.Map => "Szabálykapcsolatok térképe", WorkshopTool.System => "Rendszermodell", WorkshopTool.Library => "Szabálytár és sablonok", WorkshopTool.Start => "Mit szeretnél módosítani?", _ => selectedRule?.Name ?? "Válassz szabályt" };
+        if (workshopTool == WorkshopTool.Rules && workshopPhase is WorkshopPhase.Understand or WorkshopPhase.Edit) {
             EditorStyle.Text(HudTheme.Muted, RuleWorkshopModel.Topics[workshopTopic].Name);
             if (ruleBack.Count > 0) { ImGui.SameLine(); if (ImGui.SmallButton("< Előző szabály")) SelectWorkshopRule(ruleBack.Pop(), remember: false); }
         }
-        EditorStyle.Title(title);
-        foreach (var phase in Enum.GetValues<WorkshopPhase>()) {
-            if (phase != WorkshopPhase.Understand) ImGui.SameLine(0, 6);
-            string label = phase switch { WorkshopPhase.Understand => "1. Megértés", WorkshopPhase.Edit => "2. Szerkesztés",
-                WorkshopPhase.Trial => "3. Próba", _ => "4. Alkalmazás" };
-            if (ViewTab(label, workshopPhase == phase, "")) SetWorkshopPhase(phase, selectedRule);
+        bool projectPage = workshopPhase is WorkshopPhase.Trial or WorkshopPhase.Apply;
+        if (projectPage) {
+            if (EditorStyle.QuietButton("‹ Vissza: " + title)) SetWorkshopPhase(projectReturnPhase, selectedRule);
+            EditorStyle.Title(workshopPhase == WorkshopPhase.Trial ? "Próba · a teljes munkapéldány" : "Alkalmazás a játékban");
+        } else {
+            EditorStyle.Title(title);
+            if (workshopTool == WorkshopTool.Rules) {
+                if (ViewTab("Megértés", workshopPhase == WorkshopPhase.Understand, "Mit számol, miből, mit változtat és mely körökben vesz részt.")) SetWorkshopPhase(WorkshopPhase.Understand, selectedRule);
+                ImGui.SameLine(0, 6);
+                if (ViewTab("Szerkesztés", workshopPhase == WorkshopPhase.Edit, "A szabály képlete, munkaciklusa vagy belső algoritmusa.")) SetWorkshopPhase(WorkshopPhase.Edit, selectedRule);
+            }
         }
         ImGui.Separator();
         ImGui.BeginChild("workshop-phase", new Vec2(0, -54), ImGuiChildFlags.None,
             workshopPhase == WorkshopPhase.Edit ? ImGuiWindowFlags.NoScrollbar : ImGuiWindowFlags.None);
         if (workshopPhase == WorkshopPhase.Trial) WorkshopTrial(world);
+        else if (workshopPhase != WorkshopPhase.Apply && workshopTool == WorkshopTool.System) systemView.Draw(SystemModel(), OpenSystemProcess, OpenSystemVariable);
         else if (workshopPhase == WorkshopPhase.Apply) WorkshopApply(world);
         else if (workshopTool == WorkshopTool.Objects) ObjectsView(world);
         else if (workshopTool == WorkshopTool.Map) currentRules.Draw(world,
@@ -143,9 +160,11 @@ internal sealed partial class RuleEditorView
     }
     private void SetWorkshopPhase(WorkshopPhase phase, GameRuleDefinition rule)
     {
+        if (phase is WorkshopPhase.Trial or WorkshopPhase.Apply && workshopPhase is WorkshopPhase.Understand or WorkshopPhase.Edit) projectReturnPhase = workshopPhase;
         workshopPhase = phase;
         if (phase == WorkshopPhase.Edit && workshopTool == WorkshopTool.Rules && rule != null) EnsureRuleBinding(rule);
     }
+    private void OpenProjectPhase(WorkshopPhase phase) => SetWorkshopPhase(phase, currentRules.Index.Find(workshopRule));
     private void WorkshopUnderstanding(GameRuleDefinition rule)
     {
         ImGui.TextWrapped(rule.Description); ImGui.Spacing();
@@ -153,10 +172,10 @@ internal sealed partial class RuleEditorView
             EditorStyle.Fact("Kikre vonatkozik?", rule.Scope);
             EditorStyle.Fact("Mikor fut?", rule.Schedule); ImGui.EndTable();
         }
-        EditorStyle.Section("Mi mivel függ össze?");
-        ImGui.TextWrapped("A kapcsolatok adatot adnak át. A lista nem a végrehajtási sorrendet mutatja.");
-        FocusedConnections(rule);
-        if (ImGui.CollapsingHeader("Minden bemenet, kimenet és kapcsolódó szabály")) {
+        EditorStyle.Section("Helye a rendszermodellben");
+        ImGui.TextWrapped("A kapcsolatok adatot adnak át; nem a végrehajtási sorrendet és nem a hatás előjelét mutatják.");
+        RuleSystemContext(rule);
+        if (ImGui.CollapsingHeader("Kapcsolódó szabályok mennyiségenként")) {
             if (ImGui.BeginTable("workshop-connections", 2, ImGuiTableFlags.SizingStretchSame | ImGuiTableFlags.PadOuterX)) {
                 ImGui.TableNextRow(); ImGui.TableSetColumnIndex(0); DrawRuleConnections(rule, incoming: true);
                 ImGui.TableSetColumnIndex(1); DrawRuleConnections(rule, incoming: false); ImGui.EndTable();
@@ -191,34 +210,6 @@ internal sealed partial class RuleEditorView
             ImGui.PopID();
         }
     }
-    private void FocusedConnections(GameRuleDefinition rule)
-    {
-        string input = rule.Reads.Contains("water.growthFactor") ? "water.growthFactor" : rule.Reads.FirstOrDefault();
-        string output = rule.Writes.Contains("forest.volume") ? "forest.volume" : rule.Writes.FirstOrDefault();
-        if (!ImGui.BeginTable("focused-rule-flow", 3, ImGuiTableFlags.SizingStretchSame | ImGuiTableFlags.PadOuterX)) return;
-        ImGui.TableNextRow();
-        void Cell(int column, string label, string field, bool incoming) {
-            ImGui.TableSetColumnIndex(column);
-            ImGui.BeginChild("flow-" + column, new Vec2(0, 132), ImGuiChildFlags.Borders);
-            EditorStyle.Text(HudTheme.Muted, label);
-            EditorStyle.Title(field == null ? "Induló adat / saját állapot" : RuleWorkshopModel.FieldName(field));
-            if (field != null) {
-                var neighbours = incoming ? currentRules.Index.Writers(field) : currentRules.Index.Readers(field);
-                var other = neighbours.FirstOrDefault(r => r.Id != rule.Id && r.Execution != GameRuleExecution.Presentation && r.Module != "Idő és vezérlés");
-                if (other != null && ImGui.Selectable(other.Name + "##focus" + other.Id)) SelectWorkshopRule(other.Id);
-                if (other != null && ImGui.IsItemHovered()) ImGui.SetTooltip(other.Name);
-            }
-            ImGui.EndChild();
-        }
-        Cell(0, "BEMENETET AD", input, true);
-        ImGui.TableSetColumnIndex(1);
-        ImGui.BeginChild("flow-selected", new Vec2(0, 132), ImGuiChildFlags.Borders);
-        EditorStyle.Text(HudTheme.AmberAccent, "EZT SZERKESZTED"); EditorStyle.Title(rule.Name);
-        if (ImGui.Button("Gráf megnyitása")) SetWorkshopPhase(WorkshopPhase.Edit, rule);
-        ImGui.EndChild();
-        Cell(2, "EREDMÉNY / FOGYASZTÓ", output, false);
-        ImGui.EndTable();
-    }
     private string ObjectSourceLabel(GameWorld world)
     {
         if (!useLiveObjects) return $"Objektumforrás: editor tesztvilága · tick {world.SimulationTick}";
@@ -235,11 +226,7 @@ internal sealed partial class RuleEditorView
             foreach (string kind in new[] { "truck", "forwarder", "processor" })
                 if (rule.Id == "machine.controller" || rule.Id == "machine." + kind || kind == "truck" && rule.Id is "vehicle.transfer" or "fleet.orders")
                     result.Add(new(RuleWorkshopModel.KindName(kind) + " munkaciklusa", View.Behaviors, Controller: kind));
-        foreach (var hook in WorldBehaviorPolicy.Hooks.Where(h => h.Id == rule.Id
-            || h.Id.StartsWith("tuning.") && GameTuning.Spec(h.Id[7..])?.Rule == rule.Id
-            || h.Id.StartsWith("route.") && rule.Id is "route.find" or "route.policy"
-            || (h.Id.StartsWith("loading.") || h.Id == "unloading.amount") && (rule.Id == "loading.policy" || rule.Id == "machine.logTransfer" && h.Kind == "forwarder" || rule.Id == "vehicle.transfer" && h.Kind == "truck")
-            || h.Id == "machine.pace" && rule.Id == (h.Kind == "forwarder" ? "machine.forwarder" : "machine.processor")))
+        foreach (var hook in WorldBehaviorPolicy.Hooks.Where(h => RuleWorkshopModel.HookBelongsTo(h, rule)))
             result.Add(new(hook.Name + " · " + RuleWorkshopModel.KindName(hook.Kind), View.Behaviors, Hook: hook));
         foreach (var source in rule.Sources) result.Add(new("Belső algoritmus · " + source.Symbol, View.Algorithms, Source: source));
         return result.ToArray();
@@ -349,7 +336,9 @@ internal sealed partial class RuleEditorView
     }
     private static string MeasureLabel(string key) => key switch {
         "forest.totalVolume" => "Élő faállomány térfogata (m³)", "forest.meanHeight" => "Átlagmagasság (m)", "forest.meanDiameter" => "Átlagátmérő (m)",
-        "forest.meanHealth" => "Átlagos faegészség (0–1)", "road.meanCondition" => "Átlagos útállapot (0–1)", _ => RuleWorkshopModel.FieldName(key)
+        "forest.meanHealth" => "Átlagos faegészség (0–1)", "road.meanCondition" => "Átlagos útállapot (0–1)",
+        "world.treeCount" => "Élő fák (db)", "world.balance" => "Egyenleg (eFt)", "world.income" => "Bevétel (eFt)", "world.expenses" => "Kiadások (eFt)",
+        "world.runningCosts" => "Üzemeltetés (eFt)", "world.rain" => "Csapadékráta", "world.snow" => "Hókészlet (mm)", "world.time" => "Erdőév", _ => RuleWorkshopModel.FieldName(key)
     };
     private void WorkshopApply(GameWorld world)
     {
@@ -390,10 +379,10 @@ internal sealed partial class RuleEditorView
         if (workshopPhase == WorkshopPhase.Understand && workshopTool == WorkshopTool.Rules) {
             if (EditorStyle.PrimaryButton("Gráf szerkesztése ->", rule != null)) SetWorkshopPhase(WorkshopPhase.Edit, rule);
         } else if (workshopPhase == WorkshopPhase.Edit) {
-            if (EditorStyle.PrimaryButton("Ellenőrzés és próba ->")) workshopPhase = WorkshopPhase.Trial;
+            if (EditorStyle.PrimaryButton("Ellenőrzés és próba ->")) OpenProjectPhase(WorkshopPhase.Trial);
         } else if (workshopPhase == WorkshopPhase.Trial) {
             if (EditorStyle.PrimaryButton(graphSimulation != null ? "Próba folyamatban…" : "Összehasonlító próba indítása", !busy)) Try(() => SimulateGraphs(world));
-            ImGui.SameLine(); if (ImGui.Button("Alkalmazás áttekintése ->")) workshopPhase = WorkshopPhase.Apply;
+            ImGui.SameLine(); if (ImGui.Button("Alkalmazás áttekintése ->")) OpenProjectPhase(WorkshopPhase.Apply);
         } else if (workshopPhase == WorkshopPhase.Apply) {
             if (EditorStyle.PrimaryButton(algorithmBuild != null ? "Fordítás folyamatban…" : "Alkalmazás a játékban", !busy)) Try(() => ApplyProject(world, true));
             ImGui.SameLine(); if (ImGui.Button("Vissza a szerkesztéshez")) SetWorkshopPhase(WorkshopPhase.Edit, rule);
