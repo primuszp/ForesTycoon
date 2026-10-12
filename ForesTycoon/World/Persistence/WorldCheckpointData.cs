@@ -40,5 +40,8 @@ namespace ForesTycoon
         ForestryActionResult LastAction, ForestryAreaSummary LastArea, double Expenses = 0, RuleModel Rules = null,
         Dictionary<string, double> Tuning = null, double RoadWeatherSeconds = 0, BehaviorModel Behaviors = null,
         BehaviorControllerSnapshot[] BehaviorStates = null, DynamicsModel Dynamics = null,
-        Dictionary<string, double> DynamicsValues = null, string RuleProjectName = null, AlgorithmGraphReference Algorithms = null);
+        Dictionary<string, double> DynamicsValues = null, string RuleProjectName = null, AlgorithmGraphReference Algorithms = null,
+        // Null: the built-in rule book with no custom fields, so older saves and the opening reference stay unchanged.
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        RuleBookCheckpoint RuleBook = null);
 }

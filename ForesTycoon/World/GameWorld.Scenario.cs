@@ -105,8 +105,39 @@ namespace ForesTycoon
                 forest.PaintInitialForest(scenario.ForestPaint.ToDictionary(p => p.Key,
                     p => p.Value.Length == 0 ? ForestSpecies.None : Enum.TryParse(p.Value, out ForestSpecies s) ? s : ForestSpecies.None),
                     preserveUnpainted: scenario.InitialState != null);
+                BuildSceneStructures(scenario);
             }
             QueueRuleProject(project); ExecutePendingCommands();
+        }
+
+        /// <summary>What the scene asked for but the map did not allow, e.g. a mill on a slope; shown in the editor.</summary>
+        internal List<string> SceneProblems { get; } = new();
+
+        /// <summary>
+        /// The scene's roads, sawmills and depots, built in that order like a player would, but free: they are the starting
+        /// estate, not spending. Forest under a building's footprint is cleared first.
+        /// </summary>
+        private void BuildSceneStructures(WorldScenario scenario)
+        {
+            SceneProblems.Clear();
+            if (scenario.Roads.Count + scenario.Sawmills.Count + scenario.Depots.Count == 0) return;
+            double expenses = Expenses; string status = Logistics?.Status;
+            foreach (var road in scenario.Roads) {
+                var surface = road.Surface == "Asphalt" ? RoadPaving.Asphalt : RoadPaving.Macadam;
+                int before = RoadCount;
+                ((IWorldCommandTarget)this).ExecuteRoadPath(road.From, road.To, false, surface);
+                if (RoadCount == before && !map.IsRoadTile(road.From)) SceneProblems.Add($"Az út #{road.From} → #{road.To} nem épülhetett meg (víz vagy meredek).");
+            }
+            void Place(int tile, string what, Func<int, bool> place)
+            {
+                if (map.TryGetSawmillFootprint(tile, out var footprint, out _))
+                    forest.PaintInitialForest(footprint.ToDictionary(t => t, _ => ForestSpecies.None), preserveUnpainted: true);
+                if (Logistics == null || !place(tile)) SceneProblems.Add($"{what} #{tile}: {Logistics?.Status ?? "nincs logisztika."}");
+            }
+            foreach (int tile in scenario.Sawmills) Place(tile, "Fűrészmalom", t => Logistics.PlaceMill(t));
+            foreach (int tile in scenario.Depots) Place(tile, "Telephely", t => Logistics.PlaceDepot(t));
+            Expenses = expenses;
+            if (Logistics != null) Logistics.Status = status;
         }
 
         /// <summary>

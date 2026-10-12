@@ -20,6 +20,10 @@ public sealed class RuleProject
     public AlgorithmGraphReference Algorithms { get; set; }
     /// <summary>The world map and its soil types, authored in the world editor; used when a new world is created.</summary>
     public WorldScenario World { get; set; }
+    /// <summary>The rule book: rules written as schedule + scope + condition + effects, run by the game in this order.</summary>
+    public List<WorldRule> Rules { get; set; } = new();
+    /// <summary>State variables the rules may add to a scope.</summary>
+    public List<RuleFieldDefinition> Fields { get; set; } = new();
     public RuleAuthoring Authoring { get; set; } = new();
     internal static readonly JsonSerializerOptions JsonOptions = new() {
         WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase, PropertyNameCaseInsensitive = true,

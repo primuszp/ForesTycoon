@@ -61,7 +61,8 @@ namespace ForesTycoon.Editor
         protected override void LoadScene()
         {
             VSync = VSyncMode.On;
-            sandbox = WorldLoader.CreateOpening(enableRendering: false);
+            // The editor opens the scene the game starts from, missions and rules included.
+            sandbox = WorldLoader.CreateStart(enableRendering: false);
             if (worldFile != null) { EditorWorldLoader.Load(sandbox, worldFile); editor.UseWorldFile(worldFile); }
             if (smoke) openingReference = OpeningSceneReference.Fingerprints(sandbox);
             ui = new ImGuiController(); HudTheme.Apply();

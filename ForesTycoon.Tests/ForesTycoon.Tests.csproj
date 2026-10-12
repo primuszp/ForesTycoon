@@ -27,6 +27,7 @@
     <Using Include="ForesTycoon.Map" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="../ForesTycoon/Content/Scenes/opening.project.json" Link="Content/Scenes/opening.project.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../docs/references/opening-scene/fingerprints.json" Link="OpeningReference.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../docs/references/opening-scene/opening.world.json.gz" Link="OpeningReference.world.json.gz" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

@@ -9,6 +9,8 @@ namespace ForesTycoon;
 sealed partial class GameWorld
 {
     private DynamicsRuntime dynamics;
+    private RuleEngine ruleEngine;
+    internal RuleEngine RuleBook => ruleEngine;
     private string ruleProjectName = "ForesTycoon szabályrendszer";
     private AlgorithmGraphReference algorithmGraphs;
     internal static readonly string[] RuleWorldFields = {
@@ -17,6 +19,7 @@ sealed partial class GameWorld
     };
     internal RuleProject RuleProjectDocument => new() { Name = ruleProjectName, Road = RuleDocument,
         Tuning = Tuning.ToOverrides(), Behaviors = BehaviorDocument, Dynamics = dynamics.Document, Algorithms = AlgorithmSnapshot(),
+        Rules = RuleEngine.Clone(ruleEngine.Rules), Fields = RuleEngine.CloneFields(ruleEngine.Fields),
         World = ruleProjectWorld == null ? null : RuleProject.FromJson(new RuleProject { World = ruleProjectWorld }.ToJson()).World };
     /// <summary>The world map of the active project: used by the next new world, never applied to the running one.</summary>
     private WorldScenario ruleProjectWorld;
@@ -26,7 +29,8 @@ sealed partial class GameWorld
     };
     internal IReadOnlyDictionary<string, double> DynamicsValues => dynamics.Values;
     internal string DynamicsError => dynamics.LastError;
-    internal double ReadRuleValue(string key) => key.StartsWith("stock.", StringComparison.Ordinal) ? dynamics.Read(key) : ReadWorldValue(key);
+    internal double ReadRuleValue(string key) => key.StartsWith("stock.", StringComparison.Ordinal) ? dynamics.Read(key)
+        : key.StartsWith("tuning.", StringComparison.Ordinal) && GameTuning.Spec(key[7..]) is TuningSpec spec ? Tuning[spec.Key] : ReadWorldValue(key);
     private double ReadWorldValue(string key) => key switch {
         "world.time" => forest.ForestYear, "world.treeCount" => ForestTreeCount, "world.roadCount" => RoadCount,
         "world.rain" => Environment.LiquidRainRate, "world.temperature" => Environment.Temperature,
@@ -45,8 +49,8 @@ sealed partial class GameWorld
         prepared.Document.Tuning = prepared.Tuning.ToOverrides();
         return prepared.Document;
     }
-    private static (RuleProject Document, CompiledRoadRule Road, GameTuning Tuning, DynamicsRuntime Dynamics, WorldBehaviorPolicy Policy)
-        PrepareRuleProject(RuleProject project, Func<string, double> readWorld)
+    private static (RuleProject Document, CompiledRoadRule Road, GameTuning Tuning, DynamicsRuntime Dynamics, WorldBehaviorPolicy Policy, RuleEngine Engine)
+        PrepareRuleProject(RuleProject project, Func<string, double> readWorld, Func<string, double> readRule = null)
     {
         ArgumentNullException.ThrowIfNull(project);
         var copy = project.Clone();
@@ -65,7 +69,11 @@ sealed partial class GameWorld
             if (!copy.Behaviors.Graphs.Any(g => g != null && g.Hook == hook.Id && g.Kind == hook.Kind && !g.ObjectId.HasValue))
                 copy.Behaviors.Graphs.Add(WorldBehaviorPolicy.DefaultGraph(hook));
         var policy = new WorldBehaviorPolicy(copy.Behaviors, DynamicsRuntime.Keys(copy.Dynamics, RuleWorldFields), runtime.Read);
-        return (copy, road, tuning, runtime, policy);
+        // The rule book always holds the built-in rules (moved out of C#); a project may edit or disable them.
+        copy.Rules ??= new(); copy.Fields ??= new();
+        RuleEngine.AddMissingBuiltIns(copy.Rules);
+        var engine = new RuleEngine(copy.Rules, copy.Fields, copy.Dynamics.Stocks.Select(s => s.Id), readRule ?? (_ => 0));
+        return (copy, road, tuning, runtime, policy, engine);
     }
     internal void QueueRuleProject(RuleProject project)
     {
@@ -77,11 +85,14 @@ sealed partial class GameWorld
     private void ApplyRuleProject(RuleProject project)
     {
         RequireAlgorithmRuntime(project.Algorithms);
-        var next = PrepareRuleProject(project, ReadWorldValue);
+        var next = PrepareRuleProject(project, ReadWorldValue, ReadRuleValue);
+        next.Engine.Preserve(ruleEngine);
         next.Dynamics.Preserve(dynamics);
         next.Policy.Controllers.PreserveUnchanged(behaviorPolicy.Controllers);
         bool refresh = ForestBehaviorSignature(BehaviorDocument) != ForestBehaviorSignature(next.Document.Behaviors);
-        roadRule = next.Road; dynamics = next.Dynamics; behaviorPolicy = next.Policy; ruleProjectName = next.Document.Name; ruleProjectWorld = next.Document.World;
+        roadRule = next.Road; dynamics = next.Dynamics; behaviorPolicy = next.Policy; ruleEngine = next.Engine; ruleProjectName = next.Document.Name;
+        // A rules-only project keeps the running scene (its map and missions); a project with a world replaces it.
+        ruleProjectWorld = next.Document.World ?? ruleProjectWorld;
         // Species numbers are world content the rules read; a project change installs them for the whole process.
         ForestSpeciesBook.Apply(SpeciesEdits(next.Document.World));
         // Springs are part of the hydrology the rules run: a project change moves, adds or stops them at once.

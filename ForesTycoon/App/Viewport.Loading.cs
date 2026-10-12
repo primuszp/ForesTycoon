@@ -23,8 +23,7 @@ namespace ForesTycoon
             {
                 if (world == null)
                 {
-                    world = sceneProject == null ? WorldLoader.CreateOpening() :
-                        WorldLoader.CreateProject(RuleProject.FromJson(System.IO.File.ReadAllText(sceneProject)), enableRendering: true);
+                    world = WorldLoader.CreateStart(sceneProject);
                     if (resumeWorld != null) {
                         using var input = System.IO.File.OpenRead(resumeWorld); world.Load(input, allowAlgorithmMigration: true);
                         var project = RuleProject.FromJson(System.IO.File.ReadAllText(RuleProject.DefaultPath));

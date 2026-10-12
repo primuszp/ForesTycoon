@@ -219,8 +219,9 @@ namespace ForesTycoon
                 "ForesTycoon.Map/Terrain/TerrainMap.SkidTrails.cs", "DriveSkidTrail", "vehicle.mass|vehicle.position|machine.position|trail.wear", "trail.wear|trail.idle",
                 "A vályú fokozatosan mélyül, az üresjárati idő nullázódik. A teherautó nyomterhelése a közúti alapkopás húszszorosa.", "vályú = clamp(vályú + terhelés × (1 - vályú), 0, 1)");
             var age = Add("trail.age", "Nyom regenerációja és benövése", "Utak és nyomok", "Nyomcsempe", "Út-időjárási frissítés",
-                "ForesTycoon.Map/Terrain/TerrainMap.SkidTrails.cs", "AgeSkidTrails", "trail.wear|trail.idle|calendar.time", "trail.wear|trail.idle|trail.network",
-                "A vályú évente 0,4-et enyhül; 3 év használatlanság és szinte eltűnt vályú után a nyom megszűnik. Az útvonalak újraellenőrződnek.");
+                "ForesTycoon/World/RuleEngine.cs", "BuiltIn", "trail.wear|trail.idle|calendar.time", "trail.wear|trail.idle|trail.network",
+                "A Szabálykönyv beépített szabálya (adat, nem C#): a vályú évente 0,4-et enyhül; a benövési idő után a sima nyom megszűnik. Az útvonalak újraellenőrződnek.",
+                "kopás = max(0; kopás − 0,4 × lépés); tétlenség += lépés; megszűnik, ha tétlenség ≥ benövés és kopás ≤ 0,001", GameRuleExecution.EditableExpressions);
             Add("route.find", "Hálózati útvonalkeresés", "Járművek", "Hálózat / forrás és cél", "Utasítás / hálózatváltozás",
                 "ForesTycoon.Map/Terrain/TerrainMap.Network.cs", "FindNetworkPath", "road.network|trail.network|trail.wear|buildings.footprint|timber.stacks", "vehicle.route",
                 "Közös út- és nyomhálózat, kölcsönös csatlakozások, burkolat és nyomvályú szerinti költség. A flottában a dokkpárok útvonalai közül a legkisebb összesített költségű nyer; azonos költségnél a rendezett dokksorrend dönt.");

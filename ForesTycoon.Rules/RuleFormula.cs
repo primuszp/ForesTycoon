@@ -418,6 +418,14 @@ public sealed class WorldScenario
     public Dictionary<int, double> Springs { get; set; } = new();
     /// <summary>The species of this world; empty means the built-in species unchanged.</summary>
     public List<SpeciesDefinition> Species { get; set; } = new();
+    /// <summary>Roads built with the scene, in order, at no cost: each runs from one tile to another along the game's road path.</summary>
+    public List<RoadSegment> Roads { get; set; } = new();
+    /// <summary>Sawmills by top-left tile of their 2×2 footprint.</summary>
+    public List<int> Sawmills { get; set; } = new();
+    /// <summary>Depots by top-left tile; the first one receives the starting fleet (processor, forwarder, log truck).</summary>
+    public List<int> Depots { get; set; } = new();
+    /// <summary>The scene's missions: goals the game checks against world values while it runs.</summary>
+    public List<MissionGoal> Missions { get; set; } = new();
 
     public void Validate()
     {
@@ -436,7 +444,20 @@ public sealed class WorldScenario
                   && s.PreferredMoisture is >= 0 and <= 1 && s.PreferredTexture is >= 0 and <= 1))
                 throw new InvalidDataException($"{s.Name}: érvénytelen paraméter (arányok 0–1, ráták nem negatívak).");
         }
-        HeightPaint ??= new(); ForestPaint ??= new(); Species ??= new(); Springs ??= new();
+        HeightPaint ??= new(); ForestPaint ??= new(); Species ??= new(); Springs ??= new(); Missions ??= new();
+        Roads ??= new(); Sawmills ??= new(); Depots ??= new();
+        if (Roads.Count > 512 || Sawmills.Count > 32 || Depots.Count > 32) throw new InvalidDataException("Túl sok út, malom vagy telephely a pályán.");
+        foreach (var r in Roads)
+            if (r == null || r.From < 0 || r.To < 0 || r.From >= Size * Size || r.To >= Size * Size || Array.IndexOf(RoadSegment.Surfaces, r.Surface) < 0)
+                throw new InvalidDataException("Egy út érvénytelen csempére vagy burkolatra mutat.");
+        foreach (int tile in Sawmills.Concat(Depots))
+            if (tile < 0 || tile >= Size * Size) throw new InvalidDataException("Egy malom vagy telephely érvénytelen csempére mutat.");
+        if (Missions.Count > 32) throw new InvalidDataException("Egy pályán legfeljebb 32 küldetés lehet.");
+        var missions = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var m in Missions) {
+            if (m == null || string.IsNullOrWhiteSpace(m.Id) || !missions.Add(m.Id)) throw new InvalidDataException("Minden küldetésnek egyedi azonosítója legyen.");
+            m.Validate();
+        }
         foreach (var (tile, rate) in Springs)
             if (tile < 0 || tile >= Size * Size || !(rate > 0 && rate <= 100000)) throw new InvalidDataException("Egy forrás érvénytelen csempére mutat, vagy a hozama nem 0 és 100 000 mm/óra közötti.");
         var species = new HashSet<string>(StringComparer.Ordinal);
@@ -452,4 +473,42 @@ public sealed class WorldScenario
         foreach (var (tile, soil) in SoilPaint)
             if (tile < 0 || tile >= Size * Size || !ids.Contains(soil)) throw new InvalidDataException("A festett talaj ismeretlen talajtípusra vagy csempére mutat.");
     }
+}
+
+/// <summary>
+/// One mission of a scene: a world value (a <c>world.*</c> field or a dynamics stock) compared with a target, optionally
+/// before a deadline forest year. The game evaluates it from the current state; nothing is stored beyond the scene.
+/// </summary>
+public sealed class MissionGoal
+{
+    public static readonly string[] Comparisons = { ">=", "<=" };
+    public string Id { get; set; } = "kuldetes";
+    public string Title { get; set; } = "Új küldetés";
+    public string Description { get; set; } = "";
+    /// <summary>The value checked: e.g. <c>world.balance</c>, <c>world.deliveredTimber</c>, <c>world.treeCount</c>, <c>stock.x</c>.</summary>
+    public string Metric { get; set; } = "world.balance";
+    public string Comparison { get; set; } = ">=";
+    public double Target { get; set; }
+    /// <summary>The forest year (<c>world.time</c>) by which the goal must be reached; 0 means no deadline.</summary>
+    public double DeadlineYear { get; set; }
+
+    public bool Reached(double value) => Comparison == "<=" ? value <= Target : value >= Target;
+
+    public void Validate()
+    {
+        if (string.IsNullOrWhiteSpace(Title) || Description == null || string.IsNullOrWhiteSpace(Metric)
+            || !(Metric.StartsWith("world.", StringComparison.Ordinal) || Metric.StartsWith("stock.", StringComparison.Ordinal)))
+            throw new InvalidDataException($"{Title}: a küldetésnek címe és world.* vagy stock.* mérőszáma legyen.");
+        if (Array.IndexOf(Comparisons, Comparison) < 0 || !double.IsFinite(Target) || !(DeadlineYear is >= 0 and <= 1000))
+            throw new InvalidDataException($"{Title}: érvénytelen feltétel, cél vagy határidő (0–1000 év).");
+    }
+}
+
+/// <summary>A road of the scene: the game's road path from one tile to another, with its surface.</summary>
+public sealed class RoadSegment
+{
+    public static readonly string[] Surfaces = { "Asphalt", "Macadam" };
+    public int From { get; set; }
+    public int To { get; set; }
+    public string Surface { get; set; } = "Macadam";
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 
 namespace ForesTycoon
 {
@@ -11,7 +12,7 @@ namespace ForesTycoon
                 commands.Count, map.Capture(), ecosystem.Capture(), wildlife.Capture(), Logistics.Capture(), vehicles.Capture(),
                 timberCargo.Available, timberCargo.Delivered, effects.Capture(), lastForestryAction, lastForestryArea, Expenses, RuleDocument,
                 Tuning.IsDefault ? null : Tuning.ToOverrides(), roadWeatherSeconds, BehaviorDocument, BehaviorStates,
-                dynamics.Document, dynamics.Capture(), ruleProjectName, AlgorithmSnapshot());
+                dynamics.Document, dynamics.Capture(), ruleProjectName, AlgorithmSnapshot(), ruleEngine.Capture());
         }
 
         private void RestoreCheckpoint(WorldCheckpointData s)
@@ -36,6 +37,10 @@ namespace ForesTycoon
             dynamics = new(s.Dynamics ?? new DynamicsModel(), RuleWorldFields, ReadWorldValue);
             if (s.DynamicsValues != null) dynamics.Restore(s.DynamicsValues);
             ruleProjectName = s.RuleProjectName ?? "ForesTycoon szabályrendszer";
+            var rules = s.RuleBook?.Rules ?? RuleEngine.BuiltIn();
+            RuleEngine.AddMissingBuiltIns(rules);
+            ruleEngine = new RuleEngine(rules, s.RuleBook?.Fields ?? new(), dynamics.Document.Stocks.Select(x => x.Id), ReadRuleValue);
+            ruleEngine.Restore(s.RuleBook?.Values);
             algorithmGraphs = s.Algorithms;
             behaviorPolicy = new WorldBehaviorPolicy(s.Behaviors ?? WorldBehaviorPolicy.DefaultDocument(),
                 DynamicsRuntime.Keys(dynamics.Document, RuleWorldFields), ReadRuleValue);

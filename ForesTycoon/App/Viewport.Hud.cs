@@ -45,6 +45,7 @@ namespace ForesTycoon
 
             TrackForestryResult();
             TrackSeason();
+            TrackMissions();
             DrawEstateCard();
             DrawLedger();
             DrawJournal();

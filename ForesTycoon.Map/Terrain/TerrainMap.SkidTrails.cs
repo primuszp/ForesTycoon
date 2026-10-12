@@ -33,6 +33,18 @@ namespace ForesTycoon.Map
         public float GetSkidTrailWear(int tileId) => skidTrails.TryGetValue(tileId, out var t) ? t.Wear : 0;
         public float GetSkidTrailIdle(int tileId) => skidTrails.TryGetValue(tileId, out var t) ? t.Idle : 0;
 
+        /// <summary>Rule-engine access: sets a trail's ruts (0–1) and idle years; returns false for a tile without a trail.</summary>
+        public bool SetSkidTrailState(int tileId, float wear, float idle)
+        {
+            if (!skidTrails.TryGetValue(tileId, out var trail)) return false;
+            trail.Wear = Math.Clamp(wear, 0, 1); trail.Idle = Math.Max(0, idle);
+            skidTrails[tileId] = trail;
+            return true;
+        }
+
+        /// <summary>Rule-engine access: the trail is gone (overgrown), as in <see cref="AgeSkidTrails"/>.</summary>
+        public bool RemoveSkidTrail(int tileId) => skidTrails.Remove(tileId);
+
         /// <summary>Forest floor a machine can drive on: no road, building or open water.</summary>
         public bool CanCarrySkidTrail(int tileId)
         {

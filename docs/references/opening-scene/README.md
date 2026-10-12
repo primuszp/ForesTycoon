@@ -47,3 +47,45 @@ A víztartalom nem indul újra: alacsonyabb telítettségnél az új talajba nem
 Ellenőrzés: 78 célzott teszt sikeres. Ezek lefedik a referencia egyezését, a helyi talajfestést, az új típusokat és törlésvédelmet, a kapacitáscsökkentés vízmegőrzését, a mentés-visszatöltést, az újrarögzítést és a havi növekedési határon túli determinisztikus továbbfuttatást. A szerkesztett projekt parancssori futtatása és az editor OpenGL-próbája is sikeres.
 
 Következő külön lépés lehet a küldetéscélok és eseményszabályok felvétele. Az editor jelenleg térképrétegeken szerkeszt; a diorámás 3D megjelenítés továbbra is a játékban ellenőrizhető.
+
+## Negyedik lépés: a játék a jelenetdokumentumot futtatja, küldetésekkel
+
+A játék alapindulása már nem a beépített generátor, hanem a `ForesTycoon/Content/Scenes/opening.project.json` jelenetprojekt (`WorldLoader.CreateStart`). Forráskönyvtárból futtatva a játék és az editor is ezt a forrásfájlt használja, így az editorban mentett jelenet újrafordítás nélkül indul; telepített futásnál a kimenet mellé másolt példány töltődik be. Ha egyik sem létezik, a régi `CreateOpening` útvonal marad. A `--scene-project` továbbra is felülírja.
+
+Az editor induló tesztvilága ugyanebből a fájlból épül, a jelenetfájl mezője alapból erre mutat, a **Nyitójelenet átvétele** pedig ezt nyitja meg.
+
+Új **Küldetések** lap: a `WorldScenario.Missions` célokat tárol (mérőszám: `world.*` mező, `world.deliveredTimber` vagy `stock.*` készlet; legalább/legfeljebb; cél; opcionális határidő erdőévben). A játék az Erdőnapló tetején mutatja az állásukat, és naplózza a teljesítést vagy a lejártat. Az állapot a futó világ értékeiből számolódik, külön mentett küldetésállapot nincs (egy már teljesült, de később visszaeső cél újra folyamatban lesz). Küldetés szerkesztése nem építi újra a tesztvilágot. Világ nélküli szabályprojekt (pl. a helyi `project.json`) alkalmazása már nem törli a futó jelenet térképét és küldetéseit.
+
+Ellenőrzés: a teljes tesztsor (1726) sikeres, köztük a `MissionTests` (a szállított jelenet terep-, ökológia- és grafikai lenyomata egyezik a referenciával; küldetések körútja és kiértékelése; hibás küldetések elutasítása). A játék és az editor OpenGL-próbája sikeres.
+
+## Ötödik lépés: a játék számai az editorban, egységes mentés
+
+A **Szabályok** lap négy részre bomlik: **Képletek** (a korábbi képletszerkesztő), **Gazdaság** (faár-szorzó, hitelkeret, dízelár, építési és javítási költségek), **Gépek és járművek** (kapacitás, tempó, fogyasztás, kopás, javítás, járműfizika) és **Összes szám** (mind a kereshető hangolólistában). A számok szabályonként kártyán jelennek meg, egységgel, alapértékkel és visszaállítással. Elengedés után a tesztvilágban azonnal érvényesek, és a jelenetfájlba kerülnek. Az útburkolatok számai továbbra is a Típusok › Burkolatok lapon vannak.
+
+A fejléc **Mentés · Ctrl+S** gombja a munkapéldányt és a jelenetfájlt is menti. Az állapotsor jelzői: a jelenetfájl neve; *mentve / mentetlen módosítás* (a fájl tényleges tartalmával összevetve); *tesztvilág naprakész / újraépítés kell* (kattintásra újraépít); a játék átvételi állapota.
+
+Ha a játék a szerkesztett nyitójelenetből indul, a helyi `project.json`-kapcsolat már nem írja felül induláskor a jelenet szabályait. Csak az indulás után közzétett projektet veszi át („Alkalmazás a játékban”).
+
+Ellenőrzés: 1727 teszt sikeres (új: `SceneRulesTests`), az editor és a játék OpenGL-próbája is sikeres.
+
+## Hatodik lépés: Jelenet menü, visszavonás, képlet–szám kapcsolat
+
+- **Jelenet… (Ctrl+O)** a fejlécben: aktív fájl, mentés, megnyitás és mentés másként tetszőleges útvonalra, a játék nyitójelenete, az eredeti generált nyitójelenet. Mentetlen módosításnál figyelmeztet. A Pálya lap bal oszlopában ennek helyén most a **Generálás** szakasz áll.
+- **Vissza / Újra (Ctrl+Z, Ctrl+Y vagy Ctrl+Shift+Z)**: 100 lépés a pályafestésre, a talajtípusokra, a fafajokra, a forrásokra, a küldetésekre és a játék számaira. Egy lépés a lezárt szerkesztés (felengedett ecset, elhagyott mező). A tooltip megnevezi a lépést. Pályát érintő lépésnél a tesztvilág újraépül, szám- és küldetéslépésnél nem. Másik jelenet megnyitása törli az előzményt. A képletszövegek szerkesztése még nincs benne.
+- **Képlet ↔ szám**: a képletnél a hozzá tartozó szabály számai szerkeszthetők („A szabály számai”). A számkártyákon pedig ugrógomb vezet a szabály képletéhez, ha van ilyen.
+
+Ellenőrzés: 1727 teszt sikeres. Az editor smoke-próbája valódi ImGui-képkockákon visszavonja, majd újra végrehajtja egy küldetés felvételét és egy számmódosítást.
+
+## Hetedik lépés: utak, fűrészmalmok és telephely a jelenetben
+
+A `WorldScenario` új mezői: `Roads` (szakaszok: kezdő- és végcsempe, `Asphalt`/`Macadam` burkolat), `Sawmills` és `Depots` (a 2×2-es hely bal felső csempéje). A betöltő a festés után, a játékos építésének sorrendjében építi fel őket. Az építés ingyenes, a játék nulla egyenleggel indul. Épület alól az erdő kiirtódik, és az első telephely kapja a kezdő járműparkot (processzor, forwarder, rönkszállító). Ami nem épülhet meg (víz, lejtő, foglalt hely, út nélküli telephely), az a `SceneProblems` listába kerül, és az editor kiírja.
+
+Editor: a Pálya lap **Utak és épületek** rétege szerkeszthető.
+- **Út:** kattintás a kezdő-, majd a végcsempére. A további kattintások folytatják az utat, jobb gomb vagy Esc fejezi be. Az utat a játék útkeresése vezeti.
+- **Malom és telephely:** egy kattintás. Előtte zöld vagy piros keret mutatja, hova építhető.
+- **Építménylista:** rámutatásra kiemeli az elemet a térképen, és innen törölhető.
+- Az építmények szerkesztése is visszavonható.
+
+A rögzített nyitójelenet meglévő útjai és épületei változatlanok, a referencia-lenyomatok egyeznek.
+
+Ellenőrzés: 1729 teszt sikeres. Új a `SceneStructureTests`: ingyenes építés járműparkkal, determinisztikus betöltés, hibás elhelyezés jelzése, érvénytelen út elutasítása. A játék és az editor OpenGL-próbája is sikeres.

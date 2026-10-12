@@ -11,7 +11,7 @@ using Vec4 = System.Numerics.Vector4;
 
 namespace ForesTycoon.Editor;
 
-internal enum WorldTab { Map, Types, Rules, Trial }
+internal enum WorldTab { Map, Types, Missions, Rules, Trial }
 internal enum MapLayer { Soil, Elevation, Water, GroundWater, Forest, Tracks, Trafficability }
 internal enum TypeTab { Soil, Species, Surfaces }
 
@@ -62,14 +62,20 @@ internal sealed partial class RuleEditorView
         seedEdit = scenario.Seed;
         return scenario;
     }
-    private string ScenarioKey() => new RuleProject { World = scenario }.ToJson();
+    // Missions are checked by the running game; editing them does not rebuild the test world.
+    private string ScenarioKey()
+    {
+        if (scenario == null) return new RuleProject().ToJson();
+        var missions = scenario.Missions; scenario.Missions = new();
+        try { return new RuleProject { World = scenario }.ToJson(); } finally { scenario.Missions = missions; }
+    }
     /// <summary>The editor's test world is rebuilt from the map whenever the map or a type changes.</summary>
     private void ApplyScenario(GameWorld world, string what)
     {
         try {
             scenario.Validate();
             var project = CollectProject(world); project.Algorithms = null;
-            world.StartScenario(scenario, project); appliedScenario = ScenarioKey();
+            world.StartScenario(scenario, project); appliedScenario = ScenarioKey(); statusFrame = -1000;
             message = what + " A tesztvilág újraépült a pályából.";
         } catch (Exception e) when (e is System.IO.InvalidDataException or ArgumentException or InvalidOperationException) { message = e.Message; }
     }
@@ -82,22 +88,76 @@ internal sealed partial class RuleEditorView
         foreach (var (tab, label, help) in new[] {
             (WorldTab.Map, "Pálya", "A világ térképe: generálás, majd talaj festése; rétegek, csempék."),
             (WorldTab.Types, "Típusok", "Talajtípusok és paramétereik: amit a térkép fest, és amit a szabályok olvasnak."),
+            (WorldTab.Missions, "Küldetések", "A pálya céljai: amit a játék a futó világ értékeiből ellenőriz."),
             (WorldTab.Rules, "Szabályok", "A világ szabályai képletként: minden csempén ugyanúgy futnak."),
             (WorldTab.Trial, "Próba", "Eső a pályán: az alap és a szerkesztett szabályok összevetése.") }) {
             ImGui.SameLine(0, 6);
             if (ViewTab(label, worldTab == tab, help)) worldTab = tab;
         }
         ImGui.SameLine(0, 30);
-        if (ImGui.Button("Mentés · Ctrl+S")) Try(() => SaveProjectDraft(world));
-        if (ImGui.GetIO().KeyCtrl && ImGui.IsKeyPressed(ImGuiKey.S)) Try(() => SaveProjectDraft(world));
+        SceneMenu(world);
+        ImGui.SameLine();
+        UndoButtons(world);
+        ImGui.SameLine();
+        if (ImGui.Button("Mentés · Ctrl+S")) Try(() => SaveAll(world));
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Menti a munkapéldányt és a jelenetfájlt (pálya, küldetések, szabályok):\n" + scenePath);
+        if (ImGui.GetIO().KeyCtrl && ImGui.IsKeyPressed(ImGuiKey.S)) Try(() => SaveAll(world));
         ImGui.SameLine();
         if (EditorStyle.PrimaryButton(algorithmBuild != null ? "Alkalmazás folyamatban…" : "Alkalmazás a játékban", algorithmBuild == null,
-            "Közzéteszi a projektet: a futó játék átveszi a szabályokat, az új világ ebből a pályából épül.")) Try(() => ApplyProject(world, true));
-        bool running = publishedProjectRevision != null && workshopVersions.Running == publishedProjectRevision && liveObjects?.Error == null;
-        EditorStyle.Text(HudTheme.Muted, (workshopVersions.Unsaved ? "Mentetlen módosítás" : "Mentve") + " · "
-            + (publishedProjectRevision == null ? "a játékban még az előző szabályok futnak" : running ? "a játék átvette" : "a játék átvételére vár")
-            + (appliedScenario != ScenarioKey() ? " · a tesztvilág nem ebből a pályából készült" : ""));
+            "A futó játék azonnal átveszi a szabályokat; az új világ ebből a pályából épül.")) Try(() => ApplyProject(world, true));
+        StatusChips(world);
         ImGui.Separator();
+    }
+
+    // ── Where the work stands: file, test world, game ────────────────────
+    private (string Path, DateTime Written, string Key) sceneFile;
+    /// <summary>The scene file's content in the same normal form as the edited document; re-read only when the file changes.</summary>
+    private string SceneFileKey()
+    {
+        try {
+            if (!System.IO.File.Exists(scenePath)) return null;
+            var written = System.IO.File.GetLastWriteTimeUtc(scenePath);
+            if (sceneFile.Path != scenePath || sceneFile.Written != written) {
+                var p = RuleProject.FromJson(System.IO.File.ReadAllText(scenePath)); p.Algorithms = null; p.Authoring = null;
+                sceneFile = (scenePath, written, p.ToJson());
+            }
+            return sceneFile.Key;
+        } catch (Exception e) when (e is System.IO.IOException or System.IO.InvalidDataException or System.Text.Json.JsonException) { return null; }
+    }
+    private (bool SceneSaved, bool WorldCurrent) statusCache;
+    private int statusFrame = -1000;
+
+    private string SceneDocumentKey(GameWorld world) { var p = CollectProject(world); p.Algorithms = null; p.Authoring = null; return p.ToJson(); }
+
+    private void SaveAll(GameWorld world)
+    {
+        SaveProjectDraft(world);
+        if (scenario == null) return;
+        SaveScene(world);
+        message = "Mentve: munkapéldány és jelenet (" + System.IO.Path.GetFileName(scenePath) + "). A játék következő indulása ezt futtatja.";
+    }
+
+    private void StatusChips(GameWorld world)
+    {
+        // Serializing the whole scene is not free: refresh twice a second.
+        if (ImGui.GetFrameCount() - statusFrame > 30) {
+            statusFrame = ImGui.GetFrameCount();
+            statusCache = (SceneFileKey() is string saved && saved == SceneDocumentKey(world), appliedScenario == ScenarioKey());
+        }
+        bool running = publishedProjectRevision != null && workshopVersions.Running == publishedProjectRevision && liveObjects?.Error == null;
+        ImGui.AlignTextToFramePadding();
+        EditorStyle.Text(HudTheme.Muted, "Jelenet: " + System.IO.Path.GetFileName(scenePath));
+        ImGui.SameLine(0, 12);
+        EditorStyle.Chip(statusCache.SceneSaved ? "mentve" : "mentetlen módosítás", statusCache.SceneSaved ? HudTheme.Good : HudTheme.AmberAccent, "chip-save");
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip(statusCache.SceneSaved ? "A jelenetfájl megegyezik a szerkesztett állapottal." : "Ctrl+S menti a jelenetfájlba.");
+        ImGui.SameLine(0, 8);
+        if (EditorStyle.Chip(statusCache.WorldCurrent ? "tesztvilág naprakész" : "tesztvilág: újraépítés kell", statusCache.WorldCurrent ? HudTheme.Good : HudTheme.Info, "chip-world", !statusCache.WorldCurrent)
+            && !statusCache.WorldCurrent) { ApplyScenario(world, ""); statusFrame = -1000; }
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip(statusCache.WorldCurrent ? "A tesztvilág ebből a pályából épült." : "A pálya megváltozott. Kattintás: a tesztvilág újraépítése.");
+        ImGui.SameLine(0, 8);
+        EditorStyle.Chip(publishedProjectRevision == null ? "játék: korábbi szabályok" : running ? "játék: átvette" : "játék: átvételre vár",
+            running ? HudTheme.Good : HudTheme.Muted, "chip-game");
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("„Alkalmazás a játékban” után a futó játék átveszi a szabályokat.");
     }
 
     private bool scenarioBuilt;
@@ -107,7 +167,8 @@ internal sealed partial class RuleEditorView
         if (standalone && !scenarioBuilt) { scenarioBuilt = true; if (appliedScenario != ScenarioKey()) ApplyScenario(world, "A tesztvilág a pályából épült."); }
         switch (worldTab) {
             case WorldTab.Types: TypesTab(world); break;
-            case WorldTab.Rules: RulesTab(world); break;
+            case WorldTab.Missions: MissionsTab(world); break;
+            case WorldTab.Rules: RulesArea(world); break;
             case WorldTab.Trial: TrialTab(world); break;
             default: MapTab(world); break;
         }
@@ -120,7 +181,7 @@ internal sealed partial class RuleEditorView
         (MapLayer.Water, "Víz", "Tavak és folyók. Festhető: a vízszint alá süllyesztett terep megtelik."),
         (MapLayer.GroundWater, "Talajvíz", "Gyökérzóna telítettsége."),
         (MapLayer.Forest, "Erdő", "Fafaj és fatérfogat. Festhető: kezdő erdő fajjal, vagy irtás."),
-        (MapLayer.Tracks, "Utak és nyomok", "Burkolt utak és közelítőnyomok."),
+        (MapLayer.Tracks, "Utak és épületek", "Kezdő utak, fűrészmalmok és telephely. Szerkeszthető: út két kattintással, épület egy kattintással."),
         (MapLayer.Trafficability, "Járhatóság", "A járhatósági szabály eredménye most, burkolatlan csempéken.") };
 
     private static readonly int[] MapSizes = { 32, 48, 64, 96, 128 };
@@ -135,8 +196,7 @@ internal sealed partial class RuleEditorView
             if (ImGui.Selectable(layerName, mapLayer == layer)) mapLayer = layer;
             if (ImGui.IsItemHovered()) ImGui.SetTooltip(help);
         }
-        EditorStyle.Section("Jelenet");
-        SceneFiles(world);
+        EditorStyle.Section("Generálás");
         bool captured = scenario.InitialState != null;
         ImGui.TextWrapped(captured ? "Rögzített jelenet: a talaj és a festés szerkeszthető; az eredeti terep és az érintetlen fák megmaradnak. A seed és a méret rögzített."
             : "A pálya seedből generálódik, utána festéssel alakítod.");
@@ -180,6 +240,7 @@ internal sealed partial class RuleEditorView
 
         ImGui.BeginChild("map-canvas", new Vec2(-right - 8, 0), ImGuiChildFlags.Borders, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
         int hovered = TileMap(world, "pálya", TileColour(world), painting: mapLayer is MapLayer.Soil or MapLayer.Elevation or MapLayer.Water or MapLayer.Forest);
+        if (mapLayer == MapLayer.Tracks) StructureCanvas(world, hovered);
         MapLegend(world);
         ImGui.EndChild(); ImGui.SameLine();
 
@@ -220,6 +281,7 @@ internal sealed partial class RuleEditorView
                 if (ColourSwatch(scenario.Species[i].Name, SpeciesColour(scenario.Species[i].Id), i == brushSpecies, "species" + i)) brushSpecies = i;
             ImGui.SetNextItemWidth(-60); ImGui.SliderInt("Méret", ref brushSize, 1, 6);
         }
+        else if (mapLayer == MapLayer.Tracks) StructurePanel(world);
         int shown = hovered >= 0 ? hovered : selectedTile;
         if (shown >= 0) TileSection(world, shown, hovered >= 0 ? "A kurzor alatt" : "Kijelölt csempe");
         else { EditorStyle.Section("Csempe"); ImGui.TextWrapped("Mutass vagy kattints egy csempére: itt látod a rétegeit."); }
@@ -295,6 +357,7 @@ internal sealed partial class RuleEditorView
                             stroke.Add((c + dc) * rows + r + dr);
             if (!painting && ImGui.IsMouseClicked(ImGuiMouseButton.Left)) selectedTile = over;
         }
+        if (id == "pálya") mapGeometry = (at, cell, rows);
         if (mapLayer == MapLayer.Water && id == "pálya")
             foreach (int spring in scenario.Springs.Keys.Where(t => t < columns * rows))
                 draw.AddCircleFilled(at + new Vec2(spring / rows + .5f, spring % rows + .5f) * cell, Math.Max(2, cell * .25f), EditorStyle.U(1, 1, 1, .95f));
@@ -359,7 +422,7 @@ internal sealed partial class RuleEditorView
         MapLayer.Forest => tile => world.TileSpecies(tile) is var s && s != ForesTycoon.Ecology.ForestSpecies.None
             ? Mix(new(0.17f, 0.19f, 0.14f, 1), SpeciesColour(s.ToString()), 0.45f + 0.55f * (float)Math.Clamp(world.TileForest(tile) / 30, 0, 1))
             : world.IsWaterTile(tile) ? new(0.20f, 0.32f, 0.50f, 1) : new(0.17f, 0.19f, 0.14f, 1),
-        MapLayer.Tracks => tile => world.Map.IsRoadTile(tile) ? new(0.85f, 0.82f, 0.75f, 1) : world.Map.IsSkidTrail(tile) ? new(0.85f, 0.55f, 0.28f, 1)
+        MapLayer.Tracks => tile => world.Map.IsRoadTile(tile) ? new(0.85f, 0.82f, 0.75f, 1) : world.Map.IsBuildingTile(tile) ? new(0.62f, 0.40f, 0.26f, 1) : world.Map.IsSkidTrail(tile) ? new(0.85f, 0.55f, 0.28f, 1)
             : EditorStyle.Dim(SoilColour(world, tile), .45f),
         MapLayer.Trafficability => tile => world.IsUnpaved(tile) ? TrafficColour(world.Trafficability(tile)) : new(0.45f, 0.45f, 0.45f, 1),
         _ => tile => SoilColour(world, tile)
@@ -410,7 +473,7 @@ internal sealed partial class RuleEditorView
                 ImGui.Dummy(new Vec2(18, 20)); ImGui.SameLine();
                 ImGui.TextUnformatted($"{scenario.SoilTypes[i].Name} · {100.0 * counts[i] / Math.Max(1, tiles):0}%");
             }
-            if (mapLayer == MapLayer.Tracks) { ImGui.SameLine(0, 18); EditorStyle.Text(HudTheme.Muted, "világos: burkolt út · narancs: közelítőnyom"); }
+            if (mapLayer == MapLayer.Tracks) { EditorStyle.Text(HudTheme.Muted, "világos: út · barna: épület · narancs: közelítőnyom"); }
             return;
         }
         (string Low, string High, Vec4 A, Vec4 B) = mapLayer switch {
@@ -665,6 +728,7 @@ internal sealed partial class RuleEditorView
             EditorStyle.Fact("Eredmény", $"{selected.Hook.Unit}, {selected.Hook.Min:G4}–{selected.Hook.Max:G4} közé korlátozva");
             ImGui.EndTable();
         }
+        RuleNumbers(world, selected.Rule.Id);
         EditorStyle.Section("Képlet");
         string text = formulaText;
         if (ImGui.InputTextMultiline("##formula", ref text, 4000, new Vec2(-1, 150))) { formulaText = text; TryFormula(selected.Hook, names, apply: false); }

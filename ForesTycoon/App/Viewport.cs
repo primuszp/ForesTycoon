@@ -236,7 +236,8 @@ namespace ForesTycoon
             this.resumeWorld = resumeWorld; this.runtimeAcknowledgement = runtimeAcknowledgement;
             this.sceneProject = sceneProject;
             // No automatic whole-code graph bootstrap: the built code runs unless a project carries an edited algorithm bundle.
-            ruleProjectLink = new(path: sceneProject, closeOldRuntime: Close, bootstrapAlgorithms: false);
+            ruleProjectLink = new(path: sceneProject, closeOldRuntime: Close, bootstrapAlgorithms: false,
+                adoptRunning: sceneProject == null && resumeWorld == null && WorldLoader.OpeningScenePath() != null);
         }
 
         protected override void LoadScene()

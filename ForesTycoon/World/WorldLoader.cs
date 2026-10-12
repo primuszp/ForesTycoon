@@ -13,6 +13,30 @@ internal static partial class WorldLoader
         return new(TerrainSettings.Default, enableRendering: enableRendering);
     }
 
+    internal const string OpeningSceneFile = "Content/Scenes/opening.project.json";
+
+    /// <summary>
+    /// The opening scene document the game starts from: the project's source copy when running from a checkout (so editor
+    /// saves are played without a rebuild), otherwise the copy shipped next to the executable; null if neither exists.
+    /// </summary>
+    internal static string OpeningScenePath()
+    {
+        for (var dir = new System.IO.DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent) {
+            string source = System.IO.Path.Combine(dir.FullName, "ForesTycoon", OpeningSceneFile);
+            if (System.IO.File.Exists(source)) return source;
+        }
+        string shipped = System.IO.Path.Combine(AppContext.BaseDirectory, OpeningSceneFile);
+        return System.IO.File.Exists(shipped) ? shipped : null;
+    }
+
+    /// <summary>The game's start: the authored opening scene, or the generated opening when no scene document exists.</summary>
+    internal static GameWorld CreateStart(string sceneProject = null, bool enableRendering = true)
+    {
+        sceneProject ??= OpeningScenePath();
+        return sceneProject == null ? CreateOpening(enableRendering)
+            : CreateProject(RuleProject.FromJson(System.IO.File.ReadAllText(sceneProject)), enableRendering);
+    }
+
     internal static GameWorld CreateProject(RuleProject project, bool enableRendering = false)
     {
         ArgumentNullException.ThrowIfNull(project);

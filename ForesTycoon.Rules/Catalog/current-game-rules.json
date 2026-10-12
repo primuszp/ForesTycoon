@@ -2686,9 +2686,9 @@
       "module": "Utak \u00E9s nyomok",
       "scope": "Nyomcsempe",
       "schedule": "\u00DAt-id\u0151j\u00E1r\u00E1si friss\u00EDt\u00E9s",
-      "execution": "NativeCode",
-      "description": "A v\u00E1ly\u00FA \u00E9vente 0,4-et enyh\u00FCl; 3 \u00E9v haszn\u00E1latlans\u00E1g \u00E9s szinte elt\u0171nt v\u00E1ly\u00FA ut\u00E1n a nyom megsz\u0171nik. Az \u00FAtvonalak \u00FAjraellen\u0151rz\u0151dnek.",
-      "formula": "",
+      "execution": "EditableExpressions",
+      "description": "A Szab\u00E1lyk\u00F6nyv be\u00E9p\u00EDtett szab\u00E1lya (adat, nem C#): a v\u00E1ly\u00FA \u00E9vente 0,4-et enyh\u00FCl; a ben\u00F6v\u00E9si id\u0151 ut\u00E1n a sima nyom megsz\u0171nik. Az \u00FAtvonalak \u00FAjraellen\u0151rz\u0151dnek.",
+      "formula": "kop\u00E1s = max(0; kop\u00E1s \u2212 0,4 \u00D7 l\u00E9p\u00E9s); t\u00E9tlens\u00E9g \u002B= l\u00E9p\u00E9s; megsz\u0171nik, ha t\u00E9tlens\u00E9g \u2265 ben\u00F6v\u00E9s \u00E9s kop\u00E1s \u2264 0,001",
       "notes": "",
       "reads": [
         "trail.wear",
@@ -2703,8 +2703,8 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon.Map/Terrain/TerrainMap.SkidTrails.cs",
-          "symbol": "AgeSkidTrails"
+          "file": "ForesTycoon/World/RuleEngine.cs",
+          "symbol": "BuiltIn"
         }
       ],
       "parameters": [

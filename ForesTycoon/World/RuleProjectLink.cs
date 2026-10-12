@@ -19,12 +19,14 @@ internal sealed class RuleProjectLink
     private Process replacement;
     private readonly Action closeOldRuntime;
     private readonly Func<AlgorithmBuildResult, string, string, string, Process> launchRuntime;
-    private readonly bool bootstrapAlgorithms;
+    private readonly bool bootstrapAlgorithms, adoptRunning;
     internal bool HandoffPending => replacement != null;
     internal string Error { get; private set; }
     internal string Path => path;
     internal RuleProjectLink(string path = null, Action closeOldRuntime = null,
-        Func<AlgorithmBuildResult, string, string, string, Process> launchRuntime = null, bool bootstrapAlgorithms = true) {
+        Func<AlgorithmBuildResult, string, string, string, Process> launchRuntime = null, bool bootstrapAlgorithms = true, bool adoptRunning = false) {
+        // adoptRunning: the world already runs its scene's rules; only projects published after it started replace them.
+        this.adoptRunning = adoptRunning;
         this.path = System.IO.Path.GetFullPath(path ?? RuleProject.DefaultPath); this.closeOldRuntime = closeOldRuntime;
         this.launchRuntime = launchRuntime ?? ((runtime, save, ready, project) => AlgorithmBuild.StartRuntime(runtime, new[] { "--algorithm-handoff", save, ready }, project));
         this.bootstrapAlgorithms = bootstrapAlgorithms;
@@ -62,6 +64,7 @@ internal sealed class RuleProjectLink
             try {
                 if (!File.Exists(path)) RuleProject.WriteAtomic(path, world.RuleProjectDocument.ToJson());
                 string json = File.ReadAllText(path);
+                if (installed == null && adoptRunning && building == null && replacement == null) installed = json;
                 if (json == installed && building == null && replacement == null) Error = null;
                 if (json != installed && json != rejectedJson && building == null && replacement == null) {
                     var project = RuleProject.FromJson(json); GameWorld.ValidateRuleProject(project);

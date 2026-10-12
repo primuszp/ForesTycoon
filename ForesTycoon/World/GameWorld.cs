@@ -397,7 +397,8 @@ namespace ForesTycoon
                 : null;
             map.WeatherRoads(years, rain, adjust, new RoadWeathering(Tuning.F(Tune.AsphaltWeather), Tuning.F(Tune.AsphaltRainWeather),
                 Tuning.F(Tune.MacadamWeather), Tuning.F(Tune.MacadamRainWeather)));
-            if (map.AgeSkidTrails(years).Length > 0)
+            // The rule book runs here, every half game second: built-in rules (e.g. trail ageing) and the project's own.
+            if (ruleEngine.Run(this, years, forest.ForestYear))
             {
                 Logistics?.TrailsChanged();
                 vehicles.RemoveInvalidRoutes(map.IsNetworkTile);
@@ -598,6 +599,7 @@ namespace ForesTycoon
             roadRule = candidate.roadRule;
             ruleProjectName = candidate.ruleProjectName; ruleProjectWorld = candidate.ruleProjectWorld;
             algorithmGraphs = candidate.algorithmGraphs;
+            ruleEngine = candidate.ruleEngine;
             dynamics = new(candidate.dynamics.Document, RuleWorldFields, ReadWorldValue);
             dynamics.Restore(candidate.dynamics.Capture());
             behaviorPolicy = new(candidate.BehaviorDocument, DynamicsRuntime.Keys(dynamics.Document, RuleWorldFields), ReadRuleValue);

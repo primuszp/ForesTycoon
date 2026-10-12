@@ -77,6 +77,7 @@ internal sealed partial class RuleEditorView
         projectPathEdit = projectPath;
         workshopVersions.Reset(); bindingSelectedFor = null; trialResult = null; publishedProjectRevision = null;
         authoring = project.Clone().Authoring ?? new();
+        LoadRuleBook(project);
         scenario = project.World == null ? null : RuleProject.FromJson(new RuleProject { World = project.World }.ToJson()).World;
         scenarioBuilt = false; appliedScenario = null;
         if (scenario != null) seedEdit = scenario.Seed;
@@ -119,7 +120,8 @@ internal sealed partial class RuleEditorView
     internal RuleProject CollectProject(GameWorld world) => new() { Name = projectName,
         Road = (draft ?? currentRules.RoadTrafficModel ?? world.RuleDocument).Clone(),
         Tuning = currentRules.TuningOverrides(world), Behaviors = behaviors.Document, Dynamics = dynamicsEditor.Document,
-        Algorithms = algorithms.Reference, Authoring = JsonSerializer.Deserialize<RuleAuthoring>(JsonSerializer.Serialize(authoring)),
+        Algorithms = algorithms.Reference, Rules = RuleEngine.Clone(RuleBookRules(world)), Fields = RuleEngine.CloneFields(RuleBookFields(world)),
+        Authoring = JsonSerializer.Deserialize<RuleAuthoring>(JsonSerializer.Serialize(authoring)),
         World = scenario == null ? world.RuleProjectDocument.World : RuleProject.FromJson(new RuleProject { World = scenario }.ToJson()).World };
     private double PreviewValue(GameWorld world, string key)
     {

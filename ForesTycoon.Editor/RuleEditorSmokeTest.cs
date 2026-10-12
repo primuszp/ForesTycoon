@@ -88,10 +88,16 @@ namespace ForesTycoon.Editor
                     (() => editor.ShowWorld(WorldTab.Map, MapLayer.Trafficability, forestTile), "world-map-traffic"),
                     (() => editor.ShowWorld(WorldTab.Map, MapLayer.Elevation, forestTile), "world-map-elevation"),
                     (() => editor.ShowWorld(WorldTab.Map, MapLayer.Forest, forestTile), "world-map-forest"),
+                    (() => editor.ShowWorld(WorldTab.Map, MapLayer.Tracks, forestTile), "world-map-structures"),
                     (() => editor.ShowWorld(WorldTab.Types), "world-types"),
                     (() => editor.ShowWorldTypes(TypeTab.Species, 2), "world-types-species"),
                     (() => editor.ShowWorldTypes(TypeTab.Surfaces), "world-types-surfaces"),
                     (() => editor.ShowWorld(WorldTab.Rules, tile: forestTile), "world-rules"),
+                    (() => editor.ShowMissions(), "world-missions"),
+                    (() => editor.ShowRuleBook(), "world-rulebook"),
+                    (() => editor.ShowRules(RulesTopic.Economy), "world-rules-economy"),
+                    (() => editor.ShowRules(RulesTopic.Machines), "world-rules-machines"),
+                    (() => editor.ShowRules(RulesTopic.Formulas), "world-rules-formulas"),
                     (() => { editor.ShowWorld(WorldTab.Trial); editor.ShowWorldTrial(rainTrial); }, "world-trial") }) {
                     screen.Show();
                     for (int frame = 0; frame < 3; frame++) {
@@ -103,6 +109,27 @@ namespace ForesTycoon.Editor
                     FramebufferCapture.SavePng(Path.Combine(output, screen.Name + ".png"), width, height);
                 }
                 Require(rainTrial.Summary.Contains("járhatóság"), "World trial produced no result.");
+                // Undo/redo: a finished mission edit and a number edit are steps; undo restores both in order, redo replays.
+                void Frames(int n) {
+                    for (int frame = 0; frame < n; frame++) {
+                        ui.Update(width, height, width, height, Vec2.One, 1f / 60);
+                        ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 900)); editor.Draw(world, ref open);
+                        ui.Render();
+                    }
+                }
+                editor.ShowMissions(); Frames(12);
+                int missions = editor.EditedScenario.Missions.Count;
+                editor.EditedScenario.Missions.Add(new MissionGoal { Id = "undo-proba", Title = "Visszavonási próba" }); Frames(12);
+                double undoDiesel = world.Tuning[Tune.DieselPrice];
+                editor.SetTuningForTest("DieselPrice", undoDiesel + 1); Frames(12);
+                Require(editor.CanUndo, "Edits were not recorded for undo.");
+                editor.Undo(world); world.ExecutePendingCommands(); Frames(12);
+                Require(Math.Abs(world.Tuning[Tune.DieselPrice] - undoDiesel) < 1e-9 && editor.EditedScenario.Missions.Count == missions + 1, "Undo did not restore the number.");
+                editor.Undo(world); Frames(12);
+                Require(editor.EditedScenario.Missions.Count == missions, "Undo did not remove the mission.");
+                editor.Redo(world); editor.Redo(world); world.ExecutePendingCommands(); Frames(12);
+                Require(editor.EditedScenario.Missions.Count == missions + 1 && Math.Abs(world.Tuning[Tune.DieselPrice] - undoDiesel - 1) < 1e-9, "Redo did not replay the edits.");
+                editor.Undo(world); editor.Undo(world); world.ExecutePendingCommands(); Frames(12);
                 string workshopActive = world.RuleProjectDocument.ToJson();
                 foreach (var screen in new[] {
                     ("forest.growth", WorkshopPhase.Understand, "workshop-growth"),

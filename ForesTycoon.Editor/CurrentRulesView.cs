@@ -699,6 +699,29 @@ namespace ForesTycoon.Editor
             return false;
         }
 
+        /// <summary>The tunable number with this key, or null before the catalog is loaded.</summary>
+        internal RuleParameter TuningParameter(string key) =>
+            catalog?.Rules.SelectMany(r => r.Parameters).FirstOrDefault(p => p.Key == key);
+
+        /// <summary>Puts a tunable number back to the game's default; true when it had been changed.</summary>
+        internal bool ResetTuning(string key)
+        {
+            bool reset = false;
+            foreach (var rule in catalog?.Rules ?? new())
+                for (int i = 0; i < rule.Parameters.Count; i++)
+                    if (rule.Parameters[i].Key == key && rule.Parameters[i].Changed) { rule.Parameters[i] = rule.Parameters[i] with { Value = rule.Parameters[i].Default }; reset = true; }
+            return reset;
+        }
+
+        /// <summary>Sets every tunable number: the given overrides, defaults for the rest.</summary>
+        internal void SetTuning(IReadOnlyDictionary<string, double> overrides)
+        {
+            foreach (var rule in catalog?.Rules ?? new())
+                for (int i = 0; i < rule.Parameters.Count; i++)
+                    if (rule.Parameters[i].Tunable)
+                        rule.Parameters[i] = rule.Parameters[i] with { Value = overrides.TryGetValue(rule.Parameters[i].Key, out double v) ? v : rule.Parameters[i].Default };
+        }
+
         internal Dictionary<string, double> TuningOverrides(GameWorld world)
         {
             if (catalog == null) Load(world.DescribeCurrentRules());

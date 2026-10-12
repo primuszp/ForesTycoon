@@ -203,6 +203,34 @@ namespace ForesTycoon
             }
         }
 
+        // ── Missions: authored with the scene in the editor, checked here ────
+        private readonly Dictionary<string, MissionState> missionStates = new(StringComparer.Ordinal);
+
+        private void TrackMissions()
+        {
+            foreach (var m in world.MissionStatus()) {
+                if (missionStates.TryGetValue(m.Goal.Id, out var before) && before != m.State && m.State != MissionState.Active)
+                    AddJournal((m.State == MissionState.Reached ? "Küldetés teljesítve: " : "Küldetés lejárt: ") + m.Goal.Title,
+                        m.State == MissionState.Reached ? HudTheme.Good : HudTheme.Bad);
+                missionStates[m.Goal.Id] = m.State;
+            }
+        }
+
+        private void DrawMissions()
+        {
+            if (world.Missions.Count == 0) return;
+            ImGui.SeparatorText("Küldetések");
+            foreach (var m in world.MissionStatus()) {
+                var colour = m.State switch { MissionState.Reached => HudTheme.Good, MissionState.Failed => HudTheme.Bad, _ => HudTheme.Parchment };
+                ImGui.TextColored(colour, "• " + m.Goal.Title + m.State switch { MissionState.Reached => " – kész", MissionState.Failed => " – lejárt", _ => "" });
+                if (ImGui.IsItemHovered() && m.Goal.Description.Length > 0) ImGui.SetTooltip(m.Goal.Description);
+                string deadline = m.Goal.DeadlineYear > 0 ? $" · határidő: {m.Goal.DeadlineYear:0.#}. erdőév" : "";
+                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 16);
+                ImGui.TextColored(HudTheme.Muted, m.Error ?? $"{m.Value:N0} / {(m.Goal.Comparison == "<=" ? "legfeljebb " : "")}{m.Goal.Target:N0}{deadline}");
+            }
+            ImGui.Separator();
+        }
+
         // ── Forest journal ───────────────────────────────────────────────────
         private void AddJournal(string text, NVec4 colour)
         {
@@ -222,6 +250,7 @@ namespace ForesTycoon
                 EndPanel();
                 return;
             }
+            DrawMissions();
             if (journal.Count == 0) ImGui.TextColored(HudTheme.Muted, "Csend van az erdőben.");
             double now = frameClock.TotalTimeSeconds;
             var draw = ImGui.GetWindowDrawList();
