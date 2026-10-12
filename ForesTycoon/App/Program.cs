@@ -26,6 +26,7 @@ namespace ForesTycoon
                 return;
             }
             if (Array.Exists(args, a => a == "--ui-font-smoke-test")) { UiFontSmokeTest.Run(); return; }
+            if (Array.Exists(args, a => a == "--ui-render-smoke-test")) { UiRenderSmokeTest.Run(); return; }
             if (Array.Exists(args, a => a == "--forest-icon-smoke-test")) { ForestIconSmokeTest.Run(); return; }
             if (Array.Exists(args, a => a == "--tycoon-icon-preview")) { TycoonIconPreview.Run(); return; }
             if (Array.Exists(args, a => a == "--vegetation-preview")) { VegetationPreview.Run(); return; }

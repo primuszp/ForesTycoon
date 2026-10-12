@@ -16,6 +16,17 @@ namespace ForesTycoon
 
         private void RunCaptureScript()
         {
+            if (System.Environment.GetEnvironmentVariable("FORES_CAPTURE_UI_HOVER") == "1") {
+                simulationClock.IsPaused = true;
+                int step = (int)frameIndex / 5;
+                imgui.MouseMove(step % 2 == 0 ? Width - 100 : Width / 2, step % 2 == 0 ? Height - 100 : Height / 2);
+                if (frameIndex % 5 == 4) {
+                    Directory.CreateDirectory(captureDirectory);
+                    FramebufferCapture.SavePng(Path.Combine(captureDirectory, $"hover-{step:D2}.png"), FramebufferWidth, FramebufferHeight);
+                }
+                if (frameIndex >= 60) Close();
+                return;
+            }
             if (captureSeasons) { RunSeasonalCapture(); return; }
             void Save(string name)
             {

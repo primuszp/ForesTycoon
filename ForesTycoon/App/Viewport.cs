@@ -280,6 +280,9 @@ namespace ForesTycoon
         // ── Rajzolás ─────────────────────────────────────────────────────────
         private void Render()
         {
+            // Loading/UI frames precede the scene; establish the 3D depth state on every frame.
+            // Without it the slab draws over the terrain and post-processing receives no scene depth.
+            RenderDevice.InitializeFrameState();
             bool diorama = postProcess.Begin(world.Graphics, FramebufferWidth, FramebufferHeight);
             // The studio backdrop follows the sky: warm at dusk, deep blue at night (last frame's light).
             Vector3 backdrop = new Vector3(BG_COLOR.R / 255f, BG_COLOR.G / 255f, BG_COLOR.B / 255f) * Rendering.Daylight.Current.SkyTint;
