@@ -28,12 +28,12 @@ namespace ForesTycoon
                 surface[i] = ground[i] + FloodLift + Math.Clamp(level - ground[i], 0, 2 * depth);
         }
 
-        /// <summary>Colour of flood water: a faint muddy sheet when shallow, clear blue when deep.</summary>
+        /// <summary>Colour of flood water: a light, slightly muddy blue when shallow, deep blue when deep.</summary>
         internal static Color FloodColor(double depthMillimetres)
         {
             double share = Math.Sqrt(Math.Clamp((depthMillimetres - MinimumFloodDepth) / 300, 0, 1));
             int Mix(int shallow, int deep) => (int)Math.Round(shallow + (deep - shallow) * share);
-            return Color.FromArgb(Mix(85, 215), Mix(120, 40), Mix(135, 100), Mix(140, 170));
+            return Color.FromArgb(Mix(150, 220), Mix(75, 30), Mix(135, 95), Mix(185, 170));
         }
 
         /// <summary>Draws the moving surface water of the environment model (rain, springs, overflowing rivers) where it

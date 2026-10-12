@@ -47,7 +47,8 @@ szomszéd felé: lejtőn le, sík terepen szétterül, a kiásott árokban (sül
 vízszintesen is végigfolyik, a mélyedést a pereméig tölti, a túltöltött mederből kiönt, és
 felfelé soha nem folyik. A térfogat megmarad; víz csak a pálya szélén és állóvízbe távozik,
 közben beszivárog és párolog. A folyók mederként viselkednek, nem nyelik el a vizet. Az
-elárasztott földút nehezen járható.
+elárasztott földút nehezen járható. A játék 3D nézete a 3 mm-nél mélyebb felszíni vizet vízfelületként
+rajzolja: a sekély víz világos, átlátszóbb, a mély sötétkék.
 
 ## Típusok
 
@@ -155,7 +156,7 @@ Képernyőképek: `artifacts/rule-editor/world-*.png`.
 
 ## Következő szeletek
 
-Az elöntés kirajzolása a 3D nézetben (ma csak az editor térképén látszik); a generált
+A generált
 folyók forrásai; klímák és járművek a Típusokba; utak és telephelyek a Pályára; további szabályok (víz,
 növekedés, egészség, útkopás) átköltöztetése képletként, a rendszerdinamikai modell
 szerint; misszió (célok, kezdőállapot, események).
