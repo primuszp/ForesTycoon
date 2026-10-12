@@ -223,7 +223,7 @@ namespace ForesTycoon
 
         // ────────────────────────────────────────────────────────────────────
         public Viewport(ulong? smokeTestFrameLimit = null, string captureDirectory = null, bool visible = true, bool captureSeasons = false,
-            string resumeWorld = null, string runtimeAcknowledgement = null) : base(
+            string resumeWorld = null, string runtimeAcknowledgement = null, string sceneProject = null) : base(
             new GameWindowSettings
             {
                 UpdateFrequency = 0
@@ -234,8 +234,9 @@ namespace ForesTycoon
             this.captureDirectory = captureDirectory;
             this.captureSeasons = captureSeasons;
             this.resumeWorld = resumeWorld; this.runtimeAcknowledgement = runtimeAcknowledgement;
+            this.sceneProject = sceneProject;
             // No automatic whole-code graph bootstrap: the built code runs unless a project carries an edited algorithm bundle.
-            ruleProjectLink = new(closeOldRuntime: Close, bootstrapAlgorithms: false);
+            ruleProjectLink = new(path: sceneProject, closeOldRuntime: Close, bootstrapAlgorithms: false);
         }
 
         protected override void LoadScene()

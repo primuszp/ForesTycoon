@@ -56,7 +56,7 @@ internal sealed partial class RuleEditorView
     private WorldScenario Scenario(GameWorld world)
     {
         if (scenario != null) return scenario;
-        scenario = world.RuleProjectDocument.World ?? GameWorld.DefaultScenario(world.Map.Settings.Seed);
+        scenario = world.RuleProjectDocument.World ?? WorldLoader.CaptureScenario(world);
         // Maps made before species moved here edit the built-in species.
         if (scenario.Species.Count == 0) scenario.Species = GameWorld.DefaultScenario().Species;
         seedEdit = scenario.Seed;
@@ -68,7 +68,8 @@ internal sealed partial class RuleEditorView
     {
         try {
             scenario.Validate();
-            world.StartScenario(scenario); appliedScenario = ScenarioKey();
+            var project = CollectProject(world); project.Algorithms = null;
+            world.StartScenario(scenario, project); appliedScenario = ScenarioKey();
             message = what + " A tesztvilág újraépült a pályából.";
         } catch (Exception e) when (e is System.IO.InvalidDataException or ArgumentException or InvalidOperationException) { message = e.Message; }
     }
@@ -126,6 +127,7 @@ internal sealed partial class RuleEditorView
 
     private void MapTab(GameWorld world)
     {
+        brushSoil = Math.Clamp(brushSoil, 0, scenario.SoilTypes.Count - 1);
         float left = 250, right = 320;
         ImGui.BeginChild("map-left", new Vec2(left, 0), ImGuiChildFlags.Borders);
         EditorStyle.Section("Réteg");
@@ -133,12 +135,17 @@ internal sealed partial class RuleEditorView
             if (ImGui.Selectable(layerName, mapLayer == layer)) mapLayer = layer;
             if (ImGui.IsItemHovered()) ImGui.SetTooltip(help);
         }
-        EditorStyle.Section("Generálás");
-        ImGui.TextWrapped("A pálya seedből generálódik, utána festéssel alakítod.");
+        EditorStyle.Section("Jelenet");
+        SceneFiles(world);
+        bool captured = scenario.InitialState != null;
+        ImGui.TextWrapped(captured ? "Rögzített jelenet: a talaj és a festés szerkeszthető; az eredeti terep és az érintetlen fák megmaradnak. A seed és a méret rögzített."
+            : "A pálya seedből generálódik, utána festéssel alakítod.");
+        ImGui.BeginDisabled(captured);
         ImGui.SetNextItemWidth(-1); ImGui.InputInt("##seed", ref seedEdit);
         if (ImGui.Button("Új seed")) seedEdit = new Random().Next(1, 999999);
         ImGui.SameLine();
         if (ImGui.Button("Generálás")) { scenario.Seed = seedEdit; ApplyScenario(world, $"Generálva a {seedEdit} seedből; a festés megmaradt."); }
+        ImGui.EndDisabled();
         foreach (var (count, label, clear) in new (int, string, Action)[] {
             (scenario.SoilPaint.Count, "festett talajcsempe", () => scenario.SoilPaint.Clear()),
             (scenario.HeightPaint.Count, "festett terepsarok", () => scenario.HeightPaint.Clear()),
@@ -158,12 +165,14 @@ internal sealed partial class RuleEditorView
         if (ImGui.IsItemHovered()) ImGui.SetTooltip($"{24 * world.SecondsPerEnvironmentHour:0} játékmásodperc; nagy pályán néhány másodpercig tart.");
         EditorStyle.Text(HudTheme.Muted, (behaviors.IsPaused ? "Áll" : "Fut") + $" · forrásból eddig {world.Environment.SpringReceived / 1000 * world.TileArea:0} m³");
         EditorStyle.Section("Méret");
+        ImGui.BeginDisabled(captured);
         int sizeIndex = Array.IndexOf(MapSizes, scenario.Size);
         ImGui.SetNextItemWidth(-1);
         if (ImGui.Combo("##size", ref sizeIndex, MapSizes.Select(n => $"{n} × {n} csempe").ToArray(), MapSizes.Length) && sizeIndex >= 0 && MapSizes[sizeIndex] != scenario.Size) {
             scenario.Size = MapSizes[sizeIndex]; scenario.SoilPaint.Clear(); scenario.HeightPaint.Clear(); scenario.ForestPaint.Clear(); scenario.Springs.Clear();
             ApplyScenario(world, $"A pálya mérete {scenario.Size} × {scenario.Size}; a festés törlődött, mert a csempék újraszámozódtak.");
         }
+        ImGui.EndDisabled();
         EditorStyle.Section("Pálya neve");
         string name = scenario.Name; ImGui.SetNextItemWidth(-1);
         if (ImGui.InputText("##scenario-name", ref name, 80) && name.Trim().Length > 0) scenario.Name = name.Trim();
@@ -430,6 +439,7 @@ internal sealed partial class RuleEditorView
         ImGui.Separator();
         if (typeTab == TypeTab.Species) { SpeciesTab(world); return; }
         if (typeTab == TypeTab.Surfaces) { SurfacesTab(world); return; }
+        if (scenario.InitialState != null) ImGui.TextWrapped("A talajparaméterek szerkeszthetők. A meglévő talajfoltok a helyükön maradnak; kisebb telítettségnél a többletvíz a felszínre kerül.");
         ImGui.BeginChild("types-list", new Vec2(280, 0), ImGuiChildFlags.Borders);
         EditorStyle.Section("Talajtípusok");
         selectedSoilType = Math.Clamp(selectedSoilType, 0, scenario.SoilTypes.Count - 1);
@@ -443,11 +453,12 @@ internal sealed partial class RuleEditorView
             message = "Új talajtípus. Festéssel kerül a térképre.";
         }
         var type = scenario.SoilTypes[selectedSoilType];
-        bool used = scenario.SoilPaint.ContainsValue(type.Id);
+        bool used = scenario.SoilPaint.ContainsValue(type.Id) || (scenario.InitialState != null &&
+            Enumerable.Range(0, world.Map.Tiles.Count).Any(t => world.Soils.Profile(t).Id == type.Id));
         ImGui.BeginDisabled(scenario.SoilTypes.Count == 1 || used);
         if (ImGui.Button("Törlés", new Vec2(-1, 0))) { scenario.SoilTypes.RemoveAt(selectedSoilType); selectedSoilType = 0; ApplyScenario(world, "Talajtípus törölve."); }
         ImGui.EndDisabled();
-        if (used) ImGui.TextWrapped("Festve van a térképen, ezért nem törölhető.");
+        if (used) ImGui.TextWrapped("Használatban van a térképen, ezért nem törölhető.");
         ImGui.EndChild(); ImGui.SameLine();
 
         ImGui.BeginChild("type-form", new Vec2(0, 0), ImGuiChildFlags.Borders);
@@ -810,8 +821,7 @@ internal sealed partial class RuleEditorView
     {
         (double[] Traffic, double[] Water, bool[] Unpaved, double Mean, double Soft) Run(RuleProject project)
         {
-            using var world = new GameWorld(GameWorld.ScenarioSettings(project.World), soils: GameWorld.SoilModel(project.World), enableRendering: false);
-            world.QueueRuleProject(project); world.ExecutePendingCommands();
+            using var world = WorldLoader.CreateProject(project);
             if (intensity > 0) { world.QueueWeather(ForesTycoon.Ecology.WeatherPreset.Rain, intensity, seconds); world.ExecutePendingCommands(); }
             for (int i = 0; i < seconds * 30; i++) world.Update(1.0 / 30);
             var (columns, rows) = world.TileGrid; int n = columns * rows;

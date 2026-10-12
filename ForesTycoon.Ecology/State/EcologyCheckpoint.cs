@@ -9,7 +9,9 @@ namespace ForesTycoon.Ecology
     internal sealed record EnvironmentCheckpoint(double[][] Fields, double Remainder, double MonthSeconds,
         double RadiationIntegral, double Evaporated, double Transpired, double Outflow, double InitialWater,
         ulong Revision, WeatherCheckpoint Weather, ForestHydrologyInputs[] Vegetation, ulong VegetationRevision,
-        double? RainReceived = null, double[] Snow = null, double? SpringReceived = null);
+        double? RainReceived = null, double[] Snow = null, double? SpringReceived = null,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        double? InitialWaterBeforeSoilEdit = null);
     internal sealed record TreePatchCheckpoint(int TileId, ForestTree[] Trees, ForestTreeStump[] Stumps,
         ForestDeadTree[] DeadTrees, float Depot, ulong Revision, ulong TopologyRevision);
     internal sealed record TreeStoreCheckpoint(TreePatchCheckpoint[] Patches, ulong NextId, ulong TopologyRevision,
@@ -24,11 +26,13 @@ namespace ForesTycoon.Ecology
 
     internal sealed partial class EnvironmentSystem
     {
+        // Soil editing preserves the original water ledger instead of seeding fresh reservoirs.
+        private double? initialWaterBeforeSoilEdit;
         private double[][] StateFields => new[] { canopy, surface, soil, deep, drought, wet, wetIntegral,
             demandIntegral, uptakeIntegral, uptakeRate, demandRate };
         internal EnvironmentCheckpoint Capture() => new(StateFields.Select(a => (double[])a.Clone()).ToArray(),
             remainder, monthSeconds, radiationIntegral, Evaporated, Transpired, Outflow, InitialWater, Revision, weather.Capture(),
-            (ForestHydrologyInputs[])vegetation.Clone(), vegetationRevision, RainReceived, (double[])snow.Clone(), springReceived);
+            (ForestHydrologyInputs[])vegetation.Clone(), vegetationRevision, RainReceived, (double[])snow.Clone(), springReceived, initialWaterBeforeSoilEdit);
 
         internal void Restore(EnvironmentCheckpoint state)
         {
@@ -53,7 +57,11 @@ namespace ForesTycoon.Ecology
             CheckpointGuard.Require(state.Remainder >= -1e-9 && state.Remainder < StepSeconds && double.IsFinite(state.Remainder), "water remainder");
             foreach (double v in new[] { state.MonthSeconds, state.RadiationIntegral, state.Evaporated, state.Transpired,
                 state.Outflow, state.InitialWater }) CheckpointGuard.NonNegative(v, "water scalar");
-            CheckpointGuard.Require(state.InitialWater == InitialWater, "initial water/model mismatch");
+            if (state.InitialWaterBeforeSoilEdit.HasValue)
+                CheckpointGuard.NonNegative(state.InitialWaterBeforeSoilEdit.Value, "initial water before soil edit");
+            CheckpointGuard.Require(state.InitialWater == (state.InitialWaterBeforeSoilEdit ?? InitialWater), "initial water/model mismatch");
+            initialWaterBeforeSoilEdit = state.InitialWaterBeforeSoilEdit;
+            InitialWater = state.InitialWater;
             CheckpointGuard.Length(state.Vegetation, CellCount, "vegetation water inputs");
             foreach (var input in state.Vegetation)
             {

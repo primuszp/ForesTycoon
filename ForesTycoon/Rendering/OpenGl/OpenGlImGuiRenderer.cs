@@ -11,7 +11,6 @@ namespace ForesTycoon.OpenGl
         private readonly RenderResourceOwner owner = new();
         private bool disposed;
         private int vao, vbo, ebo;
-        private int vboSize, eboSize;
         private int shader;
         private int projLoc, texLoc;
         private int fontTexture;
@@ -25,12 +24,6 @@ namespace ForesTycoon.OpenGl
             io.BackendFlags |= ImGuiBackendFlags.RendererHasVtxOffset;
             vbo = GL.GenBuffer();
             ebo = GL.GenBuffer();
-            vboSize = 10000 * VertSize;
-            eboSize = 2000 * sizeof(ushort);
-            GL.BindBuffer(BufferTarget.ArrayBuffer, vbo);
-            GL.BufferData(BufferTarget.ArrayBuffer, vboSize, IntPtr.Zero, BufferUsageHint.DynamicDraw);
-            GL.BindBuffer(BufferTarget.ElementArrayBuffer, ebo);
-            GL.BufferData(BufferTarget.ElementArrayBuffer, eboSize, IntPtr.Zero, BufferUsageHint.DynamicDraw);
 
             shader = BuildShader();
             projLoc = GlProgram.Uniform(shader, "projection_matrix");
@@ -162,20 +155,12 @@ void main()
                     int idxBytes = cmdList.IdxBuffer.Size * sizeof(ushort);
 
                     GL.BindBuffer(BufferTarget.ArrayBuffer, vbo);
-                    if (vtxBytes > vboSize)
-                    {
-                        vboSize = Math.Max(vboSize * 2, vtxBytes);
-                        GL.BufferData(BufferTarget.ArrayBuffer, vboSize, IntPtr.Zero, BufferUsageHint.DynamicDraw);
-                    }
-                    GL.BufferSubData(BufferTarget.ArrayBuffer, IntPtr.Zero, vtxBytes, cmdList.VtxBuffer.Data);
-
+                    // Match Dear ImGui's OpenGL backend: replace storage for each draw list.
+                    // Reusing storage with BufferSubData has caused driver-dependent UI corruption.
+                    // https://github.com/ocornut/imgui/blob/v1.91.6/backends/imgui_impl_opengl3.cpp
+                    GL.BufferData(BufferTarget.ArrayBuffer, vtxBytes, cmdList.VtxBuffer.Data, BufferUsageHint.StreamDraw);
                     GL.BindBuffer(BufferTarget.ElementArrayBuffer, ebo);
-                    if (idxBytes > eboSize)
-                    {
-                        eboSize = Math.Max(eboSize * 2, idxBytes);
-                        GL.BufferData(BufferTarget.ElementArrayBuffer, eboSize, IntPtr.Zero, BufferUsageHint.DynamicDraw);
-                    }
-                    GL.BufferSubData(BufferTarget.ElementArrayBuffer, IntPtr.Zero, idxBytes, cmdList.IdxBuffer.Data);
+                    GL.BufferData(BufferTarget.ElementArrayBuffer, idxBytes, cmdList.IdxBuffer.Data, BufferUsageHint.StreamDraw);
 
                     for (int c = 0; c < cmdList.CmdBuffer.Size; c++)
                     {

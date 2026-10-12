@@ -72,7 +72,7 @@ namespace ForesTycoon.Ecology
         internal double Evaporated { get; private set; }
         internal double Transpired { get; private set; }
         internal double Outflow { get; private set; }
-        internal double InitialWater { get; }
+        internal double InitialWater { get; private set; }
         internal ulong Revision { get; private set; }
         internal int CellCount => soil.Length;
         internal double MeanWetness { get; private set; }

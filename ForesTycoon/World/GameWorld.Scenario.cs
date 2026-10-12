@@ -11,14 +11,18 @@ namespace ForesTycoon
         /// <summary>The built-in soil types, as an editable scenario on the given seed.</summary>
         internal static WorldScenario DefaultScenario(int seed = 42, int size = 64) => new() {
             Name = "Új pálya", Seed = seed, Size = size,
-            SoilTypes = SoilCatalog.Default.Profiles.ToArray().Select(p => new SoilTypeDefinition {
+            SoilTypes = EditableSoils(SoilCatalog.Default, rounded: true),
+            Species = ForestSpeciesTraits.Playable.Select(DefaultSpecies).ToList() };
+
+        internal static List<SoilTypeDefinition> EditableSoils(SoilCatalog catalog, bool rounded = false) =>
+            catalog.Profiles.ToArray().Select(p => new SoilTypeDefinition {
                 Id = p.Id, Name = p.Name, Color = $"#{p.Color & 255:X2}{(p.Color >> 8) & 255:X2}{(p.Color >> 16) & 255:X2}",
                 PreferredMoisture = p.PreferredMoisture, PreferredTexture = p.PreferredTexture,
                 Saturation = p.Properties.Saturation, FieldCapacity = p.Properties.FieldCapacity, WiltingPoint = p.Properties.WiltingPoint,
                 InfiltrationPerHour = p.Properties.InfiltrationPerHour, DrainagePerHour = p.Properties.DrainagePerHour,
-                Fertility = p.Properties.Fertility, BearingCapacity = Math.Round(EnvironmentSystem.BearingCapacity(p.Properties), 2)
-            }).ToList(),
-            Species = ForestSpeciesTraits.Playable.Select(DefaultSpecies).ToList() };
+                Fertility = p.Properties.Fertility, BearingCapacity = rounded ? Math.Round(EnvironmentSystem.BearingCapacity(p.Properties), 2)
+                    : EnvironmentSystem.BearingCapacity(p.Properties)
+            }).ToList();
 
         private static SpeciesDefinition DefaultSpecies(ForestSpecies s)
         {
@@ -70,18 +74,38 @@ namespace ForesTycoon
         internal static TerrainSettings ScenarioSettings(WorldScenario scenario) => TerrainSettings.Default.WithNodeSize(scenario.Size + 1, scenario.Seed);
 
         /// <summary>Replaces this world with a new one built from the scenario; the scenario stays the project's map.</summary>
-        internal void StartScenario(WorldScenario scenario)
+        internal void StartScenario(WorldScenario scenario, RuleProject definition = null)
         {
             // A new world starts with default rules; the project's rules and formulas carry over as one journaled change.
-            var project = RuleProjectDocument;
+            var project = definition?.Clone() ?? RuleProjectDocument;
             project.World = RuleProject.FromJson(new RuleProject { World = scenario }.ToJson()).World;
+            ValidateRuleProject(project);
+            RequireAlgorithmRuntime(project.Algorithms);
+            if (scenario.InitialState != null) {
+                using var candidate = new GameWorld(TerrainSettings.Default.WithNodeSize(17, 42), Graphics,
+                    EcologyTime.DefaultGameSecondsPerYear, SoilLandscapeDefinition.Default, ClimateDefinition.Default);
+                WorldLoader.RestoreInitialState(candidate, project.World);
+                candidate.InitializeProjectScene(project);
+                if (HasPresentation) candidate.AttachRendering();
+                Adopt(candidate);
+                return;
+            }
             Regenerate(ScenarioSettings(scenario), SoilModel(scenario));
+            InitializeProjectScene(project);
+        }
+
+        internal void InitializeProjectScene(RuleProject project)
+        {
+            var scenario = project.World;
             // The painted map is the initial state: terrain (and so water) first, then the forest that grows on it.
-            ForestSpeciesBook.Apply(SpeciesEdits(scenario));
-            int[] changed = map.ApplyHeightTargets(scenario.HeightPaint);
-            if (changed.Length > 0) ecosystem.ApplyTerrainEdit(changed);
-            forest.PaintInitialForest(scenario.ForestPaint.ToDictionary(p => p.Key,
-                p => p.Value.Length == 0 ? ForestSpecies.None : Enum.TryParse(p.Value, out ForestSpecies s) ? s : ForestSpecies.None));
+            if (scenario != null) {
+                ForestSpeciesBook.Apply(SpeciesEdits(scenario));
+                int[] changed = map.ApplyHeightTargets(scenario.HeightPaint);
+                if (changed.Length > 0) ecosystem.ApplyTerrainEdit(changed);
+                forest.PaintInitialForest(scenario.ForestPaint.ToDictionary(p => p.Key,
+                    p => p.Value.Length == 0 ? ForestSpecies.None : Enum.TryParse(p.Value, out ForestSpecies s) ? s : ForestSpecies.None),
+                    preserveUnpainted: scenario.InitialState != null);
+            }
             QueueRuleProject(project); ExecutePendingCommands();
         }
 

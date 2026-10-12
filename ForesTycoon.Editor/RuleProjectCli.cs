@@ -15,6 +15,11 @@ internal static class RuleProjectCli
     internal static bool Run(string[] args)
     {
         if (args.Length == 0) return false;
+        if (args.Length == 2 && args[0] == "--export-opening-scene") {
+            var project = WorldLoader.OpeningProject(); project.Algorithms = null;
+            RuleProject.WriteAtomic(args[1], project.ToJson());
+            Console.WriteLine("Nyitójelenet projektje mentve: " + Path.GetFullPath(args[1])); return true;
+        }
         if (args[0] == "--compare-project" && args.Length == 6 && args[4] == "--world") {
             if (!int.TryParse(args[2], out int ticks) || ticks < 0 || ticks > 100000) throw new ArgumentException("0–100000 tick szükséges.");
             string save = Path.GetFullPath(args[5]); using var input = File.OpenRead(save); var checkpoint = WorldSaveSerializer.Read(input).Checkpoint;
@@ -107,8 +112,8 @@ internal static class RuleProjectCli
                 if (process.ExitCode != 0) throw new InvalidDataException("A gráfszimuláció sikertelen; kilépési kód: " + process.ExitCode);
                 return true;
             }
-            using var world = Sandbox(args.Length == 6 ? args[5] : null);
-            var project = RuleProject.FromJson(File.ReadAllText(args[1])); world.QueueRuleProject(project); world.ExecutePendingCommands();
+            using var world = args.Length == 6 ? Sandbox(args[5]) : WorldLoader.CreateProject(graphProject);
+            if (args.Length == 6) { world.QueueRuleProject(graphProject); world.ExecutePendingCommands(); }
             var trace = new List<object>();
             for (int i = 0; i <= ticks; i++) {
                 if (i % 30 == 0 || i == ticks) trace.Add(new { tick = world.SimulationTick, seconds = i / 30d, stocks = world.DynamicsValues.ToDictionary(p => p.Key, p => p.Value) });

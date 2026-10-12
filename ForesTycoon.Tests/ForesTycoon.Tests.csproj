@@ -27,6 +27,10 @@
     <Using Include="ForesTycoon.Map" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="../docs/references/opening-scene/fingerprints.json" Link="OpeningReference.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../docs/references/opening-scene/opening.world.json.gz" Link="OpeningReference.world.json.gz" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
     <Compile Include="../ForesTycoon.Editor/RuleWorkshopModel.cs" Link="Editor/RuleWorkshopModel.cs" />
     <Compile Include="../ForesTycoon.Editor/WorkshopDraftStore.cs" Link="Editor/WorkshopDraftStore.cs" />
     <Compile Include="../ForesTycoon.Editor/AuthoringOperations.cs" Link="Editor/AuthoringOperations.cs" />

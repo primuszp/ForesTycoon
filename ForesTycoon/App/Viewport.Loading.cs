@@ -12,6 +12,7 @@ namespace ForesTycoon
         private IEnumerator<float> mapPreparation;
         private bool loadingPresented;
         private float loadingProgress;
+        private readonly string sceneProject;
 
         private void RenderLoadingFrame()
         {
@@ -22,7 +23,8 @@ namespace ForesTycoon
             {
                 if (world == null)
                 {
-                    world = new GameWorld(TerrainSettings.Default);
+                    world = sceneProject == null ? WorldLoader.CreateOpening() :
+                        WorldLoader.CreateProject(RuleProject.FromJson(System.IO.File.ReadAllText(sceneProject)), enableRendering: true);
                     if (resumeWorld != null) {
                         using var input = System.IO.File.OpenRead(resumeWorld); world.Load(input, allowAlgorithmMigration: true);
                         var project = RuleProject.FromJson(System.IO.File.ReadAllText(RuleProject.DefaultPath));

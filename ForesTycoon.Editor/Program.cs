@@ -51,6 +51,7 @@ namespace ForesTycoon.Editor
         private readonly bool smoke;
         private int frames;
         private readonly string worldFile;
+        private System.Collections.Generic.SortedDictionary<string, string> openingReference;
         internal EditorWindow(string file, bool smoke = false, bool visible = true, string worldFile = null) : base(GameWindowSettings.Default, new NativeWindowSettings
         {
             Title = "ForesTycoon – Világszerkesztő", ClientSize = new(1280, 900),
@@ -60,8 +61,9 @@ namespace ForesTycoon.Editor
         protected override void LoadScene()
         {
             VSync = VSyncMode.On;
-            sandbox = new GameWorld(TerrainSettings.Default.WithNodeSize(17, 42), enableRendering: false);
+            sandbox = WorldLoader.CreateOpening(enableRendering: false);
             if (worldFile != null) { EditorWorldLoader.Load(sandbox, worldFile); editor.UseWorldFile(worldFile); }
+            if (smoke) openingReference = OpeningSceneReference.Fingerprints(sandbox);
             ui = new ImGuiController(); HudTheme.Apply();
         }
         protected override void RenderScene(FrameEventArgs args)
@@ -78,6 +80,11 @@ namespace ForesTycoon.Editor
             ui.Render();
             if (smoke && ++frames == 3)
             {
+                var actual = OpeningSceneReference.Fingerprints(sandbox);
+                foreach (string field in new[] { "Terrain", "Ecology", "Graphics" })
+                    if (openingReference[field] != actual[field]) throw new InvalidOperationException("Editor changed opening scene: " + field);
+                if (sandbox.RuleProjectDocument.World?.InitialState == null)
+                    throw new InvalidOperationException("Editor did not retain the opening scene snapshot.");
                 GL.Finish();
                 if (GL.GetError() != OpenTK.Graphics.OpenGL.ErrorCode.NoError) throw new InvalidOperationException("Standalone editor OpenGL error.");
                 string capture = System.IO.Path.GetFullPath("artifacts/rule-editor/standalone.png");

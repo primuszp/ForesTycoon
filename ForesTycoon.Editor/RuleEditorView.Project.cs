@@ -78,6 +78,7 @@ internal sealed partial class RuleEditorView
         workshopVersions.Reset(); bindingSelectedFor = null; trialResult = null; publishedProjectRevision = null;
         authoring = project.Clone().Authoring ?? new();
         scenario = project.World == null ? null : RuleProject.FromJson(new RuleProject { World = project.World }.ToJson()).World;
+        scenarioBuilt = false; appliedScenario = null;
         if (scenario != null) seedEdit = scenario.Seed;
         authoringUndo.Clear(); authoringRedo.Clear();
         publishedGuard.Observe(projectPath); draftGuard.Observe(RuleWorkshopModel.DraftPath(projectPath)); guardedPath = Path.GetFullPath(projectPath);

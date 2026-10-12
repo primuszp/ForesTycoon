@@ -211,12 +211,16 @@ namespace ForesTycoon.Ecology
 
         /// <summary>
         /// A world-editor map's forest: painted tiles get a natural mature stand of the chosen species, or none.
-        /// The rest of the generated forest stays; individuals are rebuilt from the stands.
+        /// Generated maps rebuild individuals from stands; captured scenes preserve every unpainted patch.
         /// </summary>
-        internal void PaintInitialForest(IReadOnlyDictionary<int, ForestSpecies> paint)
+        internal void PaintInitialForest(IReadOnlyDictionary<int, ForestSpecies> paint, bool preserveUnpainted = false)
         {
             if (paint == null || paint.Count == 0) return;
-            for (int id = 0; id < stands.Length; id++) stands[id] = IndividualStand(id, ForestYear);
+            if (preserveUnpainted) {
+                var tiles = new List<int>(paint.Keys);
+                ClearTerrainTiles(tiles.ToArray());
+            }
+            else for (int id = 0; id < stands.Length; id++) stands[id] = IndividualStand(id, ForestYear);
             foreach (var (tileId, species) in paint)
             {
                 if ((uint)tileId >= (uint)stands.Length) continue;
@@ -226,8 +230,18 @@ namespace ForesTycoon.Ecology
                 float age = 4f + UnitFloat(Hash(habitat.Seed, tileId, 1)) * profile.MatureAgeYears * 2.2f;
                 float health = Math.Clamp(0.72f + Fitness(species, moisture, elevation) * 0.28f, 0f, 1f);
                 stands[tileId] = new ForestStand(species, age, InitialBiomass(profile, age, health), health);
+                if (preserveUnpainted) IndividualTrees.Create(tileId, stands[tileId], ForestYear, habitat.Seed);
             }
-            InitializeIndividuals();
+            if (preserveUnpainted) {
+                monthlyPreparation.Clear();
+                competition.Snapshot(habitat, IndividualTrees, ForestYear);
+                foreach (int id in paint.Keys)
+                    if (IndividualTrees.TryGet(id, out var patch)) {
+                        UpdateIndividualRates(id, patch, ForestYear, updateHealth: false);
+                        stands[id] = IndividualStand(id, ForestYear);
+                    }
+            }
+            else InitializeIndividuals();
             RecalculateStatistics();
             Revision++; EditRevision++;
         }

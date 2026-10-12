@@ -15,11 +15,13 @@ internal static class GraphRuntimeHost
         if (!int.TryParse(args[2], out int ticks) || ticks < 0 || ticks > 100000) throw new ArgumentException("0–100000 tick szükséges.");
         var project = RuleProject.FromJson(File.ReadAllText(args[1]));
         if (project.Algorithms != null && project.Algorithms.Revision != AlgorithmBuild.CurrentRevision) throw new InvalidDataException("A futtató algoritmusrevíziója eltér a projekttől.");
-        using var world = new GameWorld(TerrainSettings.Default.WithNodeSize(17, 42), enableRendering: false);
-        if (args.Length >= 6 && args[4] == "--world") {
+        bool fromSave = args.Length >= 6 && args[4] == "--world";
+        using var world = fromSave ? new GameWorld(TerrainSettings.Default.WithNodeSize(17, 42), enableRendering: false)
+            : WorldLoader.CreateProject(project);
+        if (fromSave) {
             using var input = File.OpenRead(args[5]); world.Load(input, allowAlgorithmMigration: args.Contains("--migrate"));
+            world.QueueRuleProject(project); world.ExecutePendingCommands();
         }
-        world.QueueRuleProject(project); world.ExecutePendingCommands();
         var trace = new List<object>();
         for (int i = 0; i <= ticks; i++) {
             if (i % 30 == 0 || i == ticks) trace.Add(new { tick = world.SimulationTick, seconds = i / 30d,

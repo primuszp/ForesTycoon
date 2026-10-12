@@ -404,6 +404,9 @@ public sealed class WorldScenario
     public int Seed { get; set; } = 42;
     /// <summary>Tiles per side of the square map.</summary>
     public int Size { get; set; } = 64;
+    /// <summary>Optional portable gzip/base64 world checkpoint. Paint is applied over this exact scene.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string InitialState { get; set; }
     public List<SoilTypeDefinition> SoilTypes { get; set; } = new();
     /// <summary>Painted soil: soil type ID by tile ID, over the generated map.</summary>
     public Dictionary<int, string> SoilPaint { get; set; } = new();
@@ -421,6 +424,8 @@ public sealed class WorldScenario
         if (string.IsNullOrWhiteSpace(Name) || SoilTypes == null || SoilTypes.Count is 0 or > 64 || SoilPaint == null)
             throw new InvalidDataException("A pályának neve és 1–64 talajtípusa legyen.");
         if (Size is < 16 or > 128) throw new InvalidDataException("A pálya mérete 16–128 csempe lehet.");
+        if (InitialState != null && (!InitialState.StartsWith("world-gzip-v1:", StringComparison.Ordinal) || InitialState.Length > 32 * 1024 * 1024))
+            throw new InvalidDataException("Ismeretlen vagy túl nagy kiinduló jelenet.");
         var ids = new HashSet<string>(StringComparer.Ordinal);
         foreach (var s in SoilTypes) {
             if (s == null || string.IsNullOrWhiteSpace(s.Id) || string.IsNullOrWhiteSpace(s.Name) || !ids.Add(s.Id))

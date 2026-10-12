@@ -6,6 +6,16 @@ namespace ForesTycoon
     {
         static void Main(string[] args)
         {
+            if (args.Length == 2 && args[0] == "--record-opening-reference") {
+                using var reference = new GameWorld(TerrainSettings.Default, enableRendering: false);
+                System.IO.Directory.CreateDirectory(args[1]);
+                System.IO.File.WriteAllText(System.IO.Path.Combine(args[1], "fingerprints.json"),
+                    System.Text.Json.JsonSerializer.Serialize(OpeningSceneReference.Fingerprints(reference), new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+                using var save = System.IO.File.Create(System.IO.Path.Combine(args[1], "opening.world.json.gz"));
+                using var compressed = new System.IO.Compression.GZipStream(save, System.IO.Compression.CompressionLevel.Optimal);
+                reference.Save(compressed);
+                return;
+            }
             if (GraphRuntimeHost.RunHeadless(args)) return;
             if ((args.Length == 0 || Array.IndexOf(args, "--algorithm-handoff") >= 0) && GraphRuntimeHost.DispatchProjectRuntime(args)) return;
             RenderBackendSelection.UseOpenGl();
@@ -94,12 +104,16 @@ namespace ForesTycoon
             if (captureFrame >= 0 && captureFrame + 1 >= args.Length) throw new ArgumentException("--capture-frame requires an output directory.");
             int captureSeasons = Array.FindIndex(args, argument => argument == "--capture-seasons");
             int handoff = Array.IndexOf(args, "--algorithm-handoff");
+            int sceneProject = Array.IndexOf(args, "--scene-project");
+            if (sceneProject >= 0 && (sceneProject + 1 >= args.Length || handoff >= 0))
+                throw new ArgumentException("--scene-project jelenetprojekt.json szükséges; algoritmusátadással együtt nem használható.");
             if (handoff >= 0 && handoff + 2 >= args.Length) throw new ArgumentException("Az algoritmusátadás mentést és nyugtázási útvonalat kér.");
             if (captureSeasons >= 0 && captureSeasons + 1 >= args.Length) throw new ArgumentException("--capture-seasons requires an output directory.");
             using Viewport game = new Viewport(smokeTest ? 120UL : null,
                 captureSeasons >= 0 ? args[captureSeasons + 1] : captureFrame >= 0 ? args[captureFrame + 1] : null,
                 captureSeasons: captureSeasons >= 0, resumeWorld: handoff >= 0 ? args[handoff + 1] : null,
-                runtimeAcknowledgement: handoff >= 0 ? args[handoff + 2] : null);
+                runtimeAcknowledgement: handoff >= 0 ? args[handoff + 2] : null,
+                sceneProject: sceneProject >= 0 ? args[sceneProject + 1] : null);
             game.Run();
         }
     }
