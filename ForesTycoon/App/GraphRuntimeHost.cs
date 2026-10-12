@@ -38,6 +38,10 @@ internal static class GraphRuntimeHost
         if (!File.Exists(RuleProject.DefaultPath)) return false;
         var project = RuleProject.FromJson(File.ReadAllText(RuleProject.DefaultPath));
         if (project.Algorithms == null || project.Algorithms.Revision == AlgorithmBuild.CurrentRevision) return false;
+        if (AlgorithmBuild.StaleReason(project.Algorithms) is string stale) {
+            Console.WriteLine("A projekt algoritmusmásolatát figyelmen kívül hagyom (" + stale + "); a játék a lefordított kódjával indul.");
+            return false;
+        }
         Console.WriteLine("Az editor algoritmusgráfjainak fordítása…");
         var runtime = AlgorithmBuild.CompileAsync(project.Algorithms).GetAwaiter().GetResult();
         using var child = AlgorithmBuild.StartRuntime(runtime, args, RuleProject.DefaultPath);

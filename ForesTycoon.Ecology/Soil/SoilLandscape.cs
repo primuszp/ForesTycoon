@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace ForesTycoon.Ecology
 {
@@ -6,11 +7,16 @@ namespace ForesTycoon.Ecology
     {
         internal int GeneratorVersion { get; }
         internal SoilCatalog Catalog { get; }
-        internal SoilLandscapeDefinition(int generatorVersion, SoilCatalog catalog)
+        /// <summary>Painted soil: profile index by tile ID, applied over the generated raster.</summary>
+        internal IReadOnlyDictionary<int, byte> Overrides { get; }
+        internal SoilLandscapeDefinition(int generatorVersion, SoilCatalog catalog, IReadOnlyDictionary<int, byte> overrides = null)
         {
+            Overrides = overrides ?? new Dictionary<int, byte>();
+            foreach (var (id, profile) in Overrides)
+                if (id < 0 || profile >= catalog.Profiles.Length) throw new ArgumentException("Painted soil names an unknown tile or profile.");
             if (generatorVersion != 0 && generatorVersion != 1) throw new NotSupportedException("Unsupported soil generator.");
             Catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
-            if (generatorVersion == 0 && (catalog.Profiles.Length != 1 || catalog[0].Properties != SoilProperties.Standard))
+            if (generatorVersion == 0 && (catalog.Profiles.Length != 1 || catalog[0].Properties != SoilProperties.Standard || Overrides.Count > 0))
                 throw new ArgumentException("The legacy soil model requires the standard profile.");
             GeneratorVersion = generatorVersion;
         }
@@ -52,6 +58,8 @@ namespace ForesTycoon.Ecology
                     if (score < best) { best = score; profileIndices[id] = (byte)p; }
                 }
             }
+            foreach (var (id, profile) in definition.Overrides)
+                if (id < profileIndices.Length) profileIndices[id] = profile;
             Profiles = new RasterField<byte>(grid,
                 new("soil.profile", "Talajtípus", "profile-id", "soil.landscape", true), profileIndices);
         }
@@ -89,6 +97,7 @@ namespace ForesTycoon.Ecology
         public bool IsImpervious(int id) => terrain.IsImpervious(id);
         public bool IsWaterOutlet(int id) => terrain.IsWaterOutlet(id);
         public float GetNormalizedElevation(int id) => terrain.GetNormalizedElevation(id);
+        public float GetGroundHeight(int id) => terrain.GetGroundHeight(id);
         public int GetAdjacentTileIds(int id, Span<int> destination) => terrain.GetAdjacentTileIds(id, destination);
     }
 }

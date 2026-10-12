@@ -8,7 +8,9 @@ using System.Text.Json.Serialization;
 namespace ForesTycoon.Rules
 {
     public enum BehaviorOperation { Constant, Native, Delta, Time, State, Amount, Add, Subtract, Multiply, Divide, Minimum, Maximum, Greater, Less, Select, Absolute, Negate,
-        Capacity, Available, From, To, Surface, NamedValue }
+        Capacity, Available, From, To, Surface, NamedValue,
+        // A named input the hook declares (for example a soil parameter of the tile); Key holds its name.
+        Input, Exp, Power }
     public sealed class BehaviorNode
     {
         public string Id { get; set; } = "";
@@ -48,12 +50,15 @@ namespace ForesTycoon.Rules
         public static BehaviorModel FromJson(string json) => JsonSerializer.Deserialize<BehaviorModel>(json, Options) ?? throw new InvalidDataException("Üres viselkedésmodell.");
         public BehaviorModel Clone() => FromJson(ToJson());
         public static int Inputs(BehaviorOperation op) => op switch {
-            BehaviorOperation.Select => 3, BehaviorOperation.Absolute or BehaviorOperation.Negate => 1,
+            BehaviorOperation.Select => 3, BehaviorOperation.Absolute or BehaviorOperation.Negate or BehaviorOperation.Exp => 1,
+            BehaviorOperation.Power => 2,
             >= BehaviorOperation.Add and <= BehaviorOperation.Less => 2, _ => 0
         };
     }
+    /// <param name="Inputs">Names of the extra values the game passes with every evaluation, in order.</param>
+    /// <param name="Formula">The rule as the game computes it, written as a formula; null when it is not yet expressed.</param>
     public sealed record BehaviorHook(string Id, string Name, string Kind, string Unit, double Min, double Max,
-        string State, string Amount, string Schedule, bool SupportsObjects = true);
+        string State, string Amount, string Schedule, bool SupportsObjects = true, string[] Inputs = null, string Formula = null);
     public readonly record struct BehaviorInputs(double Native, double Delta, double Time, double State, double Amount,
         double Capacity = 0, double Available = 0, double From = 0, double To = 0, double Surface = 0);
 
@@ -62,6 +67,9 @@ namespace ForesTycoon.Rules
     {
         private readonly BehaviorModel document;
         private readonly Dictionary<(string Hook, string Kind, ulong? Id), Program> programs = new();
+        private readonly HashSet<(string Hook, string Kind)> overriding = new();
+        /// <summary>True when some graph of the hook computes more than the built-in result.</summary>
+        public bool Overrides(string hook, string kind) => overriding.Contains((hook, kind));
         public BehaviorModel Document => document.Clone();
         public bool HasGraphs => document.Graphs.Count > 0;
         public string LastError { get; private set; }
@@ -83,12 +91,13 @@ namespace ForesTycoon.Rules
                 if (!hook.SupportsObjects && graph.ObjectId.HasValue) throw new InvalidDataException("Ez a paraméter a teljes világra vonatkozik.");
                 if (!programs.TryAdd((graph.Hook, graph.Kind, graph.ObjectId), new Program(graph, hook, namedValues, readValue)))
                     throw new InvalidDataException("Egy eseményhez és célhoz csak egy viselkedés köthető.");
+                if (graph.Nodes.Find(n => n.Id == graph.Output)?.Operation != BehaviorOperation.Native) overriding.Add((graph.Hook, graph.Kind));
             }
         }
-        public double Evaluate(string hook, string kind, ulong id, in BehaviorInputs inputs)
+        public double Evaluate(string hook, string kind, ulong id, in BehaviorInputs inputs, double[] extras = null)
         {
             if (!programs.TryGetValue((hook, kind, id), out var program) && !programs.TryGetValue((hook, kind, null), out program)) return inputs.Native;
-            try { return program.Evaluate(inputs); }
+            try { return program.Evaluate(inputs, extras); }
             catch (ArithmeticException e) {
                 LastError = $"{hook} / {kind} #{id}: {e.Message} A beépített eredmény maradt érvényben.";
                 return inputs.Native;
@@ -97,7 +106,8 @@ namespace ForesTycoon.Rules
         private sealed class Program
         {
             private readonly BehaviorNode[] nodes;
-            private readonly int[] a, b, c;
+            private readonly int[] a, b, c, inputIndex;
+            private double[] extras;
             private readonly double[] values;
             private readonly bool[] evaluated;
             private readonly int output;
@@ -113,6 +123,9 @@ namespace ForesTycoon.Rules
                     if (n == null || string.IsNullOrWhiteSpace(n.Id) || string.IsNullOrWhiteSpace(n.Name) || !Enum.IsDefined(n.Operation)
                         || !double.IsFinite(n.Value) || !float.IsFinite(n.X) || !float.IsFinite(n.Y) || !byId.TryAdd(n.Id, n))
                         throw new InvalidDataException("Érvénytelen vagy ismétlődő csomópont.");
+                foreach (var n in graph.Nodes.Where(n => n.Operation == BehaviorOperation.Input))
+                    if (hook.Inputs == null || Array.IndexOf(hook.Inputs, n.Key) < 0)
+                        throw new InvalidDataException("Ennek a szabálynak nincs ilyen bemenete: " + n.Key);
                 foreach (var n in graph.Nodes.Where(n => n.Operation == BehaviorOperation.NamedValue))
                     if (namedValues == null || !namedValues.Contains(n.Key) || readValue == null)
                         throw new InvalidDataException("Ismeretlen készlet vagy világmező: " + n.Key);
@@ -130,6 +143,7 @@ namespace ForesTycoon.Rules
                 foreach (var n in graph.Nodes) Visit(n.Id);
                 Visit(graph.Output);
                 nodes = ordered.ToArray(); values = new double[nodes.Length]; evaluated = new bool[nodes.Length]; a = new int[nodes.Length]; b = new int[nodes.Length]; c = new int[nodes.Length];
+                inputIndex = nodes.Select(n => n.Operation == BehaviorOperation.Input ? Array.IndexOf(hook.Inputs, n.Key) : -1).ToArray();
                 var indices = nodes.Select((n, i) => (n.Id, i)).ToDictionary(p => p.Id, p => p.i);
                 for (int i = 0; i < nodes.Length; i++) {
                     int count = BehaviorModel.Inputs(nodes[i].Operation);
@@ -137,8 +151,9 @@ namespace ForesTycoon.Rules
                 }
                 output = indices[graph.Output];
             }
-            internal double Evaluate(in BehaviorInputs input)
+            internal double Evaluate(in BehaviorInputs input, double[] extraValues = null)
             {
+                extras = extraValues;
                 Array.Clear(evaluated);
                 return Math.Clamp(EvaluateNode(output, input), hook.Min, hook.Max);
             }
@@ -156,6 +171,8 @@ namespace ForesTycoon.Rules
                         BehaviorOperation.Capacity => input.Capacity, BehaviorOperation.Available => input.Available,
                         BehaviorOperation.From => input.From, BehaviorOperation.To => input.To, BehaviorOperation.Surface => input.Surface,
                         BehaviorOperation.NamedValue => readValue(nodes[i].Key),
+                        BehaviorOperation.Input => extras != null && inputIndex[i] < extras.Length ? extras[inputIndex[i]] : throw new ArithmeticException("Hiányzó bemenet: " + nodes[i].Key),
+                        BehaviorOperation.Exp => Math.Exp(left), BehaviorOperation.Power => Math.Pow(left, right),
                         BehaviorOperation.Add => left + right, BehaviorOperation.Subtract => left - right, BehaviorOperation.Multiply => left * right,
                         BehaviorOperation.Divide => right == 0 ? throw new ArithmeticException("Nullával osztás.") : left / right,
                         BehaviorOperation.Minimum => Math.Min(left, right), BehaviorOperation.Maximum => Math.Max(left, right),

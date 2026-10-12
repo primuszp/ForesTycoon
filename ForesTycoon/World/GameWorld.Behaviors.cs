@@ -8,13 +8,28 @@ namespace ForesTycoon
     {
         internal static readonly BehaviorHook[] Hooks = new BehaviorHook[] {
             new("road.trafficWear", "Forgalmi útkopás", "road", "állapotveszteség", 0, 1, "Út sérültsége", "Áthaladási terhelés", "Teherautó csempeváltás"),
-            new("water.snowmelt", "Hóolvadás", "tile", "mm", 0, 1e9, "Helyi hőmérséklet (°C)", "Hókészlet (mm)", "Környezeti lépés, beszivárgás előtt"),
-            new("water.infiltration", "Beszivárgás", "tile", "mm", 0, 1e9, "Gyökérzónavíz (mm)", "Felszíni víz (mm)", "Környezeti lépés"),
+            new("water.snowmelt", "Hóolvadás", "tile", "mm", 0, 1e9, "Helyi hőmérséklet (°C)", "Hókészlet (mm)", "Környezeti lépés, beszivárgás előtt",
+                Inputs: new[] { "óra" }, Formula: WaterFormulas.Snowmelt),
+            new("water.infiltration", "Beszivárgás", "tile", "mm", 0, 1e9, "Gyökérzónavíz (mm)", "Felszíni víz (mm)", "Környezeti lépés",
+                Inputs: new[] { "talaj.beszivárgás", "talaj.telítettség", "óra", "burkolt" }, Formula: WaterFormulas.Infiltration),
             new("forest.growth", "Fanövekedési tényező", "tree", "1", 0, 10, "Egészség (0–1)", "Kor (erdőév)", "Növekedési ráta frissítése"),
             new("forest.health", "Fa egészségének célértéke", "tree", "1", 0, 1, "Egészség (0–1)", "Kor (erdőév)", "Erdőhónap"),
             new("machine.pace", "Forwarder munkatempó", "forwarder", "munka-s", 0, 10, "Kopás (0–1)", "Rakomány (m³)", "Gép al-lépés"),
             new("machine.pace", "Processzor munkatempó", "processor", "munka-s", 0, 10, "Kopás (0–1)", "Rakomány (m³)", "Gép al-lépés"),
-            new("mill.process", "Malom feldolgozása", "mill", "m³", 0, 1e6, "Már feldolgozott mennyiség (m³)", "Készlet (m³)", "Logisztikai lépés")
+            new("mill.process", "Malom feldolgozása", "mill", "m³", 0, 1e6, "Már feldolgozott mennyiség (m³)", "Készlet (m³)", "Logisztikai lépés"),
+            new("water.evaporation", "Talajpárolgás", "tile", "mm", 0, 1e9, "Gyökérzónavíz (mm)", "Maradék párolgási igény (mm)", "Környezeti lépés; a hervadáspont feletti vízre korlátozva",
+                Inputs: new[] { "talaj.hervadáspont", "talaj.vízkapacitás", "lombborítás" }, Formula: WaterFormulas.Evaporation),
+            new("water.uptake", "Gyökérvíz-felvétel", "tile", "mm", 0, 1e9, "Gyökérzónavíz (mm)", "Lombfelület vízigénye (mm)", "Környezeti lépés; a hervadáspont feletti vízre korlátozva",
+                Inputs: new[] { "talaj.hervadáspont", "talaj.vízkapacitás" }, Formula: WaterFormulas.Uptake),
+            new("water.drainage", "Mélybe szivárgás", "tile", "mm", 0, 1e9, "Gyökérzónavíz (mm)", "Szabadföldi vízkapacitás feletti víz (mm)", "Környezeti lépés; a gyökérzóna vizére korlátozva",
+                Inputs: new[] { "talaj.drénezés", "óra" }, Formula: WaterFormulas.Drainage),
+            new("water.baseflow", "Alaplefolyás", "tile", "mm", 0, 1e9, "Mélyvíz (mm)", "Lépés hossza (óra)", "Környezeti lépés; a mélyvízre korlátozva",
+                Formula: WaterFormulas.Baseflow),
+            new("water.stress", "Növekedési vízválasz", "tile", "1", 0, 1, "Vízellátottság (0–1)", "Pangóvíz aránya (0–1)", "Havi növekedési ráta és fa-erőforrás",
+                Inputs: new[] { "faj.szárazságérzékenység" }, Formula: WaterFormulas.Stress),
+            new("trail.trafficability", "Földút járhatósága", "tile", "0–1", 0, 1, "Átnedvesedés (0–1)", "Talaj teherbírása (0–1)", "Jármű haladása burkolatlan csempén; 1 = száraz, jól járható",
+                Formula: "# Átázott, gyenge teherbírású talajon a földút nehezen járható.\n1 - átnedvesedés * (1 - talaj.teherbírás)"),
+            new("road.weather", "Időjárási útromlás", "road", "állapotveszteség / erdőév", 0, 100, "Útállapot (0–1)", "Csapadék-intenzitás (0–1)", "Legalább 0,5 játék-s összegzése")
         }.Concat(TransportHooks()).Concat(GameTuning.Specs.Select(s => new BehaviorHook("tuning." + s.Id, s.Name, "world", s.Unit, s.Min, s.Max,
             "Nem használt", "Nem használt", "Paraméter lekérdezése; járműspecifikáció alkalmazáskor", false))).ToArray();
         private readonly CompiledBehaviorModel model;
@@ -28,8 +43,9 @@ namespace ForesTycoon
         internal BehaviorModel Document => model.Document;
         internal string LastError => model.LastError;
         internal bool HasGraphs => model.HasGraphs;
+        public bool Overrides(string hook, string kind) => model.Overrides(hook, kind);
         public double Evaluate(in BehaviorQuery query) => model.Evaluate(query.Hook, query.Kind, query.Id,
-            new(query.Native, query.Delta, query.Time, query.State, query.Amount, query.Capacity, query.Available, query.From, query.To, query.Surface));
+            new(query.Native, query.Delta, query.Time, query.State, query.Amount, query.Capacity, query.Available, query.From, query.To, query.Surface), query.Extras);
         private static IEnumerable<BehaviorHook> TransportHooks()
         {
             foreach (string kind in new[] { "forwarder", "processor", "truck" }) {

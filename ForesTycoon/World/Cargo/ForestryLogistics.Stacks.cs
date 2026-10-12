@@ -42,7 +42,8 @@ namespace ForesTycoon
         internal const double DieselPrice = 0.62;
 
         /// <summary>Sawmill price of round wood by species, thousand forints per m³.</summary>
-        internal static double TimberPrice(ForestSpecies species) => species switch
+        internal static double TimberPrice(ForestSpecies species) => ForestSpeciesBook.TimberPrice(species) ?? BuiltinTimberPrice(species);
+        internal static double BuiltinTimberPrice(ForestSpecies species) => species switch
         {
             ForestSpecies.Oak => 55, ForestSpecies.SessileOak => 50, ForestSpecies.TurkeyOak => 28,
             ForestSpecies.Ash => 40, ForestSpecies.Maple => 38, ForestSpecies.Beech => 35,

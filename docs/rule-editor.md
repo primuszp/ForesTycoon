@@ -1,158 +1,148 @@
-# Szabályműhely
+# Világszerkesztő
 
-Az editor témák szerint rendezi a játék 82 katalogizált szabályát. A meglévő erdei
-megjelenés megmaradt; a külön szerkesztők közös munkafolyamatba kerültek.
+A ForesTycoon világát az editorban építjük fel, a játék ezt futtatja. A világ csempékből
+áll; a szabályok viszont a világéi: egyszer írod meg őket, és minden csempén ugyanúgy
+futnak. Egy csempe csak annyit mond: milyen a talaja, magassága, vize, mi áll rajta.
 
 ```powershell
 dotnet run --project ForesTycoon.Editor
-# Meglévő projekt és saját tesztvilág:
-dotnet run --project ForesTycoon.Editor -- --project projekt.json --world mentés.json
+dotnet run --project ForesTycoon.Editor -- --project projekt.json
 ```
 
-## Rendszermodell
+A cél egy rendszerdinamikai modell: a **Típusok** a modell állandói (talaj, fafaj, burkolat),
+a **Pálya** a kezdőállapota (domborzat, víz, talaj, erdő), a **Szabályok** az áramlásai
+(mi mit változtat, miből). A játék szabályai fokozatosan költöznek ide a kódból.
 
-Az editor a **Rendszermodell** térképpel nyílik: a játék összes mennyisége
-alrendszerenként, az anyagáramlás irányában (időjárás és víz → erdő → kitermelés →
-utak → gazdaság). Szögletes doboz a készlet, lekerekített az áramlás, halványabb a
-segédváltozó. Kattintásra a mennyiség hatásai kiemelődnek (borostyán: amire hat,
-kék: ami rá hat), jobb oldalt látszik a szerepe, egysége, képletkulcsa, a
-be- és kiáramlásai, a felhasználói és a rajta átmenő visszacsatolási körök.
-Kijelölés nélkül az áttekintés az összecsatolt csoportokat, a fő köröket és a
-nyitott készleteket sorolja fel. Egy körre kattintva a kör lépései és szabályai
-látszanak; a szabály neve a műhelybe visz. Az **Adatok és szerkezet is** kapcsoló
-a paramétereket, térképet, órákat és megjelenítést is mutatja.
+Négy munkatér van.
 
-A mennyiségek szótára `ForesTycoon.Rules/Catalog/system-model.json`; ember és AI is
-bővítheti. A saját készletek, áramlások és a mennyiséget olvasó képletek is a
-térképre kerülnek. A kapcsolat adat-hozzáférés, nem futási sorrend és nem előjel;
-hogy egy kör erősít vagy kiegyenlít, azt a próba mutatja meg. Részletek és
-ütemterv: [rendszermodell-alapú editor](editor-system-model.md).
+## Pálya
 
-## Első próbálkozás
+A világ térképe, felülnézetben. A bal oldalon választod a réteget: **Talaj**, **Domborzat**,
+**Víz**, **Talajvíz**, **Erdő**, **Utak és nyomok**, **Járhatóság**. Az első négy festhető
+(a Talajvíz, az utak és a járhatóság a szimuláció eredménye).
 
-1. Bal oldalt válaszd az **Erdő és élővilág → Egyedi fanövekedés** szabályt.
-2. A **Megértés** megmutatja, kire vonatkozik, mikor fut, mely mennyiségekből számol
-   és melyeket változtatja, áramlás-e (melyik készletet tölti vagy apasztja), és
-   mely visszacsatolási körök haladnak át rajta. Egy mennyiség a rendszertérképre,
-   egy kör a kiemelt körhöz visz. A kapcsolódó szabályok mennyiségenként kinyithatók;
-   nevükre kattintva át lehet lépni, az **Előző szabály** gombbal visszatérni.
-3. Nyisd meg a **Szerkesztés** lépést. A választó a növekedési tényező képletét és
-   a kapcsolódó belső algoritmusgráfokat is eléri. A **Szorzó hozzáadása az
-   eredményhez** valódi állandó- és szorzáscsomópontot hoz létre, összeköti őket,
-   kijelöli a szorzót. Jobb oldalt módosítsd az értékét: például 1,1 = +10%.
-   A kimeneti tartomány és a fizikai készletkorlát továbbra is érvényes.
-4. A **Mentés / Ctrl+S** külön munkapéldányt ír. Ettől a játék szabálya nem változik.
-5. A felső sáv projektállapot-lánca: **1 · Munkapéldány**, **2 · Próba**, **3 · Játék**.
-   A Próba és az Alkalmazás a teljes projektre vonatkozik, ezért innen (vagy a
-   Szerkesztés alján az **Ellenőrzés és próba** gombbal) nyílik; a **Vissza** gomb a
-   korábbi szabályhoz visz. A **Próba** oldalon válassz tesztvilágot vagy saját világmentést és időtávot.
-   Az összehasonlító próba az alap- és a szerkesztett teljes projektet ugyanabból
-   a checkpointból futtatja. Az időtáv tickben adott: 30 tick egy szimulációs
-   másodperc. A táblázat az erdőév kezdetét és végét is mutatja; havi folyamat
-   vizsgálatához megfelelően hosszú időszak kell.
-6. Az **Alkalmazás** oldal áttekinti az eltéréseket az editor tesztvilágának szabályaihoz
-   képest. Az **Alkalmazás a játékban** ellenőrzi, szükség esetén fordítja, majd
-   közzéteszi a teljes projektet. A felső sáv külön jelzi az átvétel visszaigazolását.
+- **Generálás:** a pálya seedből készül; az **Új seed** és a **Generálás** új térképet ad.
+  A festés megmarad.
+- **Méret:** 32–128 csempe oldalanként (a játék alapértéke 64). Méretváltáskor a festés
+  törlődik, mert a csempék újraszámozódnak.
+- **Festés:** jobb oldalt választod az ecsetet és a méretét, a térképen bal gombbal húzva
+  festesz. Elengedéskor a tesztvilág újraépül a pályából.
+  - *Talaj:* talajtípus.
+  - *Domborzat:* emelés, süllyesztés (egy lépcső húzásonként), simítás az átlaghoz. A szomszédos
+    sarkok legfeljebb egy lépcsőnyire térnek el.
+  - *Víz:* a **Tó** ecset a csempéket a vízszintre süllyeszti és partot emel köréjük; a
+    **Szárazföld** a vízszint fölé emel. A **Forrás** folyamatosan vizet ad a csempe
+    felszínéhez (hozam mm/óra, mellette m³/óra); a **Forrás törlése** megszünteti.
+    A Víz réteg a mozgó felszíni víz mélységét is mutatja, a forrásokat fehér pont jelöli.
+  - *Erdő:* kezdő erdő a választott fajból (vegyes korú, természetes állomány), vagy irtás.
+- **Szimuláció:** **Indítás / Szünet**, **1 óra előre**, **1 nap előre**: így látod, merre folyik
+  a forrás vize, hol áll meg, hol önt ki.
+- **Csempe:** rámutatva vagy kattintva jobb oldalt látszanak a csempe rétegei: növényzet,
+  járhatóság, talaj, teherbírás, gyökérzóna- és mélyvíz, magasság.
 
-A lépések között szabadon válthatsz. A próba pillanatfelvételt használ, közben
-szerkeszthetsz. Az újabb változtatás után a régi eredmény korábbiként jelenik meg.
-A próba megszakítható; eredménye és nyomvonala külön fájlokban megmarad.
+### Hogyan folyik a víz?
 
-## Témák és szerkesztés
+A felszíni víz a vízfelszín szintje (terep + vízmélység) szerint folyik minden alacsonyabb
+szomszéd felé: lejtőn le, sík terepen szétterül, a kiásott árokban (süllyesztett csempesor)
+vízszintesen is végigfolyik, a mélyedést a pereméig tölti, a túltöltött mederből kiönt, és
+felfelé soha nem folyik. A térfogat megmarad; víz csak a pálya szélén és állóvízbe távozik,
+közben beszivárog és párolog. A folyók mederként viselkednek, nem nyelik el a vizet. Az
+elárasztott földút nehezen járható.
 
-- Erdő és élővilág
-- Időjárás, talaj és víz
-- Kitermelés és szállítás
-- Utak és járművek
-- Gazdaság és fenntartás
-- Világ és idő
-- Látvány
+## Típusok
 
-A kereső minden témában keres. Egy szabály lapján a közös választó nyitja a
-képletet, munkaciklust vagy belső algoritmust; nem kell előre külön szerkesztőfület
-választani. Gépi munkaciklus vagy hiányzó képletfelülírás megnyitása önmagában nem
-hoz létre új szabályt: erre külön létrehozásgomb van.
+Három táblázat: **Talajtípusok**, **Fafajok**, **Burkolatok**. Minden paraméter mellett ott
+áll, hol hat.
 
-Képletgráfnál a csomópontok húzhatók, a jobb egérgomb mozgatja a vásznat, a görgő
-nagyít. A pontokra kattintva vagy az inspector bemeneteivel szerkesztheted a
-kapcsolatokat. Van visszavonás és újra. A belső algoritmusok **Műveletnézet**
-alapnézete elágazásokat, ismétléseket, hívásokat, értékadásokat és elnevezett
-bemeneteket mutat. Kattintás kijelöl, dupla kattintás belép a részgráfba. A
-számok, nevek és szövegek a megfelelő eredeti értékcsomópontot módosítják;
-Enter vagy a mező elhagyása rögzíti az értéket. A számítási / összehasonlítási művelet és az egyszerű adattípus
-választóval módosítható, az igaz / hamis érték kapcsolóval szerkeszthető. Számnál
-tizedespontot használj. Egy utasításblokkban művelet
-közvetlenül beszúrható; osztályban vagy struktúrában saját eljárás is létrehozható.
-Az új eljárást híváscsomóponttal kell a működő folyamatba bekötni.
+### Talajtípusok
 
-A **Teljes szerkezeti gráf** minden eredeti portot és műveletet elérhetővé tesz.
-A két nézet ugyanazokat az ID-kat és kapcsolatokat használja; nincs veszteséges
-átalakítás vagy párhuzamos forrás. A nem felismert szerkezet részletes műveletként
-látható. A fordító ellenőrzi a szintaxist és a típusokat. Nincs forráskódszerkesztő.
 
-Az **Új szabály / készlet / áramlás** a választott témában hoz létre saját elemet.
-A saját képletet a játék tényleges folyamatához kötöd; a meglévő célkötést
-helyettesíti. A készletek és áramlások a témalistában és a közös keresőben is
-megjelennek. A besorolás és a saját jegyzet a projektben tárolódik, az AI is
-szerkesztheti. Egy készletből közvetlenül készíthető azt olvasó szorzóképlet.
-A fogyasztók és a kapcsolódó áramlások látszanak; használt készletet előbb
-le kell választani a folyamatokról és képletekről, utána törölhető.
+| Paraméter | Hatás |
+| --- | --- |
+| Teherbírás (0–1) | Átázva mennyire járható rajta a földút és a közelítőnyom (`talaj.teherbírás`). |
+| Termékenység (0–1) | Termőhelyi alkalmasság: a fák növekedése és egészsége. |
+| Telítettség, szabadföldi vízkapacitás, hervadáspont (mm) | A talaj víztartása, elszivárgás, aszály. |
+| Beszivárgás, drénezés (mm/óra) | Mennyi csapadékot nyel el és milyen gyorsan vezeti a mélybe. |
+| Generálás: nedvesség, textúra | Hová kerül a típus a generált térképen. |
 
-A **Szabálytár és sablonok** összegyűjti az aktív képleteket és munkaciklusokat.
-Az ott vagy az inspectorban készített másolat sablon, nem ütköző aktív kötés.
-A sablon egy típusszabályhoz vagy támogatott egyedi objektumhoz kapcsolható:
-a célkötést helyettesíti, a többi kötés megmarad. A sablonok neve módosítható,
-importálhatók és exportálhatók (`forest-rule-template-library`, 1. verzió).
-Meglévő `forest-behaviors` dokumentum és szabályprojekt is importálható sablonként.
+Új típus másolással készül; festett típus nem törölhető. A talajtípusok új világ
+létrehozásakor kerülnek a játékba; a futó játék világa a régi talajjal fut tovább.
 
-Az **Indulási segítség** játékmeneti célból vezet a megfelelő munkatérbe.
-A közös kereső szabályokat, saját elemeket és a választott világ objektumait is
-keresi. A **További eszközök** a szabálykapcsolatok térképét, az összes dinamikai
-elemet és minden belső algoritmusgráfot eléri. A témák ugyanazok az alrendszerek,
-mint a rendszermodellben és a szabálykapcsolatok térképén.
+### Fafajok
 
-## Objektumok és projekt
+A 16 játszható faj: faanyagár (eFt/m³, a malomban), növekedési ráta, legnagyobb fatömeg,
+érett és legnagyobb kor, kedvelt nedvesség és magasság tűréssel, árnyéktűrés,
+szárazságérzékenység, érett és legnagyobb magasság, egyedszám csempénként, fasűrűség.
+A futó világra is hatnak: a fák ezután ezekkel nőnek, a fa ezen az áron kel el. Az
+**Alapértékek visszaállítása** a beépített számokat adja vissza. Új fajhoz famodell is kell,
+ezért egyelőre a meglévő fajok paraméterei szerkeszthetők.
 
-Az **Objektum kiválasztása** a játék által publikált katalógust böngészi. Látszik,
-hogy friss, korábbi vagy hiányzó kapcsolatból származik. A tesztvilág forrása
-külön választható: hiányzó kapcsolat esetén nincs automatikus forráscsere.
-Egyedi felülírást külön gomb hoz létre; az helyettesíti a típusszintű szabályt.
-Járműhöz egyedi munkaciklus is készíthető. A **Vissza a típusszabályhoz** vagy
-**Vissza a típus munkaciklusához** eltávolítja a helyi kötést.
-Az objektumazonosító a saját világára vonatkozik.
+### Burkolatok
 
-A **Projekt** menüben van a projekt neve és útvonala, a munkapéldány és a közzétett
-projekt megnyitása, a világmentés betöltése és az objektumforrás kiválasztása.
-Világ betöltése nem írja felül a munkapéldányt; a tesztvilág szabályainak átvétele
-külön művelet.
+Aszfalt, makadám, földút és közelítőnyom egy táblázatban: építési költség, forgalmi kopás
+szorzója, időjárási romlás szárazon és esőben, gördülési ellenállás, javítási arány,
+benövési idő. Az alkalmazás után a futó játékra is azonnal hatnak. A földút járhatóságát
+a Szabályok fül képlete adja a talaj és a talajvíz alapján.
 
-Más algoritmusverzióval készült, aktuális és függő parancs nélküli checkpoint
-állapota is beolvasható az editor elkülönített futtatójába. A helyi világ ilyenkor
-az editor algoritmusait használja; a teljes összehasonlító próba alapforrása az
-eredeti mentés lesz, az eredeti lefordított algoritmusverzióval.
+## Szabályok
 
-A munkapéldány `<projekt>.draft.json`, algoritmusai változatlan pillanatképek a
-`<projekt>.draft.algorithms` mappában. Hiányos képlet is menthető javításhoz;
-alkalmazáskor a futtató teljes ellenőrzése szükséges. A közzétett projekt külön
-fájl. Más belső algoritmusverzióra a játék mentett állapotból új futtatóval vált;
-az újvilág-szabályok nem generálják újra a meglévő világot.
+A világ szabályai olvasható képletként. Bal oldalt a szabályok témánként; `•` jelöli, ahol
+saját képlet fut. A kiválasztott szabálynál látszik, hol és mikor fut, mi az eredménye.
 
-A mentés és publikálás észleli, ha közben másik editor vagy AI átírta a célfájlt;
-az új fájlt nem írja felül csendben. Megnyithatod az új változatot vagy külön
-projektútvonalra mentheted a munkát. A korábbi fájlok a `.history` mappában
-megmaradnak és a Projekt menüből visszanyithatók. A visszanyitás önmagában nem
-módosítja a játékot. Bezáráskor a mentetlen munkáról külön `.recovery-...draft.json`
-mentés készül, amely ugyanott megnyitható. A projektváltás is megőrzi az előző
-munkapéldányt. Az **Új, önálló projekt** külön útvonalon indul.
+```
+# Átázott, gyenge teherbírású talajon a földút nehezen járható.
+1 - átnedvesedés * (1 - talaj.teherbírás)
+```
 
-A szerkesztési besorolások, jegyzetek és sablonok az `authoring` mezőben vannak.
-Nem játékszabályok: a runtime tartalmi lenyomata ezeket kihagyja, a szerkesztő
-módosításjelzése azonban figyelembe veszi őket.
+- Műveletek: `+ - * /`, összehasonlítás `<` `>`, zárójel.
+- Függvények: `min(a; b)`, `max(a; b)`, `abs(x)`, `ha(feltétel; akkor; különben)`,
+  `korlát(x; alsó; felső)`. Az argumentumokat pontosvessző választja el.
+- Tizedesvessző vagy pont; `#` után megjegyzés; `név = érték` köztes lépés. Az utolsó sor
+  az eredmény.
+- `beépített` a játék eddigi számítása. A szabály saját bemenetei (például `átnedvesedés`,
+  `talaj.teherbírás`), valamint `idő`, `lépés`, `világ.csapadék`, `világ.egyenleg`,
+  `készlet.<azonosító>` használható. A lista a képlet alatt látszik; kattintva a név a
+  képlet végére kerül.
 
-A backend, a pontos egységek, az objektumkötések, a munkaciklusok, a mentési
-szerződés és az AI parancssori műveletei a
-[rendszerdinamika útmutatóban](system-dynamics.md) találhatók. A további UI-terv:
-[editor újratervezése](editor-ux-redesign.md).
+Hiba esetén a sor és az oszlop jelenik meg, elírt névnél javaslat is. A **Képlet
+használata** a képletet teszi a szabállyá a projektben és a tesztvilágban. A **Vissza a
+beépítettre** a játék eredeti számítását állítja vissza. Jobb oldalt próbaszámítás: a
+Pálya fülön kiválasztott csempe bemeneteivel, és a járhatóságnál a képlet eredménye az
+egész térképen.
+
+A kódból már teljesen áthozott szabályok, képletként: **földút járhatósága**, és a teljes
+vízháztartás: **beszivárgás**, **talajpárolgás**, **gyökérvíz-felvétel**, **mélybe
+szivárgás**, **alaplefolyás**, **hóolvadás**, **növekedési vízválasz**. A képlet pontosan azt
+számolja, amit eddig a kód; ezt teszt ellenőrzi. Ezek a szabályok saját bemeneteket kapnak a
+csempétől: `talaj.beszivárgás`, `talaj.telítettség`, `talaj.vízkapacitás`,
+`talaj.hervadáspont`, `talaj.drénezés`, `lombborítás`, `burkolt`, `óra`,
+`faj.szárazságérzékenység`. Függvény még: `exp(x)`, `hatvány(alap; kitevő)`. A többi
+szabálynál a `beépített` a kódban futó számítás, amit a képlet felülírhat vagy szorozhat.
+
+## Próba
+
+Két világ épül ugyanabból a pályából: az egyik a játék alapszabályaival, a másik a
+tieiddel. Mindkettőre ugyanannyi eső esik (erősség, időtartam; 0 eső mellett csak a
+források folynak). Az eredmény: a felszíni víz (elöntés) és a két járhatósági térkép a
+próba végén, az átlagos járhatóság, a nehezen járható csempék aránya és az elöntött
+csempék száma.
+
+## Mentés és alkalmazás
+
+- **Mentés / Ctrl+S:** külön munkapéldányt ír (`<projekt>.draft.json`), a játékot nem változtatja.
+- **Alkalmazás a játékban:** közzéteszi a projektet (`%LOCALAPPDATA%/ForesTycoon/rules/project.json`).
+  A futó játék átveszi a szabályokat és képleteket; az **új világ** a játékban ebből a
+  pályából épül. A felső sor mutatja, átvette-e a játék.
+
+A projekt egy JSON-fájl: `world` (pálya: seed, méret, talajtípusok, fafajok, talaj-,
+domborzat- és erdőfestés), `tuning` (burkolatok és más hangolt számok),
+`behaviors` (a lefordított szabálygráfok), `authoring.formulas` (a képletek szövege).
+Az AI ugyanezt a fájlt szerkesztheti; a parancssori műveletek a
+[rendszerdinamika útmutatóban](system-dynamics.md) vannak.
+
+A projekt nem visz magával másolatot a játék kódjáról. Ha egy régebbi projektben ilyen
+elavult algoritmusmásolat van, a játék figyelmen kívül hagyja, és a saját lefordított
+kódjával fut.
 
 ## Ellenőrzés
 
@@ -161,7 +151,11 @@ dotnet test ForesTycoon.Tests
 dotnet run --project ForesTycoon.Editor -- --smoke-test
 ```
 
-A grafikus ellenőrzés megnyitja az új munkafolyamat lapjait, ellenőrzi, hogy a
-böngészés nem változtatja meg az aktív világot, és tényleges összehasonlító
-szimulációval igazolja a visszacsatolási készlet változását. Képernyőképek:
-`artifacts/rule-editor/workshop-*.png`.
+Képernyőképek: `artifacts/rule-editor/world-*.png`.
+
+## Következő szeletek
+
+Az elöntés kirajzolása a 3D nézetben (ma csak az editor térképén látszik); a generált
+folyók forrásai; klímák és járművek a Típusokba; utak és telephelyek a Pályára; további szabályok (víz,
+növekedés, egészség, útkopás) átköltöztetése képletként, a rendszerdinamikai modell
+szerint; misszió (célok, kezdőállapot, események).

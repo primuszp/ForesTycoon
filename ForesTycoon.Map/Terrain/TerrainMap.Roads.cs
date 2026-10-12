@@ -4,6 +4,12 @@ using OpenTK.Mathematics;
 
 namespace ForesTycoon.Map
 {
+    /// <summary>Weathering of paved roads: condition loss per forest year when dry, and per unit of rain.</summary>
+    internal readonly record struct RoadWeathering(float AsphaltBase, float AsphaltRain, float MacadamBase, float MacadamRain)
+    {
+        internal static RoadWeathering Default => new(0.015f, 0.08f, 0.10f, 1.6f);
+    }
+
     internal sealed partial class TerrainMap
     {
         public int RoadCount => roads.Count;
@@ -274,16 +280,20 @@ namespace ForesTycoon.Map
         /// Weathering over <paramref name="years"/>: macadam washes out, much faster on wet ground and in rain; asphalt
         /// ages slowly. <paramref name="rain"/> is the present rain intensity (0 dry … 1 downpour).
         /// </summary>
-        public void WeatherRoads(float years, float rain)
+        /// <param name="rates">Condition loss per forest year by surface, dry and in rain; defaults to the built-in rates.</param>
+        /// <param name="adjust">Optional rate override per tile (condition loss per forest year).</param>
+        public void WeatherRoads(float years, float rain, Func<int, float, float> adjust = null, RoadWeathering? rates = null)
         {
+            var r = rates ?? RoadWeathering.Default;
             if (years <= 0 || roads.Count == 0) return;
             float[] moisture = hydro.TileMoisture;
             foreach (int id in roads.Tiles)
             {
                 float wet = Math.Clamp(moisture[id], 0, 1);
                 float rate = roads.GetPaving(id) == RoadPaving.Macadam
-                    ? 0.10f * (1 + 2.5f * wet) + 1.6f * rain * (0.4f + wet)
-                    : 0.015f * (1 + wet) + 0.08f * rain;
+                    ? r.MacadamBase * (1 + 2.5f * wet) + r.MacadamRain * rain * (0.4f + wet)
+                    : r.AsphaltBase * (1 + wet) + r.AsphaltRain * rain;
+                if (adjust != null) rate = Math.Max(0, adjust(id, rate));
                 roads.SetCondition(id, roads.GetCondition(id) - rate * years);
             }
         }

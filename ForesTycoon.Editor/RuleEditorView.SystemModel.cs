@@ -17,6 +17,9 @@ internal sealed partial class RuleEditorView
     private SystemModelAnalysis systemModel;
     private string systemModelKey;
 
+    private int influenceTarget;
+    private double influenceStrength = 0.5;
+
     private SystemModelAnalysis SystemModel()
     {
         var dynamics = dynamicsEditor.Draft;
@@ -24,17 +27,31 @@ internal sealed partial class RuleEditorView
         string key = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(currentRules.Catalog) + "|"
             + new RuleProject { Dynamics = dynamics }.ToJson().GetHashCode() + "|"
             + string.Join(";", formulas.Select(g => g.Id + ":" + g.Name + ":" + g.Hook + ":" + g.Kind + ":" + string.Join(",", g.Nodes.Where(n => n.Operation == BehaviorOperation.NamedValue).Select(n => n.Key))))
-            + "|" + string.Join(",", dynamics.Stocks.Select(s => TopicOf("stock." + s.Id, 5)));
+            + "|" + string.Join(",", dynamics.Stocks.Select(s => TopicOf("stock." + s.Id, 5)))
+            + "|" + System.Text.Json.JsonSerializer.Serialize(authoring.Quantities);
         if (systemModel != null && key == systemModelKey) return systemModel;
         systemModelKey = key;
         return systemModel = RuleWorkshopModel.SystemModel(currentRules.Catalog, dynamics, formulas,
-            id => id.StartsWith("flow.") ? FlowTopic(dynamics.Flows.Single(f => "flow." + f.Id == id)) : TopicOf(id, 5));
+            id => id.StartsWith("flow.") ? FlowTopic(dynamics.Flows.Single(f => "flow." + f.Id == id)) : TopicOf(id, 5), authoring.Quantities);
     }
+
+    private SystemModelHost SystemHost(GameWorld world) => new() {
+        Value = key => { try { return PreviewValue(world, key); } catch (ArithmeticException) { return double.NaN; } },
+        Tile = id => world.DescribeTile(id), TileCount = world.Map.Tiles.Count,
+        OpenProcess = OpenSystemProcess, Editable = EditableSummary,
+        DrawProcess = DrawProcessEditing, DrawQuantity = v => DrawQuantityEditing(world, v)
+    };
 
     internal void ShowSystemModel(string variable = null)
     {
         workshopTool = WorkshopTool.System; workshopPhase = WorkshopPhase.Understand;
-        if (variable != null) systemView.Focus(variable);
+        if (variable != null) systemView.Focus(systemModel, variable);
+    }
+    /// <summary>Opens the system map on one tile's vertical section.</summary>
+    internal void ShowSystemTile(int tile, string layer = null)
+    {
+        ShowSystemModel(); systemView.SelectedTile = tile;
+        if (layer != null) systemView.ShowLayer(layer); else systemView.ShowStack();
     }
 
     private void ShowSystemLoop(SystemLoop loop) { ShowSystemModel(); systemView.FocusLoop(loop); }
@@ -54,9 +71,94 @@ internal sealed partial class RuleEditorView
         if (process.Id.StartsWith("graph.", StringComparison.Ordinal)) SetWorkshopPhase(WorkshopPhase.Edit, currentRules.Index.Find(process.RuleId));
     }
 
-    private void OpenSystemVariable(SystemVariable variable)
+    /// <summary>What can be changed in a rule without touching its internal algorithm.</summary>
+    private string EditableSummary(SystemProcess process)
     {
-        if (variable.Id.StartsWith("stock.", StringComparison.Ordinal)) OpenDynamic(variable.Id[6..], false);
+        if (process.Id.StartsWith("flow.", StringComparison.Ordinal)) return "saját áramlás";
+        if (currentRules.Index.Find(process.RuleId) is not GameRuleDefinition rule) return "";
+        var parts = new List<string>();
+        var bindings = Bindings(rule);
+        if (bindings.Any(b => b.Hook != null && !b.Hook.Id.StartsWith("tuning."))) parts.Add("képlet");
+        if (rule.Parameters.Any(p => p.Tunable)) parts.Add("paraméter");
+        if (bindings.Any(b => b.Controller != null)) parts.Add("munkaciklus");
+        return parts.Count > 0 ? string.Join(", ", parts) : "belső algoritmus";
+    }
+
+    /// <summary>A rule's editing points inside the system map: parameters in place, formula and cycle one click away.</summary>
+    private void DrawProcessEditing(SystemProcess process)
+    {
+        if (process.Id.StartsWith("flow.", StringComparison.Ordinal)) {
+            if (ImGui.SmallButton("Áramlás szerkesztése")) OpenDynamic(process.Id[5..], true);
+            return;
+        }
+        if (currentRules.Index.Find(process.RuleId) is not GameRuleDefinition rule) return;
+        ImGui.PushTextWrapPos(); EditorStyle.Text(HudTheme.Muted, rule.Description); ImGui.PopTextWrapPos();
+        if (rule.Formula.Length > 0) { ImGui.PushTextWrapPos(); EditorStyle.Text(HudTheme.Info, rule.Formula); ImGui.PopTextWrapPos(); }
+        var bindings = Bindings(rule);
+        bool algorithmShown = false;
+        for (int i = 0; i < bindings.Length; i++) {
+            var binding = bindings[i];
+            if (binding.Hook?.Id.StartsWith("tuning.") == true) continue;
+            if (binding.Source != null) { if (algorithmShown) continue; algorithmShown = true; }
+            string state = "";
+            if (binding.Hook != null) {
+                var graph = behaviors.Document.Graphs.Find(g => g.Hook == binding.Hook.Id && g.Kind == binding.Hook.Kind && g.ObjectId == null);
+                state = graph != null && graph.Nodes.Find(n => n.Id == graph.Output)?.Operation != BehaviorOperation.Native ? " · saját képlet" : " · beépített";
+            }
+            string label = binding.Hook != null ? "Képlet: " + binding.Hook.Name + state : binding.Controller != null ? binding.Label : "Belső algoritmus";
+            if (ImGui.SmallButton(label + "##bind" + i)) OpenRuleBinding(rule, i);
+        }
+        if (rule.Parameters.Any(p => p.Tunable)) currentRules.DrawRuleParameters(rule);
+        if (ImGui.SmallButton("Megnyitás a műhelyben")) SelectWorkshopRule(rule.Id);
+    }
+
+    private void OpenRuleBinding(GameRuleDefinition rule, int index)
+    {
+        SelectWorkshopRule(rule.Id);
+        SetWorkshopPhase(WorkshopPhase.Edit, rule);
+        if (index < ruleBindings.Length && index != bindingIndex) { bindingIndex = index; OpenRuleBinding(); }
+    }
+
+    /// <summary>Wording of a quantity (stored in the project) and new influences from it, as formulas.</summary>
+    private void DrawQuantityEditing(GameWorld world, SystemVariable v)
+    {
+        if (ImGui.CollapsingHeader("Megnevezés és réteg")) {
+            authoring.Quantities.TryGetValue(v.Id, out var saved);
+            string name = v.Name, unit = v.Unit, description = v.Description;
+            var layers = SystemVocabulary.Default.Layers;
+            int layer = Math.Max(0, layers.FindIndex(l => l.Id == v.Layer));
+            QuantityPresentation Edit() { RememberAuthoring(); if (!authoring.Quantities.TryGetValue(v.Id, out var q)) authoring.Quantities[v.Id] = q = new(); return q; }
+            ImGui.SetNextItemWidth(-90); if (ImGui.InputText("Név", ref name, 120, ImGuiInputTextFlags.EnterReturnsTrue) && name.Trim().Length > 0) Edit().Name = name.Trim();
+            ImGui.SetNextItemWidth(-90); if (ImGui.InputText("Egység", ref unit, 40, ImGuiInputTextFlags.EnterReturnsTrue)) Edit().Unit = unit.Trim();
+            ImGui.SetNextItemWidth(-90); if (ImGui.Combo("Réteg", ref layer, layers.Select(l => l.Name).ToArray(), layers.Count)) Edit().Layer = layers[layer].Id;
+            if (ImGui.InputTextMultiline("Leírás", ref description, 1000, new Vec2(-90, 60), ImGuiInputTextFlags.EnterReturnsTrue)) Edit().Description = description.Trim();
+            ImGui.TextWrapped("Enter rögzíti. A megnevezés a közös projektbe kerül; a játék számítását nem változtatja.");
+            if (saved != null && ImGui.SmallButton("Eredeti megnevezés")) { RememberAuthoring(); authoring.Quantities.Remove(v.Id); }
+        }
+        if (!ImGui.CollapsingHeader("Hatás hozzáadása ebből a mennyiségből")) return;
+        if (v.Observe.Length == 0) {
+            ImGui.TextWrapped("Ez a mennyiség még nem olvasható képletből. Ehhez a játéknak mérhető mezőként kell közzétennie (a szótár observe kulcsa).");
+            return;
+        }
+        var targets = WorldBehaviorPolicy.Hooks.Where(h => h.Kind != "dynamics")
+            .Select(h => (Hook: h, Rule: currentRules.Index.Rules.FirstOrDefault(r => RuleWorkshopModel.HookBelongsTo(h, r))))
+            .Where(t => t.Rule != null).OrderBy(t => RuleWorkshopModel.Topic(t.Rule)).ThenBy(t => t.Rule.Name).ToArray();
+        influenceTarget = Math.Clamp(influenceTarget, 0, targets.Length - 1);
+        string Label((BehaviorHook Hook, GameRuleDefinition Rule) t) => t.Rule.Name + " · " + t.Hook.Name;
+        ImGui.TextWrapped($"A választott szabály eredményét szorozza: × (1 + erősség × ({v.Name} − jelenlegi érték)). Pozitív erősség: nagyobb {v.Name}, nagyobb eredmény.");
+        ImGui.SetNextItemWidth(-90);
+        if (ImGui.BeginCombo("Szabály", Label(targets[influenceTarget]))) {
+            for (int i = 0; i < targets.Length; i++) if (ImGui.Selectable(Label(targets[i]) + "##target" + i, i == influenceTarget)) influenceTarget = i;
+            ImGui.EndCombo();
+        }
+        ImGui.SetNextItemWidth(-90); ImGui.InputDouble("Erősség", ref influenceStrength, 0.05, 0.5, "%.3f");
+        double reference = PreviewValue(world, v.Observe);
+        if (!double.IsFinite(reference)) reference = 0;
+        if (EditorStyle.PrimaryButton("Hatás létrehozása")) {
+            var target = targets[influenceTarget];
+            behaviors.AddInfluence(target.Hook, v.Observe, v.Name, reference, influenceStrength);
+            message = $"Új hatás: {v.Name} → {target.Rule.Name}. A képlet a Szerkesztés lépésben finomítható; mentés után próbáld ki.";
+        }
     }
 
     /// <summary>The rule's place in the model: what it reads, what it changes, and the loops it closes.</summary>

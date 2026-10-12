@@ -66,6 +66,50 @@
       "description": "A szimuláció állapotát olvasó megjelenítés; nem hat vissza a modellre."
     }
   ],
+  "layers": [
+    {
+      "id": "atmosphere",
+      "name": "Légkör és időjárás",
+      "perTile": true,
+      "description": "Csapadék, hó, hőmérséklet és párologtató igény a csempe fölött."
+    },
+    {
+      "id": "vegetation",
+      "name": "Növényzet",
+      "perTile": true,
+      "description": "A csempén álló fák, lombkorona, újulat, holtfa és a vadak."
+    },
+    {
+      "id": "surface",
+      "name": "Felszín: utak és nyomok",
+      "perTile": true,
+      "description": "Utak, közelítőnyomok, épületek és a járhatóság."
+    },
+    {
+      "id": "terrain",
+      "name": "Terep",
+      "perTile": true,
+      "description": "A csempe geometriája: magasság, lejtés, felszíni víz és hó, vízelvezetés."
+    },
+    {
+      "id": "soil",
+      "name": "Talaj",
+      "perTile": true,
+      "description": "A csempe talajtípusa: termékenység, víztartó képesség és teherbírás."
+    },
+    {
+      "id": "groundwater",
+      "name": "Talajvíz",
+      "perTile": true,
+      "description": "Gyökérzóna és mélyvíz: beszivárgás, felvétel, párolgás, elszivárgás."
+    },
+    {
+      "id": "management",
+      "name": "Gazdálkodás",
+      "perTile": false,
+      "description": "Nem csempéhez kötött tevékenység: gépek, szállítás, rakatok, malom, pénz."
+    }
+  ],
   "variables": [
     {
       "id": "forest.trees",
@@ -74,7 +118,8 @@
       "kind": "Stock",
       "unit": "",
       "observe": "world.treeCount",
-      "description": "Az élő fák egyedei méretükkel és fajukkal; a növekedés, elhalás, újulat és kivágás változtatja."
+      "description": "Az élő fák egyedei méretükkel és fajukkal; a növekedés, elhalás, újulat és kivágás változtatja.",
+      "layer": "vegetation"
     },
     {
       "id": "forest.health",
@@ -83,7 +128,8 @@
       "kind": "Stock",
       "unit": "0–1",
       "observe": "",
-      "description": "Egyedi egészségi állapot, amely a tartós stresszből és a termőhelyből halmozódik."
+      "description": "Egyedi egészségi állapot, amely a tartós stresszből és a termőhelyből halmozódik.",
+      "layer": "vegetation"
     },
     {
       "id": "forest.stress",
@@ -92,7 +138,8 @@
       "kind": "Stock",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "vegetation"
     },
     {
       "id": "forest.deadwood",
@@ -101,7 +148,8 @@
       "kind": "Stock",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "vegetation"
     },
     {
       "id": "forest.stumps",
@@ -110,7 +158,8 @@
       "kind": "Stock",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "vegetation"
     },
     {
       "id": "forest.volume",
@@ -119,7 +168,8 @@
       "kind": "Auxiliary",
       "unit": "m³",
       "observe": "",
-      "description": "A faállományból származtatott térfogat; a kitermelés kijelölése ezt olvassa."
+      "description": "A faállományból származtatott térfogat; a kitermelés kijelölése ezt olvassa.",
+      "layer": "vegetation"
     },
     {
       "id": "forest.fitness",
@@ -128,7 +178,8 @@
       "kind": "Auxiliary",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "vegetation"
     },
     {
       "id": "forest.resources",
@@ -137,7 +188,8 @@
       "kind": "Auxiliary",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "vegetation"
     },
     {
       "id": "forest.canopy",
@@ -146,7 +198,8 @@
       "kind": "Auxiliary",
       "unit": "",
       "observe": "",
-      "description": "A faállományból számolt lombkorona; a csapadék-visszatartást és a párolgást befolyásolja."
+      "description": "A faállományból számolt lombkorona; a csapadék-visszatartást és a párolgást befolyásolja.",
+      "layer": "vegetation"
     },
     {
       "id": "forest.species",
@@ -155,7 +208,8 @@
       "kind": "Parameter",
       "unit": "",
       "observe": "",
-      "description": "Fajonkénti biológiai paraméterek."
+      "description": "Fajonkénti biológiai paraméterek.",
+      "layer": "vegetation"
     },
     {
       "id": "forest.plantations",
@@ -164,7 +218,8 @@
       "kind": "Structure",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "vegetation"
     },
     {
       "id": "harvest.sites",
@@ -173,7 +228,8 @@
       "kind": "Structure",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "vegetation"
     },
     {
       "id": "wildlife.state",
@@ -182,7 +238,8 @@
       "kind": "Stock",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "vegetation"
     },
     {
       "id": "wildlife.forage",
@@ -191,7 +248,8 @@
       "kind": "Stock",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "vegetation"
     },
     {
       "id": "water.snow",
@@ -200,7 +258,8 @@
       "kind": "Stock",
       "unit": "mm",
       "observe": "world.snow",
-      "description": ""
+      "description": "",
+      "layer": "terrain"
     },
     {
       "id": "water.canopy",
@@ -209,7 +268,8 @@
       "kind": "Stock",
       "unit": "mm",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "vegetation"
     },
     {
       "id": "water.surface",
@@ -218,7 +278,8 @@
       "kind": "Stock",
       "unit": "mm",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "terrain"
     },
     {
       "id": "water.root",
@@ -227,7 +288,8 @@
       "kind": "Stock",
       "unit": "mm",
       "observe": "",
-      "description": "A talaj növények által elérhető víztárolója; a fák vízválaszának alapja."
+      "description": "A talaj növények által elérhető víztárolója; a fák vízválaszának alapja.",
+      "layer": "groundwater"
     },
     {
       "id": "water.deep",
@@ -236,7 +298,8 @@
       "kind": "Stock",
       "unit": "mm",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "groundwater"
     },
     {
       "id": "water.evaporated",
@@ -245,7 +308,8 @@
       "kind": "Flow",
       "unit": "mm",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "groundwater"
     },
     {
       "id": "water.transpired",
@@ -254,7 +318,8 @@
       "kind": "Flow",
       "unit": "mm",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "groundwater"
     },
     {
       "id": "water.outflow",
@@ -263,7 +328,8 @@
       "kind": "Flow",
       "unit": "mm",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "groundwater"
     },
     {
       "id": "water.balance",
@@ -272,7 +338,8 @@
       "kind": "Auxiliary",
       "unit": "mm",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "groundwater"
     },
     {
       "id": "water.monthBudget",
@@ -281,7 +348,8 @@
       "kind": "Auxiliary",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "groundwater"
     },
     {
       "id": "water.growthFactor",
@@ -290,7 +358,8 @@
       "kind": "Auxiliary",
       "unit": "×",
       "observe": "",
-      "description": "Aszály- és víztöbblet-tényező, amely a fanövekedést szorozza."
+      "description": "Aszály- és víztöbblet-tényező, amely a fanövekedést szorozza.",
+      "layer": "vegetation"
     },
     {
       "id": "water.potential",
@@ -299,7 +368,8 @@
       "kind": "Auxiliary",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "atmosphere"
     },
     {
       "id": "water.routing",
@@ -308,7 +378,8 @@
       "kind": "Structure",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "terrain"
     },
     {
       "id": "weather.rain",
@@ -317,7 +388,8 @@
       "kind": "Flow",
       "unit": "",
       "observe": "world.rain",
-      "description": ""
+      "description": "",
+      "layer": "atmosphere"
     },
     {
       "id": "weather.snowfall",
@@ -326,7 +398,8 @@
       "kind": "Flow",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "atmosphere"
     },
     {
       "id": "weather.forcing",
@@ -335,7 +408,8 @@
       "kind": "Auxiliary",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "atmosphere"
     },
     {
       "id": "climate.local",
@@ -344,7 +418,8 @@
       "kind": "Auxiliary",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "atmosphere"
     },
     {
       "id": "climate.rainMultiplier",
@@ -353,7 +428,8 @@
       "kind": "Auxiliary",
       "unit": "×",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "atmosphere"
     },
     {
       "id": "soil.profile",
@@ -362,7 +438,8 @@
       "kind": "Parameter",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "soil"
     },
     {
       "id": "soil.fertility",
@@ -371,7 +448,8 @@
       "kind": "Parameter",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "soil"
     },
     {
       "id": "timber.stacks",
@@ -380,7 +458,8 @@
       "kind": "Stock",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "management"
     },
     {
       "id": "timber.localDepot",
@@ -389,7 +468,8 @@
       "kind": "Stock",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "management"
     },
     {
       "id": "timber.cargoValue",
@@ -398,7 +478,8 @@
       "kind": "Auxiliary",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "management"
     },
     {
       "id": "machine.cargo",
@@ -407,7 +488,8 @@
       "kind": "Stock",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "management"
     },
     {
       "id": "machine.controllerState",
@@ -416,7 +498,8 @@
       "kind": "Auxiliary",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "management"
     },
     {
       "id": "machine.state",
@@ -425,7 +508,8 @@
       "kind": "Auxiliary",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "management"
     },
     {
       "id": "machine.work",
@@ -434,7 +518,8 @@
       "kind": "Auxiliary",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "management"
     },
     {
       "id": "machine.pace",
@@ -443,7 +528,8 @@
       "kind": "Auxiliary",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "management"
     },
     {
       "id": "machine.position",
@@ -452,7 +538,8 @@
       "kind": "Auxiliary",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "management"
     },
     {
       "id": "machine.grapple",
@@ -461,7 +548,8 @@
       "kind": "Auxiliary",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "management"
     },
     {
       "id": "machine.fuel",
@@ -470,7 +558,8 @@
       "kind": "Flow",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "management"
     },
     {
       "id": "mill.stock",
@@ -479,7 +568,8 @@
       "kind": "Stock",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "management"
     },
     {
       "id": "mill.processed",
@@ -488,7 +578,8 @@
       "kind": "Flow",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "management"
     },
     {
       "id": "fleet.state",
@@ -497,7 +588,8 @@
       "kind": "Auxiliary",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "management"
     },
     {
       "id": "buildings.footprint",
@@ -506,7 +598,8 @@
       "kind": "Structure",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "surface"
     },
     {
       "id": "road.condition",
@@ -515,7 +608,8 @@
       "kind": "Stock",
       "unit": "0–1",
       "observe": "",
-      "description": "Burkolt csempénként 1 = ép; a forgalom és az időjárás csökkenti, a javítás növeli."
+      "description": "Burkolt csempénként 1 = ép; a forgalom és az időjárás csökkenti, a javítás növeli.",
+      "layer": "surface"
     },
     {
       "id": "road.network",
@@ -524,7 +618,8 @@
       "kind": "Structure",
       "unit": "",
       "observe": "world.roadCount",
-      "description": ""
+      "description": "",
+      "layer": "surface"
     },
     {
       "id": "trail.wear",
@@ -533,7 +628,8 @@
       "kind": "Stock",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "surface"
     },
     {
       "id": "trail.idle",
@@ -542,7 +638,8 @@
       "kind": "Stock",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "surface"
     },
     {
       "id": "trail.network",
@@ -551,7 +648,8 @@
       "kind": "Structure",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "surface"
     },
     {
       "id": "vehicle.cargo",
@@ -560,7 +658,8 @@
       "kind": "Stock",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "management"
     },
     {
       "id": "vehicle.mass",
@@ -569,7 +668,8 @@
       "kind": "Auxiliary",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "management"
     },
     {
       "id": "vehicle.position",
@@ -578,7 +678,8 @@
       "kind": "Auxiliary",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "management"
     },
     {
       "id": "vehicle.speed",
@@ -587,7 +688,8 @@
       "kind": "Auxiliary",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "management"
     },
     {
       "id": "vehicle.resistance",
@@ -596,7 +698,8 @@
       "kind": "Auxiliary",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "management"
     },
     {
       "id": "vehicle.route",
@@ -605,7 +708,8 @@
       "kind": "Auxiliary",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "management"
     },
     {
       "id": "vehicle.transportState",
@@ -614,7 +718,8 @@
       "kind": "Auxiliary",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "management"
     },
     {
       "id": "vehicle.fuel",
@@ -623,7 +728,8 @@
       "kind": "Flow",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "management"
     },
     {
       "id": "economy.result",
@@ -632,7 +738,8 @@
       "kind": "Stock",
       "unit": "",
       "observe": "world.balance",
-      "description": ""
+      "description": "",
+      "layer": "management"
     },
     {
       "id": "economy.income",
@@ -641,7 +748,8 @@
       "kind": "Flow",
       "unit": "",
       "observe": "world.income",
-      "description": ""
+      "description": "",
+      "layer": "management"
     },
     {
       "id": "economy.expenses",
@@ -650,7 +758,8 @@
       "kind": "Flow",
       "unit": "",
       "observe": "world.expenses",
-      "description": ""
+      "description": "",
+      "layer": "management"
     },
     {
       "id": "economy.runningCosts",
@@ -659,7 +768,8 @@
       "kind": "Flow",
       "unit": "",
       "observe": "world.runningCosts",
-      "description": ""
+      "description": "",
+      "layer": "management"
     },
     {
       "id": "economy.fuelFactor",
@@ -668,7 +778,8 @@
       "kind": "Auxiliary",
       "unit": "×",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "management"
     },
     {
       "id": "vehicle.wear",
@@ -677,7 +788,8 @@
       "kind": "Stock",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "management"
     },
     {
       "id": "vehicle.broken",
@@ -686,7 +798,8 @@
       "kind": "Auxiliary",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "management"
     },
     {
       "id": "calendar.time",
@@ -695,7 +808,8 @@
       "kind": "Input",
       "unit": "",
       "observe": "world.time",
-      "description": "Az erdőidő; a képletekben world.time néven, erdőévben olvasható."
+      "description": "Az erdőidő; a képletekben world.time néven, erdőévben olvasható.",
+      "layer": ""
     },
     {
       "id": "forest.month",
@@ -704,7 +818,8 @@
       "kind": "Input",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": ""
     },
     {
       "id": "vehicle.time",
@@ -713,7 +828,8 @@
       "kind": "Input",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": ""
     },
     {
       "id": "wildlife.time",
@@ -722,7 +838,8 @@
       "kind": "Input",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": ""
     },
     {
       "id": "world.seed",
@@ -731,7 +848,8 @@
       "kind": "Input",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": ""
     },
     {
       "id": "player.input",
@@ -740,7 +858,8 @@
       "kind": "Input",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": ""
     },
     {
       "id": "commands",
@@ -749,7 +868,8 @@
       "kind": "Input",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": ""
     },
     {
       "id": "ecology.steps",
@@ -758,7 +878,8 @@
       "kind": "Structure",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": ""
     },
     {
       "id": "rules.behaviors",
@@ -767,7 +888,8 @@
       "kind": "Structure",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": ""
     },
     {
       "id": "save.snapshot",
@@ -776,7 +898,8 @@
       "kind": "Structure",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": ""
     },
     {
       "id": "terrain.settings",
@@ -785,7 +908,8 @@
       "kind": "Parameter",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": ""
     },
     {
       "id": "terrain.height",
@@ -794,7 +918,8 @@
       "kind": "Structure",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "terrain"
     },
     {
       "id": "terrain.moisture",
@@ -803,7 +928,8 @@
       "kind": "Structure",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "terrain"
     },
     {
       "id": "terrain.water",
@@ -812,7 +938,8 @@
       "kind": "Structure",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "terrain"
     },
     {
       "id": "terrain.outlets",
@@ -821,7 +948,8 @@
       "kind": "Structure",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": "terrain"
     },
     {
       "id": "visual.tree",
@@ -830,7 +958,8 @@
       "kind": "Presentation",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": ""
     },
     {
       "id": "visual.truck",
@@ -839,7 +968,8 @@
       "kind": "Presentation",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": ""
     },
     {
       "id": "visual.weather",
@@ -848,7 +978,8 @@
       "kind": "Presentation",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": ""
     },
     {
       "id": "visual.foliage",
@@ -857,7 +988,8 @@
       "kind": "Presentation",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": ""
     },
     {
       "id": "visual.deadwood",
@@ -866,7 +998,8 @@
       "kind": "Presentation",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": ""
     },
     {
       "id": "visual.machines",
@@ -875,7 +1008,8 @@
       "kind": "Presentation",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": ""
     },
     {
       "id": "visual.buildings",
@@ -884,7 +1018,8 @@
       "kind": "Presentation",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": ""
     },
     {
       "id": "visual.animals",
@@ -893,7 +1028,8 @@
       "kind": "Presentation",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": ""
     },
     {
       "id": "visual.fish",
@@ -902,7 +1038,8 @@
       "kind": "Presentation",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": ""
     },
     {
       "id": "visual.terrain",
@@ -911,7 +1048,8 @@
       "kind": "Presentation",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": ""
     },
     {
       "id": "visual.roads",
@@ -920,7 +1058,28 @@
       "kind": "Presentation",
       "unit": "",
       "observe": "",
-      "description": ""
+      "description": "",
+      "layer": ""
+    },
+    {
+      "id": "soil.bearing",
+      "name": "Talaj teherbírása",
+      "subsystem": "environment",
+      "kind": "Parameter",
+      "unit": "0–1",
+      "observe": "",
+      "layer": "soil",
+      "description": "Mennyire tartja meg a talaj a járművet átnedvesedve; a jól áteresztő talaj többet bír."
+    },
+    {
+      "id": "trail.trafficability",
+      "name": "Földút járhatósága",
+      "subsystem": "roads",
+      "kind": "Auxiliary",
+      "unit": "0–1",
+      "observe": "",
+      "layer": "surface",
+      "description": "1 = száraz, jól járható; átázott, gyenge teherbírású talajon csökken, és nő a jármű menetellenállása."
     }
   ]
 }

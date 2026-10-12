@@ -74,15 +74,15 @@ namespace ForesTycoon.Editor
             var flags = ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse;
             if (standalone) flags |= ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoTitleBar;
             if (!standalone) ImGui.SetNextWindowSize(new Vec2(1280, 820), ImGuiCond.FirstUseEver);
-            if (!ImGui.Begin("Szabályrendszer editor", ref open, flags)) { ImGui.End(); return; }
+            if (!ImGui.Begin("Világszerkesztő", ref open, flags)) { ImGui.End(); return; }
             RefreshProjectOperations();
             currentRules.EnsureCatalog(world);
             RefreshWorkshopRevision(world);
             CompiledRoadRule compiled = compiler.Compile(draft);
-            WorkshopHeader(world);
+            WorldHeader(world);
             float statusHeight = ImGui.GetFrameHeightWithSpacing() + 6;
             ImGui.BeginChild("editor-body", new Vec2(0, -statusHeight), ImGuiChildFlags.None, ImGuiWindowFlags.NoScrollbar);
-            WorkshopBody(world, compiled);
+            WorldBody(world, standalone);
             ImGui.EndChild();
             WorkshopStatus();
             ImGui.End();

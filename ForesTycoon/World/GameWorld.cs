@@ -104,6 +104,8 @@ namespace ForesTycoon
             try
             {
                 var renderer = new TerrainRenderer(scene, vehicles, effects, forest, Graphics, Environment, wildlife, Logistics);
+                // The ecosystem may rebuild its environment (new map, loaded save): always draw the current one.
+                renderer.FloodDepth = id => Environment?.SurfaceDepth(id) ?? 0;
                 terrain = scene;
                 terrainRenderer = renderer;
             }
@@ -117,6 +119,7 @@ namespace ForesTycoon
         public int RoadPreviewCount => terrain?.RoadPreviewCount ?? 0;
         public int VehicleCount => vehicles.Count;
         internal int FishCount=>terrainRenderer?.FishCount ?? 0;
+        internal int FloodTilesDrawn => terrainRenderer?.FloodTilesDrawn ?? 0;
         internal int WildlifeCount => terrainRenderer?.WildlifeCount ?? 0;
         internal bool TryGetWildlifePosition(out Vector3 position)
         {
@@ -388,7 +391,12 @@ namespace ForesTycoon
             if (roadWeatherSeconds < 0.5) return;
             float rain = (float)Math.Clamp(Environment.RainRate / 20, 0, 1);
             float years = (float)(roadWeatherSeconds / ecosystem.ForestYearSeconds);
-            map.WeatherRoads(years, rain);
+            var policy = behaviorPolicy;
+            Func<int, float, float> adjust = policy.Overrides("road.weather", "road")
+                ? (id, rate) => (float)policy.Evaluate(new("road.weather", "road", (ulong)id, rate, years, forest.ForestYear, map.GetRoadCondition(id), rain))
+                : null;
+            map.WeatherRoads(years, rain, adjust, new RoadWeathering(Tuning.F(Tune.AsphaltWeather), Tuning.F(Tune.AsphaltRainWeather),
+                Tuning.F(Tune.MacadamWeather), Tuning.F(Tune.MacadamRainWeather)));
             if (map.AgeSkidTrails(years).Length > 0)
             {
                 Logistics?.TrailsChanged();
@@ -514,12 +522,14 @@ namespace ForesTycoon
             terrain?.SetRoadPreview(startTileId, endTileId, remove);
         public void ClearRoadPreview() => terrain?.ClearRoadPreview();
 
-        public void Regenerate(TerrainSettings settings)
+        public void Regenerate(TerrainSettings settings) => Regenerate(settings, SoilLandscapeDefinition.Default);
+        /// <summary>A new world from a seed and a soil model, for example a world-editor scenario with painted soil.</summary>
+        internal void Regenerate(TerrainSettings settings, SoilLandscapeDefinition soils)
         {
             EnsureAvailable(allowFaulted: true);
             terrainRenderer?.VerifyAccess();
             using var candidate = new GameWorld(settings, Graphics, EcologyTime.DefaultGameSecondsPerYear,
-                SoilLandscapeDefinition.Default, ClimateDefinition.Default);
+                soils ?? SoilLandscapeDefinition.Default, ClimateDefinition.Default);
             candidate.ApplyTuning(Tuning);
             if (HasPresentation) candidate.AttachRendering();
             Adopt(candidate);
@@ -586,7 +596,7 @@ namespace ForesTycoon
             // Route creation must follow this world's terrain after the ownership transfer.
             vehicles.RoadRouteFactory = route => VehicleRoadRoute.Create(map, route);
             roadRule = candidate.roadRule;
-            ruleProjectName = candidate.ruleProjectName;
+            ruleProjectName = candidate.ruleProjectName; ruleProjectWorld = candidate.ruleProjectWorld;
             algorithmGraphs = candidate.algorithmGraphs;
             dynamics = new(candidate.dynamics.Document, RuleWorldFields, ReadWorldValue);
             dynamics.Restore(candidate.dynamics.Capture());

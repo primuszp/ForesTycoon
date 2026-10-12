@@ -84,7 +84,7 @@ namespace ForesTycoon
                 "commands|terrain.height|buildings.footprint|road.network", "terrain.height|forest.trees|water.routing",
                 "Csak ténylegesen megváltozott cellák növényzete vész el, kitermelt készlet nélkül. Út- és épületmagasság védett; a többi erdő és a szimulációs idő megmarad.");
             var soilRule = Add("soil.catalog", "Talajprofilok és termőhely", "Talaj és klíma", "Térképcella", "Új világ", "ForesTycoon.Ecology/Soil/SoilLandscape.cs", "SoilLandscape",
-                "world.seed|terrain.height|terrain.moisture", "soil.profile|soil.fertility", "Térben összefüggő, seedelt talajprofilok; telítettség, szabadföldi vízkapacitás, hervadáspont, beszivárgás, drénezés és termékenység.");
+                "world.seed|terrain.height|terrain.moisture", "soil.profile|soil.fertility|soil.bearing", "Térben összefüggő, seedelt talajprofilok; telítettség, szabadföldi vízkapacitás, hervadáspont, beszivárgás, drénezés, termékenység és a drénezésből adódó teherbírás.");
             soils ??= SoilLandscapeDefinition.Default;
             foreach (var profile in soils.Catalog.Profiles)
             {
@@ -139,9 +139,10 @@ namespace ForesTycoon
             Add("water.drainage", "Mélyvíz és alaplefolyás", "Vízháztartás", "Térképcella", "Környezeti lépés", water, "drainage",
                 "water.root|water.deep|soil.profile", "water.root|water.deep|water.outflow",
                 "Szabadföldi vízkapacitás felett a drénezési ráta szerint mélyvízbe jut a víz; a mélyvízből 0,15 mm/környezeti óra távozik.");
-            Add("water.runoff", "Térbeli felszíni lefolyás", "Vízháztartás", "Szomszédos cellák és kifolyók", "Környezeti lépés",
-                "ForesTycoon.Ecology/Water/SurfaceWaterFlux.cs", "Schedule", "water.surface|water.routing|terrain.height|terrain.outlets", "water.surface|water.outflow",
-                "Cellánként egy lejtőirányú fluxus. Bejövő víz együtt kerül publikálásra, egy lépésben nem folyhat át több cellán. Külső veszteség csak kifolyón.");
+            Add("water.runoff", "Felszíni vízfolyás és elöntés", "Vízháztartás", "Szomszédos csempék, források és kifolyók", "Környezeti lépés",
+                "ForesTycoon.Ecology/Water/SurfaceWaterFlow.cs", "Step", "water.surface|water.routing|terrain.height|terrain.outlets", "water.surface|water.outflow",
+                "A víz a vízfelszín szintje (terep + vízmélység) szerint folyik minden alacsonyabb szomszéd felé: lejtőn le, sík terepen szétterül, árokban végigfolyik, mélyedést a pereméig tölt, túltöltött mederből kiönt, felfelé soha. Lépésenként legfeljebb egy csempét halad; a térfogat megmarad, csak a pálya szélén és állóvízbe távozik. Források folyamatosan táplálják.",
+                "átfolyás élenként = 0,2-ig korlátozott 1,5 / óra × szintkülönbség; a csempe 0,5 mm-t megtart");
             Add("water.stress", "Aszály, víztöbblet és havi vízválasz", "Vízháztartás", "Cellánként / fafajonként", "Környezeti lépés + erdőhónap", water, "WaterResponse",
                 "water.root|water.monthBudget|soil.profile|forest.species", "water.growthFactor",
                 "Simított szárazság és víztöbblet; a havi igény/felvétel integrálja adja a növekedési vízellátást. Fafajfüggő szárazságérzékenység.",
@@ -225,8 +226,12 @@ namespace ForesTycoon
                 "Közös út- és nyomhálózat, kölcsönös csatlakozások, burkolat és nyomvályú szerinti költség. A flottában a dokkpárok útvonalai közül a legkisebb összesített költségű nyer; azonos költségnél a rendezett dokksorrend dönt.");
             var mass = Add("vehicle.mass", "Rakomány és össztömeg", "Járművek", "Teherautó", "Mozgási lépés", dynamics, "Mass",
                 "vehicle.cargo", "vehicle.mass", "A rakomány térfogatból a rögzített frissfa-sűrűség alapján tömeg lesz. Ez a sűrűség jelenleg nem fajfüggő.", "tömeg = üres tömeg + m³ × fasűrűség");
+            Add("trail.trafficability", "Földút járhatósága", "Utak és nyomok", "Burkolatlan csempe", "Jármű haladásakor",
+                "ForesTycoon/World/GameWorld.Rules.cs", "Trafficability", "soil.bearing|water.root|water.surface|trail.wear", "trail.trafficability",
+                "Átázott, gyenge teherbírású talajon a földút és a közelítőnyom felülete romlik, a jármű gördülési ellenállása nő. A teherbírás a talajtípus paramétere; az átnedvesedés a gyökérzóna telítettsége (a szabadföldi vízkapacitás felétől a telítettségig) vagy a felszíni víz.",
+                "járhatóság = 1 - átnedvesedés × (1 - teherbírás)");
             var resistance = Add("vehicle.resistance", "Lejtés és menetellenállás", "Járművek", "Teherautó / aktuális útszakasz", "Legfeljebb 1/30 jármű-s", dynamics, "Resistance",
-                "vehicle.mass|vehicle.speed|terrain.height|road.condition|road.network|trail.wear", "vehicle.resistance",
+                "vehicle.mass|vehicle.speed|terrain.height|road.condition|road.network|trail.wear|trail.trafficability", "vehicle.resistance",
                 "Gördülés, előjeles lejtőellenállás és légellenállás; durva, kopott felület növeli a gördülést.", "F = Crr × m × g × cos(atan(lejtés)) + m × g × sin(atan(lejtés)) + 0,5 × levegősűrűség × légellenállási felület × v²");
             Add("vehicle.motion", "Gyorsulás, kanyar és fékezés", "Járművek", "Teherautó", "Legfeljebb 1/30 jármű-s",
                 "ForesTycoon/World/Vehicles/Vehicle.cs", "VehicleDynamics.Step", "vehicle.time|vehicle.route|vehicle.resistance|vehicle.mass|road.condition|vehicle.broken", "vehicle.position|vehicle.speed|vehicle.fuel",

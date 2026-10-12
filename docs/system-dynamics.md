@@ -1,5 +1,8 @@
 # Közös szabályprojekt és rendszerdinamika
 
+> A felület leírása: [Világszerkesztő](rule-editor.md). Az alábbi, a szabályműhelyre hivatkozó UI-részek elavultak; a projektformátum, a futtatás és a CLI érvényes.
+
+
 A játék, a grafikus editor és az AI ugyanazt a `forest-rule-project` JSON-dokumentumot
 használja. A projekt együtt tartalmazza az útkopási gráfot (`road`), a hangolási
 értékeket (`tuning`), az objektumokhoz kapcsolható képlet- és gépvezérlési gráfokat

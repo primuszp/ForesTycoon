@@ -51,6 +51,28 @@ public static class AlgorithmBuild
         if (reference.Revision.Length != 64 || bundle.Revision() != reference.Revision) throw new InvalidDataException("Az algoritmusgráf tartalma nem egyezik a projekt revíziójával.");
         return bundle;
     }
+    /// <summary>
+    /// A bundle that no longer describes the code: some source file is missing from it (it predates the file), it cannot
+    /// be read, or it renders exactly the current sources (a plain snapshot). Such a bundle must not replace the built game:
+    /// running it would silently revert later code changes. Returns the reason, or null for a real, edited bundle.
+    /// </summary>
+    public static string? StaleReason(AlgorithmGraphReference? reference)
+    {
+        if (reference == null || reference.Revision == CurrentRevision) return null;
+        try {
+            var rendered = Read(reference).RenderAll();
+            string workspace = Path.GetFullPath(reference.WorkspaceRoot);
+            if (!File.Exists(Path.Combine(workspace, "ForesTycoon/ForesTycoon.csproj"))) return "a munkaterület nem található";
+            var sources = AlgorithmBundle.SourcePaths(workspace).ToArray();
+            var missing = sources.Where(p => !rendered.ContainsKey(p)).ToArray();
+            if (missing.Length > 0) return "régebbi a kódnál; hiányzik belőle: " + string.Join(", ", missing.Take(4)) + (missing.Length > 4 ? " …" : "");
+            static string Normal(string text) => text.Replace("\r\n", "\n").TrimEnd();
+            if (sources.All(p => Normal(rendered[p]) == Normal(File.ReadAllText(Path.Combine(workspace, p))))) return "a jelenlegi kód változatlan másolata";
+            return null;
+        } catch (Exception e) when (e is IOException or InvalidDataException or UnauthorizedAccessException or System.Text.Json.JsonException) {
+            return "nem olvasható: " + e.Message;
+        }
+    }
     public static async Task<AlgorithmBuildResult> CompileAsync(AlgorithmGraphReference reference, CancellationToken cancellation = default)
     {
         var bundle = Read(reference); var rendered = bundle.RenderAll();

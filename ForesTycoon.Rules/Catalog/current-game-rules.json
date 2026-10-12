@@ -381,7 +381,7 @@
       "scope": "T\u00E9rk\u00E9pcella",
       "schedule": "\u00DAj vil\u00E1g",
       "execution": "NativeCode",
-      "description": "T\u00E9rben \u00F6sszef\u00FCgg\u0151, seedelt talajprofilok; tel\u00EDtetts\u00E9g, szabadf\u00F6ldi v\u00EDzkapacit\u00E1s, hervad\u00E1spont, besziv\u00E1rg\u00E1s, dr\u00E9nez\u00E9s \u00E9s term\u00E9kenys\u00E9g.",
+      "description": "T\u00E9rben \u00F6sszef\u00FCgg\u0151, seedelt talajprofilok; tel\u00EDtetts\u00E9g, szabadf\u00F6ldi v\u00EDzkapacit\u00E1s, hervad\u00E1spont, besziv\u00E1rg\u00E1s, dr\u00E9nez\u00E9s, term\u00E9kenys\u00E9g \u00E9s a dr\u00E9nez\u00E9sb\u0151l ad\u00F3d\u00F3 teherb\u00EDr\u00E1s.",
       "formula": "",
       "notes": "",
       "reads": [
@@ -391,7 +391,8 @@
       ],
       "writes": [
         "soil.profile",
-        "soil.fertility"
+        "soil.fertility",
+        "soil.bearing"
       ],
       "sources": [
         {
@@ -934,7 +935,8 @@
         "water.surface",
         "water.root",
         "soil.profile",
-        "forest.canopy"
+        "forest.canopy",
+        "rules.behaviors"
       ],
       "writes": [
         "water.canopy",
@@ -968,7 +970,8 @@
         "soil.profile",
         "forest.canopy",
         "road.network",
-        "buildings.footprint"
+        "buildings.footprint",
+        "rules.behaviors"
       ],
       "writes": [
         "water.root",
@@ -998,7 +1001,8 @@
       "reads": [
         "water.root",
         "water.deep",
-        "soil.profile"
+        "soil.profile",
+        "rules.behaviors"
       ],
       "writes": [
         "water.root",
@@ -1017,13 +1021,13 @@
     },
     {
       "id": "water.runoff",
-      "name": "T\u00E9rbeli felsz\u00EDni lefoly\u00E1s",
+      "name": "Felsz\u00EDni v\u00EDzfoly\u00E1s \u00E9s el\u00F6nt\u00E9s",
       "module": "V\u00EDzh\u00E1ztart\u00E1s",
-      "scope": "Szomsz\u00E9dos cell\u00E1k \u00E9s kifoly\u00F3k",
+      "scope": "Szomsz\u00E9dos csemp\u00E9k, forr\u00E1sok \u00E9s kifoly\u00F3k",
       "schedule": "K\u00F6rnyezeti l\u00E9p\u00E9s",
       "execution": "NativeCode",
-      "description": "Cell\u00E1nk\u00E9nt egy lejt\u0151ir\u00E1ny\u00FA fluxus. Bej\u00F6v\u0151 v\u00EDz egy\u00FCtt ker\u00FCl publik\u00E1l\u00E1sra, egy l\u00E9p\u00E9sben nem folyhat \u00E1t t\u00F6bb cell\u00E1n. K\u00FCls\u0151 vesztes\u00E9g csak kifoly\u00F3n.",
-      "formula": "",
+      "description": "A v\u00EDz a v\u00EDzfelsz\u00EDn szintje (terep \u002B v\u00EDzm\u00E9lys\u00E9g) szerint folyik minden alacsonyabb szomsz\u00E9d fel\u00E9: lejt\u0151n le, s\u00EDk terepen sz\u00E9tter\u00FCl, \u00E1rokban v\u00E9gigfolyik, m\u00E9lyed\u00E9st a perem\u00E9ig t\u00F6lt, t\u00FAlt\u00F6lt\u00F6tt mederb\u0151l ki\u00F6nt, felfel\u00E9 soha. L\u00E9p\u00E9senk\u00E9nt legfeljebb egy csemp\u00E9t halad; a t\u00E9rfogat megmarad, csak a p\u00E1lya sz\u00E9l\u00E9n \u00E9s \u00E1ll\u00F3v\u00EDzbe t\u00E1vozik. Forr\u00E1sok folyamatosan t\u00E1pl\u00E1lj\u00E1k.",
+      "formula": "\u00E1tfoly\u00E1s \u00E9lenk\u00E9nt = 0,2-ig korl\u00E1tozott 1,5 / \u00F3ra \u00D7 szintk\u00FCl\u00F6nbs\u00E9g; a csempe 0,5 mm-t megtart",
       "notes": "",
       "reads": [
         "water.surface",
@@ -1037,8 +1041,8 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon.Ecology/Water/SurfaceWaterFlux.cs",
-          "symbol": "Schedule"
+          "file": "ForesTycoon.Ecology/Water/SurfaceWaterFlow.cs",
+          "symbol": "Step"
         }
       ],
       "parameters": [],
@@ -1059,7 +1063,8 @@
         "water.root",
         "water.monthBudget",
         "soil.profile",
-        "forest.species"
+        "forest.species",
+        "rules.behaviors"
       ],
       "writes": [
         "water.growthFactor"
@@ -2468,7 +2473,8 @@
         "weather.rain",
         "calendar.time",
         "road.condition",
-        "road.network"
+        "road.network",
+        "rules.behaviors"
       ],
       "writes": [
         "road.condition"
@@ -2479,7 +2485,44 @@
           "symbol": "WeatherRoads"
         }
       ],
-      "parameters": [],
+      "parameters": [
+        {
+          "name": "Aszfalt roml\u00E1sa sz\u00E1razon",
+          "value": 0.014999999664723873,
+          "unit": "\u00E1llapot/erd\u0151\u00E9v",
+          "key": "AsphaltWeather",
+          "min": 0,
+          "max": 5,
+          "default": 0.014999999664723873
+        },
+        {
+          "name": "Aszfalt roml\u00E1sa es\u0151ben",
+          "value": 0.07999999821186066,
+          "unit": "\u00E1llapot/erd\u0151\u00E9v/es\u0151",
+          "key": "AsphaltRainWeather",
+          "min": 0,
+          "max": 20,
+          "default": 0.07999999821186066
+        },
+        {
+          "name": "Makad\u00E1m roml\u00E1sa sz\u00E1razon",
+          "value": 0.10000000149011612,
+          "unit": "\u00E1llapot/erd\u0151\u00E9v",
+          "key": "MacadamWeather",
+          "min": 0,
+          "max": 5,
+          "default": 0.10000000149011612
+        },
+        {
+          "name": "Makad\u00E1m roml\u00E1sa es\u0151ben",
+          "value": 1.600000023841858,
+          "unit": "\u00E1llapot/erd\u0151\u00E9v/es\u0151",
+          "key": "MacadamRainWeather",
+          "min": 0,
+          "max": 20,
+          "default": 1.600000023841858
+        }
+      ],
       "x": 515,
       "y": 30
     },
@@ -2755,6 +2798,36 @@
       "y": 30
     },
     {
+      "id": "trail.trafficability",
+      "name": "F\u00F6ld\u00FAt j\u00E1rhat\u00F3s\u00E1ga",
+      "module": "Utak \u00E9s nyomok",
+      "scope": "Burkolatlan csempe",
+      "schedule": "J\u00E1rm\u0171 halad\u00E1sakor",
+      "execution": "NativeCode",
+      "description": "\u00C1t\u00E1zott, gyenge teherb\u00EDr\u00E1s\u00FA talajon a f\u00F6ld\u00FAt \u00E9s a k\u00F6zel\u00EDt\u0151nyom fel\u00FClete romlik, a j\u00E1rm\u0171 g\u00F6rd\u00FCl\u00E9si ellen\u00E1ll\u00E1sa n\u0151. A teherb\u00EDr\u00E1s a talajt\u00EDpus param\u00E9tere; az \u00E1tnedvesed\u00E9s a gy\u00F6k\u00E9rz\u00F3na tel\u00EDtetts\u00E9ge (a szabadf\u00F6ldi v\u00EDzkapacit\u00E1s fel\u00E9t\u0151l a tel\u00EDtetts\u00E9gig) vagy a felsz\u00EDni v\u00EDz.",
+      "formula": "j\u00E1rhat\u00F3s\u00E1g = 1 - \u00E1tnedvesed\u00E9s \u00D7 (1 - teherb\u00EDr\u00E1s)",
+      "notes": "",
+      "reads": [
+        "soil.bearing",
+        "water.root",
+        "water.surface",
+        "trail.wear",
+        "rules.behaviors"
+      ],
+      "writes": [
+        "trail.trafficability"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/World/GameWorld.Rules.cs",
+          "symbol": "Trafficability"
+        }
+      ],
+      "parameters": [],
+      "x": 270,
+      "y": 290
+    },
+    {
       "id": "vehicle.resistance",
       "name": "Lejt\u00E9s \u00E9s menetellen\u00E1ll\u00E1s",
       "module": "J\u00E1rm\u0171vek",
@@ -2771,6 +2844,7 @@
         "road.condition",
         "road.network",
         "trail.wear",
+        "trail.trafficability",
         "rules.behaviors"
       ],
       "writes": [

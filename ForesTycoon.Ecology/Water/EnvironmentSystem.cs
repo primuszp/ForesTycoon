@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace ForesTycoon.Ecology
 {
@@ -13,17 +15,37 @@ namespace ForesTycoon.Ecology
         internal static bool IsValidForestYearSeconds(double seconds) => EcologyTime.IsValidForestYearSeconds(seconds);
         internal const double HoursPerSecond = EcologyTime.HoursPerSecond;
         internal const double StepSeconds = EcologyTime.StepSeconds;
+        internal double HoursPerStep => StepSeconds * weather.HoursPerSecond;
+        internal double Cover(int id) => (uint)id < (uint)CellCount ? vegetation[id].Cover : 0;
         internal const double SnowMeltBaseRate = .18, SnowMeltDepthRate = .35;
         internal IBehaviorPolicy Behaviors { get; set; }
+        private SurfaceWaterFlow surfaceFlow;
+        private double[] springRates;
+        private double springReceived;
+        /// <summary>Water springs add to these tiles' surface (mm per environment hour): sources of streams and rivers.</summary>
+        internal IReadOnlyDictionary<int, double> Springs
+        {
+            get => springRates == null ? new Dictionary<int, double>() : Enumerable.Range(0, CellCount).Where(i => springRates[i] > 0).ToDictionary(i => i, i => springRates[i]);
+            set {
+                if (value == null || value.Count == 0) { springRates = null; return; }
+                var rates = new double[CellCount];
+                foreach (var (tile, rate) in value)
+                    if ((uint)tile < (uint)CellCount && double.IsFinite(rate) && rate > 0) rates[tile] = rate;
+                springRates = rates;
+            }
+        }
+        internal double SpringReceived => springReceived;
+        // Named inputs of the water rules, in the order their hooks declare them; reused every cell.
+        private readonly double[] snowmeltInputs = new double[1], infiltrationInputs = new double[4], evaporationInputs = new double[3],
+            uptakeInputs = new double[2], drainageInputs = new double[2];
         private readonly IForestHabitat habitat;
         private readonly IForestCanopy forest;
         private readonly double[] canopy, surface, soil, deep, drought, wet, wetIntegral, snow;
-        private readonly SurfaceWaterFlux surfaceFlux, snowFlux;
+        private readonly SurfaceWaterFlux snowFlux;
         private readonly double[] demandIntegral, uptakeIntegral, uptakeRate, demandRate;
         private readonly SoilProperties[] soils;
         private readonly ForestHydrologyInputs[] vegetation;
         private ulong vegetationRevision = ulong.MaxValue;
-        private readonly int[] destinations;
         private double remainder, monthSeconds, radiationIntegral;
         private readonly WeatherSystem weather;
         private double regionalRainReceived;
@@ -70,7 +92,7 @@ namespace ForesTycoon.Ecology
                 return total;
             }
         }
-        internal double BalanceError => StoredWater - (InitialWater + RainReceived - Evaporated - Transpired - Outflow);
+        internal double BalanceError => StoredWater - (InitialWater + RainReceived + springReceived - Evaporated - Transpired - Outflow);
 
         double IForestEnvironment.Radiation => Radiation;
         double IForestEnvironment.PeriodRadiation => PeriodRadiation;
@@ -87,9 +109,8 @@ namespace ForesTycoon.Ecology
             int n = habitat.TileCount;
             canopy = new double[n]; surface = new double[n]; soil = new double[n]; deep = new double[n];
             snow = new double[n];
-            drought = new double[n]; wet = new double[n]; wetIntegral = new double[n]; surfaceFlux = new SurfaceWaterFlux(n);
+            drought = new double[n]; wet = new double[n]; wetIntegral = new double[n];
             snowFlux = new SurfaceWaterFlux(n);
-            destinations = new int[n];
             demandIntegral = new double[n]; uptakeIntegral = new double[n];
             uptakeRate = new double[n]; demandRate = new double[n];
             soils = new SoilProperties[n]; vegetation = new ForestHydrologyInputs[n];
@@ -129,40 +150,29 @@ namespace ForesTycoon.Ecology
             Revision++;
             Summarize();
         }
-        internal void RefreshRouting()
-        {
-            Span<int> neighbours = stackalloc int[4];
-            for (int i = 0; i < CellCount; i++)
-                RefreshRoute(i, neighbours);
-        }
+        internal void RefreshRouting() => RebuildSurfaceFlow();
 
-        // Only these cells and direct neighbours can acquire a different downhill destination.
-        // Re-routing never changes water stores, forcing, integrals or simulation time.
+        // Terrain edits change ground heights and outlets; flow is rebuilt from the habitat. Water stores are untouched.
         internal void RefreshRouting(ReadOnlySpan<int> changedTiles)
         {
             foreach (int id in changedTiles)
                 if ((uint)id >= (uint)CellCount) throw new ArgumentOutOfRangeException(nameof(changedTiles));
-            Span<int> neighbours = stackalloc int[4], adjacent = stackalloc int[4];
-            foreach (int id in changedTiles)
-            {
-                RefreshRoute(id, neighbours);
-                int count = habitat.GetAdjacentTileIds(id, adjacent);
-                for (int j = 0; j < count; j++) RefreshRoute(adjacent[j], neighbours);
-            }
+            RebuildSurfaceFlow();
         }
 
-        private void RefreshRoute(int id, Span<int> neighbours)
+        /// <summary>Ground heights, edge neighbours and outlets of the level-driven surface water.</summary>
+        private void RebuildSurfaceFlow()
         {
-            destinations[id] = -1;
-            float low = habitat.GetNormalizedElevation(id);
-            int count = habitat.GetAdjacentTileIds(id, neighbours);
-            for (int j = 0; j < count; j++)
-            {
-                int next = neighbours[j];
-                float height = habitat.GetNormalizedElevation(next);
-                if (height < low) { low = height; destinations[id] = next; }
+            Span<int> adjacent = stackalloc int[4];
+            var ground = new double[CellCount]; var links = new int[CellCount][]; var outlets = new bool[CellCount];
+            for (int i = 0; i < CellCount; i++) {
+                ground[i] = habitat.GetGroundHeight(i) * 1000.0;
+                links[i] = adjacent[..habitat.GetAdjacentTileIds(i, adjacent)].ToArray();
+                outlets[i] = habitat.IsWaterOutlet(i);
             }
+            surfaceFlow = new SurfaceWaterFlow(ground, links, outlets);
         }
+
         private void RefreshVegetation()
         {
             if (forest == null || vegetationRevision == forest.Revision) return;
@@ -175,14 +185,21 @@ namespace ForesTycoon.Ecology
             double dt = interval.Seconds;
             RefreshVegetation();
             double hours = dt * weather.HoursPerSecond;
-            var runoffStep = SurfaceRunoffLaw.Legacy.Prepare(hours);
             // Shared atmospheric forcing drives both soil evaporation and leaf-water demand.
             double uniformPotential = interval.Forcing.PotentialEvaporationPerHour * hours;
             monthSeconds += dt;
             radiationIntegral += interval.Forcing.Radiation * dt;
-            surfaceFlux.BeginStep();
+            // Formula hooks for the soil budget; skipped entirely while they only return the built-in value.
+            bool evaporationHook = Behaviors?.Overrides("water.evaporation", "tile") == true, uptakeHook = Behaviors?.Overrides("water.uptake", "tile") == true;
+            bool drainageHook = Behaviors?.Overrides("water.drainage", "tile") == true, baseflowHook = Behaviors?.Overrides("water.baseflow", "tile") == true;
+            bool snowmeltHook = Behaviors?.Overrides("water.snowmelt", "tile") == true, infiltrationHook = Behaviors?.Overrides("water.infiltration", "tile") == true;
+            snowmeltInputs[0] = hours; infiltrationInputs[2] = hours; drainageInputs[1] = hours;
             for (int id = 0; id < CellCount; id++)
             {
+                if (springRates != null && springRates[id] > 0) {
+                    double spring = springRates[id] * hours;
+                    surface[id] += spring; springReceived += spring;
+                }
                 var local = Climate.Cell(id, interval.Forcing);
                 double rain = interval.Rain * local.RainMultiplier;
                 double potential = Climate.Uniform ? uniformPotential : local.Forcing.PotentialEvaporationPerHour * hours;
@@ -193,8 +210,8 @@ namespace ForesTycoon.Ecology
                 // Integrate ds/d(degree-hour) = -0.18 - 0.35*s exactly; all melt becomes water.
                 double thaw = Math.Max(0, local.Forcing.Temperature) * hours;
                 double melt = (snow[id] + SnowMeltBaseRate / SnowMeltDepthRate) * (1 - Math.Exp(-SnowMeltDepthRate * thaw));
-                if (Behaviors != null) melt = Behaviors.Evaluate(new("water.snowmelt", "tile", (ulong)id, melt,
-                    dt, Time, local.Forcing.Temperature, snow[id]));
+                if (snowmeltHook) melt = Behaviors.Evaluate(new("water.snowmelt", "tile", (ulong)id, melt,
+                    dt, Time, local.Forcing.Temperature, snow[id], Extras: snowmeltInputs));
                 surface[id] += StockFlows.Withdraw(ref snow[id], melt);
                 var profile = soils[id];
                 var trees = vegetation[id];
@@ -206,8 +223,11 @@ namespace ForesTycoon.Ecology
                 bool sealedSurface = habitat.IsImpervious(id);
                 double infiltration = Math.Min(surface[id], Math.Min(
                     (sealedSurface ? 0.5 : profile.InfiltrationPerHour) * hours, Math.Max(0, profile.Saturation - soil[id])));
-                if (Behaviors != null) infiltration = Math.Min(surface[id], Math.Min(Math.Max(0, profile.Saturation - soil[id]),
-                    Behaviors.Evaluate(new("water.infiltration", "tile", (ulong)id, infiltration, dt, Time, soil[id], surface[id]))));
+                if (infiltrationHook) {
+                    infiltrationInputs[0] = profile.InfiltrationPerHour; infiltrationInputs[1] = profile.Saturation; infiltrationInputs[3] = sealedSurface ? 1 : 0;
+                    infiltration = Math.Min(surface[id], Math.Min(Math.Max(0, profile.Saturation - soil[id]),
+                        Behaviors.Evaluate(new("water.infiltration", "tile", (ulong)id, infiltration, dt, Time, soil[id], surface[id], Extras: infiltrationInputs))));
+                }
                 StockFlows.Transfer(ref surface[id], ref soil[id], infiltration);
 
                 double budget = potential;
@@ -217,6 +237,10 @@ namespace ForesTycoon.Ecology
                 budget -= loss; Evaporated += loss;
                 double available = Math.Max(0, soil[id] - profile.WiltingPoint);
                 loss = Math.Min(available, budget * profile.Availability(soil[id]) * (1 - trees.Cover) * 0.65);
+                if (evaporationHook) {
+                    evaporationInputs[0] = profile.WiltingPoint; evaporationInputs[1] = profile.FieldCapacity; evaporationInputs[2] = trees.Cover;
+                    loss = Math.Clamp(Behaviors.Evaluate(new("water.evaporation", "tile", (ulong)id, loss, dt, Time, soil[id], budget, Extras: evaporationInputs)), 0, available);
+                }
                 StockFlows.Withdraw(ref soil[id], loss); Evaporated += loss;
 
                 // Allocate the shared root-zone budget proportionally to living leaf-area demand.
@@ -224,24 +248,32 @@ namespace ForesTycoon.Ecology
                 double requested = sealedSurface ? 0 : potential * trees.LeafAreaIndex * 0.8;
                 available = Math.Max(0, soil[id] - profile.WiltingPoint);
                 double uptake = Math.Min(available, requested * profile.Availability(soil[id]));
+                if (uptakeHook) {
+                    uptakeInputs[0] = profile.WiltingPoint; uptakeInputs[1] = profile.FieldCapacity;
+                    uptake = Math.Clamp(Behaviors.Evaluate(new("water.uptake", "tile", (ulong)id, uptake, dt, Time, soil[id], requested, Extras: uptakeInputs)), 0, available);
+                }
                 StockFlows.Withdraw(ref soil[id], uptake); Transpired += uptake;
                 demandIntegral[id] += requested; uptakeIntegral[id] += uptake;
                 demandRate[id] = requested / hours; uptakeRate[id] = uptake / hours;
 
-                double drainage = Math.Min(Math.Max(0, soil[id] - profile.FieldCapacity), profile.DrainagePerHour * hours);
+                double excess = Math.Max(0, soil[id] - profile.FieldCapacity);
+                double drainage = Math.Min(excess, profile.DrainagePerHour * hours);
+                if (drainageHook) {
+                    drainageInputs[0] = profile.DrainagePerHour;
+                    drainage = Math.Clamp(Behaviors.Evaluate(new("water.drainage", "tile", (ulong)id, drainage, dt, Time, soil[id], excess, Extras: drainageInputs)), 0, soil[id]);
+                }
                 StockFlows.Transfer(ref soil[id], ref deep[id], drainage);
-                double baseflow = StockFlows.Withdraw(ref deep[id], 0.15 * hours);
+                double release = 0.15 * hours;
+                if (baseflowHook) release = Math.Max(0, Behaviors.Evaluate(new("water.baseflow", "tile", (ulong)id, Math.Min(release, deep[id]), dt, Time, deep[id], hours)));
+                double baseflow = StockFlows.Withdraw(ref deep[id], release);
                 Outflow += baseflow;
                 double dry = 1 - profile.Availability(soil[id]), waterlogged = profile.Waterlogging(soil[id]);
                 double blend = 1 - Math.Exp(-dt / 90);
                 drought[id] += (dry - drought[id]) * blend; wet[id] += (waterlogged - wet[id]) * blend;
                 wetIntegral[id] += wet[id] * dt;
-                int to = destinations[id];
-                double exported = surfaceFlux.Schedule(id, to, to < 0 && habitat.IsWaterOutlet(id),
-                    surface[id], runoffStep);
-                if (exported != 0) Outflow += exported;
             }
-            surfaceFlux.Commit(surface);
+            // Surface water then flows by its level to lower neighbours; outlets carry it off the map.
+            Outflow += surfaceFlow.Step(surface, hours);
             if (interval.Snow || MeanSnowCover > 0) RedistributeSnow(interval.Forcing, hours);
         }
 
@@ -296,8 +328,26 @@ namespace ForesTycoon.Ecology
             double supply = demandIntegral[id] > 1e-12
                 ? uptakeIntegral[id] / demandIntegral[id] : soils[id].Availability(soil[id]);
             double waterlogging = monthSeconds > 0 ? wetIntegral[id] / monthSeconds : wet[id];
-            return WaterResponse(supply, waterlogging, species);
+            double response = WaterResponse(supply, waterlogging, species);
+            return Behaviors?.Overrides("water.stress", "tile") == true
+                ? Math.Clamp(Behaviors.Evaluate(new("water.stress", "tile", (ulong)id, response, 0, Time, Math.Clamp(supply, 0, 1), waterlogging,
+                    Extras: new double[] { ForestSpeciesTraits.For(species).DrySensitivity })), 0, 1)
+                : response;
         }
+
+        /// <summary>
+        /// How firmly an unpaved surface carries vehicles: soaked soil with low bearing capacity gives way. The capacity is
+        /// the soil type's parameter (older catalogs: from drainage); wetness is root-zone waterlogging or standing water.
+        /// </summary>
+        internal (double Wetness, double Bearing) Trafficability(int id)
+        {
+            if ((uint)id >= (uint)CellCount) return (0, 1);
+            var profile = soils[id];
+            // Soil softens well before saturation: wetness rises from half the field capacity to full saturation.
+            double softening = (soil[id] - profile.FieldCapacity / 2) / (profile.Saturation - profile.FieldCapacity / 2);
+            return (Math.Clamp(Math.Max(softening, surface[id] / 10), 0, 1), BearingCapacity(profile));
+        }
+        internal static double BearingCapacity(SoilProperties profile) => profile.BearingCapacity ?? Math.Clamp(0.25 + profile.DrainagePerHour / 8, 0.25, 0.9);
 
         internal double CurrentWaterFactor(int id, ForestSpecies species) => (uint)id < (uint)CellCount
             ? WaterResponse(soils[id].Availability(soil[id]), wet[id], species) : 1;
@@ -313,6 +363,9 @@ namespace ForesTycoon.Ecology
             Array.Clear(wetIntegral); Array.Clear(demandIntegral); Array.Clear(uptakeIntegral);
             monthSeconds = radiationIntegral = 0;
         }
+
+        /// <summary>Surface water standing on a tile (mm).</summary>
+        internal double SurfaceDepth(int id) => (uint)id < (uint)surface.Length ? surface[id] : 0;
 
         internal EnvironmentCell Cell(int id)
         {

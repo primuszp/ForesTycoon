@@ -1,0 +1,450 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using System.Text;
+
+namespace ForesTycoon.Rules;
+
+/// <summary>A name a formula may use, bound to one input of the graph runtime.</summary>
+public sealed record FormulaName(string Name, BehaviorOperation Operation, string Key = "", string Help = "");
+
+public sealed class FormulaException(string message, int line, int column) : FormatException(message)
+{
+    public int Line { get; } = line;
+    public int Column { get; } = column;
+}
+
+/// <summary>
+/// Readable rule formulas, compiled to the same bounded expression graph the game already runs. Spreadsheet style:
+/// <c>átnedvesedés = max(víz; 0,2)</c> lines, <c>;</c> between function arguments, decimal comma or point,
+/// <c>#</c> comments. The last line is the result. Functions: min, max, abs, ha(feltétel; akkor; különben), korlát(x; alsó; felső).
+/// </summary>
+public static class RuleFormula
+{
+    /// <summary>The names every rule formula may use for its hook: the built-in result, its two inputs, time, world fields, stocks.</summary>
+    public static IReadOnlyList<FormulaName> Names(BehaviorHook hook, IEnumerable<string> stockIds = null)
+    {
+        var (state, amount) = InputNames(hook);
+        var names = new List<FormulaName> {
+            new("beépített", BehaviorOperation.Native, Help: "A játék eddigi számítása erre a szabályra."),
+            new(state, BehaviorOperation.State, Help: hook.State),
+            new(amount, BehaviorOperation.Amount, Help: hook.Amount),
+            new("lépés", BehaviorOperation.Delta, Help: "Az aktuális lépés hossza."),
+            new("idő", BehaviorOperation.Time, Help: "Eltelt idő (erdőév)."),
+        };
+        if (hook.Kind is "truck" or "forwarder" or "processor")
+            names.AddRange(new FormulaName[] {
+                new("kapacitás", BehaviorOperation.Capacity, Help: "Rakománykapacitás (m³)."), new("elérhető", BehaviorOperation.Available, Help: "Elérhető mennyiség (m³)."),
+                new("honnan", BehaviorOperation.From, Help: "Kiinduló csempe."), new("hová", BehaviorOperation.To, Help: "Célcsempe."),
+                new("burkolat", BehaviorOperation.Surface, Help: "0 terep, 1 aszfalt, 2 makadám, 3 nyom.") });
+        foreach (string input in hook.Inputs ?? Array.Empty<string>()) names.Add(new(input, BehaviorOperation.Input, input, InputHelp(input)));
+        foreach (var (key, name, help) in WorldNames) names.Add(new(name, BehaviorOperation.NamedValue, key, help));
+        foreach (string id in stockIds ?? Enumerable.Empty<string>()) names.Add(new("készlet." + id, BehaviorOperation.NamedValue, "stock." + id, "Saját készlet."));
+        if (hook.Kind == "world") names.RemoveAll(n => n.Operation is not (BehaviorOperation.Native or BehaviorOperation.NamedValue));
+        return names;
+    }
+
+    private static readonly (string Key, string Name, string Help)[] WorldNames = {
+        ("world.time", "világ.erdőév", "Eltelt erdőév."), ("world.treeCount", "világ.fák", "Élő fák száma."),
+        ("world.roadCount", "világ.utak", "Útcsempék száma."), ("world.rain", "világ.csapadék", "Folyékony csapadék intenzitása."),
+        ("world.temperature", "világ.hőmérséklet", "Hőmérséklet (°C)."), ("world.snow", "világ.hó", "Hókészlet (mm)."),
+        ("world.water", "világ.víz", "Tárolt víz összesen."), ("world.income", "világ.bevétel", "Eddigi bevétel (eFt)."),
+        ("world.expenses", "világ.kiadás", "Eddigi kiadás (eFt)."), ("world.runningCosts", "világ.üzemeltetés", "Üzemeltetési költség (eFt)."),
+        ("world.balance", "világ.egyenleg", "Egyenleg (eFt).") };
+
+    // Hooks whose inputs read better with a hand-picked name than one derived from the label.
+    private static readonly Dictionary<string, (string State, string Amount)> Preferred = new() {
+        ["trail.trafficability"] = ("átnedvesedés", "talaj.teherbírás"),
+        ["road.weather"] = ("útállapot", "csapadék"),
+        ["water.stress"] = ("vízellátottság", "pangóvíz"),
+        ["water.snowmelt"] = ("hőmérséklet", "hókészlet"),
+        ["water.infiltration"] = ("gyökérzónavíz", "felszíni_víz"),
+        ["water.evaporation"] = ("gyökérzónavíz", "párolgási_igény"),
+        ["water.uptake"] = ("gyökérzónavíz", "vízigény"),
+        ["water.drainage"] = ("gyökérzónavíz", "többletvíz"),
+        ["water.baseflow"] = ("mélyvíz", "lépés_órái"),
+    };
+
+    private static string InputHelp(string name) => name switch {
+        "óra" => "A lépés hossza (környezeti óra).",
+        "talaj.beszivárgás" => "A csempe talajtípusának beszivárgása (mm/óra).",
+        "talaj.telítettség" => "A talajtípus teljes víztartása (mm).",
+        "talaj.vízkapacitás" => "Szabadföldi vízkapacitás (mm): e fölött a víz elszivárog.",
+        "talaj.hervadáspont" => "Hervadáspont (mm): ez alatt nincs felvehető víz.",
+        "talaj.drénezés" => "A talajtípus drénezése (mm/óra).",
+        "lombborítás" => "A csempe lombborítása (0–1).",
+        "burkolt" => "1, ha a csempe burkolt (út, épület); különben 0.",
+        "faj.szárazságérzékenység" => "A fafaj szárazságérzékenysége (a vízválasz kitevője).",
+        _ => "A szabály bemenete."
+    };
+
+    private static (string State, string Amount) InputNames(BehaviorHook hook) =>
+        Preferred.TryGetValue(hook.Id, out var names) ? names : (Derive(hook.State, "állapot"), Derive(hook.Amount, "mennyiség"));
+
+    private static string Derive(string label, string fallback)
+    {
+        if (string.IsNullOrWhiteSpace(label) || label.StartsWith("Nem használt")) return fallback;
+        string text = label.Split('(', ';')[0].Trim().ToLowerInvariant();
+        var builder = new StringBuilder();
+        foreach (char c in text) builder.Append(char.IsLetterOrDigit(c) ? c : '_');
+        string name = builder.ToString().Trim('_');
+        while (name.Contains("__")) name = name.Replace("__", "_");
+        return name.Length > 0 && char.IsLetter(name[0]) ? name : fallback;
+    }
+
+    /// <summary>The formula of a built-in rule as the game computes it, where the rule has been moved into the editor.</summary>
+    public static string Default(BehaviorHook hook) => hook.Formula ?? "beépített";
+
+    public static BehaviorGraph Compile(string text, BehaviorGraph target, IReadOnlyList<FormulaName> names)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        var parser = new Parser(text ?? "", names);
+        var graph = new BehaviorGraph { Id = target.Id, Name = target.Name, Hook = target.Hook, Kind = target.Kind, ObjectId = target.ObjectId, Nodes = new() };
+        graph.Output = parser.Parse(graph.Nodes);
+        Layout(graph);
+        return graph;
+    }
+
+    /// <summary>Text for an existing graph; shared nodes repeat in place. Unknown inputs keep their raw key.</summary>
+    public static string Decompile(BehaviorGraph graph, IReadOnlyList<FormulaName> names)
+    {
+        var byId = graph.Nodes.ToDictionary(n => n.Id, StringComparer.Ordinal);
+        string Name(BehaviorNode n) => names.FirstOrDefault(x => x.Operation == n.Operation && (n.Operation is not (BehaviorOperation.NamedValue or BehaviorOperation.Input) || x.Key == n.Key))?.Name ?? n.Key;
+        string Write(string id, int parent, int depth)
+        {
+            if (depth > 64 || !byId.TryGetValue(id ?? "", out var n)) return "?";
+            int own = Precedence(n.Operation);
+            string a(int p) => Write(n.A, p, depth + 1);
+            string b(int p) => Write(n.B, p, depth + 1);
+            string text = n.Operation switch {
+                BehaviorOperation.Constant => n.Value.ToString("0.######", CultureInfo.InvariantCulture),
+                BehaviorOperation.Add => a(own) + " + " + b(own), BehaviorOperation.Subtract => a(own) + " - " + b(own + 1),
+                BehaviorOperation.Multiply => a(own) + " * " + b(own), BehaviorOperation.Divide => a(own) + " / " + b(own + 1),
+                BehaviorOperation.Greater => a(own) + " > " + b(own), BehaviorOperation.Less => a(own) + " < " + b(own),
+                BehaviorOperation.Minimum => $"min({a(0)}; {b(0)})", BehaviorOperation.Maximum => $"max({a(0)}; {b(0)})",
+                BehaviorOperation.Absolute => $"abs({a(0)})", BehaviorOperation.Negate => "-" + a(9),
+                BehaviorOperation.Exp => $"exp({a(0)})", BehaviorOperation.Power => $"hatvány({a(0)}; {b(0)})",
+                BehaviorOperation.Select => $"ha({a(0)}; {b(0)}; {Write(n.C, 0, depth + 1)})",
+                _ => Name(n)
+            };
+            return own > 0 && own < parent ? "(" + text + ")" : text;
+        }
+        return Write(graph.Output, 0, 0);
+    }
+
+    private static int Precedence(BehaviorOperation op) => op switch {
+        BehaviorOperation.Greater or BehaviorOperation.Less => 1, BehaviorOperation.Add or BehaviorOperation.Subtract => 2,
+        BehaviorOperation.Multiply or BehaviorOperation.Divide => 3, _ => 0 };
+
+    private static void Layout(BehaviorGraph graph)
+    {
+        var byId = graph.Nodes.ToDictionary(n => n.Id, StringComparer.Ordinal);
+        var depth = new Dictionary<string, int>(StringComparer.Ordinal);
+        int Depth(string id, int guard) {
+            if (guard > 300 || !byId.TryGetValue(id ?? "", out var n)) return 0;
+            if (depth.TryGetValue(id, out int d)) return d;
+            int inputs = BehaviorModel.Inputs(n.Operation);
+            d = 1 + Math.Max(inputs > 0 ? Depth(n.A, guard + 1) : -1, Math.Max(inputs > 1 ? Depth(n.B, guard + 1) : -1, inputs > 2 ? Depth(n.C, guard + 1) : -1));
+            return depth[id] = d;
+        }
+        foreach (var n in graph.Nodes) Depth(n.Id, 0);
+        foreach (var column in graph.Nodes.GroupBy(n => depth[n.Id]))
+            foreach (var (n, i) in column.Select((n, i) => (n, i))) { n.X = 30 + column.Key * 250; n.Y = 30 + i * 120; }
+    }
+
+    private sealed class Parser
+    {
+        private readonly string text;
+        private readonly Dictionary<string, FormulaName> names;
+        private readonly Dictionary<string, string> locals = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, string> inputs = new(StringComparer.Ordinal);
+        private List<BehaviorNode> nodes;
+        private int position, line = 1, lineStart;
+
+        internal Parser(string text, IReadOnlyList<FormulaName> names)
+        {
+            this.text = text; this.names = names.ToDictionary(n => n.Name, StringComparer.Ordinal);
+        }
+
+        internal string Parse(List<BehaviorNode> into)
+        {
+            nodes = into; string result = null;
+            while (true) {
+                SkipBlank(newlines: true);
+                if (position >= text.Length) break;
+                int start = position;
+                string name = TryAssignment();
+                string value = Expression();
+                SkipBlank(newlines: false);
+                if (position < text.Length && text[position] != '\n' && text[position] != '\r') throw Error("Váratlan jel: " + text[position]);
+                if (name != null) {
+                    if (names.ContainsKey(name)) throw Error($"A „{name}” a szabály bemenete; adj más nevet a köztes értéknek.", start);
+                    locals[name] = value; Node(value).Name = name;
+                }
+                result = value;
+            }
+            if (result == null) throw Error("Üres képlet: írd le, mit számoljon a szabály (például: beépített).");
+            if (nodes.Count > 256) throw Error("Legfeljebb 256 lépésből álló képlet lehet.");
+            return result;
+        }
+
+        private string TryAssignment()
+        {
+            int saved = position, savedLine = line, savedStart = lineStart;
+            if (TryIdentifier(out string name)) {
+                SkipBlank(newlines: false);
+                if (position < text.Length && text[position] == '=') { position++; return name; }
+            }
+            position = saved; line = savedLine; lineStart = savedStart;
+            return null;
+        }
+
+        private string Expression()
+        {
+            string left = Sum();
+            SkipBlank(false);
+            if (Peek('>') || Peek('<')) {
+                var op = text[position++] == '>' ? BehaviorOperation.Greater : BehaviorOperation.Less;
+                return Add(op, op == BehaviorOperation.Greater ? "nagyobb" : "kisebb", left, Sum());
+            }
+            return left;
+        }
+        private string Sum()
+        {
+            string left = Product();
+            while (true) {
+                SkipBlank(false);
+                if (Peek('+')) { position++; left = Add(BehaviorOperation.Add, "összeg", left, Product()); }
+                else if (Peek('-') || Peek('−')) { position++; left = Add(BehaviorOperation.Subtract, "különbség", left, Product()); }
+                else return left;
+            }
+        }
+        private string Product()
+        {
+            string left = Unary();
+            while (true) {
+                SkipBlank(false);
+                if (Peek('*') || Peek('×')) { position++; left = Add(BehaviorOperation.Multiply, "szorzat", left, Unary()); }
+                else if (Peek('/')) { position++; left = Add(BehaviorOperation.Divide, "hányados", left, Unary()); }
+                else return left;
+            }
+        }
+        private string Unary()
+        {
+            SkipBlank(false);
+            if (Peek('-') || Peek('−')) { position++; return Add(BehaviorOperation.Negate, "ellentett", Unary()); }
+            return Primary();
+        }
+        private string Primary()
+        {
+            SkipBlank(false);
+            if (position >= text.Length) throw Error("Hiányzó érték a képlet végén.");
+            if (Peek('(')) { position++; string inner = Expression(); Expect(')'); return inner; }
+            if (char.IsDigit(text[position])) return Number();
+            int start = position;
+            if (!TryIdentifier(out string name)) throw Error("Itt értéket, nevet vagy zárójelet vártam.");
+            SkipBlank(false);
+            if (Peek('(')) return Call(name, start);
+            if (locals.TryGetValue(name, out string local)) return local;
+            if (names.TryGetValue(name, out var known)) {
+                string key = known.Operation + ":" + known.Key;
+                if (!inputs.TryGetValue(key, out string id)) inputs[key] = id = Add(known.Operation, known.Name, key: known.Key);
+                return id;
+            }
+            var close = names.Keys.Concat(locals.Keys).OrderBy(k => Distance(k, name)).FirstOrDefault();
+            throw Error($"Ismeretlen név: „{name}”." + (close != null && Distance(close, name) <= 3 ? $" Erre gondoltál: „{close}”?" : ""), start);
+        }
+        private string Call(string name, int start)
+        {
+            Expect('(');
+            var args = new List<string>();
+            SkipBlank(true);
+            if (!Peek(')')) while (true) { args.Add(Expression()); SkipBlank(true); if (Peek(';')) { position++; continue; } break; }
+            Expect(')');
+            void Count(int n) { if (args.Count != n) throw Error($"A {name} függvénynek {n} értéket kell kapnia, pontosvesszővel elválasztva.", start); }
+            switch (name) {
+                case "min": Count(2); return Add(BehaviorOperation.Minimum, "kisebbik", args[0], args[1]);
+                case "max": Count(2); return Add(BehaviorOperation.Maximum, "nagyobbik", args[0], args[1]);
+                case "abs": Count(1); return Add(BehaviorOperation.Absolute, "abszolút érték", args[0]);
+                case "exp": Count(1); return Add(BehaviorOperation.Exp, "exponenciális", args[0]);
+                case "hatvány": Count(2); return Add(BehaviorOperation.Power, "hatvány", args[0], args[1]);
+                case "ha": Count(3); return Add(BehaviorOperation.Select, "ha", args[0], args[1], args[2]);
+                case "korlát": Count(3);
+                    return Add(BehaviorOperation.Maximum, "korlátozva", args[1], Add(BehaviorOperation.Minimum, "felső korlát", args[0], args[2]));
+                default: throw Error($"Ismeretlen függvény: „{name}”. Használható: min, max, abs, exp, hatvány, ha, korlát.", start);
+            }
+        }
+        private string Number()
+        {
+            int start = position;
+            while (position < text.Length && char.IsDigit(text[position])) position++;
+            if (position + 1 < text.Length && (text[position] == '.' || text[position] == ',') && char.IsDigit(text[position + 1])) {
+                position++; while (position < text.Length && char.IsDigit(text[position])) position++;
+            }
+            double value = double.Parse(text[start..position].Replace(',', '.'), CultureInfo.InvariantCulture);
+            return Add(BehaviorOperation.Constant, text[start..position], value: value);
+        }
+        private bool TryIdentifier(out string name)
+        {
+            int start = position;
+            while (position < text.Length && (char.IsLetterOrDigit(text[position]) || text[position] is '_' or '.')
+                   && (position > start || char.IsLetter(text[position]))) position++;
+            name = text[start..position].TrimEnd('.');
+            position = start + name.Length;
+            return name.Length > 0;
+        }
+        private string Add(BehaviorOperation op, string label, string a = "", string b = "", string c = "", double value = 0, string key = "")
+        {
+            string id = "f" + nodes.Count;
+            nodes.Add(new BehaviorNode { Id = id, Name = label, Operation = op, A = a, B = b, C = c, Value = value, Key = key });
+            return id;
+        }
+        private BehaviorNode Node(string id) => nodes.Find(n => n.Id == id);
+        private bool Peek(char c) => position < text.Length && text[position] == c;
+        private void Expect(char c) { SkipBlank(true); if (!Peek(c)) throw Error($"Itt „{c}” jelet vártam."); position++; }
+        private void SkipBlank(bool newlines)
+        {
+            while (position < text.Length) {
+                char c = text[position];
+                if (c == '#' || c == '/' && position + 1 < text.Length && text[position + 1] == '/') {
+                    while (position < text.Length && text[position] != '\n') position++;
+                } else if (c == ' ' || c == '\t' || newlines && (c == '\r' || c == '\n')) {
+                    if (c == '\n') { line++; lineStart = position + 1; }
+                    position++;
+                } else return;
+            }
+        }
+        private FormulaException Error(string message, int at = -1)
+        {
+            if (at < 0) at = position;
+            int l = 1, start = 0;
+            for (int i = 0; i < Math.Min(at, text.Length); i++) if (text[i] == '\n') { l++; start = i + 1; }
+            return new FormulaException($"{l}. sor, {at - start + 1}. oszlop: {message}", l, at - start + 1);
+        }
+        private static int Distance(string a, string b)
+        {
+            var d = new int[a.Length + 1, b.Length + 1];
+            for (int i = 0; i <= a.Length; i++) d[i, 0] = i;
+            for (int j = 0; j <= b.Length; j++) d[0, j] = j;
+            for (int i = 1; i <= a.Length; i++)
+                for (int j = 1; j <= b.Length; j++)
+                    d[i, j] = Math.Min(Math.Min(d[i - 1, j] + 1, d[i, j - 1] + 1), d[i - 1, j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1));
+            return d[a.Length, b.Length];
+        }
+    }
+}
+
+/// <summary>One soil type of a world: what the map paints and what the rules read as <c>talaj.*</c>.</summary>
+public sealed class SoilTypeDefinition
+{
+    public string Id { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string Color { get; set; } = "#A98A62";
+    /// <summary>Where the generator places it: soil moisture and texture it prefers (0–1).</summary>
+    public double PreferredMoisture { get; set; } = .5;
+    public double PreferredTexture { get; set; } = .5;
+    public double Saturation { get; set; } = 180;
+    public double FieldCapacity { get; set; } = 130;
+    public double WiltingPoint { get; set; } = 25;
+    public double InfiltrationPerHour { get; set; } = 12;
+    public double DrainagePerHour { get; set; } = 2;
+    public double Fertility { get; set; } = 1;
+    public double BearingCapacity { get; set; } = .5;
+}
+
+/// <summary>One tree species: its biology, its size and the price of its timber. The ID is the game's species name.</summary>
+public sealed class SpeciesDefinition
+{
+    public string Id { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string Description { get; set; } = "";
+    public double MaximumAgeYears { get; set; } = 200;
+    public double MatureAgeYears { get; set; } = 35;
+    public double MaximumBiomass { get; set; } = 1;
+    public double AnnualGrowthRate { get; set; } = .06;
+    /// <summary>Site the species prefers and how far from it it still thrives (0–1).</summary>
+    public double PreferredMoisture { get; set; } = .6;
+    public double MoistureTolerance { get; set; } = .3;
+    public double PreferredElevation { get; set; } = .5;
+    public double ElevationTolerance { get; set; } = .4;
+    /// <summary>0 = light-demanding pioneer, 1 = regenerates under a closed canopy.</summary>
+    public double ShadeTolerance { get; set; } = .5;
+    public double WoodDensity { get; set; } = 1;
+    /// <summary>Exponent on the water supply: lower is more drought tolerant.</summary>
+    public double DrySensitivity { get; set; } = .85;
+    public double MatureHeight { get; set; } = 30;
+    public double MaxHeight { get; set; } = 36;
+    public int Capacity { get; set; } = 6;
+    /// <summary>Timber value, thousand forints per cubic metre.</summary>
+    public double TimberPrice { get; set; } = 30;
+
+    internal void Validate()
+    {
+        bool Unit(double v) => v is >= 0 and <= 1;
+        if (string.IsNullOrWhiteSpace(Id) || string.IsNullOrWhiteSpace(Name) || Description == null)
+            throw new InvalidDataException("Minden fafajnak azonosítója és neve legyen.");
+        if (!(MatureAgeYears > 0 && MaximumAgeYears > MatureAgeYears && MaximumAgeYears <= 2000 && MaximumBiomass is > 0 and <= 10
+              && AnnualGrowthRate is > 0 and <= 1 && Unit(PreferredMoisture) && Unit(MoistureTolerance) && MoistureTolerance > 0
+              && Unit(PreferredElevation) && Unit(ElevationTolerance) && ElevationTolerance > 0 && Unit(ShadeTolerance)
+              && WoodDensity is > 0 and <= 5 && DrySensitivity is > 0 and <= 5 && MatureHeight > 0 && MaxHeight >= MatureHeight
+              && MaxHeight <= 100 && Capacity is >= 1 and <= 64 && TimberPrice is >= 0 and <= 10000))
+            throw new InvalidDataException($"{Name}: érvénytelen paraméter (kor, magasság, arányok 0–1, ár nem negatív).");
+    }
+}
+
+/// <summary>
+/// A world as authored in the editor: generated from a seed, then painted. The game builds new worlds from it;
+/// a running world keeps the map it was created with.
+/// </summary>
+public sealed class WorldScenario
+{
+    public string Name { get; set; } = "Új pálya";
+    public int Seed { get; set; } = 42;
+    /// <summary>Tiles per side of the square map.</summary>
+    public int Size { get; set; } = 64;
+    public List<SoilTypeDefinition> SoilTypes { get; set; } = new();
+    /// <summary>Painted soil: soil type ID by tile ID, over the generated map.</summary>
+    public Dictionary<int, string> SoilPaint { get; set; } = new();
+    /// <summary>Painted terrain: absolute height by corner (node) ID; water lies where corners are below sea level.</summary>
+    public Dictionary<int, int> HeightPaint { get; set; } = new();
+    /// <summary>Painted initial forest: species ID by tile ID; an empty ID clears the tile.</summary>
+    public Dictionary<int, string> ForestPaint { get; set; } = new();
+    /// <summary>Springs: water added to a tile's surface, mm per environment hour. Streams and rivers start here.</summary>
+    public Dictionary<int, double> Springs { get; set; } = new();
+    /// <summary>The species of this world; empty means the built-in species unchanged.</summary>
+    public List<SpeciesDefinition> Species { get; set; } = new();
+
+    public void Validate()
+    {
+        if (string.IsNullOrWhiteSpace(Name) || SoilTypes == null || SoilTypes.Count is 0 or > 64 || SoilPaint == null)
+            throw new InvalidDataException("A pályának neve és 1–64 talajtípusa legyen.");
+        if (Size is < 16 or > 128) throw new InvalidDataException("A pálya mérete 16–128 csempe lehet.");
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var s in SoilTypes) {
+            if (s == null || string.IsNullOrWhiteSpace(s.Id) || string.IsNullOrWhiteSpace(s.Name) || !ids.Add(s.Id))
+                throw new InvalidDataException("Minden talajtípusnak egyedi azonosítója és neve legyen.");
+            if (!(s.WiltingPoint >= 0 && s.FieldCapacity > s.WiltingPoint && s.Saturation > s.FieldCapacity))
+                throw new InvalidDataException($"{s.Name}: hervadáspont < szabadföldi vízkapacitás < telítettség legyen.");
+            if (!(s.InfiltrationPerHour >= 0 && s.DrainagePerHour >= 0 && s.Fertility is >= 0 and <= 1 && s.BearingCapacity is >= 0 and <= 1
+                  && s.PreferredMoisture is >= 0 and <= 1 && s.PreferredTexture is >= 0 and <= 1))
+                throw new InvalidDataException($"{s.Name}: érvénytelen paraméter (arányok 0–1, ráták nem negatívak).");
+        }
+        HeightPaint ??= new(); ForestPaint ??= new(); Species ??= new(); Springs ??= new();
+        foreach (var (tile, rate) in Springs)
+            if (tile < 0 || tile >= Size * Size || !(rate > 0 && rate <= 100000)) throw new InvalidDataException("Egy forrás érvénytelen csempére mutat, vagy a hozama nem 0 és 100 000 mm/óra közötti.");
+        var species = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var s in Species) {
+            if (s == null || !species.Add(s.Id ?? "")) throw new InvalidDataException("Ismétlődő fafaj.");
+            s.Validate();
+        }
+        foreach (var (node, height) in HeightPaint)
+            if (node < 0 || node >= (Size + 1) * (Size + 1) || height < 0) throw new InvalidDataException("A festett domborzat érvénytelen pontra vagy magasságra mutat.");
+        foreach (var (tile, kind) in ForestPaint)
+            if (tile < 0 || tile >= Size * Size || kind == null || kind.Length > 0 && species.Count > 0 && !species.Contains(kind))
+                throw new InvalidDataException("A festett erdő ismeretlen fafajra vagy csempére mutat.");
+        foreach (var (tile, soil) in SoilPaint)
+            if (tile < 0 || tile >= Size * Size || !ids.Contains(soil)) throw new InvalidDataException("A festett talaj ismeretlen talajtípusra vagy csempére mutat.");
+    }
+}

@@ -130,7 +130,7 @@ internal sealed partial class RuleEditorView
         ImGui.BeginChild("workshop-phase", new Vec2(0, -54), ImGuiChildFlags.None,
             workshopPhase == WorkshopPhase.Edit ? ImGuiWindowFlags.NoScrollbar : ImGuiWindowFlags.None);
         if (workshopPhase == WorkshopPhase.Trial) WorkshopTrial(world);
-        else if (workshopPhase != WorkshopPhase.Apply && workshopTool == WorkshopTool.System) systemView.Draw(SystemModel(), OpenSystemProcess, OpenSystemVariable);
+        else if (workshopPhase != WorkshopPhase.Apply && workshopTool == WorkshopTool.System) systemView.Draw(SystemModel(), SystemHost(world));
         else if (workshopPhase == WorkshopPhase.Apply) WorkshopApply(world);
         else if (workshopTool == WorkshopTool.Objects) ObjectsView(world);
         else if (workshopTool == WorkshopTool.Map) currentRules.Draw(world,

@@ -77,9 +77,48 @@ namespace ForesTycoon
         {
             vehicles.RoadState = id => map.IsRoadTile(id)
                 ? (map.GetRoadPaving(id) == RoadPaving.Asphalt ? RoadSurface.Asphalt : RoadSurface.Gravel, map.GetRoadCondition(id))
-                : (RoadSurface.Dirt, 0.2f - 0.2f * map.GetSkidTrailWear(id));
+                : (RoadSurface.Dirt, (0.2f - 0.2f * map.GetSkidTrailWear(id)) * Trafficability(id));
             vehicles.RoadWear = ApplyTrafficWear;
             vehicles.RoadLoad = mass => RoadTrafficParameters.Load(mass, Tuning);
+        }
+        /// <summary>Soaked soil with low bearing capacity makes dirt tracks rough: lower condition, more rolling resistance.</summary>
+        internal float Trafficability(int id)
+        {
+            if (Environment == null) return 1;
+            var (wetness, bearing) = Environment.Trafficability(id);
+            double native = 1 - wetness * (1 - bearing);
+            if (behaviorPolicy.Overrides("trail.trafficability", "tile"))
+                native = behaviorPolicy.Evaluate(new("trail.trafficability", "tile", (ulong)id, native, Time: forest.ForestYear, State: wetness, Amount: bearing));
+            return (float)System.Math.Clamp(native, 0, 1);
+        }
+        /// <summary>A vertical section of one tile: the current value of its per-tile quantities, by system-model ID.</summary>
+        internal Dictionary<string, string> DescribeTile(int id)
+        {
+            var result = new Dictionary<string, string>(System.StringComparer.Ordinal);
+            if (id < 0 || id >= map.Tiles.Count) return result;
+            if (Soils != null) {
+                var profile = Soils.Profile(id);
+                result["soil.profile"] = profile.Name;
+                result["soil.fertility"] = profile.Properties.Fertility.ToString("0.00");
+                result["soil.bearing"] = EnvironmentSystem.BearingCapacity(profile.Properties).ToString("0.00");
+            }
+            if (Environment != null) {
+                var cell = Environment.Cell(id);
+                result["water.root"] = $"{cell.Soil:0.#} / {cell.Capacity:0} mm";
+                result["water.deep"] = $"{cell.Deep:0.#} mm";
+                result["water.surface"] = $"{cell.Surface:0.##} mm";
+                result["water.canopy"] = $"{cell.Canopy:0.##} mm";
+                result["water.growthFactor"] = cell.GrowthFactor.ToString("0.00");
+            }
+            if (forest.TryGetStand(id, out var stand) && stand.Species != ForestSpecies.None) {
+                result["forest.trees"] = $"{ForestSpeciesTraits.For(stand.Species).Name}, {stand.AgeYears:0} év";
+                result["forest.health"] = stand.Health.ToString("0.00");
+                result["forest.volume"] = $"{ForestSystem.TimberCubicMetres(stand):0.#} m³";
+            }
+            if (map.IsRoadTile(id)) result["road.condition"] = map.GetRoadCondition(id).ToString("0.00") + " · " + (map.GetRoadPaving(id) == RoadPaving.Asphalt ? "aszfalt" : "makadám");
+            else result["trail.trafficability"] = Trafficability(id).ToString("0.00") + (map.IsSkidTrail(id) ? " · közelítőnyom" : " · földfelszín");
+            if (map.IsSkidTrail(id)) result["trail.wear"] = map.GetSkidTrailWear(id).ToString("0.00");
+            return result;
         }
         internal void ApplyTrafficWear(int id, float amount)
         {

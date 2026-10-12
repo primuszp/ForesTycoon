@@ -18,6 +18,8 @@ namespace ForesTycoon.Ecology
         bool IsImpervious(int tileId) => false;
         bool IsWaterOutlet(int tileId) => false;
         float GetNormalizedElevation(int tileId);
+        /// <summary>Ground height in metres, for water that flows by its level. Fallback: a scaled normalised elevation.</summary>
+        float GetGroundHeight(int tileId) => GetNormalizedElevation(tileId) * 100f;
         int GetAdjacentTileIds(int tileId, Span<int> destination);
         /// <summary>How the initial forest should be laid out; <see cref="ForestPattern.Natural"/> follows site suitability.</summary>
         ForestPattern ForestPattern => ForestPattern.Natural;

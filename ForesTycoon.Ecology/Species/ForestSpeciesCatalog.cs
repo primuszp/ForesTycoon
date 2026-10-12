@@ -32,6 +32,8 @@ namespace ForesTycoon.Ecology
         private static readonly ForestSpeciesTraits[] Table = Build();
 
         internal static ForestSpeciesTraits For(ForestSpecies species) =>
+            ForestSpeciesBook.TryTraits(species, out var edited) ? edited : Builtin(species);
+        internal static ForestSpeciesTraits Builtin(ForestSpecies species) =>
             (int)species < Table.Length && Table[(int)species].Preset != null ? Table[(int)species] : Table[(int)ForestSpecies.Beech];
 
         /// <summary>Real species in menu order: classic four, other trees, shrubs.</summary>

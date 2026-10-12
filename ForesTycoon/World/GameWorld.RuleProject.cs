@@ -16,7 +16,10 @@ sealed partial class GameWorld
         "world.snow", "world.water", "world.income", "world.expenses", "world.runningCosts", "world.balance"
     };
     internal RuleProject RuleProjectDocument => new() { Name = ruleProjectName, Road = RuleDocument,
-        Tuning = Tuning.ToOverrides(), Behaviors = BehaviorDocument, Dynamics = dynamics.Document, Algorithms = AlgorithmSnapshot() };
+        Tuning = Tuning.ToOverrides(), Behaviors = BehaviorDocument, Dynamics = dynamics.Document, Algorithms = AlgorithmSnapshot(),
+        World = ruleProjectWorld == null ? null : RuleProject.FromJson(new RuleProject { World = ruleProjectWorld }.ToJson()).World };
+    /// <summary>The world map of the active project: used by the next new world, never applied to the running one.</summary>
+    private WorldScenario ruleProjectWorld;
     private AlgorithmGraphReference AlgorithmSnapshot() => algorithmGraphs == null ? null : new() {
         Revision = algorithmGraphs.Revision, BundlePath = algorithmGraphs.BundlePath,
         WorkspaceRoot = algorithmGraphs.WorkspaceRoot, HostVersion = algorithmGraphs.HostVersion
@@ -53,6 +56,7 @@ sealed partial class GameWorld
             || !algorithms.Revision.All(char.IsAsciiHexDigit) || string.IsNullOrWhiteSpace(algorithms.BundlePath)
             || !Path.IsPathFullyQualified(algorithms.BundlePath) || string.IsNullOrWhiteSpace(algorithms.WorkspaceRoot)
             || !Path.IsPathFullyQualified(algorithms.WorkspaceRoot))) throw new InvalidDataException("Hibás algoritmusgráf-hivatkozás.");
+        copy.World?.Validate();
         var road = new CompiledRoadRule(copy.Road); road.ValidateRange();
         var tuning = GameTuning.FromOverrides(copy.Tuning);
         var runtime = new DynamicsRuntime(copy.Dynamics, RuleWorldFields, readWorld);
@@ -77,7 +81,11 @@ sealed partial class GameWorld
         next.Dynamics.Preserve(dynamics);
         next.Policy.Controllers.PreserveUnchanged(behaviorPolicy.Controllers);
         bool refresh = ForestBehaviorSignature(BehaviorDocument) != ForestBehaviorSignature(next.Document.Behaviors);
-        roadRule = next.Road; dynamics = next.Dynamics; behaviorPolicy = next.Policy; ruleProjectName = next.Document.Name;
+        roadRule = next.Road; dynamics = next.Dynamics; behaviorPolicy = next.Policy; ruleProjectName = next.Document.Name; ruleProjectWorld = next.Document.World;
+        // Species numbers are world content the rules read; a project change installs them for the whole process.
+        ForestSpeciesBook.Apply(SpeciesEdits(next.Document.World));
+        // Springs are part of the hydrology the rules run: a project change moves, adds or stops them at once.
+        Environment.Springs = next.Document.World?.Springs;
         algorithmGraphs = next.Document.Algorithms ?? AlgorithmBuild.CurrentReference;
         BindBehaviors(); ApplyTuning(next.Tuning);
         if (refresh) forest.RefreshEnvironmentRates();

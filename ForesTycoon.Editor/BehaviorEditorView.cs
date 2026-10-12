@@ -150,6 +150,26 @@ namespace ForesTycoon.Editor
             else if (graph != null) Inspector(world, graph);
             ImGui.EndChild();
         }
+        /// <summary>
+        /// Makes a quantity influence a hook's result: result × max(0, 1 + strength × (quantity − reference)).
+        /// Creates the type graph when missing; the new constants stay editable nodes of the graph.
+        /// </summary>
+        internal void AddInfluence(BehaviorHook hook, string key, string name, double reference, double strength)
+        {
+            SelectHook(hook);
+            var graph = model.Graphs.Find(g => g.Id == selectedGraph);
+            var output = graph?.Nodes.Find(n => n.Id == graph.Output);
+            if (output == null || graph.Nodes.Count > 246) return;
+            Remember();
+            selectedNode = AuthoringOperations.AddInfluence(graph, key, name, reference, strength);
+        }
+        /// <summary>Replaces the type-level graph of the graph's hook (a rule formula compiled by the world editor).</summary>
+        internal void SetTypeGraph(BehaviorGraph graph)
+        {
+            Remember();
+            model.Graphs.RemoveAll(g => g.Hook == graph.Hook && g.Kind == graph.Kind && g.ObjectId == null);
+            model.Graphs.Add(graph); selectedGraph = graph.Id; selectedNode = graph.Output;
+        }
         internal void AddOutputMultiplier()
         {
             if (selectedController != null) return;

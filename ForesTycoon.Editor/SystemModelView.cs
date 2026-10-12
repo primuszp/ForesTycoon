@@ -8,293 +8,518 @@ using Vec4 = System.Numerics.Vector4;
 
 namespace ForesTycoon.Editor;
 
+/// <summary>What the system map needs from its host: live values, one tile's section and the workshop's editing panels.</summary>
+internal sealed class SystemModelHost
+{
+    internal Func<string, double> Value = _ => double.NaN;
+    internal Func<int, IReadOnlyDictionary<string, string>> Tile = _ => new Dictionary<string, string>();
+    internal int TileCount;
+    internal Action<SystemProcess> OpenProcess = _ => { };
+    internal Action<SystemProcess> DrawProcess = _ => { };
+    internal Action<SystemVariable> DrawQuantity = _ => { };
+    internal Func<SystemProcess, string> Editable = _ => "";
+}
+
 /// <summary>
-/// The whole game as one stock-and-flow model: quantities in subsystem columns ordered along the causal chain
-/// (weather and water, forest, harvesting, roads, economy), their influences, coupled groups and feedback loops.
-/// A quantity or loop selection explains itself in the inspector; its processes open the rule workshop.
+/// The game model as a stack of tile layers — atmosphere, vegetation, surface, terrain, soil, groundwater — beside the
+/// non-spatial management. Every rule is a link between quantities, often across layers (soil and groundwater decide
+/// how passable a dirt track is). Three levels drawn like the formula graphs: the layer stack, one layer with its
+/// neighbours, one feedback loop. The inspector edits the selection: wording, influences, parameters and formulas.
 /// </summary>
 internal sealed class SystemModelView
 {
-    // Left to right roughly follows the material chain: water feeds trees, trees become timber, roads carry it, it is sold.
-    private static readonly string[] ColumnOrder = { "environment", "forest", "logistics", "roads", "economy", "world", "visual" };
-    private const float NodeWidth = 150, NodeHeight = 26, RowStep = 31, ColumnStep = 192, ColumnTop = 40;
+    private const float BandLabel = 176, ChipWidth = 200, ChipHeight = 30, ChipStepX = 208, ChipStepY = 38, BandGap = 16, ChipColumns = 3;
+    private const float BandWidth = BandLabel + ChipColumns * ChipStepX + 6;
+    private const float NodeWidth = 196, NodeHeader = 24, NodeHeight = 58, GhostHeight = 40, LayerStep = 260, RowStep = 74;
 
-    private SystemModelAnalysis laidOut;
-    private bool laidOutAll, showAll, fitRequested = true;
-    private readonly Dictionary<string, Vec2> positions = new(StringComparer.Ordinal);
-    private readonly List<(string Subsystem, Vec2 At)> headings = new();
+    private enum Level { Stack, Layer, Loop }
+    private Level level = Level.Stack, beforeLoop = Level.Stack;
+    private string layer;
+    private SystemModelAnalysis laidOut; private string laidOutFor, laidOutSelection; private Level laidOutLevel; private SystemLoop laidOutLoop;
+    private readonly Dictionary<string, (Vec2 At, Vec2 Size, bool Ghost)> boxes = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (Vec2 At, Vec2 Size)> bands = new(StringComparer.Ordinal);
+    private readonly List<(Vec2 Min, Vec2 Max, string Process)> labels = new();
     private Vec2 pan = new(20, 20);
     private float zoom = 0.8f;
+    private bool fitRequested = true;
     private string search = "";
+    private int tile = -1;
+    private IReadOnlyDictionary<string, string> section = new Dictionary<string, string>();
 
     internal string SelectedVariable { get; private set; }
     internal SystemLoop SelectedLoop { get; private set; }
-    internal void Focus(string variable) { SelectedVariable = variable; SelectedLoop = null; fitRequested = true; }
-    internal void FocusLoop(SystemLoop loop) { SelectedLoop = loop; SelectedVariable = null; }
+    internal int SelectedTile { get => tile; set => tile = value; }
 
-    internal static Vec4 SubsystemColour(SystemModelAnalysis model, string subsystem) =>
-        EditorStyle.TopicColour(Math.Max(0, model.Vocabulary.SubsystemIndex(subsystem)));
+    internal void ShowStack() { level = Level.Stack; SelectedVariable = null; SelectedLoop = null; fitRequested = true; }
+    internal void ShowLayer(string id) { level = Level.Layer; layer = id; SelectedLoop = null; fitRequested = true; }
+    internal void Focus(SystemModelAnalysis model, string variable)
+    {
+        SelectedLoop = null; SelectedVariable = variable;
+        if (model?.Variable(variable) is SystemVariable v && v.Layer.Length > 0) ShowLayer(v.Layer);
+    }
+    internal void FocusLoop(SystemLoop loop)
+    {
+        if (level != Level.Loop) beforeLoop = level;
+        SelectedLoop = loop; SelectedVariable = null; level = Level.Loop; fitRequested = true;
+    }
 
-    /// <summary>A loop as one readable line, closed back to its first quantity.</summary>
-    internal static string Chain(SystemModelAnalysis model, SystemLoop loop) =>
-        string.Join(" › ", loop.Variables.Append(loop.Variables[0]).Select(model.Name));
+    // Colours follow what the layer is: air, leaves, track, rock, earth, water; management in gold.
+    internal static Vec4 LayerColour(string id) => id switch {
+        "atmosphere" => new(0.62f, 0.78f, 0.90f, 1), "vegetation" => new(0.47f, 0.72f, 0.38f, 1), "surface" => new(0.88f, 0.58f, 0.32f, 1),
+        "terrain" => new(0.70f, 0.66f, 0.56f, 1), "soil" => new(0.66f, 0.48f, 0.32f, 1), "groundwater" => new(0.36f, 0.58f, 0.88f, 1),
+        "management" => new(0.90f, 0.78f, 0.40f, 1), _ => new(0.6f, 0.6f, 0.6f, 1) };
+    private static Vec4 Colour(SystemVariable v) => LayerColour(v.Layer);
+    private static string LayerName(SystemModelAnalysis model, string id) => model.Vocabulary.Layers.Find(l => l.Id == id)?.Name ?? id;
+    internal static string Chain(SystemModelAnalysis model, SystemLoop loop) => string.Join(" › ", loop.Variables.Append(loop.Variables[0]).Select(model.Name));
+    private static bool Shown(SystemVariable v) => SystemModelAnalysis.OnLayer(v);
+    private static string KindTag(SystemVariableKind kind) => kind switch {
+        SystemVariableKind.Stock => "KÉSZLET", SystemVariableKind.Flow => "ÁRAMLÁS", SystemVariableKind.Auxiliary => "SEGÉD",
+        SystemVariableKind.Parameter => "ADAT", _ => "TÉRKÉP" };
 
-    internal void Draw(SystemModelAnalysis model, Action<SystemProcess> openProcess, Action<SystemVariable> openVariable)
+    internal static IEnumerable<(string From, string To, SystemProcess[] Processes)> CrossLayerRules(SystemModelAnalysis model) => model.CrossLayerRules();
+
+    internal void Draw(SystemModelAnalysis model, SystemModelHost host)
     {
         if (SelectedVariable != null && model.Variable(SelectedVariable) == null) SelectedVariable = null;
-        if (laidOut != model || laidOutAll != showAll) Layout(model);
-        float inspector = Math.Min(330, ImGui.GetContentRegionAvail().X * .32f);
+        if (level == Level.Layer && model.Vocabulary.LayerIndex(layer) < 0) ShowStack();
+        if (level == Level.Loop && SelectedLoop == null) level = beforeLoop;
+        section = tile >= 0 ? host.Tile(tile) : new Dictionary<string, string>();
+        Breadcrumb(model, host);
+        float inspector = Math.Min(360, ImGui.GetContentRegionAvail().X * .33f);
         ImGui.BeginChild("system-canvas", new Vec2(-inspector - 8, 0), ImGuiChildFlags.Borders, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
-        Canvas(model);
+        Canvas(model, host);
         ImGui.EndChild(); ImGui.SameLine();
         ImGui.BeginChild("system-inspector", new Vec2(0, 0), ImGuiChildFlags.Borders);
-        if (SelectedLoop != null) LoopDetails(model, SelectedLoop, openProcess);
-        else if (model.Variable(SelectedVariable) is SystemVariable v) VariableDetails(model, v, openProcess, openVariable);
-        else Overview(model);
+        if (SelectedLoop != null && level == Level.Loop) LoopDetails(model, SelectedLoop, host);
+        else if (model.Variable(SelectedVariable) is SystemVariable v) VariableDetails(model, v, host);
+        else if (level == Level.Layer) LayerDetails(model, host);
+        else StackDetails(model, host);
         ImGui.EndChild();
     }
 
+    private void Breadcrumb(SystemModelAnalysis model, SystemModelHost host)
+    {
+        if (level == Level.Stack) { ImGui.AlignTextToFramePadding(); EditorStyle.Text(HudTheme.Parchment, "Rétegek"); }
+        else if (EditorStyle.QuietButton("‹ Rétegek")) ShowStack();
+        if (level == Level.Layer) {
+            ImGui.SameLine(); ImGui.AlignTextToFramePadding(); EditorStyle.Text(HudTheme.Muted, "›"); ImGui.SameLine();
+            ImGui.AlignTextToFramePadding(); EditorStyle.Text(LayerColour(layer), LayerName(model, layer));
+        } else if (level == Level.Loop) {
+            ImGui.SameLine(); ImGui.AlignTextToFramePadding(); EditorStyle.Text(HudTheme.Muted, "›"); ImGui.SameLine();
+            ImGui.AlignTextToFramePadding(); EditorStyle.Text(HudTheme.AmberAccent, $"Visszacsatolási kör · {SelectedLoop?.Length} lépés");
+        }
+        ImGui.SameLine(0, 20);
+        foreach (var l in model.Vocabulary.Layers) {
+            ImGui.SameLine(0, 4);
+            if (EditorStyle.Chip(l.Name, LayerColour(l.Id), "crumb" + l.Id, true)) { SelectedVariable = null; ShowLayer(l.Id); }
+        }
+        // The tile whose section the map shows.
+        ImGui.AlignTextToFramePadding(); EditorStyle.Text(HudTheme.Muted, "Csempe:"); ImGui.SameLine();
+        ImGui.SetNextItemWidth(130);
+        int value = tile;
+        if (ImGui.InputInt("##section-tile", ref value)) tile = Math.Clamp(value, -1, Math.Max(-1, host.TileCount - 1));
+        ImGui.SameLine();
+        if (tile < 0) EditorStyle.Text(HudTheme.Muted, "nincs kiválasztva: a dobozok a világ összesített értékeit mutatják, ahol van ilyen");
+        else EditorStyle.Text(HudTheme.Info, section.TryGetValue("soil.profile", out var soil) ? $"#{tile} metszete · talaj: {soil}" : $"#{tile} metszete");
+    }
+
+    // ── Layout ───────────────────────────────────────────────────────────
     private void Layout(SystemModelAnalysis model)
     {
-        laidOut = model; laidOutAll = showAll; positions.Clear(); headings.Clear(); fitRequested = true;
-        int column = 0;
-        foreach (string subsystem in ColumnOrder.Concat(model.Vocabulary.Subsystems.Select(s => s.Id)).Distinct()) {
-            var members = model.Variables.Where(v => v.Subsystem == subsystem && (showAll || SystemVocabulary.Endogenous(v.Kind)))
-                .OrderBy(v => v.Kind).ThenBy(v => v.Name, StringComparer.CurrentCulture).ToArray();
-            if (members.Length == 0) continue;
-            var at = new Vec2(column++ * ColumnStep, 0);
-            headings.Add((subsystem, at));
-            for (int i = 0; i < members.Length; i++) positions[members[i].Id] = at + new Vec2(0, ColumnTop + i * RowStep);
+        laidOut = model; laidOutFor = layer; laidOutLevel = level; laidOutLoop = SelectedLoop; laidOutSelection = SelectedVariable;
+        boxes.Clear(); bands.Clear(); fitRequested = true;
+        if (level == Level.Stack) StackLayout(model);
+        else if (level == Level.Loop) {
+            int n = SelectedLoop.Length; float radius = Math.Max(200, n * 78);
+            for (int i = 0; i < n; i++) {
+                double angle = -Math.PI / 2 + 2 * Math.PI * i / n;
+                var centre = new Vec2((float)Math.Cos(angle) * radius * 1.35f, (float)Math.Sin(angle) * radius);
+                boxes[SelectedLoop.Variables[i]] = (centre - new Vec2(NodeWidth, NodeHeight) / 2, new Vec2(NodeWidth, NodeHeight), false);
+            }
+        } else LayerLayout(model);
+    }
+
+    private void StackLayout(SystemModelAnalysis model)
+    {
+        float y = 0;
+        foreach (var l in model.Vocabulary.Layers) {
+            // Management is not per tile: only its stocks and flows, below the tile's layers.
+            var members = Members(model, l.Id).Where(v => l.PerTile || v.Kind is SystemVariableKind.Stock or SystemVariableKind.Flow).ToArray();
+            if (!l.PerTile) y += BandGap * 2;
+            int rows = Math.Max(1, (members.Length + (int)ChipColumns - 1) / (int)ChipColumns);
+            float height = Math.Max(78, 16 + rows * ChipStepY);
+            bands[l.Id] = (new Vec2(0, y), new Vec2(BandWidth, height));
+            for (int i = 0; i < members.Length; i++)
+                boxes[members[i].Id] = (new Vec2(BandLabel + i % (int)ChipColumns * ChipStepX, y + 12 + i / (int)ChipColumns * ChipStepY), new Vec2(ChipWidth, ChipHeight), false);
+            y += height + BandGap;
         }
     }
 
-    private void Canvas(SystemModelAnalysis model)
+    private static SystemVariable[] Members(SystemModelAnalysis model, string id) => model.Variables.Where(v => v.Layer == id && Shown(v))
+        .OrderBy(v => v.Kind).ThenBy(v => v.Name, StringComparer.CurrentCulture).ToArray();
+
+    /// <summary>The layer's quantities in a compact grid; other layers' sources on the left, consumers on the right.</summary>
+    private void LayerLayout(SystemModelAnalysis model)
     {
+        var ordered = Members(model, layer);
+        var members = ordered.Select(v => v.Id).ToHashSet(StringComparer.Ordinal);
+        int columns = ordered.Length > 12 ? 3 : 2, rows = Math.Max(1, (ordered.Length + columns - 1) / columns);
+        for (int i = 0; i < ordered.Length; i++)
+            boxes[ordered[i].Id] = (new Vec2(i % columns * (NodeWidth + 44), (i / columns - (rows - 1) / 2f) * RowStep), new Vec2(NodeWidth, NodeHeight), false);
+        float right = columns * (NodeWidth + 44) + 60;
+        // Other layers appear only around the selected quantity; the layer itself stays readable.
+        bool Outside(string id) => !members.Contains(id) && model.Variable(id) is SystemVariable v && Shown(v);
+        bool Around(SystemInfluence e) => SelectedVariable != null && (e.From == SelectedVariable || e.To == SelectedVariable);
+        var sources = model.Influences.Where(e => members.Contains(e.To) && Outside(e.From) && Around(e)).Select(e => e.From).Distinct()
+            .OrderBy(id => model.Vocabulary.LayerIndex(model.Variable(id).Layer)).ThenBy(model.Name).ToArray();
+        var consumers = model.Influences.Where(e => members.Contains(e.From) && Outside(e.To) && Around(e)).Select(e => e.To).Where(id => !sources.Contains(id)).Distinct()
+            .OrderBy(id => model.Vocabulary.LayerIndex(model.Variable(id).Layer)).ThenBy(model.Name).ToArray();
+        Place(sources, -NodeWidth - 110, GhostHeight, true);
+        Place(consumers, right, GhostHeight, true);
+
+        void Place(IEnumerable<string> ids, float x, float height, bool ghost)
+        {
+            var list = ids.ToArray();
+            float step = ghost ? GhostHeight + 10 : RowStep, top = -(list.Length - 1) * step / 2;
+            for (int i = 0; i < list.Length; i++) boxes[list[i]] = (new Vec2(x, top + i * step), new Vec2(NodeWidth, height), ghost);
+        }
+    }
+
+    // ── Canvas ───────────────────────────────────────────────────────────
+    private void Canvas(SystemModelAnalysis model, SystemModelHost host)
+    {
+        if (laidOut != model || laidOutFor != layer || laidOutLevel != level || laidOutLoop != SelectedLoop
+            || level == Level.Layer && laidOutSelection != SelectedVariable) Layout(model);
         Vec2 origin = ImGui.GetCursorScreenPos(), size = ImGui.GetContentRegionAvail();
         size = new Vec2(Math.Max(1, size.X), Math.Max(1, size.Y));
-        if (fitRequested && positions.Count > 0) Fit(size);
+        if (fitRequested && boxes.Count + bands.Count > 0) Fit(size);
         ImGui.InvisibleButton("system-map", size, ImGuiButtonFlags.MouseButtonLeft | ImGuiButtonFlags.MouseButtonRight);
         bool hover = ImGui.IsItemHovered(); var io = ImGui.GetIO();
         if (hover && ImGui.IsMouseDragging(ImGuiMouseButton.Right)) pan += io.MouseDelta;
-        if (hover && io.MouseWheel != 0) {
-            float next = Math.Clamp(zoom * (1 + io.MouseWheel * 0.1f), 0.3f, 1.8f);
+        if (hover && io.MouseWheel != 0 && level == Level.Stack && !io.KeyCtrl) pan.Y += io.MouseWheel * 60;
+        else if (hover && io.MouseWheel != 0) {
+            float next = Math.Clamp(zoom * (1 + io.MouseWheel * 0.1f), 0.35f, 1.6f);
             pan = io.MousePos - origin - (io.MousePos - origin - pan) * next / zoom; zoom = next;
         }
         var draw = ImGui.GetWindowDrawList(); draw.PushClipRect(origin, origin + size, true);
         EditorStyle.Grid(draw, origin, size, pan, zoom);
         Vec2 Screen(Vec2 p) => origin + pan + p * zoom;
-        Vec2 box = new Vec2(NodeWidth, NodeHeight) * zoom;
+        string over = null, overBand = null;
+        foreach (var (id, box) in boxes) if (hover && Inside(io.MousePos, Screen(box.At), box.Size * zoom)) over = id;
+        if (over == null) foreach (var (id, band) in bands) if (hover && Inside(io.MousePos, Screen(band.At), band.Size * zoom)) overBand = id;
+        labels.Clear();
 
-        string over = null;
-        foreach (var (id, p) in positions) if (hover && Inside(io.MousePos, Screen(p), box)) over = id;
-        string query = search.Trim();
-        bool Matches(string id) => query.Length > 0 && (model.Name(id) + " " + id).Contains(query, StringComparison.OrdinalIgnoreCase);
-
-        // What is in focus: a loop, or a quantity with its direct neighbours, or (hovered) a quantity under the cursor.
-        string focus = SelectedLoop == null ? SelectedVariable ?? over : null;
-        var loopEdges = new HashSet<(string, string)>();
-        if (SelectedLoop != null)
-            for (int i = 0; i < SelectedLoop.Length; i++) loopEdges.Add((SelectedLoop.Variables[i], SelectedLoop.Variables[(i + 1) % SelectedLoop.Length]));
-        var lit = new HashSet<string>(StringComparer.Ordinal);
-        if (SelectedLoop != null) lit.UnionWith(SelectedLoop.Variables);
-        else if (focus != null) {
-            lit.Add(focus);
-            foreach (var e in model.Influences) { if (e.From == focus) lit.Add(e.To); if (e.To == focus) lit.Add(e.From); }
-        }
-        bool dimming = lit.Count > 0 || query.Length > 0;
-
-        foreach (var (subsystem, at) in headings) {
-            Vec4 colour = SubsystemColour(model, subsystem); Vec2 h = Screen(at);
-            draw.AddRectFilled(h, h + new Vec2(NodeWidth * zoom, 3 * zoom), EditorStyle.U(EditorStyle.Fade(colour, 0.85f)), 2);
-            string name = model.Vocabulary.Subsystems.Find(s => s.Id == subsystem)?.Name.ToUpperInvariant() ?? subsystem;
-            draw.AddText(ImGui.GetFont(), Math.Max(11, ImGui.GetFontSize() * zoom * .85f), h + new Vec2(0, 8 * zoom), EditorStyle.U(colour), name);
-        }
-
-        // Influences: faint context, coloured around the focus, a bold arrowed ring for the selected loop.
-        foreach (var e in model.Influences) {
-            if (!positions.TryGetValue(e.From, out var a) || !positions.TryGetValue(e.To, out var b)) continue;
-            bool inLoop = loopEdges.Contains((e.From, e.To));
-            bool incoming = focus != null && e.To == focus, outgoing = focus != null && e.From == focus;
-            if (SelectedLoop != null && !inLoop) { if (dimming) continue; }
-            uint colour = inLoop || outgoing ? EditorStyle.Selection : incoming ? EditorStyle.U(EditorStyle.OperationKind)
-                : EditorStyle.U(1, 1, 1, dimming ? 0.025f : 0.06f);
-            float width = inLoop ? 3f : incoming || outgoing ? 2f : 1f;
-            Edge(draw, Screen(a), Screen(b), box, (ColumnStep - NodeWidth) * zoom, colour, width, inLoop || incoming || outgoing);
-        }
-
-        foreach (var (id, p) in positions) {
-            var v = model.Variable(id); Vec2 s = Screen(p);
-            Vec4 colour = SubsystemColour(model, v.Subsystem);
-            bool selected = id == SelectedVariable || SelectedLoop?.Variables.Contains(id) == true;
-            float alpha = !dimming || lit.Contains(id) || Matches(id) ? 1 : 0.28f;
-            float radius = v.Kind switch { SystemVariableKind.Stock => 2, SystemVariableKind.Flow => NodeHeight / 2, SystemVariableKind.Auxiliary => 9, _ => 4 } * zoom;
-            Vec4 fill = v.Kind switch {
-                SystemVariableKind.Stock => EditorStyle.Dim(colour, 0.38f), SystemVariableKind.Flow => EditorStyle.Dim(colour, 0.24f),
-                SystemVariableKind.Auxiliary => new Vec4(0.115f, 0.145f, 0.125f, 1), _ => new Vec4(0.09f, 0.11f, 0.10f, 1) };
-            draw.AddRectFilled(s, s + box, EditorStyle.U(EditorStyle.Fade(fill, alpha * (id == over ? 1 : 0.95f))), radius);
-            float border = selected ? 2.6f : v.Kind == SystemVariableKind.Stock ? 1.8f : 1f;
-            uint borderColour = selected ? EditorStyle.Selection : Matches(id) ? EditorStyle.U(HudTheme.Info)
-                : EditorStyle.U(EditorStyle.Fade(SystemVocabulary.Endogenous(v.Kind) ? colour : HudTheme.Muted, alpha * (v.Kind == SystemVariableKind.Stock ? 0.95f : 0.55f)));
-            draw.AddRect(s, s + box, borderColour, radius, ImDrawFlags.None, border);
-            draw.PushClipRect(s, s + box, true);
-            float font = Math.Max(11, ImGui.GetFontSize() * zoom * .92f);
-            draw.AddText(ImGui.GetFont(), font, s + new Vec2(8 * zoom, (box.Y - font) / 2),
-                EditorStyle.U(EditorStyle.Fade(SystemVocabulary.Endogenous(v.Kind) ? HudTheme.Parchment : HudTheme.Muted, Math.Max(alpha, 0.35f))), v.Name);
-            draw.PopClipRect();
-        }
+        if (level == Level.Stack) StackCanvas(model, host, draw, Screen, over, overBand);
+        else GraphCanvas(model, host, draw, Screen, over);
         draw.PopClipRect();
 
-        if (hover && over != null) {
-            var v = model.Variable(over);
-            ImGui.SetTooltip(v.Name + "\n" + SystemVocabulary.KindName(v.Kind) + (v.Unit.Length > 0 ? " · " + v.Unit : "")
-                + $"\nVáltoztatja: {model.Writers(over).Count} folyamat · olvassa: {model.Readers(over).Count}");
+        string label = labels.LastOrDefault(l => Inside(io.MousePos, l.Min, l.Max - l.Min)).Process;
+        if (hover && label != null) { ImGui.SetMouseCursor(ImGuiMouseCursor.Hand); ImGui.SetTooltip(model.Name(label) + "\nKattintás: a szabály megnyitása"); }
+        else if (hover && over != null) Tooltip(model, host, over);
+        else if (hover && overBand != null) ImGui.SetTooltip(LayerName(model, overBand) + "\nKattintás: a réteg szabályai és gráfja");
+        if (hover && ImGui.IsMouseClicked(ImGuiMouseButton.Left)) {
+            bool twice = ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left);
+            if (label != null) host.OpenProcess(model.Process(label));
+            else if (overBand != null) { SelectedVariable = null; ShowLayer(overBand); }
+            else if (over != null && (twice && level != Level.Layer || level == Level.Layer && boxes[over].Ghost && twice)) Focus(model, over);
+            else if (over != null && level != Level.Loop) SelectedVariable = over;
+            else if (over == null && level != Level.Loop) SelectedVariable = null;
         }
-        if (hover && ImGui.IsMouseClicked(ImGuiMouseButton.Left)) { SelectedVariable = over; SelectedLoop = null; }
         if (ImGui.IsWindowFocused() && !io.WantTextInput && ImGui.IsKeyPressed(ImGuiKey.F)) fitRequested = true;
 
-        // Overlay: search, view controls and the shape legend.
         ImGui.SetCursorScreenPos(origin + new Vec2(10, 8));
-        ImGui.SetNextItemWidth(200); ImGui.InputTextWithHint("##system-search", "Mennyiség keresése…", ref search, 80);
-        ImGui.SameLine(); if (ImGui.Checkbox("Adatok és szerkezet is", ref showAll)) fitRequested = true;
-        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Paraméterek, térkép, órák, parancsok és megjelenítés. Ezek nem vesznek részt visszacsatolásban.");
+        ImGui.SetNextItemWidth(240);
+        if (ImGui.InputTextWithHint("##system-search", "Mennyiség keresése, Enter: ugrás", ref search, 80, ImGuiInputTextFlags.EnterReturnsTrue)) {
+            var found = model.Variables.FirstOrDefault(v => Shown(v) && (v.Name + " " + v.Id).Contains(search.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (found != null) Focus(model, found.Id);
+        }
         ImGui.SameLine(); if (EditorStyle.QuietButton("Igazítás", "Minden elem a képbe (F)")) fitRequested = true;
-        Legend(draw, origin + new Vec2(10, size.Y - 26));
+        ImGui.SetCursorScreenPos(origin + new Vec2(10, size.Y - ImGui.GetTextLineHeight() - 8));
+        EditorStyle.Text(EditorStyle.Fade(HudTheme.Muted, 0.85f), level switch {
+            Level.Stack => "Egy csempe rétegei felülről lefelé · mennyiség: kapcsolatai · réteg neve: a réteg gráfja · görgő: lapozás, Ctrl+görgő: nagyítás",
+            Level.Layer => "Kattintás egy mennyiségre: a más rétegekkel való kapcsolatai is megjelennek · halvány doboz: más réteg (dupla kattintás: oda lép)",
+            _ => "Címke: a lépés szabálya · dupla kattintás egy mennyiségen: a rétege"
+        });
     }
 
-    private static void Legend(ImDrawListPtr draw, Vec2 at)
+    private string ValueText(SystemModelHost host, SystemVariable v)
     {
-        var colour = EditorStyle.U(HudTheme.Muted);
-        void Item(string label, float radius, float border)
-        {
-            draw.AddRect(at, at + new Vec2(26, 14), colour, radius, ImDrawFlags.None, border);
-            draw.AddText(at + new Vec2(32, -1), colour, label);
-            at.X += 40 + ImGui.CalcTextSize(label).X + 12;
-        }
-        Item("Készlet", 1, 1.8f); Item("Áramlás", 7, 1); Item("Segédváltozó", 4, 1);
-        draw.AddLine(at + new Vec2(0, 7), at + new Vec2(26, 7), EditorStyle.Selection, 2);
-        draw.AddText(at + new Vec2(32, -1), colour, "hatás a kijelölésből");
-        at.X += 40 + ImGui.CalcTextSize("hatás a kijelölésből").X + 12;
-        draw.AddLine(at + new Vec2(0, 7), at + new Vec2(26, 7), EditorStyle.U(EditorStyle.OperationKind), 2);
-        draw.AddText(at + new Vec2(32, -1), colour, "hatás a kijelölésre");
+        if (section.TryGetValue(v.Id, out var text)) return text;
+        if (tile >= 0 || v.Observe.Length == 0) return null;
+        double value = host.Value(v.Observe);
+        return double.IsFinite(value) ? Format(value) + (v.Unit.Length > 0 ? " " + v.Unit : "") : null;
     }
 
-    private static void Edge(ImDrawListPtr draw, Vec2 a, Vec2 b, Vec2 box, float gap, uint colour, float width, bool arrow)
+    private void Tooltip(SystemModelAnalysis model, SystemModelHost host, string id)
     {
-        Vec2 start, end, c1, c2; float pull;
-        if (Math.Abs(a.X - b.X) < 1) {
-            // Same column: bow into the gap on the right, without crossing into the next column.
-            start = a + new Vec2(box.X, box.Y / 2); end = b + new Vec2(box.X, box.Y / 2);
-            pull = Math.Min(10 + Math.Abs(b.Y - a.Y) * 0.2f, gap * 1.1f);
-            c1 = start + new Vec2(pull, 0); c2 = end + new Vec2(pull, 0);
-        } else {
-            bool forward = b.X > a.X;
-            start = a + new Vec2(forward ? box.X : 0, box.Y / 2); end = b + new Vec2(forward ? 0 : box.X, box.Y / 2);
-            pull = Math.Max(30, Math.Abs(end.X - start.X) * 0.45f) * (forward ? 1 : -1);
-            c1 = start + new Vec2(pull, 0); c2 = end - new Vec2(pull, 0);
-        }
-        if (arrow) EditorStyle.BezierArrow(draw, start, c1, c2, end, 8, colour, width);
-        else draw.AddBezierCubic(start, c1, c2, end, colour, width);
+        var v = model.Variable(id); string value = ValueText(host, v);
+        ImGui.SetTooltip(v.Name + "\n" + SystemVocabulary.KindName(v.Kind) + " · " + LayerName(model, v.Layer)
+            + (value != null ? "\nÉrték: " + value : "")
+            + $"\nVáltoztatja {model.Writers(id).Count} szabály, használja {model.Readers(id).Count}");
     }
+
+    private void StackCanvas(SystemModelAnalysis model, SystemModelHost host, ImDrawListPtr draw, Func<Vec2, Vec2> screen, string over, string overBand)
+    {
+        float font = ImGui.GetFontSize() * zoom;
+        var cross = CrossLayerRules(model).ToArray();
+        foreach (var (id, band) in bands) {
+            Vec2 p = screen(band.At), s = band.Size * zoom; Vec4 colour = LayerColour(id);
+            bool perTile = model.Vocabulary.Layers.Find(l => l.Id == id)?.PerTile != false;
+            float labelWidth = (BandLabel - 22) * zoom, small = Math.Max(11, font * .78f);
+            draw.AddRectFilled(p, p + s, EditorStyle.U(EditorStyle.Fade(EditorStyle.Dim(colour, .32f), overBand == id ? .75f : .5f)), 6 * zoom);
+            draw.AddRectFilled(p, p + new Vec2(6 * zoom, s.Y), EditorStyle.U(colour), 6 * zoom, ImDrawFlags.RoundCornersLeft);
+            draw.AddRect(p, p + s, EditorStyle.U(EditorStyle.Fade(colour, overBand == id ? .9f : .35f)), 6 * zoom, ImDrawFlags.None, overBand == id ? 2 : 1);
+            Text(draw, p + new Vec2(16, 8) * zoom, Math.Max(13, font * 1.0f), EditorStyle.TextBright, LayerName(model, id), labelWidth);
+            int links = cross.Where(c => c.From == id || c.To == id).Sum(c => c.Processes.Length);
+            Text(draw, p + new Vec2(16, 8) * zoom + new Vec2(0, Math.Max(16, font * 1.25f)), small, EditorStyle.TextMuted, perTile ? $"{links} rétegközi szabály" : "nem csempéhez kötött", labelWidth);
+            Text(draw, p + new Vec2(16, 8) * zoom + new Vec2(0, Math.Max(16, font * 1.25f) + small + 4), small, EditorStyle.U(EditorStyle.Fade(colour, .9f)), "megnyitás ›", labelWidth);
+        }
+        string focus = SelectedVariable ?? over;
+        var pills = new List<(Vec2 At, string Text, Vec4 Colour, string Process)>();
+        if (focus != null && boxes.ContainsKey(focus)) {
+            // The selected quantity's influences, chip to chip, with the rule on each link.
+            foreach (var e in model.Influences.Where(e => (e.From == focus || e.To == focus) && boxes.ContainsKey(e.From) && boxes.ContainsKey(e.To))) {
+                var a = boxes[e.From]; var b = boxes[e.To];
+                Vec2 ca = screen(a.At + a.Size / 2), cb = screen(b.At + b.Size / 2);
+                Vec2 start = Exit(ca, cb, screen(a.At), a.Size * zoom), end = Exit(cb, ca, screen(b.At), b.Size * zoom);
+                Vec2 bend = new Vec2(-(cb - ca).Y, (cb - ca).X) * .12f, mid = (start + end) / 2 + bend;
+                bool outgoing = e.From == focus;
+                uint colour = outgoing ? EditorStyle.Selection : EditorStyle.U(EditorStyle.OperationKind);
+                EditorStyle.BezierArrow(draw, start, Vec2.Lerp(start, mid, .7f), Vec2.Lerp(end, mid, .7f), end, 8 * zoom + 3, colour, 2.2f);
+                pills.Add((mid, e.Processes.Count == 1 ? model.Name(e.Processes[0]) : model.Name(e.Processes[0]) + $" +{e.Processes.Count - 1}",
+                    outgoing ? HudTheme.AmberAccent : EditorStyle.OperationKind, e.Processes[0]));
+            }
+        }
+        var lit = new HashSet<string>(StringComparer.Ordinal);
+        if (focus != null) { lit.Add(focus); foreach (var e in model.Influences) { if (e.From == focus) lit.Add(e.To); if (e.To == focus) lit.Add(e.From); } }
+        foreach (var (id, box) in boxes) {
+            var v = model.Variable(id); Vec2 p = screen(box.At), s = box.Size * zoom; Vec4 colour = Colour(v);
+            float alpha = focus == null || lit.Contains(id) ? 1 : .4f;
+            draw.AddRectFilled(p, p + s, EditorStyle.U(id == over ? .15f : .10f, id == over ? .19f : .13f, id == over ? .16f : .11f, .96f * Math.Max(alpha, .7f)), 5 * zoom);
+            draw.AddRectFilled(p, p + new Vec2(4 * zoom, s.Y), EditorStyle.U(EditorStyle.Fade(colour, alpha)), 5 * zoom, ImDrawFlags.RoundCornersLeft);
+            draw.AddRect(p, p + s, id == SelectedVariable ? EditorStyle.Selection : EditorStyle.U(EditorStyle.Fade(colour, (v.Kind == SystemVariableKind.Stock ? .9f : .35f) * alpha)),
+                5 * zoom, ImDrawFlags.None, id == SelectedVariable ? 2.4f : v.Kind == SystemVariableKind.Stock ? 1.8f : 1);
+            string value = ValueText(host, v);
+            float chipFont = Math.Max(12, font * .88f), valueFont = Math.Max(11, font * .82f);
+            float valueWidth = value == null ? 0 : Math.Min(s.X * .45f, ImGui.CalcTextSize(value).X * valueFont / ImGui.GetFontSize() + 6);
+            Text(draw, p + new Vec2(10 * zoom, (s.Y - chipFont) / 2), chipFont, EditorStyle.U(EditorStyle.Fade(HudTheme.Parchment, Math.Max(alpha, .5f))), v.Name, s.X - valueWidth - 14 * zoom);
+            if (value != null) Text(draw, p + new Vec2(s.X - valueWidth - 4 * zoom, (s.Y - valueFont) / 2), valueFont, EditorStyle.U(EditorStyle.Fade(colour, alpha)), value, valueWidth);
+        }
+        foreach (var (at, text, colour, process) in pills) { var rect = Pill(draw, at, text, colour); labels.Add((rect.Min, rect.Max, process)); }
+    }
+
+    private void GraphCanvas(SystemModelAnalysis model, SystemModelHost host, ImDrawListPtr draw, Func<Vec2, Vec2> screen, string over)
+    {
+        string focus = SelectedVariable ?? (over != null && !boxes[over].Ghost ? over : null);
+        var edges = new List<(string From, string To, IReadOnlyList<string> Via)>();
+        if (level == Level.Loop)
+            for (int i = 0; i < SelectedLoop.Length; i++) edges.Add((SelectedLoop.Variables[i], SelectedLoop.Variables[(i + 1) % SelectedLoop.Length], SelectedLoop.Steps[i]));
+        else edges.AddRange(model.Influences.Where(e => boxes.ContainsKey(e.From) && boxes.ContainsKey(e.To) && !(boxes[e.From].Ghost && boxes[e.To].Ghost))
+            .Select(e => (e.From, e.To, e.Processes)));
+        var lit = new HashSet<string>(StringComparer.Ordinal);
+        if (focus != null) { lit.Add(focus); foreach (var e in edges) { if (e.From == focus) lit.Add(e.To); if (e.To == focus) lit.Add(e.From); } }
+
+        float PortY(string id) => boxes[id].Ghost ? boxes[id].Size.Y / 2 : NodeHeader + (NodeHeight - NodeHeader) / 2;
+        Vec2 Out(string id) => screen(boxes[id].At + new Vec2(NodeWidth, PortY(id)));
+        Vec2 In(string id) => screen(boxes[id].At + new Vec2(0, PortY(id)));
+        var pills = new List<(Vec2 At, string Text, Vec4 Colour, string Process)>();
+        foreach (var (from, to, via) in edges) {
+            bool ring = level == Level.Loop, outgoing = focus == from, incoming = focus == to;
+            uint colour = ring || outgoing ? EditorStyle.Selection : incoming ? EditorStyle.U(EditorStyle.OperationKind)
+                : EditorStyle.U(EditorStyle.Fade(HudTheme.Parchment, focus == null ? 0.2f : 0.05f));
+            Vec2 a = Out(from), b = In(to);
+            float pull = Math.Max(60 * zoom, Math.Abs(b.X - a.X) * 0.45f);
+            Vec2 c1 = a + new Vec2(pull, 0), c2 = b - new Vec2(pull, 0);
+            EditorStyle.BezierArrow(draw, a, c1, c2, b, 8 * zoom + 3, colour, ring ? 3 : outgoing || incoming ? 2.2f : 1.3f);
+            // One label per rule: several inputs of the same rule share it.
+            if (ring || (outgoing || incoming) && !pills.Any(p => p.Process == via[0] && !ring))
+                pills.Add((Bezier(a, c1, c2, b, .5f), via.Count == 1 ? model.Name(via[0]) : model.Name(via[0]) + $" +{via.Count - 1}",
+                    ring || outgoing ? HudTheme.AmberAccent : EditorStyle.OperationKind, via[0]));
+        }
+        foreach (var (id, box) in boxes) {
+            var v = model.Variable(id); Vec2 p = screen(box.At), s = box.Size * zoom;
+            Vec4 colour = Colour(v);
+            float alpha = focus == null || lit.Contains(id) ? 1 : 0.35f;
+            if (box.Ghost) alpha *= 0.75f;
+            NodeFrame(draw, p, s, colour, id == over, id == SelectedVariable, alpha, box.Ghost ? 0 : NodeHeader, v.Kind == SystemVariableKind.Stock);
+            float font = Math.Max(13, ImGui.GetFontSize() * zoom);
+            uint text = EditorStyle.U(EditorStyle.Fade(HudTheme.Parchment, Math.Max(alpha, .45f)));
+            if (box.Ghost) {
+                draw.AddRectFilled(p, p + new Vec2(5 * zoom, s.Y), EditorStyle.U(EditorStyle.Fade(colour, alpha)), 8 * zoom, ImDrawFlags.RoundCornersLeft);
+                Text(draw, p + new Vec2(12, 4) * zoom, font * .9f, text, v.Name, s.X - 18 * zoom);
+                Text(draw, p + new Vec2(12, 21) * zoom, font * .75f, EditorStyle.TextMuted, LayerName(model, v.Layer), s.X - 18 * zoom);
+                continue;
+            }
+            string tag = KindTag(v.Kind); float tagWidth = ImGui.CalcTextSize(tag).X * zoom * .72f;
+            Text(draw, p + new Vec2(10, 4) * zoom, font * .92f, text, v.Name, s.X - tagWidth - 22 * zoom);
+            draw.AddText(ImGui.GetFont(), font * .72f, p + new Vec2(s.X - tagWidth - 8 * zoom, 7 * zoom), EditorStyle.U(EditorStyle.Fade(HudTheme.Parchment, .6f * alpha)), tag);
+            string body = ValueText(host, v) ?? (v.Unit.Length > 0 ? v.Unit : "—");
+            Text(draw, p + new Vec2(12, NodeHeader + 9) * zoom, font * 1.0f, EditorStyle.U(EditorStyle.Fade(colour, alpha)), body, s.X * .66f);
+            int loops = model.LoopsThroughVariable(id).Count;
+            if (loops > 0) {
+                string count = $"{loops} kör"; float w = ImGui.CalcTextSize(count).X * zoom * .78f;
+                draw.AddText(ImGui.GetFont(), font * .78f, p + new Vec2(s.X - w - 10 * zoom, (NodeHeader + 13) * zoom), EditorStyle.TextMuted, count);
+            }
+            float portY = (NodeHeader + (NodeHeight - NodeHeader) / 2) * zoom;
+            draw.AddCircleFilled(p + new Vec2(0, portY), 4.5f * zoom, EditorStyle.U(EditorStyle.Fade(colour, alpha)));
+            draw.AddCircleFilled(p + new Vec2(s.X, portY), 4.5f * zoom, EditorStyle.U(EditorStyle.Fade(colour, alpha)));
+        }
+        foreach (var (at, name, colour, process) in pills) { var rect = Pill(draw, at, name, colour); labels.Add((rect.Min, rect.Max, process)); }
+    }
+
+    /// <summary>The node look of the formula editor: shadow, body, coloured header with an accent line, border.</summary>
+    private void NodeFrame(ImDrawListPtr draw, Vec2 p, Vec2 s, Vec4 colour, bool hovered, bool selected, float alpha, float header, bool stock = false)
+    {
+        float r = 8 * zoom;
+        draw.AddRectFilled(p + new Vec2(3, 4), p + s + new Vec2(3, 4), EditorStyle.U(0, 0, 0, .35f * alpha), r);
+        draw.AddRectFilled(p, p + s, EditorStyle.U(hovered ? .14f : .115f, hovered ? .18f : .145f, hovered ? .15f : .125f, .97f * Math.Max(alpha, .6f)), r);
+        if (header > 0) {
+            draw.AddRectFilled(p, p + new Vec2(s.X, header * zoom), EditorStyle.U(EditorStyle.Fade(EditorStyle.Dim(colour, 0.55f), alpha)), r, ImDrawFlags.RoundCornersTop);
+            draw.AddRectFilled(p + new Vec2(0, header * zoom - 2), p + new Vec2(s.X, header * zoom), EditorStyle.U(EditorStyle.Fade(colour, alpha)));
+        }
+        uint border = selected ? EditorStyle.Selection : EditorStyle.U(EditorStyle.Fade(colour, (stock ? .9f : .5f) * alpha));
+        draw.AddRect(p, p + s, border, r, ImDrawFlags.None, selected ? 2.6f : stock ? 2f : 1.2f);
+    }
+
+    private static void Text(ImDrawListPtr draw, Vec2 at, float size, uint colour, string text, float width)
+    {
+        draw.PushClipRect(at, at + new Vec2(Math.Max(1, width), size + 4), true);
+        draw.AddText(ImGui.GetFont(), size, at, colour, text);
+        draw.PopClipRect();
+    }
+
+    private (Vec2 Min, Vec2 Max) Pill(ImDrawListPtr draw, Vec2 centre, string text, Vec4 colour)
+    {
+        float size = Math.Max(11, ImGui.GetFontSize() * zoom * .82f);
+        Vec2 t = ImGui.CalcTextSize(text) * size / ImGui.GetFontSize();
+        Vec2 min = centre - t / 2 - new Vec2(7, 3), max = centre + t / 2 + new Vec2(7, 3);
+        draw.AddRectFilled(min, max, EditorStyle.U(0.06f, 0.08f, 0.07f, 0.94f), (max.Y - min.Y) / 2);
+        draw.AddRect(min, max, EditorStyle.U(EditorStyle.Fade(colour, .7f)), (max.Y - min.Y) / 2);
+        draw.AddText(ImGui.GetFont(), size, centre - t / 2, EditorStyle.U(colour), text);
+        return (min, max);
+    }
+
+    /// <summary>Where the segment from a point inside a box towards another point leaves the box.</summary>
+    private static Vec2 Exit(Vec2 from, Vec2 towards, Vec2 min, Vec2 size)
+    {
+        Vec2 d = towards - from, max = min + size; float t = 1;
+        if (d.X > 1e-4f) t = Math.Min(t, (max.X - from.X) / d.X); else if (d.X < -1e-4f) t = Math.Min(t, (min.X - from.X) / d.X);
+        if (d.Y > 1e-4f) t = Math.Min(t, (max.Y - from.Y) / d.Y); else if (d.Y < -1e-4f) t = Math.Min(t, (min.Y - from.Y) / d.Y);
+        return from + d * Math.Max(0, t);
+    }
+    private static Vec2 Bezier(Vec2 a, Vec2 b, Vec2 c, Vec2 d, float t)
+    {
+        float s = 1 - t; return s * s * s * a + 3 * s * s * t * b + 3 * s * t * t * c + t * t * t * d;
+    }
+    internal static string Format(double v) => Math.Abs(v) >= 10000 ? v.ToString("N0") : Math.Abs(v) >= 100 ? v.ToString("0.#") : v.ToString("0.###");
 
     private void Fit(Vec2 size)
     {
-        Vec2 min = new(positions.Values.Min(p => p.X), 0), max = new(positions.Values.Max(p => p.X) + NodeWidth, positions.Values.Max(p => p.Y) + NodeHeight);
-        Vec2 content = max - min + new Vec2(30, 100);
-        zoom = Math.Clamp(Math.Min(size.X / content.X, size.Y / content.Y), 0.3f, 1.1f);
-        pan = new Vec2((size.X - (max.X - min.X) * zoom) / 2, 46) - min * zoom;
+        var rects = boxes.Values.Select(b => (b.At, b.Size)).Concat(bands.Values.Select(b => (b.At, b.Size))).ToArray();
+        Vec2 min = new(rects.Min(b => b.At.X), rects.Min(b => b.At.Y));
+        Vec2 max = new(rects.Max(b => b.At.X + b.Size.X), rects.Max(b => b.At.Y + b.Size.Y));
+        Vec2 content = max - min + new Vec2(40, 110);
+        zoom = level == Level.Stack ? Math.Clamp(size.X / content.X, 0.5f, 1.1f) : Math.Clamp(Math.Min(size.X / content.X, size.Y / content.Y), 0.35f, 1.15f);
+        if (level == Level.Stack) { pan = new Vec2((size.X - (max.X - min.X) * zoom) / 2, 50) - min * zoom; fitRequested = false; return; }
+        pan = new Vec2((size.X - (max.X - min.X) * zoom) / 2, Math.Max(46, (size.Y - (max.Y - min.Y) * zoom) / 2)) - min * zoom;
         fitRequested = false;
     }
 
     private static bool Inside(Vec2 p, Vec2 min, Vec2 size) => p.X >= min.X && p.Y >= min.Y && p.X <= min.X + size.X && p.Y <= min.Y + size.Y;
 
     // ── Inspector ────────────────────────────────────────────────────────
-    private void Overview(SystemModelAnalysis model)
+    private void StackDetails(SystemModelAnalysis model, SystemModelHost host)
     {
-        EditorStyle.Title("A játék rendszermodellje");
-        ImGui.TextWrapped("Minden szabály mennyiségeket olvas és ír. A készletek felhalmozódnak, az áramlások töltik vagy apasztják őket, a segédváltozók köztes számítások. Kattints egy mennyiségre vagy egy körre.");
-        var counts = model.Variables.GroupBy(v => v.Kind).ToDictionary(g => g.Key, g => g.Count());
-        if (EditorStyle.BeginFacts("system-counts")) {
-            foreach (var kind in new[] { SystemVariableKind.Stock, SystemVariableKind.Flow, SystemVariableKind.Auxiliary })
-                EditorStyle.Fact(SystemVocabulary.KindName(kind), counts.GetValueOrDefault(kind).ToString());
-            EditorStyle.Fact("Folyamat", model.Processes.Count.ToString());
-            ImGui.EndTable();
-        }
-        EditorStyle.Section("Összecsatolt csoportok");
-        ImGui.TextWrapped("Egy csoporton belül minden mennyiség — közvetve — visszahat a többire, ezért ott egy módosítás hatása körbeér.");
-        foreach (var group in model.CoupledGroups) {
-            var subsystems = group.Select(id => model.Variable(id).Subsystem).Distinct().ToArray();
-            ImGui.Bullet(); ImGui.SameLine();
-            ImGui.TextWrapped($"{group.Count} mennyiség · " + string.Join(", ", subsystems.Select(s => model.Vocabulary.Subsystems.Find(x => x.Id == s)?.Name ?? s)));
-        }
-        EditorStyle.Section("Fő visszacsatolási körök");
-        ImGui.TextWrapped("Minden készlet legrövidebb köre; elöl a több alrendszert összekötők.");
-        foreach (var loop in model.KeyLoops)
-            if (ImGui.Selectable(Chain(model, loop) + "##key" + loop.Key)) FocusLoop(loop);
-        var open = model.Variables.Where(v => v.Kind == SystemVariableKind.Stock && model.CoupledGroupOf(v.Id) == null).ToArray();
-        if (open.Length > 0) {
-            EditorStyle.Section("Nyitott készletek");
-            ImGui.TextWrapped("Ezek változnak, de értékük nem hat vissza a saját alakulásukra. Visszacsatolást saját képlettel adhatsz hozzájuk.");
-            foreach (var v in open) if (ImGui.Selectable(v.Name + "##open" + v.Id)) Focus(v.Id);
-        }
-        if (model.Unclassified.Count > 0) {
-            EditorStyle.Section("Besorolatlan mezők");
-            ImGui.TextWrapped(string.Join(", ", model.Unclassified));
-        }
-    }
-
-    private void VariableDetails(SystemModelAnalysis model, SystemVariable v, Action<SystemProcess> openProcess, Action<SystemVariable> openVariable)
-    {
-        if (EditorStyle.QuietButton("‹ Áttekintés")) { SelectedVariable = null; return; }
-        EditorStyle.Title(v.Name);
-        EditorStyle.Chip(SystemVocabulary.KindName(v.Kind), SubsystemColour(model, v.Subsystem), "kind" + v.Id);
-        ImGui.TextWrapped(v.Description.Length > 0 ? v.Description : SystemVocabulary.KindHelp(v.Kind));
-        if (EditorStyle.BeginFacts("variable-facts")) {
-            EditorStyle.Fact("Alrendszer", model.Vocabulary.Subsystems.Find(s => s.Id == v.Subsystem)?.Name ?? v.Subsystem);
-            EditorStyle.Fact("Egység", v.Unit.Length > 0 ? v.Unit : "nincs rögzítve");
-            EditorStyle.Fact("Képletben", v.Observe.Length > 0 ? v.Observe : "nem olvasható közvetlenül");
-            EditorStyle.Fact("Azonosító", v.Id);
-            ImGui.EndTable();
-        }
-        if (v.Id.StartsWith("stock.") && ImGui.Button("Készlet szerkesztése")) openVariable(v);
-        ProcessList(model, v.Kind == SystemVariableKind.Stock ? "Be- és kiáramlások (ezek változtatják)" : "Ezek számolják", model.Writers(v.Id), openProcess, "w");
-        ProcessList(model, "Ezek használják", model.Readers(v.Id), openProcess, "r");
-        EditorStyle.Section("Visszacsatolási körök");
-        var loops = model.LoopsThroughVariable(v.Id);
-        if (!SystemVocabulary.Endogenous(v.Kind)) ImGui.TextWrapped("Külső vagy rögzített érték: nem része visszacsatolásnak.");
-        else if (loops.Count == 0) ImGui.TextWrapped("Nincs kör: a hatása nem tér vissza ehhez a mennyiséghez.");
-        foreach (var loop in loops.Take(8)) if (ImGui.Selectable(Chain(model, loop) + "##vl" + loop.Key)) FocusLoop(loop);
-        if (loops.Count > 8) EditorStyle.Text(HudTheme.Muted, $"+ {loops.Count - 8} további kör");
-    }
-
-    private static void ProcessList(SystemModelAnalysis model, string title, IReadOnlyList<SystemProcess> processes, Action<SystemProcess> open, string prefix)
-    {
-        EditorStyle.Section(title);
-        if (processes.Count == 0) { EditorStyle.Text(HudTheme.Muted, "Nincs katalogizált folyamat."); return; }
-        foreach (var p in processes) {
-            if (ImGui.Selectable(p.Name + "##" + prefix + p.Id)) open(p);
-            if (ImGui.IsItemHovered()) ImGui.SetTooltip("Megnyitás a szabályműhelyben\n" + p.Id);
-        }
-    }
-
-    private void LoopDetails(SystemModelAnalysis model, SystemLoop loop, Action<SystemProcess> openProcess)
-    {
-        if (EditorStyle.QuietButton("‹ Áttekintés")) { SelectedLoop = null; return; }
-        EditorStyle.Title($"Visszacsatolási kör · {loop.Length} lépés");
-        ImGui.TextWrapped("A kör minden lépése egy folyamat, amely az egyik mennyiséget olvassa és a következőt írja. A katalógus az adatkapcsolatot rögzíti, a hatás előjelét nem: hogy a kör erősít vagy kiegyenlít, azt az összehasonlító próba mutatja meg.");
-        for (int i = 0; i < loop.Length; i++) {
-            ImGui.PushID(i);
-            if (ImGui.Selectable(model.Name(loop.Variables[i]) + "##lv")) Focus(loop.Variables[i]);
-            ImGui.Indent(18);
-            foreach (string p in loop.Steps[i]) {
-                var process = model.Process(p);
-                if (EditorStyle.Chip(process.Name, SubsystemColour(model, process.Subsystem), "step" + p, true)) openProcess(process);
-                if (ImGui.IsItemHovered()) ImGui.SetTooltip("Szabály megnyitása");
+        EditorStyle.Title("Egy csempe rétegei");
+        ImGui.TextWrapped("A terep csempékből áll; minden csempének van domborzata, talaja, talajvize, felszíne és növényzete. A szabályok ezeket kötik össze, gyakran rétegeken át: a talaj és a talajvíz dönti el, hogyan nő a fa, és mennyire járható esőben a földút. Válassz csempét fent, és a dobozok az ő értékeit mutatják.");
+        if (tile >= 0 && section.Count > 0) {
+            EditorStyle.Section($"A #{tile} csempe metszete");
+            if (EditorStyle.BeginFacts("tile-section")) {
+                foreach (var l in model.Vocabulary.Layers.Where(l => l.PerTile))
+                    foreach (var v in Members(model, l.Id).Where(v => section.ContainsKey(v.Id)))
+                        EditorStyle.Fact(v.Name, section[v.Id], LayerColour(l.Id));
+                ImGui.EndTable();
             }
-            ImGui.Unindent(18);
+        }
+        EditorStyle.Section("Szabályok a rétegek között");
+        ImGui.TextWrapped("Melyik réteg mire hat. Nyisd ki: a szabály paraméterei itt állíthatók, a képlete egy kattintással nyílik.");
+        foreach (var (from, to, processes) in CrossLayerRules(model).Where(c => model.Vocabulary.Layers.Find(l => l.Id == c.From)?.PerTile == true)) {
+            ImGui.PushID(from + to);
+            EditorStyle.Text(LayerColour(from), LayerName(model, from)); ImGui.SameLine(); EditorStyle.Text(HudTheme.Muted, "›"); ImGui.SameLine();
+            EditorStyle.Text(LayerColour(to), LayerName(model, to));
+            ImGui.Indent(10); foreach (var p in processes) ProcessHeader(model, host, p, "x"); ImGui.Unindent(10);
             ImGui.PopID();
         }
-        EditorStyle.Text(HudTheme.Muted, "› vissza: " + model.Name(loop.Variables[0]));
-        var spans = loop.Variables.Select(v => model.Variable(v).Subsystem).Distinct().Select(s => model.Vocabulary.Subsystems.Find(x => x.Id == s)?.Name ?? s);
-        ImGui.Spacing(); ImGui.TextWrapped("Érintett alrendszerek: " + string.Join(", ", spans));
+        EditorStyle.Section("Fő visszacsatolási körök");
+        foreach (var loop in model.KeyLoops.Take(10))
+            if (ImGui.Selectable(Chain(model, loop) + "##key" + loop.Key)) FocusLoop(loop);
+    }
+
+    private void LayerDetails(SystemModelAnalysis model, SystemModelHost host)
+    {
+        var info = model.Vocabulary.Layers.Find(l => l.Id == layer);
+        EditorStyle.Title(info?.Name ?? layer);
+        ImGui.TextWrapped(info?.Description ?? "");
+        foreach (var (from, to, processes) in CrossLayerRules(model).Where(c => c.From == layer || c.To == layer)) {
+            ImGui.PushID(from + to);
+            EditorStyle.Section((from == layer ? "Hat erre: " + LayerName(model, to) : "Hat rá: " + LayerName(model, from)));
+            foreach (var p in processes) ProcessHeader(model, host, p, "c");
+            ImGui.PopID();
+        }
+        EditorStyle.Section("A réteg saját szabályai");
+        var members = Members(model, layer).Select(v => v.Id).ToHashSet(StringComparer.Ordinal);
+        foreach (var p in model.Processes.Where(p => p.Writes.Any(members.Contains) && p.Reads.Where(r => model.Variable(r) is SystemVariable v && Shown(v)).All(members.Contains)))
+            ProcessHeader(model, host, p, "own");
+    }
+
+    private static void ProcessHeader(SystemModelAnalysis model, SystemModelHost host, SystemProcess p, string prefix)
+    {
+        if (p == null) return;
+        string editable = host.Editable(p);
+        if (!ImGui.CollapsingHeader(p.Name + (editable.Length > 0 ? "  · " + editable : "") + "##" + prefix + p.Id)) return;
+        ImGui.Indent(8);
+        var reads = p.Reads.Select(model.Variable).Where(v => v != null && Shown(v)).ToArray();
+        var writes = p.Writes.Select(model.Variable).Where(v => v != null && Shown(v)).ToArray();
+        ImGui.PushTextWrapPos();
+        EditorStyle.Text(HudTheme.Muted, "Olvassa: " + string.Join(", ", reads.Select(v => v.Name)));
+        EditorStyle.Text(HudTheme.Muted, "Változtatja: " + string.Join(", ", writes.Select(v => v.Name)));
+        ImGui.PopTextWrapPos();
+        ImGui.PushID(prefix + p.Id); host.DrawProcess(p); ImGui.PopID();
+        ImGui.Unindent(8); ImGui.Spacing();
+    }
+
+    private void VariableDetails(SystemModelAnalysis model, SystemVariable v, SystemModelHost host)
+    {
+        if (EditorStyle.QuietButton("‹ " + (level == Level.Layer ? LayerName(model, layer) : "Rétegek"))) { SelectedVariable = null; return; }
+        EditorStyle.Title(v.Name);
+        EditorStyle.Chip(SystemVocabulary.KindName(v.Kind) + " · " + LayerName(model, v.Layer), Colour(v), "kind" + v.Id);
+        string value = ValueText(host, v);
+        if (value != null) { ImGui.SameLine(); ImGui.AlignTextToFramePadding(); EditorStyle.Text(Colour(v), value); }
+        ImGui.TextWrapped(v.Description.Length > 0 ? v.Description : SystemVocabulary.KindHelp(v.Kind));
+        ImGui.PushID("quantity" + v.Id); host.DrawQuantity(v); ImGui.PopID();
+        EditorStyle.Section(v.Kind == SystemVariableKind.Stock ? "Be- és kiáramlások" : "Ezek számolják");
+        foreach (var p in model.Writers(v.Id)) ProcessHeader(model, host, p, "w");
+        if (model.Writers(v.Id).Count == 0) EditorStyle.Text(HudTheme.Muted, "Nincs katalogizált szabály.");
+        EditorStyle.Section("Ezek használják");
+        foreach (var p in model.Readers(v.Id)) ProcessHeader(model, host, p, "r");
+        if (model.Readers(v.Id).Count == 0) EditorStyle.Text(HudTheme.Muted, "Nincs katalogizált szabály.");
+        EditorStyle.Section("Visszacsatolási körök");
+        var loops = model.LoopsThroughVariable(v.Id);
+        if (!SystemVocabulary.Endogenous(v.Kind)) ImGui.TextWrapped("Rögzített adat vagy térkép: hat a többire, de visszacsatolás nem változtatja.");
+        else if (loops.Count == 0) ImGui.TextWrapped("Nincs kör: a hatása nem tér vissza ehhez a mennyiséghez.");
+        foreach (var loop in loops.Take(8)) if (ImGui.Selectable(Chain(model, loop) + "##vl" + loop.Key)) FocusLoop(loop);
+    }
+
+    private void LoopDetails(SystemModelAnalysis model, SystemLoop loop, SystemModelHost host)
+    {
+        if (EditorStyle.QuietButton("‹ Vissza")) { SelectedLoop = null; level = beforeLoop; fitRequested = true; return; }
+        EditorStyle.Title($"Visszacsatolási kör · {loop.Length} lépés");
+        ImGui.TextWrapped("Minden lépés egy szabály, amely az egyik mennyiséget olvassa és a következőt írja. A kör erősségét ezek a szabályok adják: nyisd ki és állítsd őket. Hogy a kör erősít vagy kiegyenlít, az összehasonlító próba mutatja meg.");
+        for (int i = 0; i < loop.Length; i++) {
+            ImGui.PushID(i);
+            EditorStyle.Text(Colour(model.Variable(loop.Variables[i])), model.Name(loop.Variables[i]) + "  ›  " + model.Name(loop.Variables[(i + 1) % loop.Length]));
+            foreach (string p in loop.Steps[i]) ProcessHeader(model, host, model.Process(p), "l" + i);
+            ImGui.PopID();
+        }
     }
 }

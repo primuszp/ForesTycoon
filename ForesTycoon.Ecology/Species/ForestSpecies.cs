@@ -52,7 +52,10 @@ namespace ForesTycoon.Ecology
         /// <summary>Biomass a fully stocked neighbouring tile is assumed to carry; used to normalise crowding.</summary>
         public const float ReferenceCanopyBiomass = 1.2f;
 
-        public static ForestSpeciesProfile For(ForestSpecies species) => species switch
+        public static ForestSpeciesProfile For(ForestSpecies species) =>
+            ForestSpeciesBook.TryProfile(species, out var edited) ? edited : Builtin(species);
+
+        internal static ForestSpeciesProfile Builtin(ForestSpecies species) => species switch
         {
             ForestSpecies.Spruce => new ForestSpeciesProfile(
                 // Widened site range: with the old narrow optimum spruce died out of every

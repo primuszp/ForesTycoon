@@ -41,6 +41,9 @@ namespace ForesTycoon
         internal int FogParticleCount => forestWeather.Metrics.FogParticles;
         internal bool FogDepthFallback => forestWeather.Metrics.DepthFallback;
         internal int MarkerRenderedCount { get; private set; }
+        /// <summary>Surface water depth (mm) of a tile, drawn as flood water; by default the environment's.</summary>
+        internal Func<int, double> FloodDepth { get; set; }
+        internal int FloodTilesDrawn => terrain.FloodTilesDrawn;
         private readonly ForestWeatherRenderer forestWeather = new ForestWeatherRenderer();
         private readonly CloudRenderer clouds = new CloudRenderer();
         private readonly WildlifeRenderer wildlife;
@@ -55,6 +58,7 @@ namespace ForesTycoon
         public TerrainRenderer(Terrain terrain, VehicleSystem vehicles, WorldEffectSystem effects, ForestSystem forest, GraphicsSettings graphics = null,EnvironmentSystem environment=null, WildlifeSystem wildlifeSystem=null,ForestryLogistics logistics=null)
         {
             this.environment=environment;
+            if (environment != null) FloodDepth = environment.SurfaceDepth;
             this.logistics=logistics;
             ownsWildlife = wildlifeSystem == null;
             wildlifeSimulation = wildlifeSystem ?? new WildlifeSystem();
@@ -158,6 +162,7 @@ namespace ForesTycoon
             pipeline.Add(RenderLayer.WaterSurface, "water-surface", context => DrawSurface(SurfaceKind.Water, () => terrain.DrawWater(context)));
             pipeline.Add(RenderLayer.WaterWalls, "water-walls", context => DrawSurface(SurfaceKind.Water, () => terrain.DrawWaterWalls(context)));
             pipeline.Add(RenderLayer.RiverFallback, "river-fallback", context => DrawSurface(SurfaceKind.Water, () => terrain.DrawRivers(context)));
+            pipeline.Add(RenderLayer.RiverFallback, "flood-water", context => DrawSurface(SurfaceKind.Water, () => terrain.DrawFloodWater(context, FloodDepth)));
             pipeline.Add(RenderLayer.Foundations, "road-foundations", _ => DrawSurface(SurfaceKind.Road, terrain.DrawRoadFoundations));
             pipeline.Add(RenderLayer.DecalBegin, "decal-state-begin", _ => BeginDecals());
             pipeline.Add(RenderLayer.Grid, "terrain-grid", context => {

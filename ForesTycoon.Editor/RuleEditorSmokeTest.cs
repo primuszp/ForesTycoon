@@ -76,6 +76,33 @@ namespace ForesTycoon.Editor
                 Require(GL.GetError() == ErrorCode.NoError, "Editor OpenGL error.");
                 string output = Path.GetFullPath("artifacts/rule-editor"); Directory.CreateDirectory(output);
                 FramebufferCapture.SavePng(Path.Combine(output, "editor.png"), width, height);
+                int forestTile = Enumerable.Range(0, world.Map.Tiles.Count).FirstOrDefault(id => world.DescribeTile(id).ContainsKey("forest.trees"));
+                var trialProject = editor.CollectProject(world); trialProject.Algorithms = null;
+                trialProject.World ??= GameWorld.DefaultScenario(world.Map.Settings.Seed);
+                var trialBase = GameWorld.DefaultRuleProject(); trialBase.Algorithms = null; trialBase.World = trialProject.World;
+                var rainTrial = RuleEditorView.RunWorldTrial(trialBase, trialProject, 30, 40);
+                foreach (var screen in new (Action Show, string Name)[] {
+                    (() => editor.ShowWorld(WorldTab.Map, MapLayer.Soil, forestTile), "world-map-soil"),
+                    (() => { editor.AddSpring(world, forestTile, 20000, 12 * world.SecondsPerEnvironmentHour); editor.ShowWorld(WorldTab.Map, MapLayer.Water, forestTile); }, "world-map-water"),
+                    (() => editor.ShowWorld(WorldTab.Rules, tile: forestTile, rule: "water.infiltration|tile"), "world-rules-water"),
+                    (() => editor.ShowWorld(WorldTab.Map, MapLayer.Trafficability, forestTile), "world-map-traffic"),
+                    (() => editor.ShowWorld(WorldTab.Map, MapLayer.Elevation, forestTile), "world-map-elevation"),
+                    (() => editor.ShowWorld(WorldTab.Map, MapLayer.Forest, forestTile), "world-map-forest"),
+                    (() => editor.ShowWorld(WorldTab.Types), "world-types"),
+                    (() => editor.ShowWorldTypes(TypeTab.Species, 2), "world-types-species"),
+                    (() => editor.ShowWorldTypes(TypeTab.Surfaces), "world-types-surfaces"),
+                    (() => editor.ShowWorld(WorldTab.Rules, tile: forestTile), "world-rules"),
+                    (() => { editor.ShowWorld(WorldTab.Trial); editor.ShowWorldTrial(rainTrial); }, "world-trial") }) {
+                    screen.Show();
+                    for (int frame = 0; frame < 3; frame++) {
+                        ui.Update(width, height, width, height, Vec2.One, 1f / 60);
+                        ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 900)); editor.Draw(world, ref open);
+                        GL.Viewport(0, 0, width, height); GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit); ui.Render(); GL.Finish();
+                    }
+                    Require(GL.GetError() == ErrorCode.NoError, "World editor OpenGL error: " + screen.Name);
+                    FramebufferCapture.SavePng(Path.Combine(output, screen.Name + ".png"), width, height);
+                }
+                Require(rainTrial.Summary.Contains("járhatóság"), "World trial produced no result.");
                 string workshopActive = world.RuleProjectDocument.ToJson();
                 foreach (var screen in new[] {
                     ("forest.growth", WorkshopPhase.Understand, "workshop-growth"),
@@ -97,6 +124,8 @@ namespace ForesTycoon.Editor
                 }
                 foreach (var screen in new (Action Show, string Name)[] {
                     (() => editor.ShowSystemModel(), "workshop-system"),
+                    (() => editor.ShowSystemTile(Enumerable.Range(0, world.Map.Tiles.Count).FirstOrDefault(id => world.DescribeTile(id).ContainsKey("forest.trees"))), "workshop-system-tile"),
+                    (() => editor.ShowSystemModel("trail.trafficability"), "workshop-system-surface"),
                     (() => editor.ShowSystemModel("water.root"), "workshop-system-water"),
                     (() => editor.ShowSystemLoopThrough("economy.result"), "workshop-system-economy-loop") }) {
                     screen.Show();

@@ -18,6 +18,7 @@ namespace ForesTycoon
         EmptyMass, TimberDensity, Power, MaxTractiveForce, Drivetrain, Braking, DragArea,
         RollingAsphalt, RollingGravel, RollingDirt, RoughnessRolling, FuelPerKilowattHour, IdleFuelPerHour,
         TimberPriceFactor, CreditLimit,
+        AsphaltWeather, AsphaltRainWeather, MacadamWeather, MacadamRainWeather,
     }
 
     /// <summary>One tunable: which rule it belongs to, how it is shown and the range the game accepts.</summary>
@@ -93,6 +94,11 @@ namespace ForesTycoon
             // Economic feedback. Both are formula hooks, so the market price and the credit line can follow the balance or project stocks.
             new(Tune.TimberPriceFactor, "timber.deliver", "Faanyag piaci árszorzó", "×", 1, 0, 10),
             new(Tune.CreditLimit, "economy.balance", "Hitelkeret", "eFt", Economy.UnlimitedCredit, 0, Economy.UnlimitedCredit),
+
+            new(Tune.AsphaltWeather, "road.weather", "Aszfalt romlása szárazon", "állapot/erdőév", RoadWeathering.Default.AsphaltBase, 0, 5),
+            new(Tune.AsphaltRainWeather, "road.weather", "Aszfalt romlása esőben", "állapot/erdőév/eső", RoadWeathering.Default.AsphaltRain, 0, 20),
+            new(Tune.MacadamWeather, "road.weather", "Makadám romlása szárazon", "állapot/erdőév", RoadWeathering.Default.MacadamBase, 0, 5),
+            new(Tune.MacadamRainWeather, "road.weather", "Makadám romlása esőben", "állapot/erdőév/eső", RoadWeathering.Default.MacadamRain, 0, 20),
         };
 
         private static readonly Dictionary<string, TuningSpec> byId = Specs.ToDictionary(s => s.Id, StringComparer.Ordinal);

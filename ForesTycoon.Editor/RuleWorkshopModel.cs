@@ -28,21 +28,24 @@ internal static class RuleWorkshopModel
         || h.Id.StartsWith("tuning.") && GameTuning.Spec(h.Id[7..])?.Rule == rule.Id
         || h.Id.StartsWith("route.") && rule.Id is "route.find" or "route.policy"
         || (h.Id.StartsWith("loading.") || h.Id == "unloading.amount") && (rule.Id == "loading.policy" || rule.Id == "machine.logTransfer" && h.Kind == "forwarder" || rule.Id == "vehicle.transfer" && h.Kind == "truck")
-        || h.Id == "machine.pace" && rule.Id == (h.Kind == "forwarder" ? "machine.forwarder" : "machine.processor");
+        || h.Id == "machine.pace" && rule.Id == (h.Kind == "forwarder" ? "machine.forwarder" : "machine.processor")
+        || h.Id == "water.baseflow" && rule.Id == "water.drainage";
 
     /// <summary>
     /// The game's system model with this project's own stocks, flows and the formulas that read model quantities, so a
     /// feedback loop authored in a project shows up next to the native ones. Shared by the editor and the agent CLI.
     /// </summary>
-    internal static SystemModelAnalysis SystemModel(GameRuleCatalog catalog, DynamicsModel dynamics, IEnumerable<BehaviorGraph> graphs, Func<string, int> topicOf)
+    internal static SystemModelAnalysis SystemModel(GameRuleCatalog catalog, DynamicsModel dynamics, IEnumerable<BehaviorGraph> graphs, Func<string, int> topicOf,
+        IReadOnlyDictionary<string, QuantityPresentation>? quantities = null)
     {
-        var vocabulary = SystemVocabulary.Default;
+        var vocabulary = SystemVocabulary.Default.With(quantities!);
         string Subsystem(int topic) => vocabulary.Subsystems[Math.Clamp(topic, 0, vocabulary.Subsystems.Count - 1)].Id;
         // Formula keys name either a project stock or the world quantity they observe.
         string? Quantity(string key) => key.StartsWith("stock.", StringComparison.Ordinal) ? key : vocabulary.Observed(key)?.Id;
         string[] Reads(BehaviorGraph graph) => graph.Nodes.Where(n => n.Operation == BehaviorOperation.NamedValue).Select(n => Quantity(n.Key)).OfType<string>().Distinct().ToArray();
         var stocks = dynamics.Stocks.Select(s => new SystemVariable { Id = "stock." + s.Id, Name = s.Name, Subsystem = Subsystem(topicOf("stock." + s.Id)),
-            Kind = SystemVariableKind.Stock, Unit = s.Unit == "1" ? "" : s.Unit, Observe = "stock." + s.Id, Description = "Saját készlet ebben a projektben." }).ToList();
+            Kind = SystemVariableKind.Stock, Unit = s.Unit == "1" ? "" : s.Unit, Observe = "stock." + s.Id, Description = "Saját készlet ebben a projektben.",
+            Layer = quantities != null && quantities.TryGetValue("stock." + s.Id, out var o) && vocabulary.LayerIndex(o.Layer) >= 0 ? o.Layer : "management" }).ToList();
         var processes = new List<SystemProcess>();
         foreach (var flow in dynamics.Flows) {
             var writes = new[] { flow.From, flow.To }.Where(e => e.Length > 0).Select(e => "stock." + e).ToArray();

@@ -677,6 +677,28 @@ namespace ForesTycoon.Editor
         internal bool OverviewRequested { get; set; }
 
         /// <summary>The edited tunable numbers that differ from the game's defaults.</summary>
+        /// <summary>One tunable number as an inline field; returns true when an edit was finished.</summary>
+        internal bool TuningField(string key, string id)
+        {
+            if (catalog == null) return false;
+            foreach (var rule in catalog.Rules)
+                for (int i = 0; i < rule.Parameters.Count; i++) {
+                    var p = rule.Parameters[i];
+                    if (p.Key != key) continue;
+                    float value = (float)p.Value;
+                    float speed = (float)Math.Max(Math.Abs(p.Value) * 0.005, (p.Max - p.Min) * 0.0005);
+                    ImGui.SetNextItemWidth(-1);
+                    if (p.Changed) ImGui.PushStyleColor(ImGuiCol.Text, HudTheme.AmberAccent);
+                    if (ImGui.DragFloat("##" + id, ref value, speed, (float)p.Min, (float)p.Max, Format(p), ImGuiSliderFlags.AlwaysClamp))
+                        rule.Parameters[i] = p with { Value = value == (float)p.Default ? p.Default : Math.Clamp(value, p.Min, p.Max) };
+                    if (p.Changed) ImGui.PopStyleColor();
+                    if (ImGui.IsItemHovered()) ImGui.SetTooltip($"{p.Name}\nAlapérték: {p.Default:G6} {p.Unit}\nHúzás: hangolás · Ctrl+kattintás: beírás");
+                    return ImGui.IsItemDeactivatedAfterEdit();
+                }
+            ImGui.TextDisabled("—");
+            return false;
+        }
+
         internal Dictionary<string, double> TuningOverrides(GameWorld world)
         {
             if (catalog == null) Load(world.DescribeCurrentRules());

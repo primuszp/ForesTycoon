@@ -204,6 +204,12 @@ namespace ForesTycoon.Map
         float IForestHabitat.GetNormalizedElevation(int tileId) =>
             Math.Clamp(tiles[tileId].Low / (float)Math.Max(1, settings.MaxHeight), 0f, 1f);
 
+        float IForestHabitat.GetGroundHeight(int tileId)
+        {
+            var t = tiles[tileId];
+            return (t.W.zPos + t.S.zPos + t.E.zPos + t.N.zPos) / 4f;
+        }
+
         int IForestHabitat.GetAdjacentTileIds(int tileId, Span<int> destination)
         {
             if (!IsValidTileId(tileId)) return 0;
@@ -216,8 +222,8 @@ namespace ForesTycoon.Map
         bool IForestHabitat.IsImpervious(int id) => IsRoadTile(id) || IsBuildingTile(id);
         bool IForestHabitat.IsWaterOutlet(int id) => IsEnvironmentWaterOutlet(id);
 
-        internal bool IsEnvironmentWaterOutlet(int id) => data.IsBorderTile(tiles[id]) ||
-            ShouldDrawStandingWater(tiles[id]) || CountRiverCorners(tiles[id]) >= 2;
+        // Water leaves the map at its edge and into standing water; rivers carry it on as channels, so they can also overflow.
+        internal bool IsEnvironmentWaterOutlet(int id) => data.IsBorderTile(tiles[id]) || ShouldDrawStandingWater(tiles[id]);
 
         // ── Geometry queries ────────────────────────────────────────────────────────
         public bool TryGetNodePosition(int nodeId, out Vector3 position)

@@ -1,5 +1,8 @@
 # A szabályeditor új használati terve
 
+> **Elavult (2026-10-12):** a négyfázisú szabályműhely helyét a [Világszerkesztő](rule-editor.md) vette át.
+
+
 Állapot: a következő lépést, a rendszermodell-alapú átszervezést az [értékelés és ütemterv](editor-system-model.md) írja le; az ott javított pontok felülírják az itteni terv megfelelő részeit (pl. a Próba és az Alkalmazás projektszintű oldal lett).
 
 Korábbi állapot: az első gyakorlati szakasz megvalósult, 2026-10-11. Elkészült a tematikus

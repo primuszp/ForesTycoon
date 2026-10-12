@@ -1,5 +1,8 @@
 # Rendszermodell-alapú editor: értékelés, célarchitektúra, ütemterv
 
+> **Elavult (2026-10-12):** a rendszermodell-térkép és a szabályműhely kikerült a felületről, mert nem volt használható. Az aktuális editor: [Világszerkesztő](rule-editor.md). A rendszermodell-szótár (`system-model.json`) és az elemzés a kódban és a CLI-ben megmaradt.
+
+
 Állapot: 2026-10-11. Az első szakasz (közös rendszermodell, rendszertérkép,
 gazdasági visszacsatolás, projektszintű próba és alkalmazás) megvalósult; a
 további szakaszok tervek. Használat: [editor útmutató](rule-editor.md),

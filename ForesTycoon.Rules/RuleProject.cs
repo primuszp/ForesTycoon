@@ -18,6 +18,8 @@ public sealed class RuleProject
     public BehaviorModel Behaviors { get; set; } = new();
     public DynamicsModel Dynamics { get; set; } = new();
     public AlgorithmGraphReference Algorithms { get; set; }
+    /// <summary>The world map and its soil types, authored in the world editor; used when a new world is created.</summary>
+    public WorldScenario World { get; set; }
     public RuleAuthoring Authoring { get; set; } = new();
     internal static readonly JsonSerializerOptions JsonOptions = new() {
         WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase, PropertyNameCaseInsensitive = true,
@@ -65,6 +67,18 @@ public sealed class RuleAuthoring
 {
     public Dictionary<string, RulePresentation> Entries { get; set; } = new();
     public List<RuleTemplate> Templates { get; set; } = new();
+    /// <summary>Project wording of model quantities, by quantity ID; empty fields keep the shipped vocabulary.</summary>
+    public Dictionary<string, QuantityPresentation> Quantities { get; set; } = new();
+    /// <summary>Rule formula source by "hook|kind"; the compiled graph in <c>behaviors</c> is what runs.</summary>
+    public Dictionary<string, string> Formulas { get; set; } = new();
+}
+public sealed class QuantityPresentation
+{
+    public string Name { get; set; } = "";
+    public string Unit { get; set; } = "";
+    public string Description { get; set; } = "";
+    public string Subsystem { get; set; } = "";
+    public string Layer { get; set; } = "";
 }
 public sealed class RulePresentation
 {

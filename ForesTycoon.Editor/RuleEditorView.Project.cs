@@ -77,6 +77,8 @@ internal sealed partial class RuleEditorView
         projectPathEdit = projectPath;
         workshopVersions.Reset(); bindingSelectedFor = null; trialResult = null; publishedProjectRevision = null;
         authoring = project.Clone().Authoring ?? new();
+        scenario = project.World == null ? null : RuleProject.FromJson(new RuleProject { World = project.World }.ToJson()).World;
+        if (scenario != null) seedEdit = scenario.Seed;
         authoringUndo.Clear(); authoringRedo.Clear();
         publishedGuard.Observe(projectPath); draftGuard.Observe(RuleWorkshopModel.DraftPath(projectPath)); guardedPath = Path.GetFullPath(projectPath);
         algorithms.Load(project.Algorithms);
@@ -116,7 +118,8 @@ internal sealed partial class RuleEditorView
     internal RuleProject CollectProject(GameWorld world) => new() { Name = projectName,
         Road = (draft ?? currentRules.RoadTrafficModel ?? world.RuleDocument).Clone(),
         Tuning = currentRules.TuningOverrides(world), Behaviors = behaviors.Document, Dynamics = dynamicsEditor.Document,
-        Algorithms = algorithms.Reference, Authoring = JsonSerializer.Deserialize<RuleAuthoring>(JsonSerializer.Serialize(authoring)) };
+        Algorithms = algorithms.Reference, Authoring = JsonSerializer.Deserialize<RuleAuthoring>(JsonSerializer.Serialize(authoring)),
+        World = scenario == null ? world.RuleProjectDocument.World : RuleProject.FromJson(new RuleProject { World = scenario }.ToJson()).World };
     private double PreviewValue(GameWorld world, string key)
     {
         if (useLiveObjects) {
@@ -134,7 +137,7 @@ internal sealed partial class RuleEditorView
     private void ApplyProject(GameWorld world, bool publish)
     {
         if (publish) publishedGuard.RequireUnchanged(projectPath);
-        var project = CollectProject(world); project.Algorithms = algorithms.Store(projectPath);
+        var project = CollectProject(world); project.Algorithms = null;
         project = GameWorld.NormalizeRuleProject(project);
         if (project.Algorithms != null && project.Algorithms.Revision != AlgorithmBuild.CurrentRevision) {
             if (!publish) throw new InvalidOperationException("Az algoritmusgráfokat a Mentés és futtatás fordítja. A beépített tesztvilág az editor saját algoritmusverzióját futtatja; a teljes gráfprojektet a CLI szimuláció ellenőrzi.");

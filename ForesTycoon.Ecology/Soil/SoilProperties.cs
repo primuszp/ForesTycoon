@@ -10,6 +10,8 @@ namespace ForesTycoon.Ecology
         [property: JsonRequired] double DrainagePerHour, [property: JsonRequired] float Fertility)
     {
         internal static SoilProperties Standard => new(180, 130, 25, 12, 2, 1);
+        /// <summary>0–1: how firmly the soaked soil carries vehicles. Absent in older catalogs, which derive it from drainage.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public double? BearingCapacity { get; init; }
 
         internal void Validate()
         {
@@ -17,7 +19,8 @@ namespace ForesTycoon.Ecology
                 || WiltingPoint < 0 || FieldCapacity <= WiltingPoint || Saturation <= FieldCapacity
                 || !double.IsFinite(InfiltrationPerHour) || InfiltrationPerHour < 0
                 || !double.IsFinite(DrainagePerHour) || DrainagePerHour < 0
-                || !float.IsFinite(Fertility) || Fertility < 0 || Fertility > 1)
+                || !float.IsFinite(Fertility) || Fertility < 0 || Fertility > 1
+                || BearingCapacity is double bearing && (!double.IsFinite(bearing) || bearing < 0 || bearing > 1))
                 throw new ArgumentOutOfRangeException(nameof(SoilProperties), "Invalid soil storage or flux parameters.");
         }
 

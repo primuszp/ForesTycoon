@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace ForesTycoon.Ecology
 {
@@ -205,6 +206,29 @@ namespace ForesTycoon.Ecology
             accumulatedSeconds = 0.0;
             month = 0;
             ClearStatistics();
+            Revision++; EditRevision++;
+        }
+
+        /// <summary>
+        /// A world-editor map's forest: painted tiles get a natural mature stand of the chosen species, or none.
+        /// The rest of the generated forest stays; individuals are rebuilt from the stands.
+        /// </summary>
+        internal void PaintInitialForest(IReadOnlyDictionary<int, ForestSpecies> paint)
+        {
+            if (paint == null || paint.Count == 0) return;
+            for (int id = 0; id < stands.Length; id++) stands[id] = IndividualStand(id, ForestYear);
+            foreach (var (tileId, species) in paint)
+            {
+                if ((uint)tileId >= (uint)stands.Length) continue;
+                if (species == ForestSpecies.None || !habitat.CanSupportForest(tileId)) { stands[tileId] = default; continue; }
+                float moisture = habitat.GetMoisture(tileId), elevation = habitat.GetNormalizedElevation(tileId);
+                ForestSpeciesProfile profile = ForestSpeciesProfile.For(species);
+                float age = 4f + UnitFloat(Hash(habitat.Seed, tileId, 1)) * profile.MatureAgeYears * 2.2f;
+                float health = Math.Clamp(0.72f + Fitness(species, moisture, elevation) * 0.28f, 0f, 1f);
+                stands[tileId] = new ForestStand(species, age, InitialBiomass(profile, age, health), health);
+            }
+            InitializeIndividuals();
+            RecalculateStatistics();
             Revision++; EditRevision++;
         }
 

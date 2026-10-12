@@ -234,7 +234,8 @@ namespace ForesTycoon
             this.captureDirectory = captureDirectory;
             this.captureSeasons = captureSeasons;
             this.resumeWorld = resumeWorld; this.runtimeAcknowledgement = runtimeAcknowledgement;
-            ruleProjectLink = new(closeOldRuntime: Close, bootstrapAlgorithms: !smokeTestFrameLimit.HasValue);
+            // No automatic whole-code graph bootstrap: the built code runs unless a project carries an edited algorithm bundle.
+            ruleProjectLink = new(closeOldRuntime: Close, bootstrapAlgorithms: false);
         }
 
         protected override void LoadScene()
@@ -496,7 +497,9 @@ namespace ForesTycoon
             int seed = new Random().Next();
             if (tileCount.HasValue) currentMapTiles = tileCount.Value;
             interaction.CancelGesture();
-            world.Regenerate(TerrainSettings.Default.WithNodeSize(currentMapTiles + 1, seed).WithForestPattern(forestPattern ?? world.InitialForestPattern));
+            // A published world-editor map is the new world; an explicit size or pattern request still generates freely.
+            if (world.RuleProjectDocument.World is WorldScenario scenario && tileCount == null && forestPattern == null) world.StartScenario(scenario);
+            else world.Regenerate(TerrainSettings.Default.WithNodeSize(currentMapTiles + 1, seed).WithForestPattern(forestPattern ?? world.InitialForestPattern));
             simulationClock.Reset();
             RequestFrame();
         }

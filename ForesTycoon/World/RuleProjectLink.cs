@@ -65,6 +65,9 @@ internal sealed class RuleProjectLink
                 if (json == installed && building == null && replacement == null) Error = null;
                 if (json != installed && json != rejectedJson && building == null && replacement == null) {
                     var project = RuleProject.FromJson(json); GameWorld.ValidateRuleProject(project);
+                    string stale = AlgorithmBuild.StaleReason(project.Algorithms);
+                    // An outdated code snapshot never replaces the running code; the rules, formulas and map still apply.
+                    if (stale != null) project.Algorithms = AlgorithmBuild.CurrentReference;
                     if (project.Algorithms == null && AlgorithmBuild.CurrentReference is AlgorithmGraphReference current) {
                         project.Algorithms = current; json = project.ToJson(); RuleProject.WriteAtomic(path, json);
                     }
@@ -82,7 +85,10 @@ internal sealed class RuleProjectLink
                         if (closeOldRuntime == null) throw new InvalidDataException("Ez a host nem támogat algoritmusfuttató-cserét.");
                         buildingJson = json; building = Task.Run(async () => (await AlgorithmBuild.CompileAsync(project.Algorithms), project.ToJson()));
                         Error = "Az új algoritmusgráfok fordítása folyamatban; a játék a jelenlegi szabályokkal fut.";
-                    } else { world.QueueRuleProject(project); installed = json; rejectedJson = null; Error = null; }
+                    } else {
+                        world.QueueRuleProject(project); installed = json; rejectedJson = null;
+                        Error = stale == null ? null : "A projekt algoritmusmásolata elavult (" + stale + "); a játék a saját kódjával fut, a szabályokat átvette.";
+                    }
                 }
             } catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or ArgumentException) { Error = e.Message; }
         }

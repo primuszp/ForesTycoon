@@ -18,6 +18,15 @@ public sealed class SystemSubsystem
     public string Description { get; set; } = "";
 }
 
+/// <summary>A horizontal layer of a map tile (groundwater, soil, terrain, surface, vegetation, atmosphere) or a non-spatial one.</summary>
+public sealed class SystemLayer
+{
+    public string Id { get; set; } = "";
+    public string Name { get; set; } = "";
+    public bool PerTile { get; set; } = true;
+    public string Description { get; set; } = "";
+}
+
 /// <summary>A named game quantity read or written by rules. <see cref="Observe"/> is its formula key, when exposed.</summary>
 public sealed class SystemVariable
 {
@@ -28,6 +37,8 @@ public sealed class SystemVariable
     public string Unit { get; set; } = "";
     public string Observe { get; set; } = "";
     public string Description { get; set; } = "";
+    /// <summary>The tile layer the quantity belongs to; empty for clocks, commands and presentation.</summary>
+    public string Layer { get; set; } = "";
 }
 
 /// <summary>
@@ -40,6 +51,8 @@ public sealed class SystemVocabulary
     public int Version { get; set; } = 1;
     public string Name { get; set; } = "";
     public List<SystemSubsystem> Subsystems { get; set; } = new();
+    /// <summary>Top to bottom: what stands on a tile above what lies beneath it.</summary>
+    public List<SystemLayer> Layers { get; set; } = new();
     public List<SystemVariable> Variables { get; set; } = new();
 
     private Dictionary<string, SystemVariable> byId, byObserve;
@@ -68,18 +81,40 @@ public sealed class SystemVocabulary
             if (s == null || string.IsNullOrWhiteSpace(s.Id) || string.IsNullOrWhiteSpace(s.Name) || !subsystems.Add(s.Id)
                 || s.Modules == null || s.Modules.Any(m => string.IsNullOrWhiteSpace(m) || !modules.Add(m)))
                 throw new InvalidDataException("Hibás vagy ismétlődő alrendszer: " + s?.Id);
+        var layers = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var l in Layers ?? throw new InvalidDataException("Hiányzó rétegek."))
+            if (l == null || string.IsNullOrWhiteSpace(l.Id) || string.IsNullOrWhiteSpace(l.Name) || l.Description == null || !layers.Add(l.Id))
+                throw new InvalidDataException("Hibás vagy ismétlődő réteg: " + l?.Id);
         byId = new(StringComparer.Ordinal); byObserve = new(StringComparer.Ordinal);
         foreach (var v in Variables) {
             if (v == null || string.IsNullOrWhiteSpace(v.Id) || string.IsNullOrWhiteSpace(v.Name) || !subsystems.Contains(v.Subsystem)
-                || !Enum.IsDefined(v.Kind) || v.Unit == null || v.Observe == null || v.Description == null || !byId.TryAdd(v.Id, v))
+                || !Enum.IsDefined(v.Kind) || v.Unit == null || v.Observe == null || v.Description == null || v.Layer == null
+                || v.Layer.Length > 0 && !layers.Contains(v.Layer) || !byId.TryAdd(v.Id, v))
                 throw new InvalidDataException("Hibás vagy ismétlődő rendszerváltozó: " + v?.Id);
             if (v.Observe.Length > 0 && !byObserve.TryAdd(v.Observe, v)) throw new InvalidDataException("Ismétlődő mérési kulcs: " + v.Observe);
         }
+    }
+    /// <summary>A copy with a project's wording applied; unknown quantities and subsystems are ignored.</summary>
+    public SystemVocabulary With(IReadOnlyDictionary<string, QuantityPresentation> overrides)
+    {
+        if (overrides == null || overrides.Count == 0) return this;
+        var copy = FromJson(ToJson());
+        foreach (var (id, o) in overrides) {
+            var v = copy.Variables.Find(x => x.Id == id);
+            if (v == null || o == null) continue;
+            if (!string.IsNullOrWhiteSpace(o.Name)) v.Name = o.Name.Trim();
+            if (!string.IsNullOrWhiteSpace(o.Unit)) v.Unit = o.Unit.Trim();
+            if (!string.IsNullOrWhiteSpace(o.Description)) v.Description = o.Description.Trim();
+            if (copy.Subsystems.Any(s => s.Id == o.Subsystem)) v.Subsystem = o.Subsystem;
+            if (o.Layer != null && copy.Layers.Any(l => l.Id == o.Layer)) v.Layer = o.Layer;
+        }
+        copy.Validate(); return copy;
     }
     public SystemVariable Find(string id) => id != null && byId.TryGetValue(id, out var v) ? v : null;
     /// <summary>The quantity a formula key (for example <c>world.treeCount</c>) observes.</summary>
     public SystemVariable Observed(string key) => key != null && byObserve.TryGetValue(key, out var v) ? v : null;
     public int SubsystemIndex(string id) => Subsystems.FindIndex(s => s.Id == id);
+    public int LayerIndex(string id) => Layers.FindIndex(l => l.Id == id);
     /// <summary>Index of the subsystem owning a catalog module; -1 for an unknown module.</summary>
     public int SubsystemOfModule(string module) => Subsystems.FindIndex(s => s.Modules.Contains(module));
     public static bool Endogenous(SystemVariableKind kind) => kind is SystemVariableKind.Stock or SystemVariableKind.Flow or SystemVariableKind.Auxiliary;
@@ -198,6 +233,16 @@ public sealed class SystemModelAnalysis
         Process(process)?.Writes.Select(Variable).Where(v => v?.Kind == SystemVariableKind.Stock).ToArray() ?? Array.Empty<SystemVariable>();
     /// <summary>The stock limits its own change (for example drainage depends on the stored water).</summary>
     public bool ReadsOwnStock(string process) => Process(process) is SystemProcess p && p.Writes.Any(w => p.Reads.Contains(w) && Variable(w)?.Kind == SystemVariableKind.Stock);
+    /// <summary>A quantity drawn in a layer: it has one, and it is not a clock, command or picture.</summary>
+    public static bool OnLayer(SystemVariable v) => v.Layer.Length > 0 && v.Kind is not (SystemVariableKind.Input or SystemVariableKind.Presentation);
+    /// <summary>Rules whose inputs and outputs lie in different layers, by (from, to) layer pair in stack order.</summary>
+    public IEnumerable<(string From, string To, SystemProcess[] Processes)> CrossLayerRules() =>
+        Processes.SelectMany(p => p.Reads.Select(Variable).Where(v => v != null && OnLayer(v)).Select(v => v.Layer).Distinct()
+                .SelectMany(from => p.Writes.Select(Variable).Where(v => v != null && OnLayer(v)).Select(v => v.Layer).Distinct()
+                    .Where(to => to != from).Select(to => (From: from, To: to, Process: p))))
+            .GroupBy(x => (x.From, x.To))
+            .OrderBy(g => Vocabulary.LayerIndex(g.Key.From)).ThenBy(g => Vocabulary.LayerIndex(g.Key.To))
+            .Select(g => (g.Key.From, g.Key.To, g.Select(x => x.Process).Distinct().ToArray()));
     public IReadOnlyList<string> CoupledGroupOf(string variable) => CoupledGroups.FirstOrDefault(g => g.Contains(variable));
 
     /// <summary>For each quantity this one influences, the shortest way back to it; shortest loops first.</summary>
