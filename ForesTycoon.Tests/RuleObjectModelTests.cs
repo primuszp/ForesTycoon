@@ -17,7 +17,7 @@ public sealed class RuleObjectModelTests
         Assert.False(tree.Abstract); Assert.True(schema.Find("plant").Abstract);
         // Inherited first, own last; only the plant's health is writable.
         Assert.Equal("plant", tree.Fields.Single(f => f.Name == "health").DeclaredBy);
-        Assert.Equal(new[] { "health" }, tree.Fields.Where(f => f.Writable).Select(f => f.Name));
+        Assert.Equal(new[] { "health", "stressYears" }, tree.Fields.Where(f => f.Writable).Select(f => f.Name));
         Assert.Equal("tileEnvironment", Assert.Single(tree.Relations).Target);
         // Concrete kinds become scopes; relation fields are readable as "relation.field".
         var scope = RuleEngine.Scope("tree");
@@ -86,5 +86,47 @@ public sealed class RuleObjectModelTests
         Assert.Contains(map.Loops, l => l.Polarity == -1 && l.Edges.Select(e => e.From).OrderBy(k => k)
             .SequenceEqual(new[] { "tileEnvironment.cover", "tree.height", "tree.light" }));
         Assert.All(map.Loops, l => Assert.Equal(l.Edges[0].From, l.Edges[^1].To));
+    }
+
+    [Fact]
+    public void StumpDecayIsARuleBookRuleAndItsCurveDecidesWhenAStumpGoes()
+    {
+        using var world = World();
+        var rule = Assert.Single(world.RuleProjectDocument.Rules, r => r.Id == "forest.stumps");
+        Assert.True(rule.BuiltIn && rule.Enabled); Assert.Equal("stump", rule.Scope);
+        Assert.True(world.DiagnosticFellForestBlock(out _));
+        var stumps = RuleEngine.Scope("stump");
+        int felled = stumps.Elements(world).Length;
+        Assert.True(felled > 0);
+        // Fresh stumps stay: they are younger than six forest years.
+        Run(world, 1);
+        Assert.Equal(felled, stumps.Elements(world).Length);
+        // Move the threshold below their age: the rule removes every one of them.
+        var project = world.RuleProjectDocument; project.Algorithms = null;
+        project.Rules.Single(r => r.Id == "forest.stumps").Effects[0].Formula = "curve.step(age; 0; 0; 1)";
+        world.QueueRuleProject(project); world.ExecutePendingCommands();
+        Run(world, 1);
+        Assert.Null(world.RuleBook.LastError);
+        Assert.Empty(stumps.Elements(world));
+    }
+
+    [Fact]
+    public void AnArrowDrawnOnTheMapNamesItsSourceThroughTheRelationAndRunsAsARule()
+    {
+        var schema = GameWorld.RuleObjects;
+        Assert.Equal("tile.rootWater", RuleCausalMap.NameIn(schema, "tree", "tileEnvironment.rootWater"));
+        Assert.Equal("age", RuleCausalMap.NameIn(schema, "tree", "tree.age"));
+        Assert.Null(RuleCausalMap.NameIn(schema, "tree", "truck.cargo"));
+        // What the editor stores for "Root water → Stress years": a rule on the tree with a curve of the relation field.
+        using var world = World();
+        var project = world.RuleProjectDocument; project.Algorithms = null;
+        var curve = new RuleCurve { Input = "tile.rootWater", Points = new() { (0, 0.5), (200, 0) }, Tail = " * lépés" };
+        project.Rules.Add(new WorldRule { Id = "drawn", Name = "Root water › Stress years", Scope = "tree",
+            Effects = { new() { Target = "stressYears", Mode = "add", Formula = curve.ToFormula() } } });
+        world.QueueRuleProject(project); world.ExecutePendingCommands();
+        Run(world, 0.6);
+        Assert.Null(world.RuleBook.LastError);
+        var edge = Assert.Single(RuleCausalMap.Build(schema, world.RuleProjectDocument.Rules).Edges, e => e.Rule == "drawn");
+        Assert.Equal(("tileEnvironment.rootWater", "tree.stressYears", -1), (edge.From, edge.To, edge.Sign));
     }
 }

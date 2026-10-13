@@ -7,6 +7,8 @@ namespace ForesTycoon.Ecology
     sealed partial class ForestSystem
     {
         internal ForestTreeStore IndividualTrees { get; } = new();
+        /// <summary>Stump decay runs as a rule-book rule (forest.stumps) in the game; standalone forests keep the native removal.</summary>
+        internal bool StumpsByRules { get; set; }
         private ForestCompetition competition = new();
         private readonly ForestMonthlyPreparation monthlyPreparation = new();
         internal int LastMonthlyPreparedTrees { get; private set; }
@@ -207,7 +209,7 @@ namespace ForesTycoon.Ecology
                         if (year - patch.DeadTrees[i].DeathYear >= 8) {
                             patch.DeadTrees.RemoveAt(i); IndividualTrees.NotifyTopologyChanged(patch);
                         }
-                if (patch.Stumps == null) continue;
+                if (patch.Stumps == null || StumpsByRules) continue;
                 for (int i = patch.Stumps.Count - 1; i >= 0; i--)
                     if (patch.Stumps[i].Decay(year) >= 1) {
                         patch.Stumps.RemoveAt(i); IndividualTrees.NotifyTopologyChanged(patch);

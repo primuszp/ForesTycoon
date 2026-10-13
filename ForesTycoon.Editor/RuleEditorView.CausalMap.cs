@@ -19,7 +19,9 @@ internal sealed partial class RuleEditorView
     private readonly Dictionary<string, Vec2> mapPositions = new(StringComparer.Ordinal);
     private Vec2 mapPan = new(20, 20);
     private int mapEdge = -1, mapLoop = -1;
-    private string mapDragNode;
+    private string mapDragNode, mapLinkFrom;
+    private readonly HashSet<string> mapExtra = new(StringComparer.Ordinal);
+    private GameWorld mapWorld; // the world this frame edits, for links made on the canvas
     private bool mapEditableOnly;
 
     private static readonly Vec2 NodeSize = new(180, 42);
@@ -33,7 +35,8 @@ internal sealed partial class RuleEditorView
     private void CausalMapArea(GameWorld world)
     {
         var rules = RuleBookRules(world);
-        var map = RuleCausalMap.Build(Objects, rules);
+        mapWorld = world;
+        var map = RuleCausalMap.Build(Objects, rules, mapExtra);
         if (pendingEdgeRule != null) { mapEdge = map.Edges.ToList().FindIndex(e => e.Rule == pendingEdgeRule); pendingEdgeRule = null; }
         mapEdge = Math.Min(mapEdge, map.Edges.Count - 1); mapLoop = Math.Min(mapLoop, map.Loops.Count - 1);
         Layout(map);
@@ -65,6 +68,23 @@ internal sealed partial class RuleEditorView
             "Húzd a mezőket a rendezéshez, a jobb egérgombbal a térképet.");
         ImGui.PopTextWrapPos();
         if (ImGui.Button("Elrendezés alaphelyzetbe")) { mapPositions.Clear(); mapPan = new(20, 20); }
+        EditorStyle.Section("Rajzolás");
+        ImGui.PushTextWrapPos(0);
+        EditorStyle.Text(HudTheme.Muted, "Húzz a mező jobb szélén lévő pontból egy sárga keretes (írható) mezőre: új szabály lesz, görbével. " +
+            "Kijelölt nyíl: Del törli.");
+        ImGui.PopTextWrapPos();
+        ImGui.SetNextItemWidth(-1);
+        if (ImGui.BeginCombo("##map-add", "+ mező a térképre")) {
+            foreach (var e in Objects.Entities.Where(x => !x.Abstract || x.Id == "tileEnvironment")) {
+                EditorStyle.Text(HudTheme.Muted, e.Name);
+                foreach (var f in e.Fields.Where(f => f.Name != "index")) {
+                    string key = e.Id + "." + f.Name;
+                    if (map.Nodes.Any(n => n.Key == key)) continue;
+                    if (ImGui.Selectable($"  {f.Display}##add{key}")) mapExtra.Add(key);
+                }
+            }
+            ImGui.EndCombo();
+        }
         ImGui.EndChild(); ImGui.SameLine();
 
         // ── Middle: the map ────────────────────────────────────────────
@@ -74,7 +94,8 @@ internal sealed partial class RuleEditorView
         ImGui.EndChild();
 
         // ── Right: the selected rule, with its curve ─────────────────────
-        if (detail) { ImGui.SameLine(); ImGui.BeginChild("map-rule", Vec2.Zero, ImGuiChildFlags.Borders); EdgeDetail(world, map, map.Edges[mapEdge], rules); ImGui.EndChild(); }
+        // A click on the map may have just cleared or changed the selection.
+        if (detail && mapEdge >= 0 && mapEdge < map.Edges.Count) { ImGui.SameLine(); ImGui.BeginChild("map-rule", Vec2.Zero, ImGuiChildFlags.Borders); EdgeDetail(world, map, map.Edges[mapEdge], rules); ImGui.EndChild(); }
     }
 
     private static void Legend(Vec4 colour, string text, bool dashed)
@@ -110,6 +131,8 @@ internal sealed partial class RuleEditorView
         ImGui.InvisibleButton("map-surface", Vec2.Max(size, new Vec2(50, 50)), ImGuiButtonFlags.MouseButtonLeft | ImGuiButtonFlags.MouseButtonRight);
         bool hovered = ImGui.IsItemHovered(); var io = ImGui.GetIO(); var mouse = io.MousePos;
         if (ImGui.IsItemActive() && ImGui.IsMouseDragging(ImGuiMouseButton.Right)) mapPan += io.MouseDelta;
+        // The layout may have been reset by a button earlier in this frame: place any field that has no position yet.
+        Layout(map);
         var dl = ImGui.GetWindowDrawList();
         dl.PushClipRect(origin, origin + size, true);
         Vec2 At(string key) => origin + mapPan + mapPositions[key];
@@ -152,7 +175,7 @@ internal sealed partial class RuleEditorView
         }
 
         // Fields: drag to arrange; hover for help.
-        string hoverNode = null;
+        string hoverNode = null, hoverPort = null;
         foreach (var n in map.Nodes) {
             var p = At(n.Key); bool over = hovered && mouse.X >= p.X && mouse.Y >= p.Y && mouse.X <= p.X + NodeSize.X && mouse.Y <= p.Y + NodeSize.Y;
             if (over) hoverNode = n.Key;
@@ -162,14 +185,33 @@ internal sealed partial class RuleEditorView
             var title = n.Field.Display; var code = n.Entity + "." + n.Field.Name;
             dl.AddText(p + new Vec2((NodeSize.X - ImGui.CalcTextSize(title).X) / 2, 5), EditorStyle.U(HudTheme.Parchment), title);
             dl.AddText(p + new Vec2((NodeSize.X - ImGui.CalcTextSize(code).X) / 2, 22), EditorStyle.U(HudTheme.Muted), code);
+            var port = p + new Vec2(NodeSize.X, NodeSize.Y / 2);
+            bool portHot = hovered && Vec2.Distance(port, mouse) < 9;
+            dl.AddCircleFilled(port, portHot ? 6 : 4, EditorStyle.U(portHot ? HudTheme.AmberAccent : HudTheme.Muted));
+            if (portHot) hoverPort = n.Key;
+        }
+        // A link being drawn follows the mouse; the field under it lights up when it can be the target.
+        if (mapLinkFrom != null) {
+            var target = hoverNode != null ? map.Nodes.First(x => x.Key == hoverNode) : null;
+            bool ok = target != null && target.Key != mapLinkFrom && LinkScope(target) != null && RuleCausalMap.NameIn(Objects, LinkScope(target), mapLinkFrom) != null;
+            dl.AddLine(At(mapLinkFrom) + new Vec2(NodeSize.X, NodeSize.Y / 2), mouse, EditorStyle.U(ok ? HudTheme.AmberAccent : HudTheme.Muted), 2.5f);
+            if (target != null) dl.AddRect(At(target.Key) - new Vec2(3, 3), At(target.Key) + NodeSize + new Vec2(3, 3), EditorStyle.U(ok ? HudTheme.Good : HudTheme.Bad), 8, ImDrawFlags.None, 2);
         }
 
         if (ImGui.IsItemActivated() && ImGui.IsMouseClicked(ImGuiMouseButton.Left)) {
-            mapDragNode = hoverNode;
-            if (hoverNode == null) { mapEdge = hoverEdge; if (hoverEdge >= 0) draggedPoint = -1; }
+            if (hoverPort != null) mapLinkFrom = hoverPort;
+            else {
+                mapDragNode = hoverNode;
+                if (hoverNode == null) { mapEdge = hoverEdge; if (hoverEdge >= 0) draggedPoint = -1; }
+            }
         }
         if (ImGui.IsItemActive() && mapDragNode != null && ImGui.IsMouseDragging(ImGuiMouseButton.Left)) mapPositions[mapDragNode] += io.MouseDelta;
-        if (ImGui.IsItemDeactivated()) mapDragNode = null;
+        if (ImGui.IsItemDeactivated()) {
+            if (mapLinkFrom != null && hoverNode != null && hoverNode != mapLinkFrom) CreateLink(map, mapLinkFrom, map.Nodes.First(x => x.Key == hoverNode));
+            mapDragNode = null; mapLinkFrom = null;
+        }
+        if (mapEdge >= 0 && mapEdge < map.Edges.Count && !map.Edges[mapEdge].Native && ImGui.IsWindowFocused() && ImGui.IsKeyPressed(ImGuiKey.Delete))
+            DeleteLink(map.Edges[mapEdge]);
 
         if (hoverNode != null) {
             var n = map.Nodes.First(x => x.Key == hoverNode);
@@ -192,6 +234,46 @@ internal sealed partial class RuleEditorView
         return dir * Math.Min(sx, sy);
     }
 
+    /// <summary>The scope a link into <paramref name="target"/> becomes a rule on: its concrete object kind, if the field is writable.</summary>
+    private static string LinkScope(CausalNode target) =>
+        target.Field.Writable && Objects.Find(target.Entity) is { Abstract: false } && RuleEngine.Scope(target.Entity) != null ? target.Entity : null;
+
+    /// <summary>A drawn arrow becomes a rule: on the target's object, the target changes by a curve of the source.</summary>
+    private void CreateLink(RuleCausalMap map, string from, CausalNode target)
+    {
+        string scope = LinkScope(target);
+        if (scope == null) { message = $"{target.Field.Display}: nem írható mező, nem lehet nyíl célja."; return; }
+        string input = RuleCausalMap.NameIn(Objects, scope, from);
+        if (input == null) { message = $"A(z) {Objects.Find(scope).Name} objektum nem látja ezt a mezőt: nincs köztük kapcsolat."; return; }
+        var source = map.Nodes.First(n => n.Key == from).Field;
+        double lo = double.IsFinite(source.Min) ? source.Min : 0, hi = double.IsFinite(source.Max) ? source.Max : Math.Max(lo + 1, 10);
+        var rules = RuleBookRules(mapWorld);
+        int n = rules.Count(r => !r.BuiltIn) + 1;
+        while (rules.Exists(r => r.Id == $"sajat-{n}")) n++;
+        var curve = new RuleCurve { Family = "linear", Input = input, Points = new() { (lo, 0), (hi, 0.1) }, Tail = " * lépés" };
+        rules.Add(new WorldRule { Id = $"sajat-{n}", Name = $"{source.Display} › {target.Field.Display}", Scope = scope, Enabled = false,
+            Description = "A térképen rajzolva.", Effects = { new() { Target = target.Field.Name, Mode = "add", Formula = curve.ToFormula() } } });
+        ApplyRuleBook(mapWorld, "Új nyíl, kikapcsolva: formáld meg a görbét, majd kapcsold be.");
+        var rebuilt = RuleCausalMap.Build(Objects, rules, mapExtra);
+        mapEdge = rebuilt.Edges.ToList().FindIndex(e => e.RuleIndex == rules.Count - 1);
+    }
+
+    /// <summary>Removes a rule-book arrow: its effects on the target; a rule left without effects goes too (a built-in one is switched off).</summary>
+    private void DeleteLink(CausalEdge edge)
+    {
+        var rules = RuleBookRules(mapWorld);
+        if (edge.RuleIndex < 0 || edge.RuleIndex >= rules.Count) return;
+        var rule = rules[edge.RuleIndex];
+        if (rule.BuiltIn) { rule.Enabled = false; ApplyRuleBook(mapWorld, rule.Name + ": kikapcsolva (beépített, nem törölhető)."); }
+        else {
+            string field = edge.To[(edge.To.IndexOf('.') + 1)..];
+            rule.Effects.RemoveAll(e => e.Target == field && e.Mode != "action");
+            if (rule.Effects.Count == 0) rules.RemoveAt(edge.RuleIndex);
+            ApplyRuleBook(mapWorld, rule.Name + ": nyíl törölve.");
+        }
+        mapEdge = -1;
+    }
+
     private void EdgeDetail(GameWorld world, RuleCausalMap map, CausalEdge edge, List<WorldRule> rules)
     {
         EditorStyle.Text(HudTheme.Parchment, edge.RuleName);
@@ -207,12 +289,15 @@ internal sealed partial class RuleEditorView
             return;
         }
         ImGui.PopTextWrapPos();
+        if (edge.RuleIndex < 0 || edge.RuleIndex >= rules.Count) { mapEdge = -1; return; }
         var rule = rules[edge.RuleIndex];
         if (!rule.Enabled) {
             EditorStyle.Text(HudTheme.AmberAccent, "Kikapcsolva: nem fut a játékban.");
             ImGui.SameLine(); if (ImGui.SmallButton("Bekapcsolás")) { rule.Enabled = true; ApplyRuleBook(world, rule.Name + ": bekapcsolva."); }
         }
         if (ImGui.Button("Megnyitás a szabálykönyvben")) ShowRuleBook(edge.RuleIndex);
+        ImGui.SameLine();
+        if (ImGui.Button(rule.BuiltIn ? "Kikapcsolás" : "Nyíl törlése")) { DeleteLink(edge); return; }
         EditorStyle.Section("Hatás");
         string to = edge.To[(edge.To.IndexOf('.') + 1)..];
         bool finished = false, any = false;
@@ -224,6 +309,10 @@ internal sealed partial class RuleEditorView
             any = true;
             EditorStyle.Text(HudTheme.Muted, e.Mode == "add" ? $"{e.Target} változása lépésenként:" : $"{e.Target} értéke:");
             if (RuleCurve.TryParse(e.Formula, out var curve)) {
+                if (EditorStyle.QuietButton($"előjel megfordítása##flip{i}", "A görbe a 0-ra tükröződik: ami nőtt, csökken, és fordítva.")) {
+                    curve.Points = curve.Points.Select(p => (p.X, -p.Y)).ToList(); curve.Above = -curve.Above;
+                    e.Formula = curve.ToFormula(); finished = true;
+                }
                 if (CurveEditor(rule.Id + "#" + i, curve, scope?.Entity ?? rule.Scope, inputs, ref finished)) e.Formula = curve.ToFormula();
             } else {
                 ImGui.PushTextWrapPos(0); ImGui.TextUnformatted(e.Formula); ImGui.PopTextWrapPos();

@@ -138,3 +138,35 @@ Mit mutat meg:
   szabálykönyv kapcsolatait a képletekből olvassa ki; görbénél az előjel a görbe irányából jön, máskor „±”.
   A visszacsatolási hurkok listázva, kiemelhetők; egy szabálykönyv-nyílra kattintva a görbe ott helyben szerkeszthető.
 - Az aszálykár-minta képlete: `curve.linear(tile.waterSupply; 0; -0,3; 0,2; 0) * (1 - 0,5 * shadeTolerance) * lépés`.
+
+## 8. Gráfos szerkesztés (megvalósítva)
+
+- A térképen minden mező jobb szélén pont van; onnan egy **írható** (sárga keretes) mezőre húzva új szabály lesz a cél
+  objektumán: `cél += curve.linear(forrás; …) * lépés`. A forrás más objektumé is lehet, ha a cél látja egy kapcsolaton át
+  (`tile.rootWater`). Az új szabály kikapcsolva születik, a görbéje jobbra azonnal szerkeszthető.
+- Kijelölt nyíl: **Del** vagy „Nyíl törlése” (beépített szabálynál kikapcsolás); „előjel megfordítása” a görbét a 0-ra tükrözi.
+- „+ mező a térképre”: kapcsolat nélküli mező felvétele, hogy az első nyíl rajzolható legyen.
+- Írható mezők most: `tree.health`, `tree.stressYears`. Új írható mező = setter az interfészen és a nézetosztályban.
+
+## 9. A natív C# szabályok átköltöztetése
+
+Cél: minden játékszabály a szabálykönyvben fusson, a térképen szerkeszthető nyílként. Egy szabály átköltöztetése:
+objektum és mező az interfészen (írható, ha a szabály írja) → beépített szabály a `RuleEngine.BuiltIn()`-ben, az eddigi
+viselkedéssel egyezően → a natív ág kikapcsolása (a játékban; önálló ökológiai teszteknél megmaradhat) → teszt, hogy ugyanaz
+történik → a katalógusban `EditableExpressions`. Kész: `trail.age`, `forest.stumps` (hatókör: `stump`, `remove` művelet).
+
+Javasolt sorrend (az egyszerűtől az összetettig; mindegyik után mérés):
+
+| Lépés | Szabályok | Ami kell hozzá |
+| --- | --- | --- |
+| 1 | `road.weather`, `trail.traffic`, `trail.trafficability` | `IRoad`, `ISkidTrail` objektum; a régi `trail` hatókör kiváltása |
+| 2 | `upkeep.wear`, `upkeep.service`, `upkeep.effects`, `upkeep.repair` | `IVehicle` írható kopás, `repair` művelet; `IForwarder`, `IProcessor` |
+| 3 | `economy.fuel`, `economy.balance`, `timber.deliver` | világ-objektum pénzmezői, **események** (faanyag leszállítva) |
+| 4 | `forest.health`, `forest.mortality` | `month` időzítés; `die` művelet a fán |
+| 5 | `forest.growth`, `forest.canopy`, `forest.competition`, `forest.regeneration` | havi kétfázisú futás (szomszédok pillanatképe), `plant` művelet |
+| 6 | `water.*` (11 szabály) | csempe-objektum írható vízmezői, **áthelyező** hatás (a vízmérleg megmaradjon), óránkénti időzítés |
+| 7 | `vehicle.*`, `machine.*`, `fleet.*`, `mill.*`, `wildlife.*` | állapotgépek a térképen; a gépvezérlő már szerkeszthető |
+
+Nem költözik: a megjelenítés (`visual.*`), a terepgenerálás, a mentés és a parancsfeldolgozás (`time.*`, `commands.apply`,
+`save.restore`, `terrain.*`) – ezek a motor részei, nem játékszabályok. A natív nyilak (`[RuleCause]`) addig is a térképen
+vannak; átköltöztetéskor a deklaráció helyét a beépített szabály veszi át.

@@ -34,6 +34,20 @@ namespace ForesTycoon.OpenGl
         {
             ObjectDisposedException.ThrowIf(disposed, this);
             owner.Check();
+            // Leave the GL state as found: later passes (and the next frame) rely on their program, buffer and texture units.
+            GL.GetInteger(GetPName.CurrentProgram, out int program);
+            GL.GetInteger(GetPName.ArrayBufferBinding, out int arrayBuffer);
+            GL.ActiveTexture(TextureUnit.Texture3); GL.GetInteger(GetPName.TextureBinding2D, out int unit3); GL.ActiveTexture(TextureUnit.Texture0);
+            try { DrawWeather(terrain, forest, weather, settings, context, environment); }
+            finally {
+                GL.ActiveTexture(TextureUnit.Texture3); GL.BindTexture(TextureTarget.Texture2D, unit3); GL.ActiveTexture(TextureUnit.Texture0);
+                GL.BindBuffer(BufferTarget.ArrayBuffer, arrayBuffer);
+                GL.UseProgram(program);
+            }
+        }
+
+        private void DrawWeather(Terrain terrain, ForestSystem forest, WeatherVisualState weather, GraphicsSettings settings, RenderContext context, EnvironmentSystem environment)
+        {
             submittedParticles = submittedSegments = 0; depthFallback = false;
             if((!settings.Fog || settings.FogDensity <= 0) && weather.Flash < 0.002f) return;
             terrain.CollectForestWeather(mist, forest, crowns, settings.Lightning && weather.Flash >= 0.002f && eventId != weather.LightningEvent,environment,
@@ -82,6 +96,9 @@ namespace ForesTycoon.OpenGl
                 GL.Uniform3(GlProgram.Uniform(fogProgram,"up"),up);
                 GL.Uniform3(GlProgram.Uniform(fogProgram,"climate"),(float)(weather.Time%4096),
                     settings.FogDensity,weather.Flash);
+                // How many quads stack on an average pixel: the view is orthographic, so one NDC scale per axis.
+                float rightPerUnit=(new Vector4(right,0)*camera).Xy.Length, upPerUnit=(new Vector4(up,0)*camera).Xy.Length;
+                GL.Uniform1(GlProgram.Uniform(fogProgram,"coverage"),FogParticleMotion.CoverageScale(FogParticleMotion.Overlap(rightPerUnit,upPerUnit,particles)));
                 GL.BindVertexArray(vao); GL.BindBuffer(BufferTarget.ArrayBuffer,buffer);
                 if (upload.Length < particles.Count * 8) Array.Resize(ref upload, Math.Max(particles.Count * 8, upload.Length * 2));
                 float[] data = upload;
@@ -179,6 +196,7 @@ in vec2 uv;
 in vec3 world;
 in vec4 particle;
 uniform vec3 climate;
+uniform float coverage;
 uniform mat4 inverse_camera;
 uniform vec4 viewport;
 uniform sampler2D scene_depth;
@@ -200,7 +218,7 @@ void main(){
     float edge=(1-smoothstep(0.5,1,length(uv)));
     vec2 q=uv*3.2+vec2(particle.z,particle.w)+vec2(climate.x*0.018,-climate.x*0.012);
     float density=noise(q)*0.65+noise(q*2.03)*0.25+noise(q*4.1)*0.1;
-    float alpha=edge*smoothstep(0.1,0.6,density)*particle.x*climate.y*0.38*intersection;
+    float alpha=edge*smoothstep(0.1,0.6,density)*particle.x*climate.y*0.38*intersection*coverage;
     if(alpha<0.003) discard;
     output_color=vec4(vec3(0.74,0.79,0.81)+vec3(0.5,0.6,0.8)*climate.z,alpha);
 }");

@@ -29,7 +29,8 @@ public sealed class RuleCausalMap
         Nodes = nodes; Edges = edges; Loops = FindLoops(nodes, edges);
     }
 
-    public static RuleCausalMap Build(RuleSchema schema, IReadOnlyList<WorldRule> rules)
+    /// <param name="extra">Fields to show even without links ("tree.age"), so the designer can draw the first one.</param>
+    public static RuleCausalMap Build(RuleSchema schema, IReadOnlyList<WorldRule> rules, IEnumerable<string> extra = null)
     {
         var nodes = new Dictionary<string, CausalNode>(StringComparer.Ordinal);
         var edges = new List<CausalEdge>();
@@ -73,6 +74,7 @@ public sealed class RuleCausalMap
                 }
             }
         }
+        foreach (string key in extra ?? Enumerable.Empty<string>()) Resolve(key);
         return new(nodes.Values.OrderBy(n => n.Entity, StringComparer.Ordinal).ToList(), edges);
     }
 
@@ -80,6 +82,17 @@ public sealed class RuleCausalMap
     private static readonly Regex Identifier = new(@"[\p{L}_][\p{L}\p{N}_.]*", RegexOptions.Compiled);
     private static IEnumerable<string> Mentioned(RuleEntitySchema scope, string text, RuleSchema schema) =>
         Identifier.Matches(text ?? "").Select(m => Local(scope, m.Value.TrimEnd('.'), schema)).Where(k => k != null).Distinct();
+
+    /// <summary>How a rule on <paramref name="scope"/> names the field <paramref name="key"/>: its own field, or through a relation. Null: unreachable.</summary>
+    public static string NameIn(RuleSchema schema, string scope, string key)
+    {
+        var e = schema.Find(scope); int dot = key.IndexOf('.');
+        if (e == null || dot < 0) return null;
+        string entity = key[..dot], field = key[(dot + 1)..];
+        if (schema.Lineage(scope).Any(x => x.Id == entity) && e.Fields.Any(f => f.Name == field)) return field;
+        var relation = e.Relations.FirstOrDefault(r => r.Target == entity);
+        return relation != null && schema.Find(entity).Fields.Any(f => f.Name == field) ? relation.Name + "." + field : null;
+    }
 
     private static string Local(RuleEntitySchema scope, string name, RuleSchema schema)
     {

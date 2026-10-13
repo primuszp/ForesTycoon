@@ -68,8 +68,17 @@ internal interface ITree : IPlant
     [RuleField("Consecutive years short of resources; above 4 a weak tree dies.", Unit = "forest years", Min = 0)]
     [RuleCause("tree.light", -1, "forest.mortality")]
     [RuleCause("tree.water", -1, "forest.mortality")]
-    double StressYears { get; }
+    double StressYears { get; set; }
     [RuleField("Shade tolerance of the species.", Unit = "0–1", Min = 0, Max = 1)] double ShadeTolerance { get; }
+}
+
+[RuleEntity("stump", Element = "stump", Help = "What is left of a felled tree. It rots away; the rule book decides when it is gone.")]
+internal interface IStump : IWorldObject
+{
+    [RuleField("Forest years since the tree was felled.", Unit = "forest years", Min = 0)] double Age { get; }
+    [RuleField("Stem diameter of the felled tree.", Unit = "m", Min = 0)] double Diameter { get; }
+    [RuleRelation("The tile the stump stands on.")] ITileEnvironment Tile { get; }
+    [RuleAction("The stump has rotted away and disappears.")] bool Remove();
 }
 
 [RuleEntity("vehicle", Abstract = true, Help = "Anything that moves on the road network.")]
@@ -135,7 +144,7 @@ sealed partial class GameWorld
         public double Diameter => Tree.At(World.forest.ForestYear).Diameter;
         public double Light => Tree.Resources.Light;
         public double Water => Tree.Resources.Water;
-        public double StressYears => Tree.StressYears;
+        public double StressYears { get => Tree.StressYears; set => Tree = Tree with { StressYears = (float)Math.Max(0, value) }; }
         public double ShadeTolerance => ForestSpeciesProfile.For(Tree.Species).ShadeTolerance;
 
         /// <summary>A fixed visiting order: tiles ascending, trees in store order.</summary>
@@ -146,6 +155,33 @@ sealed partial class GameWorld
                 for (int i = 0; i < patch.Count; i++) list.Add((id, i));
             Trees = list.ToArray(); tile.Invalidate();
             return Enumerable.Range(0, Trees.Length).ToArray();
+        }
+    }
+
+    private sealed class StumpView : RuleView, IStump
+    {
+        internal (int Tile, int Index)[] Stumps = Array.Empty<(int, int)>();
+        private readonly TileView tile = new();
+        private ForestTreeStump Stump { get { var (t, i) = Stumps[Id]; World.forest.IndividualTrees.TryGet(t, out var p); return p.Stumps[i]; } }
+        public double Age => Math.Max(0, World.forest.ForestYear - Stump.FelledYear);
+        public double Diameter => Stump.Felled.Dimensions.Diameter;
+        public ITileEnvironment Tile { get { tile.Bind(World, Stumps[Id].Tile); return tile; } }
+        public bool Remove()
+        {
+            var (t, i) = Stumps[Id];
+            World.forest.IndividualTrees.TryGet(t, out var patch);
+            patch.Stumps.RemoveAt(i); World.forest.IndividualTrees.NotifyTopologyChanged(patch);
+            return false; // vegetation only: the road network is unchanged
+        }
+
+        /// <summary>Tiles ascending, stumps of a tile last to first: removing one never moves a stump still to be visited.</summary>
+        internal int[] Snapshot(GameWorld world)
+        {
+            var list = new List<(int, int)>();
+            foreach (var (id, patch) in world.forest.IndividualTrees.Patches.OrderBy(p => p.Key))
+                if (patch.Stumps != null) for (int i = patch.Stumps.Count - 1; i >= 0; i--) list.Add((id, i));
+            Stumps = list.ToArray(); tile.Invalidate();
+            return Enumerable.Range(0, Stumps.Length).ToArray();
         }
     }
 
@@ -164,6 +200,7 @@ sealed partial class GameWorld
     // Views hold per-world element snapshots; each world gets its own.
     private static readonly ConditionalWeakTable<GameWorld, TreeView> TreeViews = new();
     private static readonly ConditionalWeakTable<GameWorld, TruckView> TruckViews = new();
+    private static readonly ConditionalWeakTable<GameWorld, StumpView> StumpViews = new();
 
     /// <summary>The object model of the game, as the editor sees it.</summary>
     internal static RuleSchema RuleObjects { get; } = RuleSchema.Discover(typeof(GameWorld).Assembly);
@@ -172,6 +209,8 @@ sealed partial class GameWorld
     internal static RuleScope[] DiscoveredScopes() => new[] {
         EntityScope(RuleObjects.Find("tree"), w => { var v = TreeViews.GetValue(w, _ => new()); return v.Snapshot(w); },
             w => TreeViews.GetValue(w, _ => new()).Trees.Length, (w, id) => { var v = TreeViews.GetValue(w, _ => new()); v.Bind(w, id); return v; }),
+        EntityScope(RuleObjects.Find("stump"), w => StumpViews.GetValue(w, _ => new()).Snapshot(w),
+            w => StumpViews.GetValue(w, _ => new()).Stumps.Length, (w, id) => { var v = StumpViews.GetValue(w, _ => new()); v.Bind(w, id); return v; }),
         EntityScope(RuleObjects.Find("truck"), w => Enumerable.Range(0, w.vehicles.Vehicles.Count).ToArray(), w => w.vehicles.Vehicles.Count,
             (w, id) => { var v = TruckViews.GetValue(w, _ => new()); v.Bind(w, id); return v; }),
     };

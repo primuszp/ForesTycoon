@@ -2343,9 +2343,9 @@
       "module": "Erd\u00E9szeti beavatkoz\u00E1s",
       "scope": "Kiv\u00E1gott fa helye",
       "schedule": "Erd\u0151h\u00F3nap / megjelen\u00EDt\u00E9s",
-      "execution": "NativeCode",
-      "description": "A t\u00F6nk hat erd\u0151\u00E9v alatt lebomlik; a telep\u00EDt\u00E9st nem akad\u00E1lyozza.",
-      "formula": "boml\u00E1s = clamp((\u00E9v - kiv\u00E1g\u00E1s \u00E9ve) / 6, 0, 1)",
+      "execution": "EditableExpressions",
+      "description": "A t\u00F6nk hat erd\u0151\u00E9v alatt lebomlik; a telep\u00EDt\u00E9st nem akad\u00E1lyozza. Szab\u00E1lyk\u00F6nyv-szab\u00E1ly (forest.stumps, hat\u00F3k\u00F6r: stump).",
+      "formula": "megsz\u0171nik, ha age \u2265 6",
       "notes": "",
       "reads": [
         "forest.stumps",

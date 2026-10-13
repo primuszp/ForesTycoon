@@ -196,7 +196,7 @@ namespace ForesTycoon
                 "Egész fák kerülnek a helyi rönkdepóba. Részrakodás nem zsugorítja a megmaradt fákat; a fák térfogata és a tönk mérete megmarad.", "V = π × átmérő² / 4 × magasság × 0,45");
             Add("forest.stumps", "Tönkök lebomlása", "Erdészeti beavatkozás", "Kivágott fa helye", "Erdőhónap / megjelenítés",
                 "ForesTycoon.Ecology/Species/ForestTree.cs", "LifetimeYears", "forest.stumps|calendar.time", "forest.stumps",
-                "A tönk hat erdőév alatt lebomlik; a telepítést nem akadályozza.", "bomlás = clamp((év - kivágás éve) / 6, 0, 1)");
+                "A tönk hat erdőév alatt lebomlik; a telepítést nem akadályozza. Szabálykönyv-szabály (forest.stumps, hatókör: stump).", "megszűnik, ha age ≥ 6", GameRuleExecution.EditableExpressions);
 
             var build = Add("road.build", "Útépítés és hálózat", "Utak és nyomok", "Útvonal cellái", "Játékosparancs", game, "ExecuteRoadPath",
                 "commands|terrain.height|terrain.water|buildings.footprint|economy.result", "road.network|economy.expenses|forest.trees|water.routing",

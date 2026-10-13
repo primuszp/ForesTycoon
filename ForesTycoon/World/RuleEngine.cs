@@ -60,6 +60,9 @@ internal sealed class RuleEngine
                 new() { Target = "nyom.tétlenség", Mode = "add", Formula = "lépés" },
                 new() { Target = "nyom.megszüntetése", Mode = "action",
                     Formula = "ha(nyom.tétlenség < hangolás.SkidTrailOvergrowYears; 0; ha(nyom.kopás > 0,001; 0; 1))" } } },
+        new() { Id = "forest.stumps", BuiltIn = true, Name = "Tönkök lebomlása", Scope = "stump", Schedule = "step",
+            Description = "A tönk hat erdőév alatt elkorhad és eltűnik. Korábban C# kód volt (havi ellenőrzés).",
+            Effects = { new() { Target = "remove", Mode = "action", Formula = "curve.step(age; 6; 0; 1)" } } },
         // A sample of the object model: a tree rule reading its own tile through a relation. Off by default, so the
         // shipped game behaves as before; switch it on in the editor to see dry ground weaken the trees on it.
         new() { Id = "tree.drought", BuiltIn = true, Enabled = false, Name = "Aszálykár a fákon", Scope = "tree", Schedule = "step",

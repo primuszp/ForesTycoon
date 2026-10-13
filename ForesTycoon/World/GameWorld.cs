@@ -86,6 +86,7 @@ namespace ForesTycoon
             try
             {
                 ecosystem = new Ecosystem(map, forestYearSeconds, soilModel, climate);
+                ecosystem.Forest.StumpsByRules = true; // the rule book runs stump decay (forest.stumps)
                 timberCargo = systems.Add(new TimberCargoSystem());
                 vehicles = systems.Add(new VehicleSystem(timberCargo, route => VehicleRoadRoute.Create(this.map, route)) { TimeScale = VehicleTimeScale });
                 effects = systems.Add(new WorldEffectSystem());
