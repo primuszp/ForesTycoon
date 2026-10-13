@@ -98,6 +98,10 @@ namespace ForesTycoon.Editor
                     (() => editor.ShowRules(RulesTopic.Economy), "world-rules-economy"),
                     (() => editor.ShowRules(RulesTopic.Machines), "world-rules-machines"),
                     (() => editor.ShowRules(RulesTopic.Formulas), "world-rules-formulas"),
+                    (() => editor.ShowRules(RulesTopic.Map), "world-rules-map"),
+                    (() => editor.ShowCausalEdge("tree.drought"), "world-rules-map-curve"),
+                    (() => editor.ShowRules(RulesTopic.Objects), "world-rules-objects"),
+                    (() => editor.ShowRuleBook(world.RuleProjectDocument.Rules.FindIndex(r => r.Id == "tree.drought")), "world-rulebook-curve"),
                     (() => { editor.ShowWorld(WorldTab.Trial); editor.ShowWorldTrial(rainTrial); }, "world-trial") }) {
                     screen.Show();
                     for (int frame = 0; frame < 3; frame++) {

@@ -273,7 +273,50 @@ public static class RuleFormula
                 case "ha": Count(3); return Add(BehaviorOperation.Select, "ha", args[0], args[1], args[2]);
                 case "korlát": Count(3);
                     return Add(BehaviorOperation.Maximum, "korlátozva", args[1], Add(BehaviorOperation.Minimum, "felső korlát", args[0], args[2]));
-                default: throw Error($"Ismeretlen függvény: „{name}”. Használható: min, max, abs, exp, hatvány, ha, korlát.", start);
+                default:
+                    if (name.StartsWith("curve.", StringComparison.Ordinal)) return Curve(name[6..], args, start);
+                    throw Error($"Ismeretlen függvény: „{name}”. Használható: min, max, abs, exp, hatvány, ha, korlát, curve.*.", start);
+            }
+        }
+        // Curve families (see RuleCurve): built from the bounded operations, so the runtime needs nothing new.
+        private string Curve(string family, List<string> a, int start)
+        {
+            var f = RuleCurve.Find(family) ?? throw Error($"Ismeretlen görbecsalád: „{family}”. Használható: {string.Join(", ", RuleCurve.Families.Select(x => x.Id))}.", start);
+            if (f.Id == "points" ? a.Count < 5 || a.Count % 2 == 0 : a.Count != f.Arguments + 1)
+                throw Error(f.Id == "points" ? "A curve.points: bemenet, majd legalább két x; y pár." : $"A curve.{f.Id} függvénynek {f.Arguments + 1} értéke van: bemenet; {f.ArgumentHelp}.", start);
+            string C(double v) => Add(BehaviorOperation.Constant, v.ToString(CultureInfo.InvariantCulture), value: v);
+            string Sub(string x, string y) => Add(BehaviorOperation.Subtract, "különbség", x, y);
+            string Mul(string x, string y) => Add(BehaviorOperation.Multiply, "szorzat", x, y);
+            string Lerp(string y0, string y1, string t) => Add(BehaviorOperation.Add, "görbe", y0, Mul(Sub(y1, y0), t));
+            string T(string x, string x0, string x1) => Add(BehaviorOperation.Divide, "arány", Sub(x, x0), Sub(x1, x0));
+            string Clamp01(string v) => Add(BehaviorOperation.Maximum, "korlát", C(0), Add(BehaviorOperation.Minimum, "korlát", v, C(1)));
+            string x = a[0];
+            switch (f.Id) {
+                case "linear": return Lerp(a[2], a[4], Clamp01(T(x, a[1], a[3])));
+                case "step": return Add(BehaviorOperation.Select, "küszöb", Add(BehaviorOperation.Less, "kisebb", x, a[1]), a[2], a[3]);
+                case "smooth": { string t = Clamp01(T(x, a[1], a[3])); return Lerp(a[2], a[4], Mul(Mul(t, t), Sub(C(3), Mul(C(2), t)))); }
+                case "saturate": {
+                    string t = Add(BehaviorOperation.Maximum, "korlát", C(0), T(x, a[1], a[3]));
+                    string e = Sub(C(1), Add(BehaviorOperation.Exp, "exponenciális", Mul(C(-3), t)));
+                    return Lerp(a[2], a[4], Add(BehaviorOperation.Divide, "normálva", e, C(1 - Math.Exp(-3))));
+                }
+                case "decay": {
+                    string t = Add(BehaviorOperation.Maximum, "korlát", C(0), T(x, a[1], a[3]));
+                    return Lerp(a[4], a[2], Add(BehaviorOperation.Exp, "exponenciális", Mul(C(-3), t)));
+                }
+                case "bell": {
+                    string u = Add(BehaviorOperation.Divide, "távolság", Sub(x, a[1]), Mul(C(0.5), Sub(a[3], a[1])));
+                    return Lerp(a[4], a[2], Add(BehaviorOperation.Exp, "harang", Mul(C(-0.5), Mul(u, u))));
+                }
+                default: { // points: linear between breakpoints, flat outside
+                    int n = (a.Count - 1) / 2;
+                    string result = a[2 * n];
+                    for (int i = n - 1; i >= 1; i--) {
+                        string seg = Lerp(a[2 * i], a[2 * i + 2], Clamp01(T(x, a[2 * i - 1], a[2 * i + 1])));
+                        result = Add(BehaviorOperation.Select, "szakasz", Add(BehaviorOperation.Less, "kisebb", x, a[2 * i + 1]), seg, result);
+                    }
+                    return result;
+                }
             }
         }
         private string Number()

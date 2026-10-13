@@ -113,12 +113,24 @@ internal sealed partial class RuleEditorView
         Clause("MIKOR", "Minden lépésben, a lépés hossza: lépés (erdőév).");
         Clause("HOL", null);
         ImGui.SetNextItemWidth(260);
-        if (ImGui.BeginCombo("##scope", ScopeName(rule.Scope))) {
-            foreach (var s in RuleEngine.Scopes)
-                if (ImGui.Selectable(s.Name, s.Id == rule.Scope) && s.Id != rule.Scope) { rule.Scope = s.Id; finished = true; }
+        if (ImGui.BeginCombo("##scope", ScopeName(rule.Scope), ImGuiComboFlags.HeightLarge)) {
+            EditorStyle.Text(HudTheme.Muted, "Térkép");
+            foreach (var s in RuleEngine.Scopes.Where(s => s.Entity == null))
+                if (ImGui.Selectable("  " + s.Name, s.Id == rule.Scope) && s.Id != rule.Scope) { rule.Scope = s.Id; finished = true; }
+            ImGui.Separator();
+            EditorStyle.Text(HudTheme.Muted, "Objektumok");
+            string picked = null;
+            foreach (var root in Objects.Roots) ObjectNode(root, rule.Scope, id => picked = id, abstractSelectable: false);
+            if (picked != null && picked != rule.Scope) { rule.Scope = picked; finished = true; ImGui.CloseCurrentPopup(); }
             ImGui.EndCombo();
         }
         ImGui.SameLine(); EditorStyle.Text(HudTheme.Muted, $"most {ElementCount(world, scope)} {scope.Element}");
+        if (scope.Entity != null) {
+            ImGui.SetCursorPosX(80);
+            EditorStyle.Text(HudTheme.Muted, string.Join(" › ", Objects.Lineage(scope.Entity).Select(x => x.Name)));
+            ImGui.SameLine();
+            if (EditorStyle.QuietButton("objektum##open-obj", "Az objektum mezői, kapcsolatai és öröklése.")) { selectedObject = scope.Entity; rulesTopic = RulesTopic.Objects; }
+        }
 
         Clause("HA", null);
         string condition = rule.Condition ?? "";
@@ -152,15 +164,35 @@ internal sealed partial class RuleEditorView
             ImGui.SameLine(0, 16);
             ImGui.BeginDisabled(i == 0); if (ImGui.SmallButton("fel")) up = i; ImGui.EndDisabled();
             ImGui.SameLine(); if (ImGui.SmallButton("töröl")) remove = i;
-            // The formula gets the full width on its own line: it is the part that is read and edited most.
-            ImGui.Indent(24); ImGui.AlignTextToFramePadding();
-            EditorStyle.Text(HudTheme.Muted, e.Mode == "add" ? "+=" : e.Mode == "action" ? "ha" : "=");
-            ImGui.SameLine();
-            string formula = e.Formula ?? "";
-            ImGui.SetNextItemWidth(-1);
-            if (ImGui.InputTextWithHint("##formula", e.Mode == "action" ? "üres: mindig" : "képlet", ref formula, 1000)) e.Formula = formula;
-            if (ImGui.IsItemActive()) lastFormula = i;
-            finished |= ImGui.IsItemDeactivatedAfterEdit();
+            // A curve is edited by its shape; anything else (or on request) as formula text on its own full-width line.
+            ImGui.Indent(24);
+            string viewKey = rule.Id + "#" + i;
+            bool isCurve = RuleCurve.TryParse(e.Formula, out var curve);
+            if (e.Mode != "action") {
+                if (isCurve) {
+                    bool asText = formulaView.Contains(viewKey);
+                    if (EditorStyle.QuietButton(asText ? "görbeként##v" : "képletként##v", asText ? "Szerkesztés a görbe alakjával." : "A görbe képletszövege; így is szerkeszthető."))
+                        if (!formulaView.Remove(viewKey)) formulaView.Add(viewKey);
+                } else if (EditorStyle.QuietButton("görbe##v", "A képlet helyére görbe kerül: bemenet → hatás, húzható pontokkal. (A mostani képlet lecserélődik.)")) {
+                    string input = RuleEngine.Names(scope.Id, fields, dynamicsEditor.Draft.Stocks.Select(s => s.Id)).FirstOrDefault(n => n.Operation == BehaviorOperation.Input && n.Name != e.Target)?.Name ?? "lépés";
+                    e.Formula = new RuleCurve { Input = input, Points = new() { (0, 0), (1, 1) }, Tail = " * lépés" }.ToFormula();
+                    isCurve = RuleCurve.TryParse(e.Formula, out curve); formulaView.Remove(viewKey); finished = true;
+                }
+            }
+            if (isCurve && !formulaView.Contains(viewKey)) {
+                var inputs = RuleEngine.Names(scope.Id, fields, dynamicsEditor.Draft.Stocks.Select(s => s.Id)).Where(n => n.Operation == BehaviorOperation.Input).Select(n => n.Name).ToArray();
+                EditorStyle.Text(HudTheme.Muted, e.Mode == "add" ? $"{e.Target} változása lépésenként:" : $"{e.Target} értéke:");
+                if (CurveEditor(viewKey, curve, scope.Entity ?? scope.Id, inputs, ref finished)) e.Formula = curve.ToFormula();
+            } else {
+                ImGui.AlignTextToFramePadding();
+                EditorStyle.Text(HudTheme.Muted, e.Mode == "add" ? "+=" : e.Mode == "action" ? "ha" : "=");
+                ImGui.SameLine();
+                string formula = e.Formula ?? "";
+                ImGui.SetNextItemWidth(-1);
+                if (ImGui.InputTextWithHint("##formula", e.Mode == "action" ? "üres: mindig" : "képlet", ref formula, 1000)) e.Formula = formula;
+                if (ImGui.IsItemActive()) lastFormula = i;
+                finished |= ImGui.IsItemDeactivatedAfterEdit();
+            }
             ImGui.Unindent(24); ImGui.Spacing();
             ImGui.PopID();
         }

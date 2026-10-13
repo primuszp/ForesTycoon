@@ -6,7 +6,7 @@ using Vec2 = System.Numerics.Vector2;
 
 namespace ForesTycoon.Editor;
 
-internal enum RulesTopic { RuleBook, Formulas, Economy, Machines, AllNumbers }
+internal enum RulesTopic { RuleBook, Map, Objects, Formulas, Economy, Machines, AllNumbers }
 
 /// <summary>
 /// The game's tunable numbers inside the world editor, grouped the way a designer thinks about them: money, then
@@ -27,6 +27,8 @@ internal sealed partial class RuleEditorView
     {
         foreach (var (topic, label, help) in new[] {
             (RulesTopic.RuleBook, "Szabálykönyv", "Szabályok adatként: mikor, hol, ha mi teljesül, akkor mi változik. A játék futtatja; C# nem kell hozzá."),
+            (RulesTopic.Map, "Ok-okozati térkép", "Mi mire hat: a mezők csomópontok, a szabályok nyilak, a visszacsatolási hurkok kiemelve. Egy nyílra kattintva a görbe itt szerkeszthető."),
+            (RulesTopic.Objects, "Objektumok", "A játék objektumai, amelyekre szabály írható: hierarchia, mezők, kapcsolatok, műveletek. A játék kódjából derül ki."),
             (RulesTopic.Formulas, "Képletek", "A beépített számítások egy-egy értékének felülírása: víz, járhatóság, növekedés…"),
             (RulesTopic.Economy, "Gazdaság", "Faár, hitelkeret, üzemanyagár, építési költségek."),
             (RulesTopic.Machines, "Gépek és járművek", "Kapacitás, sebesség, fogyasztás, kopás, javítás."),
@@ -50,6 +52,8 @@ internal sealed partial class RuleEditorView
                 ImGui.EndChild();
                 break;
             case RulesTopic.Formulas: RulesTab(world); break;
+            case RulesTopic.Objects: ObjectsArea(world); break;
+            case RulesTopic.Map: CausalMapArea(world); break;
             default: RuleBookArea(world); break;
         }
     }

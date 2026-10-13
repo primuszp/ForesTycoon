@@ -12,7 +12,11 @@ internal sealed record RuleScopeField(string Name, string Help, Func<GameWorld, 
 internal sealed record RuleScopeAction(string Name, string Help, Func<GameWorld, int, bool> Apply);
 /// <summary>An entity set a rule runs on: its elements, fields and actions. Custom fields are kept per element ID.</summary>
 internal sealed record RuleScope(string Id, string Name, string Element, Func<GameWorld, int[]> Elements, Func<GameWorld, int> Size,
-    RuleScopeField[] Fields, RuleScopeAction[] Actions);
+    RuleScopeField[] Fields, RuleScopeAction[] Actions)
+{
+    /// <summary>The discovered object kind (<see cref="GameWorld.RuleObjects"/>) behind the scope; null for hand-written scopes.</summary>
+    public string Entity { get; init; }
+}
 
 internal sealed record RuleBookCheckpoint(List<WorldRule> Rules, List<RuleFieldDefinition> Fields, Dictionary<string, double[]> Values);
 
@@ -31,7 +35,7 @@ internal sealed class RuleEngine
         ("talaj.beszivárgás", "Beszivárgás (mm/óra)."), ("talaj.telítettség", "Teljes víztartás (mm)."), ("talaj.vízkapacitás", "Szabadföldi vízkapacitás (mm)."),
         ("talaj.hervadáspont", "Hervadáspont (mm)."), ("talaj.drénezés", "Drénezés (mm/óra)."), ("talaj.teherbírás", "Teherbírás (0–1)."),
         ("lombborítás", "Lombborítás (0–1)."), ("burkolt", "1 út vagy épület, különben 0."), ("átnedvesedés", "Átnedvesedés (0–1).") };
-    internal static readonly RuleScope[] Scopes = {
+    internal static readonly RuleScope[] Scopes = new RuleScope[] {
         new("world", "Világ", "a világ", _ => new[] { 0 }, _ => 1, Array.Empty<RuleScopeField>(), Array.Empty<RuleScopeAction>()),
         new("tile", "Minden csempe", "csempe", w => Enumerable.Range(0, w.Map.Tiles.Count).ToArray(), w => w.Map.Tiles.Count,
             TileFieldNames.Select(n => new RuleScopeField(n.Name, n.Help, (w, id) => w.TileRuleInputs(id).TryGetValue(n.Name, out double v) ? v : 0)).ToArray(),
@@ -43,7 +47,7 @@ internal sealed class RuleEngine
                 new("nyom.tétlenség", "Erdőévek az utolsó áthaladás óta.", (w, id) => w.Map.GetSkidTrailIdle(id),
                     (w, id, v) => w.Map.SetSkidTrailState(id, w.Map.GetSkidTrailWear(id), (float)v)) },
             new RuleScopeAction[] { new("nyom.megszüntetése", "A nyom benő és eltűnik a térképről.", (w, id) => w.Map.RemoveSkidTrail(id)) }),
-    };
+    }.Concat(GameWorld.DiscoveredScopes()).ToArray();
     internal static RuleScope Scope(string id) => Array.Find(Scopes, s => s.Id == id);
 
 
@@ -56,6 +60,13 @@ internal sealed class RuleEngine
                 new() { Target = "nyom.tétlenség", Mode = "add", Formula = "lépés" },
                 new() { Target = "nyom.megszüntetése", Mode = "action",
                     Formula = "ha(nyom.tétlenség < hangolás.SkidTrailOvergrowYears; 0; ha(nyom.kopás > 0,001; 0; 1))" } } },
+        // A sample of the object model: a tree rule reading its own tile through a relation. Off by default, so the
+        // shipped game behaves as before; switch it on in the editor to see dry ground weaken the trees on it.
+        new() { Id = "tree.drought", BuiltIn = true, Enabled = false, Name = "Aszálykár a fákon", Scope = "tree", Schedule = "step",
+            Description = "Kiszáradt talajon a fa egészsége romlik; az árnyéktűrő fajok jobban bírják. A havi növekedés ezt a csökkent egészséget látja.",
+            Effects = {
+                new() { Target = "health", Mode = "add",
+                    Formula = "curve.linear(tile.waterSupply; 0; -0,3; 0,2; 0) * (1 - 0,5 * shadeTolerance) * lépés" } } },
     };
 
     /// <summary>Built-in rules a project does not list yet are added at their place in the built-in order.</summary>
@@ -83,7 +94,8 @@ internal sealed class RuleEngine
         }
     }
     private sealed record CompiledEffect(RuleEffect Source, Expression Value, int Field, RuleScopeAction Action);
-    private sealed record CompiledRule(WorldRule Source, RuleScope Scope, string[] Inputs, Expression Condition, CompiledEffect[] Effects);
+    /// <summary><paramref name="Used"/>: the inputs the rule mentions; only these are read per element (a tree rule touches thousands).</summary>
+    private sealed record CompiledRule(WorldRule Source, RuleScope Scope, string[] Inputs, bool[] Used, Expression Condition, CompiledEffect[] Effects);
 
     private readonly CompiledRule[] compiled;
     private readonly Dictionary<string, double[]> values = new(StringComparer.Ordinal);
@@ -161,7 +173,8 @@ internal sealed class RuleEngine
                 if (!writable) throw new InvalidDataException($"{rule.Name}: a(z) {e.Target} nem írható mező ebben a hatókörben.");
                 return new CompiledEffect(e, Compile(e.Formula, $"{i + 1}. hatás"), field, null);
             }).ToArray();
-            list.Add(new(rule, scope, inputs, condition, effects));
+            string text = rule.Condition + " " + string.Join(" ", rule.Effects.Select(e => e.Target + " " + e.Formula));
+            list.Add(new(rule, scope, inputs, inputs.Select(n => text.Contains(n, StringComparison.Ordinal)).ToArray(), condition, effects));
         }
         compiled = list.ToArray();
     }
@@ -203,7 +216,7 @@ internal sealed class RuleEngine
             var customDefs = rule.Inputs.Skip(scope.Fields.Length).Select(n => Fields.Find(f => f.Name == n)).ToArray();
             var inputs = new double[rule.Inputs.Length];
             foreach (int id in scope.Elements(world)) {
-                for (int i = 0; i < scope.Fields.Length; i++) inputs[i] = scope.Fields[i].Read(world, id);
+                for (int i = 0; i < scope.Fields.Length; i++) if (rule.Used[i]) inputs[i] = scope.Fields[i].Read(world, id);
                 for (int i = 0; i < custom.Length; i++) inputs[scope.Fields.Length + i] = custom[i][id];
                 string error = null;
                 if (rule.Condition != null && rule.Condition.Evaluate(years, time, inputs, out error) == 0) { if (error != null) LastError = error; continue; }
@@ -219,7 +232,7 @@ internal sealed class RuleEngine
                     double next = effect.Source.Mode == "add" ? inputs[effect.Field] + value : value;
                     if (effect.Field < scope.Fields.Length) {
                         scope.Fields[effect.Field].Write(world, id, next);
-                        inputs[effect.Field] = scope.Fields[effect.Field].Read(world, id);
+                        inputs[effect.Field] = scope.Fields[effect.Field].Read(world, id); // the world may clamp it
                     } else {
                         int c = effect.Field - scope.Fields.Length;
                         next = Math.Clamp(next, customDefs[c].Min, customDefs[c].Max);
