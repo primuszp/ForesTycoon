@@ -96,9 +96,6 @@ namespace ForesTycoon.OpenGl
                 GL.Uniform3(GlProgram.Uniform(fogProgram,"up"),up);
                 GL.Uniform3(GlProgram.Uniform(fogProgram,"climate"),(float)(weather.Time%4096),
                     settings.FogDensity,weather.Flash);
-                // How many quads stack on an average pixel: the view is orthographic, so one NDC scale per axis.
-                float rightPerUnit=(new Vector4(right,0)*camera).Xy.Length, upPerUnit=(new Vector4(up,0)*camera).Xy.Length;
-                GL.Uniform1(GlProgram.Uniform(fogProgram,"coverage"),FogParticleMotion.CoverageScale(FogParticleMotion.Overlap(rightPerUnit,upPerUnit,particles)));
                 GL.BindVertexArray(vao); GL.BindBuffer(BufferTarget.ArrayBuffer,buffer);
                 if (upload.Length < particles.Count * 8) Array.Resize(ref upload, Math.Max(particles.Count * 8, upload.Length * 2));
                 float[] data = upload;
@@ -114,6 +111,10 @@ namespace ForesTycoon.OpenGl
                 using(RenderDevice.CreateStateScope().Enable(RenderCapability.DepthTest).Disable(RenderCapability.CullFace).AlphaBlend().DepthWrite(false))
                 {
                     GL.DrawArraysInstanced(PrimitiveType.Triangles,0,6,particles.Count);
+                    // Submit the fog now. Without it the NVIDIA driver (threaded optimisation, seen on a Quadro P1000 /
+                    // 581.42) rendered every later frame's scene grey and unlit once fog appeared; synchronous debug
+                    // output or a flush here both prevent it. One flush per frame, only while fog is drawn.
+                    GL.Flush();
                     RenderMetrics.RecordDraw(particles.Count*6);
                     submittedParticles = particles.Count;
                 }
@@ -196,7 +197,6 @@ in vec2 uv;
 in vec3 world;
 in vec4 particle;
 uniform vec3 climate;
-uniform float coverage;
 uniform mat4 inverse_camera;
 uniform vec4 viewport;
 uniform sampler2D scene_depth;
@@ -218,7 +218,7 @@ void main(){
     float edge=(1-smoothstep(0.5,1,length(uv)));
     vec2 q=uv*3.2+vec2(particle.z,particle.w)+vec2(climate.x*0.018,-climate.x*0.012);
     float density=noise(q)*0.65+noise(q*2.03)*0.25+noise(q*4.1)*0.1;
-    float alpha=edge*smoothstep(0.1,0.6,density)*particle.x*climate.y*0.38*intersection*coverage;
+    float alpha=edge*smoothstep(0.1,0.6,density)*particle.x*climate.y*0.38*intersection;
     if(alpha<0.003) discard;
     output_color=vec4(vec3(0.74,0.79,0.81)+vec3(0.5,0.6,0.8)*climate.z,alpha);
 }");

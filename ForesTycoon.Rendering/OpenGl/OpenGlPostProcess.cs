@@ -66,6 +66,13 @@ namespace ForesTycoon.Rendering.OpenGl
             if (!active) return;
             active = false;
 
+            // The passes below use units 0 and 1; what the scene left there (unit 1: the shadow map that model and surface
+            // shaders sample) is put back afterwards. Leaving them empty made the next frame sample texture 0 as a shadow map,
+            // which is undefined behaviour (the driver's debug output reports it).
+            GL.GetInteger(GetPName.ActiveTexture, out int activeUnit);
+            GL.ActiveTexture(TextureUnit.Texture0); GL.GetInteger(GetPName.TextureBinding2D, out int unit0);
+            GL.ActiveTexture(TextureUnit.Texture1); GL.GetInteger(GetPName.TextureBinding2D, out int unit1);
+
             // Multisample resolve: colour and depth go to plain textures the shaders can read.
             GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, msaaFramebuffer);
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, resolveFramebuffer);
@@ -144,8 +151,9 @@ namespace ForesTycoon.Rendering.OpenGl
             GL.Uniform1(GlProgram.Uniform(finishProgram, "time"), time % 64f);
             DrawFullScreen();
 
-            GL.ActiveTexture(TextureUnit.Texture1); GL.BindTexture(TextureTarget.Texture2D, 0);
-            GL.ActiveTexture(TextureUnit.Texture0); GL.BindTexture(TextureTarget.Texture2D, 0);
+            GL.ActiveTexture(TextureUnit.Texture1); GL.BindTexture(TextureTarget.Texture2D, unit1);
+            GL.ActiveTexture(TextureUnit.Texture0); GL.BindTexture(TextureTarget.Texture2D, unit0);
+            GL.ActiveTexture((TextureUnit)activeUnit);
             GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
         }
 
