@@ -11,14 +11,14 @@ public sealed class RuleObjectModelTests
     public void TheHierarchyIsDiscoveredWithInheritedFieldsAndRelations()
     {
         var schema = GameWorld.RuleObjects;
-        Assert.Equal(new[] { "World object", "Plant", "Tree" }, schema.Lineage("tree").Select(e => e.Name));
-        Assert.Equal(new[] { "World object", "Vehicle", "Truck" }, schema.Lineage("truck").Select(e => e.Name));
+        Assert.Equal(new[] { "Világobjektum", "Növény", "Fa" }, schema.Lineage("tree").Select(e => e.Name));
+        Assert.Equal(new[] { "Világobjektum", "Jármű", "Rönkszállító" }, schema.Lineage("truck").Select(e => e.Name));
         var tree = schema.Find("tree");
         Assert.False(tree.Abstract); Assert.True(schema.Find("plant").Abstract);
         // Inherited first, own last; only the plant's health is writable.
         Assert.Equal("plant", tree.Fields.Single(f => f.Name == "health").DeclaredBy);
         Assert.Equal(new[] { "health", "stressYears" }, tree.Fields.Where(f => f.Writable).Select(f => f.Name));
-        Assert.Equal("tileEnvironment", Assert.Single(tree.Relations).Target);
+        Assert.Equal("tile", Assert.Single(tree.Relations).Target);
         // Concrete kinds become scopes; relation fields are readable as "relation.field".
         var scope = RuleEngine.Scope("tree");
         Assert.Contains(scope.Fields, f => f.Name == "tile.waterSupply" && f.Write == null);
@@ -76,7 +76,7 @@ public sealed class RuleObjectModelTests
         using var world = World();
         var map = RuleCausalMap.Build(GameWorld.RuleObjects, world.RuleProjectDocument.Rules);
         // The drought sample: a rising curve of the tile's water supply → health moves with it.
-        var drought = Assert.Single(map.Edges, e => e.Rule == "tree.drought" && e.From == "tileEnvironment.waterSupply");
+        var drought = Assert.Single(map.Edges, e => e.Rule == "tree.drought" && e.From == "tile.waterSupply");
         Assert.Equal(("tree.health", 1, false), (drought.To, drought.Sign, drought.Native));
         // The modifier's input influences too, with a sign that depends on the curve.
         Assert.Contains(map.Edges, e => e.Rule == "tree.drought" && e.From == "tree.shadeTolerance" && e.Sign == 0);
@@ -84,7 +84,7 @@ public sealed class RuleObjectModelTests
         Assert.Contains(map.Edges, e => e.Native && e.From == "tree.light" && e.To == "tree.health");
         // Canopy closes → less light → slower growth: self-thinning balances itself.
         Assert.Contains(map.Loops, l => l.Polarity == -1 && l.Edges.Select(e => e.From).OrderBy(k => k)
-            .SequenceEqual(new[] { "tileEnvironment.cover", "tree.height", "tree.light" }));
+            .SequenceEqual(new[] { "tile.cover", "tree.height", "tree.light" }));
         Assert.All(map.Loops, l => Assert.Equal(l.Edges[0].From, l.Edges[^1].To));
     }
 
@@ -114,7 +114,7 @@ public sealed class RuleObjectModelTests
     public void AnArrowDrawnOnTheMapNamesItsSourceThroughTheRelationAndRunsAsARule()
     {
         var schema = GameWorld.RuleObjects;
-        Assert.Equal("tile.rootWater", RuleCausalMap.NameIn(schema, "tree", "tileEnvironment.rootWater"));
+        Assert.Equal("tile.rootWater", RuleCausalMap.NameIn(schema, "tree", "tile.rootWater"));
         Assert.Equal("age", RuleCausalMap.NameIn(schema, "tree", "tree.age"));
         Assert.Null(RuleCausalMap.NameIn(schema, "tree", "truck.cargo"));
         // What the editor stores for "Root water → Stress years": a rule on the tree with a curve of the relation field.
@@ -127,6 +127,6 @@ public sealed class RuleObjectModelTests
         Run(world, 0.6);
         Assert.Null(world.RuleBook.LastError);
         var edge = Assert.Single(RuleCausalMap.Build(schema, world.RuleProjectDocument.Rules).Edges, e => e.Rule == "drawn");
-        Assert.Equal(("tileEnvironment.rootWater", "tree.stressYears", -1), (edge.From, edge.To, edge.Sign));
+        Assert.Equal(("tile.rootWater", "tree.stressYears", -1), (edge.From, edge.To, edge.Sign));
     }
 }

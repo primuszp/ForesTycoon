@@ -55,6 +55,31 @@ public sealed class WorldRule
         if (Effects != null) foreach (var term in Effects.Where(e => e?.Influence?.Terms != null).SelectMany(e => e.Influence.Terms)) term?.UpgradeConditions();
     }
 
+    /// <summary>Renames whole field and action names everywhere the rule mentions them (formulas, targets, visual effects).</summary>
+    public void RenameFields(IReadOnlyDictionary<string, string> names)
+    {
+        if (names.Count == 0 || Effects == null || Effects.Any(e => e == null)) return;
+        string Map(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return value;
+            foreach (var (oldName, newName) in names)
+                if (value.Contains(oldName, StringComparison.Ordinal))
+                    value = System.Text.RegularExpressions.Regex.Replace(value,
+                        @"(?<![\w.])" + System.Text.RegularExpressions.Regex.Escape(oldName) + @"(?![\w.])", newName.Replace("$", "$$"));
+            return value;
+        }
+        Condition = Map(Condition);
+        foreach (var effect in Effects) {
+            effect.Target = Map(effect.Target); effect.Formula = Map(effect.Formula);
+            if (effect.Influence?.Terms == null) continue;
+            foreach (var term in effect.Influence.Terms.Where(t => t != null)) {
+                term.WhenField = Map(term.WhenField); term.AmountField = Map(term.AmountField);
+                foreach (var factor in term.Factors ?? new()) if (factor != null) factor.Source = Map(factor.Source);
+                foreach (var condition in term.Conditions ?? new()) if (condition != null) { condition.Field = Map(condition.Field); condition.ValueField = Map(condition.ValueField); }
+            }
+        }
+    }
+
     public void Validate()
     {
         if (RoadWeather != null) {

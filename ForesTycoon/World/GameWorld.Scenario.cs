@@ -171,23 +171,6 @@ namespace ForesTycoon
         internal int SoilIndex(int id) => Soils?.ProfileIndices[id] ?? 0;
         internal float TileElevation(int id) => ((IForestHabitat)map).GetNormalizedElevation(id);
         internal bool IsWaterTile(int id) => map.IsWaterTile(id);
-        /// <summary>A tile's current values under the names the water and track rule formulas use.</summary>
-        internal Dictionary<string, double> TileRuleInputs(int id)
-        {
-            var result = new Dictionary<string, double>(StringComparer.Ordinal);
-            if (Environment == null || id < 0 || id >= Environment.CellCount) return result;
-            var cell = Environment.Cell(id); var p = Soils?.Profile(id).Properties ?? SoilProperties.Standard;
-            var (wetness, bearing) = Environment.Trafficability(id);
-            result["gyökérzónavíz"] = cell.Soil; result["felszíni_víz"] = cell.Surface; result["mélyvíz"] = cell.Deep;
-            result["többletvíz"] = Math.Max(0, cell.Soil - p.FieldCapacity);
-            result["talaj.beszivárgás"] = p.InfiltrationPerHour; result["talaj.telítettség"] = p.Saturation;
-            result["talaj.vízkapacitás"] = p.FieldCapacity; result["talaj.hervadáspont"] = p.WiltingPoint; result["talaj.drénezés"] = p.DrainagePerHour;
-            result["óra"] = result["lépés_órái"] = Environment.HoursPerStep;
-            result["burkolt"] = map.IsRoadTile(id) || map.IsBuildingTile(id) ? 1 : 0; result["lombborítás"] = Environment.Cover(id);
-            result["átnedvesedés"] = wetness; result["talaj.teherbírás"] = bearing;
-            result["vízellátottság"] = Math.Clamp(cell.Soil <= p.WiltingPoint ? 0 : p.Availability(cell.Soil), 0, 1); result["pangóvíz"] = cell.Waterlogging;
-            return result;
-        }
         /// <summary>Game seconds per environment hour, and the area of one tile in square metres.</summary>
         internal double SecondsPerEnvironmentHour => Environment == null ? 45 : EnvironmentSystem.StepSeconds / Environment.HoursPerStep;
         internal double TileArea { get { var g = ((IForestHabitat)map).GetForestTileGeometry(0); return g.Width * g.Height; } }

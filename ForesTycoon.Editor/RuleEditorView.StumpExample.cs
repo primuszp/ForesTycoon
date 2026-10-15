@@ -19,6 +19,7 @@ internal sealed partial class RuleEditorView
         if (example == null) return;
         rules[index].Effects = example.Effects; rules[index].Description = example.Description;
         rules[index].Condition = ""; rules[index].Enabled = true; rules[index].Scope = example.Scope;
+        rules[index].UseLegacyRoadOverride = example.UseLegacyRoadOverride;
         ShowRuleBook(index); selectedInfluence = selectedTerm = 0;
         stumpTrial = null; stumpTrialError = null;
         ApplyRuleBook(world, "Alapértelmezett szabály visszaállítva.");
@@ -32,9 +33,12 @@ internal sealed partial class RuleEditorView
         } catch (System.IO.InvalidDataException e) { stumpTrialError = e.Message; }
     }
 
+    /// <summary>Rules with a side-by-side trial of fixed test objects (today: stump rules, see <see cref="StumpRuleTrial"/>).</summary>
+    private static bool HasComparisonTrial(WorldRule rule) => rule.Scope == "stump";
+
     private void StumpComparisonArea(GameWorld world, WorldRule rule)
     {
-        if (rule.Scope != "stump") return;
+        if (!HasComparisonTrial(rule)) return;
         if (!ImGui.CollapsingHeader("Nedvesség és átmérő · négy próbatönk", ImGuiTreeNodeFlags.DefaultOpen)) return;
         ImGui.TextWrapped("Külön tesztvilág, négy friss tönk. A nedvesség rögzített; csak ez a tönkszabály fut, a játék szabályfuttatójával.");
         if (ImGui.Button("Összehasonlítás futtatása")) RunStumpComparison(world, rule);

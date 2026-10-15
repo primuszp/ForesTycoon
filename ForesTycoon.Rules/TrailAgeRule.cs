@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 
@@ -28,22 +29,7 @@ public static class TrailAgeRule
     public static void Upgrade(WorldRule rule)
     {
         if (rule.Scope != "trail" || rule.Effects == null || rule.Effects.Any(e => e == null)) return;
-        string Map(string value) {
-            if (value == null) return null;
-            foreach (var (oldName, newName) in new[] { ("nyom.kopás", "wear"), ("nyom.tétlenség", "idleYears"), ("nyom.megszüntetése", "remove") })
-                value = Regex.Replace(value, @"(?<![\w.])" + Regex.Escape(oldName) + @"(?![\w.])", newName);
-            return value;
-        }
-        rule.Condition = Map(rule.Condition);
-        foreach (var effect in rule.Effects.Where(e => e != null)) {
-            effect.Target = Map(effect.Target); effect.Formula = Map(effect.Formula);
-            if (effect.Influence?.Terms == null) continue;
-            foreach (var term in effect.Influence.Terms.Where(t => t != null)) {
-                term.WhenField = Map(term.WhenField); term.AmountField = Map(term.AmountField);
-                foreach (var factor in term.Factors ?? new()) factor.Source = Map(factor.Source);
-                foreach (var condition in term.Conditions ?? new()) { condition.Field = Map(condition.Field); condition.ValueField = Map(condition.ValueField); }
-            }
-        }
+        rule.RenameFields(new Dictionary<string, string> { ["nyom.kopás"] = "wear", ["nyom.tétlenség"] = "idleYears", ["nyom.megszüntetése"] = "remove" });
         string Compact(string text) => Regex.Replace(text ?? "", @"\s+", "");
         if (rule.Condition != "" || rule.Effects.Count != 3 || rule.Effects.Any(e => e.Influence != null)) return;
         var effects = rule.Effects;

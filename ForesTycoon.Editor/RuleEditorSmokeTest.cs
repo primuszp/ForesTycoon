@@ -99,6 +99,7 @@ namespace ForesTycoon.Editor
                     (() => editor.ShowRuleBook(world.RuleProjectDocument.Rules.FindIndex(r => r.Id == "tree.drought")), "world-rulebook-curve"),
                     (() => editor.ShowRuleBook(world.RuleProjectDocument.Rules.FindIndex(r => r.Id == "road.weather")), "world-rule-influences"),
                     (() => editor.ShowRuleBook(world.RuleProjectDocument.Rules.FindIndex(r => r.Id == "forest.stumps")), "world-stump-influences"),
+                    (() => editor.ShowRuleOverview(), "world-rule-overview"),
                     (() => { editor.ShowWorld(WorldTab.Trial); editor.ShowWorldTrial(rainTrial); }, "world-trial") }) {
                     screen.Show();
                     for (int frame = 0; frame < 3; frame++) {
@@ -138,6 +139,18 @@ namespace ForesTycoon.Editor
                 editor.Undo(world); world.ExecutePendingCommands(); Frames(12);
                 editor.Undo(world); world.ExecutePendingCommands(); Frames(12);
                 Require(world.RuleProjectDocument.Rules.Single(r => r.Id == "road.weather").Effects[0].Influence.Terms.Count == connectionCount, "Undo did not restore graph relationships.");
+                // The rule reads as Hungarian sentences that follow the graph.
+                Require(editor.InfluenceSentences.Any(l => l.StartsWith("Minden út esetén az állapot évente", StringComparison.Ordinal)) && editor.InfluenceSentences.Any(l => l.Contains("aszfalt")),
+                    "Rule sentences missing or not in designer words: " + string.Join(" | ", editor.InfluenceSentences));
+                // Click-to-connect: click a source, then click the target.
+                void Click(string anchor) { var p = editor.InfluenceGraphAnchors[anchor]; ui.MouseMove((int)p.X, (int)p.Y); Frames(2); ui.MouseButton(0, true); Frames(2); ui.MouseButton(0, false); Frames(4); }
+                Click("source:rainIntensity"); Click("target:condition"); Frames(8); world.ExecutePendingCommands();
+                Require(world.RuleProjectDocument.Rules.Single(r => r.Id == "road.weather").Effects[0].Influence.Terms.Count == connectionCount + 1, "Click-to-connect did not create a relationship.");
+                Require(editor.InfluenceSentences.Count(l => l.Contains("eső erőssége")) >= 3, "Sentences did not update after connecting.");
+                ui.MouseMove(0, 0); editor.Undo(world); world.ExecutePendingCommands(); Frames(12);
+                Require(world.RuleProjectDocument.Rules.Single(r => r.Id == "road.weather").Effects[0].Influence.Terms.Count == connectionCount, "Undo did not remove the clicked relationship.");
+                Require(RuleEditorView.FieldUses(world.RuleProjectDocument.Rules).Any(u => u.Key == "road.condition" && u.Writers.Count > 0) && RuleEditorView.FieldUses(world.RuleProjectDocument.Rules).Any(u => u.Key == "tile.moisture" && u.Readers.Count > 0),
+                    "Overview does not list the road condition rule.");
                 editor.ShowMissions(); Frames(12);
                 int missions = editor.EditedScenario.Missions.Count;
                 editor.EditedScenario.Missions.Add(new MissionGoal { Id = "undo-proba", Title = "Visszavonási próba" }); Frames(12);
@@ -256,6 +269,28 @@ namespace ForesTycoon.Editor
                     Require(stumpEditor.InfluenceGraphSourceLabels["diameter"] == "- Lassítja", "Diameter slowdown was not labeled separately on the graph.");
                     Require(GL.GetError() == ErrorCode.NoError, "Stump example graph OpenGL error.");
                     FramebufferCapture.SavePng(Path.Combine(output, "stump-decay-example.png"), width, height);
+                }
+                // Two rules writing the same field: the overview flags it and the rule shows the run order.
+                var sharedProject = GameWorld.DefaultRuleProject(); RuleEngine.AddMissingBuiltIns(sharedProject.Rules);
+                sharedProject.World = null; sharedProject.Algorithms = null;
+                var copy = RuleEngine.Clone(new() { sharedProject.Rules.Single(r => r.Id == "road.weather") })[0];
+                copy.Id = "road.weather-copy"; copy.Name = "Útromlás – próbamásolat"; copy.BuiltIn = false; copy.Enabled = true; copy.UseLegacyRoadOverride = false;
+                sharedProject.Rules.Add(copy);
+                Require(RuleEditorView.FieldUses(sharedProject.Rules).Single(u => u.Key == "road.condition").Shared, "Overview did not flag two rules writing road condition.");
+                string sharedPath = Path.Combine(output, "shared-writer.project.json");
+                RuleProject.WriteAtomic(sharedPath, sharedProject.ToJson());
+                var sharedEditor = new RuleEditorView(sharedPath);
+                foreach (var screen in new (Action Show, string Name)[] {
+                    (() => sharedEditor.ShowRuleOverview(), "world-rule-overview-shared"),
+                    (() => sharedEditor.ShowRuleBook(sharedProject.Rules.Count - 1), "world-rule-shared-writer") }) {
+                    screen.Show();
+                    for (int frame = 0; frame < 3; frame++) {
+                        ui.Update(width, height, width, height, Vec2.One, 1f / 60);
+                        ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 900)); sharedEditor.Draw(world, ref open);
+                        GL.Viewport(0, 0, width, height); GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit); ui.Render(); GL.Finish();
+                    }
+                    Require(GL.GetError() == ErrorCode.NoError, "Overview OpenGL error: " + screen.Name);
+                    FramebufferCapture.SavePng(Path.Combine(output, screen.Name + ".png"), width, height);
                 }
                 var graphEditor = new RuleEditorView(Path.Combine(output, "road-wear.json"));
                 for (int frame = 0; frame < 3; frame++)

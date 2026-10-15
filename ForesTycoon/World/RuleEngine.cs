@@ -14,7 +14,7 @@ internal sealed record RuleScopeAction(string Name, string Help, Func<GameWorld,
 internal sealed record RuleScope(string Id, string Name, string Element, Func<GameWorld, int[]> Elements, Func<GameWorld, int> Size,
     RuleScopeField[] Fields, RuleScopeAction[] Actions)
 {
-    /// <summary>The discovered object kind (<see cref="GameWorld.RuleObjects"/>) behind the scope; null for hand-written scopes.</summary>
+    /// <summary>The discovered object kind (<see cref="GameWorld.RuleObjects"/>) behind the scope.</summary>
     public string Entity { get; init; }
 }
 
@@ -28,19 +28,8 @@ internal sealed record RuleBookCheckpoint(List<WorldRule> Rules, List<RuleFieldD
 internal sealed class RuleEngine
 {
     // ── Scopes: the building blocks a rule can address ──────────────────
-    // Declared before the scopes that read it (static initialization runs in text order).
-    private static readonly (string Name, string Help)[] TileFieldNames = {
-        ("gyökérzónavíz", "Gyökérzóna vize (mm)."), ("felszíni_víz", "Felszíni víz (mm)."), ("mélyvíz", "Mélyvíz (mm)."),
-        ("többletvíz", "Szabadföldi vízkapacitás feletti víz (mm)."), ("vízellátottság", "Felvehető víz aránya (0–1)."), ("pangóvíz", "Pangóvíz aránya (0–1)."),
-        ("talaj.beszivárgás", "Beszivárgás (mm/óra)."), ("talaj.telítettség", "Teljes víztartás (mm)."), ("talaj.vízkapacitás", "Szabadföldi vízkapacitás (mm)."),
-        ("talaj.hervadáspont", "Hervadáspont (mm)."), ("talaj.drénezés", "Drénezés (mm/óra)."), ("talaj.teherbírás", "Teherbírás (0–1)."),
-        ("lombborítás", "Lombborítás (0–1)."), ("burkolt", "1 út vagy épület, különben 0."), ("átnedvesedés", "Átnedvesedés (0–1).") };
-    internal static readonly RuleScope[] Scopes = new RuleScope[] {
-        new("world", "Világ", "a világ", _ => new[] { 0 }, _ => 1, Array.Empty<RuleScopeField>(), Array.Empty<RuleScopeAction>()),
-        new("tile", "Minden csempe", "csempe", w => Enumerable.Range(0, w.Map.Tiles.Count).ToArray(), w => w.Map.Tiles.Count,
-            TileFieldNames.Select(n => new RuleScopeField(n.Name, n.Help, (w, id) => w.TileRuleInputs(id).TryGetValue(n.Name, out double v) ? v : 0)).ToArray(),
-            Array.Empty<RuleScopeAction>()),
-    }.Concat(GameWorld.DiscoveredScopes()).ToArray();
+    // Every concrete kind of the object model (RuleEntities.cs) with its view; no scope is written by hand.
+    internal static readonly RuleScope[] Scopes = GameWorld.DiscoveredScopes();
     internal static RuleScope Scope(string id) => Array.Find(Scopes, s => s.Id == id);
 
 
@@ -57,12 +46,19 @@ internal sealed class RuleEngine
             Effects = {
                 new() { Target = "health", Mode = "add",
                     Formula = "curve.linear(tile.waterSupply; 0; -0,3; 0,2; 0) * (1 - 0,5 * shadeTolerance) * lépés" } } },
-    }.Select(r => { r.UpgradeAuthoring(); return r; }).ToList();
+    }.Select(r => { Upgrade(r); return r; }).ToList();
+
+    /// <summary>Brings a saved rule to the current model: authoring upgrades, then former field names (aliases) renamed.</summary>
+    internal static void Upgrade(WorldRule rule)
+    {
+        rule.UpgradeAuthoring();
+        if (rule.Scope != null) rule.RenameFields(GameWorld.FieldAliases(rule.Scope));
+    }
 
     /// <summary>Built-in rules a project does not list yet are added at their place in the built-in order.</summary>
     internal static void AddMissingBuiltIns(List<WorldRule> rules)
     {
-        foreach (var rule in rules) rule.UpgradeAuthoring();
+        foreach (var rule in rules) Upgrade(rule);
         foreach (var rule in BuiltIn())
             if (!rules.Exists(r => r.Id == rule.Id)) rules.Add(rule);
     }
@@ -181,7 +177,7 @@ internal sealed class RuleEngine
 
     internal RuleEngine(List<WorldRule> rules, List<RuleFieldDefinition> fields, IEnumerable<string> stockIds, Func<string, double> readValue)
     {
-        foreach (var rule in rules) rule.UpgradeAuthoring();
+        foreach (var rule in rules) Upgrade(rule);
         Rules = rules; Fields = fields;
         if (rules.Count > 256 || fields.Count > 64) throw new InvalidDataException("Legfeljebb 256 szabály és 64 saját mező lehet.");
         var fieldNames = new HashSet<string>(StringComparer.Ordinal);

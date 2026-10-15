@@ -48,7 +48,7 @@ public sealed class SceneSoilEditingTests
         Assert.Equal(5, cell.Soil);
         Assert.Equal(old.Surface + old.Soil - 5, cell.Surface, 9);
         Assert.Equal(original.Environment.StoredWater, edited.Environment.StoredWater, 7);
-        Assert.Equal(.25, edited.TileRuleInputs(tile)["talaj.beszivárgás"]);
+        Assert.Equal(.25, RuleEngine.Scope("tile").Fields.Single(f => f.Name == "infiltration").Read(edited, tile));
         Assert.Equal(.123, edited.Soils.Profile(tile).Properties.BearingCapacity);
         Assert.Equal(Json(original.CaptureCheckpoint().Ecology.Forest.Trees), Json(edited.CaptureCheckpoint().Ecology.Forest.Trees));
         using var stream = new MemoryStream(); edited.Save(stream); stream.Position = 0;

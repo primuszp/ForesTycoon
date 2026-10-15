@@ -13,10 +13,6 @@ sealed partial class GameWorld
     internal RuleEngine RuleBook => ruleEngine;
     private string ruleProjectName = "ForesTycoon szabályrendszer";
     private AlgorithmGraphReference algorithmGraphs;
-    internal static readonly string[] RuleWorldFields = {
-        "world.time", "world.treeCount", "world.roadCount", "world.rain", "world.temperature",
-        "world.snow", "world.water", "world.income", "world.expenses", "world.runningCosts", "world.balance"
-    };
     internal RuleProject RuleProjectDocument => new() { Name = ruleProjectName, Road = RuleDocument,
         Tuning = Tuning.ToOverrides(), Behaviors = BehaviorDocument, Dynamics = dynamics.Document, Algorithms = AlgorithmSnapshot(),
         Rules = RuleEngine.Clone(ruleEngine.Rules), Fields = RuleEngine.CloneFields(ruleEngine.Fields),
@@ -31,13 +27,6 @@ sealed partial class GameWorld
     internal string DynamicsError => dynamics.LastError;
     internal double ReadRuleValue(string key) => key.StartsWith("stock.", StringComparison.Ordinal) ? dynamics.Read(key)
         : key.StartsWith("tuning.", StringComparison.Ordinal) && GameTuning.Spec(key[7..]) is TuningSpec spec ? Tuning[spec.Key] : ReadWorldValue(key);
-    private double ReadWorldValue(string key) => key switch {
-        "world.time" => forest.ForestYear, "world.treeCount" => ForestTreeCount, "world.roadCount" => RoadCount,
-        "world.rain" => Environment.LiquidRainRate, "world.temperature" => Environment.Temperature,
-        "world.snow" => Environment.SnowWater, "world.water" => Environment.StoredWater,
-        "world.income" => Income, "world.expenses" => Expenses, "world.runningCosts" => Logistics.RunningCosts,
-        "world.balance" => Balance, _ => throw new ArithmeticException("Ismeretlen világmező: " + key)
-    };
     internal static RuleProject DefaultRuleProject() => new() { Behaviors = WorldBehaviorPolicy.DefaultDocument(), Algorithms = AlgorithmBuild.CurrentReference };
     internal static void ValidateRuleProject(RuleProject project)
     {

@@ -15,7 +15,7 @@ public sealed class RoadWeatherCard
         InfluenceFactor Moisture(double low, double high) => new() { Source = "tile.moisture", OutputLow = low, OutputHigh = high };
         InfluenceTerm Term(string name, bool macadam, double? amount, string tuning, params InfluenceFactor[] factors) => new() {
             Name = name, Amount = amount ?? 0, AmountField = amount.HasValue ? "" : "tuning." + tuning,
-            WhenField = "isMacadam", Comparison = macadam ? "greater" : "less", Threshold = .5, Factors = new(factors) };
+            WhenField = "surface", Comparison = macadam ? "greater" : "less", Threshold = .5, Factors = new(factors) };
         return new() { new() { Target = "condition", Mode = "add", Influence = new() { Terms = new() {
             Term("Aszfalt: nedvesség", false, AsphaltBase, "AsphaltWeather", Moisture(1, 1 + AsphaltMoistureFactor)),
             Term("Aszfalt: eső", false, AsphaltRain, "AsphaltRainWeather", new InfluenceFactor { Source = "rainIntensity" }),
@@ -51,6 +51,6 @@ public sealed class RoadWeatherCard
         string asphalt = $"{Rate(AsphaltBase, "AsphaltWeather")} * (1 + {N(AsphaltMoistureFactor)} * tile.moisture) + {Rate(AsphaltRain, "AsphaltRainWeather")} * rainIntensity";
         string macadam = $"{Rate(MacadamBase, "MacadamWeather")} * (1 + {N(MacadamMoistureFactor)} * tile.moisture) + {Rate(MacadamRain, "MacadamRainWeather")} * rainIntensity * ({N(MacadamRainBaseline)} + {N(MacadamRainMoistureFactor)} * tile.moisture)";
         return new() { new() { Target = "condition", Mode = "add",
-            Formula = $"-max(0; ha(isMacadam; {macadam}; {asphalt})) * deltaYears" } };
+            Formula = $"-max(0; ha(surface; {macadam}; {asphalt})) * deltaYears" } };
     }
 }

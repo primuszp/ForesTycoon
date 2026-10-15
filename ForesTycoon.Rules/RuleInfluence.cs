@@ -70,6 +70,12 @@ public sealed class InfluenceCondition
     internal string Compile()
     {
         RuleInfluence.Finite(Value);
+        if (ValueField == null) throw new InvalidDataException("Hiányzó határértékforrás.");
+        if (Comparison is "equal" or "notEqual") {
+            // For bool and enum fields: exactly this option (or any other one).
+            string field = RuleInfluence.Field(Field), value = ValueField.Length == 0 ? RuleInfluence.Number(Value) : RuleInfluence.Field(ValueField);
+            return Comparison == "equal" ? $"ha({field} < {value}; 0; ha({field} > {value}; 0; 1))" : $"ha({field} < {value}; 1; ha({field} > {value}; 1; 0))";
+        }
         string op = Comparison switch { "less" or "atLeast" => "<", "greater" or "atMost" => ">",
             _ => throw new InvalidDataException("Válassz érvényes összehasonlítást.") };
         if (ValueField == null) throw new InvalidDataException("Hiányzó határértékforrás.");

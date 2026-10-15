@@ -32,11 +32,11 @@ public sealed class RoadWeatherCardTests
         var card = new RoadWeatherCard { AsphaltBase = .015, AsphaltRain = .08, MacadamBase = .10, MacadamRain = 1.6 };
         var formula = card.CompileEffects().Single().Formula;
         var names = new[] {
-            new FormulaName("isMacadam", BehaviorOperation.Input, "isMacadam"),
+            new FormulaName("surface", BehaviorOperation.Input, "surface"),
             new FormulaName("tile.moisture", BehaviorOperation.Input, "tile.moisture"),
             new FormulaName("rainIntensity", BehaviorOperation.Input, "rainIntensity"),
             new FormulaName("deltaYears", BehaviorOperation.Delta) };
-        var hook = new BehaviorHook("test", "test", "road", "", -1e12, 1e12, "", "", "", Inputs: new[] { "isMacadam", "tile.moisture", "rainIntensity" });
+        var hook = new BehaviorHook("test", "test", "road", "", -1e12, 1e12, "", "", "", Inputs: new[] { "surface", "tile.moisture", "rainIntensity" });
         var graph = RuleFormula.Compile(formula, new BehaviorGraph { Id = "test", Name = "test", Hook = "test", Kind = "road" }, names);
         var runtime = new CompiledBehaviorModel(new BehaviorModel { Graphs = { graph } }, new[] { hook });
         double result = runtime.Evaluate("test", "road", 0, new(0, years, 0, 0, 0), new[] { macadam ? 1d : 0d, wet, rain });

@@ -94,18 +94,58 @@ középen a kapcsolatok gráfja, jobbra a kijelölt hatás beállításai. Az á
 hangolási számok a **Típusok → Játékparaméterek** alatt találhatók; nincs külön
 Képletek, Objektumok, Ok-okozati térkép vagy Gazdaság szabályszerkesztő lap.
 
-1. Válassz objektumtípust, például `road` vagy `tree`. A kódból felderített mezők közül
-   választhatsz; csak írható mező lehet cél.
-2. A **+ Forrásmező** választóval tegyél egy mezőt a gráfra. A **+ Célmező** választóval
-   jelöld ki, mit változtasson a szabály, például `condition`.
-3. Húzd a forrás dobozát a célra. Létrejön egy új kapcsolat; nem kell képletet írnod.
-4. Kattints a középső hatásdobozra. Jobbra válaszd a növelést vagy csökkentést,
-   az erősséget, az egyenes/lágy/küszöbös görbét és szükség esetén a feltételt.
-   A görbe pontjai húzhatók, értékei számként is megadhatók.
-5. Egy másik forrást a **hatásdobozra** húzva új szorzót adhatsz hozzá. Például
-   az eső hatását a nedvesség is erősítheti. Az azonos célra vezető hatások összeadódnak.
-6. Egy forrás a **Forrás leválasztása**, egy kapcsolat a **Kapcsolat törlése**,
-   egy cél az összes hatásával a **Cél törlése** gombbal távolítható el.
+A szerkesztő mindent magyarul, a tervező szavaival mutat: objektum (**Út**, **Közelítőnyom**,
+**Tönk**, **Fa**) és tulajdonság (**Állapot**, **Vályúmélység**, **Lebomlás**). A kódbeli név
+(`road.condition`) csak a buborékban, másodlagos jelzésként látszik. A nevek és súgók a
+`ForesTycoon/World/RuleEntityTexts.cs` táblából jönnek (kulcs: `objektum.mező`,
+választós mezőnél `objektum.mező.érték`); ha egy új mezőnek még nincs sora, az angol kódnév látszik.
+
+1. **Mely objektumokon fusson?** Válaszd ki, például **Út** vagy **Fa**. Mellette látszik,
+   hány ilyen objektum van most a tesztvilágban.
+2. A **+ Forrás, cél vagy művelet hozzáadása** alatt a **Cél vagy művelet** választóval
+   jelöld ki, mit változtasson a szabály, például **Állapot**. Csak írható tulajdonság lehet cél.
+3. A **Forrás (azonnal bekötve)** választó a kiválasztott forrást rögtön bekötik:
+   *új kapcsolatként* a kijelölt célra, vagy *szorzóként* a kijelölt kapcsolathoz.
+   Bekötetlen, elvesző forrásdoboz nincs.
+4. A gráfon is köthetsz: **húzd** a forrás dobozát a célra (új kapcsolat) vagy egy
+   kapcsolat dobozára (szorzó). Húzás helyett **kattints** a forrásra (sárga keret),
+   majd kattints a célra vagy a kapcsolatra. Esc vagy üres területre kattintás: mégse.
+5. Kattints egy kapcsolat dobozára; jobbra állíthatod az irányt, az erősséget, a görbét
+   és a feltételeket. Egy kapcsolat törlése a **Kapcsolat törlése**, egy célé az összes
+   kapcsolatával a **Cél törlése**, egy forrásé a **Forrás eltávolítása** gomb.
+
+**Szövegesen.** A gráf fölött a szabály magyar mondatokban olvasható, például:
+„Minden út esetén az állapot évente „Aszfalt romlása szárazon” (most 0,05) értékkel csökken,
+minél nagyobb a nedvesség, annál erősebben (0: 1×, 1: 2×), ha a burkolat aszfalt.”
+A mondatok a mentett adatból készülnek, minden szerkesztéssel azonnal frissülnek; a
+kijelölt kapcsolat mondata világos, és a jobb oldali panel tetején is látszik.
+
+**A gráf olvasása.**
+
+- *Forrás* doboz: felül az objektum és a tartomány (**Csempe · 0–1**, **Út · aszfalt / makadám**),
+  középen a tulajdonság, alul a hatás iránya (**+ Növeli**, **- Csökkenti**, **+ Gyorsítja**,
+  **Feltétel**). A források a bekötött kapcsolatok sorrendjében állnak, így kevesebb a keresztező vonal.
+- *Kapcsolat* doboz: neve, erőssége mértékegységgel és időalappal (**– 0,05 / év**,
+  **+ 1 erdőév / év**, paraméternél a mostani értékkel), alatta a feltételek és szorzók száma.
+- *Cél* doboz: az objektum, a tulajdonság, a hatás módja és a tartomány
+  (**Út · Állapot · változtatja / év · 0–1**).
+- Folytonos vonal: szorzó (zöld növel, borostyán csökkent). **Szaggatott, „ha” jelű kék vonal:
+  feltétel** – a kapcsolat csak akkor hat, ha teljesül; az erősségét nem skálázza.
+
+**A jobb oldali panel.**
+
+- **Hogyan hasson a célra?** *Hozzáad vagy levon*: a kapcsolatok eredménye a jelenlegi
+  értékhez adódik. *Felülírja*: az új érték a kapcsolatok összege, a régi elveszik.
+- **Mennyi idő alatt?** *Egy erdőév alatt* (ajánlott): az erősség egy teljes erdőévre
+  vonatkozik, a játék minden lépésben az eltelt idővel arányos részét alkalmazza, így a
+  játéksebesség nem változtat a hatáson. *Minden lépésben*: lépésenként (0,5 játékmásodperc)
+  a teljes erősség hat; számlálókhoz, kapcsolókhoz.
+- **Erősség:** *Saját szám* vagy *Játékparaméterből*. A játékparaméter a **Típusok →
+  Játékparaméterek** lapon hangolható, több szabály is használhatja; a panel mutatja a mostani
+  értékét. 0–1 tartományú célnál gyorsgombok adják meg, hány év alatt fusson végig a teljes skála
+  (20, 10, 5, 2, 1 év).
+- Ha az objektum csak egyféle (nincs kapcsolódó csempe vagy paraméter), az objektumválasztó
+  rejtve marad, csak a tulajdonságot kell kiválasztani.
 
 Az útromlás induló mintája négy kapcsolatra van bontva: aszfalt-nedvesség,
 aszfalt-eső, makadám-nedvesség és makadám-eső/nedvesség. Ezek törölhetők, a forrásuk
@@ -113,18 +153,28 @@ lecserélhető, az irányuk megfordítható. Nincs rögzített bemenetlista az �
 a választó a mindenkori objektumsémából épül. Az új szabály üres, kikapcsolt
 állapotból indul. Meglévő szabályból kikapcsolt saját másolat is készíthető.
 
-Az **Éves változási ütem** kapcsolóval az erősség erdőévenként értendő;
-kikapcsolva minden szabálylépésben ennyi a változás. A forrásgörbe szorzót ad:
+A forrásgörbe szorzót ad:
 0 = nincs hatás, 1 = teljes erősség, 2 = kétszeres hatás. Az eredményt a célmező
 saját tartományára korlátozza a játék. A kapcsolatok és célok sorrendje rögzített;
 a későbbi célhatás már a korábbi írást látja.
 
 A gráf alatti **Próba** az aktív tesztvilág egy kiválasztott objektumán, írás nélkül
-mutatja a cél előtte/utána értékét és minden kapcsolat hozzájárulását. A környezetet
-állandónak tekinti. A külön forgalmi kopást és más szabályokat nem számolja hozzá.
+mutatja a cél előtte/utána értékét és minden kapcsolat hozzájárulását, kerekítve és
+mértékegységgel, a részek arányával. Az objektumot a leíró listából (sorszám, csempe
+koordinátája, főbb tulajdonságai, például „Út 3 · (12; 40) · Állapot 0,78 · Burkolat makadám”)
+vagy a mellette lévő kis térképen kattintva választod. A környezetet állandónak tekinti; a
+külön forgalmi kopást és más szabályokat nem számolja hozzá.
 A szerkesztés lezárásakor a projekt a tesztvilágba kerül; **Mentés** és
 **Alkalmazás a játékban** viszi tovább a jelenetbe, illetve a játékba. A visszavonás
 és újraalkalmazás a gráfkapcsolatokra is működik.
+
+**Áttekintés: ki mit ír és olvas.** A szabálylista alatti bejegyzés táblázatban mutatja
+minden objektum minden érintett tulajdonságát: mely szabályok írják (futási sorrendben,
+a mód megjelölésével), melyek olvassák, és mit számol a játék maga (a kódbeli
+`[RuleCause]` jelölésekből, például „forest.growth: nő a Fa · Egészség hatására”). Ha két
+bekapcsolt szabály ugyanazt a mezőt írja, a sor (!) jelet kap: a lista szerinti későbbi
+szabály a korábbi eredményét látja, felülírásnál pedig a korábbit eltünteti. Ugyanez a
+figyelmeztetés a szabály mondatai alatt is megjelenik; rákattintva az áttekintés nyílik meg.
 
 Régi projekt egyedi `road.weather` felülírása megmarad. Ilyenkor látható jelzés
 figyelmeztet, hogy a korábbi képlet is hat, és a **Csak az itt összeállított hatások

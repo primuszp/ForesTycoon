@@ -35,7 +35,7 @@ internal sealed partial class RuleEditorView
     }
     private List<WorldRule> RuleBookRules(GameWorld world) => ruleBook ??= RuleEngine.Clone(world.RuleProjectDocument.Rules);
     private List<RuleFieldDefinition> RuleBookFields(GameWorld world) => ruleFields ??= RuleEngine.CloneFields(world.RuleProjectDocument.Fields);
-    internal void ShowRuleBook(int index = 0) { worldTab = WorldTab.Rules; selectedBookRule = index; }
+    internal void ShowRuleBook(int index = 0) { worldTab = WorldTab.Rules; selectedBookRule = index; ruleOverview = false; }
     private void RulesArea(GameWorld world) => RuleBookArea(world);
 
     /// <summary>Checks the whole book as the game will; on success the test world runs it at once.</summary>
@@ -67,18 +67,23 @@ internal sealed partial class RuleEditorView
                 if (ImGui.IsItemHovered()) ImGui.SetTooltip(enabled ? "Fut a játékban. Kattintás: kikapcsolás." : "Nem fut. Kattintás: bekapcsolás.");
                 ImGui.SameLine();
                 ImGui.PushStyleColor(ImGuiCol.Text, enabled ? HudTheme.Parchment : HudTheme.Muted);
-                if (ImGui.Selectable(rules[i].Name + "##rule" + i, selectedBookRule == i)) { selectedBookRule = i; lastFormula = -1; }
+                if (ImGui.Selectable(rules[i].Name + "##rule" + i, selectedBookRule == i && !ruleOverview)) { selectedBookRule = i; lastFormula = -1; ruleOverview = false; }
                 ImGui.PopStyleColor();
                 if (ImGui.IsItemHovered()) ImGui.SetTooltip($"{ScopeName(rules[i].Scope)} · {(rules[i].RoadWeather != null ? 1 : rules[i].Effects.Count)} hatás");
             }
             if (!any) EditorStyle.Text(HudTheme.Muted, builtIn ? "Nincs." : "Még nincs saját szabály.");
         }
         ImGui.Spacing();
+        if (ImGui.Selectable("Áttekintés: ki mit ír és olvas", ruleOverview)) ruleOverview = !ruleOverview;
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Melyik szabály melyik mezőt írja és olvassa, és melyik mezőt írja több szabály.");
+        ImGui.Spacing();
         if (ImGui.Button("Új szabály", new Vec2(-1, 0))) {
             int n = rules.Count(r => !r.BuiltIn) + 1;
             while (rules.Exists(r => r.Id == $"sajat-{n}")) n++;
-            rules.Add(new WorldRule { Id = $"rule-{Guid.NewGuid():N}", Name = $"Saját szabály {n}", Scope = "road", Enabled = false,
-                Effects = { new() { Target = "condition", Mode = "add", Influence = new() } } });
+            // The first kind of object, in the object model's order, that a rule can change.
+            var first = RuleEngine.Scopes.First(s => s.Fields.Any(f => f.Write != null));
+            rules.Add(new WorldRule { Id = $"rule-{Guid.NewGuid():N}", Name = $"Saját szabály {n}", Scope = first.Id, Enabled = false,
+                Effects = { new() { Target = first.Fields.First(f => f.Write != null).Name, Mode = "add", Influence = new() } } });
             selectedBookRule = rules.Count - 1; lastFormula = -1;
             message = "Új szabály: válaszd ki, hol fusson, és adj hozzá hatást.";
         }
@@ -88,6 +93,7 @@ internal sealed partial class RuleEditorView
         ImGui.PopTextWrapPos();
         ImGui.EndChild(); ImGui.SameLine();
 
+        if (ruleOverview) { RuleOverviewArea(world, rules); return; }
         if (rules.Count > 0 && rules[selectedBookRule].Condition.Length == 0 && rules[selectedBookRule].Effects.All(e => e.Influence != null)) {
             InfluenceArea(world, rules[selectedBookRule]);
             return;
@@ -97,7 +103,7 @@ internal sealed partial class RuleEditorView
         ImGui.BeginChild("book-rule", new Vec2(-360, 0), ImGuiChildFlags.Borders);
         if (rules.Count == 0) { ImGui.EndChild(); ImGui.SameLine(); ImGui.BeginChild("book-names", Vec2.Zero, ImGuiChildFlags.Borders); ImGui.EndChild(); return; }
         var rule = rules[selectedBookRule];
-        var scope = RuleEngine.Scope(rule.Scope) ?? RuleEngine.Scopes[1];
+        var scope = RuleEngine.Scope(rule.Scope) ?? RuleEngine.Scopes[0];
         bool finished = false;
 
         string name = rule.Name;
@@ -121,10 +127,6 @@ internal sealed partial class RuleEditorView
         Clause("HOL", null);
         ImGui.SetNextItemWidth(260);
         if (ImGui.BeginCombo("##scope", ScopeName(rule.Scope), ImGuiComboFlags.HeightLarge)) {
-            EditorStyle.Text(HudTheme.Muted, "Térkép");
-            foreach (var s in RuleEngine.Scopes.Where(s => s.Entity == null))
-                if (ImGui.Selectable("  " + s.Name, s.Id == rule.Scope) && s.Id != rule.Scope) { rule.Scope = s.Id; finished = true; }
-            ImGui.Separator();
             EditorStyle.Text(HudTheme.Muted, "Objektumok");
             string picked = null;
             foreach (var root in Objects.Roots) ObjectNode(root, rule.Scope, id => picked = id, abstractSelectable: false);
@@ -140,7 +142,7 @@ internal sealed partial class RuleEditorView
         Clause("HA", null);
         string condition = rule.Condition ?? "";
         ImGui.SetNextItemWidth(-1);
-        if (ImGui.InputTextWithHint("##condition", "üres: mindig · például: gyökérzónavíz > talaj.vízkapacitás", ref condition, 1000)) rule.Condition = condition;
+        if (ImGui.InputTextWithHint("##condition", "üres: mindig · például: rootWater > fieldCapacity", ref condition, 1000)) rule.Condition = condition;
         if (ImGui.IsItemActive()) lastFormula = -1;
         finished |= ImGui.IsItemDeactivatedAfterEdit();
 
