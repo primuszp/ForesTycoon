@@ -98,12 +98,12 @@ public sealed class RuleObjectModelTests
         var stumps = RuleEngine.Scope("stump");
         int felled = stumps.Elements(world).Length;
         Assert.True(felled > 0);
-        // Fresh stumps stay: they are younger than six forest years.
+        // Fresh stumps stay: almost no decomposition has accumulated yet.
         Run(world, 1);
         Assert.Equal(felled, stumps.Elements(world).Length);
-        // Move the threshold below their age: the rule removes every one of them.
+        // Move the completion threshold to zero: the rule removes every one of them.
         var project = world.RuleProjectDocument; project.Algorithms = null;
-        project.Rules.Single(r => r.Id == "forest.stumps").Effects[0].Formula = "curve.step(age; 0; 0; 1)";
+        project.Rules.Single(r => r.Id == "forest.stumps").Effects[1].Influence.Terms[0].Factors[0].InputHigh = 0;
         world.QueueRuleProject(project); world.ExecutePendingCommands();
         Run(world, 1);
         Assert.Null(world.RuleBook.LastError);

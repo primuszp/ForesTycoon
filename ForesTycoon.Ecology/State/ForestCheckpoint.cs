@@ -24,6 +24,7 @@ namespace ForesTycoon.Ecology
                 CheckpointGuard.Require(p.TopologyRevision <= s.TopologyRevision, "tree topology revision");
                 foreach (var tree in p.Trees) ValidateTree(tree, p.TileId, year, s.NextId, ids);
                 foreach (var stump in p.Stumps) {
+                    CheckpointGuard.Require(stump.DecayProgress == null || double.IsFinite(stump.DecayProgress.Value) && stump.DecayProgress >= 0 && stump.DecayProgress <= 1, "stump decay");
                     ValidateTree(stump.Felled, p.TileId, year, s.NextId, ids);
                     CheckpointGuard.Require(double.IsFinite(stump.FelledYear) && stump.FelledYear >= 0 && stump.FelledYear <= year, "stump time");
                 }

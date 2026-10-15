@@ -40,29 +40,16 @@ internal sealed class RuleEngine
         new("tile", "Minden csempe", "csempe", w => Enumerable.Range(0, w.Map.Tiles.Count).ToArray(), w => w.Map.Tiles.Count,
             TileFieldNames.Select(n => new RuleScopeField(n.Name, n.Help, (w, id) => w.TileRuleInputs(id).TryGetValue(n.Name, out double v) ? v : 0)).ToArray(),
             Array.Empty<RuleScopeAction>()),
-        new("trail", "Minden közelítőnyom", "nyom", w => w.Map.SkidTrailTiles.ToArray(), w => w.Map.Tiles.Count,
-            new RuleScopeField[] {
-                new("nyom.kopás", "Nyomvályú mélysége (0 friss … 1 mély, sáros).", (w, id) => w.Map.GetSkidTrailWear(id),
-                    (w, id, v) => w.Map.SetSkidTrailState(id, (float)v, w.Map.GetSkidTrailIdle(id))),
-                new("nyom.tétlenség", "Erdőévek az utolsó áthaladás óta.", (w, id) => w.Map.GetSkidTrailIdle(id),
-                    (w, id, v) => w.Map.SetSkidTrailState(id, w.Map.GetSkidTrailWear(id), (float)v)) },
-            new RuleScopeAction[] { new("nyom.megszüntetése", "A nyom benő és eltűnik a térképről.", (w, id) => w.Map.RemoveSkidTrail(id)) }),
     }.Concat(GameWorld.DiscoveredScopes()).ToArray();
     internal static RuleScope Scope(string id) => Array.Find(Scopes, s => s.Id == id);
 
 
     // ── Built-in rules, moved out of C# one by one ───────────────────────
-    internal static List<WorldRule> BuiltIn() => new() {
-        new() { Id = "trail.age", BuiltIn = true, Name = "Nyom regenerációja és benövése", Scope = "trail", Schedule = "step",
-            Description = "A nyomvályúk erdőévenként 0,4-del simulnak. A használaton kívüli, sima nyom a benövési idő után eltűnik.",
-            Effects = {
-                new() { Target = "nyom.kopás", Mode = "set", Formula = "max(0; nyom.kopás - 0,4 * lépés)" },
-                new() { Target = "nyom.tétlenség", Mode = "add", Formula = "lépés" },
-                new() { Target = "nyom.megszüntetése", Mode = "action",
-                    Formula = "ha(nyom.tétlenség < hangolás.SkidTrailOvergrowYears; 0; ha(nyom.kopás > 0,001; 0; 1))" } } },
-        new() { Id = "forest.stumps", BuiltIn = true, Name = "Tönkök lebomlása", Scope = "stump", Schedule = "step",
-            Description = "A tönk hat erdőév alatt elkorhad és eltűnik. Korábban C# kód volt (havi ellenőrzés).",
-            Effects = { new() { Target = "remove", Mode = "action", Formula = "curve.step(age; 6; 0; 1)" } } },
+    internal static List<WorldRule> BuiltIn() => new List<WorldRule> {
+        new() { Id = "road.weather", BuiltIn = true, Name = "Időjárási útromlás", Scope = "road",
+            Description = "Az eső és a térképi nedvesség burkolatonként csökkenti az út állapotát.", RoadWeather = new() },
+        TrailAgeRule.Default(),
+        StumpDecayRule.Default(),
         // A sample of the object model: a tree rule reading its own tile through a relation. Off by default, so the
         // shipped game behaves as before; switch it on in the editor to see dry ground weaken the trees on it.
         new() { Id = "tree.drought", BuiltIn = true, Enabled = false, Name = "Aszálykár a fákon", Scope = "tree", Schedule = "step",
@@ -70,11 +57,12 @@ internal sealed class RuleEngine
             Effects = {
                 new() { Target = "health", Mode = "add",
                     Formula = "curve.linear(tile.waterSupply; 0; -0,3; 0,2; 0) * (1 - 0,5 * shadeTolerance) * lépés" } } },
-    };
+    }.Select(r => { r.UpgradeAuthoring(); return r; }).ToList();
 
     /// <summary>Built-in rules a project does not list yet are added at their place in the built-in order.</summary>
     internal static void AddMissingBuiltIns(List<WorldRule> rules)
     {
+        foreach (var rule in rules) rule.UpgradeAuthoring();
         foreach (var rule in BuiltIn())
             if (!rules.Exists(r => r.Id == rule.Id)) rules.Add(rule);
     }
@@ -96,7 +84,7 @@ internal sealed class RuleEngine
             return value;
         }
     }
-    private sealed record CompiledEffect(RuleEffect Source, Expression Value, int Field, RuleScopeAction Action);
+    private sealed record CompiledEffect(RuleEffect Source, Expression Value, int Field, RuleScopeAction Action, Expression[] Parts = null);
     /// <summary><paramref name="Used"/>: the inputs the rule mentions; only these are read per element (a tree rule touches thousands).</summary>
     private sealed record CompiledRule(WorldRule Source, RuleScope Scope, string[] Inputs, bool[] Used, Expression Condition, CompiledEffect[] Effects);
 
@@ -105,6 +93,62 @@ internal sealed class RuleEngine
     internal List<WorldRule> Rules { get; }
     internal List<RuleFieldDefinition> Fields { get; }
     internal string LastError { get; private set; }
+
+    internal sealed record RoadWeatherPreview(double Moisture, double RainIntensity, double Rate, double Before, double After);
+    internal sealed record InfluenceContribution(string Name, double Change);
+    internal sealed record InfluencePreview(string Target, double Before, double After, InfluenceContribution[] Contributions);
+    internal IReadOnlyList<InfluencePreview> PreviewInfluences(GameWorld world, string ruleId, int id, double years)
+    {
+        var rule = compiled.Single(r => r.Source.Id == ruleId);
+        if (rule.Source.Effects.Any(e => e.Influence == null)) throw new InvalidDataException("A próba vizuális hatásokhoz használható.");
+        var inputs = new double[rule.Inputs.Length];
+        for (int i = 0; i < rule.Scope.Fields.Length; i++) if (rule.Used[i]) inputs[i] = rule.Scope.Fields[i].Read(world, id);
+        for (int i = rule.Scope.Fields.Length; i < inputs.Length; i++) inputs[i] = ReadCustom(world, rule.Inputs[i], id);
+        var rows = new List<InfluencePreview>();
+        for (int e = 0; e < rule.Effects.Length; e++) {
+            var effect = rule.Effects[e];
+            if (effect.Source.Mode == "action") {
+                double trigger = effect.Value.Evaluate(years, world.ReadRuleValue("world.time"), inputs, out string actionError);
+                if (actionError != null) throw new InvalidDataException(actionError);
+                rows.Add(new(effect.Source.Target, 0, rule.Source.Enabled && trigger != 0 ? 1 : 0, Array.Empty<InfluenceContribution>()));
+                if (rule.Source.Enabled && trigger != 0) break;
+                continue;
+            }
+            double before = inputs[effect.Field];
+            double value = effect.Value.Evaluate(years, world.ReadRuleValue("world.time"), inputs, out string error);
+            if (error != null) throw new InvalidDataException(error);
+            if (rule.Source.UseLegacyRoadOverride && years > 0) value = -world.AdjustRoadWeatherRate(id, -value / years, years, world.ReadRuleValue("world.time")) * years;
+            var field = GameWorld.RuleObjects.Find(rule.Scope.Entity)?.Fields.FirstOrDefault(f => f.Name == effect.Source.Target);
+            double after = rule.Source.Enabled ? Math.Clamp(effect.Source.Mode == "set" ? value : before + value, field?.Min ?? -1e12, field?.Max ?? 1e12) : before;
+            inputs[effect.Field] = after;
+            var parts = new List<InfluenceContribution>();
+            // Inputs are the pre-effect snapshot when explaining each contribution.
+            inputs[effect.Field] = before;
+            for (int p = 0; p < (effect.Parts?.Length ?? 0); p++) {
+                double change = effect.Parts[p].Evaluate(years, world.ReadRuleValue("world.time"), inputs, out error);
+                if (error != null) throw new InvalidDataException(error);
+                parts.Add(new(rule.Source.Effects[e].Influence.Terms[p].Name, rule.Source.Enabled ? change : 0));
+            }
+            inputs[effect.Field] = after;
+            rows.Add(new(effect.Source.Target, before, after, parts.ToArray()));
+        }
+        return rows;
+    }
+    /// <summary>Read-only explanation using the very same compiled effect and compatibility binding as Run.</summary>
+    internal RoadWeatherPreview PreviewRoadWeather(GameWorld world, string ruleId, int tile, double years)
+    {
+        var rule = compiled.Single(r => r.Source.Id == ruleId && r.Source.Scope == "road");
+        var inputs = rule.Scope.Fields.Select(f => f.Read(world, tile)).ToArray();
+        double before = world.Map.GetRoadCondition(tile);
+        double time = world.ReadRuleValue("world.time");
+        double delta = rule.Effects[0].Value.Evaluate(years, time, inputs, out string error);
+        if (error != null) throw new InvalidDataException(error);
+        if ((rule.Source.UseLegacyRoadOverride || rule.Source.RoadWeather?.UseLegacyOverride == true) && years > 0)
+            delta = -world.AdjustRoadWeatherRate(tile, -delta / years, years, time) * years;
+        if (!rule.Source.Enabled) delta = 0;
+        return new(world.Map.GetRuleMoisture(tile), (float)Math.Clamp(world.Environment.RainRate / 20, 0, 1),
+            years > 0 ? -delta / years : 0, before, Math.Clamp(before + delta, 0, 1));
+    }
 
     /// <summary>The names a rule's formulas may use on a scope: fields, custom fields, step, time, world values, stocks, tuning.</summary>
     internal static IReadOnlyList<FormulaName> Names(string scope, IEnumerable<RuleFieldDefinition> fields, IEnumerable<string> stocks)
@@ -115,11 +159,13 @@ internal sealed class RuleEngine
         names.RemoveAll(n => n.Operation == BehaviorOperation.Delta || n.Operation == BehaviorOperation.Time);
         names.Insert(0, new("lépés", BehaviorOperation.Delta, Help: "Az eltelt idő ebben a lépésben (erdőév)."));
         names.Insert(1, new("idő", BehaviorOperation.Time, Help: "Eltelt idő a játék kezdete óta (erdőév)."));
+        names.Insert(0, new("deltaYears", BehaviorOperation.Delta, Help: "Elapsed forest years in this rule step."));
         for (int i = 0; i < names.Count; i++)
             if (names[i].Operation == BehaviorOperation.Input)
                 names[i] = names[i] with { Help = s.Fields.FirstOrDefault(f => f.Name == names[i].Name)?.Help
                     ?? fields.FirstOrDefault(f => f.Name == names[i].Name)?.Description ?? "" };
         foreach (var spec in GameTuning.Specs) names.Add(new("hangolás." + spec.Id, BehaviorOperation.NamedValue, "tuning." + spec.Id, $"{spec.Name} ({spec.Unit})."));
+        foreach (var spec in GameTuning.Specs) names.Add(new("tuning." + spec.Id, BehaviorOperation.NamedValue, "tuning." + spec.Id, $"{spec.Name} ({spec.Unit})."));
         return names;
     }
 
@@ -135,6 +181,7 @@ internal sealed class RuleEngine
 
     internal RuleEngine(List<WorldRule> rules, List<RuleFieldDefinition> fields, IEnumerable<string> stockIds, Func<string, double> readValue)
     {
+        foreach (var rule in rules) rule.UpgradeAuthoring();
         Rules = rules; Fields = fields;
         if (rules.Count > 256 || fields.Count > 64) throw new InvalidDataException("Legfeljebb 256 szabály és 64 saját mező lehet.");
         var fieldNames = new HashSet<string>(StringComparer.Ordinal);
@@ -166,7 +213,8 @@ internal sealed class RuleEngine
                 }
             }
             var condition = string.IsNullOrWhiteSpace(rule.Condition) ? null : Compile(rule.Condition, "feltétel");
-            var effects = rule.Effects.Select((e, i) => {
+            var sourceEffects = rule.EffectiveEffects();
+            var effects = sourceEffects.Select((e, i) => {
                 if (e.Mode == "action") {
                     var action = Array.Find(scope.Actions, a => a.Name == e.Target) ?? throw new InvalidDataException($"{rule.Name}: a(z) {scope.Name} hatókörben nincs ilyen művelet: {e.Target}.");
                     return new CompiledEffect(e, string.IsNullOrWhiteSpace(e.Formula) ? null : Compile(e.Formula, $"{i + 1}. hatás"), -1, action);
@@ -174,9 +222,11 @@ internal sealed class RuleEngine
                 int field = Array.IndexOf(inputs, e.Target);
                 bool writable = field >= 0 && (field >= scope.Fields.Length || scope.Fields[field].Write != null);
                 if (!writable) throw new InvalidDataException($"{rule.Name}: a(z) {e.Target} nem írható mező ebben a hatókörben.");
-                return new CompiledEffect(e, Compile(e.Formula, $"{i + 1}. hatás"), field, null);
+                var influence = rule.Effects.ElementAtOrDefault(i)?.Influence;
+                var parts = influence?.Terms.Select(t => Compile(new RuleInfluence { PerYear = influence.PerYear, Terms = new() { t } }.Compile(), "kapcsolat")).ToArray();
+                return new CompiledEffect(e, Compile(e.Formula, $"{i + 1}. hatás"), field, null, parts);
             }).ToArray();
-            string text = rule.Condition + " " + string.Join(" ", rule.Effects.Select(e => e.Target + " " + e.Formula));
+            string text = rule.Condition + " " + string.Join(" ", sourceEffects.Select(e => e.Target + " " + e.Formula));
             list.Add(new(rule, scope, inputs, inputs.Select(n => text.Contains(n, StringComparison.Ordinal)).ToArray(), condition, effects));
         }
         compiled = list.ToArray();
@@ -211,6 +261,7 @@ internal sealed class RuleEngine
     /// <summary>One step of <paramref name="years"/>; returns true when an action changed the network (routes need a refresh).</summary>
     internal bool Run(GameWorld world, double years, double time)
     {
+        LastError = null;
         bool changed = false;
         foreach (var rule in compiled) {
             if (!rule.Source.Enabled) continue;
@@ -227,6 +278,8 @@ internal sealed class RuleEngine
                 foreach (var effect in rule.Effects) {
                     double value = effect.Value == null ? 1 : effect.Value.Evaluate(years, time, inputs, out error);
                     if (error != null) { LastError = $"{rule.Source.Name}: {error}"; break; }
+                    if ((rule.Source.UseLegacyRoadOverride || rule.Source.RoadWeather?.UseLegacyOverride == true) && years > 0)
+                        value = -world.AdjustRoadWeatherRate(id, -value / years, years, time) * years;
                     if (effect.Action != null) {
                         if (value == 0) continue;
                         changed |= effect.Action.Apply(world, id);

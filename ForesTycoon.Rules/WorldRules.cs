@@ -25,15 +25,56 @@ public sealed class WorldRule
     public string Condition { get; set; } = "";
     /// <summary>Applied in order on each element; a later effect sees the earlier ones of the same element.</summary>
     public List<RuleEffect> Effects { get; set; } = new();
+    public RoadWeatherCard RoadWeather { get; set; }
+    public bool UseLegacyRoadOverride { get; set; }
+    public List<RuleEffect> EffectiveEffects() => RoadWeather?.CompileEffects() ?? Effects.Select(e => e.Executable()).ToList();
+
+    public void UpgradeAuthoring()
+    {
+        TrailAgeRule.Upgrade(this);
+        if (Scope == "stump" && Condition == "" && Effects != null && Effects.Count == 1 && Effects[0].Influence == null
+            && Effects[0].Target == "remove" && Effects[0].Mode == "action"
+            && RuleCurve.TryParse(Effects[0].Formula, out var curve) && curve.Family == "step" && curve.Input == "age"
+            && curve.Tail.Length == 0 && curve.Points[0].X > 0 && curve.Points[0].Y == 0 && curve.Above == 1) {
+            double lifetime = curve.Points[0].X;
+            Effects = new() {
+                new() { Target = "decayProgress", Mode = "set", Influence = new() { PerYear = false, Terms = new() {
+                    new() { Name = "Lebomlás az életkor alapján", Decrease = false, Amount = 1, Factors = new() {
+                        new() { Source = "age", InputHigh = lifetime } } } } } },
+                new() { Target = "remove", Mode = "action", Influence = new() { PerYear = false, Terms = new() {
+                    new() { Name = "Eltűnés teljes lebomláskor", Decrease = false, Amount = 1, Factors = new() {
+                        new() { Source = "decayProgress", Shape = "step", InputHigh = 1 } } } } } }
+            };
+        }
+        if (RoadWeather != null) {
+            Validate();
+            Effects = RoadWeather.ToInfluences();
+            UseLegacyRoadOverride = RoadWeather.UseLegacyOverride;
+            RoadWeather = null;
+        }
+        if (Effects != null) foreach (var term in Effects.Where(e => e?.Influence?.Terms != null).SelectMany(e => e.Influence.Terms)) term?.UpgradeConditions();
+    }
 
     public void Validate()
     {
+        if (RoadWeather != null) {
+            RoadWeather.Validate();
+            if (Scope != "road" || Schedule != "step" || Condition != "" || Effects == null || Effects.Count != 0)
+                throw new InvalidDataException("Az útromlási kártya road/step szabály; külön feltétel és hatás nélkül tárolandó.");
+        }
         if (string.IsNullOrWhiteSpace(Id) || string.IsNullOrWhiteSpace(Name) || Description == null || string.IsNullOrWhiteSpace(Scope)
             || Array.IndexOf(Schedules, Schedule) < 0 || Condition == null || Effects == null || Effects.Count > 32)
             throw new InvalidDataException($"{Name}: a szabálynak azonosítója, neve, hatóköre, időzítése és legfeljebb 32 hatása legyen.");
         foreach (var e in Effects)
             if (e == null || string.IsNullOrWhiteSpace(e.Target) || Array.IndexOf(RuleEffect.Modes, e.Mode) < 0 || e.Formula == null)
                 throw new InvalidDataException($"{Name}: minden hatásnak célja, módja (set, add, action) és képlete legyen.");
+        foreach (var e in Effects) {
+            if (e.Influence == null) continue;
+            if (e.Formula.Length != 0 || e.Mode is not ("add" or "set" or "action")) throw new InvalidDataException("A vizuális hatást külön képlet nélkül kell tárolni.");
+            _ = e.Influence.Compile();
+        }
+        if (UseLegacyRoadOverride && (Scope != "road" || Effects.Count != 1 || Effects[0].Target != "condition" || Effects[0].Mode != "add"))
+            throw new InvalidDataException("A régi útromlási felülírás csak egyetlen condition hatással használható. Kapcsold ki a régi felülírást.");
     }
 }
 
@@ -45,6 +86,8 @@ public sealed class RuleEffect
     public string Mode { get; set; } = "set";
     /// <summary>The new value, the increment, or for an action its trigger (not 0 = do it; empty = always).</summary>
     public string Formula { get; set; } = "";
+    public RuleInfluence Influence { get; set; }
+    public RuleEffect Executable() => Influence == null ? this : new() { Target = Target, Mode = Mode, Formula = Mode == "action" ? $"ha({Influence.Compile()} > 0; 1; 0)" : Influence.Compile() };
 }
 
 /// <summary>A state variable the designer adds to a scope; the game keeps one value per element and saves it.</summary>

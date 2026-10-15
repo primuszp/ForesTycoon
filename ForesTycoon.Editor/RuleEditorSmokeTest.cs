@@ -95,13 +95,10 @@ namespace ForesTycoon.Editor
                     (() => editor.ShowWorld(WorldTab.Rules, tile: forestTile), "world-rules"),
                     (() => editor.ShowMissions(), "world-missions"),
                     (() => editor.ShowRuleBook(), "world-rulebook"),
-                    (() => editor.ShowRules(RulesTopic.Economy), "world-rules-economy"),
-                    (() => editor.ShowRules(RulesTopic.Machines), "world-rules-machines"),
-                    (() => editor.ShowRules(RulesTopic.Formulas), "world-rules-formulas"),
-                    (() => editor.ShowRules(RulesTopic.Map), "world-rules-map"),
-                    (() => editor.ShowCausalEdge("tree.drought"), "world-rules-map-curve"),
-                    (() => editor.ShowRules(RulesTopic.Objects), "world-rules-objects"),
+                    (() => editor.ShowWorldTypes(TypeTab.Parameters), "world-parameters"),
                     (() => editor.ShowRuleBook(world.RuleProjectDocument.Rules.FindIndex(r => r.Id == "tree.drought")), "world-rulebook-curve"),
+                    (() => editor.ShowRuleBook(world.RuleProjectDocument.Rules.FindIndex(r => r.Id == "road.weather")), "world-rule-influences"),
+                    (() => editor.ShowRuleBook(world.RuleProjectDocument.Rules.FindIndex(r => r.Id == "forest.stumps")), "world-stump-influences"),
                     (() => { editor.ShowWorld(WorldTab.Trial); editor.ShowWorldTrial(rainTrial); }, "world-trial") }) {
                     screen.Show();
                     for (int frame = 0; frame < 3; frame++) {
@@ -121,6 +118,26 @@ namespace ForesTycoon.Editor
                         ui.Render();
                     }
                 }
+                editor.ShowRuleBook(world.RuleProjectDocument.Rules.FindIndex(r => r.Id == "road.weather")); Frames(12);
+                int connectionCount = editor.CollectProject(world).Rules.Single(r => r.Id == "road.weather").Effects[0].Influence.Terms.Count;
+                void DragLink(string source, string target)
+                {
+                    var a = editor.InfluenceGraphAnchors[source]; var b = editor.InfluenceGraphAnchors[target];
+                    ui.MouseMove((int)a.X, (int)a.Y); Frames(2);
+                    ui.MouseButton(0, true); Frames(2);
+                    ui.MouseMove((int)b.X, (int)b.Y); Frames(2);
+                    ui.MouseButton(0, false); Frames(12); world.ExecutePendingCommands();
+                }
+                DragLink("source:rainIntensity", "target:condition");
+                var graphRule = world.RuleProjectDocument.Rules.Single(r => r.Id == "road.weather");
+                Require(graphRule.Effects[0].Influence.Terms.Count == connectionCount + 1, "Dragging source to target did not create and apply a relationship.");
+                Require(graphRule.Effects[0].Influence.Terms[^1].Factors.Single().Source == "rainIntensity", "Graph connected the wrong source.");
+                DragLink("source:tile.moisture", "effect:0:0");
+                graphRule = world.RuleProjectDocument.Rules.Single(r => r.Id == "road.weather");
+                Require(graphRule.Effects[0].Influence.Terms[0].Factors.Count == 2, "Dragging source to an effect did not add a multiplier.");
+                editor.Undo(world); world.ExecutePendingCommands(); Frames(12);
+                editor.Undo(world); world.ExecutePendingCommands(); Frames(12);
+                Require(world.RuleProjectDocument.Rules.Single(r => r.Id == "road.weather").Effects[0].Influence.Terms.Count == connectionCount, "Undo did not restore graph relationships.");
                 editor.ShowMissions(); Frames(12);
                 int missions = editor.EditedScenario.Missions.Count;
                 editor.EditedScenario.Missions.Add(new MissionGoal { Id = "undo-proba", Title = "Visszavonási próba" }); Frames(12);
@@ -170,6 +187,76 @@ namespace ForesTycoon.Editor
                     FramebufferCapture.SavePng(Path.Combine(output, screen.Name + ".png"), width, height);
                 }
                 File.WriteAllText(Path.Combine(output, "road-wear.json"), model.ToJson());
+                using (var trailWorld = new GameWorld(settings, enableRendering: false)) {
+                    int trailStart = Enumerable.Range(0, trailWorld.Map.Tiles.Count - 2).First(id => trailWorld.Map.CanCarrySkidTrail(id)
+                        && trailWorld.Map.CanCarrySkidTrail(id + 1) && trailWorld.Map.CanCarrySkidTrail(id + 2));
+                    trailWorld.QueueSkidTrailPath(trailStart, trailStart + 2, false); trailWorld.ExecutePendingCommands();
+                    var trailIds = trailWorld.Map.SkidTrailTiles.OrderBy(id => id).ToArray();
+                    foreach (int id in trailIds) trailWorld.Map.SetSkidTrailState(id, .8f, .5f);
+                    var trailProject = trailWorld.RuleProjectDocument; trailProject.World = null; trailProject.Algorithms = null;
+                    string trailPath = Path.Combine(output, "trail-regeneration.project.json");
+                    RuleProject.WriteAtomic(trailPath, trailProject.ToJson());
+                    using (var initial = File.Create(Path.Combine(output, "trail-regeneration.world.json"))) trailWorld.Save(initial);
+                    var trailEditor = new RuleEditorView(trailPath);
+                    void TrailFrames(int count) {
+                        for (int frame = 0; frame < count; frame++) {
+                            ui.Update(width, height, width, height, Vec2.One, 1f / 60);
+                            ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 900)); trailEditor.Draw(trailWorld, ref open);
+                            GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit); ui.Render(); GL.Finish();
+                        }
+                    }
+                    TrailFrames(3); trailEditor.ShowRuleBook(trailProject.Rules.FindIndex(r => r.Id == "trail.age")); TrailFrames(12);
+                    var removal = trailEditor.InfluenceGraphAnchors["effect:2:0"];
+                    ui.MouseMove((int)removal.X, (int)removal.Y); TrailFrames(2);
+                    ui.MouseButton(0, true); TrailFrames(2); ui.MouseButton(0, false); ui.MouseMove(0, 0); TrailFrames(12);
+                    Require(trailEditor.InfluenceGraphSourceLabels.ContainsKey("idleYears") && trailEditor.InfluenceGraphSourceLabels.ContainsKey("tuning.SkidTrailOvergrowYears"),
+                        "Trail graph did not expose both the idle-time condition and the linked overgrowth parameter.");
+                    Require(GL.GetError() == ErrorCode.NoError, "Trail graph OpenGL error.");
+                    FramebufferCapture.SavePng(Path.Combine(output, "trail-regeneration-graph.png"), width, height);
+                    // Connect the existing rut depth as an author-selected regeneration multiplier using a real drag.
+                    var a = trailEditor.InfluenceGraphAnchors["source:wear"]; var b = trailEditor.InfluenceGraphAnchors["effect:0:0"];
+                    ui.MouseMove((int)a.X, (int)a.Y); TrailFrames(2); ui.MouseButton(0, true); TrailFrames(2);
+                    ui.MouseMove((int)b.X, (int)b.Y); TrailFrames(2); ui.MouseButton(0, false); TrailFrames(12); trailWorld.ExecutePendingCommands();
+                    var connected = trailWorld.RuleProjectDocument.Rules.Single(r => r.Id == "trail.age").Effects[0].Influence.Terms.Single();
+                    Require(connected.Factors.Single().Source == "wear", "Trail drag did not apply its chosen source to the runtime.");
+                    trailWorld.RuleBook.Run(trailWorld, .1, 0);
+                    Require(Math.Abs(trailWorld.Map.GetSkidTrailWear(trailIds[0]) - .768) < 1e-6, "Runtime did not execute the graph's chosen regeneration multiplier.");
+                    ui.MouseMove(0, 0);
+                }
+                // A reviewable example project, a real four-stump sandbox, and the graph's measured comparison.
+                var stumpProject = GameWorld.DefaultRuleProject();
+                RuleEngine.AddMissingBuiltIns(stumpProject.Rules);
+                stumpProject.Name = "Tönklebomlás – nedvesség és átmérő példa";
+                stumpProject.World = null; stumpProject.Algorithms = null;
+                string stumpProjectPath = Path.Combine(output, "stump-decay-example.project.json");
+                RuleProject.WriteAtomic(stumpProjectPath, stumpProject.ToJson());
+                using (var stumpWorld = StumpRuleTrial.CreateWorld(stumpProject, "forest.stumps")) {
+                    using (var initial = File.Create(Path.Combine(output, "stump-decay-example.world.json"))) stumpWorld.Save(initial);
+                    var stumpEditor = new RuleEditorView(stumpProjectPath);
+                    for (int frame = 0; frame < 3; frame++) {
+                        ui.Update(width, height, width, height, Vec2.One, 1f / 60);
+                        ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 900)); stumpEditor.Draw(stumpWorld, ref open);
+                        ui.Render();
+                    }
+                    stumpEditor.ResetVisualRule(stumpWorld, "forest.stumps"); stumpWorld.ExecutePendingCommands();
+                    var stumpRule = stumpWorld.RuleProjectDocument.Rules.Single(r => r.Id == "forest.stumps");
+                    stumpEditor.RunStumpComparison(stumpWorld, stumpRule);
+                    var stumpComparison = StumpRuleTrial.Run(stumpProject, "forest.stumps");
+                    Require(stumpComparison.Cases.All(c => c.RemovedAtYears.HasValue), "Example did not remove fully decomposed stumps.");
+                    File.WriteAllText(Path.Combine(output, "stump-decay-comparison.json"), System.Text.Json.JsonSerializer.Serialize(stumpComparison,
+                        new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+                    ui.MouseMove(0, 0);
+                    for (int frame = 0; frame < 3; frame++) {
+                        ui.Update(width, height, width, height, Vec2.One, 1f / 60);
+                        ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 900)); stumpEditor.Draw(stumpWorld, ref open);
+                        GL.Viewport(0, 0, width, height); GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
+                        ui.Render(); GL.Finish();
+                    }
+                    Require(stumpEditor.InfluenceGraphSourceLabels["tile.moisture"] == "+ Gyorsítja", "Moisture acceleration was not labeled separately on the graph.");
+                    Require(stumpEditor.InfluenceGraphSourceLabels["diameter"] == "- Lassítja", "Diameter slowdown was not labeled separately on the graph.");
+                    Require(GL.GetError() == ErrorCode.NoError, "Stump example graph OpenGL error.");
+                    FramebufferCapture.SavePng(Path.Combine(output, "stump-decay-example.png"), width, height);
+                }
                 var graphEditor = new RuleEditorView(Path.Combine(output, "road-wear.json"));
                 for (int frame = 0; frame < 3; frame++)
                 {

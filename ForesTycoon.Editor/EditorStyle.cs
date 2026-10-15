@@ -157,7 +157,7 @@ namespace ForesTycoon.Editor
             }
         }
 
-        /// <summary>Stop the shaft at the head's base: its antialiased stroke must not round off the tip.</summary>
+        /// <summary>A tangent approach followed by a straight shaft ending inside the head, never at its tip.</summary>
         internal static void BezierArrow(ImDrawListPtr draw, Vec2 start, Vec2 control1, Vec2 control2, Vec2 tip,
             float headSize, uint colour, float width, Vec2? headDirection = null)
         {
@@ -165,20 +165,23 @@ namespace ForesTycoon.Editor
             float length = direction.Length();
             if (length < 1e-4f) return;
             Vec2 unit = direction / length;
-            // Keep the original curve until the last head-sized section (de Casteljau subdivision).
-            // The extra half-stroke accounts for the rounded/antialiased end of the line.
-            float setback = headSize + width * .5f;
-            float low = 0, high = 1;
-            for (int i = 0; i < 18; i++) {
-                float t = (low + high) * .5f, s = 1 - t;
-                Vec2 point = s * s * s * start + 3 * s * s * t * control1 + 3 * s * t * t * control2 + t * t * t * tip;
-                if (Vec2.Dot(tip - point, unit) > setback) low = t; else high = t;
+            headSize = Math.Max(headSize, width * 3);
+            // The curve ends before the head. Only a straight, axial segment enters the triangle.
+            Vec2 join = tip - unit * (headSize + Math.Max(width * 2, headSize * .5f));
+            float available = Vec2.Dot(join - start, unit);
+            float pull = Math.Max(headSize, length);
+            if (available > 0) {
+                pull = Math.Min(pull, available * .5f);
+                // Short column gaps must not make the control polygon overshoot the join.
+                float overshoot = Vec2.Dot(control1 - join, unit);
+                if (overshoot > 0) control1 -= unit * overshoot;
             }
-            float end = low;
-            Vec2 a = Vec2.Lerp(start, control1, end), b = Vec2.Lerp(control1, control2, end), c = Vec2.Lerp(control2, tip, end);
-            Vec2 d = Vec2.Lerp(a, b, end), e = Vec2.Lerp(b, c, end);
-            if (end > 0) draw.AddBezierCubic(start, a, d, Vec2.Lerp(d, e, end), colour, width);
-            Arrow(draw, tip, direction, headSize, colour);
+            draw.PathClear();
+            draw.PathLineTo(start);
+            draw.PathBezierCubicCurveTo(control1, join - unit * pull, join);
+            draw.PathLineTo(tip - unit * (headSize * .5f));
+            draw.PathStroke(colour, ImDrawFlags.None, width);
+            Arrow(draw, tip, unit, headSize, colour);
         }
 
         /// <summary>An arrowhead at <paramref name="tip"/> pointing along <paramref name="direction"/>.</summary>

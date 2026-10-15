@@ -26,6 +26,8 @@ internal interface IPlace : IWorldObject { }
     Help = "Soil and water of a tile. Write tile rules on the Tile scope; here it is read through relations.")]
 internal interface ITileEnvironment : IPlace
 {
+    [RuleField("Hydrological map moisture used by road weathering (not root-zone water).", Unit = "0–1", Min = 0, Max = 1)]
+    double Moisture { get; }
     [RuleField("Water in the root zone.", Unit = "mm")]
     [RuleCause("tileEnvironment.cover", -1, "water.interception", Help = "Canopy intercepts rain and transpires.")]
     double RootWater { get; }
@@ -37,6 +39,24 @@ internal interface ITileEnvironment : IPlace
     [RuleCause("tree.height", +1, "forest.canopy", Help = "Taller trees close the canopy.")]
     double Cover { get; }
     [RuleField("Field capacity of the soil.", Unit = "mm")] double FieldCapacity { get; }
+}
+
+[RuleEntity("road", Element = "road", Help = "A paved road tile; weather rules change its condition.")]
+internal interface IRoad : IWorldObject
+{
+    [RuleField("Road condition: 1 is new, 0 is worn out.", Unit = "0–1", Min = 0, Max = 1)] double Condition { get; set; }
+    [RuleField("1 for macadam, 0 for asphalt.", Min = 0, Max = 1)] double IsMacadam { get; }
+    [RuleField("Current RainRate / 20, clamped to 0–1.", Unit = "0–1", Min = 0, Max = 1)] double RainIntensity { get; }
+    [RuleRelation("The road's tile and hydrological map moisture.")] ITileEnvironment Tile { get; }
+}
+
+[RuleEntity("trail", Element = "trail", Help = "A temporary forest track. Machines deepen its ruts and reset its idle time.")]
+internal interface ITrail : IWorldObject
+{
+    [RuleField("Rut depth; 0 is smooth and 1 is deeply rutted.", Display = "Rut depth", Unit = "0–1", Min = 0, Max = 1)] double Wear { get; set; }
+    [RuleField("Forest years since the last machine pass.", Display = "Idle years", Unit = "forest years", Min = 0)] double IdleYears { get; set; }
+    [RuleRelation("Environment of the trail tile.")] ITileEnvironment Tile { get; }
+    [RuleAction("The overgrown trail disappears and routes are refreshed.", Display = "Remove")] bool Remove();
 }
 
 [RuleEntity("plant", Abstract = true, Help = "A living plant: it has an age and a health, and stands on a tile.")]
@@ -75,6 +95,7 @@ internal interface ITree : IPlant
 [RuleEntity("stump", Element = "stump", Help = "What is left of a felled tree. It rots away; the rule book decides when it is gone.")]
 internal interface IStump : IWorldObject
 {
+    [RuleField("Decomposition progress; 0 is fresh, 1 is fully decomposed.", Display = "Decay progress", Unit = "0–1", Min = 0, Max = 1)] double DecayProgress { get; set; }
     [RuleField("Forest years since the tree was felled.", Unit = "forest years", Min = 0)] double Age { get; }
     [RuleField("Stem diameter of the felled tree.", Unit = "m", Min = 0)] double Diameter { get; }
     [RuleRelation("The tile the stump stands on.")] ITileEnvironment Tile { get; }
@@ -110,6 +131,7 @@ sealed partial class GameWorld
 
     private sealed class TileView : RuleView, ITileEnvironment
     {
+        public double Moisture => World.Map.GetRuleMoisture(Id);
         private Dictionary<string, double> cache; private int cached = -1;
         private double Get(string name)
         {
@@ -123,6 +145,24 @@ sealed partial class GameWorld
         public double Waterlogging => Get("pangóvíz");
         public double Cover => Get("lombborítás");
         public double FieldCapacity => Get("talaj.vízkapacitás");
+    }
+
+    private sealed class RoadView : RuleView, IRoad
+    {
+        private readonly TileView tile = new();
+        public double Condition { get => World.Map.GetRoadCondition(Id); set => World.Map.SetRoadCondition(Id, (float)value); }
+        public double IsMacadam => World.Map.GetRoadPaving(Id) == RoadPaving.Macadam ? 1 : 0;
+        public double RainIntensity => (float)Math.Clamp(World.Environment.RainRate / 20, 0, 1);
+        public ITileEnvironment Tile { get { tile.Bind(World, Id); tile.Invalidate(); return tile; } }
+    }
+
+    private sealed class TrailView : RuleView, ITrail
+    {
+        private readonly TileView tile = new();
+        public double Wear { get => World.Map.GetSkidTrailWear(Id); set => World.Map.SetSkidTrailState(Id, (float)value, World.Map.GetSkidTrailIdle(Id)); }
+        public double IdleYears { get => World.Map.GetSkidTrailIdle(Id); set => World.Map.SetSkidTrailState(Id, World.Map.GetSkidTrailWear(Id), (float)value); }
+        public ITileEnvironment Tile { get { tile.Bind(World, Id); tile.Invalidate(); return tile; } }
+        public bool Remove() => World.Map.RemoveSkidTrail(Id);
     }
 
     private sealed class TreeView : RuleView, ITree
@@ -163,6 +203,11 @@ sealed partial class GameWorld
         internal (int Tile, int Index)[] Stumps = Array.Empty<(int, int)>();
         private readonly TileView tile = new();
         private ForestTreeStump Stump { get { var (t, i) = Stumps[Id]; World.forest.IndividualTrees.TryGet(t, out var p); return p.Stumps[i]; } }
+        public double DecayProgress {
+            get => Stump.DecayProgress ?? Math.Clamp((World.forest.ForestYear - Stump.FelledYear) / ForestTreeStump.LifetimeYears, 0, 1);
+            set { var (t, i) = Stumps[Id]; World.forest.IndividualTrees.TryGet(t, out var patch);
+                patch.Stumps[i] = patch.Stumps[i] with { DecayProgress = Math.Clamp(value, 0, 1) }; }
+        }
         public double Age => Math.Max(0, World.forest.ForestYear - Stump.FelledYear);
         public double Diameter => Stump.Felled.Dimensions.Diameter;
         public ITileEnvironment Tile { get { tile.Bind(World, Stumps[Id].Tile); return tile; } }
@@ -201,12 +246,18 @@ sealed partial class GameWorld
     private static readonly ConditionalWeakTable<GameWorld, TreeView> TreeViews = new();
     private static readonly ConditionalWeakTable<GameWorld, TruckView> TruckViews = new();
     private static readonly ConditionalWeakTable<GameWorld, StumpView> StumpViews = new();
+    private static readonly ConditionalWeakTable<GameWorld, RoadView> RoadViews = new();
+    private static readonly ConditionalWeakTable<GameWorld, TrailView> TrailViews = new();
 
     /// <summary>The object model of the game, as the editor sees it.</summary>
     internal static RuleSchema RuleObjects { get; } = RuleSchema.Discover(typeof(GameWorld).Assembly);
 
     /// <summary>Rule scopes generated from the object model: fields, relation fields (“csempe.x”) and actions.</summary>
     internal static RuleScope[] DiscoveredScopes() => new[] {
+        EntityScope(RuleObjects.Find("trail"), w => w.Map.SkidTrailTiles.OrderBy(id => id).ToArray(), w => w.Map.Tiles.Count,
+            (w, id) => { var v = TrailViews.GetValue(w, _ => new()); v.Bind(w, id); return v; }),
+        EntityScope(RuleObjects.Find("road"), w => w.Map.RoadTiles.OrderBy(id => id).ToArray(), w => w.Map.Tiles.Count,
+            (w, id) => { var v = RoadViews.GetValue(w, _ => new()); v.Bind(w, id); return v; }),
         EntityScope(RuleObjects.Find("tree"), w => { var v = TreeViews.GetValue(w, _ => new()); return v.Snapshot(w); },
             w => TreeViews.GetValue(w, _ => new()).Trees.Length, (w, id) => { var v = TreeViews.GetValue(w, _ => new()); v.Bind(w, id); return v; }),
         EntityScope(RuleObjects.Find("stump"), w => StumpViews.GetValue(w, _ => new()).Snapshot(w),

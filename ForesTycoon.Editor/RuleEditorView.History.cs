@@ -72,7 +72,7 @@ internal sealed partial class RuleEditorView
         currentRules.SetTuning(JsonSerializer.Deserialize<Dictionary<string, double>>(to.Tuning));
         var book = JsonSerializer.Deserialize<RuleBookState>(to.Rules);
         if (book?.Rules != null) { ruleBook = book.Rules; ruleFields = book.Fields ?? new(); ruleBookError = null; }
-        historyIndex = index; statusFrame = -1000; formulaFor = null;
+        historyIndex = index; statusFrame = -1000;
         if (rebuild) ApplyScenario(world, verb + ": " + summary + ".");
         else { Try(() => ApplyProject(world, false)); message = verb + ": " + summary + "."; }
     }

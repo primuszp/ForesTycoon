@@ -250,7 +250,7 @@ namespace ForesTycoon.Ecology
         {
             ForestTree tree = SettleIndividual(patch.Trees[index], ForestYear) with { AnnualGrowth = default };
             patch.Depot += ForestTree.Volume(tree.Dimensions);
-            (patch.Stumps ??= new List<ForestTreeStump>()).Add(new(tree, ForestYear));
+            (patch.Stumps ??= new List<ForestTreeStump>()).Add(new(tree, ForestYear) { DecayProgress = StumpsByRules ? 0 : null });
             IndividualTrees.RemoveLiving(patch, index);
         }
 

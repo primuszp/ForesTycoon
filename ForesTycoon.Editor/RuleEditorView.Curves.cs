@@ -16,23 +16,27 @@ namespace ForesTycoon.Editor;
 internal sealed partial class RuleEditorView
 {
     private int draggedPoint = -1;
+    private (double X0, double X1, double Y0, double Y1)? draggedBounds;
     private string draggedCurve;
     private readonly HashSet<string> formulaView = new(StringComparer.Ordinal);
 
     /// <summary>Draws the editor; returns true while it changed the curve, and sets <paramref name="finished"/> when an edit is complete.</summary>
-    private bool CurveEditor(string id, RuleCurve curve, string scope, IReadOnlyList<string> inputs, ref bool finished)
+    private bool CurveEditor(string id, RuleCurve curve, string scope, IReadOnlyList<string> inputs, ref bool finished, bool bindings = true)
     {
         bool changed = false;
         ImGui.PushID(id);
 
-        // Families as small pictures of their shape.
-        foreach (var family in RuleCurve.Families) {
-            bool on = curve.Family == family.Id;
-            if (FamilyButton(family, on)) { curve.SetFamily(family.Id); changed = finished = true; }
-            ImGui.SameLine(0, 4);
+        // Wrap by panel width, including the narrow graph inspector.
+        int columns = Math.Clamp((int)(ImGui.GetContentRegionAvail().X / 78), 1, RuleCurve.Families.Length);
+        if (ImGui.BeginTable("curve-families", columns, ImGuiTableFlags.SizingFixedFit)) {
+            foreach (var family in RuleCurve.Families) {
+                ImGui.TableNextColumn();
+                if (FamilyButton(family, curve.Family == family.Id)) { curve.SetFamily(family.Id); changed = finished = true; }
+            }
+            ImGui.EndTable();
         }
-        ImGui.NewLine();
 
+        if (bindings) {
         // Input: any readable field of the scope, its relations included.
         ImGui.AlignTextToFramePadding(); EditorStyle.Text(HudTheme.Muted, "bemenet"); ImGui.SameLine();
         ImGui.SetNextItemWidth(220);
@@ -41,38 +45,65 @@ internal sealed partial class RuleEditorView
                 if (ImGui.Selectable(name, name == curve.Input)) { curve.Input = name; changed = finished = true; }
             ImGui.EndCombo();
         }
+        }
         var field = SchemaField(scope, curve.Input);
-        if (field != null) { ImGui.SameLine(); EditorStyle.Text(HudTheme.Muted, $"{field.Display} · {field.Unit}"); }
+        if (field != null) { if (bindings) ImGui.SameLine(); EditorStyle.Text(HudTheme.Muted, $"{field.Display} · {field.Unit}"); }
 
-        changed |= CurvePlot(id, curve, field, editable: true, ref finished);
+        try { curve.Validate(); changed |= CurvePlot(id, curve, field, editable: true, ref finished); }
+        catch (System.IO.InvalidDataException e) { EditorStyle.Text(HudTheme.Bad, e.Message); }
+        var familyHelp = RuleCurve.Find(curve.Family);
+        if (familyHelp != null) ImGui.TextWrapped(familyHelp.Help);
 
-        // Exact values for the points, and the modifier after the curve.
+        var (xmin, xmax) = InputRange(curve, field);
+        double ymin = Math.Min(0, curve.Points.Min(p => p.Y)), ymax = Math.Max(1, curve.Points.Max(p => p.Y));
         for (int i = 0; i < curve.Points.Count; i++) {
             var (x, y) = curve.Points[i];
-            ImGui.SetNextItemWidth(64); bool edit = ImGui.InputDouble($"x##px{i}", ref x, 0, 0, "%.3g"); finished |= ImGui.IsItemDeactivatedAfterEdit(); ImGui.SameLine();
-            ImGui.SetNextItemWidth(64); edit |= ImGui.InputDouble($"{(curve.Family == "step" ? "alatta" : "y")}##py{i}", ref y, 0, 0, "%.3g"); finished |= ImGui.IsItemDeactivatedAfterEdit();
+            bool edit = CurveNumber($"{(curve.Family == "step" ? "Küszöb" : $"{i + 1}. pont · bemenet")}##px{i}", ref x, xmin, xmax, ref finished);
+            edit |= CurveNumber($"{(curve.Family == "step" ? "Küszöb alatt" : "Kimenet")}##py{i}", ref y, ymin, ymax, ref finished);
             if (edit) { curve.Points[i] = (x, y); changed = true; }
-            // Pairs wrap to the next line when the panel is narrow.
-            if (i < curve.Points.Count - 1 || curve.Family is "step" or "points") { ImGui.SameLine(0, 14); if (ImGui.GetContentRegionAvail().X < 170) ImGui.NewLine(); }
         }
         if (curve.Family == "step") {
-            double above = curve.Above; ImGui.SetNextItemWidth(90);
-            if (ImGui.InputDouble("felette##above", ref above, 0, 0, "%.3g")) { curve.Above = above; changed = true; }
-            finished |= ImGui.IsItemDeactivatedAfterEdit();
+            double above = curve.Above;
+            if (CurveNumber("Küszöbtől##above", ref above, Math.Min(ymin, above), Math.Max(ymax, above), ref finished)) { curve.Above = above; changed = true; }
         }
         if (curve.Family == "points") {
+            ImGui.BeginDisabled(curve.Points.Count >= 16);
             if (ImGui.SmallButton("+ pont")) { var (a, b) = (curve.Points[^2], curve.Points[^1]); curve.Points.Insert(curve.Points.Count - 1, ((a.X + b.X) / 2, (a.Y + b.Y) / 2)); changed = finished = true; }
+            ImGui.EndDisabled();
             ImGui.SameLine(); ImGui.BeginDisabled(curve.Points.Count <= 2);
             if (ImGui.SmallButton("- pont")) { curve.Points.RemoveAt(curve.Points.Count - 2); changed = finished = true; }
             ImGui.EndDisabled();
         }
+        if (bindings) {
         ImGui.AlignTextToFramePadding(); EditorStyle.Text(HudTheme.Muted, "szorzó"); ImGui.SameLine();
         string tail = curve.Tail ?? ""; ImGui.SetNextItemWidth(-1);
         if (ImGui.InputTextWithHint("##tail", "például: * lépés", ref tail, 400)) { curve.Tail = tail; changed = true; }
         finished |= ImGui.IsItemDeactivatedAfterEdit();
+        }
         if (curve.Family == "points") curve.Points.Sort((a, b) => a.X.CompareTo(b.X));
         ImGui.PopID();
         return changed;
+    }
+
+    private static readonly Dictionary<uint, (double Min, double Max)> sliderRanges = new();
+    private static bool CurveNumber(string label, ref double value, double min, double max, ref bool finished)
+    {
+        ImGui.PushID(label);
+        ImGui.TextUnformatted(label.Split("##")[0]);
+        ImGui.SetNextItemWidth(Math.Max(80, ImGui.GetContentRegionAvail().X * .35f));
+        double typed = value;
+        bool changed = ImGui.InputDouble("##number", ref typed, 0, 0, "%.17g") && double.IsFinite(typed) && Math.Abs(typed) <= 1e9;
+        if (changed) value = typed;
+        finished |= ImGui.IsItemDeactivatedAfterEdit();
+        ImGui.SameLine(); ImGui.SetNextItemWidth(-1);
+        uint sliderId = ImGui.GetID("##slider");
+        if (sliderRanges.TryGetValue(sliderId, out var held)) { min = held.Min; max = held.Max; }
+        float sliding = (float)value;
+        if (ImGui.SliderFloat("##slider", ref sliding, (float)min, (float)Math.Max(min + 1e-6, max), "%.4g")) { value = sliding; changed = true; }
+        finished |= ImGui.IsItemDeactivatedAfterEdit();
+        if (ImGui.IsItemActivated()) sliderRanges[sliderId] = (min, max);
+        if (ImGui.IsItemDeactivated()) sliderRanges.Remove(sliderId);
+        ImGui.PopID(); return changed;
     }
 
     private static bool FamilyButton(RuleCurveFamily family, bool on)
@@ -102,7 +133,10 @@ internal sealed partial class RuleEditorView
         var ys = Enumerable.Range(0, 41).Select(i => curve.Evaluate(x0 + (x1 - x0) * i / 40)).Concat(curve.Points.Select(p => p.Y)).Append(curve.Above).Append(0).ToArray();
         double y0 = ys.Min(), y1 = ys.Max(); double pad = Math.Max(1e-3, (y1 - y0) * 0.12); y0 -= pad; y1 += pad;
 
-        float width = Math.Max(240, ImGui.GetContentRegionAvail().X);
+        if (draggedCurve == key && draggedPoint >= 0 && draggedBounds is { } bounds) {
+            x0 = bounds.X0; x1 = bounds.X1; y0 = bounds.Y0; y1 = bounds.Y1;
+        }
+        float width = Math.Max(160, ImGui.GetContentRegionAvail().X);
         ImGui.InvisibleButton("plot", new Vec2(width, height));
         var min = ImGui.GetItemRectMin(); var max = ImGui.GetItemRectMax();
         const float left = 46, bottom = 20, top = 8, right = 10;
@@ -139,11 +173,17 @@ internal sealed partial class RuleEditorView
         if (editable) {
             if (ImGui.IsItemActivated()) {
                 var near = handles.OrderBy(h => Vec2.Distance(h.Item2, mouse)).FirstOrDefault();
-                draggedPoint = handles.Count > 0 && Vec2.Distance(near.Item2, mouse) < 12 ? near.i : -1; draggedCurve = key;
+                draggedPoint = handles.Count > 0 && Vec2.Distance(near.Item2, mouse) < 12 ? near.i : -1; draggedCurve = key; draggedBounds = (x0, x1, y0, y1);
             }
             if (ImGui.IsItemActive() && draggedPoint >= 0 && draggedCurve == key) {
                 double nx = Math.Clamp(Xi(mouse.X), x0, x1), ny = Yi(mouse.Y);
-                if (draggedPoint < curve.Points.Count) curve.Points[draggedPoint] = (Snap(nx, x1 - x0), Snap(ny, y1 - y0));
+                if (draggedPoint < curve.Points.Count) {
+                    double eps = Math.Max(1e-8, (x1 - x0) * .0001);
+                    nx = Snap(nx, x1 - x0);
+                    if (draggedPoint > 0) nx = Math.Max(nx, curve.Points[draggedPoint - 1].X + eps);
+                    if (draggedPoint + 1 < curve.Points.Count) nx = Math.Min(nx, curve.Points[draggedPoint + 1].X - eps);
+                    curve.Points[draggedPoint] = (nx, Snap(ny, y1 - y0));
+                }
                 else curve.Above = Snap(ny, y1 - y0);
                 changed = true;
             }

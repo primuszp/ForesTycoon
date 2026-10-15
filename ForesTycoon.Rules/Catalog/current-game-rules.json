@@ -2342,13 +2342,14 @@
       "name": "T\u00F6nk\u00F6k leboml\u00E1sa",
       "module": "Erd\u00E9szeti beavatkoz\u00E1s",
       "scope": "Kiv\u00E1gott fa helye",
-      "schedule": "Erd\u0151h\u00F3nap / megjelen\u00EDt\u00E9s",
+      "schedule": "Szab\u00E1lyl\u00E9p\u00E9s / megjelen\u00EDt\u00E9s",
       "execution": "EditableExpressions",
-      "description": "A t\u00F6nk hat erd\u0151\u00E9v alatt lebomlik; a telep\u00EDt\u00E9st nem akad\u00E1lyozza. Szab\u00E1lyk\u00F6nyv-szab\u00E1ly (forest.stumps, hat\u00F3k\u00F6r: stump).",
-      "formula": "megsz\u0171nik, ha age \u2265 6",
+      "description": "A nedvess\u00E9g gyors\u00EDtja, az \u00E1tm\u00E9r\u0151 lass\u00EDtja a leboml\u00E1st. A szerkeszthet\u0151 gr\u00E1f teljes leboml\u00E1skor t\u00E1vol\u00EDtja el a t\u00F6nk\u00F6t; a telep\u00EDt\u00E9st nem akad\u00E1lyozza.",
+      "formula": "megsz\u0171nik, ha decayProgress \u2265 1",
       "notes": "",
       "reads": [
         "forest.stumps",
+        "terrain.moisture",
         "calendar.time"
       ],
       "writes": [
@@ -2356,8 +2357,8 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon.Ecology/Species/ForestTree.cs",
-          "symbol": "LifetimeYears"
+          "file": "ForesTycoon.Rules/StumpDecayRule.cs",
+          "symbol": "Default"
         }
       ],
       "parameters": [],
@@ -2464,7 +2465,7 @@
       "module": "Utak \u00E9s nyomok",
       "scope": "K\u00F6z\u00FAti csempe",
       "schedule": "Legal\u00E1bb 0,5 j\u00E1t\u00E9k-s \u00F6sszegz\u00E9se",
-      "execution": "NativeCode",
+      "execution": "EditableExpressions",
       "description": "A t\u00E9rk\u00E9pi hidrol\u00F3giai nedvess\u00E9get olvassa, nem a dinamikus gy\u00F6k\u00E9rz\u00F3navizet. Makad\u00E1m er\u0151sebben romlik es\u0151ben; id\u0151t erd\u0151\u00E9vre v\u00E1ltja.",
       "formula": "makad\u00E1m: 0,10 \u00D7 (1 \u002B 2,5 \u00D7 nedvess\u00E9g) \u002B 1,6 \u00D7 es\u0151 \u00D7 (0,4 \u002B nedvess\u00E9g); aszfalt: 0,015 \u00D7 (1 \u002B nedvess\u00E9g) \u002B 0,08 \u00D7 es\u0151; \u00E1llapot -= r\u00E1ta \u00D7 \u00E9vek",
       "notes": "",
@@ -2481,8 +2482,8 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon.Map/Terrain/TerrainMap.Roads.cs",
-          "symbol": "WeatherRoads"
+          "file": "ForesTycoon.Rules/RuleInfluence.cs",
+          "symbol": "Compile"
         }
       ],
       "parameters": [
@@ -2687,7 +2688,7 @@
       "scope": "Nyomcsempe",
       "schedule": "\u00DAt-id\u0151j\u00E1r\u00E1si friss\u00EDt\u00E9s",
       "execution": "EditableExpressions",
-      "description": "A Szab\u00E1lyk\u00F6nyv be\u00E9p\u00EDtett szab\u00E1lya (adat, nem C#): a v\u00E1ly\u00FA \u00E9vente 0,4-et enyh\u00FCl; a ben\u00F6v\u00E9si id\u0151 ut\u00E1n a sima nyom megsz\u0171nik. Az \u00FAtvonalak \u00FAjraellen\u0151rz\u0151dnek.",
+      "description": "A gr\u00E1fos szab\u00E1ly alapbe\u00E1ll\u00EDt\u00E1sa: a v\u00E1ly\u00FA \u00E9vente 0,4-et enyh\u00FCl; a k\u00E9t szerkeszthet\u0151 felt\u00E9tel (el\u00E9g haszn\u00E1lat n\u00E9lk\u00FCli id\u0151 \u00E9s kis v\u00E1ly\u00FAm\u00E9lys\u00E9g) egy\u00FCtt v\u00E1ltja ki a megsz\u0171n\u00E9st. Az \u00FAtvonalak \u00FAjraellen\u0151rz\u0151dnek.",
       "formula": "kop\u00E1s = max(0; kop\u00E1s \u2212 0,4 \u00D7 l\u00E9p\u00E9s); t\u00E9tlens\u00E9g \u002B= l\u00E9p\u00E9s; megsz\u0171nik, ha t\u00E9tlens\u00E9g \u2265 ben\u00F6v\u00E9s \u00E9s kop\u00E1s \u2264 0,001",
       "notes": "",
       "reads": [
@@ -2703,8 +2704,8 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/RuleEngine.cs",
-          "symbol": "BuiltIn"
+          "file": "ForesTycoon.Rules/TrailAgeRule.cs",
+          "symbol": "Default"
         }
       ],
       "parameters": [

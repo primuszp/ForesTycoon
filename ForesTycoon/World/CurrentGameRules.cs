@@ -194,9 +194,9 @@ namespace ForesTycoon
             Add("forest.fell", "Egész fák kivágása és helyi depó", "Erdészeti beavatkozás", "Faegyed / cella", "Processzor-munka vagy kitermelési művelet", individuals, "FellIndividual",
                 "harvest.sites|forest.trees|machine.work", "forest.trees|forest.stumps|timber.localDepot",
                 "Egész fák kerülnek a helyi rönkdepóba. Részrakodás nem zsugorítja a megmaradt fákat; a fák térfogata és a tönk mérete megmarad.", "V = π × átmérő² / 4 × magasság × 0,45");
-            Add("forest.stumps", "Tönkök lebomlása", "Erdészeti beavatkozás", "Kivágott fa helye", "Erdőhónap / megjelenítés",
-                "ForesTycoon.Ecology/Species/ForestTree.cs", "LifetimeYears", "forest.stumps|calendar.time", "forest.stumps",
-                "A tönk hat erdőév alatt lebomlik; a telepítést nem akadályozza. Szabálykönyv-szabály (forest.stumps, hatókör: stump).", "megszűnik, ha age ≥ 6", GameRuleExecution.EditableExpressions);
+            Add("forest.stumps", "Tönkök lebomlása", "Erdészeti beavatkozás", "Kivágott fa helye", "Szabálylépés / megjelenítés",
+                "ForesTycoon.Rules/StumpDecayRule.cs", "Default", "forest.stumps|terrain.moisture|calendar.time", "forest.stumps",
+                "A nedvesség gyorsítja, az átmérő lassítja a lebomlást. A szerkeszthető gráf teljes lebomláskor távolítja el a tönköt; a telepítést nem akadályozza.", "megszűnik, ha decayProgress ≥ 1", GameRuleExecution.EditableExpressions);
 
             var build = Add("road.build", "Útépítés és hálózat", "Utak és nyomok", "Útvonal cellái", "Játékosparancs", game, "ExecuteRoadPath",
                 "commands|terrain.height|terrain.water|buildings.footprint|economy.result", "road.network|economy.expenses|forest.trees|water.routing",
@@ -205,9 +205,9 @@ namespace ForesTycoon
                 "commands|road.condition|road.network|economy.result", "road.condition|economy.expenses",
                 "Csak a hitelkereten belüli egyenlegnél indul. A kopott útcsempék állapota 1-re áll; a költség a burkolat építési ára és a sérülés szerint számolódik.", "javítás = építési ár × 0,8 × sérülés");
             Add("road.weather", "Időjárási útromlás", "Utak és nyomok", "Közúti csempe", "Legalább 0,5 játék-s összegzése",
-                "ForesTycoon.Map/Terrain/TerrainMap.Roads.cs", "WeatherRoads", "terrain.moisture|weather.rain|calendar.time|road.condition|road.network", "road.condition",
+                "ForesTycoon.Rules/RuleInfluence.cs", "Compile", "terrain.moisture|weather.rain|calendar.time|road.condition|road.network", "road.condition",
                 "A térképi hidrológiai nedvességet olvassa, nem a dinamikus gyökérzónavizet. Makadám erősebben romlik esőben; időt erdőévre váltja.",
-                "makadám: 0,10 × (1 + 2,5 × nedvesség) + 1,6 × eső × (0,4 + nedvesség); aszfalt: 0,015 × (1 + nedvesség) + 0,08 × eső; állapot -= ráta × évek");
+                "makadám: 0,10 × (1 + 2,5 × nedvesség) + 1,6 × eső × (0,4 + nedvesség); aszfalt: 0,015 × (1 + nedvesség) + 0,08 × eső; állapot -= ráta × évek", GameRuleExecution.EditableExpressions);
             var traffic = Add("road.trafficWear", "Forgalmi útkopás – gráf", "Utak és nyomok", "Közúti csempe", "Teherautó csempeváltás",
                 "ForesTycoon/World/GameWorld.Rules.cs", "ApplyTrafficWear", "vehicle.mass|road.network|road.condition|vehicle.position", "road.condition",
                 "A jelenleg szerkeszthető és a játékba bekötött gráf. Áthaladási terhelés, burkolati szorzó, állapot és szerkesztett egyenletek.",
@@ -219,8 +219,8 @@ namespace ForesTycoon
                 "ForesTycoon.Map/Terrain/TerrainMap.SkidTrails.cs", "DriveSkidTrail", "vehicle.mass|vehicle.position|machine.position|trail.wear", "trail.wear|trail.idle",
                 "A vályú fokozatosan mélyül, az üresjárati idő nullázódik. A teherautó nyomterhelése a közúti alapkopás húszszorosa.", "vályú = clamp(vályú + terhelés × (1 - vályú), 0, 1)");
             var age = Add("trail.age", "Nyom regenerációja és benövése", "Utak és nyomok", "Nyomcsempe", "Út-időjárási frissítés",
-                "ForesTycoon/World/RuleEngine.cs", "BuiltIn", "trail.wear|trail.idle|calendar.time", "trail.wear|trail.idle|trail.network",
-                "A Szabálykönyv beépített szabálya (adat, nem C#): a vályú évente 0,4-et enyhül; a benövési idő után a sima nyom megszűnik. Az útvonalak újraellenőrződnek.",
+                "ForesTycoon.Rules/TrailAgeRule.cs", "Default", "trail.wear|trail.idle|calendar.time", "trail.wear|trail.idle|trail.network",
+                "A gráfos szabály alapbeállítása: a vályú évente 0,4-et enyhül; a két szerkeszthető feltétel (elég használat nélküli idő és kis vályúmélység) együtt váltja ki a megszűnést. Az útvonalak újraellenőrződnek.",
                 "kopás = max(0; kopás − 0,4 × lépés); tétlenség += lépés; megszűnik, ha tétlenség ≥ benövés és kopás ≤ 0,001", GameRuleExecution.EditableExpressions);
             Add("route.find", "Hálózati útvonalkeresés", "Járművek", "Hálózat / forrás és cél", "Utasítás / hálózatváltozás",
                 "ForesTycoon.Map/Terrain/TerrainMap.Network.cs", "FindNetworkPath", "road.network|trail.network|trail.wear|buildings.footprint|timber.stacks", "vehicle.route",

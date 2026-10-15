@@ -9,6 +9,7 @@
 | Project structure / Projektfelépítés | [Architecture](architecture.md) |
 | Engine systems / Motorrendszerek | [Engine architecture](engine-architecture.md) |
 | World editor / Világszerkesztő | [Editor guide](rule-editor.md) |
+| Editable world rules / Szerkeszthető világszabályok | [Értékelés, átállási terv és útromlási minta](editor-rule-migration-plan.md) |
 | Executable rule project / Futtatható szabályprojekt | [System dynamics and AI interface](system-dynamics.md) |
 | System model (superseded UI) / Rendszermodell | [Assessment, vocabulary](editor-system-model.md) |
 | Model import / Modellimport | [Import contract](model-import-contract.md), [animation](animated-models.md) |

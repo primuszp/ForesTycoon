@@ -390,14 +390,7 @@ namespace ForesTycoon
         {
             roadWeatherSeconds += seconds;
             if (roadWeatherSeconds < 0.5) return;
-            float rain = (float)Math.Clamp(Environment.RainRate / 20, 0, 1);
             float years = (float)(roadWeatherSeconds / ecosystem.ForestYearSeconds);
-            var policy = behaviorPolicy;
-            Func<int, float, float> adjust = policy.Overrides("road.weather", "road")
-                ? (id, rate) => (float)policy.Evaluate(new("road.weather", "road", (ulong)id, rate, years, forest.ForestYear, map.GetRoadCondition(id), rain))
-                : null;
-            map.WeatherRoads(years, rain, adjust, new RoadWeathering(Tuning.F(Tune.AsphaltWeather), Tuning.F(Tune.AsphaltRainWeather),
-                Tuning.F(Tune.MacadamWeather), Tuning.F(Tune.MacadamRainWeather)));
             // The rule book runs here, every half game second: built-in rules (e.g. trail ageing) and the project's own.
             if (ruleEngine.Run(this, years, forest.ForestYear))
             {
@@ -406,6 +399,12 @@ namespace ForesTycoon
             }
             roadWeatherSeconds = 0;
         }
+
+        // Compatibility only: the card supplies the base rate; the former native weather loop no longer runs.
+        internal double AdjustRoadWeatherRate(int id, double rate, double years, double time) =>
+            behaviorPolicy.Overrides("road.weather", "road")
+                ? Math.Max(0, behaviorPolicy.Evaluate(new("road.weather", "road", (ulong)id, rate, years, time,
+                    map.GetRoadCondition(id), (float)Math.Clamp(Environment.RainRate / 20, 0, 1)))) : rate;
 
         void IWorldCommandTarget.ExecuteSkidTrailPath(int startTileId, int endTileId, bool remove)
         {

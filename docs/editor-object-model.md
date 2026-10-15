@@ -1,5 +1,10 @@
 # Editor: felderíthető objektummodell és szabályszerkesztés
 
+> Felületi frissítés, 2026-10-15: a külön Objektumok / Ok-okozati térkép / Képletek
+> lapok megszűntek. Az útromlást és az új numerikus szabályokat egyetlen gráfos
+> szerkesztő kezeli. [Aktuális használat](rule-editor.md#szabályok).
+> Az alábbi felületleírás történeti; a sémára vonatkozó alapelvek továbbra is érvényesek.
+
 Állapot: 2026-10-13. Előzmény: [rule-building-blocks.md](rule-building-blocks.md) (a szabály = mikor · hol · ha · akkor).
 
 ## 1. A probléma

@@ -36,6 +36,7 @@
     <Compile Include="../ForesTycoon.Editor/WorkshopDraftStore.cs" Link="Editor/WorkshopDraftStore.cs" />
     <Compile Include="../ForesTycoon.Editor/AuthoringOperations.cs" Link="Editor/AuthoringOperations.cs" />
     <Compile Include="../ForesTycoon.Editor/EditorWorldLoader.cs" Link="Editor/EditorWorldLoader.cs" />
+    <Compile Include="../ForesTycoon.Editor/StumpRuleTrial.cs" Link="Editor/StumpRuleTrial.cs" />
   </ItemGroup>
 
   <ItemGroup>

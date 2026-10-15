@@ -63,7 +63,7 @@ public sealed class RuleCausalMap
         for (int i = 0; i < rules.Count; i++) {
             var rule = rules[i]; var scope = schema.Find(rule.Scope);
             if (scope == null || scope.Abstract) continue;
-            foreach (var effect in rule.Effects.Where(x => x.Mode != "action")) {
+            foreach (var effect in rule.EffectiveEffects().Where(x => x.Mode != "action")) {
                 var to = Node(scope.Id, effect.Target); if (to == null) continue;
                 RuleCurve.TryParse(effect.Formula, out var curve);
                 foreach (string name in Mentioned(scope, rule.Condition + " " + effect.Formula, schema)) {

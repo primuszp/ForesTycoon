@@ -35,7 +35,8 @@ internal sealed partial class RuleEditorView
     }
     private List<WorldRule> RuleBookRules(GameWorld world) => ruleBook ??= RuleEngine.Clone(world.RuleProjectDocument.Rules);
     private List<RuleFieldDefinition> RuleBookFields(GameWorld world) => ruleFields ??= RuleEngine.CloneFields(world.RuleProjectDocument.Fields);
-    internal void ShowRuleBook(int index = 0) { worldTab = WorldTab.Rules; rulesTopic = RulesTopic.RuleBook; selectedBookRule = index; }
+    internal void ShowRuleBook(int index = 0) { worldTab = WorldTab.Rules; selectedBookRule = index; }
+    private void RulesArea(GameWorld world) => RuleBookArea(world);
 
     /// <summary>Checks the whole book as the game will; on success the test world runs it at once.</summary>
     private void ApplyRuleBook(GameWorld world, string what)
@@ -68,7 +69,7 @@ internal sealed partial class RuleEditorView
                 ImGui.PushStyleColor(ImGuiCol.Text, enabled ? HudTheme.Parchment : HudTheme.Muted);
                 if (ImGui.Selectable(rules[i].Name + "##rule" + i, selectedBookRule == i)) { selectedBookRule = i; lastFormula = -1; }
                 ImGui.PopStyleColor();
-                if (ImGui.IsItemHovered()) ImGui.SetTooltip($"{ScopeName(rules[i].Scope)} · {rules[i].Effects.Count} hatás");
+                if (ImGui.IsItemHovered()) ImGui.SetTooltip($"{ScopeName(rules[i].Scope)} · {(rules[i].RoadWeather != null ? 1 : rules[i].Effects.Count)} hatás");
             }
             if (!any) EditorStyle.Text(HudTheme.Muted, builtIn ? "Nincs." : "Még nincs saját szabály.");
         }
@@ -76,7 +77,8 @@ internal sealed partial class RuleEditorView
         if (ImGui.Button("Új szabály", new Vec2(-1, 0))) {
             int n = rules.Count(r => !r.BuiltIn) + 1;
             while (rules.Exists(r => r.Id == $"sajat-{n}")) n++;
-            rules.Add(new WorldRule { Id = $"sajat-{n}", Name = $"Saját szabály {n}", Scope = "tile", Description = "" });
+            rules.Add(new WorldRule { Id = $"rule-{Guid.NewGuid():N}", Name = $"Saját szabály {n}", Scope = "road", Enabled = false,
+                Effects = { new() { Target = "condition", Mode = "add", Influence = new() } } });
             selectedBookRule = rules.Count - 1; lastFormula = -1;
             message = "Új szabály: válaszd ki, hol fusson, és adj hozzá hatást.";
         }
@@ -85,6 +87,11 @@ internal sealed partial class RuleEditorView
         EditorStyle.Text(HudTheme.Muted, "A szabályok fentről lefelé, minden lépésben (0,5 játékmásodperc) futnak, a hatókör minden elemén.");
         ImGui.PopTextWrapPos();
         ImGui.EndChild(); ImGui.SameLine();
+
+        if (rules.Count > 0 && rules[selectedBookRule].Condition.Length == 0 && rules[selectedBookRule].Effects.All(e => e.Influence != null)) {
+            InfluenceArea(world, rules[selectedBookRule]);
+            return;
+        }
 
         // ── Middle: the rule as a sentence ──────────────────────────────
         ImGui.BeginChild("book-rule", new Vec2(-360, 0), ImGuiChildFlags.Borders);
@@ -128,8 +135,6 @@ internal sealed partial class RuleEditorView
         if (scope.Entity != null) {
             ImGui.SetCursorPosX(80);
             EditorStyle.Text(HudTheme.Muted, string.Join(" › ", Objects.Lineage(scope.Entity).Select(x => x.Name)));
-            ImGui.SameLine();
-            if (EditorStyle.QuietButton("objektum##open-obj", "Az objektum mezői, kapcsolatai és öröklése.")) { selectedObject = scope.Entity; rulesTopic = RulesTopic.Objects; }
         }
 
         Clause("HA", null);

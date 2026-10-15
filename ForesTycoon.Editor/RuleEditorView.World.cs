@@ -13,7 +13,7 @@ namespace ForesTycoon.Editor;
 
 internal enum WorldTab { Map, Types, Missions, Rules, Trial }
 internal enum MapLayer { Soil, Elevation, Water, GroundWater, Forest, Tracks, Trafficability }
-internal enum TypeTab { Soil, Species, Surfaces }
+internal enum TypeTab { Soil, Species, Surfaces, Parameters }
 
 /// <summary>
 /// The world editor: one world, built from a generated and painted map, its types (soil) and its rules (readable
@@ -31,8 +31,8 @@ internal sealed partial class RuleEditorView
     private int elevationTool, waterTool, brushSpecies, selectedSpecies;
     private TypeTab typeTab;
     private readonly HashSet<int> stroke = new();
-    private string selectedRuleHook = "trail.trafficability|tile", formulaText, formulaFor, formulaError;
-    private readonly Dictionary<string, double> previewInputs = new(StringComparer.Ordinal);
+
+
     private int trialIntensity = 25, trialSeconds = 60;
     private Task<WorldTrialResult> worldTrial;
     private WorldTrialResult worldTrialResult;
@@ -43,7 +43,7 @@ internal sealed partial class RuleEditorView
     internal void ShowWorld(WorldTab tab, MapLayer layer = MapLayer.Soil, int tile = -1, string rule = null)
     {
         worldTab = tab; mapLayer = layer; if (tile >= 0) selectedTile = tile;
-        if (rule != null) selectedRuleHook = rule;
+
     }
     /// <summary>A spring on the map, then some simulated time: shows where its water goes.</summary>
     internal void AddSpring(GameWorld world, int tile, double rate, double seconds)
@@ -89,7 +89,7 @@ internal sealed partial class RuleEditorView
             (WorldTab.Map, "Pálya", "A világ térképe: generálás, majd talaj festése; rétegek, csempék."),
             (WorldTab.Types, "Típusok", "Talajtípusok és paramétereik: amit a térkép fest, és amit a szabályok olvasnak."),
             (WorldTab.Missions, "Küldetések", "A pálya céljai: amit a játék a futó világ értékeiből ellenőriz."),
-            (WorldTab.Rules, "Szabályok", "A világ szabályai képletként: minden csempén ugyanúgy futnak."),
+            (WorldTab.Rules, "Szabályok", "Te állítod össze: mi hasson mire, milyen feltétellel és milyen görbe szerint."),
             (WorldTab.Trial, "Próba", "Eső a pályán: az alap és a szerkesztett szabályok összevetése.") }) {
             ImGui.SameLine(0, 6);
             if (ViewTab(label, worldTab == tab, help)) worldTab = tab;
@@ -495,13 +495,20 @@ internal sealed partial class RuleEditorView
         foreach (var (tab, label, help) in new[] {
             (TypeTab.Soil, "Talajtípusok", "Amit a térkép fest: víztartás, termékenység, teherbírás."),
             (TypeTab.Species, "Fafajok", "Növekedés, termőhely, méret és faanyagár."),
-            (TypeTab.Surfaces, "Burkolatok", "Utak és nyomok: költség, kopás, romlás, menetellenállás.") }) {
+            (TypeTab.Surfaces, "Burkolatok", "Utak és nyomok: költség, kopás, romlás, menetellenállás."),
+            (TypeTab.Parameters, "Játékparaméterek", "Gazdaság, gépek és egyéb alapértékek. A kapcsolatokat a Szabályokban építed.") }) {
             if (tab != TypeTab.Soil) ImGui.SameLine(0, 6);
             if (ViewTab(label, typeTab == tab, help)) typeTab = tab;
         }
         ImGui.Separator();
         if (typeTab == TypeTab.Species) { SpeciesTab(world); return; }
         if (typeTab == TypeTab.Surfaces) { SurfacesTab(world); return; }
+        if (typeTab == TypeTab.Parameters) {
+            ImGui.BeginChild("parameters", Vec2.Zero);
+            currentRules.DrawTuning(world);
+            if (currentRules.UnappliedTuning(world) > 0 && ImGui.Button("Paraméterek alkalmazása")) Try(() => ApplyProject(world, false));
+            ImGui.EndChild(); return;
+        }
         if (scenario.InitialState != null) ImGui.TextWrapped("A talajparaméterek szerkeszthetők. A meglévő talajfoltok a helyükön maradnak; kisebb telítettségnél a többletvíz a felszínre kerül.");
         ImGui.BeginChild("types-list", new Vec2(280, 0), ImGuiChildFlags.Borders);
         EditorStyle.Section("Talajtípusok");
@@ -680,153 +687,6 @@ internal sealed partial class RuleEditorView
         if (changed) { Try(() => ApplyProject(world, false)); message = "Burkolat módosítva; a tesztvilágban már ez érvényes."; }
         ImGui.EndChild();
     }
-
-    // ── Rules ────────────────────────────────────────────────────────────
-    private (BehaviorHook Hook, GameRuleDefinition Rule)[] FormulaRules() => WorldBehaviorPolicy.Hooks
-        .Where(h => !h.Id.StartsWith("tuning.") && h.Kind != "dynamics")
-        .Select(h => (Hook: h, Rule: currentRules.Index.Rules.FirstOrDefault(r => RuleWorkshopModel.HookBelongsTo(h, r))))
-        .Where(t => t.Rule != null).OrderBy(t => RuleWorkshopModel.Topic(t.Rule)).ThenBy(t => t.Hook.Name, StringComparer.CurrentCulture).ToArray();
-    private static string HookKey(BehaviorHook hook) => hook.Id + "|" + hook.Kind;
-    private static string HookName(BehaviorHook hook) => hook.Name.StartsWith(hook.Kind + " ")
-        ? RuleWorkshopModel.KindName(hook.Kind) + hook.Name[hook.Kind.Length..] : hook.Name;
-
-    private string FormulaSource(BehaviorHook hook)
-    {
-        if (authoring.Formulas.TryGetValue(HookKey(hook), out var text)) return text;
-        var graph = behaviors.Document.Graphs.Find(g => g.Hook == hook.Id && g.Kind == hook.Kind && g.ObjectId == null);
-        if (graph == null || graph.Nodes.Find(n => n.Id == graph.Output)?.Operation == BehaviorOperation.Native) return RuleFormula.Default(hook);
-        return RuleFormula.Decompile(graph, RuleFormula.Names(hook, dynamicsEditor.Draft.Stocks.Select(s => s.Id)));
-    }
-    private bool HasFormula(BehaviorHook hook) => authoring.Formulas.ContainsKey(HookKey(hook))
-        || behaviors.Document.Graphs.Any(g => g.Hook == hook.Id && g.Kind == hook.Kind && g.ObjectId == null && g.Nodes.Find(n => n.Id == g.Output)?.Operation != BehaviorOperation.Native);
-
-    private void RulesTab(GameWorld world)
-    {
-        var rules = FormulaRules();
-        var selected = rules.FirstOrDefault(r => HookKey(r.Hook) == selectedRuleHook);
-        if (selected.Hook == null) { selected = rules[0]; selectedRuleHook = HookKey(selected.Hook); }
-        var names = RuleFormula.Names(selected.Hook, dynamicsEditor.Draft.Stocks.Select(s => s.Id));
-        if (formulaFor != selectedRuleHook) { formulaText = FormulaSource(selected.Hook); formulaFor = selectedRuleHook; formulaError = null; previewInputs.Clear(); }
-
-        ImGui.BeginChild("rules-list", new Vec2(300, 0), ImGuiChildFlags.Borders);
-        int topic = -1;
-        foreach (var (hook, rule) in rules) {
-            int t = RuleWorkshopModel.Topic(rule);
-            if (t != topic) { topic = t; EditorStyle.Section(RuleWorkshopModel.Topics[t].Name); }
-            bool own = HasFormula(hook);
-            if (ImGui.Selectable((own ? "• " : "   ") + HookName(hook) + "##" + HookKey(hook), HookKey(hook) == selectedRuleHook)) selectedRuleHook = HookKey(hook);
-            if (ImGui.IsItemHovered()) ImGui.SetTooltip(own ? "Saját képlet fut." : "A játék beépített számítása fut; a képlet a beépített eredményt adja.");
-        }
-        ImGui.EndChild(); ImGui.SameLine();
-
-        ImGui.BeginChild("rule-edit", new Vec2(-360, 0), ImGuiChildFlags.Borders);
-        EditorStyle.Title(HookName(selected.Hook));
-        ImGui.TextWrapped(selected.Rule.Description);
-        if (EditorStyle.BeginFacts("rule-scope")) {
-            EditorStyle.Fact("Hol fut?", ScopeOf(selected.Hook) + " – a világ minden ilyen elemén ugyanúgy.");
-            EditorStyle.Fact("Mikor fut?", selected.Hook.Schedule);
-            EditorStyle.Fact("Eredmény", $"{selected.Hook.Unit}, {selected.Hook.Min:G4}–{selected.Hook.Max:G4} közé korlátozva");
-            ImGui.EndTable();
-        }
-        RuleNumbers(world, selected.Rule.Id);
-        EditorStyle.Section("Képlet");
-        string text = formulaText;
-        if (ImGui.InputTextMultiline("##formula", ref text, 4000, new Vec2(-1, 150))) { formulaText = text; TryFormula(selected.Hook, names, apply: false); }
-        if (formulaError != null) { ImGui.PushTextWrapPos(); EditorStyle.Text(HudTheme.Bad, formulaError); ImGui.PopTextWrapPos(); }
-        else EditorStyle.Text(HudTheme.Good, "Érvényes képlet.");
-        if (EditorStyle.PrimaryButton("Képlet használata", formulaError == null, "A képlet lesz a szabály a projektben és a tesztvilágban.")) TryFormula(selected.Hook, names, apply: true);
-        ImGui.SameLine();
-        if (ImGui.Button("Vissza a beépítettre")) {
-            RememberAuthoring(); authoring.Formulas.Remove(HookKey(selected.Hook));
-            behaviors.RestoreDefault(selected.Hook.Id, selected.Hook.Kind, null);
-            formulaFor = null; Try(() => ApplyProject(world, false)); message = selected.Hook.Name + ": a beépített számítás fut.";
-        }
-        EditorStyle.Section("Használható nevek");
-        ImGui.TextWrapped("Műveletek: + - * /, összehasonlítás < >, zárójel. Függvények: min(a; b), max(a; b), abs(x), ha(feltétel; akkor; különben), korlát(x; alsó; felső). Tizedesvessző vagy pont; # után megjegyzés; név = érték köztes lépés.");
-        if (ImGui.BeginTable("names", 2, ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp)) {
-            ImGui.TableSetupColumn("név", ImGuiTableColumnFlags.WidthFixed, 190); ImGui.TableSetupColumn("jelentés");
-            foreach (var n in names.Where(n => n.Operation != BehaviorOperation.NamedValue || n.Key.StartsWith("stock.") || n.Key is "world.rain" or "world.time" or "world.balance" or "world.temperature")) {
-                ImGui.TableNextRow(); ImGui.TableSetColumnIndex(0);
-                if (ImGui.Selectable(n.Name + "##name" + n.Name)) { formulaText = (formulaText.TrimEnd() + " " + n.Name).TrimStart(); TryFormula(selected.Hook, names, apply: false); }
-                ImGui.TableSetColumnIndex(1); ImGui.TextWrapped(n.Help);
-            }
-            ImGui.EndTable();
-        }
-        EditorStyle.Text(HudTheme.Muted, "Kattintás: a név a képlet végére kerül. További világértékek: világ.fák, világ.utak, világ.hó, világ.bevétel…");
-        ImGui.EndChild(); ImGui.SameLine();
-
-        ImGui.BeginChild("rule-preview", new Vec2(0, 0), ImGuiChildFlags.Borders);
-        RulePreview(world, selected.Hook, names);
-        ImGui.EndChild();
-    }
-
-    private static string ScopeOf(BehaviorHook hook) => hook.Kind switch {
-        "tile" => "minden csempe", "road" => "minden útcsempe", "tree" => "minden fa", "forwarder" => "minden forwarder",
-        "processor" => "minden processzor", "truck" => "minden teherautó", "mill" => "minden malom", "world" => "a világ", _ => hook.Kind };
-
-    private BehaviorGraph TryFormula(BehaviorHook hook, IReadOnlyList<FormulaName> names, bool apply)
-    {
-        try {
-            var target = new BehaviorGraph { Id = "formula." + hook.Kind + "." + hook.Id, Name = hook.Name, Hook = hook.Id, Kind = hook.Kind };
-            var graph = RuleFormula.Compile(formulaText, target, names);
-            _ = new CompiledBehaviorModel(new BehaviorModel { Graphs = { graph } }, WorldBehaviorPolicy.Hooks,
-                DynamicsRuntime.Keys(dynamicsEditor.Draft, GameWorld.RuleWorldFields), _ => 0);
-            formulaError = null;
-            if (apply) {
-                RememberAuthoring(); authoring.Formulas[HookKey(hook)] = formulaText;
-                behaviors.SetTypeGraph(graph);
-                worldApplyRequested = true;
-                message = hook.Name + ": a képlet a szabály. A tesztvilágban már ez fut; mentés és alkalmazás után a játékban is.";
-            }
-            return graph;
-        } catch (Exception e) when (e is FormatException or System.IO.InvalidDataException) { formulaError = e.Message; return null; }
-    }
-    private bool worldApplyRequested;
-
-    private void RulePreview(GameWorld world, BehaviorHook hook, IReadOnlyList<FormulaName> names)
-    {
-        if (worldApplyRequested) { worldApplyRequested = false; Try(() => ApplyProject(world, false)); }
-        EditorStyle.Section("Próbaszámítás");
-        var graph = formulaError == null ? TryFormula(hook, names, apply: false) : null;
-        if (graph == null) { ImGui.TextWrapped("Javítsd a képletet az előnézethez."); return; }
-        var used = graph.Nodes.Select(n => names.FirstOrDefault(x => x.Operation == n.Operation && (n.Operation is not (BehaviorOperation.NamedValue or BehaviorOperation.Input) || x.Key == n.Key)))
-            .Where(n => n != null && n.Operation != BehaviorOperation.Constant).Distinct().ToArray();
-        bool traffic = hook.Id == "trail.trafficability", tile = hook.Kind == "tile";
-        if (tile && selectedTile >= 0 && !previewInputs.ContainsKey("#tile" + selectedTile)) {
-            previewInputs.Clear(); previewInputs["#tile" + selectedTile] = 1;
-            foreach (var (key, value) in world.TileRuleInputs(selectedTile)) previewInputs[key] = value;
-            if (traffic) previewInputs["beépített"] = 1 - previewInputs["átnedvesedés"] * (1 - previewInputs["talaj.teherbírás"]);
-        }
-        if (tile) EditorStyle.Text(HudTheme.Muted, selectedTile >= 0 ? $"Bemenetek a #{selectedTile} csempéről (Pálya fül)" : "Válassz csempét a Pálya fülön, vagy állítsd a bemeneteket.");
-        foreach (var n in used) {
-            double value = previewInputs.TryGetValue(n.Name, out var v) ? v : n.Operation == BehaviorOperation.NamedValue ? Safe(() => PreviewValue(world, n.Key)) : 0.5;
-            float f = (float)value; ImGui.SetNextItemWidth(-130);
-            if (ImGui.DragFloat(n.Name, ref f, 0.01f)) previewInputs[n.Name] = f; else previewInputs[n.Name] = value;
-        }
-        double Input(BehaviorOperation op) => previewInputs.TryGetValue(names.FirstOrDefault(n => n.Operation == op)?.Name ?? "", out var v) ? v : 0;
-        var model = new CompiledBehaviorModel(new BehaviorModel { Graphs = { graph } }, WorldBehaviorPolicy.Hooks,
-            DynamicsRuntime.Keys(dynamicsEditor.Draft, GameWorld.RuleWorldFields), key => used.FirstOrDefault(u => u.Key == key) is FormulaName n && previewInputs.TryGetValue(n.Name, out var v) ? v : Safe(() => PreviewValue(world, key)));
-        double result = model.Evaluate(hook.Id, hook.Kind, 0, new BehaviorInputs(Input(BehaviorOperation.Native), Input(BehaviorOperation.Delta), Input(BehaviorOperation.Time),
-            Input(BehaviorOperation.State), Input(BehaviorOperation.Amount), Input(BehaviorOperation.Capacity), Input(BehaviorOperation.Available),
-            Input(BehaviorOperation.From), Input(BehaviorOperation.To), Input(BehaviorOperation.Surface)),
-            (hook.Inputs ?? Array.Empty<string>()).Select(name => previewInputs.TryGetValue(name, out var v) ? v : 0).ToArray());
-        EditorStyle.Text(HudTheme.Muted, "Eredmény");
-        EditorStyle.Title(result.ToString("0.###"), true, HudTheme.AmberAccent);
-        if (model.LastError != null) EditorStyle.Text(HudTheme.Bad, model.LastError);
-        if (!traffic) return;
-        EditorStyle.Section("A képlet a pályán, most");
-        ImGui.TextWrapped("Minden burkolatlan csempe a saját talajával és vizével.");
-        var (columns, rows) = world.TileGrid;
-        var values = new double[columns * rows];
-        for (int t = 0; t < values.Length; t++) {
-            var (wetness, bearing) = world.TileTrafficInputs(t);
-            values[t] = model.Evaluate(hook.Id, hook.Kind, (ulong)t, new BehaviorInputs(1 - wetness * (1 - bearing), 0, 0, wetness, bearing));
-        }
-        TileMap(world, "preview", tile => world.IsUnpaved(tile) ? TrafficColour(values[tile]) : new(0.45f, 0.45f, 0.45f, 1), false,
-            new Vec2(ImGui.GetContentRegionAvail().X, ImGui.GetContentRegionAvail().X * rows / Math.Max(1, columns)));
-        ImGui.TextWrapped("Száraz időben szinte minden kék. Az eső hatását a Próba fül mutatja.");
-    }
-    private static double Safe(Func<double> read) { try { double v = read(); return double.IsFinite(v) ? v : 0; } catch (ArithmeticException) { return 0; } }
 
     // ── Trial ────────────────────────────────────────────────────────────
     private void TrialTab(GameWorld world)

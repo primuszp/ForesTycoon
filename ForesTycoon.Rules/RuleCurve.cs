@@ -68,9 +68,22 @@ public sealed class RuleCurve
         }
     }
 
+    public void Validate()
+    {
+        if (Find(Family) == null || Points == null || Points.Count < (Family == "step" ? 1 : 2)
+            || Points.Count > 16 || (Family != "points" && Points.Count != (Family == "step" ? 1 : 2)))
+            throw new System.IO.InvalidDataException("Ismeretlen vagy hiányos görbe.");
+        RuleInfluence.Finite(Above);
+        for (int i = 0; i < Points.Count; i++) {
+            RuleInfluence.Finite(Points[i].X); RuleInfluence.Finite(Points[i].Y);
+            if (i > 0 && Points[i].X <= Points[i - 1].X)
+                throw new System.IO.InvalidDataException("A pontok bemeneti értékei növekvő sorrendben következzenek.");
+        }
+    }
+
     public string ToFormula()
     {
-        static string N(double v) => Math.Round(v, 4).ToString("0.####", CultureInfo.InvariantCulture).Replace('.', ',');
+        static string N(double v) => v.ToString("0.###############################", CultureInfo.InvariantCulture).Replace('.', ',');
         IEnumerable<double> args = Family == "step" ? new[] { Points[0].X, Points[0].Y, Above } : Points.SelectMany(p => new[] { p.X, p.Y });
         return $"curve.{Family}({Input}; {string.Join("; ", args.Select(N))}){Tail}";
     }

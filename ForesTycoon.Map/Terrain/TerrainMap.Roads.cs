@@ -202,6 +202,8 @@ namespace ForesTycoon.Map
         public RoadPaving GetRoadPaving(int tileId) => roads.GetPaving(tileId);
         /// <summary>Surface condition of a road tile: 1 = new, 0 = ruined.</summary>
         public float GetRoadCondition(int tileId) => roads.GetCondition(tileId);
+        internal void SetRoadCondition(int tileId, float condition) { if (roads.Has(tileId)) roads.SetCondition(tileId, condition); }
+        internal float GetRuleMoisture(int tileId) => Math.Clamp(hydro.TileMoisture[tileId], 0, 1);
         public IEnumerable<int> RoadTiles => roads.Tiles;
 
         /// <summary>Wears the surface of a road tile by <paramref name="amount"/> (traffic).</summary>
