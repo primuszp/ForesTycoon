@@ -165,9 +165,9 @@ namespace ForesTycoon
             Add("forest.site", "Termőhelyi alkalmasság", "Erdő", "Cella / fafaj", "Generálás, fajajánló, telepítés és rátafrissítés", "ForesTycoon.Rules/EcologyResponseProgram.cs", "Fitness",
                 "terrain.height|soil.fertility|forest.species", "forest.fitness", "Egy közös projektgráf adja a fafaj termőhelyi alkalmasságát minden hívónak. A nedvesség is beköthető; az alapgráf a termékenységet és a faj magasságigényét használja.", execution: GameRuleExecution.EditableGraph);
             Add("forest.competition", "Fény- és koronatér-versengés", "Erdő", "Faegyed és két szomszédsági gyűrű",
-                "Havi előkészítés / helyi beavatkozás", "ForesTycoon.Ecology/Forest/ForestCompetition.cs", "Evaluate",
+                "Havi előkészítés / helyi beavatkozás", "ForesTycoon.Rules/ForestCompetitionRules.cs", "DefaultGraph",
                 "forest.trees|weather.forcing|water.growthFactor|forest.species", "forest.resources",
-                "Közös geometriapillanatkép, koronafedés és magassági dominancia alapján fény és tér. Környezeti vízelosztás mellett nincs második gyökérverseny-büntetés.");
+                "A projekt fapáronkénti árnyékolás- és térterhelésgráfjai, majd összesítő fény-, tér-, fajválasz- és erőforráskorlát-gráfjai. A motor csak a közös geometriapillanatképet és a sorrendtartó, szeletelt összegzést adja. Nincs külön gyökérverseny-büntetés.", execution: GameRuleExecution.EditableGraph);
             Add("forest.growth", "Fák növekedése", "Erdő", "Faegyed", "Havi és helyi rátafrissítés",
                 "ForesTycoon.Rules/TreeGrowthRule.cs", "Default", "forest.fitness|forest.resources|water.growthFactor|forest.health|calendar.time|forest.species", "forest.trees|forest.volume",
                 "A projekt gráfja adja az éves átmérő-, magasság- és koronanövekedést. A motor csak interpolálja a méretet.", execution: GameRuleExecution.EditableGraph);

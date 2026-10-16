@@ -25,7 +25,7 @@ namespace ForesTycoon
             model = new(document, Hooks, keys, read); Controllers = new(document); Responses = new(document);
         }
 
-        internal static BehaviorGraph DefaultGraph(BehaviorHook hook) => hook.Kind == "site" ? EcologyResponseProgram.DefaultGraph(hook) : new() {
+        internal static BehaviorGraph DefaultGraph(BehaviorHook hook) => EcologyResponseProgram.IsPureKind(hook.Kind) ? EcologyResponseProgram.DefaultGraph(hook) : new() {
             Id = "default." + hook.Kind + "." + hook.Id, Name = hook.Name, Hook = hook.Id, Kind = hook.Kind
         };
         internal static BehaviorModel DefaultDocument() => new() { Graphs = Hooks.Select(DefaultGraph).ToList() };
@@ -92,7 +92,7 @@ namespace ForesTycoon
         {
             var replacement = new WorldBehaviorPolicy(model, DynamicsRuntime.Keys(dynamics.Document, RuleWorldFields), ruleValues.ReadRule);
             replacement.Controllers.PreserveUnchanged(behaviorPolicy.Controllers);
-            if (SiteSignature(behaviorPolicy.Document) != SiteSignature(replacement.Document)) pendingForestRateRefresh = true;
+            if (ResponseSignature(behaviorPolicy.Document) != ResponseSignature(replacement.Document)) pendingForestRateRefresh = true;
             behaviorPolicy = replacement;
             BindBehaviors();
             ApplyTuning(Tuning);

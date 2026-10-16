@@ -142,7 +142,7 @@ internal sealed partial class RuleEditorView
             ImGui.PushID(graph.Id);
             if (ImGui.Selectable(graph.Name + " · " + RuleWorkshopModel.KindName(graph.Kind) + (graph.ObjectId.HasValue ? " #" + graph.ObjectId : " · típus"))) OpenLibraryGraph(graph);
             if (ImGui.SmallButton("Sablonként másolom")) { RememberAuthoring(); authoring.Templates.Add(AuthoringOperations.Template(graph)); }
-            ImGui.SameLine(); if (ImGui.SmallButton(graph.ObjectId.HasValue ? "Egyedi felülírás eltávolítása" : graph.Kind == "site" ? "Alapgráf visszaállítása" : "Beépített alap visszaállítása")) behaviors.RestoreDefault(graph.Hook, graph.Kind, graph.ObjectId);
+            ImGui.SameLine(); if (ImGui.SmallButton(graph.ObjectId.HasValue ? "Egyedi felülírás eltávolítása" : EcologyResponseProgram.IsPureKind(graph.Kind) ? "Alapgráf visszaállítása" : "Beépített alap visszaállítása")) behaviors.RestoreDefault(graph.Hook, graph.Kind, graph.ObjectId);
             ImGui.PopID();
         }
         }

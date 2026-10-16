@@ -23,7 +23,7 @@ namespace ForesTycoon.Ecology
         }
         internal void PrepareNextMonthStep() => SimulationWork.Complete(PrepareNextMonthWork());
         internal IEnumerable<int> PrepareNextMonthWork() => Environment == null ? Array.Empty<int>()
-            : monthlyPreparation.AdvanceWork(habitat, IndividualTrees, Revision, (month + 1) / 12.0, SecondsUntilMonth);
+            : monthlyPreparation.AdvanceWork(habitat, IndividualTrees, Revision, (month + 1) / 12.0, SecondsUntilMonth, Responses);
         private readonly HashSet<int> changedResourceTiles = new();
         internal double ForestYear => month / 12.0 + accumulatedSeconds / secondsPerYear;
         internal int IndividualTreeCount => IndividualTrees.TreeCount;
@@ -54,6 +54,11 @@ namespace ForesTycoon.Ecology
             MarkResourceArea(tile);
         }
         internal IEnumerable<int> CompleteRuleEditsWork(double year) => RefreshChangedResourceRatesWork(year, currentConditions: true);
+        internal void NotifyCompetitionRuleEdit(int tile)
+        {
+            if (IndividualTrees.TryGet(tile, out var patch)) patch.Revision++;
+            MarkResourceArea(tile);
+        }
         internal float LastAnnualGrowthCubicMetres => (float)lastYearGrowth;
         // Diagnostic fixtures only. Normal edits go through planting/harvest operations.
         internal void NotifyIndividualVisualEdit() {
@@ -125,7 +130,7 @@ namespace ForesTycoon.Ecology
                 ForestResources resources = default;
                 ForestBoundaryGeometry geometry = default;
                 bool cached = monthlyBoundary && !currentConditions && Environment != null
-                    && monthlyPreparation.TryGet(Revision, year, id, i, tree.Id, water, radiation, out resources, out geometry);
+                    && monthlyPreparation.TryGet(Revision, year, id, i, tree.Id, water, radiation, out resources, out geometry, Responses);
                 if (cached)
                 {
                     LastMonthlyPreparedTrees++;
@@ -135,7 +140,9 @@ namespace ForesTycoon.Ecology
                 else
                 {
                     tree = SettleIndividual(tree, year);
-                    resources = competition.Evaluate(habitat, tree, year, water, radiation, Environment != null);
+                    var loads = new WorkResult<ForestCompetitionLoads>();
+                    foreach (int unit in competition.EvaluateLoadsWork(habitat, tree, year, loads, Responses)) yield return unit;
+                    resources = ForestCompetition.Resolve(loads.Value, water, radiation, Responses);
                 }
                 tree = tree with { Resources = resources };
                 patch.Trees[i] = tree;

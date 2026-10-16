@@ -537,7 +537,15 @@ sealed partial class GameWorld
         }
         public double TreeId => Tree.Id;
         public double Age => Tree.Age(World.RuleEvaluationYear);
-        public double Health { get => Tree.Health; set => Tree = Tree with { Health = (float)Math.Clamp(value, 0, 1) }; }
+        public double Health {
+            get => Tree.Health;
+            set {
+                float next = (float)Math.Clamp(value, 0, 1);
+                if (Tree.Health == next) return;
+                Tree = Tree with { Health = next };
+                World.forest.NotifyCompetitionRuleEdit(Trees[Id].Tile);
+            }
+        }
         public ITile Tile { get { tile.Bind(World, Trees[Id].Tile); return tile; } }
         // Size is state anchored at a year; writing it re-anchors the tree there, and growth continues from the new size.
         public double Height { get => Tree.At(World.RuleEvaluationYear).Height; set => Resize(d => d with { Height = (float)Math.Max(0, value) }); }
@@ -548,14 +556,14 @@ sealed partial class GameWorld
             if (!World.forest.IndividualTrees.TryGet(t, out var patch)) return;
             var settled = patch.Trees[i].Settle(World.RuleEvaluationYear);
             patch.Trees[i] = settled with { Dimensions = change(settled.Dimensions) };
-            patch.Revision++;
+            World.forest.NotifyCompetitionRuleEdit(t);
         }
         public double Light => Tree.Resources.Light;
         public double Water => Tree.Resources.Water;
         public double StressYears { get => Tree.StressYears; set => Tree = Tree with { StressYears = (float)Math.Max(0, value) }; }
         public double Space => Tree.Resources.Space;
-        public double LightResponse => Tree.Resources.LightResponse(Tree.Species);
-        public double ResourceLimit => Tree.Resources.Limitation(Tree.Species);
+        public double LightResponse => Tree.Resources.LightResponse(Tree.Species, World.forest.ResponseRules);
+        public double ResourceLimit => Tree.Resources.Limitation(Tree.Species, World.forest.ResponseRules);
         public double Fitness => World.forest.SiteFitness(Tree.Species, Trees[Id].Tile);
         public double MaximumAge => ForestSpeciesProfile.For(Tree.Species).MaximumAgeYears;
         public bool Die() { var (tile, index) = Trees[Id]; World.forest.KillIndividual(tile, index, World.RuleEvaluationYear); return false; }
@@ -564,6 +572,7 @@ sealed partial class GameWorld
         public double CrownGrowth { get => Tree.AnnualGrowth.CrownRadius; set => SetRate(d => d with { CrownRadius = (float)Math.Clamp(value, 0, 100) }); }
         private void SetRate(Func<ForestTreeDimensions, ForestTreeDimensions> change) {
             var (t, i) = Trees[Id]; World.forest.SetIndividualRate(t, i, World.RuleEvaluationYear, change);
+            if (!World.growthRuleActive) World.forest.NotifyCompetitionRuleEdit(t);
         }
         public double CrownRadius { get => Tree.At(World.RuleEvaluationYear).CrownRadius; set => Resize(d => d with { CrownRadius = (float)Math.Max(0, value) }); }
         public double RelativeHeight => Height / ForestSpeciesTraits.For(Tree.Species).MaxHeight;

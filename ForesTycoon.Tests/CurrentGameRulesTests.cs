@@ -23,7 +23,7 @@ public class CurrentGameRulesTests
             Assert.Contains(source.Symbol, File.ReadAllText(file));
         }
         // The water balance is the project's flow rules; road traffic wear is a behaviour graph.
-        Assert.Equal(new[] { "forest.deadwood", "forest.growth", "forest.health", "forest.mortality", "forest.site", "forest.stress", "traffic.wear", "water.drainage", "water.evaporation", "water.infiltration", "water.precipitation", "water.runoff", "water.snowmelt", "water.stress", "water.uptake" },
+        Assert.Equal(new[] { "forest.competition", "forest.deadwood", "forest.growth", "forest.health", "forest.mortality", "forest.site", "forest.stress", "traffic.wear", "water.drainage", "water.evaporation", "water.infiltration", "water.precipitation", "water.runoff", "water.snowmelt", "water.stress", "water.uptake" },
             catalog.Rules.Where(r => r.Execution == GameRuleExecution.EditableGraph).Select(r => r.Id).OrderBy(id => id, StringComparer.Ordinal));
         Assert.Equal("machine.controller", catalog.Rules.Single(r => r.Execution == GameRuleExecution.EditableController).Id);
         Assert.Contains(catalog.Rules, r => r.Id == "route.policy" && r.Execution == GameRuleExecution.EditableExpressions);

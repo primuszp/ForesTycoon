@@ -10,7 +10,7 @@ namespace ForesTycoon.Ecology
     {
         private sealed class PreparedPatch
         {
-            internal ForestResources[] Resources = Array.Empty<ForestResources>();
+            internal ForestCompetitionLoads[] Loads = Array.Empty<ForestCompetitionLoads>();
             internal ulong[] Ids = Array.Empty<ulong>();
             internal ForestBoundaryGeometry[] Geometry = Array.Empty<ForestBoundaryGeometry>();
             internal ForestStand Stand;
@@ -74,11 +74,11 @@ namespace ForesTycoon.Ecology
         }
 
         internal void Advance(IForestHabitat habitat, ForestTreeStore store, ulong currentRevision,
-            double targetYear, double secondsUntilMonth)
-            => SimulationWork.Complete(AdvanceWork(habitat, store, currentRevision, targetYear, secondsUntilMonth));
+            double targetYear, double secondsUntilMonth, ForesTycoon.Rules.EcologyResponseProgram rules = null)
+            => SimulationWork.Complete(AdvanceWork(habitat, store, currentRevision, targetYear, secondsUntilMonth, rules));
 
         internal IEnumerable<int> AdvanceWork(IForestHabitat habitat, ForestTreeStore store, ulong currentRevision,
-            double targetYear, double secondsUntilMonth)
+            double targetYear, double secondsUntilMonth, ForesTycoon.Rules.EcologyResponseProgram rules = null)
         {
             if (revision != currentRevision || year != targetYear)
             {
@@ -97,14 +97,14 @@ namespace ForesTycoon.Ecology
                 yield return 1;
                 if (cursor < patches.Count)
                 {
-                    competition.SnapshotPatch(habitat, store, patches[cursor++].Key, year);
+                    foreach (int unit in competition.SnapshotPatchWork(habitat, store, patches[cursor++].Key, year)) yield return unit;
                     LastStepSnapshotPatches++;
                     continue;
                 }
                 if (snapshotRepairs.TryDequeue(out int snapshotId))
                 {
                     snapshotPending.Remove(snapshotId);
-                    competition.SnapshotPatch(habitat, store, snapshotId, year);
+                    foreach (int unit in competition.SnapshotPatchWork(habitat, store, snapshotId, year)) yield return unit;
                     LastStepSnapshotPatches++;
                     continue;
                 }
@@ -120,9 +120,9 @@ namespace ForesTycoon.Ecology
                 }
                 if (!prepared.TryGetValue(id, out var result))
                     prepared.Add(id, result = new());
-                if (result.Resources.Length < patch.Count)
+                if (result.Loads.Length < patch.Count)
                 {
-                    result.Resources = new ForestResources[patch.Trees.Length];
+                    result.Loads = new ForestCompetitionLoads[patch.Trees.Length];
                     result.Ids = new ulong[patch.Trees.Length];
                     result.Geometry = new ForestBoundaryGeometry[patch.Trees.Length];
                 }
@@ -133,8 +133,9 @@ namespace ForesTycoon.Ecology
                     yield return 1;
                     var source = patch.Trees[treeIndex];
                     var tree = source.Settle(year);
-                    var resources = competition.Evaluate(habitat, tree, year, 1, 1, waterAllocated: true);
-                    result.Resources[treeIndex] = resources;
+                    var loads = new WorkResult<ForestCompetitionLoads>();
+                    foreach (int unit in competition.EvaluateLoadsWork(habitat, tree, year, loads, rules)) yield return unit;
+                    result.Loads[treeIndex] = loads.Value;
                     result.Ids[treeIndex] = tree.Id;
                     float treeVolume = ForestTree.Volume(tree.Dimensions);
                     result.Geometry[treeIndex] = new(tree.Dimensions, Math.Max(0, treeVolume - ForestTree.Volume(source.Dimensions)));
@@ -145,15 +146,14 @@ namespace ForesTycoon.Ecology
         }
 
         internal bool TryGet(ulong currentRevision, double targetYear, int tileId, int index, ulong treeId,
-            float water, float radiation, out ForestResources resources, out ForestBoundaryGeometry geometry)
+            float water, float radiation, out ForestResources resources, out ForestBoundaryGeometry geometry, ForesTycoon.Rules.EcologyResponseProgram rules = null)
         {
             resources = default;
             geometry = default;
             if (!Ready || revision != currentRevision || year != targetYear
                 || !prepared.TryGetValue(tileId, out var patch) || index >= patch.Count || patch.Ids[index] != treeId)
                 return false;
-            var rawResources = patch.Resources[index];
-            resources = new(Math.Clamp(radiation, 0, 1) * rawResources.Light, Math.Clamp(water, 0, 1), rawResources.Space);
+            resources = ForestCompetition.Resolve(patch.Loads[index], water, radiation, rules);
             geometry = patch.Geometry[index];
             return true;
         }

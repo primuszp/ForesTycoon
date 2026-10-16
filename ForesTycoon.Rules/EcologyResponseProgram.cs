@@ -7,7 +7,7 @@ namespace ForesTycoon.Rules;
 /// <summary>Pure, bounded response graphs, shared by generation, surveys and the live simulation.</summary>
 public sealed class EcologyResponseProgram
 {
-    public static readonly BehaviorHook[] Hooks = {
+    private static readonly BehaviorHook[] SiteHooks = {
         new("forest.site", "Termőhelyi alkalmasság", "site", "0–1", 0, 1, "", "", "Ültetés, fajajánló és fa-erőforrás frissítése", false,
             new[] { "tile.moisture", "tile.elevation", "tile.fertility", "species.preferredElevation", "species.elevationTolerance" }),
         new("water.stress", "Fafaj vízválasza", "site", "0–1", 0, 1, "", "", "Pillanatnyi és havi fa-erőforrás frissítése", false,
@@ -17,12 +17,15 @@ public sealed class EcologyResponseProgram
         new("water.waterlogging", "Pangóvíz követése", "site", "0–1", 0, 1, "", "", "Szeletelt környezeti lépés, csempénként", false,
             new[] { "tile.rawWaterlogging", "tile.waterlogging", "step.seconds" })
     };
+    public static readonly BehaviorHook[] Hooks = SiteHooks.Concat(ForestCompetitionRules.Hooks).ToArray();
+    public static bool IsPureKind(string kind) => kind is "site" or "competitionPair" or "competition" or "resource";
     public static bool AllowedOperation(BehaviorOperation op) => op is BehaviorOperation.Constant or BehaviorOperation.Input
         or BehaviorOperation.Add or BehaviorOperation.Subtract or BehaviorOperation.Multiply or BehaviorOperation.Divide
         or BehaviorOperation.Minimum or BehaviorOperation.Maximum or BehaviorOperation.Greater or BehaviorOperation.Less
         or BehaviorOperation.Select or BehaviorOperation.Absolute or BehaviorOperation.Negate or BehaviorOperation.Exp or BehaviorOperation.Power;
     public static BehaviorGraph DefaultGraph(BehaviorHook hook)
     {
+        if (hook.Kind != "site") return ForestCompetitionRules.DefaultGraph(hook);
         string expression = hook.Id switch {
             "forest.site" => "tile.fertility * (0.45 + 0.55 * korlát(1 - abs(tile.elevation - species.preferredElevation) / max(species.elevationTolerance; 0.000001); 0; 1))",
             "water.stress" => "hatvány(korlát(tile.waterSupply; 0; 1); species.drySensitivity) * (1 - tile.waterlogging * 0.65)",
@@ -49,18 +52,18 @@ public sealed class EcologyResponseProgram
     public EcologyResponseProgram(BehaviorModel source)
     {
         var graphs = source.Graphs.Where(g => Hooks.Any(h => h.Id == g.Hook && h.Kind == g.Kind)).ToList();
-        if (graphs.Count != Hooks.Length) throw new InvalidDataException("Mind a négy termőhelyi és vízválaszgráf szükséges. A hatás kikapcsolásához köss állandót a kimenetre.");
+        if (graphs.Count != Hooks.Length) throw new InvalidDataException("Minden ökológiai válaszgráf szükséges. A hatás kikapcsolásához köss állandót a kimenetre.");
         foreach (var g in graphs)
             if (g.Nodes.Any(n => !AllowedOperation(n.Operation)))
-                throw new InvalidDataException("A termőhelyi gráf csak a felkínált csempe-, fafaj- és lépésmezőket olvashatja; nincs beépített számítás vagy másik világállapot.");
+                throw new InvalidDataException("Az ökológiai gráf csak a felkínált objektummezőket olvashatja; nincs beépített számítás vagy másik világállapot.");
         var program = new CompiledBehaviorModel(new() { Graphs = graphs }, Hooks);
-        evaluate = Hooks.Select(h => program.Evaluator(h.Id, h.Kind) ?? throw new InvalidDataException("Hiányzó termőhelyi gráf: " + h.Id)).ToArray();
+        evaluate = Hooks.Select(h => program.Evaluator(h.Id, h.Kind) ?? throw new InvalidDataException("Hiányzó ökológiai gráf: " + h.Id)).ToArray();
     }
-    private double Evaluate(int index)
+    private double Evaluate(int index, double[] values = null)
     {
-        try { return evaluate[index](default, inputs[index]); }
+        try { return evaluate[index](default, values ?? inputs[index]); }
         catch (ArithmeticException error) {
-            LastError = Hooks[index].Name + ": " + error.Message + " A hibás válasz 0; javítsd a kijelzett gráfot.";
+            LastError ??= Hooks[index].Name + ": " + error.Message + " A hibás válasz 0; javítsd a kijelzett gráfot.";
             return 0;
         }
     }
@@ -81,4 +84,29 @@ public sealed class EcologyResponseProgram
     {
         var v = inputs[3]; v[0] = raw; v[1] = previous; v[2] = seconds; return Evaluate(3);
     }
+    public (double Shade, double CrownLoad) Pair(double height, double crown, double diameter, double health, double shadeTolerance,
+        double otherHeight, double otherCrown, double otherDiameter, double otherHealth, double otherShadeTolerance, double distanceSquared)
+    {
+        var v = inputs[4];
+        v[0] = height; v[1] = crown; v[2] = diameter; v[3] = health; v[4] = shadeTolerance;
+        v[5] = otherHeight; v[6] = otherCrown; v[7] = otherDiameter; v[8] = otherHealth; v[9] = otherShadeTolerance;
+        v[10] = Math.Sqrt(distanceSquared); v[11] = distanceSquared;
+        return (Evaluate(4), Evaluate(5, v));
+    }
+    public (double Light, double Space) Competition(double shade, double crownLoad, double radiation, double water)
+    {
+        var v = inputs[6]; v[0] = shade; v[1] = crownLoad; v[2] = radiation; v[3] = water;
+        return (Evaluate(6), Evaluate(7, v));
+    }
+    public double LightResponse(double light, double water, double space, double shadeTolerance)
+    {
+        var v = inputs[8]; v[0] = light; v[1] = water; v[2] = space; v[3] = shadeTolerance;
+        return Evaluate(8);
+    }
+    public double ResourceLimit(double light, double water, double space, double shadeTolerance)
+    {
+        var v = inputs[9]; v[0] = light; v[1] = water; v[2] = space; v[3] = shadeTolerance;
+        v[4] = LightResponse(light, water, space, shadeTolerance); return Evaluate(9);
+    }
+
 }

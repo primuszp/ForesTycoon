@@ -96,7 +96,7 @@ sealed partial class GameWorld
         if (dynamics != null) next.Dynamics.Preserve(dynamics);
         next.Policy.Controllers.PreserveUnchanged(behaviorPolicy.Controllers);
         bool refresh = ruleEngine == null || GrowthSignature(ruleEngine.Rules) != GrowthSignature(next.Engine.Rules)
-            || SiteSignature(behaviorPolicy.Document) != SiteSignature(next.Policy.Document);
+            || ResponseSignature(behaviorPolicy.Document) != ResponseSignature(next.Policy.Document);
         dynamics = next.Dynamics; behaviorPolicy = next.Policy; ruleEngine = next.Engine; ruleProjectName = next.Document.Name;
         // A rules-only project keeps the running scene (its map and missions); a project with a world replaces it.
         ruleProjectWorld = next.Document.World ?? ruleProjectWorld;
@@ -122,7 +122,7 @@ sealed partial class GameWorld
         InstallRuleProject(preparing.GetAwaiter().GetResult());
     }
 
-    private static string SiteSignature(BehaviorModel model) => System.Text.Json.JsonSerializer.Serialize(model.Graphs.Where(g => g.Kind == "site"));
+    private static string ResponseSignature(BehaviorModel model) => System.Text.Json.JsonSerializer.Serialize(model.Graphs.Where(g => EcologyResponseProgram.IsPureKind(g.Kind)));
     private static string GrowthSignature(IEnumerable<WorldRule> rules) => System.Text.Json.JsonSerializer.Serialize(rules.Where(r => r.Schedule == "growth"));
 
     private void InitializeRuleProject()

@@ -21,7 +21,7 @@ internal static class ProjectGrowthFixture
             forest.IndividualTrees.TryGet(tile, out var p);
             for (int i = 0; i < p.Count; i++) {
                 var t = p.Trees[i]; var traits = ForestSpeciesTraits.For(t.Species);
-                var values = new double[] { forest.SiteFitness(t.Species, tile), t.Resources.LightResponse(t.Species), t.Resources.Water,
+                var values = new double[] { forest.SiteFitness(t.Species, tile), t.Resources.LightResponse(t.Species, forest.ResponseRules), t.Resources.Water,
                     t.Health, t.Resources.Space, year - Math.Floor(year), t.Dimensions.Diameter, t.Dimensions.Height / traits.MaxHeight,
                     traits.RadialRate, traits.HeightRate, 0, 0, traits.CrownRatio, traits.CrownSpread };
                 float diameter = (float)program.Evaluate(hooks[0].Id, "tree", t.Id, new(), values); values[11] = diameter;

@@ -519,3 +519,13 @@ műveletek számítási gráfként szerkeszthetők, képletírás nélkül. A fo
 Csempe / Fafaj / Időlépés objektumot és azon belül felderített nevű mezőt kínál;
 a teljes hálót a Teljes gráf gomb mutatja meg. A játék ezeket a gráfokat futtatja,
 a korábbi natív számítások törölve. Részletek: [termőhely és vízstressz](site-water-response-rules.md).
+
+## Fény- és térverseny – 2026-10-16
+
+A közös Szabályok listájából elérhető a szomszéd árnyékoló és térfoglaló
+hatása, a fához jutó fény, a szabad növekedési tér, a fafaj fényválasza és
+az erőforráskorlát. Forrást objektum és mező választásával lehet bekötni:
+Vizsgált fa, Szomszéd fa, Fapár, Verseny, Környezet, Erőforrások, Fafaj.
+A motor a gráfokat fapáronként is megszakítható munkában futtatja;
+a régi párhuzamos képletek és a külön gyökérverseny megszűnt.
+[Részletek és ellenőrzések](tree-competition-rules.md).

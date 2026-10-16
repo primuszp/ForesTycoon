@@ -23,7 +23,7 @@ namespace ForesTycoon.Editor
         internal void SelectGraph(string id) { selectedController = null; selectedGraph = id; selectedNode = model.Graphs.Find(g => g.Id == id)?.Output; }
         internal void RestoreDefault(string hook, string kind, ulong? id) {
             Remember(); model.Graphs.RemoveAll(g => g.Hook == hook && g.Kind == kind && g.ObjectId == id);
-            if (kind == "site") {
+            if (EcologyResponseProgram.IsPureKind(kind)) {
                 var graph = EcologyResponseProgram.DefaultGraph(availableHooks.Single(h => h.Id == hook && h.Kind == kind));
                 model.Graphs.Add(graph); selectedGraph = graph.Id; selectedNode = graph.Output;
             } else selectedGraph = null;
@@ -100,7 +100,7 @@ namespace ForesTycoon.Editor
             hookIndex = Array.IndexOf(availableHooks, hook);
             var graph = model.Graphs.Find(g => g.Hook == hook.Id && g.Kind == hook.Kind && g.ObjectId == null);
             if (graph == null) {
-                Remember(); graph = hook.Kind == "site" ? EcologyResponseProgram.DefaultGraph(hook) : new() { Id = Guid.NewGuid().ToString("N"), Name = hook.Name, Hook = hook.Id, Kind = hook.Kind };
+                Remember(); graph = EcologyResponseProgram.IsPureKind(hook.Kind) ? EcologyResponseProgram.DefaultGraph(hook) : new() { Id = Guid.NewGuid().ToString("N"), Name = hook.Name, Hook = hook.Id, Kind = hook.Kind };
                 model.Graphs.Add(graph);
             }
             selectedGraph = graph.Id; selectedNode = graph.Output;
@@ -152,7 +152,7 @@ namespace ForesTycoon.Editor
             var controller = model.Controllers.Find(c => c.Id == selectedController);
             var graph = model.Graphs.Find(g => g.Id == selectedGraph);
             if (controller == null && graph != null) {
-                ImGui.TextWrapped(graph.Kind == "site"
+                ImGui.TextWrapped(EcologyResponseProgram.IsPureKind(graph.Kind)
                     ? "Te választod a forrásokat és a kapcsolatokat. Új csomópont: objektum tulajdonsága, majd objektum és mező választása. A pontokat összekötheted; a kimenet adja a játékban használt választ. Jobb gomb: mozgatás, görgő: nagyítás."
                     : "Kezdés: jelölj ki egy csomópontot, majd módosítsd jobb oldalt. A szorzó új, összekötött csomópontokat ad az eredményhez; 1 = változatlan, 1,1 = +10%, 0,9 = -10%, a szabály korlátain belül.");
                 if (ImGui.Button("Teljes gráf")) framedGraph = null;
@@ -330,12 +330,12 @@ namespace ForesTycoon.Editor
             }
             if (!equation) {
                 if (ImGui.Button("Másolás a szabálytárba")) { if (StoreGraphTemplate != null) StoreGraphTemplate(graph); else message = "A sablonokat a közös Szabályműhely kezeli."; }
-                ImGui.SameLine(); if (hook.Kind != "site" && ImGui.Button("Gráf törlése")) { Remember(); model.Graphs.Remove(graph); selectedGraph = null; return; }
+                ImGui.SameLine(); if (!EcologyResponseProgram.IsPureKind(hook.Kind) && ImGui.Button("Gráf törlése")) { Remember(); model.Graphs.Remove(graph); selectedGraph = null; return; }
             }
             ImGui.Separator();
             if (ImGui.BeginCombo("Új csomópont", "Művelet választása")) {
                 foreach (var op in Enum.GetValues<BehaviorOperation>())
-                    if ((hook.Kind != "site" || EcologyResponseProgram.AllowedOperation(op)) && (hook.Kind != "world" || op is not (>= BehaviorOperation.Delta and <= BehaviorOperation.Amount or >= BehaviorOperation.Capacity and <= BehaviorOperation.Surface)))
+                    if ((!EcologyResponseProgram.IsPureKind(hook.Kind) || EcologyResponseProgram.AllowedOperation(op)) && (hook.Kind != "world" || op is not (>= BehaviorOperation.Delta and <= BehaviorOperation.Amount or >= BehaviorOperation.Capacity and <= BehaviorOperation.Surface)))
                     if (ImGui.Selectable(Names[(int)op])) {
                         Remember(); string id = Guid.NewGuid().ToString("N")[..8];
                         graph.Nodes.Add(new() { Id = id, Name = Names[(int)op], Operation = op, Value = 1,

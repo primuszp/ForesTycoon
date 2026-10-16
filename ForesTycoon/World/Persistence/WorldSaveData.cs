@@ -75,7 +75,7 @@ namespace ForesTycoon
         public const int CurrentVersion = 17;
         // Bump whenever native simulation semantics change. Editable graphs and tuning
         // are stored separately in the checkpoint/journal; this identifies their runtime.
-        public const string CurrentRuntimeRulesVersion = "forestycoon-simulation/2026-10-16.6";
+        public const string CurrentRuntimeRulesVersion = "forestycoon-simulation/2026-10-16.7";
         public string RuntimeRulesVersion { get; init; } = CurrentRuntimeRulesVersion;
         public WorldSaveData() { }
         // Missing JSON must not silently inherit today's runtime identifier.

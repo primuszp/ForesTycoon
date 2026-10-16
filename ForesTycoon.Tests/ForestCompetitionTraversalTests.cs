@@ -1,6 +1,6 @@
 namespace ForesTycoon.Tests;
 
-public class ForestCompetitionPruningTests
+public class ForestCompetitionTraversalTests
 {
     private sealed class Habitat : IForestHabitat
     {
@@ -40,19 +40,18 @@ public class ForestCompetitionPruningTests
         return store;
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void PruningMatchesUnculledReferenceForSmallAndOversizedCrowns(bool allocatedWater)
+    [Fact]
+    public void PairTraversalCanSuspendAndMatchesTheSynchronousGraphPath()
     {
-        var habitat = new Habitat();
-        var store = Create(habitat);
-        var competition = new ForestCompetition();
-        competition.Snapshot(habitat, store, .8);
+        var habitat = new Habitat(); var store = Create(habitat);
+        var competition = new ForestCompetition(); competition.Snapshot(habitat, store, .8);
         foreach (var entry in store.Patches)
-            foreach (var tree in entry.Value.Trees.Take(entry.Value.Count))
-                Assert.Equal(Reference(habitat, store, tree, .8, allocatedWater),
-                    competition.Evaluate(habitat, tree, .8, .7f, .6f, allocatedWater));
+        foreach (var tree in entry.Value.Trees.Take(entry.Value.Count)) {
+            var result = new WorkResult<ForestCompetitionLoads>(); int slices = 0;
+            foreach (int unit in competition.EvaluateLoadsWork(habitat, tree, .8, result)) { Assert.Equal(1, unit); slices++; }
+            Assert.True(slices > 10);
+            Assert.Equal(competition.Evaluate(habitat, tree, .8, .7f, .6f), ForestCompetition.Resolve(result.Value, .7f, .6f));
+        }
     }
 
     [Fact]
@@ -73,42 +72,6 @@ public class ForestCompetitionPruningTests
             if (store.TryGet(id, out var patch))
                 foreach (var tree in patch.Trees.Take(patch.Count))
                     Assert.Equal(full.Evaluate(habitat, tree, .8, .7f), local.Evaluate(habitat, tree, .8, .7f));
-    }
-
-    // Original pair traversal and arithmetic, without pair or cell pruning.
-    private static ForestResources Reference(Habitat habitat, ForestTreeStore store, ForestTree tree, double year, bool allocated)
-    {
-        var geometry = habitat.GetForestTileGeometry(tree.TileId);
-        float x = geometry.X + tree.U * geometry.Width, y = geometry.Y + tree.V * geometry.Height;
-        var size = tree.At(year);
-        float shade = 0, crowns = 0, roots = 0;
-        foreach (int id in Neighbours(habitat, tree.TileId))
-        {
-            if (!store.TryGet(id, out var patch)) continue;
-            var cell = habitat.GetForestTileGeometry(id);
-            for (int i = 0; i < patch.Count; i++)
-            {
-                var other = patch.Trees[i];
-                if (other.Id == tree.Id) continue;
-                var otherSize = other.At(year);
-                float dx = cell.X + other.U * cell.Width - x, dy = cell.Y + other.V * cell.Height - y;
-                float distance = dx * dx + dy * dy, reach = size.CrownRadius + otherSize.CrownRadius;
-                float overlap = Overlap(distance, reach);
-                float ratio = Math.Clamp(otherSize.CrownRadius * otherSize.CrownRadius
-                    / Math.Max(.0225f, size.CrownRadius * size.CrownRadius), .001f, 4);
-                crowns += overlap * ratio;
-                float dominance = Math.Clamp(.5f + (otherSize.Height - size.Height) / Math.Max(.8f, size.Height) * 2, 0, 1);
-                shade += overlap * 2 * dominance * other.Health;
-                if (!allocated) roots += Overlap(distance, Math.Max(1, reach * 1.25f)) * MathF.Sqrt(ratio);
-            }
-        }
-        return new(.6f * MathF.Exp(-.65f * shade), .7f / (1 + roots * .22f), 1 / (1 + crowns * .55f));
-    }
-
-    private static float Overlap(float distance, float reach)
-    {
-        float t = Math.Max(0, 1 - distance / Math.Max(.01f, reach * reach));
-        return t * t;
     }
 
     private static List<int> Neighbours(Habitat habitat, int id)

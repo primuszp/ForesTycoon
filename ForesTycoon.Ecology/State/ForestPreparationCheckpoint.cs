@@ -7,7 +7,7 @@ namespace ForesTycoon.Ecology
     internal sealed record CompetitionCellCheckpoint(int Tile, ForestCompetition.Sample[] Trees);
     internal sealed record NeighboursCheckpoint(int Tile, int[] Neighbours);
     internal sealed record CompetitionCheckpoint(CompetitionCellCheckpoint[] Cells, NeighboursCheckpoint[] Neighbours);
-    internal sealed record PreparedPatchCheckpoint(int Tile, ForestResources[] Resources, ulong[] Ids,
+    internal sealed record PreparedPatchCheckpoint(int Tile, ForestCompetitionLoads[] Loads, ulong[] Ids,
         ForestBoundaryGeometry[] Geometry, ForestStand Stand);
     internal sealed record PreparationCheckpoint(CompetitionCheckpoint Competition, int[] Patches, PreparedPatchCheckpoint[] Prepared,
         ulong Revision, double Year, int Cursor, bool Published, int[] SnapshotRepairs, int[] ResourceRepairs);
@@ -31,22 +31,17 @@ namespace ForesTycoon.Ecology
                 var cell = new Cell
                 {
                     Trees = (Sample[])c.Trees.Clone(),
-                    Count = c.Trees.Length,
-                    MinX = float.PositiveInfinity,
-                    MinY = float.PositiveInfinity,
-                    MaxX = float.NegativeInfinity,
-                    MaxY = float.NegativeInfinity
+                    Count = c.Trees.Length
                 };
                 foreach (var tree in cell.Trees)
                 {
                     yield return 1;
                     CheckpointGuard.Require(tree.Id > 0 && float.IsFinite(tree.X) && float.IsFinite(tree.Y), "competition sample");
                     CheckpointGuard.Unit(tree.Health, "competition health");
+                    CheckpointGuard.Require(Enum.IsDefined(tree.Species), "competition species");
                     CheckpointGuard.NonNegative(tree.Size.Diameter, "competition diameter");
                     CheckpointGuard.NonNegative(tree.Size.Height, "competition height"); CheckpointGuard.NonNegative(tree.Size.CrownRadius, "competition crown");
-                    cell.MinX = Math.Min(cell.MinX, tree.X); cell.MaxX = Math.Max(cell.MaxX, tree.X);
-                    cell.MinY = Math.Min(cell.MinY, tree.Y); cell.MaxY = Math.Max(cell.MaxY, tree.Y);
-                    cell.MaxRadius = Math.Max(cell.MaxRadius, tree.Size.CrownRadius);
+
                 }
                 cells.Add(c.Tile, cell);
             }
@@ -64,7 +59,7 @@ namespace ForesTycoon.Ecology
     {
         internal PreparationCheckpoint Capture() => new(competition.Capture(), patches.Select(p => p.Key).ToArray(),
             prepared.OrderBy(p => p.Key).Select(p => new PreparedPatchCheckpoint(p.Key,
-                p.Value.Resources.Take(p.Value.Count).ToArray(), p.Value.Ids.Take(p.Value.Count).ToArray(),
+                p.Value.Loads.Take(p.Value.Count).ToArray(), p.Value.Ids.Take(p.Value.Count).ToArray(),
                 p.Value.Geometry.Take(p.Value.Count).ToArray(), p.Value.Stand)).ToArray(), revision, year, cursor, published,
             snapshotRepairs.ToArray(), resourceRepairs.ToArray());
         internal void Restore(PreparationCheckpoint s, ForestTreeStore store, int tileCount) => SimulationWork.Complete(RestoreWork(s, store, tileCount));
@@ -85,13 +80,13 @@ namespace ForesTycoon.Ecology
             foreach (var p in s.Prepared)
             {
                 yield return 1;
-                CheckpointGuard.Require(p != null && (uint)p.Tile < (uint)tileCount && p.Ids != null && p.Resources != null &&
-                    p.Geometry != null && p.Ids.Length == p.Resources.Length && p.Ids.Length == p.Geometry.Length &&
+                CheckpointGuard.Require(p != null && (uint)p.Tile < (uint)tileCount && p.Ids != null && p.Loads != null &&
+                    p.Geometry != null && p.Ids.Length == p.Loads.Length && p.Ids.Length == p.Geometry.Length &&
                     !prepared.ContainsKey(p.Tile), "prepared geometry");
-                foreach (var r in p.Resources)
+                foreach (var r in p.Loads)
                 {
-                    yield return 1; CheckpointGuard.Unit(r.Light, "prepared light");
-                    CheckpointGuard.Unit(r.Water, "prepared water"); CheckpointGuard.Unit(r.Space, "prepared space");
+                    yield return 1; CheckpointGuard.NonNegative(r.Shade, "prepared shade load");
+                    CheckpointGuard.NonNegative(r.CrownLoad, "prepared crown load");
                 }
                 foreach (var g in p.Geometry)
                 {
@@ -102,7 +97,7 @@ namespace ForesTycoon.Ecology
                 }
                 prepared.Add(p.Tile, new PreparedPatch
                 {
-                    Resources = (ForestResources[])p.Resources.Clone(),
+                    Loads = (ForestCompetitionLoads[])p.Loads.Clone(),
                     Ids = (ulong[])p.Ids.Clone(),
                     Geometry = (ForestBoundaryGeometry[])p.Geometry.Clone(),
                     Stand = p.Stand,

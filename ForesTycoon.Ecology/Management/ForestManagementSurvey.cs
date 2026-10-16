@@ -51,7 +51,7 @@ namespace ForesTycoon.Ecology
                 var survey = new ForestTileSurvey(ForestSpecies.None, 0, 0, 0, 0, 0, 0, 0, 0, 0, ForestLimit.None,
                     availability, drought, waterlogging, soil.Fertility, habitat.CanSupportForest(id), false, ManagementIssue.None, 0);
                 if (forest.IndividualTrees.TryGet(id, out var patch))
-                    survey = patch.Count > 0 ? Stand(survey, patch, year, rules)
+                    survey = patch.Count > 0 ? Stand(survey, patch, year, rules, forest.ResponseRules)
                         // Felled or died out: stumps or standing dead wood without living trees.
                         : survey with { Cleared = patch.Stumps?.Count > 0 || patch.DeadTrees?.Count > 0 };
                 result[id] = survey;
@@ -64,7 +64,7 @@ namespace ForesTycoon.Ecology
             return result;
         }
 
-        private static ForestTileSurvey Stand(ForestTileSurvey site, ForestTreeStore.Patch patch, double year, ManagementRules rules)
+        private static ForestTileSurvey Stand(ForestTileSurvey site, ForestTreeStore.Patch patch, double year, ManagementRules rules, ForesTycoon.Rules.EcologyResponseProgram responses)
         {
             var species = patch.Trees[0].Species;
             float age = 0, health = 0, volume = 0;
@@ -77,7 +77,7 @@ namespace ForesTycoon.Ecology
                 if (tree.StressYears > 0) stressed++;
                 var r = tree.Resources;
                 if (r == default) continue;
-                float light = r.LightResponse(tree.Species), limitation = r.Limitation(tree.Species);
+                float light = r.LightResponse(tree.Species, responses), limitation = r.Limitation(tree.Species, responses);
                 if (r.Space < rules.OverstockedSpace && r.Space <= Math.Min(light, r.Water)) crowded++;
                 // Only count a limit that actually binds.
                 if (limitation < 0.85f)

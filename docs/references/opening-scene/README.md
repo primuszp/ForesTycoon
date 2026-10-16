@@ -159,3 +159,17 @@ A külön könyvtárba újrarögzített referencia összevetése alapján csak a
 származik, ezért a korábbi, nedvességet külön beszorzó induló egészség eltér.
 A terep, a logisztika, a grafika és minden más lenyomat egyezik. A projekt
 saját küldetéseit és szerkesztett pályáját megőriztük.
+
+## Tizennegyedik lépés: fény- és térverseny a gráfokból – 2026-10-16
+
+A szomszédok árnyékolása és térterhelése, az összegzett fény- és térválasz,
+a fafaj fényválasza és az erőforráskorlát a projekt hat szerkeszthető gráfja.
+A korábbi natív képletek, koronatávolság szerinti levágás és külön
+gyökérverseny-ág törölve. A futtató `forestycoon-simulation/2026-10-16.7`.
+
+Külön mappába újrarögzített és összevetett referencia alapján csak az
+`Ecology` és `Behaviors` lenyomat változott. A minták a fafajt is tárolják,
+a fény-/térszámítás a közös gráffuttató számértékeiből készül. A terep,
+logisztika, grafika és minden más lenyomat egyezik. A szállított jelenet
+saját küldetéseit és szerkesztett pályáját megőriztük; nincs régi
+versenyszabályt vagy előkészítési értéket átvezető betöltési ág.

@@ -40,11 +40,10 @@ public class SiteResponseGraphTests
     [Fact]
     public void ResponseInputsHaveDiscoveredObjectAndFieldNames()
     {
-        var query = GameWorld.RuleObjects.Find("site");
         foreach (var hook in EcologyResponseProgram.Hooks)
         foreach (string input in hook.Inputs!) {
             var parts = input.Split('.');
-            var relation = query.Relations.Single(r => r.Name == parts[0]);
+            var relation = GameWorld.RuleObjects.Find(hook.Kind).Relations.Single(r => r.Name == parts[0]);
             var field = GameWorld.RuleObjects.Find(relation.Target).Fields.Single(f => f.Name == parts[1]);
             Assert.NotEmpty(relation.Display); Assert.NotEmpty(field.Display);
         }

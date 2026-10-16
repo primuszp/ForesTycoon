@@ -6,6 +6,7 @@ namespace ForesTycoon
     {
         static void Main(string[] args)
         {
+            if (args.Length == 1 && args[0] == "--competition-benchmark") { RuleStepBenchmark.Run(64, 256); return; }
             if (args.Length == 1 && args[0] == "--site-response-benchmark") { RuleStepBenchmark.Run(64, 256); return; }
             if (args.Length == 1 && args[0] == "--tree-vitality-benchmark") { TreeVitalityBenchmark.Run(); return; }
             if (args.Length == 1 && args[0] == "--traffic-benchmark") { TrafficRuleBenchmark.Run(); return; }

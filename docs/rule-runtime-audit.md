@@ -3,6 +3,8 @@
 Forráskód-átvizsgálás a korábbi szabályátvezetések eltávolítása után. Ez állapotfelmérés
 és megvalósítási sorrend, nem új futtatómotor bevezetésének beszámolója.
 
+**Későbbi versenyátvezetés:** a fák fény- és térversenye a projekt hat szerkeszthető válaszgráfjából fut. A natív párhatások, fény- és térválasz, fajfüggő fényhatvány, minimumkorlát és régi gyökérverseny törölve. A pillanatkép fánként, a terhelés fapáronként szeletelt; a havi előkészítés terheléseket tárol a saját nemlineáris gráfok helyes futtatásához. [Részletek](tree-competition-rules.md). A katalógus jelenleg 16 gráfos és 50 natív folyamatot tartalmaz.
+
 **Későbbi termőhelyi átvezetés:** az alkalmasság, fajfüggő vízválasz, aszály- és pangóvízsimítás közös projektgráfokból fut. A régi Fitness, WaterResponse, külön fajajánló-képlet és WaterFormulas törölve. A lekérdezések egy objektumra korlátozottak; a bejárások szeleteltek, a mentés és a naplóból visszajátszás tesztelt. [Részletek](site-water-response-rules.md). A katalógus 15 szerkeszthető gráfos folyamatot és 51 natív folyamatot tartalmaz; ez nem jelenti azt, hogy az egész játék szabályosítása kész.
 
 **Későbbi forgalmi átvezetés:** az út- és nyomkopás közös `traffic.wear`

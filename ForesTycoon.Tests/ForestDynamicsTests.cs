@@ -54,7 +54,7 @@ public class ForestDynamicsTests
     }
 
     [Fact]
-    public void TallerDiagonalNeighbourReducesLightWaterAndSpaceAndRemovalReleasesThem()
+    public void TallerDiagonalNeighbourReducesLightAndSpaceWithoutSecondWaterPenalty()
     {
         var habitat = new Habitat(); var store = new ForestTreeStore();
         store.Create(0, new(ForestSpecies.Birch, 1, .1f, 1), 0, 4);
@@ -67,7 +67,7 @@ public class ForestDynamicsTests
         var shaded = competition.Evaluate(habitat, small.Trees[0], 0, 1);
         var dominant = competition.Evaluate(habitat, large.Trees[0], 0, 1);
         Assert.True(shaded.Light < dominant.Light);
-        Assert.True(shaded.Water < 1); Assert.True(shaded.Space < 1);
+        Assert.Equal(1, shaded.Water); Assert.True(shaded.Space < 1);
         Assert.True(shaded.LightResponse(ForestSpecies.Beech) > shaded.LightResponse(ForestSpecies.Birch));
         store.RemoveLiving(large, 0); competition.Snapshot(habitat, store, 0);
         Assert.Equal(new ForestResources(1, 1, 1), competition.Evaluate(habitat, small.Trees[0], 0, 1));
