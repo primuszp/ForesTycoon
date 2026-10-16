@@ -30,19 +30,7 @@ namespace ForesTycoon.Ecology
 
     internal readonly record struct ForestDeadTree(ForestTree Tree, double DeathYear);
 
-    // Geometry-only growth terms. Apply preserves the original floating-point operation order.
-    internal readonly record struct ForestGrowthShape(float DiameterNumerator, float DiameterDenominator,
-        float HeightMultiplier, float CrownRatio, float CrownSpread)
-    {
-        internal ForestTreeDimensions Apply(float factor)
-        {
-            float diameter = DiameterNumerator * factor / DiameterDenominator;
-            float height = HeightMultiplier * factor;
-            return new(diameter, height, Math.Max(height * CrownRatio, diameter * CrownSpread));
-        }
-    }
-    internal readonly record struct ForestBoundaryGeometry(ForestTreeDimensions Dimensions,
-        float VolumeIncrement, ForestGrowthShape Growth, float SpaceResponse);
+    internal readonly record struct ForestBoundaryGeometry(ForestTreeDimensions Dimensions, float VolumeIncrement);
 
     /// <summary>Species-specific gameplay growth curves in physical metres.</summary>
     internal static class ForestTreeGrowth
@@ -63,32 +51,5 @@ namespace ForesTycoon.Ecology
             return new(d, h, Math.Max(0.15f, h * traits.CrownRatio));
         }
 
-        internal static ForestTreeDimensions Rates(in ForestTree tree, double year, float fitness, float crowding, float water)
-        {
-            float light = Math.Clamp(1 - crowding * (1 - ForestSpeciesProfile.For(tree.Species).ShadeTolerance), 0.05f, 1);
-            return RatesWithResources(tree, year, fitness, new(light, water, 1));
-        }
-
-        internal static ForestTreeDimensions RatesWithResources(in ForestTree tree, double year, float fitness, ForestResources resources)
-        {
-            return Shape(tree.Species, tree.At(year)).Apply(Factor(fitness, resources.LightResponse(tree.Species),
-                resources.Water, MathF.Sqrt(Math.Clamp(resources.Space, 0, 1)), tree.Health, Season(year)));
-        }
-
-        internal static float Season(double year) =>
-            Math.Clamp(0.65f + 0.8f * MathF.Cos(MathF.Tau * ((float)(year % 1) - 0.25f)), 0, 1.45f);
-
-        internal static float Factor(float fitness, float lightResponse, float water, float spaceResponse, float health, float season) =>
-            Math.Clamp(fitness, 0, 1) * lightResponse * Math.Clamp(water, 0, 1) * spaceResponse * health * season;
-
-        internal static ForestGrowthShape Shape(ForestSpecies species, ForestTreeDimensions size)
-        {
-            var traits = ForestSpeciesTraits.For(species);
-            // Mature trees continue thickening; height approaches a species-dependent envelope.
-            // Young crowns expand with the leader; older crowns still spread as
-            // the trunk thickens. A diameter-only rate kept saplings artificially narrow.
-            return new(traits.RadialRate * 2, 1 + size.Diameter * 0.8f,
-                traits.HeightRate * Math.Max(0, 1 - size.Height / traits.MaxHeight), traits.CrownRatio, traits.CrownSpread);
-        }
     }
 }

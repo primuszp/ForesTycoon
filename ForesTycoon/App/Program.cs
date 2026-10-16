@@ -6,6 +6,8 @@ namespace ForesTycoon
     {
         static void Main(string[] args)
         {
+            if (args.Length == 1 && args[0] == "--tree-vitality-benchmark") { TreeVitalityBenchmark.Run(); return; }
+            if (args.Length == 1 && args[0] == "--traffic-benchmark") { TrafficRuleBenchmark.Run(); return; }
             if (args.Length == 2 && args[0] == "--record-opening-reference") {
                 using var reference = new GameWorld(TerrainSettings.Default, enableRendering: false);
                 System.IO.Directory.CreateDirectory(args[1]);

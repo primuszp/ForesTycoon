@@ -14,6 +14,8 @@ internal sealed record RuleScopeField(string Name, string Help, Func<GameWorld, 
     public double Max { get; init; } = double.PositiveInfinity;
     /// <summary>When <see cref="Read"/> skips the view (a direct reader), the reading through the view; tests compare the two.</summary>
     public Func<GameWorld, int, double> ViewRead { get; init; }
+    /// <summary>False when an optional relation does not exist for this event's subject.</summary>
+    public Func<GameWorld, int, bool> Available { get; init; }
 }
 /// <summary>A named action of a scope; returns true when it changed the world's structure (routes must be refreshed).</summary>
 internal sealed record RuleScopeAction(string Name, string Help, Func<GameWorld, int, bool> Apply);
@@ -23,6 +25,8 @@ internal sealed record RuleScope(string Id, string Name, string Element, Func<Ga
 {
     /// <summary>The discovered object kind (<see cref="GameWorld.RuleObjects"/>) behind the scope.</summary>
     public string Entity { get; init; }
+    public Func<GameWorld, int, int> StateIndex { get; init; } = (_, id) => id;
+    public Func<GameWorld, int> StateSize { get; init; }
     public Func<GameWorld, IEnumerable<int>> PrepareElements { get; init; }
     public Func<GameWorld, int[]> PreparedElements { get; init; }
     /// <summary>Collections whose members are elements of a scope, so flows can be shared out among them.</summary>
@@ -41,8 +45,8 @@ internal sealed record RuleStepCheckpoint(double Years, double Time, int Rule, i
 /// Runs the rule book: every enabled rule, in order, on every element of its scope. Per element the condition is
 /// evaluated, then the effects in order; a later effect sees the earlier writes of the same element. Expressions are the
 /// editor's formula language, compiled to the bounded behavior graphs (no IO, no C#). Deterministic: fixed element order.
-/// A step may be spread over several world ticks (<see cref="Begin"/>, <see cref="Continue"/>): the order of the work is
-/// the same, only other systems run in between.
+/// A step or passage may suspend between bounded work units (<see cref="Begin"/>, <see cref="Continue"/>).
+/// The pending logical tick or command retains ownership; other simulation work cannot overtake it.
 /// </summary>
 internal sealed class RuleEngine
 {
@@ -55,17 +59,20 @@ internal sealed class RuleEngine
     // ── Starter rules: what a new project begins with ────────────────────
     // They were C# once; now they are ordinary rules of the project, edited, switched off or deleted like any other.
     // A starter only seeds a project (and older projects that have not seen it yet); the game itself owns no rule.
-    internal static List<WorldRule> StarterRules() => WaterRules.Defaults().Concat(new List<WorldRule> {
+    internal static List<WorldRule> StarterRules() => WaterRules.Defaults().Concat(TreeVitalityRules.Defaults()).Concat(new[] { TreeGrowthRule.Default() }).Concat(new List<WorldRule> {
+        TrafficWearRule.Default(),
         RoadWeatherRule.Default(),
         TrailAgeRule.Default(),
         StumpDecayRule.Default(),
         // A sample of the object model: a tree rule reading its own tile through a relation. Off by default, so the
         // shipped game behaves as before; switch it on in the editor to see dry ground weaken the trees on it.
-        new() { Id = "tree.drought", Enabled = false, Name = "Aszálykár a fákon", Scope = "tree", Schedule = "step",
-            Description = "Kiszáradt talajon a fa egészsége romlik; az árnyéktűrő fajok jobban bírják. A havi növekedés ezt a csökkent egészséget látja.",
-            Effects = {
-                new() { Target = "health", Mode = "add",
-                    Formula = "curve.linear(tile.waterSupply; 0; -0,3; 0,2; 0) * (1 - 0,5 * shadeTolerance) * lépés" } } },
+        new() { Id = "tree.drought", Enabled = false, Name = "Aszálykár a fákon", Scope = "tree", Schedule = "month",
+            Description = "Kiszáradt talajon a fa egészsége romlik; az árnyéktűrő fajok jobban bírják. Opcionális saját hatás az egészséggráf mellett.",
+            Effects = { new() { Target = "health", Mode = "add", Influence = new() { Terms = {
+                new() { Name = "Száraz talaj gyengíti a fát", Amount = .3, Factors = {
+                    new() { Source = "tile.waterSupply", InputHigh = .2, OutputLow = 1, OutputHigh = 0 },
+                    new() { Source = "shadeTolerance", OutputLow = 1, OutputHigh = .5 } } }
+            } } } } },
     }).Select(r => { r.Template = r.Id; return r; }).ToList();
 
     /// <summary>
@@ -128,7 +135,6 @@ internal sealed class RuleEngine
     internal IReadOnlyList<InfluencePreview> PreviewInfluences(GameWorld world, string ruleId, int id, double years)
     {
         var rule = compiled.Single(r => r.Source.Id == ruleId);
-        if (rule.Source.Effects.Any(e => e.Influence == null)) throw new InvalidDataException("A próba vizuális hatásokhoz használható.");
         previewing = true;
         try { return PreviewInfluences(world, rule, id, years); }
         finally { previewing = false; }
@@ -138,11 +144,21 @@ internal sealed class RuleEngine
         var inputs = new double[rule.Inputs.Length];
         foreach (int i in rule.Reads) inputs[i] = rule.Scope.Fields[i].Read(world, id);
         for (int i = rule.Scope.Fields.Length; i < inputs.Length; i++) inputs[i] = ReadCustom(world, rule.Inputs[i], id);
+        string conditionError = null;
+        bool applies = rule.Source.Enabled && (rule.Condition == null || rule.Condition.Evaluate(years, world.ReadRuleValue("world.time"), inputs, out conditionError) != 0);
+        if (conditionError != null) throw new InvalidDataException(conditionError);
         var rows = new List<InfluencePreview>();
         for (int e = 0; e < rule.Effects.Length; e++) {
             var effect = rule.Effects[e];
+            if (!applies || !EffectAvailable(world, rule.Scope, id, effect)) {
+                double unchanged = effect.Field >= 0 ? inputs[effect.Field] : 0;
+                rows.Add(new(effect.Field < 0 && effect.Flow != null ? effect.Source.To : effect.Source.Target, unchanged, unchanged,
+                    rule.Source.Effects[e].Influence?.Terms.Select(t => new InfluenceContribution(t.Name, 0)).ToArray() ?? Array.Empty<InfluenceContribution>()));
+                continue;
+            }
             if (effect.Source.Mode == "action") {
-                double trigger = effect.Value.Evaluate(years, world.ReadRuleValue("world.time"), inputs, out string actionError);
+                string actionError = null;
+                double trigger = effect.Value == null ? 1 : effect.Value.Evaluate(years, world.ReadRuleValue("world.time"), inputs, out actionError);
                 if (actionError != null) throw new InvalidDataException(actionError);
                 rows.Add(new(effect.Source.Target, 0, rule.Source.Enabled && trigger != 0 ? 1 : 0, Array.Empty<InfluenceContribution>()));
                 if (rule.Source.Enabled && trigger != 0) break;
@@ -168,8 +184,9 @@ internal sealed class RuleEngine
             double before = inputs[effect.Field];
             double value = effect.Value.Evaluate(years, world.ReadRuleValue("world.time"), inputs, out string error);
             if (error != null) throw new InvalidDataException(error);
-            var field = GameWorld.RuleObjects.Find(rule.Scope.Entity)?.Fields.FirstOrDefault(f => f.Name == effect.Source.Target);
-            double after = rule.Source.Enabled ? Math.Clamp(effect.Source.Mode == "set" ? value : before + value, field?.Min ?? -1e12, field?.Max ?? 1e12) : before;
+            var field = effect.Field < rule.Scope.Fields.Length ? rule.Scope.Fields[effect.Field] : null;
+            var customField = field == null ? Fields.Find(f => f.Name == effect.Source.Target) : null;
+            double after = Math.Clamp(NextValue(effect.Source, before, value, years), field?.Min ?? customField?.Min ?? -1e12, field?.Max ?? customField?.Max ?? 1e12);
             inputs[effect.Field] = after;
             var parts = new List<InfluenceContribution>();
             // Inputs are the pre-effect snapshot when explaining each contribution.
@@ -287,12 +304,19 @@ internal sealed class RuleEngine
                     throw new InvalidDataException($"{rule.Name} › {part}: {e.Message}", e);
                 }
             }
-            var condition = string.IsNullOrWhiteSpace(rule.Condition) ? null : Compile(rule.Condition, "feltétel");
+            Expression CompileGraph(BehaviorGraph source) {
+                var graph = new BehaviorModel { Graphs = { source } }.Clone().Graphs[0];
+                string id = "rule.graph." + counter++; var hook = Hook(id, scope, inputs);
+                graph.Id = graph.Hook = id; graph.Kind = hook.Kind; graph.ObjectId = null;
+                return new(new CompiledBehaviorModel(new BehaviorModel { Graphs = { graph } }, new[] { hook }, named, ReadNamed, BindNamed), id, hook.Kind);
+            }
+            var condition = rule.ConditionGraph != null ? CompileGraph(rule.ConditionGraph)
+                : string.IsNullOrWhiteSpace(rule.Condition) ? null : Compile(rule.Condition, "feltétel");
             var sourceEffects = rule.EffectiveEffects();
             var effects = sourceEffects.Select((e, i) => {
                 if (e.Mode == "action") {
                     var action = Array.Find(scope.Actions, a => a.Name == e.Target) ?? throw new InvalidDataException($"{rule.Name}: a(z) {scope.Name} hatókörben nincs ilyen művelet: {e.Target}.");
-                    return new CompiledEffect(e, string.IsNullOrWhiteSpace(e.Formula) ? null : Compile(e.Formula, $"{i + 1}. hatás"), -1, action);
+                    return new CompiledEffect(e, e.Computation != null ? CompileGraph(e.Computation) : string.IsNullOrWhiteSpace(e.Formula) ? null : Compile(e.Formula, $"{i + 1}. hatás"), -1, action);
                 }
                 if (e.Mode == "flow") {
                     int Writable(string name)
@@ -318,17 +342,17 @@ internal sealed class RuleEngine
                     } else flow = new(e.FlowName, from, e.To.Length == 0 ? -1 : Writable(e.To), null, null, -1, false, -1, -1);
                     flow = flow with { Slot = LedgerSlot(e.FlowName.Length > 0 ? e.FlowName : "áramlás") };
                     var flowParts = rule.Effects.ElementAtOrDefault(i)?.Influence is { } fi
-                        ? fi.Terms.Select(t => Compile(new RuleInfluence { PerYear = fi.PerYear, Terms = new() { t } }.Compile(), "kapcsolat")).ToArray() : null;
-                    return new CompiledEffect(e, Compile(e.Formula, $"{i + 1}. áramlás"), from, null, flowParts, flow);
+                        ? fi.Terms.Select(t => Compile(new RuleInfluence { PerYear = fi.PerYear, PerHour = fi.PerHour, Terms = new() { t } }.Compile(), "kapcsolat")).ToArray() : null;
+                    return new CompiledEffect(e, e.Computation != null ? CompileGraph(e.Computation) : Compile(e.Formula, $"{i + 1}. áramlás"), from, null, flowParts, flow);
                 }
                 int field = Array.IndexOf(inputs, e.Target);
                 bool writable = field >= 0 && (field >= scope.Fields.Length || scope.Fields[field].Write != null);
                 if (!writable) throw new InvalidDataException($"{rule.Name}: a(z) {e.Target} nem írható mező ebben a hatókörben.");
                 var influence = rule.Effects.ElementAtOrDefault(i)?.Influence;
-                var parts = influence?.Terms.Select(t => Compile(new RuleInfluence { PerYear = influence.PerYear, Terms = new() { t } }.Compile(), "kapcsolat")).ToArray();
-                return new CompiledEffect(e, Compile(e.Formula, $"{i + 1}. hatás"), field, null, parts);
+                var parts = influence?.Terms.Select(t => Compile(new RuleInfluence { PerYear = influence.PerYear, PerHour = influence.PerHour, Terms = new() { t } }.Compile(), "kapcsolat")).ToArray();
+                return new CompiledEffect(e, e.Computation != null ? CompileGraph(e.Computation) : Compile(e.Formula, $"{i + 1}. hatás"), field, null, parts);
             }).ToArray();
-            string text = rule.Condition + " " + string.Join(" ", sourceEffects.Select(e => e.Target + " " + e.To + " " + e.Level + " " + e.Formula));
+            string text = System.Text.Json.JsonSerializer.Serialize(rule.ConditionGraph) + " " + System.Text.Json.JsonSerializer.Serialize(rule.Effects.Select(e => e.Computation)) + " " + rule.Condition + " " + string.Join(" ", sourceEffects.Select(e => e.Target + " " + e.To + " " + e.Level + " " + e.Formula));
             list.Add(new(rule, scope, inputs, inputs.Select(n => text.Contains(n, StringComparison.Ordinal)).ToArray(), condition, effects));
         }
         compiled = list.ToArray();
@@ -346,9 +370,10 @@ internal sealed class RuleEngine
 
     private double[] Values(GameWorld world, RuleFieldDefinition field)
     {
-        int size = Scope(field.Scope).Size(world);
+        var scope = Scope(field.Scope); int size = (scope.StateSize ?? scope.Size)(world);
         if (!values.TryGetValue(field.Name, out var array) || array.Length != size) {
-            array = new double[size]; Array.Fill(array, field.Initial); values[field.Name] = array;
+            var previous = array; array = new double[size]; Array.Fill(array, field.Initial);
+            if (previous != null) Array.Copy(previous, array, Math.Min(previous.Length, size)); values[field.Name] = array;
         }
         return array;
     }
@@ -357,14 +382,22 @@ internal sealed class RuleEngine
     {
         var f = Fields.Find(x => x.Name == name);
         if (f == null) return double.NaN;
+        var scope = Scope(f.Scope);
+        if (id < 0 || id >= scope.Size(world)) return double.NaN;
+        id = scope.StateIndex(world, id);
+        if (previewing) {
+            int size = (scope.StateSize ?? scope.Size)(world);
+            if (id < 0 || id >= size) return double.NaN;
+            return values.TryGetValue(name, out var saved) && id < saved.Length ? saved[id] : f.Initial;
+        }
         var v = Values(world, f);
         return id >= 0 && id < v.Length ? v[id] : double.NaN;
     }
 
     /// <summary>One whole step of <paramref name="years"/>; returns true when an action changed the network (routes need a refresh).</summary>
-    internal bool Run(GameWorld world, double years, double time)
+    internal bool Run(GameWorld world, double years, double time, string schedule = "step")
     {
-        Begin(world, years, time);
+        Begin(world, years, time, schedule);
         bool changed = false;
         while (StepPending) changed |= Continue(world, 256);
         return changed;
@@ -374,15 +407,18 @@ internal sealed class RuleEngine
     private IEnumerator<int> execution;
     internal bool NetworkChanged { get; private set; }
     private bool stepPending; private double stepYears, stepTime; private int stepRule, stepElement;
+    private string stepSchedule = "step"; private int eventElement;
     /// <summary>A step has begun and not all of its work is done yet.</summary>
     internal bool StepPending => stepPending;
 
     /// <summary>Starts a step of <paramref name="years"/>; <see cref="Continue"/> does the work. The previous step must be finished.</summary>
-    internal void Begin(GameWorld world, double years, double time)
+    internal void Begin(GameWorld world, double years, double time, string schedule = "step", int element = 0)
     {
+        if (!double.IsFinite(years) || years < 0 || !double.IsFinite(time) || Array.IndexOf(WorldRule.Schedules, schedule) < 0) throw new ArgumentException("Invalid rule interval or schedule.");
         if (stepPending) throw new InvalidOperationException("Az előző szabálylépés még fut.");
         execution?.Dispose(); execution = null; NetworkChanged = false;
         LastError = null; namedStep++;
+        stepSchedule = schedule; eventElement = element;
         stepPending = true; stepYears = years; stepTime = time; stepRule = stepElement = 0;
     }
 
@@ -424,11 +460,13 @@ internal sealed class RuleEngine
 
     private IEnumerable<int> PrepareValuesWork(GameWorld world, RuleFieldDefinition field)
     {
-        int size = Scope(field.Scope).Size(world);
+        var scope = Scope(field.Scope); int size = (scope.StateSize ?? scope.Size)(world);
         if (values.TryGetValue(field.Name, out var previous) && previous.Length == size) yield break;
         var array = new double[size];
         for (int first = 0; first < size; first += 1024) {
-            Array.Fill(array, field.Initial, first, Math.Min(1024, size - first));
+            int count = Math.Min(1024, size - first);
+            Array.Fill(array, field.Initial, first, count);
+            if (previous != null && first < previous.Length) Array.Copy(previous, first, array, first, Math.Min(count, previous.Length - first));
             yield return 1;
         }
         values[field.Name] = array;
@@ -445,10 +483,11 @@ internal sealed class RuleEngine
         for (int k = 0; k < ledger.Length; k++) ledgerKnown[k] = flowTotals.TryGetValue(ledgerNames[k], out ledger[k]);
         for (; stepRule < compiled.Length; stepRule++, stepElement = 0) {
             var rule = compiled[stepRule];
-            if (!rule.Source.Enabled) continue;
+            yield return 1; // Even disabled or differently scheduled rules consume a bounded work unit.
+            if (!rule.Source.Enabled || rule.Source.Schedule != stepSchedule) continue;
             var scope = rule.Scope;
-            if (scope.PrepareElements != null) foreach (int work in scope.PrepareElements(world)) yield return work;
-            var elements = scope.PreparedElements?.Invoke(world) ?? scope.Elements(world);
+            if (stepSchedule is not ("passage" or "growth") && scope.PrepareElements != null) foreach (int work in scope.PrepareElements(world)) yield return work;
+            var elements = stepSchedule == "passage" ? new[] { eventElement } : scope.PreparedElements?.Invoke(world) ?? scope.Elements(world);
             var customDefs = rule.Inputs.Skip(scope.Fields.Length).Select(n => Fields.Find(f => f.Name == n)).ToArray();
             var custom = new double[customDefs.Length][];
             for (int c = 0; c < custom.Length; c++) {
@@ -461,11 +500,12 @@ internal sealed class RuleEngine
                 yield return 1;
                 int id = elements[stepElement];
                 for (int r = 0; r < reads.Length; r++) inputs[reads[r]] = readers[r](world, id);
-                for (int i = 0; i < custom.Length; i++) inputs[scope.Fields.Length + i] = custom[i][id];
+                for (int i = 0; i < custom.Length; i++) inputs[scope.Fields.Length + i] = custom[i][scope.StateIndex(world, id)];
                 string error = null;
                 if (rule.Condition != null && rule.Condition.Evaluate(years, time, inputs, out error) == 0) { if (error != null) LastError = error; continue; }
                 if (error != null) { LastError = error; continue; }
                 foreach (var effect in effects) {
+                    if (!EffectAvailable(world, scope, id, effect)) continue;
                     double value = effect.Value == null ? 1 : effect.Value.Evaluate(years, time, inputs, out error);
                     if (error != null) { LastError = $"{rule.Source.Name}: {error}"; break; }
                     if (effect.Action != null) {
@@ -474,19 +514,31 @@ internal sealed class RuleEngine
                         break; // the element may be gone; its later effects do not run
                     }
                     if (effect.Flow != null) { Move(world, scope, id, inputs, custom, customDefs, effect.Flow, value); continue; }
-                    double next = effect.Source.Mode == "add" ? inputs[effect.Field] + value : value;
+                    double next = NextValue(effect.Source, inputs[effect.Field], value, years);
                     if (effect.Field < scope.Fields.Length) {
                         scope.Fields[effect.Field].Write(world, id, next);
                         inputs[effect.Field] = scope.Fields[effect.Field].Read(world, id); // the world may clamp it
                     } else {
                         int c = effect.Field - scope.Fields.Length;
                         next = Math.Clamp(next, customDefs[c].Min, customDefs[c].Max);
-                        custom[c][id] = next; inputs[effect.Field] = next;
+                        custom[c][scope.StateIndex(world, id)] = next; inputs[effect.Field] = next;
                     }
                 }
             }
         }
         stepPending = false;
+    }
+
+    private static double NextValue(RuleEffect effect, double before, double value, double years) => effect.Mode switch {
+        "add" => before + value,
+        "approach" => before + Math.Clamp(value - before, -effect.ApproachPerYear * years, effect.ApproachPerYear * years),
+        _ => value
+    };
+
+    private static bool EffectAvailable(GameWorld world, RuleScope scope, int id, CompiledEffect effect)
+    {
+        bool Has(int field) => field < 0 || field >= scope.Fields.Length || scope.Fields[field].Available?.Invoke(world, id) != false;
+        return Has(effect.Field) && (effect.Flow == null || Has(effect.Flow.To));
     }
 
     /// <summary>The step under way, for a checkpoint; null when none is.</summary>
@@ -557,14 +609,14 @@ internal sealed class RuleEngine
         internal Stocks(GameWorld world, RuleScope scope, int id, double[] inputs, double[][] custom, RuleFieldDefinition[] customDefs)
         { this.world = world; this.scope = scope; this.id = id; this.inputs = inputs; this.custom = custom; this.customDefs = customDefs; }
         private int Own => scope.Fields.Length;
-        internal double Read(int i) => i < Own ? scope.Fields[i].Read(world, id) : custom[i - Own][id];
+        internal double Read(int i) => i < Own ? scope.Fields[i].Read(world, id) : custom[i - Own][scope.StateIndex(world, id)];
         internal double Min(int i) => i < Own ? scope.Fields[i].Min : customDefs[i - Own].Min;
         internal double Max(int i) => i < Own ? scope.Fields[i].Max : customDefs[i - Own].Max;
         internal void Write(int i, double value)
         {
             if (i < Own) { scope.Fields[i].Write(world, id, value); inputs[i] = scope.Fields[i].Read(world, id); return; }
             value = Math.Clamp(value, customDefs[i - Own].Min, customDefs[i - Own].Max);
-            custom[i - Own][id] = value; inputs[i] = value;
+            custom[i - Own][scope.StateIndex(world, id)] = value; inputs[i] = value;
         }
     }
 

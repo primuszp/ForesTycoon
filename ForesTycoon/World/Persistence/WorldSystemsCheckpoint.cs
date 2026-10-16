@@ -9,7 +9,7 @@ namespace ForesTycoon
         internal VehicleCheckpoint Capture() => new(Id, (int[])Route.Clone(), SpeedTilesPerSecond, CargoCapacity, useRoadPhysics,
             RoadRoute?.Capture(), CurrentSpeed, RoutePosition, PreviousRoutePosition, CargoAmount, CargoStopsEnabled,
             SourceTiles == null ? null : (int[])SourceTiles.Clone(), SawmillTileId, RouteBlocked, TransportState, TransferProgress,
-            FuelUsed, Distance, Transit, TransitArrived, Broken);
+            FuelUsed, Distance, Transit, TransitArrived, Broken, wornTile);
         internal static Vehicle Restore(VehicleCheckpoint s, int tileCount)
         {
             CheckpointGuard.Require(s != null && s.Id > 0 && s.Route != null && s.Route.Length >= 2 && Enum.IsDefined(s.State), "vehicle identity");
@@ -25,6 +25,8 @@ namespace ForesTycoon
             var result = new Vehicle(s.Id, s.Route, s.Speed, s.Capacity,
                 s.RoadGeometry == null ? null : VehicleRoadRoute.Restore(s.RoadGeometry), s.Physics);
             result.CurrentSpeed = s.CurrentSpeed; result.RoutePosition = s.Position; result.PreviousRoutePosition = s.PreviousPosition;
+            CheckpointGuard.Require(s.LastPassageTile == -1 || Array.IndexOf(s.Route, s.LastPassageTile) >= 0, "vehicle passage tile");
+            result.wornTile = s.LastPassageTile;
             result.CargoAmount = s.Cargo; result.CargoStopsEnabled = s.CargoStops;
             result.SourceTiles = s.SourceTiles == null ? null : (int[])s.SourceTiles.Clone(); result.SawmillTileId = s.Mill;
             result.RouteBlocked = s.Blocked; result.TransportState = s.State; result.TransferProgress = s.TransferProgress;

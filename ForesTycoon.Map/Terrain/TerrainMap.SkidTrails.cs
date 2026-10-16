@@ -83,15 +83,6 @@ namespace ForesTycoon.Map
             result.Value = removed.ToArray();
         }
 
-        /// <summary>One machine pass: the ruts deepen (less so once they are already deep) and the trail counts as used.</summary>
-        public void DriveSkidTrail(int tileId, float amount)
-        {
-            if (!skidTrails.TryGetValue(tileId, out var trail)) return;
-            trail.Wear = Math.Clamp(trail.Wear + amount * (1 - trail.Wear), 0, 1);
-            trail.Idle = 0;
-            skidTrails[tileId] = trail;
-        }
-
         /// <summary>The 4-neighbours of a tile (the directions a skid trail or road connects in).</summary>
         public int GetTileNeighbours(int tileId, Span<int> result)
         {

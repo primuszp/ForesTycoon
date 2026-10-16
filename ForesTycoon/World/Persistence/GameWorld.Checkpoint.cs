@@ -13,7 +13,7 @@ namespace ForesTycoon
             if (BoundaryPending) throw new InvalidOperationException("A checkpoint requires a complete logical tick; queue it with AtTickBoundary.");
             return new(2, worldTick, commandJournal.Count - commands.Count,
                 commands.Count, map.Capture(), ecosystem.Capture(), wildlife.Capture(), Logistics.Capture(), vehicles.Capture(),
-                timberCargo.Available, timberCargo.Delivered, effects.Capture(), lastForestryAction, lastForestryArea, Expenses, RuleDocument,
+                timberCargo.Available, timberCargo.Delivered, effects.Capture(), lastForestryAction, lastForestryArea, Expenses,
                 Tuning.IsDefault ? null : Tuning.ToOverrides(), roadWeatherSeconds, BehaviorDocument, BehaviorStates,
                 dynamics.Document, dynamics.Capture(), ruleProjectName, AlgorithmSnapshot(), ruleEngine.Capture(), ruleEngine.CaptureStep(), pendingForestRateRefresh);
         }
@@ -44,7 +44,7 @@ namespace ForesTycoon
             worldTick = s.Tick; lastForestryAction = s.LastAction; lastForestryArea = s.LastArea; Expenses = s.Expenses;
             while (!programs.IsCompleted) yield return 64;
             var compiled = programs.GetAwaiter().GetResult();
-            roadRule = compiled.Road; dynamics = compiled.Dynamics; ruleEngine = compiled.Engine; behaviorPolicy = compiled.Policy;
+            dynamics = compiled.Dynamics; ruleEngine = compiled.Engine; behaviorPolicy = compiled.Policy;
             ruleProjectName = s.RuleProjectName ?? "ForesTycoon szabályrendszer";
             ruleEngine.RestoreStep(this, s.RuleStep);
             algorithmGraphs = s.Algorithms;
@@ -58,9 +58,8 @@ namespace ForesTycoon
             ApplyTuning(GameTuning.FromOverrides(s.Tuning));
         }
 
-        private (CompiledRoadRule Road, DynamicsRuntime Dynamics, RuleEngine Engine, WorldBehaviorPolicy Policy) PrepareCheckpointPrograms(WorldCheckpointData s)
+        private (DynamicsRuntime Dynamics, RuleEngine Engine, WorldBehaviorPolicy Policy) PrepareCheckpointPrograms(WorldCheckpointData s)
         {
-            var road = new CompiledRoadRule(s.Rules ?? RuleModel.Default()); road.ValidateRange();
             var runtime = new DynamicsRuntime(s.Dynamics ?? new DynamicsModel(), RuleWorldFields, ruleValues.ReadWorld);
             if (s.DynamicsValues != null) runtime.Restore(s.DynamicsValues);
             var rules = s.RuleBook?.Rules ?? RuleEngine.StarterRules();
@@ -69,7 +68,7 @@ namespace ForesTycoon
             engine.Restore(s.RuleBook?.Values); engine.RestoreFlows(s.RuleBook?.FlowTotals);
             var policy = new WorldBehaviorPolicy(s.Behaviors ?? WorldBehaviorPolicy.DefaultDocument(), DynamicsRuntime.Keys(runtime.Document, RuleWorldFields), ruleValues.ReadRule);
             policy.Controllers.Restore(s.BehaviorStates ?? Array.Empty<BehaviorControllerSnapshot>());
-            return (road, runtime, engine, policy);
+            return (runtime, engine, policy);
         }
 
         private void ReplayTail(WorldSaveData save)

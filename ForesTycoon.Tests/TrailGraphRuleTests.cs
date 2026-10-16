@@ -87,7 +87,7 @@ public sealed class TrailGraphRuleTests
         project.Tuning["SkidTrailOvergrowYears"] = 10;
         world.QueueRuleProject(project); world.ExecutePendingCommands(); world.Map.SetSkidTrailState(id, 0, 4);
         world.RuleBook.Run(world, 0, 0); Assert.True(world.Map.IsSkidTrail(id));
-        world.Map.DriveSkidTrail(id, .2f); Assert.Equal(0, world.Map.GetSkidTrailIdle(id));
+        world.QueuePassage(new(id, TrafficVehicleKind.Forwarder, 1, 16000, 0)); world.ExecutePendingCommands(); Assert.Equal(0, world.Map.GetSkidTrailIdle(id));
         using var saved = new MemoryStream(); world.Save(saved); saved.Position = 0;
         using var restored = World(); restored.Load(saved);
         Assert.Equal(JsonSerializer.Serialize(world.RuleProjectDocument.Rules), JsonSerializer.Serialize(restored.RuleProjectDocument.Rules));

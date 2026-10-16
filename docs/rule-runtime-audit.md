@@ -3,6 +3,17 @@
 Forráskód-átvizsgálás a korábbi szabályátvezetések eltávolítása után. Ez állapotfelmérés
 és megvalósítási sorrend, nem új futtatómotor bevezetésének beszámolója.
 
+**Későbbi forgalmi átvezetés:** az út- és nyomkopás közös `traffic.wear`
+áthaladási szabályból fut. A projekt `Road` ága, a külön útkopás-fordító és
+szerkesztő, a `road.trafficWear` viselkedésfelülírás és a natív `DriveSkidTrail`
+számítás törölve. Az eseményfuttatás a közös RuleEngine szeletelt munkáját
+használja; a mentés és a projektcsere teljes művelethatárra vár. A katalógus
+most 81 tétel: 56 NativeCode, 8 EditableGraph, 5 EditableExpressions,
+1 EditableController, 11 Presentation. Az alábbi eredeti audit forgalmi sora,
+első átfedése, külön útkopásszerkesztője és kizárólagos `step` időzítése már
+meghaladott; a többi átvezetési feladat továbbra is hátravan.
+Lásd [a megvalósított eseményszabályt és ellenőrzéseit](traffic-rules.md).
+
 **Későbbi megvalósítás ugyanazon a napon:** a folyamatos szimuláció fő folyamatai
 közös, logikai ticken belüli munkaszeletelést kaptak. Az alábbi táblák az átépítés
 előtti auditot őrzik; a mostani végrehajtás, mentési határ és a megmaradó korlátok
@@ -12,22 +23,27 @@ olvashatók. A beégetett játékszabályok gráfos átvezetése ettől még há
 ## Jelenlegi lefedettség
 
 A projekt szabálykönyvéből fut a hét vízáramlási minta, az időjárási útromlás,
-a nyomregeneráció és a tönklebomlás. Ezeknél a hatások, görbék, feltételek és az
+a nyomregeneráció, a tönklebomlás, a közös forgalmi kopás, valamint a fák
+növekedése, egészsége, stressze, elhalása és a holtfa eltűnése. Ezeknél a hatások, görbék, feltételek és az
 eltávolítás szerkeszthetők; a régi natív megfelelőjük már nincs bekötve.
 
-A katalógus 82 bejegyzése közül 57 `NativeCode`, 8 `EditableGraph`,
+A katalógus 83 bejegyzése közül 53 `NativeCode`, 13 `EditableGraph`,
 5 `EditableExpressions`, 1 `EditableController`, 11 `Presentation` jelölésű.
 Ez **nem készültségi százalék**: a natív tételek között motormechanizmus és
 katalógusadat is van; a szerkeszthető jelölés pedig felülírási pontot is jelenthet.
 A katalógus nem automatikus bizonyíték a gráfos felület elérhetőségére.
 
+A fák havi gráfjainak szerkesztése, futtatási sorrendje és ellenőrzése: [faéletciklus](tree-vitality-rules.md).
+
+A növekedés és a közös szerkesztő friss állapota: [fanövekedési gráf](tree-growth-rules.md).
+A lenti eredeti editor-audit történeti: a külön képletes szabálypanel megszűnt,
+a folyamatkapcsolatok, vezérlők, készletek és áramlások a közös szabálylistából nyílnak.
+A növekedési döntés és a `forest.growth` natív felülírás szintén megszűnt.
+
 ## Ami még hiányzik
 
 | Terület | Jelenlegi helyzet, forrás | Szükséges átvezetés |
 | --- | --- | --- |
-| Fa növekedése | `ForesTycoon.Ecology/Species/ForestTree.cs`: `Factor`, `Season`, `Shape`; `ForestSystem.Individuals.cs`: `UpdateIndividualRates`. Natív méretnövekedés és évszakválasz; a `forest.growth` csak tényezőt ír felül. | Fafaj-, fény-, víz-, tér-, egészség- és évszakbemenetekből külön magasság-, átmérő- és koronahatások, görbékkel. A folyamatos méretkiértékelés maradhat motorfeladat. |
-| Egészség, stressz, elhalás | `ForestSystem.Individuals.cs`: `UpdateIndividualRates`, `StepIndividualMonth`. Havi 0,035 egészségközelítés; árnyéktűréstől függő stresszküszöb; 4 stresszév; maximális kor. | Külön egészség- és stresszgráf, feltételes elhalási művelet; egyetlen állapottulajdonos. |
-| Holtfa | `StepIndividualMonth`: 8 év után eltűnik. A kivágási tönk ettől külön modell. | Holtfa objektum, lebomlási állapot, eltávolítási művelet és szerkeszthető alapminta. |
 | Újulat | `ForestSystem.cs`: `IsSeedSource`, `TryRegenerate`. Beégetett fajválasztás, alkalmassági küszöbök és havi esély. | Magadó feltétel, fajjelöltek kiválasztása, stabil sorsolás, új egyed létrehozása. |
 | Termőhely és versengés | `ForestSystem.cs`: `Suitability`; `ForestCompetition.cs`; `ForestHydrology.cs`. Natív fény-, tér-, lombborítás- és LAI-válaszok. | Geometriai lekérdezések motorprimitívként; az ökológiai válaszgörbék projektadatként. Fafaj és talaj kapcsolt objektumként. |
 | Vízválasz és talajpuhulás | `EnvironmentSystem.cs`: `WaterStep`, `WaterResponse`, `Trafficability`. Natív aszály-/pangóvíz-simítás és járhatósági bemenetek; `water.stress` felülírás is létezik. | Származtatott mező gráfból, időbeli közelítés művelettel; a havi és pillanatnyi fogyasztó ugyanazt a definíciót használja. |

@@ -23,7 +23,7 @@ public class CurrentGameRulesTests
             Assert.Contains(source.Symbol, File.ReadAllText(file));
         }
         // The water balance is the project's flow rules; road traffic wear is a behaviour graph.
-        Assert.Equal(new[] { "road.trafficWear", "water.drainage", "water.evaporation", "water.infiltration", "water.precipitation", "water.runoff", "water.snowmelt", "water.uptake" },
+        Assert.Equal(new[] { "forest.deadwood", "forest.growth", "forest.health", "forest.mortality", "forest.stress", "traffic.wear", "water.drainage", "water.evaporation", "water.infiltration", "water.precipitation", "water.runoff", "water.snowmelt", "water.uptake" },
             catalog.Rules.Where(r => r.Execution == GameRuleExecution.EditableGraph).Select(r => r.Id).OrderBy(id => id, StringComparer.Ordinal));
         Assert.Equal("machine.controller", catalog.Rules.Single(r => r.Execution == GameRuleExecution.EditableController).Id);
         Assert.Contains(catalog.Rules, r => r.Id == "route.policy" && r.Execution == GameRuleExecution.EditableExpressions);
@@ -38,8 +38,8 @@ public class CurrentGameRulesTests
         Assert.Contains(new("water.uptake", "water.stress", "water.root"), links);
         Assert.Contains(new("water.stress", "forest.growth", "water.growthFactor"), links);
         Assert.Contains(new("forest.growth", "forest.canopy", "forest.trees"), links);
-        Assert.Contains(new("road.trafficWear", "vehicle.motion", "road.condition"), links);
-        Assert.Contains(new("vehicle.motion", "road.trafficWear", "vehicle.position"), links);
+        Assert.Contains(new("traffic.wear", "vehicle.motion", "road.condition"), links);
+        Assert.Contains(new("vehicle.motion", "traffic.wear", "vehicle.position"), links);
         Assert.Contains(new("timber.deliver", "economy.balance", "economy.income"), links);
         Assert.DoesNotContain(links, l => l.From.StartsWith("wildlife.") && l.To == "forest.health");
     }
@@ -63,11 +63,9 @@ public class CurrentGameRulesTests
     {
         var catalog = CurrentGameRules.Build();
         catalog.Rules[0].Notes = "Próbáljuk hosszabb erdőévvel."; catalog.Rules[0].X = 175;
-        catalog.RoadTrafficModel.Nodes.Single(n => n.Id == "scale").Value = 2;
         var loaded = GameRuleCatalog.FromJson(catalog.ToJson());
         Assert.Equal(catalog.ToJson(), loaded.ToJson());
         Assert.Equal(175, loaded.Rules[0].X); Assert.Equal(catalog.Rules[0].Notes, loaded.Rules[0].Notes);
-        Assert.Equal(.003f, new CompiledRoadRule(loaded.RoadTrafficModel).Evaluate(new(.0015, 1, 0)));
         Assert.Equal(catalog.Connections(), loaded.Connections());
     }
 
@@ -101,7 +99,6 @@ public class CurrentGameRulesTests
         var fuel = saved.Rules.Single(r => r.Id == "economy.fuel");
         int i = fuel.Parameters.FindIndex(p => p.Key == "DieselPrice");
         fuel.Parameters[i] = fuel.Parameters[i] with { Value = 1.2 };
-        saved.RoadTrafficModel.Nodes.Single(n => n.Id == "scale").Value = 3;
         var current = CurrentGameRules.Build(240, new ClimateDefinition(1, 12, 2, .3, 4, .1));
         string description = current.Rules.Single(r => r.Id == "route.find").Description;
         var refreshed = CurrentGameRules.Refresh(saved, current);
@@ -110,25 +107,7 @@ public class CurrentGameRulesTests
         Assert.Equal("My route experiment", route.Notes); Assert.Equal(987, route.X);
         Assert.Equal(2, refreshed.Rules.Count(r => r.Id.StartsWith("water.snow")));
         Assert.Equal(1.2, refreshed.TuningOverrides()["DieselPrice"]);
-        Assert.Equal(3, refreshed.RoadTrafficModel.Nodes.Single(n => n.Id == "scale").Value);
         Assert.Contains(new RuleParameter("Erdőév", 240, "játék-s"), refreshed.Rules.Single(r => r.Id == "time.world").Parameters);
-        refreshed.RoadTrafficModel.Nodes.Single(n => n.Id == "scale").Value = 4;
-        Assert.Equal(3, saved.RoadTrafficModel.Nodes.Single(n => n.Id == "scale").Value);
-    }
-
-    [Fact]
-    public void InvalidTuningCannotPartiallyQueueAnEditorModel()
-    {
-        using var world = new GameWorld(TerrainSettings.Default.WithNodeSize(9, 42), enableRendering: false);
-        string original = world.RuleDocument.ToJson();
-        var changed = RuleModel.Default(); changed.Nodes.Single(n => n.Id == "scale").Value = 2;
-        Assert.Throws<ArgumentException>(() => world.QueueRuleConfiguration(changed, new Dictionary<string, double> { ["DieselPrice"] = -1 }));
-        world.ExecutePendingCommands();
-        Assert.Equal(original, world.RuleDocument.ToJson());
-        world.QueueRuleConfiguration(changed, new Dictionary<string, double> { ["DieselPrice"] = 1.2 });
-        world.ExecutePendingCommands();
-        Assert.Equal(changed.ToJson(), world.RuleDocument.ToJson());
-        Assert.Equal(1.2, world.Tuning[Tune.DieselPrice]);
     }
 
     [Fact]
@@ -137,8 +116,6 @@ public class CurrentGameRulesTests
         var catalog = CurrentGameRules.Build(); catalog.Rules[1].Id = catalog.Rules[0].Id;
         Assert.Throws<InvalidDataException>(catalog.Validate);
         catalog = CurrentGameRules.Build(); catalog.Rules[0].Sources.Clear();
-        Assert.Throws<InvalidDataException>(catalog.Validate);
-        catalog = CurrentGameRules.Build(); catalog.RoadTrafficModel.Output = "missing";
         Assert.Throws<InvalidDataException>(catalog.Validate);
         catalog = CurrentGameRules.Build();
         var parameter = catalog.Rules.SelectMany(r => r.Parameters).First(p => p.Tunable);

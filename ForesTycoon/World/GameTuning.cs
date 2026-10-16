@@ -7,14 +7,14 @@ namespace ForesTycoon
     /// <summary>Every tunable number of the native rules. The order is internal only; files and saves use the names.</summary>
     internal enum Tune
     {
-        VehicleTimeScale,
+        VehicleTimeScale, ProcessorMass, ForwarderMass,
         ProcessorCapacity, FellingRate, ProcessorUnloadRate, FuelFelling, HarvesterSpeed,
         ForwarderCapacity, ForwarderLoadRate, ForwarderUnloadRate, ForwarderSpeed, ForwarderLoadedSpeed,
         FuelDriving, FuelDrivingLoaded, FuelCrane, DieselPrice,
         WearPerSecond, BreakdownHazard, WearFuelPenalty, WearPacePenalty,
         RepairSeconds, FieldRepairRelief, RepairBaseCost, RepairWearCost, ServicePerSecond, ServiceCostPerWear,
         AsphaltBuild, MacadamBuild, RoadRepairShare, TrailCost,
-        ReferenceWear, ReferenceMass, AsphaltFactor, MacadamFactor, TrailLoadMultiplier, SkidTrailOvergrowYears,
+        SkidTrailOvergrowYears,
         EmptyMass, TimberDensity, Power, MaxTractiveForce, Drivetrain, Braking, DragArea,
         RollingAsphalt, RollingGravel, RollingDirt, RoughnessRolling, FuelPerKilowattHour, IdleFuelPerHour,
         TimberPriceFactor, CreditLimit,
@@ -37,6 +37,8 @@ namespace ForesTycoon
         {
             new(Tune.VehicleTimeScale, "time.world", "Járműidő szorzó", "×", GameWorld.VehicleTimeScale, 1, 20),
 
+            new(Tune.ProcessorMass, "machine.processor", "Gép saját tömege", "kg", 18000, 1000, 100000),
+            new(Tune.ForwarderMass, "machine.forwarder", "Gép saját tömege", "kg", 16000, 1000, 100000),
             new(Tune.ProcessorCapacity, "machine.processor", "Rakománykapacitás", "m³", ForestMachine.ProcessorCapacity, 0.5, 20),
             new(Tune.FellingRate, "machine.processor", "Kitermelési ráta", "m³/jármű-s", ForestryLogistics.FellingRate, 0.05, 20),
             new(Tune.ProcessorUnloadRate, "machine.processor", "Lerakodási ráta", "m³/jármű-s", ForestryLogistics.ProcessorUnloadRate, 0.05, 20),
@@ -70,11 +72,6 @@ namespace ForesTycoon
             new(Tune.RoadRepairShare, "road.repair", "Javítás az építési ár arányában", "× teljes kár", RoadCosts.RepairShare, 0, 5),
             new(Tune.TrailCost, "trail.build", "Nyomkijelölés", "eFt/csempe", RoadCosts.Trail, 0, 10000),
 
-            new(Tune.ReferenceWear, "road.trafficWear", "Referencia áthaladási kopás", "állapotveszteség/áthaladás", RoadTrafficParameters.ReferenceWear, 0, 0.2),
-            new(Tune.ReferenceMass, "road.trafficWear", "Referencia össztömeg", "kg", RoadTrafficParameters.ReferenceMass, 1000, 200000),
-            new(Tune.AsphaltFactor, "road.trafficWear", "Aszfalt szorzó", "1", RoadTrafficParameters.AsphaltFactor, 0, 10),
-            new(Tune.MacadamFactor, "road.trafficWear", "Makadám szorzó", "1", RoadTrafficParameters.MacadamFactor, 0, 10),
-            new(Tune.TrailLoadMultiplier, "trail.traffic", "Nyomterhelési szorzó", "× útkopás", RoadTrafficParameters.TrailLoadMultiplier, 0, 500),
             new(Tune.SkidTrailOvergrowYears, "trail.age", "Benövési idő", "erdőév", TrailAgeRule.DefaultOvergrowYears, 0.1, 50),
 
             new(Tune.EmptyMass, "vehicle.mass", "Üres tömeg", "kg", TruckSpec.Default.EmptyMass, 2000, 60000),

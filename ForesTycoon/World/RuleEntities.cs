@@ -104,24 +104,40 @@ internal interface ITrail : IWorldObject
     [RuleAction("The overgrown trail disappears and routes are refreshed.", Display = "Remove")] bool Remove();
 }
 
+[RuleEntity("trafficVehicle", Abstract = true, Display = "Vehicle", Help = "The vehicle at the instant it entered the tile.")]
+internal interface ITrafficVehicle
+{
+    [RuleField("Vehicle category.", Display = "Kind")] TrafficVehicleKind Kind { get; }
+    [RuleField("Stable vehicle identifier.", Display = "Vehicle ID", Min = 0)] double VehicleId { get; }
+    [RuleField("Total vehicle mass including cargo.", Display = "Mass", Unit = "kg", Min = 0, Max = 1000000)] double Mass { get; }
+    [RuleField("Cargo as a share of capacity.", Display = "Cargo fill", Min = 0, Max = 1)] double Fill { get; }
+}
+
+[RuleEntity("passage", Element = "passage", Display = "Passage", Help = "One vehicle entering one tile. Available only during a passage event.")]
+internal interface IPassage : IWorldObject
+{
+    [RuleField("The tile is a paved road.", Display = "On road")] bool IsRoad { get; }
+    [RuleField("The tile is a forest track.", Display = "On trail")] bool IsTrail { get; }
+    [RuleRelation("Vehicle data captured when the passage occurred.", Display = "Vehicle")] ITrafficVehicle Vehicle { get; }
+    [RuleRelation("Road at the passage location; writes on non-roads do nothing.", Display = "Road")] IRoad Road { get; }
+    [RuleRelation("Track at the passage location; writes on non-tracks do nothing.", Display = "Trail")] ITrail Trail { get; }
+    [RuleRelation("The entered tile.", Display = "Tile")] ITile Tile { get; }
+}
+
 [RuleEntity("plant", Abstract = true, Help = "A living plant: it has an age and a health, and stands on a tile.")]
 internal interface IPlant : IWorldObject
 {
     [RuleField("Age.", Unit = "forest years", Min = 0)] double Age { get; }
     [RuleField("Vigour; multiplies growth, a plant kept low for long dies.", Unit = "0–1", Min = 0, Max = 1)]
-    [RuleCause("tree.light", +1, "forest.health")]
-    [RuleCause("tree.water", +1, "forest.health")]
     double Health { get; set; }
     [RuleRelation("The tile the plant stands on.")] ITile Tile { get; }
 }
 
-[RuleEntity("tree", Element = "tree", Help = "An individual tree: size, resources and stress. Monthly growth runs natively and sees what rules change.")]
+[RuleEntity("tree", Element = "tree", Help = "An individual tree: size, resources and stress. Monthly growth consumes the health and structure produced by the project rules.")]
 internal interface ITree : IPlant
 {
+    [RuleField("Stable tree identity.", Min = 0)] double TreeId { get; }
     [RuleField("Tree height.", Unit = "m", Min = 0)]
-    [RuleCause("tree.health", +1, "forest.growth")]
-    [RuleCause("tree.light", +1, "forest.growth")]
-    [RuleCause("tree.water", +1, "forest.growth")]
     double Height { get; set; }
     [RuleField("Diameter at breast height.", Unit = "m", Min = 0)] double Diameter { get; set; }
     [RuleField("Light reaching the tree under its neighbours.", Unit = "0–1", Min = 0, Max = 1)]
@@ -131,10 +147,34 @@ internal interface ITree : IPlant
     [RuleCause("tile.rootWater", +1, "forest.competition")]
     double Water { get; }
     [RuleField("Consecutive years short of resources; above 4 a weak tree dies.", Unit = "forest years", Min = 0)]
-    [RuleCause("tree.light", -1, "forest.mortality")]
-    [RuleCause("tree.water", -1, "forest.mortality")]
     double StressYears { get; set; }
+    [RuleField("Space remaining among neighbours.", Display = "Available space", Min = 0, Max = 1)] double Space { get; }
+    [RuleField("Light available relative to the species' light response.", Display = "Light response", Min = 0, Max = 1)] double LightResponse { get; }
+    [RuleField("Smallest of water, space and light response. A resource query, not an imposed health change.", Display = "Resource limit", Min = 0, Max = 1)] double ResourceLimit { get; }
+    [RuleField("Suitability of this tile for this species.", Display = "Site fitness", Min = 0, Max = 1)] double Fitness { get; }
+    [RuleField("Maximum age from the species catalogue.", Display = "Maximum age", Unit = "forest years", Min = 0)] double MaximumAge { get; }
+    [RuleAction("The living tree becomes deadwood. Its identity and physical size are preserved; no harvested timber is credited.", Display = "Die")] bool Die();
+    [RuleField("Annual diameter growth.", Unit = "m/year", Min = 0, Max = 100)] double DiameterGrowth { get; set; }
+    [RuleField("Annual height growth.", Unit = "m/year", Min = 0, Max = 100)] double HeightGrowth { get; set; }
+    [RuleField("Annual crown radius growth.", Unit = "m/year", Min = 0, Max = 100)] double CrownGrowth { get; set; }
+    [RuleField("Crown radius.", Unit = "m", Min = 0)] double CrownRadius { get; set; }
+    [RuleField("Height divided by the species height envelope.", Min = 0)] double RelativeHeight { get; }
+    [RuleField("Species radial growth potential.", Unit = "m/year", Min = 0)] double RadialRate { get; }
+    [RuleField("Species height growth potential.", Unit = "m/year", Min = 0)] double HeightRate { get; }
+    [RuleField("Species crown-to-height ratio.", Min = 0)] double CrownRatio { get; }
+    [RuleField("Species crown spread per diameter increment.", Min = 0)] double CrownSpread { get; }
+    [RuleField("Position in the forest year, 0 at the start and 1 at the end.", Min = 0, Max = 1)] double YearFraction { get; }
     [RuleField("Shade tolerance of the species.", Unit = "0–1", Min = 0, Max = 1)] double ShadeTolerance { get; }
+}
+
+[RuleEntity("deadTree", Element = "dead tree", Display = "Dead tree", Help = "A dead tree left in the world. Project rules decide when it disappears.")]
+internal interface IDeadTree : IWorldObject
+{
+    [RuleField("Forest years since death.", Display = "Dead years", Unit = "forest years", Min = 0)] double DeadYears { get; }
+    [RuleField("Stable identity of the original tree.", Display = "Tree ID", Min = 0)] double TreeId { get; }
+    [RuleField("Diameter of the dead stem.", Unit = "m", Min = 0)] double Diameter { get; }
+    [RuleRelation("The tile on which the dead tree stands.")] ITile Tile { get; }
+    [RuleAction("The dead tree disappears, without crediting timber.", Display = "Remove")] bool Remove();
 }
 
 [RuleEntity("stump", Element = "stump", Help = "What is left of a felled tree. It rots away; the rule book decides when it is gone.")]
@@ -201,6 +241,7 @@ sealed partial class GameWorld
         internal abstract int[] Elements();
         /// <summary>Element IDs are below this; custom fields keep one value per ID.</summary>
         internal abstract int Size();
+        internal virtual bool HasRelation(string relation) => true;
         internal int[] PreparedElements { get; set; }
         internal virtual IEnumerable<int> PrepareElementsWork()
         {
@@ -403,7 +444,7 @@ sealed partial class GameWorld
     {
         internal override int[] Elements() => new[] { 0 };
         internal override int Size() => 1;
-        public double Time => World.forest.ForestYear;
+        public double Time => World.RuleEvaluationYear;
         public double TreeCount => World.ForestTreeCount;
         public double RoadCount => World.RoadCount;
         public double Rain => World.Environment.LiquidRainRate;
@@ -415,6 +456,29 @@ sealed partial class GameWorld
         public double RunningCosts => World.Logistics.RunningCosts;
         public double Balance => World.Balance;
         public double HoursPerYear => Ecology.EnvironmentSystem.HoursPerForestYear;
+    }
+
+    private sealed class TrafficVehicleView : ITrafficVehicle
+    {
+        internal TrafficPassage Passage;
+        public TrafficVehicleKind Kind => Passage.Kind;
+        public double VehicleId => Passage.VehicleId;
+        public double Mass => Passage.Mass;
+        public double Fill => Passage.Fill;
+    }
+    private sealed class PassageView : RuleView, IPassage
+    {
+        private readonly RoadView road = new(); private readonly TrailView trail = new();
+        private readonly TileView tile = new(); private readonly TrafficVehicleView vehicle = new();
+        internal override int[] Elements() => World.activePassage == null ? Array.Empty<int>() : new[] { World.activePassage.TileId };
+        internal override int Size() => World.Map.Tiles.Count;
+        public bool IsRoad => World.Map.IsRoadTile(Id);
+        public bool IsTrail => World.Map.IsSkidTrail(Id);
+        internal override bool HasRelation(string relation) => relation switch { "road" => IsRoad, "trail" => IsTrail, _ => true };
+        public ITrafficVehicle Vehicle { get { vehicle.Passage = World.activePassage ?? throw new InvalidOperationException("No passage event is active."); return vehicle; } }
+        public IRoad Road { get { road.Bind(World, Id); return road; } }
+        public ITrail Trail { get { trail.Bind(World, Id); return trail; } }
+        public ITile Tile { get { tile.Bind(World, Id); tile.Invalidate(); return tile; } }
     }
 
     private sealed class RoadView : RuleView, IRoad
@@ -471,46 +535,113 @@ sealed partial class GameWorld
                 return ref patch.Trees[i];
             }
         }
-        public double Age => Tree.Age(World.forest.ForestYear);
+        public double TreeId => Tree.Id;
+        public double Age => Tree.Age(World.RuleEvaluationYear);
         public double Health { get => Tree.Health; set => Tree = Tree with { Health = (float)Math.Clamp(value, 0, 1) }; }
         public ITile Tile { get { tile.Bind(World, Trees[Id].Tile); return tile; } }
         // Size is state anchored at a year; writing it re-anchors the tree there, and growth continues from the new size.
-        public double Height { get => Tree.At(World.forest.ForestYear).Height; set => Resize(d => d with { Height = (float)Math.Max(0, value) }); }
-        public double Diameter { get => Tree.At(World.forest.ForestYear).Diameter; set => Resize(d => d with { Diameter = (float)Math.Max(0, value) }); }
+        public double Height { get => Tree.At(World.RuleEvaluationYear).Height; set => Resize(d => d with { Height = (float)Math.Max(0, value) }); }
+        public double Diameter { get => Tree.At(World.RuleEvaluationYear).Diameter; set => Resize(d => d with { Diameter = (float)Math.Max(0, value) }); }
         private void Resize(Func<ForestTreeDimensions, ForestTreeDimensions> change)
         {
             var (t, i) = Trees[Id];
             if (!World.forest.IndividualTrees.TryGet(t, out var patch)) return;
-            var settled = patch.Trees[i].Settle(World.forest.ForestYear);
+            var settled = patch.Trees[i].Settle(World.RuleEvaluationYear);
             patch.Trees[i] = settled with { Dimensions = change(settled.Dimensions) };
             patch.Revision++;
         }
         public double Light => Tree.Resources.Light;
         public double Water => Tree.Resources.Water;
         public double StressYears { get => Tree.StressYears; set => Tree = Tree with { StressYears = (float)Math.Max(0, value) }; }
+        public double Space => Tree.Resources.Space;
+        public double LightResponse => Tree.Resources.LightResponse(Tree.Species);
+        public double ResourceLimit => Tree.Resources.Limitation(Tree.Species);
+        public double Fitness => World.forest.SiteFitness(Tree.Species, Trees[Id].Tile);
+        public double MaximumAge => ForestSpeciesProfile.For(Tree.Species).MaximumAgeYears;
+        public bool Die() { var (tile, index) = Trees[Id]; World.forest.KillIndividual(tile, index, World.RuleEvaluationYear); return false; }
+        public double DiameterGrowth { get => Tree.AnnualGrowth.Diameter; set => SetRate(d => d with { Diameter = (float)Math.Clamp(value, 0, 100) }); }
+        public double HeightGrowth { get => Tree.AnnualGrowth.Height; set => SetRate(d => d with { Height = (float)Math.Clamp(value, 0, 100) }); }
+        public double CrownGrowth { get => Tree.AnnualGrowth.CrownRadius; set => SetRate(d => d with { CrownRadius = (float)Math.Clamp(value, 0, 100) }); }
+        private void SetRate(Func<ForestTreeDimensions, ForestTreeDimensions> change) {
+            var (t, i) = Trees[Id]; World.forest.SetIndividualRate(t, i, World.RuleEvaluationYear, change);
+        }
+        public double CrownRadius { get => Tree.At(World.RuleEvaluationYear).CrownRadius; set => Resize(d => d with { CrownRadius = (float)Math.Max(0, value) }); }
+        public double RelativeHeight => Height / ForestSpeciesTraits.For(Tree.Species).MaxHeight;
+        public double RadialRate => ForestSpeciesTraits.For(Tree.Species).RadialRate;
+        public double HeightRate => ForestSpeciesTraits.For(Tree.Species).HeightRate;
+        public double CrownRatio => ForestSpeciesTraits.For(Tree.Species).CrownRatio;
+        public double CrownSpread => ForestSpeciesTraits.For(Tree.Species).CrownSpread;
+        public double YearFraction => World.RuleEvaluationYear - Math.Floor(World.RuleEvaluationYear);
         public double ShadeTolerance => ForestSpeciesProfile.For(Tree.Species).ShadeTolerance;
 
-        /// <summary>A fixed visiting order: tiles ascending, trees in store order.</summary>
+        /// <summary>A fixed visiting order: tiles ascending, trees in reverse store order (safe deletion).</summary>
         internal override int[] Elements()
         {
             var list = new List<(int, int)>(World.forest.IndividualTreeCount);
             foreach (var (id, patch) in World.forest.IndividualTrees.Patches.OrderBy(p => p.Key))
-                for (int i = 0; i < patch.Count; i++) list.Add((id, i));
+                for (int i = patch.Count - 1; i >= 0; i--) list.Add((id, i));
             Trees = list.ToArray(); tile.Invalidate();
             return Enumerable.Range(0, Trees.Length).ToArray();
         }
         internal override IEnumerable<int> PrepareElementsWork()
         {
-            var list = new List<(int, int)>(World.forest.IndividualTreeCount);
+            Trees = new (int, int)[World.forest.IndividualTreeCount];
+            PreparedElements = new int[Trees.Length]; int n = 0;
             for (int id = 0; id < World.Map.Tiles.Count; id++) {
                 yield return 1;
                 if (!World.forest.IndividualTrees.TryGet(id, out var patch)) continue;
-                for (int i = 0; i < patch.Count; i++) { list.Add((id, i)); yield return 1; }
+                for (int i = patch.Count - 1; i >= 0; i--) {
+                    Trees[n] = (id, i); PreparedElements[n] = n; n++; yield return 1;
+                }
             }
-            Trees = list.ToArray(); tile.Invalidate();
-            PreparedElements = Enumerable.Range(0, Trees.Length).ToArray();
+            tile.Invalidate();
         }
         internal override int Size() => Trees.Length;
+    }
+
+    private readonly Dictionary<int, ((int Tile, int Index)[] Trees, int[] Elements)> growthBindings = new();
+    private (TreeView View, (int Tile, int Index)[] Trees, int[] Elements) BindGrowthPatch(int tile) {
+        var view = (TreeView)View(this, typeof(TreeView));
+        var previous = (view, view.Trees, view.PreparedElements);
+        forest.IndividualTrees.TryGet(tile, out var p); int count = p?.Count ?? 0;
+        if (!growthBindings.TryGetValue(count, out var buffers)) {
+            buffers = (new (int, int)[count], new int[count]); growthBindings.Add(count, buffers);
+            for (int i = 0; i < count; i++) buffers.Elements[i] = i;
+        }
+        for (int i = 0; i < count; i++) buffers.Trees[i] = (tile, i);
+        view.Trees = buffers.Trees; view.PreparedElements = buffers.Elements;
+        return previous;
+    }
+
+    private sealed class DeadTreeView : RuleView, IDeadTree
+    {
+        private (int Tile, int Index)[] trees = System.Array.Empty<(int, int)>();
+        private readonly TileView tile = new();
+        private ForestDeadTree Tree { get { var (t, i) = trees[Id]; World.forest.IndividualTrees.TryGet(t, out var patch); return patch.DeadTrees[i]; } }
+        public double DeadYears => System.Math.Max(0, World.RuleEvaluationYear - Tree.DeathYear);
+        public double TreeId => Tree.Tree.Id;
+        public double Diameter => Tree.Tree.Dimensions.Diameter;
+        public ITile Tile { get { tile.Bind(World, trees[Id].Tile); return tile; } }
+        public bool Remove() { var (t, i) = trees[Id]; World.forest.IndividualTrees.TryGet(t, out var patch); patch.DeadTrees.RemoveAt(i); World.forest.IndividualTrees.NotifyTopologyChanged(patch); return false; }
+        internal override int Size() => trees.Length;
+        internal override int[] Elements() { SimulationWork.Complete(PrepareElementsWork()); return PreparedElements; }
+        internal override IEnumerable<int> PrepareElementsWork()
+        {
+            int count = 0;
+            for (int t = 0; t < World.Map.Tiles.Count; t++) {
+                if (World.forest.IndividualTrees.TryGet(t, out var p)) count += p.DeadTrees?.Count ?? 0;
+                yield return 1;
+            }
+            trees = new (int, int)[count]; PreparedElements = new int[count]; int n = 0;
+            for (int t = 0; t < World.Map.Tiles.Count; t++) {
+                yield return 1;
+                if (!World.forest.IndividualTrees.TryGet(t, out var patch) || patch.DeadTrees == null) continue;
+                for (int i = patch.DeadTrees.Count - 1; i >= 0; i--) {
+                    trees[n] = (t, i); PreparedElements[n] = n; n++; yield return 1;
+                }
+            }
+            tile.Invalidate();
+        }
     }
 
     private sealed class StumpView : RuleView, IStump
@@ -523,7 +654,7 @@ sealed partial class GameWorld
             set { var (t, i) = Stumps[Id]; World.forest.IndividualTrees.TryGet(t, out var patch);
                 patch.Stumps[i] = patch.Stumps[i] with { DecayProgress = Math.Clamp(value, 0, 1) }; }
         }
-        public double Age => Math.Max(0, World.forest.ForestYear - Stump.FelledYear);
+        public double Age => Math.Max(0, World.RuleEvaluationYear - Stump.FelledYear);
         public double Diameter => Stump.Felled.Dimensions.Diameter;
         public ITile Tile { get { tile.Bind(World, Stumps[Id].Tile); return tile; } }
         public bool Remove()
@@ -672,7 +803,8 @@ sealed partial class GameWorld
                 // A writable field of an attached object is writable through the relation: a tree may take its tile's water.
                 var get = Getter(f.Property); var set = f.Writable ? Setter(f.Property) : null;
                 fields.Add(new(r.Name + "." + f.Name, $"{r.Display} › {f.Display}: {Help(f)}", (w, id) => get(follow.Invoke(Bound(w, id), null)),
-                    set == null ? null : (w, id, v) => set(follow.Invoke(Bound(w, id), null), Math.Clamp(v, f.Min, f.Max))) { Min = f.Min, Max = f.Max });
+                    set == null ? null : (w, id, v) => set(follow.Invoke(Bound(w, id), null), Math.Clamp(v, f.Min, f.Max))) {
+                        Min = f.Min, Max = f.Max, Available = (w, id) => Bound(w, id).HasRelation(r.Name) });
             }
             foreach (var s in target.Summaries) {
                 var get = Summary(s);
@@ -688,7 +820,9 @@ sealed partial class GameWorld
         }).ToArray();
         return new(entity.Id, entity.Name, entity.Element, w => View(w, viewType).Elements(), w => View(w, viewType).Size(), fields.ToArray(), actions) {
             PrepareElements = w => View(w, viewType).PrepareElementsWork(), PreparedElements = w => View(w, viewType).PreparedElements,
-            Entity = entity.Id, Collections = collections };
+            Entity = entity.Id, Collections = collections,
+            StateIndex = entity.Id == "tree" ? (w, id) => checked((int)((TreeView)Bound(w, id)).TreeId) : (_, id) => id,
+            StateSize = entity.Id == "tree" ? w => w.forest.IndividualTrees.StateSize : null };
     }
 
     private static string Help(RuleFieldSchema f)

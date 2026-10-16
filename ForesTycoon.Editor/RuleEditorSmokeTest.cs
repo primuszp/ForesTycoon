@@ -25,28 +25,29 @@ namespace ForesTycoon.Editor
                 for (int id = 0; id < 255 && world.RoadCount < 2; id++) { world.QueueRoadPath(id, id + 1, false, RoadPaving.Macadam); world.ExecutePendingCommands(); }
                 var roads = world.CaptureCheckpoint().Terrain.Roads;
                 Require(roads.Length > 0, "No road fixture."); int tile = roads[0].TileId;
-                var model = RuleModel.Default(); model.Name = "Útkopás ×4"; model.Nodes.Find(n => n.Id == "scale").Value = 4;
-                world.QueueRuleModel(model); world.ExecutePendingCommands();
-                float before = world.GetRoadCondition(tile); world.ApplyTrafficWear(tile, 0.0015f);
-                Require(Math.Abs(before - world.GetRoadCondition(tile) - 0.006f) < 1e-6f, "Edited graph did not change terrain condition.");
+                var trafficProject = world.RuleProjectDocument;
+                var traffic = trafficProject.Rules.Single(r => r.Id == "traffic.wear");
+                foreach (var term in traffic.Effects[0].Influence.Terms) term.Amount *= 4;
+                world.QueueRuleProject(trafficProject); world.ExecutePendingCommands();
+                float before = world.GetRoadCondition(tile);
+                world.QueuePassage(new(tile, TrafficVehicleKind.Truck, 1, 36000, 1)); world.ExecutePendingCommands();
+                Require(Math.Abs(before - world.GetRoadCondition(tile) - .006f) < 1e-6f, "Edited passage graph did not change road condition.");
                 using var saved = new MemoryStream(); world.Save(saved); saved.Position = 0; restored.Load(saved);
-                Require(restored.RuleDocument.ToJson() == model.ToJson(), "Checkpoint lost the rule model.");
                 Require(restored.GetRoadCondition(tile) == world.GetRoadCondition(tile), "Checkpoint lost road wear.");
-                restored.ApplyTrafficWear(tile, 0.0015f); world.ApplyTrafficWear(tile, 0.0015f);
-                Require(restored.GetRoadCondition(tile) == world.GetRoadCondition(tile), "Loaded rule binding points at the wrong world.");
-                // Pending model changes retain their execution boundary after loading.
-                model.Nodes.Find(n => n.Id == "scale").Value = 2;
-                world.QueueRuleModel(model); using var pending = new MemoryStream(); world.Save(pending); pending.Position = 0; restored.Load(pending);
-                Require(restored.RuleDocument.Nodes.Find(n => n.Id == "scale").Value == 4, "Pending rule applied early.");
+                foreach (var w in new[] { restored, world }) { w.QueuePassage(new(tile, TrafficVehicleKind.Truck, 1, 36000, 1)); w.ExecutePendingCommands(); }
+                Require(restored.GetRoadCondition(tile) == world.GetRoadCondition(tile), "Loaded passage binding points at the wrong world.");
+                traffic.Effects[0].Influence.Terms[1].Amount = .003;
+                world.QueueRuleProject(trafficProject);
+                using var pending = new MemoryStream(); world.Save(pending); pending.Position = 0; restored.Load(pending);
+                Require(restored.RuleBook.Rules.Single(r => r.Id == "traffic.wear").Effects[0].Influence.Terms[1].Amount == .006, "Pending rule applied early.");
                 restored.ExecutePendingCommands(); world.ExecutePendingCommands();
-                Require(restored.RuleDocument.ToJson() == world.RuleDocument.ToJson(), "Pending rule was lost.");
-                // Replay from the command journal alone reconstructs the same rule.
+                Require(restored.RuleProjectDocument.ToJson() == world.RuleProjectDocument.ToJson(), "Pending project was lost.");
                 pending.Position = 0; var data = WorldSaveSerializer.Read(pending);
                 using var journal = new MemoryStream(); WorldSaveSerializer.Write(journal, new WorldSaveData {
                     Tick = data.Tick, TickRate = data.TickRate, Terrain = data.Terrain, ForestYearSeconds = data.ForestYearSeconds,
                     SoilModel = data.SoilModel, Climate = data.Climate, Commands = data.Commands });
                 journal.Position = 0; restored.Load(journal);
-                Require(restored.RuleDocument.ToJson() == model.ToJson(), "Journal replay lost rule changes.");
+                Require(restored.RuleProjectDocument.ToJson() == world.RuleProjectDocument.ToJson(), "Journal replay lost rule changes.");
                 // Exercise the real moving truck callback against the edited terrain rule.
                 Require(roads.Length >= 2, "Road fixture needs two tiles.");
                 int other = roads[1].TileId;
@@ -56,15 +57,15 @@ namespace ForesTycoon.Editor
                 var truck = new Vehicle(999, new[] { tile, other }, 1.5, roadRoute: geometry, roadPhysics: true)
                 {
                     RoadState = id => (RoadSurface.Gravel, world.GetRoadCondition(id)),
-                    RoadWear = (id, amount) => { passes++; world.ApplyTrafficWear(id, amount); }
+                    Passage = passage => { passes++; world.RecordPassage(passage); }
                 };
                 truck.Load(20);
                 float otherBefore = world.GetRoadCondition(other);
-                for (int tick = 0; tick < 600; tick++) truck.Update(1.0 / 30);
+                for (int tick = 0; tick < 600; tick++) { truck.Update(1.0 / 30); SimulationWork.Complete(world.TrafficWork()); }
                 Require(passes > 0 && truck.FuelUsed > 0 && world.GetRoadCondition(other) < otherBefore,
                     "Moving truck did not execute the edited rule.");
                 using var ui = new ImGuiController(); HudTheme.Apply(); var editor = new RuleEditorView(); bool open = true;
-                string snapshot = world.CaptureCheckpoint().Rules.ToJson();
+                string snapshot = world.RuleProjectDocument.ToJson();
                 for (int frame = 0; frame < 3; frame++)
                 {
                     ui.Update(width, height, width, height, Vec2.One, 1f / 60);
@@ -72,7 +73,7 @@ namespace ForesTycoon.Editor
                     GL.Viewport(0, 0, width, height); GL.ClearColor(.08f, .1f, .12f, 1);
                     GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit); ui.Render(); GL.Finish();
                 }
-                Require(world.RuleDocument.ToJson() == snapshot, "Drawing changed active rules.");
+                Require(world.RuleProjectDocument.ToJson() == snapshot, "Drawing changed active rules.");
                 Require(GL.GetError() == ErrorCode.NoError, "Editor OpenGL error.");
                 string output = Path.GetFullPath("artifacts/rule-editor"); Directory.CreateDirectory(output);
                 FramebufferCapture.SavePng(Path.Combine(output, "editor.png"), width, height);
@@ -101,6 +102,13 @@ namespace ForesTycoon.Editor
                     (() => editor.ShowRuleBook(world.RuleProjectDocument.Rules.FindIndex(r => r.Id == "road.weather")), "world-rule-influences"),
                     (() => editor.ShowRuleBook(world.RuleProjectDocument.Rules.FindIndex(r => r.Id == "forest.stumps")), "world-stump-influences"),
                     (() => editor.ShowRuleBook(world.RuleProjectDocument.Rules.FindIndex(r => r.Id == "water.spread")), "world-flow"),
+                    (() => editor.ShowRuleBook(world.RuleProjectDocument.Rules.FindIndex(r => r.Id == "forest.health")), "tree-health-graph"),
+                    (() => editor.ShowRuleBook(world.RuleProjectDocument.Rules.FindIndex(r => r.Id == "forest.stress")), "tree-stress-graph"),
+                    (() => editor.ShowRuleBook(world.RuleProjectDocument.Rules.FindIndex(r => r.Id == "forest.mortality")), "tree-mortality-graph"),
+                    (() => editor.ShowRuleBook(world.RuleProjectDocument.Rules.FindIndex(r => r.Id == "forest.deadwood")), "tree-deadwood-graph"),
+                    (() => editor.ShowRuleBook(world.RuleProjectDocument.Rules.FindIndex(r => r.Id == "forest.growth")), "tree-growth-graph"),
+                    (() => editor.ShowCommonRule("behavior:" + world.BehaviorDocument.Graphs.First(g => g.Hook == "water.stress").Id), "common-water-response"),
+                                        (() => editor.ShowRuleCalculation(world.RuleProjectDocument.Rules.FindIndex(r => r.Id == "forest.growth"), 0), "common-calculation"),
                     (() => editor.ShowRuleOverview(), "world-rule-overview"),
                     (() => { editor.ShowWorld(WorldTab.Trial); editor.ShowWorldTrial(rainTrial); }, "world-trial") }) {
                     screen.Show();
@@ -171,7 +179,7 @@ namespace ForesTycoon.Editor
                     ("forest.growth", WorkshopPhase.Understand, "workshop-growth"),
                     ("forest.growth", WorkshopPhase.Edit, "workshop-growth-edit"),
                     ("water.stress", WorkshopPhase.Understand, "workshop-water"),
-                    ("road.trafficWear", WorkshopPhase.Edit, "workshop-road-edit"),
+                    ("traffic.wear", WorkshopPhase.Edit, "workshop-road-edit"),
                     ("machine.controller", WorkshopPhase.Edit, "workshop-controller"),
                     ("forest.growth", WorkshopPhase.Trial, "workshop-trial"),
                     ("forest.growth", WorkshopPhase.Apply, "workshop-apply") }) {
@@ -201,7 +209,7 @@ namespace ForesTycoon.Editor
                     Require(GL.GetError() == ErrorCode.NoError, "System model OpenGL error: " + screen.Name);
                     FramebufferCapture.SavePng(Path.Combine(output, screen.Name + ".png"), width, height);
                 }
-                File.WriteAllText(Path.Combine(output, "road-wear.json"), model.ToJson());
+                File.WriteAllText(Path.Combine(output, "road-wear.json"), trafficProject.ToJson());
                 using (var trailWorld = new GameWorld(settings, enableRendering: false)) {
                     int trailStart = Enumerable.Range(0, trailWorld.Map.Tiles.Count - 2).First(id => trailWorld.Map.CanCarrySkidTrail(id)
                         && trailWorld.Map.CanCarrySkidTrail(id + 1) && trailWorld.Map.CanCarrySkidTrail(id + 2));
@@ -295,6 +303,7 @@ namespace ForesTycoon.Editor
                     FramebufferCapture.SavePng(Path.Combine(output, screen.Name + ".png"), width, height);
                 }
                 var graphEditor = new RuleEditorView(Path.Combine(output, "road-wear.json"));
+                graphEditor.ShowRuleBook(trafficProject.Rules.FindIndex(r => r.Id == "traffic.wear"));
                 for (int frame = 0; frame < 3; frame++)
                 {
                     ui.Update(width, height, width, height, Vec2.One, 1f / 60);
@@ -304,13 +313,9 @@ namespace ForesTycoon.Editor
                 }
                 Require(GL.GetError() == ErrorCode.NoError, "Cached graph editor OpenGL error.");
                 FramebufferCapture.SavePng(Path.Combine(output, "road-graph.png"), width, height);
+                snapshot = world.RuleProjectDocument.ToJson();
                 var current = world.DescribeCurrentRules();
                 var catalogView = new CurrentRulesView(); catalogView.Load(current);
-                catalogView.SetRoadTrafficModel(world, model.Clone());
-                catalogView.RoadTrafficModel.Nodes.Find(n => n.Id == "scale").Value = 3;
-                Require(GameRuleCatalog.FromJson(current.ToJson()).RoadTrafficModel.Nodes.Find(n => n.Id == "scale").Value == 3,
-                    "Graph edits were not retained by the catalog authoring document.");
-                catalogView.SetRoadTrafficModel(world, model.Clone());
                 string captures = Path.Combine(output, "current-rules"); Directory.CreateDirectory(captures);
                 int captureIndex = 0;
                 foreach (string group in current.Rules.Select(r => r.Module).Distinct().Prepend("").Append("gaps"))
@@ -328,7 +333,7 @@ namespace ForesTycoon.Editor
                     FramebufferCapture.SavePng(Path.Combine(captures, $"{captureIndex++:D2}.png"), width, height);
                 }
                 File.WriteAllText(Path.Combine(captures, "catalog.json"), current.ToJson());
-                Require(world.RuleDocument.ToJson() == snapshot, "Browsing catalog changed executable rules.");
+                Require(world.RuleProjectDocument.ToJson() == snapshot, "Browsing catalog changed executable rules.");
                 // Tuning: edit numbers in the catalog, capture the list, apply them as one journaled change, save and reload.
                 var fuelRule = current.Rules.Find(r => r.Id == "economy.fuel");
                 int diesel = fuelRule.Parameters.FindIndex(p => p.Key == "DieselPrice");
@@ -355,13 +360,13 @@ namespace ForesTycoon.Editor
                 using var tunedSave = new MemoryStream(); world.Save(tunedSave); tunedSave.Position = 0; restored.Load(tunedSave);
                 Require(restored.Tuning.ToJson() == world.Tuning.ToJson(), "Save lost the tuning.");
                 var behaviorView = new BehaviorEditorView();
-                var starter = new BehaviorModel { Graphs = new() { new() { Id = "starter-growth", Hook = "forest.growth", Kind = "tree" } } };
+                var starter = new BehaviorModel { Graphs = new() { new() { Id = "starter-pace", Hook = "machine.pace", Kind = "forwarder" } } };
                 behaviorView.Load(starter); behaviorView.AddOutputMultiplier();
                 var multiplied = behaviorView.Document;
                 Require(multiplied.Graphs[0].Nodes.Count == 3 && starter.Graphs[0].Nodes.Count == 1, "Starter multiplier did not create an independent connected graph.");
-                Require(new CompiledBehaviorModel(multiplied, WorldBehaviorPolicy.Hooks).Evaluate("forest.growth", "tree", 1, new(2, 1, 0, 0, 0)) == 2, "Starter multiplier changed the default result.");
+                Require(new CompiledBehaviorModel(multiplied, WorldBehaviorPolicy.Hooks).Evaluate("machine.pace", "forwarder", 1, new(2, 1, 0, 0, 0)) == 2, "Starter multiplier changed the default result.");
                 multiplied.Graphs[0].Nodes.Single(n => n.Operation == BehaviorOperation.Constant).Value = 1.1;
-                Require(Math.Abs(new CompiledBehaviorModel(multiplied, WorldBehaviorPolicy.Hooks).Evaluate("forest.growth", "tree", 1, new(2, 1, 0, 0, 0)) - 2.2) < 1e-10, "Editing starter scale did not change the real graph output.");
+                Require(Math.Abs(new CompiledBehaviorModel(multiplied, WorldBehaviorPolicy.Hooks).Evaluate("machine.pace", "forwarder", 1, new(2, 1, 0, 0, 0)) - 2.2) < 1e-10, "Editing starter scale did not change the real graph output.");
                 var behavior = new ForesTycoon.Rules.BehaviorModel();
                 behavior.Graphs.Add(new() { Id = "mill-example", Name = "Malom feldolgozása", Hook = "mill.process", Kind = "mill" });
                 behavior.Graphs[0].Nodes.Add(new() { Id = "scale", Name = "Termelési szorzó", Operation = BehaviorOperation.Constant, Value = 2, X = 30, Y = 190 });
@@ -417,10 +422,9 @@ namespace ForesTycoon.Editor
                 project.Dynamics.Flows.Add(new() { Id = "increase", Name = "Terhelés felhalmozása", To = "wearMultiplier",
                     Rate = new() { Id = "rate", Hook = "flow.increase", Kind = "dynamics", Output = "rate",
                         Nodes = new() { new() { Id = "rate", Name = "Növekedés / s", Operation = BehaviorOperation.Constant, Value = .1 } } } });
-                var roadBehavior = project.Behaviors.Graphs.Single(g => g.Hook == "road.trafficWear");
-                roadBehavior.Nodes.Add(new() { Id = "stock", Name = "Útkopási szorzó", Operation = BehaviorOperation.NamedValue, Key = "stock.wearMultiplier", X = 30, Y = 190 });
-                roadBehavior.Nodes.Add(new() { Id = "result", Name = "Kopás × készlet", Operation = BehaviorOperation.Multiply, A = "native", B = "stock", X = 300, Y = 120 }); roadBehavior.Output = "result";
-                project.Authoring.Templates.Add(AuthoringOperations.Template(roadBehavior));
+                RuleEngine.AddMissingStarters(project.Rules, project.RemovedStarters);
+                var roadInfluence = project.Rules.Single(r => r.Id == "traffic.wear").Effects[0].Influence;
+                foreach (var term in roadInfluence.Terms) term.Factors.Add(new() { Source = "stock.wearMultiplier", InputHigh = 4, OutputHigh = 4 });
                 project.Authoring.Entries["stock.wearMultiplier"] = new() { Topic = 3, Notes = "Útállapot és terhelés visszacsatolása" };
                 world.QueueRuleProject(project); world.ExecutePendingCommands(); world.Update(1);
                 Require(Math.Abs(world.DynamicsValues["wearMultiplier"] - 1.1) < 1e-9, "Dynamics stock did not integrate.");
@@ -436,6 +440,8 @@ namespace ForesTycoon.Editor
                 Require(GL.GetError() == ErrorCode.NoError, "Dynamics editor OpenGL error.");
                 FramebufferCapture.SavePng(Path.Combine(output, "dynamics.png"), width, height);
                 foreach (var screen in new (Action Select, string Name)[] {
+                    (() => projectEditor.ShowCommonRule("stock:wearMultiplier"), "common-stock"),
+                    (() => projectEditor.ShowCommonRule("flow:increase"), "common-flow"),
                     (projectEditor.ShowRuleLibrary, "workshop-library"), (projectEditor.ShowGuidedStart, "workshop-guided"),
                     (() => projectEditor.ShowThematicStock("wearMultiplier", 3), "workshop-thematic-stock"), (projectEditor.ShowCreationDialog, "workshop-create") }) {
                     screen.Select();
@@ -471,7 +477,7 @@ namespace ForesTycoon.Editor
                 Require(GL.GetError() == ErrorCode.NoError, "Algorithm graph editor OpenGL error.");
                 FramebufferCapture.SavePng(Path.Combine(output, "algorithms.png"), width, height);
                 // Incomplete projects can be reopened for repair without mutating the running world.
-                project.Road.Nodes.Clear(); project.Dynamics.Flows[0].Rate.Nodes.Clear();
+                project.Dynamics.Flows[0].Rate.Nodes.Clear();
                 string incompleteFile = Path.Combine(output, "feedback-draft.json"); RuleProject.WriteAtomic(incompleteFile, project.ToJson());
                 string activeBeforeDraft = world.RuleProjectDocument.ToJson();
                 var incompleteEditor = new RuleEditorView(incompleteFile); incompleteEditor.ShowDynamics();
@@ -480,6 +486,17 @@ namespace ForesTycoon.Editor
                 ui.Render(); GL.Finish();
                 Require(world.RuleProjectDocument.ToJson() == activeBeforeDraft, "Opening an incomplete draft changed the active project.");
                 Require(GL.GetError() == ErrorCode.NoError, "Incomplete draft editor OpenGL error.");
+                // Unsupported project data remains on disk and is reported without crashing Draw.
+                string unsupportedFile = Path.Combine(output, "unsupported-traffic.project.json");
+                string unsupportedJson = "{\"schema\":\"forest-rule-project\",\"road\":{}}";
+                File.WriteAllText(unsupportedFile, unsupportedJson);
+                var unsupportedEditor = new RuleEditorView(unsupportedFile);
+                ui.Update(width, height, width, height, Vec2.One, 1f / 60);
+                ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 900)); unsupportedEditor.Draw(world, ref open);
+                ui.Render(); GL.Finish();
+                Require(unsupportedEditor.ProjectLoadError != null, "Unsupported project did not report its error.");
+                Require(File.ReadAllText(unsupportedFile) == unsupportedJson, "Unsupported project was overwritten.");
+                Require(world.RuleProjectDocument.ToJson() == activeBeforeDraft, "Unsupported project changed active rules.");
                 // The actual startup file is distinct from the opening scene and can outlive changes to the model.
                 if (File.Exists(RuleProject.DefaultPath)) {
                     string startupFile = File.ReadAllText(RuleProject.DefaultPath);

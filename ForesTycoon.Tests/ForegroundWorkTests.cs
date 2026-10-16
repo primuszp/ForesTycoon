@@ -9,11 +9,16 @@ public class ForegroundWorkTests
     private static string State(GameWorld world) => JsonSerializer.Serialize(world.CaptureCheckpoint());
     private static void FinishGeneration(GameWorld world, int budget)
     {
-        int slices = 0;
+        int slices = 0; var timeout = System.Diagnostics.Stopwatch.StartNew();
         while (world.GenerationPending)
         {
             world.ContinueGeneration(budget);
-            Assert.True(++slices < 2_000_000, world.GenerationStage);
+            // Worker compilation/serialization waits are yielded work, not simulation progress.
+            // Let those workers run; the interactive host naturally gives them the rest of the frame.
+            if (++slices % 256 == 0) {
+                Thread.Yield();
+                Assert.True(timeout.Elapsed < TimeSpan.FromSeconds(30), world.GenerationStage);
+            }
         }
         Assert.Null(world.GenerationError);
     }

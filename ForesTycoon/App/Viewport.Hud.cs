@@ -843,7 +843,7 @@ namespace ForesTycoon
                 ImGui.TextWrapped(ruleProjectLink.Path);
                 if (ruleProjectLink.Error != null) ImGui.TextWrapped("Projekt betöltési hiba: " + ruleProjectLink.Error);
                 if (world.DynamicsError != null) ImGui.TextWrapped(world.DynamicsError);
-                ImGui.TextWrapped($"Aktív modell: {world.ActiveRuleName}");
+                ImGui.TextWrapped($"Aktív projekt: {world.ActiveRuleProjectName}");
                 ImGui.InputText("JSON-fájl", ref ruleModelPath, 1024);
                 if (ImGui.Button("Szabálymodell alkalmazása"))
                 {
@@ -864,9 +864,9 @@ namespace ForesTycoon
                         else if (schema == "forest-current-rules")
                         {
                             var catalog = GameRuleCatalog.FromJson(json);
-                            project.Road = catalog.RoadTrafficModel; project.Tuning = catalog.TuningOverrides();
+                            project.Tuning = catalog.TuningOverrides();
                         }
-                        else project.Road = RuleModel.FromJson(json);
+                        else throw new System.IO.InvalidDataException("Teljes szabályprojektet válassz; a külön útkopási modell megszűnt.");
                         GameWorld.ValidateRuleProject(project); RuleProject.WriteAtomic(ruleProjectLink.Path, project.ToJson());
                         ruleImportStatus = "A közös szabályprojekt frissült; a játék automatikusan alkalmazza.";
                     }

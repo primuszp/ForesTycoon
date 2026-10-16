@@ -58,10 +58,10 @@ public sealed class LayeredModelTests
     public void AddedInfluenceCompilesAndScalesTheResultByTheQuantity()
     {
         var document = WorldBehaviorPolicy.DefaultDocument();
-        AuthoringOperations.AddInfluence(document.Graphs.Single(g => g.Hook == "forest.growth"), "world.rain", "Csapadék", 1, 0.5);
+        AuthoringOperations.AddInfluence(document.Graphs.Single(g => g.Hook == "mill.process"), "world.rain", "Csapadék", 1, 0.5);
         var compiled = new CompiledBehaviorModel(document, WorldBehaviorPolicy.Hooks, new HashSet<string>(GameWorld.RuleWorldFields), _ => 3);
         // rain 3, reference 1: factor 1 + 0.5 × 2 = 2.
-        Assert.Equal(1.0, compiled.Evaluate("forest.growth", "tree", 7, new BehaviorInputs(0.5, 0, 0, 0, 0)), 9);
-        Assert.True(compiled.Overrides("forest.growth", "tree"));
+        Assert.Equal(1.0, compiled.Evaluate("mill.process", "mill", 7, new BehaviorInputs(0.5, 0, 0, 0, 0)), 9);
+        Assert.True(compiled.Overrides("mill.process", "mill"));
     }
 }

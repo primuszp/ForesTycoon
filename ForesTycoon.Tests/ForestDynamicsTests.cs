@@ -74,37 +74,7 @@ public class ForestDynamicsTests
     }
 
     [Fact]
-    public void PersistentSuppressionCreatesDeadwoodWithoutCreditingHarvestTimber()
-    {
-        var forest = new ForestSystem(new Habitat(1), secondsPerYear: 12); forest.Clear();
-        forest.Plant(0, ForestSpecies.Birch); forest.IndividualTrees.TryGet(0, out var patch);
-        for (int i = 0; i < patch.Count; i++)
-            patch.Trees[i] = patch.Trees[i] with { U = .5f, V = .5f, Dimensions = new(.02f, 1, .2f), AnnualGrowth = default, Health = 1 };
-        patch.Trees[0] = patch.Trees[0] with { Dimensions = new(.5f, 22, 10), BirthYear = -30 };
-        forest.Update(12 * 6);
-        Assert.InRange(patch.Count, 1, ForestTreeStore.PlantedTreesPerTile - 1);
-        Assert.NotEmpty(patch.DeadTrees!);
-        Assert.Equal(0, patch.Depot); Assert.Null(patch.Stumps);
-        Assert.True(forest.TryGetPlantation(0, out _));
-        Assert.All(patch.DeadTrees!, dead => { Assert.Equal(0, dead.Tree.Health); Assert.Equal(default, dead.Tree.AnnualGrowth); });
-        forest.Update(12 * 10);
-        Assert.Empty(patch.DeadTrees!);
-    }
-
-    [Fact]
-    public void DenseHealthyBirchPlantationSelfThinsBeforeMaximumAge()
-    {
-        var forest = new ForestSystem(new Habitat(1), secondsPerYear: 12); forest.Clear();
-        forest.Plant(0, ForestSpecies.Birch);
-        forest.Update(12 * 80);
-        Assert.True(forest.TryGetPlantationStatus(0, out var status));
-        Assert.InRange(status.Living, 1, ForestTreeStore.PlantedTreesPerTile - 1);
-        Assert.True(status.Resources.Light < 1);
-        Assert.True(80 < ForestSpeciesProfile.For(ForestSpecies.Birch).MaximumAgeYears);
-    }
-
-    [Fact]
-    public void MonthlyCompetitionAndMortalityAreIndependentOfFrameGrouping()
+    public void MonthlyCompetitionWithoutHostRulesIsIndependentOfFrameGrouping()
     {
         var a = new ForestSystem(new Habitat(1), secondsPerYear: 12);
         var b = new ForestSystem(new Habitat(1), secondsPerYear: 12);
@@ -112,7 +82,8 @@ public class ForestDynamicsTests
         a.Update(960); for (int i = 0; i < 3840; i++) b.Update(.25);
         a.IndividualTrees.TryGet(0, out var first); b.IndividualTrees.TryGet(0, out var second);
         Assert.Equal(first.Count, second.Count);
-        Assert.True(first.Count < ForestTreeStore.PlantedTreesPerTile);
+        Assert.Equal(ForestTreeStore.PlantedTreesPerTile, first.Count);
+        Assert.All(first.Trees.Take(first.Count), t => Assert.Equal(0, t.StressYears));
         Assert.Equal(first.Trees, second.Trees);
         Assert.Equal(first.DeadTrees, second.DeadTrees);
         Assert.Equal(a.Statistics, b.Statistics);

@@ -17,7 +17,7 @@ public sealed class RuleObjectModelTests
         Assert.False(tree.Abstract); Assert.True(schema.Find("plant").Abstract);
         // Inherited first, own last: health and stress, and the tree.s size (state), are writable; light and water are computed.
         Assert.Equal("plant", tree.Fields.Single(f => f.Name == "health").DeclaredBy);
-        Assert.Equal(new[] { "health", "height", "diameter", "stressYears" }, tree.Fields.Where(f => f.Writable).Select(f => f.Name));
+        Assert.Equal(new[] { "health", "height", "diameter", "stressYears", "diameterGrowth", "heightGrowth", "crownGrowth", "crownRadius" }, tree.Fields.Where(f => f.Writable).Select(f => f.Name));
         Assert.Equal("tile", Assert.Single(tree.Relations).Target);
         // Concrete kinds become scopes; relation fields are readable as "relation.field".
         var scope = RuleEngine.Scope("tree");
@@ -37,7 +37,7 @@ public sealed class RuleObjectModelTests
         var project = world.RuleProjectDocument; project.Algorithms = null;
         var rule = project.Rules.Single(r => r.Id == "tree.drought");
         // Same rule, a condition every tile meets: the tile relation is read and the tree's health written.
-        rule.Enabled = true; rule.Condition = "tile.waterSupply > -1";
+        rule.Schedule = "step"; rule.Enabled = true; rule.Condition = "tile.waterSupply > -1";
         rule.Effects = new() { new() { Target = "health", Mode = "set", Formula = "0,5" } };
         world.QueueRuleProject(project); world.ExecutePendingCommands();
         Run(world, 1);
@@ -78,14 +78,13 @@ public sealed class RuleObjectModelTests
         var map = RuleCausalMap.Build(GameWorld.RuleObjects, world.RuleProjectDocument.Rules);
         // The drought sample: a rising curve of the tile's water supply → health moves with it.
         var drought = Assert.Single(map.Edges, e => e.Rule == "tree.drought" && e.From == "tile.waterSupply");
-        Assert.Equal(("tree.health", 1, false), (drought.To, drought.Sign, drought.Native));
+        Assert.Equal(("tree.health", 0, false), (drought.To, drought.Sign, drought.Native));
         // The modifier's input influences too, with a sign that depends on the curve.
         Assert.Contains(map.Edges, e => e.Rule == "tree.drought" && e.From == "tree.shadeTolerance" && e.Sign == 0);
         // Declared in code: a cause on the abstract plant lands on the tree.
-        Assert.Contains(map.Edges, e => e.Native && e.From == "tree.light" && e.To == "tree.health");
+        Assert.Contains(map.Edges, e => !e.Native && e.Rule == "forest.health" && e.From == "tree.resourceLimit" && e.To == "tree.health");
         // Canopy closes → less light → slower growth: self-thinning balances itself.
-        Assert.Contains(map.Loops, l => l.Polarity == -1 && l.Edges.Select(e => e.From).OrderBy(k => k)
-            .SequenceEqual(new[] { "tile.cover", "tree.height", "tree.light" }));
+        Assert.Contains(map.Edges, e => !e.Native && e.Rule == "forest.growth" && e.From == "tree.lightResponse" && e.To == "tree.heightGrowth");
         Assert.All(map.Loops, l => Assert.Equal(l.Edges[0].From, l.Edges[^1].To));
     }
 

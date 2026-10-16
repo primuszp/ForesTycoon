@@ -16,6 +16,8 @@ namespace ForesTycoon.Editor
         private Func<string, double> namedReader = _ => 0;
         internal Func<string, System.Collections.Generic.IEnumerable<(ulong Id, string Label)>> ObjectSource { get; set; }
         internal Action ApplyProject { get; set; }
+        internal Func<string, string, string[], Action<string>, bool> PickField { get; set; }
+        internal Func<string, string> SourceDisplay { get; set; }
         internal Action<BehaviorGraph> StoreGraphTemplate { get; set; }
         internal Action<BehaviorController> StoreControllerTemplate { get; set; }
         internal void SelectGraph(string id) { selectedController = null; selectedGraph = id; selectedNode = model.Graphs.Find(g => g.Id == id)?.Output; }
@@ -32,7 +34,7 @@ namespace ForesTycoon.Editor
             Validate();
             if (ImGui.Button("Vissza##equation")) History(undo, redo);
             ImGui.SameLine(); if (ImGui.Button("Újra##equation")) History(redo, undo);
-            ImGui.TextWrapped(error ?? "Ráta másodpercenként; készlet- és világmezők a futó modellből.");
+            ImGui.TextWrapped(error ?? "Válassz csomópontot az értéke és kapcsolatainak szerkesztéséhez.");
             var graph = model.Graphs.FirstOrDefault();
             if (graph == null) return;
             float inspectorWidth = Math.Min(300, ImGui.GetContentRegionAvail().X * .43f);
@@ -51,6 +53,7 @@ namespace ForesTycoon.Editor
         private string validatedJson;
         private CompiledBehaviorModel compiled;
         private string error;
+        private readonly Dictionary<string, float> inputSamples = new();
         private float sampleNative = 1, sampleState, sampleAmount, sampleDelta = .5f, sampleTime;
         private float sampleCapacity = 25, sampleAvailable = 100, sampleFrom, sampleTo = 1, sampleSurface = 1;
         private readonly SimulationFrameRunner sandboxRunner = CreateSandboxRunner();
@@ -69,7 +72,7 @@ namespace ForesTycoon.Editor
         internal void RequestTime(double seconds) => clock.RequestTime(seconds);
         private static readonly string[] Names = { "Állandó", "Beépített eredmény", "Időlépés", "Szimulációs idő", "Állapot", "Mennyiség",
             "Összeadás", "Kivonás", "Szorzás", "Osztás", "Minimum", "Maximum", "Nagyobb", "Kisebb", "Feltételes választás", "Abszolút érték", "Negálás",
-            "Kapacitás", "Elérhető készlet", "Kiinduló csempe", "Célcsempe", "Burkolattípus", "Készlet / világmező" };
+            "Kapacitás", "Elérhető készlet", "Kiinduló csempe", "Célcsempe", "Burkolattípus", "Készlet / világmező", "Objektum tulajdonsága", "Exponenciális válasz", "Hatvány / gyökválasz" };
         internal BehaviorModel Document => model.Clone();
         internal string ScopeSummary {
             get {
@@ -254,7 +257,7 @@ namespace ForesTycoon.Editor
                 for (int i = 0; i < BehaviorModel.Inputs(n.Operation); i++) {
                     var from = graph.Nodes.Find(x => x.Id == ports[i]); if (from == null) continue;
                     Vec2 a = Pos(from) + new Vec2(190, 32) * zoom, b = Pos(n) + new Vec2(0, 32 + i * 14) * zoom;
-                    draw.AddBezierCubic(a, a + new Vec2(60, 0) * zoom, b - new Vec2(60, 0) * zoom, b, EditorStyle.U(HudTheme.Info), 2);
+                    EditorStyle.BezierArrow(draw, a, a + new Vec2(60, 0) * zoom, b - new Vec2(60, 0) * zoom, b, 7 * zoom, EditorStyle.U(HudTheme.Info), 2, Vec2.UnitX);
                 }
             }
             foreach (var n in graph.Nodes) {
@@ -277,7 +280,7 @@ namespace ForesTycoon.Editor
                 draw.AddRectFilled(p, p + box, EditorStyle.NodeBodyHover, 5);
                 draw.AddRect(p, p + box, n.Id == selectedNode ? EditorStyle.Selection : EditorStyle.U(HudTheme.Muted), 5);
                 draw.PushClipRect(p + new Vec2(6, 4), p + box - new Vec2(6, 4), true);
-                draw.AddText(ImGui.GetFont(), ImGui.GetFontSize() * zoom, p + new Vec2(8, 8) * zoom, EditorStyle.U(HudTheme.Parchment), n.Name);
+                draw.AddText(ImGui.GetFont(), ImGui.GetFontSize() * zoom, p + new Vec2(8, 8) * zoom, EditorStyle.U(HudTheme.Parchment), n.Operation is BehaviorOperation.Input or BehaviorOperation.NamedValue ? SourceDisplay?.Invoke(n.Key) ?? n.Name : n.Name);
                 draw.AddText(ImGui.GetFont(), ImGui.GetFontSize() * zoom, p + new Vec2(8, 32) * zoom, EditorStyle.U(HudTheme.Info), Names[(int)n.Operation]);
                 draw.AddText(ImGui.GetFont(), ImGui.GetFontSize() * zoom, p + new Vec2(8, 57) * zoom, EditorStyle.U(HudTheme.AmberAccent),
                     graph.Output == n.Id ? "KIMENET" : n.Operation == BehaviorOperation.Constant ? n.Value.ToString("G5") : n.Id);
@@ -330,12 +333,25 @@ namespace ForesTycoon.Editor
                 if (ImGui.InputText("Csomópont neve", ref nodeName, 120)) { Remember(); node.Name = nodeName; }
                 if (node.Operation == BehaviorOperation.Constant) {
                     double value = node.Value;
-                    if (ImGui.InputDouble("Érték", ref value)) { Remember(); node.Value = value; }
+                    if (ImGui.InputDouble("Érték", ref value, 0, 0, "%.12g")) { Remember(); node.Value = value; }
+                    float slide = (float)value;
+                    if (ImGui.SliderFloat("Érték csúszkával", ref slide, (float)Math.Min(0, value * 2), (float)Math.Max(1, value * 2), "%.4g")) { Remember(); node.Value = slide; }
                 }
-                if (node.Operation == BehaviorOperation.NamedValue && ImGui.BeginCombo("Készlet / világmező", node.Key)) {
-                    foreach (string key in namedKeys.OrderBy(k => k))
-                        if (ImGui.Selectable(key, node.Key == key)) { Remember(); node.Key = key; }
-                    ImGui.EndCombo();
+                if (node.Operation == BehaviorOperation.Input) {
+                    var fields = hook.Inputs ?? Array.Empty<string>();
+                    if (PickField != null) PickField("Forrás tulajdonsága", node.Key, fields, value => { Remember(); node.Key = value; });
+                    else if (ImGui.BeginCombo("Forrás tulajdonsága", node.Key)) {
+                        foreach (string field in fields) if (ImGui.Selectable(field, node.Key == field)) { Remember(); node.Key = field; }
+                        ImGui.EndCombo();
+                    }
+                }
+                if (node.Operation == BehaviorOperation.NamedValue) {
+                    if (PickField != null) PickField("Forrás a világból", node.Key, namedKeys.OrderBy(k => k).ToArray(), value => { Remember(); node.Key = value; });
+                    else if (ImGui.BeginCombo("Készlet / világmező", node.Key)) {
+                        foreach (string key in namedKeys.OrderBy(k => k))
+                            if (ImGui.Selectable(key, node.Key == key)) { Remember(); node.Key = key; }
+                        ImGui.EndCombo();
+                    }
                 }
                 int count = BehaviorModel.Inputs(node.Operation);
                 if (count > 0) SelectPort("A / feltétel", node.A, graph, value => node.A = value);
@@ -344,10 +360,13 @@ namespace ForesTycoon.Editor
                 if (ImGui.Button("Csomópont törlése")) { Remember(); graph.Nodes.Remove(node); selectedNode = null; }
             }
             ImGui.Separator(); ImGui.TextUnformatted("Próbaszámítás");
-            Sample("Beépített eredmény", "native", ref sampleNative);
+            bool Uses(BehaviorOperation op) => graph.Nodes.Any(n => n.Operation == op);
+            if (Uses(BehaviorOperation.Native)) Sample("Beépített eredmény", "native", ref sampleNative);
             if (hook.Kind != "world") {
-                Sample(hook.State, "state", ref sampleState); Sample(hook.Amount, "amount", ref sampleAmount);
-                Sample("Időlépés", "delta", ref sampleDelta); Sample("Idő", "time", ref sampleTime);
+                if (Uses(BehaviorOperation.State)) Sample(hook.State, "state", ref sampleState);
+                if (Uses(BehaviorOperation.Amount)) Sample(hook.Amount, "amount", ref sampleAmount);
+                if (Uses(BehaviorOperation.Delta)) Sample("Időlépés", "delta", ref sampleDelta);
+                if (Uses(BehaviorOperation.Time)) Sample("Idő", "time", ref sampleTime);
                 if (hook.Kind is "truck" or "forwarder" or "processor") {
                     Sample("Kapacitás (m³)", "capacity", ref sampleCapacity); Sample("Elérhető készlet (m³)", "available", ref sampleAvailable);
                     if (hook.Id.StartsWith("route.")) {
@@ -356,10 +375,15 @@ namespace ForesTycoon.Editor
                     }
                 }
             }
+            foreach (string input in graph.Nodes.Where(n => n.Operation == BehaviorOperation.Input).Select(n => n.Key).Distinct()) {
+                float sample = inputSamples.GetValueOrDefault(input, 1);
+                Sample("Forrás próbája: " + (SourceDisplay?.Invoke(input) ?? input), "input-" + input, ref sample); inputSamples[input] = sample;
+            }
             Validate();
             if (compiled != null) {
                 double value = compiled.Evaluate(graph.Hook, graph.Kind, graph.ObjectId ?? ulong.MaxValue,
-                    new(sampleNative, sampleDelta, sampleTime, sampleState, sampleAmount, sampleCapacity, sampleAvailable, sampleFrom, sampleTo, sampleSurface));
+                    new(sampleNative, sampleDelta, sampleTime, sampleState, sampleAmount, sampleCapacity, sampleAvailable, sampleFrom, sampleTo, sampleSurface),
+                    (hook.Inputs ?? Array.Empty<string>()).Select(f => (double)inputSamples.GetValueOrDefault(f, 1)).ToArray());
                 ImGui.TextWrapped($"Eredmény: {value:G6} {hook.Unit}; korlát: {hook.Min:G4}–{hook.Max:G4}");
                 if (compiled.LastError != null) ImGui.TextWrapped(compiled.LastError);
             }

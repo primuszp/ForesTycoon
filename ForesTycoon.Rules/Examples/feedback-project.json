@@ -2,116 +2,11 @@
   "schema": "forest-rule-project",
   "version": 1,
   "name": "Útkopás rendszerdinamikai visszacsatolással",
-  "road": {
-    "version": 1,
-    "name": "Útkopás",
-    "binding": "road.trafficWear",
-    "output": "wear",
-    "nodes": [
-      {
-        "id": "traffic",
-        "name": "Áthaladási terhelés",
-        "operation": "TrafficWear",
-        "value": 1,
-        "a": "",
-        "b": "",
-        "x": 20,
-        "y": 30
-      },
-      {
-        "id": "surface",
-        "name": "Burkolati szorzó",
-        "operation": "SurfaceFactor",
-        "value": 1,
-        "a": "",
-        "b": "",
-        "x": 20,
-        "y": 150
-      },
-      {
-        "id": "base",
-        "name": "Burkolati kopás",
-        "operation": "Multiply",
-        "value": 1,
-        "a": "traffic",
-        "b": "surface",
-        "x": 260,
-        "y": 70
-      },
-      {
-        "id": "scale",
-        "name": "Kopási szorzó",
-        "operation": "Constant",
-        "value": 1,
-        "a": "",
-        "b": "",
-        "x": 260,
-        "y": 210
-      },
-      {
-        "id": "wear",
-        "name": "Útállapot csökkenése",
-        "operation": "Multiply",
-        "value": 1,
-        "a": "base",
-        "b": "scale",
-        "x": 500,
-        "y": 90
-      }
-    ]
-  },
   "tuning": {},
   "behaviors": {
     "schema": "forest-behaviors",
     "version": 3,
-    "graphs": [
-      {
-        "id": "default.road.road.trafficWear",
-        "name": "Forgalmi útkopás",
-        "hook": "road.trafficWear",
-        "kind": "road",
-        "objectId": null,
-        "output": "result",
-        "nodes": [
-          {
-            "id": "native",
-            "name": "Beépített eredmény",
-            "operation": "Native",
-            "value": 0,
-            "key": "",
-            "a": "",
-            "b": "",
-            "c": "",
-            "x": 30,
-            "y": 60
-          },
-          {
-            "id": "stock",
-            "name": "Útkopási szorzó",
-            "operation": "NamedValue",
-            "value": 0,
-            "key": "stock.wearMultiplier",
-            "a": "",
-            "b": "",
-            "c": "",
-            "x": 30,
-            "y": 190
-          },
-          {
-            "id": "result",
-            "name": "Kopás × készlet",
-            "operation": "Multiply",
-            "value": 0,
-            "key": "",
-            "a": "native",
-            "b": "stock",
-            "c": "",
-            "x": 300,
-            "y": 120
-          }
-        ]
-      }
-    ],
+    "graphs": [],
     "controllers": []
   },
   "dynamics": {
@@ -155,5 +50,282 @@
         }
       }
     ]
-  }
+  },
+  "rules": [
+    {
+      "id": "traffic.wear",
+      "name": "Forgalmi út- és nyomkopás",
+      "description": "Minden áthaladáskor: a jármű tömege és a burkolat határozza meg az útkopást; a nyomon a terhelés és a meglévő vályú hat. A használt nyom pihenőideje nullázódik.",
+      "enabled": true,
+      "template": "traffic.wear",
+      "scope": "passage",
+      "schedule": "passage",
+      "condition": "",
+      "effects": [
+        {
+          "target": "road.condition",
+          "to": "",
+          "flowName": "",
+          "spread": "even",
+          "level": "",
+          "isFlow": false,
+          "mode": "add",
+          "formula": "",
+          "influence": {
+            "perYear": false,
+            "perHour": false,
+            "terms": [
+              {
+                "name": "Teherautó az aszfalton",
+                "enabled": true,
+                "decrease": true,
+                "amount": 0.0003,
+                "amountField": "",
+                "factors": [
+                  {
+                    "source": "vehicle.mass",
+                    "shape": "linear",
+                    "inputLow": 0,
+                    "inputHigh": 1000000,
+                    "outputLow": 0,
+                    "outputHigh": 27.77777777777778,
+                    "breakpoints": null
+                  },
+                  {
+                    "source": "stock.wearMultiplier",
+                    "shape": "linear",
+                    "inputLow": 0,
+                    "inputHigh": 4,
+                    "outputLow": 0,
+                    "outputHigh": 4
+                  }
+                ],
+                "conditions": [
+                  {
+                    "field": "isRoad",
+                    "comparison": "equal",
+                    "value": 1,
+                    "valueField": ""
+                  },
+                  {
+                    "field": "vehicle.kind",
+                    "comparison": "equal",
+                    "value": 0,
+                    "valueField": ""
+                  },
+                  {
+                    "field": "road.surface",
+                    "comparison": "equal",
+                    "value": 0,
+                    "valueField": ""
+                  }
+                ]
+              },
+              {
+                "name": "Teherautó a makadámon",
+                "enabled": true,
+                "decrease": true,
+                "amount": 0.0015,
+                "amountField": "",
+                "factors": [
+                  {
+                    "source": "vehicle.mass",
+                    "shape": "linear",
+                    "inputLow": 0,
+                    "inputHigh": 1000000,
+                    "outputLow": 0,
+                    "outputHigh": 27.77777777777778,
+                    "breakpoints": null
+                  },
+                  {
+                    "source": "stock.wearMultiplier",
+                    "shape": "linear",
+                    "inputLow": 0,
+                    "inputHigh": 4,
+                    "outputLow": 0,
+                    "outputHigh": 4
+                  }
+                ],
+                "conditions": [
+                  {
+                    "field": "isRoad",
+                    "comparison": "equal",
+                    "value": 1,
+                    "valueField": ""
+                  },
+                  {
+                    "field": "vehicle.kind",
+                    "comparison": "equal",
+                    "value": 0,
+                    "valueField": ""
+                  },
+                  {
+                    "field": "road.surface",
+                    "comparison": "equal",
+                    "value": 1,
+                    "valueField": ""
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "target": "trail.wear",
+          "to": "",
+          "flowName": "",
+          "spread": "even",
+          "level": "",
+          "isFlow": false,
+          "mode": "add",
+          "formula": "",
+          "influence": {
+            "perYear": false,
+            "perHour": false,
+            "terms": [
+              {
+                "name": "Teherautó terhelése mélyíti a nyomot",
+                "enabled": true,
+                "decrease": false,
+                "amount": 0.03,
+                "amountField": "",
+                "factors": [
+                  {
+                    "source": "vehicle.mass",
+                    "shape": "linear",
+                    "inputLow": 0,
+                    "inputHigh": 1000000,
+                    "outputLow": 0,
+                    "outputHigh": 27.77777777777778,
+                    "breakpoints": null
+                  },
+                  {
+                    "source": "trail.wear",
+                    "shape": "linear",
+                    "inputLow": 0,
+                    "inputHigh": 1,
+                    "outputLow": 1,
+                    "outputHigh": 0,
+                    "breakpoints": null
+                  }
+                ],
+                "conditions": [
+                  {
+                    "field": "isTrail",
+                    "comparison": "equal",
+                    "value": 1,
+                    "valueField": ""
+                  },
+                  {
+                    "field": "vehicle.kind",
+                    "comparison": "equal",
+                    "value": 0,
+                    "valueField": ""
+                  }
+                ]
+              },
+              {
+                "name": "Erdészeti gép mélyíti a nyomot",
+                "enabled": true,
+                "decrease": false,
+                "amount": 0.04,
+                "amountField": "",
+                "factors": [
+                  {
+                    "source": "trail.wear",
+                    "shape": "linear",
+                    "inputLow": 0,
+                    "inputHigh": 1,
+                    "outputLow": 1,
+                    "outputHigh": 0,
+                    "breakpoints": null
+                  }
+                ],
+                "conditions": [
+                  {
+                    "field": "isTrail",
+                    "comparison": "equal",
+                    "value": 1,
+                    "valueField": ""
+                  },
+                  {
+                    "field": "vehicle.kind",
+                    "comparison": "notEqual",
+                    "value": 0,
+                    "valueField": ""
+                  }
+                ]
+              },
+              {
+                "name": "A rakomány tovább mélyíti a nyomot",
+                "enabled": true,
+                "decrease": false,
+                "amount": 0.06,
+                "amountField": "",
+                "factors": [
+                  {
+                    "source": "vehicle.fill",
+                    "shape": "linear",
+                    "inputLow": 0,
+                    "inputHigh": 1,
+                    "outputLow": 0,
+                    "outputHigh": 1,
+                    "breakpoints": null
+                  },
+                  {
+                    "source": "trail.wear",
+                    "shape": "linear",
+                    "inputLow": 0,
+                    "inputHigh": 1,
+                    "outputLow": 1,
+                    "outputHigh": 0,
+                    "breakpoints": null
+                  }
+                ],
+                "conditions": [
+                  {
+                    "field": "isTrail",
+                    "comparison": "equal",
+                    "value": 1,
+                    "valueField": ""
+                  },
+                  {
+                    "field": "vehicle.kind",
+                    "comparison": "notEqual",
+                    "value": 0,
+                    "valueField": ""
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "target": "trail.idleYears",
+          "to": "",
+          "flowName": "",
+          "spread": "even",
+          "level": "",
+          "isFlow": false,
+          "mode": "set",
+          "formula": "",
+          "influence": {
+            "perYear": false,
+            "perHour": false,
+            "terms": [
+              {
+                "name": "Áthaladáskor újraindul a pihenőidő",
+                "enabled": true,
+                "decrease": false,
+                "amount": 0,
+                "amountField": "",
+                "factors": [],
+                "conditions": []
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
 }

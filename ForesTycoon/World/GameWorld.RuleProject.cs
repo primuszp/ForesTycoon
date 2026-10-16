@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using ForesTycoon.RuleCompiler;
+using ForesTycoon.Rules;
 
 namespace ForesTycoon;
 
@@ -22,8 +23,9 @@ sealed partial class GameWorld
     private RuleEngine ruleEngine;
     internal RuleEngine RuleBook => ruleEngine;
     private string ruleProjectName = "ForesTycoon szabályrendszer";
+    internal string ActiveRuleProjectName => ruleProjectName;
     private AlgorithmGraphReference algorithmGraphs;
-    internal RuleProject RuleProjectDocument => new() { Name = ruleProjectName, Road = RuleDocument,
+    internal RuleProject RuleProjectDocument => new() { Name = ruleProjectName,
         Tuning = Tuning.ToOverrides(), Behaviors = BehaviorDocument, Dynamics = dynamics.Document, Algorithms = AlgorithmSnapshot(),
         Rules = RuleEngine.Clone(ruleEngine.Rules), RemovedStarters = ruleEngine.RemovedStarters.ToList(), Fields = RuleEngine.CloneFields(ruleEngine.Fields),
         World = ruleProjectWorld == null ? null : RuleProject.FromJson(new RuleProject { World = ruleProjectWorld }.ToJson()).World };
@@ -48,7 +50,7 @@ sealed partial class GameWorld
         prepared.Document.Tuning = prepared.Tuning.ToOverrides();
         return prepared.Document;
     }
-    private static (RuleProject Document, CompiledRoadRule Road, GameTuning Tuning, DynamicsRuntime Dynamics, WorldBehaviorPolicy Policy, RuleEngine Engine)
+    private static (RuleProject Document, GameTuning Tuning, DynamicsRuntime Dynamics, WorldBehaviorPolicy Policy, RuleEngine Engine)
         PrepareRuleProject(RuleProject project, Func<string, double> readWorld, Func<string, double> readRule = null)
     {
         ArgumentNullException.ThrowIfNull(project);
@@ -60,7 +62,6 @@ sealed partial class GameWorld
             || !Path.IsPathFullyQualified(algorithms.BundlePath) || string.IsNullOrWhiteSpace(algorithms.WorkspaceRoot)
             || !Path.IsPathFullyQualified(algorithms.WorkspaceRoot))) throw new InvalidDataException("Hibás algoritmusgráf-hivatkozás.");
         copy.World?.Validate();
-        var road = new CompiledRoadRule(copy.Road); road.ValidateRange();
         var tuning = GameTuning.FromOverrides(copy.Tuning);
         var runtime = new DynamicsRuntime(copy.Dynamics, RuleWorldFields, readWorld);
         // Every supported process has an explicit editable type graph, including unchanged native adapters.
@@ -72,7 +73,7 @@ sealed partial class GameWorld
         copy.Rules ??= new(); copy.Fields ??= new(); copy.RemovedStarters ??= new();
         RuleEngine.AddMissingStarters(copy.Rules, copy.RemovedStarters);
         var engine = new RuleEngine(copy.Rules, copy.Fields, copy.Dynamics.Stocks.Select(s => s.Id), readRule ?? (_ => 0)) { RemovedStarters = copy.RemovedStarters };
-        return (copy, road, tuning, runtime, policy, engine);
+        return (copy, tuning, runtime, policy, engine);
     }
     internal void QueueRuleProject(RuleProject project)
     {
@@ -88,14 +89,14 @@ sealed partial class GameWorld
         InstallRuleProject(next);
     }
 
-    private void InstallRuleProject((RuleProject Document, CompiledRoadRule Road, GameTuning Tuning, DynamicsRuntime Dynamics, WorldBehaviorPolicy Policy, RuleEngine Engine) next)
+    private void InstallRuleProject((RuleProject Document, GameTuning Tuning, DynamicsRuntime Dynamics, WorldBehaviorPolicy Policy, RuleEngine Engine) next)
     {
         if (UpdatePending) throw new InvalidOperationException("A rule project is applied at a complete tick boundary.");
         next.Engine.Preserve(ruleEngine);
         if (dynamics != null) next.Dynamics.Preserve(dynamics);
         next.Policy.Controllers.PreserveUnchanged(behaviorPolicy.Controllers);
-        bool refresh = ForestBehaviorSignature(BehaviorDocument) != ForestBehaviorSignature(next.Document.Behaviors);
-        roadRule = next.Road; dynamics = next.Dynamics; behaviorPolicy = next.Policy; ruleEngine = next.Engine; ruleProjectName = next.Document.Name;
+        bool refresh = ruleEngine == null || GrowthSignature(ruleEngine.Rules) != GrowthSignature(next.Engine.Rules);
+        dynamics = next.Dynamics; behaviorPolicy = next.Policy; ruleEngine = next.Engine; ruleProjectName = next.Document.Name;
         // A rules-only project keeps the running scene (its map and missions); a project with a world replaces it.
         ruleProjectWorld = next.Document.World ?? ruleProjectWorld;
         // Species numbers are world content the rules read; a project change installs them for the whole process.
@@ -119,6 +120,8 @@ sealed partial class GameWorld
         while (!preparing.IsCompleted) yield return 64;
         InstallRuleProject(preparing.GetAwaiter().GetResult());
     }
+
+    private static string GrowthSignature(IEnumerable<WorldRule> rules) => System.Text.Json.JsonSerializer.Serialize(rules.Where(r => r.Schedule == "growth"));
 
     private void InitializeRuleProject()
     {

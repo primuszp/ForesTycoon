@@ -24,7 +24,7 @@ public class ArchitectureTests
     [Fact]
     public void RuleRuntimeIsIndependentAndTheGameNeverReferencesTheEditor()
     {
-        Assert.Empty(References(typeof(ForesTycoon.Rules.CompiledRoadRule).Assembly));
+        Assert.Empty(References(typeof(ForesTycoon.Rules.WorldRule).Assembly));
         Assert.Contains("ForesTycoon.Rules", References(Game));
         Assert.DoesNotContain("ForesTycoon.Editor", References(Game));
         Assert.DoesNotContain(Game.GetTypes(), t => t.Name == "RuleEditorView");

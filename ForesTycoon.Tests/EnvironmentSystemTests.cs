@@ -66,7 +66,7 @@ public class EnvironmentSystemTests
         for(int id=0;id<10;id++)Assert.Equal(first.Cell(id),second.Cell(id));
         Assert.True(Math.Abs(first.BalanceError)<1e-6);
     }
-    [Fact] public void DroughtReducesActualForestGrowthAndHealth()
+    [Fact] public void DroughtReducesActualForestGrowthWithoutNativeHealthDecisions()
     {
         var habitat=new Habitat(1,0.55f);
         ForestStand[] stands=[new ForestStand(ForestSpecies.Oak,20,0.5f,0.3f)];
@@ -81,8 +81,10 @@ public class EnvironmentSystemTests
         }
         bool survived = stressed.TryGetStand(0,out var dry);
         Assert.True(control.TryGetStand(0,out var normal));
-        Assert.True(stressed.Statistics.TotalBiomass < normal.Biomass, $"dry={stressed.Statistics.TotalBiomass} wet={normal.Biomass} health={dry.Health}/{normal.Health} count={stressed.IndividualTreeCount}/{control.IndividualTreeCount} water={environment.GrowthFactor(0, ForestSpecies.Oak)}");
-        Assert.True(!survived || dry.Health < normal.Health);
+        Assert.True(stressed.IndividualTrees.TryGet(0, out var stressedTrees));
+        Assert.True(control.IndividualTrees.TryGet(0, out var controlTrees));
+        Assert.True(stressedTrees.Trees[0].Resources.Water < controlTrees.Trees[0].Resources.Water);
+        Assert.Equal(normal.Health, dry.Health);
         Assert.True(environment.GrowthFactor(0, ForestSpecies.Oak) < 1);
         if (survived) Assert.Equal(before.AgeYears + 20, dry.AgeYears, 3);
         else Assert.True(stressed.IndividualTreeCount < control.IndividualTreeCount);

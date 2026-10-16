@@ -22,11 +22,10 @@ namespace ForesTycoon
         internal Func<Vehicle, string, double, double, double> BehaviorRule;
         /// <summary>Surface and condition (1 new … 0 ruined) of a road tile.</summary>
         internal Func<int,(RoadSurface Surface,float Condition)> RoadState;
-        /// <summary>Wears a road tile; the amount is for one pass of a loaded truck on macadam.</summary>
-        internal Action<int,float> RoadWear;
+        /// <summary>Reports raw passage data; only the world rule book changes roads and tracks.</summary>
+        internal Action<TrafficPassage> Passage;
         /// <summary>Truck physics and road load every vehicle uses (the world's tuning).</summary>
         internal TruckSpec Spec = TruckSpec.Default;
-        internal Func<float,float> RoadLoad;
         internal Vehicle SpawnLogistics(int[] route, int[] sources, int mill)
         {
             var result = new WorkResult<Vehicle>();
@@ -97,7 +96,7 @@ namespace ForesTycoon
         private void UpdateVehicle(Vehicle vehicle, double deltaSeconds)
         {
             {
-                vehicle.RoadState = RoadState; vehicle.RoadWear = RoadWear; vehicle.Spec = Spec; vehicle.RoadLoad = RoadLoad;
+                vehicle.RoadState = RoadState; vehicle.Passage = Passage; vehicle.Spec = Spec;
                 if(vehicle.RouteBlocked||vehicle.Broken||BehaviorPause?.Invoke(vehicle)==true){vehicle.Hold();return;}
                 if(vehicle.Transit){
                     if(!vehicle.TransitArrived){vehicle.Update(deltaSeconds);if(vehicle.RoutePosition>=vehicle.Route.Length-1-1e-6){vehicle.TransitArrived=true;vehicle.Hold();}}

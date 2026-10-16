@@ -10,7 +10,7 @@ namespace ForesTycoon
     {
         void ExecuteRuleProject(string json) => throw new System.NotSupportedException();
         void ExecuteBehaviors(string json) => throw new System.NotSupportedException();
-        void ExecuteRuleModel(string json) => throw new System.NotSupportedException();
+        void ExecuteTrafficPassage(string json) => throw new System.NotSupportedException();
         void ExecuteTuning(string json) => throw new System.NotSupportedException();
         void ExecuteElevationEdit(int nodeId, int delta, int radius, int strength);
         void ExecuteLegacyElevationEdit(int nodeId, int delta, int radius, int strength) =>

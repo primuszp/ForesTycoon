@@ -47,7 +47,6 @@ namespace ForesTycoon.Editor
         /// <summary>The last file operation's result, shown by the editor's status bar.</summary>
         internal string Message { get; set; } = "";
         internal Action<RuleSource> EditAlgorithm { get; set; }
-        internal RuleModel RoadTrafficModel => catalog?.RoadTrafficModel;
         internal GameRuleCatalog Catalog => catalog;
         internal GameRuleIndex Index => index;
         internal void EnsureCatalog(GameWorld world) { if (catalog == null) Load(world.DescribeCurrentRules()); }
@@ -55,13 +54,6 @@ namespace ForesTycoon.Editor
             if (!BeginParameterTable("workshop-parameters", true)) return;
             for (int i = 0; i < rule.Parameters.Count; i++) ParameterRow(rule, i, true);
             ImGui.EndTable();
-        }
-
-        internal void SetRoadTrafficModel(GameWorld world, RuleModel draft)
-        {
-            if (catalog == null) Load(world.DescribeCurrentRules());
-            // Both tabs edit one authoring document; an invalid draft is retained and cannot be exported as a valid catalog.
-            catalog.RoadTrafficModel = draft;
         }
 
         internal void Load(GameRuleCatalog loaded, string file = null, GameRuleCatalog current = null)
@@ -151,7 +143,7 @@ namespace ForesTycoon.Editor
         };
 
         // ── Layout ───────────────────────────────────────────────────────────
-        internal void Draw(GameWorld world, Action<RuleModel> editGraph, Action<BehaviorHook> editBehavior = null, Action<string> editController = null)
+        internal void Draw(GameWorld world, Action<string> editGraph, Action<BehaviorHook> editBehavior = null, Action<string> editController = null)
         {
             if (catalog == null) Load(world.DescribeCurrentRules());
             float height = Math.Max(260, ImGui.GetContentRegionAvail().Y);
@@ -521,7 +513,7 @@ namespace ForesTycoon.Editor
         }
 
         // ── Inspector ────────────────────────────────────────────────────────
-        private void Inspector(GameWorld world, Action<RuleModel> editGraph, Action<BehaviorHook> editBehavior, Action<string> editController)
+        private void Inspector(GameWorld world, Action<string> editGraph, Action<BehaviorHook> editBehavior, Action<string> editController)
         {
             var rule = index.Find(selected);
             if (rule != null) { RuleDetails(world, rule, editGraph, editBehavior, editController); return; }
@@ -578,7 +570,7 @@ namespace ForesTycoon.Editor
             }
         }
 
-        private void RuleDetails(GameWorld world, GameRuleDefinition rule, Action<RuleModel> editGraph, Action<BehaviorHook> editBehavior, Action<string> editController)
+        private void RuleDetails(GameWorld world, GameRuleDefinition rule, Action<string> editGraph, Action<BehaviorHook> editBehavior, Action<string> editController)
         {
             var domain = DomainOf(rule.Module);
             if (EditorStyle.Chip(rule.Module, domain.Colour, "rule-module", true)) { search = ""; string id = rule.Id; SelectModule(rule.Module); selected = id; }
@@ -601,7 +593,7 @@ namespace ForesTycoon.Editor
             if (rule.Execution == GameRuleExecution.EditableGraph)
             {
                 ImGui.Spacing();
-                if (EditorStyle.PrimaryButton("Gráf megnyitása szerkesztésre")) editGraph(catalog.RoadTrafficModel);
+                if (EditorStyle.PrimaryButton("Gráf megnyitása szerkesztésre")) editGraph(rule.Id);
             }
             if (EditorStyle.BeginFacts("rule-facts"))
             {

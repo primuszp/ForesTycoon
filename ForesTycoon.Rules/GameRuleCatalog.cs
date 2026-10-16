@@ -43,7 +43,6 @@ namespace ForesTycoon.Rules
         public string Name { get; set; } = "ForesTycoon jelenlegi szabályrendszere";
         public List<GameRuleDefinition> Rules { get; set; } = new();
         public List<string> Gaps { get; set; } = new();
-        public RuleModel RoadTrafficModel { get; set; } = RuleModel.Default();
         public RuleConnection[] Connections()
         {
             var readers = new Dictionary<string, List<GameRuleDefinition>>(StringComparer.Ordinal);
@@ -86,9 +85,8 @@ namespace ForesTycoon.Rules
                 foreach (var parameter in rule.Parameters.Where(p => p.Tunable))
                     if (!tuningKeys.Add(parameter.Key)) throw new InvalidDataException("Ismétlődő hangolási kulcs: " + parameter.Key);
             }
-            if (RoadTrafficModel == null || Gaps.Any(string.IsNullOrWhiteSpace))
+            if (Gaps.Any(string.IsNullOrWhiteSpace))
                 throw new InvalidDataException("Hiányzó útkopási modell vagy érvénytelen hiánylista.");
-            var compiled = new CompiledRoadRule(RoadTrafficModel); compiled.ValidateRange();
         }
         private static readonly JsonSerializerOptions Options = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             PropertyNameCaseInsensitive = true, WriteIndented = true, Converters = { new JsonStringEnumConverter() } };

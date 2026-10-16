@@ -134,6 +134,7 @@ namespace ForesTycoon
         }
         internal System.Collections.Generic.IReadOnlyList<Vehicle> Vehicles => vehicles.Vehicles;
         public ForestStatistics ForestStatistics => forest.Statistics;
+        internal ForestSystem Forest => forest;
         internal int ForestTreeCount => forest.IndividualTreeCount;
         internal float LastAnnualForestGrowth => forest.LastAnnualGrowthCubicMetres;
         public float TimberStockpile => Logistics.Remaining;
@@ -289,19 +290,21 @@ namespace ForesTycoon
             workPhase = 2;
             foreach (int unit in Logistics.UpdateWork(fixedDeltaSeconds * Tuning[Tune.VehicleTimeScale])) yield return unit;
             workPhase = 3;
+            foreach (int unit in TrafficWork()) yield return unit;
             foreach (int unit in Environment.RefreshVegetationWork()) yield return unit;
             foreach (int unit in WeatherRoadsWork(fixedDeltaSeconds)) yield return unit;
             workPhase = 4;
             foreach (int unit in wildlife.UpdateWork(fixedDeltaSeconds * WildlifeTimeScale, map, forest, Environment)) yield return unit;
             workPhase = 5;
             foreach (int unit in systems.UpdateWork(fixedDeltaSeconds)) yield return unit;
+            foreach (int unit in TrafficWork()) yield return unit;
             worldTick++;
         }
 
         public int ExecutePendingCommands()
         {
             EnsureAvailable(); terrainRenderer?.VerifyAccess();
-            if (UpdatePending || ruleEngine?.StepPending == true) return 0;
+            if (UpdatePending || RulesBlockCommands) return 0;
             if (generationWork != null) throw new InvalidOperationException("Use ContinueCommands while generating a world.");
             int completed = 0, count = commands.Count;
             do { completed += ContinueCommands(256); } while (commands.WorkPending && completed < count);
@@ -445,6 +448,7 @@ namespace ForesTycoon
             }
             if (ruleEngine.StepPending) {
                 foreach (int unit in ruleEngine.ContinueWork(this)) yield return unit;
+                foreach (int unit in forest.CompleteRuleEditsWork(forest.ForestYear)) yield return unit;
                 if (ruleEngine.NetworkChanged) {
                     Logistics?.TrailsChanged();
                     foreach (int unit in vehicles.RemoveInvalidRoutesWork(map.IsNetworkTile, map.AreNetworkNeighbours)) yield return unit;
@@ -593,10 +597,11 @@ namespace ForesTycoon
             (backgroundJobs, candidate.backgroundJobs) = (candidate.backgroundJobs, backgroundJobs);
             (commands, candidate.commands) = (candidate.commands, commands);
             (commandJournal, candidate.commandJournal) = (candidate.commandJournal, commandJournal);
+            (trafficPassages, candidate.trafficPassages) = (candidate.trafficPassages, trafficPassages);
+            (activePassage, candidate.activePassage) = (candidate.activePassage, activePassage);
             // Route creation must follow this world's terrain after the ownership transfer.
             vehicles.RoadRouteFactory = route => VehicleRoadRoute.Create(map, route);
             vehicles.RoadRouteWorkFactory = (route, result) => VehicleRoadRoute.CreateWork(map, route, result);
-            roadRule = candidate.roadRule;
             ruleProjectName = candidate.ruleProjectName; ruleProjectWorld = candidate.ruleProjectWorld;
             algorithmGraphs = candidate.algorithmGraphs;
             ruleEngine = candidate.ruleEngine;
@@ -609,7 +614,7 @@ namespace ForesTycoon
             pendingForestRateRefresh = candidate.pendingForestRateRefresh;
             BindRoadRules();
             ApplyTuning(candidate.Tuning);
-            foreach (var vehicle in vehicles.Vehicles) { vehicle.RoadState = vehicles.RoadState; vehicle.RoadWear = vehicles.RoadWear; }
+            foreach (var vehicle in vehicles.Vehicles) { vehicle.RoadState = vehicles.RoadState; vehicle.Passage = vehicles.Passage; }
             worldTick = candidate.worldTick;
             lastForestryAction = candidate.lastForestryAction;
             lastForestryArea = candidate.lastForestryArea;

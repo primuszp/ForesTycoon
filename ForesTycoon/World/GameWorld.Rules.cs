@@ -4,25 +4,13 @@ namespace ForesTycoon
 {
     sealed partial class GameWorld
     {
-        private CompiledRoadRule roadRule = new(RuleModel.Default());
-        internal RuleModel RuleDocument => roadRule.Document;
-        internal string ActiveRuleName => roadRule.Name;
         internal GameRuleCatalog DescribeCurrentRules() => CurrentGameRules.Build(ecosystem.ForestYearSeconds,
-            Environment.Climate.Definition, Soils.Definition, RuleDocument, Tuning);
+            Environment.Climate.Definition, Soils.Definition, Tuning);
 
         /// <summary>The world's tunable numbers (logistics, upkeep, roads, truck physics); changed only by a journaled command.</summary>
         internal GameTuning Tuning { get; private set; } = GameTuning.Default;
         internal void QueueTuning(IReadOnlyDictionary<string, double> overrides) =>
             Enqueue(new SetTuningCommand(GameTuning.FromOverrides(overrides).ToJson()));
-        internal void QueueRuleConfiguration(RuleModel model, IReadOnlyDictionary<string, double> overrides)
-        {
-            // Validate the entire editor document before queuing either change.
-            var compiled = new CompiledRoadRule(model);
-            compiled.ValidateRange();
-            var tuning = GameTuning.FromOverrides(overrides);
-            QueueRuleModel(compiled.Document);
-            QueueTuning(tuning.ToOverrides());
-        }
         void IWorldCommandTarget.ExecuteTuning(string json) => ApplyTuning(GameTuning.FromJson(json));
 
         private void ApplyTuning(GameTuning tuning)
@@ -58,27 +46,13 @@ namespace ForesTycoon
             "wildlife.state" => $"Állatok: {wildlife.Animals.Count}",
             _ => null
         };
-        private string lastRuleSample = "Még nem történt közúti áthaladás.";
-        private (int Tile, float Load, float Surface, float Wear, float Before, float After) trafficSample;
-        internal string LastRuleSample
-        {
-            get => lastRuleSample ??= $"Útcsempe {trafficSample.Tile}: terhelés {trafficSample.Load:F6} × burkolat {trafficSample.Surface:F2}; kimenet {trafficSample.Wear:F6}; állapot {trafficSample.Before:F4} -> {trafficSample.After:F4}";
-            private set => lastRuleSample = value;
-        }
-        internal void QueueRuleModel(RuleModel model) => Enqueue(new SetRuleModelCommand(model.ToJson()));
-        void IWorldCommandTarget.ExecuteRuleModel(string json)
-        {
-            var next = new CompiledRoadRule(RuleModel.FromJson(json));
-            next.ValidateRange(); roadRule = next;
-            LastRuleSample = "Szabály alkalmazva; a következő áthaladás már ezt használja.";
-        }
         private void BindRoadRules()
         {
             vehicles.RoadState = id => map.IsRoadTile(id)
                 ? (map.GetRoadPaving(id) == RoadPaving.Asphalt ? RoadSurface.Asphalt : RoadSurface.Gravel, map.GetRoadCondition(id))
                 : (RoadSurface.Dirt, (0.2f - 0.2f * map.GetSkidTrailWear(id)) * Trafficability(id));
-            vehicles.RoadWear = ApplyTrafficWear;
-            vehicles.RoadLoad = mass => RoadTrafficParameters.Load(mass, Tuning);
+            vehicles.Passage = RecordPassage;
+            Logistics.Passage = RecordPassage;
         }
         /// <summary>Soaked soil with low bearing capacity makes dirt tracks rough: lower condition, more rolling resistance.</summary>
         internal float Trafficability(int id)
@@ -119,19 +93,6 @@ namespace ForesTycoon
             if (map.IsSkidTrail(id)) result["trail.wear"] = map.GetSkidTrailWear(id).ToString("0.00");
             return result;
         }
-        internal void ApplyTrafficWear(int id, float amount)
-        {
-            if (map.IsSkidTrail(id)) { map.DriveSkidTrail(id, amount * Tuning.F(Tune.TrailLoadMultiplier)); return; }
-            if (!map.IsRoadTile(id)) return;
-            float factor = RoadTrafficParameters.SurfaceFactor(map.GetRoadPaving(id), Tuning);
-            float before = map.GetRoadCondition(id);
-            float wear = roadRule.Evaluate(new(amount, factor, 1 - before));
-            wear = (float)behaviorPolicy.Evaluate(new("road.trafficWear", "road", (ulong)id, wear,
-                Time: forest.ForestYear, State: 1 - before, Amount: amount));
-            map.WearRoad(id, wear);
-            // Store numeric diagnostics; format text only when a panel reads it.
-            trafficSample = (id, amount, factor, wear, before, map.GetRoadCondition(id));
-            lastRuleSample = null;
-        }
+
     }
 }

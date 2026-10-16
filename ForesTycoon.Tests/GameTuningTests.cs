@@ -58,29 +58,15 @@ public class GameTuningTests
     {
         var t = GameTuning.FromOverrides(new Dictionary<string, double>
         {
-            ["WearPerSecond"] = 0.002, ["RepairBaseCost"] = 1000, ["ReferenceWear"] = 0.003, ["RollingGravel"] = 0.05, ["WearFuelPenalty"] = 1
+            ["WearPerSecond"] = 0.002, ["RepairBaseCost"] = 1000, ["RollingGravel"] = 0.05, ["WearFuelPenalty"] = 1
         });
         var tuned = new VehicleUpkeep(1); var plain = new VehicleUpkeep(1);
         tuned.Operate(10, 1, out _, t); plain.Operate(10, 1, out _);
         Assert.Equal(plain.Wear * 8, tuned.Wear, 5);
         Assert.Equal(1 + tuned.Wear, tuned.Fuel(t), 5);
-        Assert.Equal(2 * RoadTrafficParameters.Load(36000), RoadTrafficParameters.Load(36000, t), 6);
         Assert.Equal(0.05f, VehicleDynamics.RollingCoefficient(t.Truck, RoadSurface.Gravel, 0));
         Assert.True(VehicleDynamics.Resistance(t.Truck, 30000, 10, 0, RoadSurface.Gravel, 0)
             > VehicleDynamics.Resistance(TruckSpec.Default, 30000, 10, 0, RoadSurface.Gravel, 0));
-    }
-
-    [Fact]
-    public void MaximumLegalTrafficTuningIsAcceptedByTheExecutableGraph()
-    {
-        var tuning = GameTuning.FromOverrides(new Dictionary<string, double> {
-            ["ReferenceWear"] = GameTuning.Spec(Tune.ReferenceWear).Max,
-            ["ReferenceMass"] = GameTuning.Spec(Tune.ReferenceMass).Min,
-            ["MacadamFactor"] = GameTuning.Spec(Tune.MacadamFactor).Max
-        });
-        var rule = new CompiledRoadRule(RuleModel.Default()); rule.ValidateRange();
-        float result = rule.Evaluate(new(RoadTrafficParameters.Load(100000, tuning), RoadTrafficParameters.SurfaceFactor(RoadPaving.Macadam, tuning), 0));
-        Assert.Equal(1, result);
     }
 
     [Fact]

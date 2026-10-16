@@ -236,10 +236,10 @@ public class ForestSystemTests
         Assert.True(forest.GetCrowding(crowded) > forest.GetCrowding(open));
         Assert.True(forest.TryGetStand(crowded, out ForestStand suppressed));
         Assert.True(forest.TryGetStand(open, out ForestStand openGrown));
-        Assert.True(openGrown.Biomass > suppressed.Biomass,
-            $"A birch hemmed in by spruce must accumulate less biomass than one grown in the open: {suppressed.Biomass}/{openGrown.Biomass}, health {suppressed.Health}/{openGrown.Health}.");
-        Assert.True(openGrown.Health > suppressed.Health,
-            "Shade must cost the suppressed birch some of its health.");
+        Assert.True(crowdedTrees.Trees[0].Resources.Light < openTrees.Trees[0].Resources.Light);
+        // Without a project the ecology mechanism computes resources but owns no growth decision.
+        Assert.All(crowdedTrees.Trees.Take(crowdedTrees.Count), t => Assert.Equal(default, t.AnnualGrowth));
+        Assert.Equal(openGrown.Health, suppressed.Health); // Ecology alone has no health-rule fallback.
     }
 
     [Fact]

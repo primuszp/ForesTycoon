@@ -128,7 +128,7 @@ internal sealed partial class RuleEditorView
     }
     private void OpenLibraryGraph(BehaviorGraph graph)
     {
-        behaviors.SelectGraph(graph.Id); workshopTool = WorkshopTool.ObjectRule; workshopPhase = WorkshopPhase.Edit; objectRuleTitle = graph.Name;
+        behaviors.SelectGraph(graph.Id); ShowCommonRule("behavior:" + graph.Id);
     }
     private void DrawRuleLibrary(GameWorld world)
     {
@@ -149,7 +149,7 @@ internal sealed partial class RuleEditorView
         if (ImGui.CollapsingHeader("Aktív munkaciklusok")) {
         foreach (var controller in behaviors.Document.Controllers.Where(c => Match(c.Name + " " + c.Kind + " " + c.ObjectId)).ToArray()) {
             ImGui.PushID(controller.Id);
-            if (ImGui.Selectable(controller.Name + (controller.ObjectId.HasValue ? " #" + controller.ObjectId : " · típus"))) { behaviors.SelectControllerById(controller.Id); workshopTool = WorkshopTool.ObjectRule; workshopPhase = WorkshopPhase.Edit; objectRuleTitle = controller.Name; }
+            if (ImGui.Selectable(controller.Name + (controller.ObjectId.HasValue ? " #" + controller.ObjectId : " · típus"))) { behaviors.SelectControllerById(controller.Id); ShowCommonRule("controllerId:" + controller.Id); }
             if (ImGui.SmallButton("Sablonként másolom")) { RememberAuthoring(); authoring.Templates.Add(AuthoringOperations.Template(controller)); }
             ImGui.SameLine(); if (ImGui.SmallButton("Vissza az alapvezérléshez")) behaviors.RestoreController(controller.Kind, controller.ObjectId);
             ImGui.PopID();
@@ -165,7 +165,7 @@ internal sealed partial class RuleEditorView
                 bool local = template.Controller != null || WorldBehaviorPolicy.Hooks.FirstOrDefault(h => h.Id == template.Graph?.Hook && h.Kind == template.Graph?.Kind)?.SupportsObjects == true;
                 var target = TargetScope(local); ImGui.TextWrapped("A célkötés meglévő szabályát ezzel a független másolattal helyettesíted. A többi objektum egyedi kötése megmarad.");
                 ImGui.BeginDisabled(templateSpecific && target == null);
-                if (ImGui.Button("Másolat kötése")) { behaviors.UseTemplate(template, target); if (template.Graph != null) OpenLibraryGraph(behaviors.Document.Graphs.Last()); else { workshopTool = WorkshopTool.ObjectRule; workshopPhase = WorkshopPhase.Edit; objectRuleTitle = template.Name; } ImGui.CloseCurrentPopup(); }
+                if (ImGui.Button("Másolat kötése")) { behaviors.UseTemplate(template, target); if (template.Graph != null) OpenLibraryGraph(behaviors.Document.Graphs.Last()); else ShowCommonRule("controllerId:" + behaviors.Document.Controllers.Last().Id); ImGui.CloseCurrentPopup(); }
                 ImGui.EndDisabled(); ImGui.EndPopup();
             }
             ImGui.PopID();
@@ -194,15 +194,15 @@ internal sealed partial class RuleEditorView
     {
         ImGui.TextWrapped("Válassz célt. Ugyanabba a szerkeszthető munkatérbe lépsz; minden gráf és kapcsolat elérhető marad.");
         foreach (var goal in new[] { ("A fák növekedését módosítanám", "forest.growth"), ("A víz és az aszály hatását módosítanám", "water.stress"),
-            ("Az utak kopását módosítanám", "road.trafficWear"), ("Egy jármű munkaciklusát módosítanám", "machine.controller"), ("Az útvonalválasztást módosítanám", "route.find") })
+            ("Az utak kopását módosítanám", "traffic.wear"), ("Egy jármű munkaciklusát módosítanám", "machine.controller"), ("Az útvonalválasztást módosítanám", "route.find") })
             if (ImGui.Button(goal.Item1, new(-1, 0))) SelectWorkshopRule(goal.Item2);
         if (ImGui.Button("Egy konkrét játékobjektum szabályát módosítanám", new(-1, 0))) ShowObjects();
         if (ImGui.Button("Saját készletet és visszacsatolást építenék", new(-1, 0))) { workshopTopic = 5; ShowDynamics(); }
         ImGui.TextWrapped("A fő lépések: megérteni az összefüggést, szerkeszteni a gráfot, összehasonlító próbát futtatni, majd alkalmazni a játékban.");
     }
-    internal void ShowRuleLibrary() { workshopTool = WorkshopTool.Library; workshopPhase = WorkshopPhase.Edit; }
+    internal void ShowRuleLibrary() => ShowCommonRule("library");
     internal void ShowGuidedStart() { workshopTool = WorkshopTool.Start; workshopPhase = WorkshopPhase.Understand; }
     internal void ShowCreationDialog() => requestCreatePopup = true;
     internal void DismissAuthoringPopups() => dismissAuthoringPopup = true;
-    internal void ShowThematicStock(string id, int topic) { SetTopic("stock." + id, topic); OpenDynamic(id, false); }
+    internal void ShowThematicStock(string id, int topic) { SetTopic("stock." + id, topic); ShowCommonRule("stock:" + id); }
 }

@@ -96,11 +96,9 @@ namespace ForesTycoon.Ecology
                 foreach (var g in p.Geometry)
                 {
                     yield return 1;
-                    CheckpointGuard.NonNegative(g.VolumeIncrement, "prepared volume"); CheckpointGuard.Unit(g.SpaceResponse, "prepared space response");
-                    foreach (double v in new[] { g.Dimensions.Diameter, g.Dimensions.Height, g.Dimensions.CrownRadius,
-                        g.Growth.DiameterNumerator, g.Growth.HeightMultiplier, g.Growth.CrownRatio, g.Growth.CrownSpread })
-                    { yield return 1; CheckpointGuard.NonNegative(v, "prepared growth"); }
-                    CheckpointGuard.Require(float.IsFinite(g.Growth.DiameterDenominator) && g.Growth.DiameterDenominator > 0, "prepared denominator");
+                    CheckpointGuard.NonNegative(g.VolumeIncrement, "prepared volume");
+                    foreach (double v in new[] { g.Dimensions.Diameter, g.Dimensions.Height, g.Dimensions.CrownRadius })
+                    { yield return 1; CheckpointGuard.NonNegative(v, "prepared dimensions"); }
                 }
                 prepared.Add(p.Tile, new PreparedPatch
                 {

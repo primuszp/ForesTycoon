@@ -21,7 +21,7 @@ public class SkidTrailTests
     [Fact]
     public void CheckpointRoundTripsTrailsAndRejectsBadOnesWithoutChanges()
     {
-        var map = Flat(); map.MarkSkidTrailPath(34, 82); map.DriveSkidTrail(50, 0.5f); map.SetSkidTrailState(50, .4f, .25f);
+        var map = Flat(); map.MarkSkidTrailPath(34, 82); map.SetSkidTrailState(50, .5f, 0); map.SetSkidTrailState(50, .4f, .25f);
         var state = JsonSerializer.Deserialize<TerrainCheckpoint>(JsonSerializer.Serialize(map.Capture()))!;
         var restored = Flat(); restored.Restore(state);
         Assert.Equal(map.GetSkidTrailWear(50), restored.GetSkidTrailWear(50));

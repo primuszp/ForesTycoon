@@ -29,7 +29,7 @@ namespace ForesTycoon
                 map.MarkSkidTrailPath(66, 71);
                 map.MarkSkidTrailPath(163, 167); // Loose end beside the road: a visible reciprocal exit.
                 // Both unused and worn tracks: the unused ones must remain simple ruts without painted markers.
-                foreach (int id in map.SkidTrailTiles) if (id > 80) map.DriveSkidTrail(id, 0.6f);
+                foreach (int id in map.SkidTrailTiles) if (id > 80) map.SetSkidTrailState(id, 0.6f, 0);
                 int[] path = map.FindNetworkPath(34, 199);
                 Require(path.Length > 2 && map.FindNetworkPath(199, 34).Length == path.Length, "Mixed network is not bidirectional.");
                 var cargo = new TimberCargoSystem(); cargo.AddHarvested(25);

@@ -109,6 +109,44 @@ internal sealed class DynamicsEditorView
         }
         ImGui.EndChild();
     }
+    internal void DrawSelected(GameWorld world, string key, Func<string, double> read, Func<string, string, string[], Action<string>, bool> pick = null)
+    {
+        SynchronizeEquation();
+        if (key.StartsWith("stock.", StringComparison.Ordinal)) key = "stock:" + key[6..];
+        if (key.StartsWith("stock:", StringComparison.Ordinal)) {
+            var stock = model.Stocks.Find(s => s.Id == key[6..]);
+            if (stock == null) { ImGui.TextWrapped("A készlet már nem létezik."); return; }
+            string name = stock.Name, unit = stock.Unit;
+            if (ImGui.InputText("Készlet neve", ref name, 120)) { Remember(); stock.Name = name; }
+            if (ImGui.InputText("Mértékegység", ref unit, 40)) { Remember(); stock.Unit = unit; }
+            double initial = stock.Initial, min = stock.Minimum, max = stock.Maximum;
+            if (ImGui.InputDouble("Kezdőérték", ref initial)) { Remember(); stock.Initial = initial; }
+            if (ImGui.InputDouble("Minimum", ref min)) { Remember(); stock.Minimum = min; }
+            if (ImGui.InputDouble("Maximum", ref max)) { Remember(); stock.Maximum = max; }
+            ImGui.TextWrapped($"A világban: {read("stock." + stock.Id):G6} {stock.Unit}");
+            bool referenced = model.Flows.Any(f => f.From == stock.Id || f.To == stock.Id || f.Rate.Nodes.Any(n => n.Key == "stock." + stock.Id));
+            ImGui.BeginDisabled(referenced);
+            if (ImGui.Button("Készlet törlése")) { Remember(); model.Stocks.Remove(stock); ImGui.EndDisabled(); return; }
+            ImGui.EndDisabled();
+            if (referenced) ImGui.TextWrapped("Törlés előtt bontsd a készletre hivatkozó áramlásokat.");
+            ImGui.TextWrapped("Kapcsolódó áramlások:");
+            foreach (var flow in model.Flows.Where(f => f.From == stock.Id || f.To == stock.Id))
+                ImGui.TextWrapped(EndpointName(flow.From) + " → " + flow.Name + " → " + EndpointName(flow.To));
+            return;
+        }
+        var active = model.Flows.Find(f => f.Id == key[5..]);
+        if (active == null) { ImGui.TextWrapped("Az áramlás már nem létezik."); return; }
+        if (selectedFlow != active.Id) SelectFlow(active);
+        if (ImGui.Button("Áramlás törlése")) { Remember(); model.Flows.Remove(active); selectedFlow = null; return; }
+        string flowName = active.Name;
+        if (ImGui.InputText("Áramlás neve", ref flowName, 120)) { Remember(); active.Name = flowName; }
+        Endpoint("Forráskészlet", active.From, v => active.From = v); ImGui.SameLine();
+        Endpoint("Célkészlet", active.To, v => active.To = v);
+        ImGui.TextWrapped("A gráf másodpercenkénti átadást ad. A közös végrehajtó készlet- és kapacitáskorláttal alkalmazza.");
+        equation.Configure(new[] { DynamicsRuntime.FlowHook(active) }, DynamicsRuntime.Keys(model, GameWorld.RuleWorldFields), read);
+        equation.PickField = pick; equation.DrawEquation(world); SynchronizeEquation();
+    }
+
     private string EndpointName(string id) => id.Length == 0 ? "Környezet" : model.Stocks.Find(s => s.Id == id)?.Name ?? id;
     private void Endpoint(string label, string id, Action<string> set)
     {

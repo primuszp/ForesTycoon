@@ -21,7 +21,7 @@ public sealed class RuleWorkshopTests
     {
         var index = new GameRuleIndex(CurrentGameRules.Build());
         Assert.DoesNotContain(RuleWorkshopModel.Search(index, 3, ""), r => r.Id == "forest.growth");
-        var result = RuleWorkshopModel.Search(index, 3, "fanövekedés");
+        var result = RuleWorkshopModel.Search(index, 3, "Fák növekedése");
         Assert.Contains(result, r => ReferenceEquals(r, index.Find("forest.growth")));
     }
     [Fact]
@@ -41,7 +41,7 @@ public sealed class RuleWorkshopTests
         var first = new RuleProject { Tuning = new() { ["a"] = 1, ["b"] = 2 } };
         var second = new RuleProject { Tuning = new() { ["b"] = 2, ["a"] = 1 } };
         Assert.Equal(first.ContentRevision(), second.ContentRevision());
-        second.Road.Nodes.Single(n => n.Id == "scale").Value = 2;
+        second.Rules.Add(TrafficWearRule.Default());
         Assert.NotEqual(first.ContentRevision(), second.ContentRevision());
     }
     [Fact]
@@ -52,11 +52,11 @@ public sealed class RuleWorkshopTests
         try {
             string published = Path.Combine(folder, "project.json");
             var active = GameWorld.DefaultRuleProject(); string original = active.ToJson(); File.WriteAllText(published, original);
-            var incomplete = active.Clone(); incomplete.Road.Nodes.Clear();
+            var incomplete = active.Clone(); incomplete.Rules.Add(new() { Id = "incomplete", Scope = "passage", Schedule = "passage", Effects = { new() { Target = "unknown", Influence = new() { PerYear = false } } } });
             var bundle = new AlgorithmBundle(); bundle.Files.Add(AlgorithmBundle.Import("ForesTycoon/World/Test.cs", "class Fixture { int Value => 1; }"));
             string draft = WorkshopDraftStore.Save(published, incomplete, bundle, folder);
             var saved = RuleProject.FromJson(File.ReadAllText(draft));
-            Assert.Empty(saved.Road.Nodes); Assert.Equal("draft", saved.Algorithms.Revision);
+            Assert.Equal("unknown", saved.Rules.Single().Effects.Single().Target); Assert.Equal("draft", saved.Algorithms.Revision);
             string firstBundle = saved.Algorithms.BundlePath, firstContents = File.ReadAllText(firstBundle);
             bundle.Files[0].Nodes.First(n => n.Token && n.Text == "1").Text = "unresolvedName";
             // Reopening a draft must preserve its publication target and permit another incomplete edit.

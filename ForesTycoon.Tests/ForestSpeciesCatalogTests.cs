@@ -61,10 +61,8 @@ public class ForestSpeciesCatalogTests
         var mature = ForestTreeGrowth.Initial(species, profile.MatureAgeYears * 1.5f, 1);
         Assert.InRange(mature.Height, traits.MatureHeight * 0.75f, traits.MatureHeight * 1.05f);
         Assert.True(previous.Height <= traits.MaxHeight);
-        // The growth rate of a thriving individual falls to zero at the envelope.
-        var shape = ForestTreeGrowth.Shape(species, new(0.3f, traits.MaxHeight, 3));
-        Assert.Equal(0, shape.HeightMultiplier, 4);
-        Assert.True(ForestTreeGrowth.Shape(species, ForestTreeGrowth.Initial(species, 2, 1)).HeightMultiplier > 0);
+        // Growth envelopes are exercised through the project graph in TreeGrowthGraphTests.
+
     }
 
     [Theory]

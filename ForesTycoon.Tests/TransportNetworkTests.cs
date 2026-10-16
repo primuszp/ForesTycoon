@@ -193,8 +193,7 @@ public class TransportNetworkTests
             var cargo = new TimberCargoSystem(); cargo.AddHarvested(100);
             var system = new VehicleSystem(cargo, r => VehicleRoadRoute.Create(map, r))
             {
-                RoadState = id => map.IsRoadTile(id) ? (RoadSurface.Gravel, map.GetRoadCondition(id)) : (RoadSurface.Dirt, 0.2f - 0.2f * map.GetSkidTrailWear(id)),
-                RoadWear = (id, amount) => { if (map.IsSkidTrail(id)) map.DriveSkidTrail(id, amount * 20); }
+                RoadState = id => map.IsRoadTile(id) ? (RoadSurface.Gravel, map.GetRoadCondition(id)) : (RoadSurface.Dirt, 0.2f - 0.2f * map.GetSkidTrailWear(id))
             };
             var truck = system.Spawn(route);
             double top = 0; damage = 0;

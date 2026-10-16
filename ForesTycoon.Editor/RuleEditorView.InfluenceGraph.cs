@@ -37,7 +37,7 @@ internal sealed partial class RuleEditorView
         if (effect.Mode == "action") return direction > 0 ? "Kiváltja" : "Gátolja";
         if (effect.Mode == "flow") return direction > 0 ? "+ Gyorsítja" : "- Lassítja";
         // The field is the pace of a process (decay, ruts smoothing out): a source speeds it up or slows it down.
-        int pace = effect.Mode == "add" ? SchemaField(scope, effect.Target)?.Pace ?? 0 : 0;
+        int pace = scope != "passage" && effect.Mode == "add" ? SchemaField(scope, effect.Target)?.Pace ?? 0 : 0;
         if (pace != 0) return direction == pace ? "+ Gyorsítja" : "- Lassítja";
         return direction > 0 ? "+ Növeli" : "- Csökkenti";
     }
@@ -45,10 +45,12 @@ internal sealed partial class RuleEditorView
     /// <summary>Every source a connection reads. Gates (conditions, steps) switch the connection on or off; the others scale it.</summary>
     private static IEnumerable<(string Source, int Direction, string Label, bool Gate)> GraphInputs(string scope, RuleEffect effect, InfluenceTerm term)
     {
+        if (term.AmountField.Length > 0) yield return (term.AmountField, term.Decrease ? -1 : 1, "Erősség forrása", false);
         foreach (var factor in term.Factors) yield return (factor.Source, ConnectionDirection(term, factor), ConnectionLabel(scope, effect, term, factor), factor.Shape == "step");
         foreach (var condition in term.Conditions) {
             int direction = condition.Comparison is "less" or "atMost" or "notEqual" ? -1 : 1;
             yield return (condition.Field, direction, direction > 0 ? "Kiváltja" : "Gátolja", true);
+            if (condition.ValueCurve is { } curve) yield return (curve.Source, -direction * curve.ToCurve().Sign, "Küszöb görbéje", true);
             if (condition.ValueField.Length > 0) yield return (condition.ValueField, -direction, direction > 0 ? "Gátolja" : "Kiváltja", true);
         }
     }
@@ -59,12 +61,13 @@ internal sealed partial class RuleEditorView
         if (!t.Enabled) return "Kikapcsolva";
         string amount = t.AmountField.Length > 0
             ? (t.AmountField.StartsWith("tuning.", StringComparison.Ordinal) && GameTuning.Spec(t.AmountField[7..]) is { } spec
-                ? RuleSentence.Number(world.Tuning[spec.Key]) + " (param.)" : FieldDisplay("", t.AmountField))
+                ? RuleSentence.Number(world.Tuning[spec.Key]) + " (param.)" : FieldDisplay(scope, t.AmountField))
             : RuleSentence.Number(t.Amount);
         if (effect.Mode == "action") return "Kiváltja";
-        if (effect.Mode == "set") return "= " + amount;
+        if (effect.Mode == "set") return "= " + amount + (t.AmountScale != 1 ? " × " + RuleSentence.Number(t.AmountScale) : "");
+        if (effect.Mode == "approach") return "Cél: " + (t.Decrease ? "− " : "+ ") + amount;
         string unit = FieldUnit(scope, effect.Target);
-        return (t.Decrease ? "– " : "+ ") + amount + (unit.Length == 0 || unit == "0–1" ? "" : " " + unit) + (effect.Influence.PerYear ? " / év" : " / lépés");
+        return (t.Decrease ? "– " : "+ ") + amount + (unit.Length == 0 || unit == "0–1" ? "" : " " + unit) + (scope == "passage" ? " / áthaladás" : effect.Influence.PerYear ? " / év" : " / lépés");
     }
 
     /// <summary>
@@ -126,7 +129,7 @@ internal sealed partial class RuleEditorView
             influence.Terms[term].Factors.Add(new() { Source = source });
         } else {
             if (influence.Terms.Count >= 16) return false;
-            influence.Terms.Add(new() { Name = FieldDisplay(rule.Scope, source) + " hatása", Decrease = rule.Effects[effect].Mode != "action", Factors = new() { new() { Source = source } } });
+            influence.Terms.Add(new() { Name = FieldDisplay(rule.Scope, source) + " hatása", Decrease = rule.Effects[effect].Mode is not ("action" or "approach"), Factors = new() { new() { Source = source } } });
             term = influence.Terms.Count - 1;
         }
         selectedEffect = effect; selectedTermIndex = term;
@@ -156,7 +159,7 @@ internal sealed partial class RuleEditorView
                 int index = rule.Effects.FindIndex(e => e.Target == field);
                 if (index < 0) {
                     bool action = scope.Actions.Any(a => a.Name == field);
-                    rule.Effects.Add(new() { Target = field, Mode = action ? "action" : "add", Influence = new() { PerYear = !action } });
+                    rule.Effects.Add(new() { Target = field, Mode = action ? "action" : "add", Influence = new() { PerYear = !action && rule.Schedule != "passage" } });
                     index = rule.Effects.Count - 1;
                 }
                 selectedInfluence = index; selectedTerm = 0;
@@ -171,7 +174,7 @@ internal sealed partial class RuleEditorView
         var inputs = terms.Select(t => GraphInputs(rule.Scope, rule.Effects[t.Effect], t.Value).ToArray()).ToArray();
         // Sources in the order of the first connection they feed: lines run mostly level and cross less.
         var sources = inputs.SelectMany((list, i) => list.Select(input => (input.Source, Row: i)))
-            .GroupBy(s => s.Source).OrderBy(g => g.Average(s => s.Row)).ThenBy(g => g.Key, StringComparer.Ordinal).Select(g => g.Key).ToArray();
+            .GroupBy(s => s.Source).OrderBy(g => g.Key.StartsWith("tuning.", StringComparison.Ordinal) ? 1 : 0).ThenBy(g => g.Average(s => s.Row)).ThenBy(g => g.Key, StringComparer.Ordinal).Select(g => g.Key).ToArray();
         // Every wire has a port of its own: a connection gets one input port per source, a target one per connection.
         const float top = 28, gap = 14, portStep = 17, boxMin = 62, lane = 54;
         static float Tall(int ports) => Math.Max(boxMin, ports * portStep + 18);
@@ -310,12 +313,12 @@ internal sealed partial class RuleEditorView
         }
         for (int i = 0; i < rule.Effects.Count; i++) {
             var p = Target(i); var effect = rule.Effects[i];
-            string mode = effect.Mode == "action" ? "művelet" : effect.Mode == "set" ? "beállítja"
+            string mode = effect.Mode == "action" ? "művelet" : effect.Mode == "approach" ? $"közelít · {RuleSentence.Number(effect.ApproachPerYear)} / év" : effect.Mode == "set" ? "beállítja"
                 : effect.Mode == "flow" ? "áramlás › " + (effect.To.Length == 0 ? "ki a rendszerből" : FieldTitle(rule.Scope, effect.To))
-                : effect.Influence.PerYear ? "változtatja / év" : "változtatja / lépés";
+                : rule.Schedule == "passage" ? "változtatja / áthaladás" : effect.Influence.PerYear ? "változtatja / év" : "változtatja / lépés";
             string range = effect.Mode is "action" or "flow" ? "" : FieldRange(rule.Scope, effect.Target);
             bool over = Hit(p, TargetSize(i)), dropping = over && (dragging || pending);
-            Box(p, TargetSize(i), dropping ? EditorStyle.Selection : EditorStyle.U(EditorStyle.OutputKind), ObjectDisplay(rule.Scope, rule.Scope), EditorStyle.TextMuted,
+            Box(p, TargetSize(i), dropping ? EditorStyle.Selection : EditorStyle.U(EditorStyle.OutputKind), ObjectDisplay(rule.Scope, FieldObject(rule.Scope, effect.Target)), EditorStyle.TextMuted,
                 effect.Target.Length == 0 ? "Kívülről" : FieldDisplay(rule.Scope, effect.Target), EditorStyle.TextBright, mode + (range.Length > 0 ? " · " + range : ""), 0, over);
             for (int j = 0; j < feeding[i].Length; j++) EditorStyle.Port(draw, TargetIn(i, j), EditorStyle.U(EditorStyle.OutputKind), true);
             if (feeding[i].Length == 0) EditorStyle.Port(draw, Target(i) + new Vec2(0, targetH[i] / 2), EditorStyle.U(EditorStyle.OutputKind), false);

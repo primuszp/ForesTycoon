@@ -17,9 +17,9 @@ internal sealed partial class RuleEditorView
     private bool ruleOverview;
     private bool overviewOnlyShared;
 
-    internal void ShowRuleOverview() { worldTab = WorldTab.Rules; ruleOverview = true; }
+    internal void ShowRuleOverview() { worldTab = WorldTab.Rules; commonSelection = null; ruleOverview = true; }
 
-    internal sealed record FieldWrite(int Rule, string Name, string Mode, bool Enabled);
+    internal sealed record FieldWrite(int Rule, string Name, string Mode, bool Enabled, string Schedule);
     internal sealed record FieldUse(string Key, string Entity, string Field, List<FieldWrite> Writers, List<(int Rule, string Name, bool Enabled)> Readers, List<string> Native)
     {
         public bool Shared => Writers.Count(w => w.Enabled) > 1;
@@ -51,7 +51,7 @@ internal sealed partial class RuleEditorView
         for (int i = 0; i < rules.Count; i++) {
             var rule = rules[i];
             foreach (var effect in rule.Effects) {
-                Use(FieldKey(rule.Scope, effect.Target))?.Writers.Add(new(i, rule.Name, effect.Mode, rule.Enabled));
+                Use(FieldKey(rule.Scope, effect.Target))?.Writers.Add(new(i, rule.Name, effect.Mode, rule.Enabled, rule.Schedule));
                 IEnumerable<string> reads = effect.Influence != null
                     ? effect.Influence.Terms.SelectMany(t => GraphInputs(rule.Scope, effect, t).Select(x => x.Source).Append(t.AmountField))
                     : Array.Empty<string>();
@@ -84,15 +84,18 @@ internal sealed partial class RuleEditorView
         return (Objects.Find(entity)?.Name ?? entity) + " · " + FieldDisplay(entity, field);
     }
 
-    private static string WriteMode(string mode) => mode switch { "set" => "felülírja", "action" => "végrehajtja", _ => "változtatja" };
+    private static string WriteMode(string mode) => mode switch { "set" => "felülírja", "approach" => "közelíti", "action" => "végrehajtja", _ => "változtatja" };
+    private static string ScheduleLabel(string schedule) => schedule switch { "passage" => "áthaladáskor", "month" => "erdőhónaponként", "growth" => "növekedési ráta frissítésekor", _ => "időszakonként" };
 
     /// <summary>Under the rule's sentence: other rules writing the same field, and in which order they run.</summary>
     private void OtherWriters(GameWorld world, WorldRule rule)
     {
         var rules = RuleBookRules(world); int self = rules.IndexOf(rule);
-        foreach (var use in FieldUses(rules).Where(u => u.Writers.Any(w => w.Rule == self) && u.Writers.Any(w => w.Rule != self && w.Enabled))) {
-            string order = string.Join(" » ", use.Writers.Where(w => w.Enabled || w.Rule == self).OrderBy(w => w.Rule).Select(w => $"{w.Rule + 1}. {(w.Rule == self ? "ez a szabály" : w.Name)}"));
-            EditorStyle.Text(HudTheme.AmberAccent, $"Figyelem: a(z) {KeyDisplay(use.Key)} mezőt más szabály is írja. Futási sorrend: {order}. A későbbi a korábbi eredményét látja.");
+        var shared = FieldUses(rules).Where(u => u.Writers.Any(w => w.Rule == self) && u.Writers.Any(w => w.Rule != self && w.Enabled)).ToArray();
+        if (shared.Length == 0 || !ImGui.CollapsingHeader($"{shared.Length} célmezőt más szabály is változtat · futási rend")) return;
+        foreach (var use in shared) {
+            string order = string.Join("; ", use.Writers.Where(w => w.Enabled || w.Rule == self).OrderBy(w => w.Rule).Select(w => $"{w.Rule + 1}. {(w.Rule == self ? "ez a szabály" : w.Name)} ({ScheduleLabel(w.Schedule)})"));
+            EditorStyle.Text(HudTheme.AmberAccent, $"A(z) {KeyDisplay(use.Key)} mezőt más szabály is írja: {order}. Azonos indításnál listasorrendben futnak; külön eseményeknél a tényleges időrend dönt.");
             if (ImGui.IsItemClicked()) ruleOverview = true;
             if (ImGui.IsItemHovered()) ImGui.SetTooltip("Kattintás: áttekintés, melyik szabály mit olvas és ír.");
         }
@@ -103,8 +106,8 @@ internal sealed partial class RuleEditorView
         ImGui.BeginChild("rule-overview", Vec2.Zero, ImGuiChildFlags.Borders);
         ImGui.PushTextWrapPos(0);
         EditorStyle.Title("Mezők és szabályok");
-        EditorStyle.Text(HudTheme.Muted, "Melyik szabály melyik objektum melyik tulajdonságát olvassa és írja. A szabályok a bal oldali lista sorrendjében futnak; " +
-            "ha két szabály ugyanazt a mezőt írja, a későbbi a korábbi eredményét látja, felülírásnál pedig a korábbit eltünteti.");
+        EditorStyle.Text(HudTheme.Muted, "Melyik szabály melyik objektum melyik tulajdonságát olvassa és írja. Az azonos eseményre vagy időlépésre induló szabályok listasorrendben futnak. " +
+            "Az áthaladási és időszakos szabályok a saját indításukkor futnak; a későbbi végrehajtás az addig kialakult állapotot látja.");
         var uses = FieldUses(rules);
         int shared = uses.Count(u => u.Shared);
         if (shared > 0) EditorStyle.Text(HudTheme.AmberAccent, $"Figyelem: {shared} mezőt több bekapcsolt szabály is ír.");
@@ -127,7 +130,7 @@ internal sealed partial class RuleEditorView
                 if (ImGui.IsItemHovered()) ImGui.SetTooltip(FieldHelp(use.Entity, use.Field));
                 ImGui.PopTextWrapPos();
                 ImGui.TableNextColumn();
-                foreach (var w in use.Writers.OrderBy(w => w.Rule)) RuleLink(w.Rule, $"{w.Rule + 1}. {w.Name} · {WriteMode(w.Mode)}", w.Enabled);
+                foreach (var w in use.Writers.OrderBy(w => w.Rule)) RuleLink(w.Rule, $"{w.Rule + 1}. {w.Name} · {ScheduleLabel(w.Schedule)} · {WriteMode(w.Mode)}", w.Enabled);
                 if (use.Writers.Count == 0) EditorStyle.Text(HudTheme.Muted, "—");
                 ImGui.TableNextColumn();
                 foreach (var r in use.Readers.OrderBy(r => r.Rule)) RuleLink(r.Rule, $"{r.Rule + 1}. {r.Name}", r.Enabled);

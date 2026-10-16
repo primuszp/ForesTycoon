@@ -80,14 +80,23 @@ ezért egyelőre a meglévő fajok paraméterei szerkeszthetők.
 
 ### Burkolatok
 
-Aszfalt, makadám, földút és közelítőnyom egy táblázatban: építési költség, forgalmi kopás
-szorzója, időjárási romlás szárazon és esőben, gördülési ellenállás, javítási arány,
+Aszfalt, makadám, földút és közelítőnyom egy táblázatban: építési költség,
+időjárási romlás szárazon és esőben, gördülési ellenállás, javítási arány,
 benövési idő. Az alkalmazás után a futó játékra is azonnal hatnak. A földút járhatóságát
 a Szabályok fül képlete adja a talaj és a talajvíz alapján.
+A forgalmi kopás burkolati hatása a közös áthaladási gráfon szerkeszthető.
 
 ## Szabályok
 
 ### Gráfos hatásszerkesztő
+
+Az áthaladási kopás is a közös szabálykönyvből fut:
+**Szabályok → Forgalmi út- és nyomkopás**. Az **Áthaladás** objektumhoz kapcsolt
+Jármű, Út, Nyom és Csempe mezői választhatók; a hatás egy belépésre értendő.
+A tömeg, rakomány, burkolat, vályúmélység és a pihenőidő nullázása ugyanazon
+gráfon szerkeszthető, képletírás nélkül. Az előnézet mellett naplózott áthaladás
+is indítható a tesztvilágban. A külön útkopásgráf és viselkedésfelülírás megszűnt.
+Részletek: [forgalmi szabályok](traffic-rules.md).
 
 **Szabályok → Időjárási útromlás**. Egyetlen szerkesztő van: balra a szabályok,
 középen a kapcsolatok gráfja, jobbra a kijelölt hatás beállításai. Az általános
@@ -445,11 +454,59 @@ után állítja meg a további lépéseket. Nagy terhelésnél az időhátralék
 
 A szabályprojekt cseréje után szükséges teljes erdőráta-frissítés is szeletelt;
 a még el nem indult frissítést a mentés megőrzi. Az új futtató azonosítója
-`forestycoon-simulation/2026-10-16.2`. Az előző `.6` és `.2026-10-16.1` futtató teljes, cél-ticknél
-készült checkpointja betölthető; régi futtatóhoz tartozó puszta parancsnaplót
-vagy történeti naplóvéget nem játszunk vissza új műveleti sorrenddel.
+`forestycoon-simulation/2026-10-16.3`. Régi futtatóhoz tartozó puszta parancsnaplót
+vagy történeti naplóvéget nem játszunk vissza új műveleti sorrenddel. A korábbi
+engedélyezett teljes checkpointok is csak támogatott szabálykötésekkel tölthetők
+be: a megszűnt külön útkopási modell és kötések nem futnak tartalék útvonalon.
 
 A pályát módosító nagy műveletek és a tesztvilág újraépítése is folytatható.
 Közben a szerkesztő a munkafázist mutatja; a világ cseréje előtt a pályaépítés
 megszakítható. A jelenet ellenőrzése/mentése háttérben készül. A mentési kérés
 félkész ecset vagy útépítés esetén is a teljes művelet végéig várakozik.
+
+
+## Fák egészsége, stressze és elhalása
+
+A Szabályok listában a **Fák egészsége**, **Fák tartós stressze**, **Fák elhalása**
+és **Elhalt fák eltűnése** ugyanazzal a gráfos felülettel szerkeszthető. Az időzítés
+„Erdőhónaponként”. A forrásválasztóban először az objektumot, utána annak
+olvasható tulajdonságát válaszd; a kódnevek angolok, a feliratok magyarok.
+
+Az egészségnél a kapcsolatok a célértéket adják, a „Célértékhez közelít” művelet
+pedig megadott éves sebességgel mozgatja az állapotot. A feltételküszöb lehet
+szám, másik tulajdonság vagy annak görbéje. Így például az árnyéktűrésből
+állítható elő a még elfogadható erőforrásellátás. A görbék, mennyiségek,
+küszöbök és a közelítési sebesség csúszkával és számbevitellel is állíthatók.
+A próba előnézete külön jelzi a célérték részeit és a tényleges állapotváltozást.
+
+A [faéletciklus leírása](tree-vitality-rules.md) tartalmazza az alapértékeket és
+a havi futtatás sorrendjét. A nyers képletes nézet nem szükséges ezekhez a szabályokhoz.
+
+
+## Közös szabálylista és fanövekedés
+
+A **Fák növekedése** gráf külön átmérő-, magasság- és koronanövekedési célt
+mutat. Az erősség forrása tetszőleges olvasható tulajdonság lehet, külön
+állítható szorzóval. Az összesítés összeadás, maximum vagy minimum lehet;
+így a korona a két növekedési kapcsolat közül az erősebbet is követheti.
+Az új gyök- és inverz görbét ugyanaz a görbeszerkesztő és fordító kezeli.
+
+A Szabályok oldalon közös listából nyílnak a világobjektumok szabályai,
+a folyamatkapcsolatok, a gépek munkaciklusai, a saját készletek és áramlások,
+valamint a sablonok. A korábbi képletszöveges szabálypanelt eltávolítottuk:
+a meglévő kifejezések számítási csomópontokként szerkeszthetők. Puszta
+megnyitásuk nem írja át az adatot; az első módosítás után a szerkesztett
+gráf marad a kanonikus, teljes pontosságú tárolt program. A hiányzó kapcsolatok
+javíthatók, a hibás gráf alkalmazását a közös validálás elutasítja.
+
+A teljes szabály feltétele is csomópontokkal szerkeszthető. Az objektummezők
+és a világforrások objektum → tulajdonság választóból választhatók.
+A kapcsolatos szerkesztés az egyszerű hatásokra, a számítási csomópontok az
+összetett aritmetikára és választásra valók; ugyanabban a szabálymunkaterületben
+élnek. A folyamatkapcsolatok és globális készletáramlások futási jelentése
+megmaradt: a felület egyesítése nem változtatta őket tárgyi készletátadássá.
+
+A felső Vissza / Újra a folyamatkapcsolatokat, munkaciklusokat, készleteket
+és áramlásokat is a szabályokkal együtt őrzi. A jelenet mentése és alkalmazása
+minden fenti adatot egyetlen projektként kezel. Részletek:
+[fanövekedés és ellenőrzés](tree-growth-rules.md).

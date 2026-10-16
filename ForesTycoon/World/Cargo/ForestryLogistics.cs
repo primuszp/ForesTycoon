@@ -17,6 +17,7 @@ namespace ForesTycoon
     }
     internal sealed partial class ForestryLogistics
     {
+        internal Action<TrafficPassage> Passage;
         internal IBehaviorPolicy Behaviors { get; set; }
         internal CompiledBehaviorControllers Controllers { get; set; }
         private readonly TerrainMap terrain;

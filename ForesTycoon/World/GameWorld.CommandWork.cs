@@ -7,8 +7,9 @@ namespace ForesTycoon;
 sealed partial class GameWorld
 {
     internal bool CommandPending => commands.WorkPending;
-    internal bool ForegroundPending => generationWork != null || commands.Count > 0 && !UpdatePending && ruleEngine?.StepPending != true;
-    internal bool BoundaryPending => UpdatePending || CommandPending || generationWork != null;
+    private bool RulesBlockCommands => ruleEngine?.StepPending == true && !(CommandPending && (activePassage != null || growthRuleActive));
+    internal bool ForegroundPending => generationWork != null || commands.Count > 0 && !UpdatePending && !RulesBlockCommands;
+    internal bool BoundaryPending => UpdatePending || CommandPending || generationWork != null || trafficPassages.Count > 0;
 
     // Synchronous adapter for replay, CLI fixtures and startup. Interactive hosts use ContinueCommands.
     private IEnumerable<int> ExecuteCommandWork(IWorldCommand command)
@@ -16,6 +17,10 @@ sealed partial class GameWorld
         var record = command.ToRecord(worldTick);
         switch (record.Kind)
         {
+            case WorldCommandKind.TrafficPassage:
+                RecordPassage(System.Text.Json.JsonSerializer.Deserialize<TrafficPassage>(record.RuleJson));
+                foreach (int unit in TrafficWork()) yield return unit;
+                break;
             case WorldCommandKind.EditElevation:
                 {
                     var changed = new WorkResult<int[]>();
@@ -138,7 +143,7 @@ sealed partial class GameWorld
     internal int ContinueCommands(int budget = 16)
     {
         EnsureAvailable(allowFaulted: GenerationPending); terrainRenderer?.VerifyAccess();
-        if (UpdatePending || ruleEngine?.StepPending == true) return 0;
+        if (UpdatePending || RulesBlockCommands) return 0;
         if (generationWork != null) { ContinueGeneration(budget); return 0; }
         int completed;
         try { backgroundJobs.PublishCompleted(); completed = commands.Continue(this, ExecuteCommandWork, budget); }

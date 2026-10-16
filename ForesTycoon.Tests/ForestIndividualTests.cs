@@ -5,7 +5,15 @@ public class ForestIndividualTests
     private static ForestSystem Create(int seed = 42)
     {
         var forest = new ForestSystem(new ForestSystemTests.TestHabitat(96, seed: seed), secondsPerYear: 12);
+        // This suite tests interpolation and bookkeeping; project biology is tested in TreeGrowthGraphTests.
+        forest.GrowthRules = (tile, year) => ConstantGrowth(forest, tile);
+        SimulationWork.Complete(forest.RefreshEnvironmentRatesWork());
         return forest;
+    }
+
+    private static IEnumerable<int> ConstantGrowth(ForestSystem forest, int tile) {
+        forest.IndividualTrees.TryGet(tile, out var p);
+        for (int i = 0; i < p.Count; i++) { p.Trees[i] = p.Trees[i] with { AnnualGrowth = new(.01f, .2f, .1f) }; yield return 1; }
     }
 
     private static (int Tile, ForestTreeStore.Patch Patch) First(ForestSystem forest) =>
@@ -49,17 +57,6 @@ public class ForestIndividualTests
         Assert.Equal(initial.Id, boundary.Id);
         Assert.Equal(initial.U, boundary.U); Assert.Equal(initial.V, boundary.V);
         Assert.True(boundary.Dimensions.Diameter > half.Diameter);
-    }
-
-    [Fact]
-    public void MatureTreesCanStillThicken()
-    {
-        var tree = new ForestTree(1, 0, ForestSpecies.Oak, 0.5f, 0.5f, 42, -180, 0,
-            ForestTreeGrowth.Initial(ForestSpecies.Oak, 180, 1), default, 1);
-        var rates = ForestTreeGrowth.Rates(tree, 0.25, 1, 0, 1);
-        Assert.True(rates.Diameter > 0);
-        Assert.True(rates.Height > 0);
-        Assert.True(rates.Height < 0.9);
     }
 
     [Fact]
@@ -122,7 +119,7 @@ public class ForestIndividualTests
     public void ResetRegeneratesTheOriginalIndividuals()
     {
         var forest = Create(); forest.Update(24); forest.Reset(new ForestSystemTests.TestHabitat(96, seed: 42));
-        var regenerated = new ForestSystem(new ForestSystemTests.TestHabitat(96, seed: 42), secondsPerYear: 12);
+        var regenerated = Create();
         for (int id = 0; id < 96; id++)
         {
             Assert.Equal(regenerated.TryGetStand(id, out var expected), forest.TryGetStand(id, out var actual));

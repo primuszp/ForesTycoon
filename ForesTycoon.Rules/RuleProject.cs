@@ -13,7 +13,6 @@ public sealed class RuleProject
     public string Schema { get; set; } = "forest-rule-project";
     public int Version { get; set; } = 1;
     public string Name { get; set; } = "ForesTycoon szabályrendszer";
-    public RuleModel Road { get; set; } = RuleModel.Default();
     public Dictionary<string, double> Tuning { get; set; } = new();
     public BehaviorModel Behaviors { get; set; } = new();
     public DynamicsModel Dynamics { get; set; } = new();
@@ -32,8 +31,13 @@ public sealed class RuleProject
         Converters = { new JsonStringEnumConverter() }
     };
     public string ToJson() => JsonSerializer.Serialize(this, JsonOptions);
-    public static RuleProject FromJson(string json) => JsonSerializer.Deserialize<RuleProject>(json, JsonOptions)
-        ?? throw new InvalidDataException("Üres szabályprojekt.");
+    public static RuleProject FromJson(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        if (document.RootElement.ValueKind == JsonValueKind.Object && document.RootElement.TryGetProperty("road", out _))
+            throw new InvalidDataException("A projekt megszűnt külön útkopási modellt tartalmaz (road). A forgalmi kopást a közös szabálykönyv áthaladási gráfja szerkeszti; a régi modellt nem hagyjuk el észrevétlenül.");
+        return JsonSerializer.Deserialize<RuleProject>(json, JsonOptions) ?? throw new InvalidDataException("Üres szabályprojekt.");
+    }
     public RuleProject Clone() => FromJson(ToJson());
     /// <summary>Stable document identity, independent of object/dictionary property order.</summary>
     public string ContentRevision()

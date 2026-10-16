@@ -37,8 +37,11 @@ internal sealed partial class RuleEditorView
     {
         if (!projectInitialized) {
             projectInitialized = true;
-            if (pendingProject != null) LoadProject(world, pendingProject);
-            else {
+            if (pendingProject != null) {
+                try { LoadProject(world, pendingProject); projectLoadError = null; }
+                catch (Exception e) when (Expected(e)) { pendingProject = null; projectLoadError = e.Message; }
+            }
+            if (pendingProject == null) {
                 projectName = world.RuleProjectDocument.Name;
                 if (behaviors.Document.Graphs.Count == 0 && behaviors.Document.Controllers.Count == 0) behaviors.LoadDraft(world.BehaviorDocument);
                 dynamicsEditor.Load(world.RuleProjectDocument.Dynamics);
@@ -72,8 +75,9 @@ internal sealed partial class RuleEditorView
     private void LoadProject(GameWorld world, RuleProject project)
     {
         ValidateDraft(project);
+        projectLoadError = null;
         var tuning = GameTuning.FromOverrides(project.Tuning);
-        pendingProject = project.Clone(); projectName = project.Name; draft = project.Road.Clone(); selected = draft.Output;
+        pendingProject = project.Clone(); projectName = project.Name;
         projectPathEdit = projectPath;
         workshopVersions.Reset(); bindingSelectedFor = null; trialResult = null; publishedProjectRevision = null;
         authoring = project.Clone().Authoring ?? new();
@@ -91,19 +95,17 @@ internal sealed partial class RuleEditorView
         foreach (var rule in catalog.Rules)
             for (int i = 0; i < rule.Parameters.Count; i++)
                 if (rule.Parameters[i].Tunable) rule.Parameters[i] = rule.Parameters[i] with { Value = tuning[GameTuning.Spec(rule.Parameters[i].Key).Key] };
-        currentRules.Load(catalog); currentRules.SetRoadTrafficModel(world, draft); fitRequested = true;
+        currentRules.Load(catalog);
     }
     private static void ValidateDraft(RuleProject project)
     {
         if (project == null || project.Schema != "forest-rule-project" || project.Version != 1 || project.Name == null
-            || project.Tuning == null || project.Road?.Nodes == null || project.Road.Nodes.Count > 128
+            || project.Tuning == null
             || project.Behaviors?.Graphs == null || project.Behaviors.Graphs.Count > 512 || project.Behaviors.Controllers == null
             || project.Dynamics?.Stocks == null || project.Dynamics.Stocks.Count > 256 || project.Dynamics.Flows == null || project.Dynamics.Flows.Count > 512
             || project.Authoring != null && (project.Authoring.Entries == null || project.Authoring.Templates == null || project.Authoring.Entries.Count > 2048 || project.Authoring.Templates.Count > 1024
                 || project.Authoring.Entries.Any(e => e.Value == null || e.Value.Notes == null) || project.Authoring.Templates.Any(t => t == null || t.Name == null || t.Id == null || t.Graph == null && t.Controller == null)))
             throw new InvalidDataException("Hiányos vagy túl nagy szerkesztési projekt.");
-        if (project.Road.Nodes.Any(n => n == null || n.Id == null || n.Name == null || !Enum.IsDefined(n.Operation) || !float.IsFinite(n.X) || !float.IsFinite(n.Y)))
-            throw new InvalidDataException("Hibás útkopási csomópont.");
         static bool InvalidNodes(BehaviorGraph graph) => graph.Nodes == null || graph.Nodes.Count > 256
             || graph.Nodes.Any(n => n == null || n.Id == null || n.Name == null || !Enum.IsDefined(n.Operation) || !float.IsFinite(n.X) || !float.IsFinite(n.Y));
         if (project.Behaviors.Graphs.Any(g => g == null || g.Id == null || g.Name == null || InvalidNodes(g))
@@ -120,7 +122,6 @@ internal sealed partial class RuleEditorView
         // The runtime compiler still rejects them at publish/apply time.
     }
     internal RuleProject CollectProject(GameWorld world) => new() { Name = projectName,
-        Road = (draft ?? currentRules.RoadTrafficModel ?? world.RuleDocument).Clone(),
         Tuning = currentRules.TuningOverrides(world), Behaviors = behaviors.Document, Dynamics = dynamicsEditor.Document,
         Algorithms = algorithms.Reference, Rules = RuleEngine.Clone(RuleBookRules(world)), RemovedStarters = RemovedStarters(world).ToList(), Fields = RuleEngine.CloneFields(RuleBookFields(world)),
         Authoring = JsonSerializer.Deserialize<RuleAuthoring>(JsonSerializer.Serialize(authoring)),
@@ -209,7 +210,7 @@ internal sealed partial class RuleEditorView
         using var input = File.OpenRead(save); var data = WorldSaveSerializer.Read(input);
         var checkpoint = data.Checkpoint ?? throw new InvalidDataException("A próbához állapotpillanatképes mentés szükséges. Olvasd be a világot, majd mentsd újra.");
         if (checkpoint.PendingCommands != 0) throw new InvalidDataException("A mentésben függő parancsok vannak. Olvasd be a tesztvilágba és léptesd a parancsokat a próba előtt.");
-        var baseline = new RuleProject { Name = checkpoint.RuleProjectName ?? "Mentés szabályai", Road = checkpoint.Rules ?? RuleModel.Default(),
+        var baseline = new RuleProject { Name = checkpoint.RuleProjectName ?? "Mentés szabályai",
             Tuning = checkpoint.Tuning ?? new(), Behaviors = checkpoint.Behaviors ?? WorldBehaviorPolicy.DefaultDocument(),
             Dynamics = checkpoint.Dynamics ?? new(), Algorithms = checkpoint.Algorithms };
         string revision = AuthoringRevision(world), source = graphTestSavedWorld ? Path.GetFullPath(worldPath) : $"Editor tesztvilága · tick {world.SimulationTick}";
@@ -281,7 +282,10 @@ internal sealed partial class RuleEditorView
         ImGui.EndChild();
     }
     private string[] ObjectKinds() => (useLiveObjects && liveObjects != null ? liveObjects.Objects.Select(o => o.Kind) : GameWorld.RuleObjectKinds).Concat(GameWorld.RuleObjectKinds).Distinct().ToArray();
-    internal void ShowDynamics() { thematicDynamics = false; view = View.Dynamics; workshopTool = WorkshopTool.Dynamics; workshopPhase = WorkshopPhase.Edit; }
+    internal void ShowDynamics() {
+        var flow = dynamicsEditor.Draft.Flows.FirstOrDefault(); var stock = dynamicsEditor.Draft.Stocks.FirstOrDefault();
+        ShowCommonRule(flow != null ? "flow:" + flow.Id : stock != null ? "stock:" + stock.Id : "library");
+    }
     internal void ShowObjects() { view = View.Objects; workshopTool = WorkshopTool.Objects; workshopPhase = WorkshopPhase.Understand; }
     internal void ShowAlgorithms() { view = View.Algorithms; workshopTool = WorkshopTool.Algorithms; workshopPhase = WorkshopPhase.Edit; }
     internal void UseWorldFile(string file) { worldPath = Path.GetFullPath(file); useLiveObjects = false; graphTestSavedWorld = true; }

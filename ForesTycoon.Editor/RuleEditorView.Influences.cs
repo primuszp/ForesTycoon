@@ -26,7 +26,7 @@ internal sealed partial class RuleEditorView
         if (ImGui.BeginCombo("Mely objektumokon fusson?", ObjectDisplay(rule.Scope, rule.Scope))) {
             foreach (var s in RuleEngine.Scopes.Where(s => s.Entity != null && (s.Fields.Any(f => f.Write != null) || s.Actions.Length > 0))) {
                 if (ImGui.Selectable(ObjectDisplay(s.Id, s.Id) + "##" + s.Id, s.Id == rule.Scope) && s.Id != rule.Scope) {
-                    rule.Scope = s.Id; scope = s;
+                    SetRuleScope(rule, s.Id); scope = s;
                     // Keep existing effects intact: incompatible bindings remain visible and require a deliberate replacement.
                     changed = true;
                 }
@@ -34,7 +34,10 @@ internal sealed partial class RuleEditorView
             }
             ImGui.EndCombo();
         }
-        ImGui.SameLine(); EditorStyle.Text(HudTheme.Muted, $"most {ElementCount(world, scope)} db, minden szabálylépésben (0,5 játékmásodperc)");
+        DrawSchedule(rule, ref changed);
+        if (ImGui.SmallButton("Teljesülési feltétel / számítási csomópontok")) { editRuleCalculation = true; selectedCalculation = -1; }
+        if (rule.ConditionGraph != null || rule.Condition.Length > 0) ImGui.TextWrapped("Ez a szabály csak a teljesülési feltétel igaz állapotában hat. A feltétel a fenti gombbal, csomópontokból szerkeszthető.");
+        DrawCustomFields(world, rule.Scope);
         if (rule.Template.Length > 0) {
             if (ImGui.Button("Visszaállítás a mintára")) ResetVisualRule(world, rule.Id);
             if (ImGui.IsItemHovered()) ImGui.SetTooltip("A szabály hatásai a minta szerinti változatra állnak vissza. Visszavonható.");
@@ -87,27 +90,39 @@ internal sealed partial class RuleEditorView
             }
             if (effect.Mode != "flow")
                 changed |= Pick(effect.Mode == "action" ? "Mely művelet fusson?" : "Mit változtasson?", effect.Target, effect.Mode == "action" ? scope.Actions.Select(a => a.Name).ToArray() : writable, v => { effect.Target = v; });
+            int combination = effect.Influence.Combine == "maximum" ? 1 : effect.Influence.Combine == "minimum" ? 2 : 0;
+            if (ImGui.Combo("Kapcsolatok összesítése", ref combination, new[] { "Összeg", "Legnagyobb hatás", "Legkisebb hatás" }, 3)) {
+                effect.Influence.Combine = combination == 1 ? "maximum" : combination == 2 ? "minimum" : "sum"; changed = true;
+            }
             if (effect.Mode == "action") ImGui.TextWrapped("Ha a kapcsolat teljesül, a művelet végrehajtódik. Eltávolítás után az objektum további hatásai leállnak.");
             else {
                 ImGui.TextUnformatted("Hogyan hasson a célra?");
-                int mode = effect.Mode switch { "set" => 1, "flow" => 2, _ => 0 };
+                int mode = effect.Mode switch { "set" => 1, "flow" => 2, "approach" => 3, _ => 0 };
                 ImGui.RadioButton("Hozzáad vagy levon", ref mode, 0); ImGui.SameLine();
                 ImGui.RadioButton("Felülírja", ref mode, 1);
+                ImGui.RadioButton("Célértékhez közelít", ref mode, 3);
                 ImGui.RadioButton("Áramoltat egyik készletből a másikba", ref mode, 2);
                 if (ImGui.IsItemHovered()) ImGui.SetTooltip("Készletből készletbe visz át: amennyi az egyikből elfogy, annyi a másikba kerül.");
-                if (mode != effect.Mode switch { "set" => 1, "flow" => 2, _ => 0 }) {
+                if (mode != effect.Mode switch { "set" => 1, "flow" => 2, "approach" => 3, _ => 0 }) {
                     if (mode == 2) { effect.To = ""; effect.FlowName = FieldDisplay(rule.Scope, effect.Target); foreach (var t in influence.Terms) t.Decrease = false; }
-                    effect.Mode = mode switch { 1 => "set", 2 => "flow", _ => "add" }; influence.PerYear = mode != 1; changed = true;
+                    effect.Mode = mode switch { 1 => "set", 2 => "flow", 3 => "approach", _ => "add" }; influence.PerYear = rule.Schedule is not ("passage" or "growth") && mode is 0 or 2; influence.PerHour = false; changed = true;
+                }
+                if (effect.Mode == "approach") {
+                    Number("Legnagyobb közelítés / erdőév", effect.ApproachPerYear, v => effect.ApproachPerYear = v);
+                    EditorStyle.Text(HudTheme.Muted, "A kapcsolatok a célértéket adják. A tényleges változás az eltelt idő és a közelítés sebessége szerint korlátozott.");
                 }
                 if (effect.Mode == "flow") FlowSettings(world, rule, scope, effect, writable, ref changed);
                 else {
-                    EditorStyle.Text(HudTheme.Muted, effect.Mode == "set"
-                        ? $"Minden lépésben a(z) {FieldDisplay(rule.Scope, effect.Target)} új értéke a kapcsolatok összege lesz; a korábbi érték elveszik."
+                    EditorStyle.Text(HudTheme.Muted, effect.Mode == "approach"
+                        ? "A kapcsolatok összege a célérték. Az érték ehhez közelít a megadott sebességgel, túllépés nélkül."
+                        : effect.Mode == "set"
+                        ? $"A(z) {FieldDisplay(rule.Scope, effect.Target)} új értékét a kapcsolatok választott összesítése adja."
                         : $"A kapcsolatok eredménye a jelenlegi {FieldDisplay(rule.Scope, effect.Target).ToLowerInvariant()} értékhez adódik (csökkentésnél levonódik).");
                     if (FieldRange(rule.Scope, effect.Target) is { Length: > 0 } range) EditorStyle.Text(HudTheme.Muted, $"Az eredmény {range} között marad.");
                 }
             }
-            if (effect.Mode is "add" or "flow") {
+            if (rule.Schedule == "passage") EditorStyle.Text(HudTheme.Muted, "A megadott erősség egy áthaladásra vonatkozik. Az időlépés hossza nem szorozza meg.");
+            else if (rule.Schedule != "growth" && effect.Mode is ("add" or "flow")) {
                 ImGui.TextUnformatted("Mennyi idő alatt?");
                 int pace = influence.PerYear ? 0 : 1;
                 ImGui.RadioButton("Egy erdőév alatt", ref pace, 0); ImGui.SameLine(); ImGui.RadioButton("Minden lépésben", ref pace, 1);
@@ -118,9 +133,9 @@ internal sealed partial class RuleEditorView
             }
             if (ImGui.SmallButton("Cél törlése")) { rule.Effects.RemoveAt(selectedInfluence); changed = true; }
             else {
-                if (effect.Mode != "action") EditorStyle.Text(HudTheme.Muted, "A kapcsolatok hatása összeadódik. Egy kapcsolaton belül a források szorzói összeszorzódnak.");
+                if (effect.Mode != "action") EditorStyle.Text(HudTheme.Muted, "Az összesítés módja választható. Egy kapcsolaton belül a források szorzói összeszorzódnak.");
                 if (influence.Terms.Count < 16 && ImGui.Button(effect.Mode == "action" ? "+ Kiváltó kapcsolat" : "+ Állandó hatás")) {
-                    influence.Terms.Add(new() { Decrease = effect.Mode != "action", Enabled = effect.Mode != "action" });
+                    influence.Terms.Add(new() { Decrease = effect.Mode is not ("action" or "approach"), Enabled = effect.Mode != "action" });
                     selectedTerm = influence.Terms.Count - 1; changed = true;
                 }
                 if (influence.Terms.Count > 0) {
@@ -143,21 +158,22 @@ internal sealed partial class RuleEditorView
                         }
                         ImGui.TextUnformatted("Erősség");
                         int strength = term.AmountField.Length > 0 ? 1 : 0;
-                        ImGui.RadioButton("Saját szám", ref strength, 0); ImGui.SameLine(); ImGui.RadioButton("Játékparaméterből", ref strength, 1);
+                        ImGui.RadioButton("Saját szám", ref strength, 0); ImGui.SameLine(); ImGui.RadioButton("Tulajdonságból", ref strength, 1);
                         if (ImGui.IsItemHovered()) ImGui.SetTooltip("A játékparaméterek a Típusok › Játékparaméterek lapon hangolhatók. Több szabály is használhatja ugyanazt.");
                         if (strength != (term.AmountField.Length > 0 ? 1 : 0)) {
                             if (strength == 0 && term.AmountField.StartsWith("tuning.", StringComparison.Ordinal) && GameTuning.Spec(term.AmountField[7..]) is { } spec) term.Amount = world.Tuning[spec.Key];
                             term.AmountField = strength == 1 ? "tuning." + GameTuning.Specs[0].Id : ""; changed = true;
                         }
                         if (strength == 1) {
-                            changed |= Pick("Melyik paraméter?", term.AmountField, GameTuning.Specs.Select(s => "tuning." + s.Id).ToArray(), v => term.AmountField = v);
+                            Number("Forrásérték szorzója", term.AmountScale, v => term.AmountScale = Math.Max(0, v));
+                            changed |= Pick("Melyik tulajdonság?", term.AmountField, readable, v => term.AmountField = v);
                             if (term.AmountField.StartsWith("tuning.", StringComparison.Ordinal) && GameTuning.Spec(term.AmountField[7..]) is { } now)
                                 EditorStyle.Text(HudTheme.Muted, $"Most: {RuleSentence.Number(world.Tuning[now.Key])} {now.Unit}. A Típusok › Játékparaméterek lapon módosítható.");
                         } else {
                             string unit = FieldUnit(rule.Scope, effect.Target);
-                            string per = effect.Mode == "add" ? influence.PerYear ? " / erdőév" : " / lépés" : "";
+                            string per = effect.Mode == "add" ? rule.Schedule == "passage" ? " / áthaladás" : influence.PerYear ? " / erdőév" : " / lépés" : "";
                             Number((effect.Mode == "action" ? "Súly" : "Mennyiség" + (unit.Length > 0 && unit != "0–1" ? $" ({unit}{per})" : per)) + "##amount", term.Amount, v => term.Amount = Math.Max(0, v));
-                            if (effect.Mode == "add" && FieldRange(rule.Scope, effect.Target) == "0–1") {
+                            if (effect.Mode == "add" && rule.Schedule != "passage" && FieldRange(rule.Scope, effect.Target) == "0–1") {
                                 // Presets for the common 0–1 states: how many forest years from full to empty.
                                 EditorStyle.Text(HudTheme.Muted, "Gyors választás (teljes skála ennyi idő alatt):");
                                 foreach (var (label, amount) in new[] { ("20 év", .05), ("10 év", .1), ("5 év", .2), ("2 év", .5), ("1 év", 1.0) }) {
@@ -192,13 +208,21 @@ internal sealed partial class RuleEditorView
                                 int comparison = Array.IndexOf(comparisons, condition.Comparison);
                                 ImGui.SetNextItemWidth(-1);
                                 if (ImGui.Combo("##comparison", ref comparison, new[] { "kisebb, mint", "legfeljebb", "nagyobb, mint", "legalább" }, 4)) { condition.Comparison = comparisons[comparison]; changed = true; }
-                                bool linked = condition.ValueField.Length > 0;
-                                if (ImGui.Checkbox("Határérték egy tulajdonságból vagy paraméterből", ref linked)) {
-                                    if (!linked && condition.ValueField.StartsWith("tuning.", StringComparison.Ordinal) && GameTuning.Spec(condition.ValueField[7..]) is { } spec) condition.Value = world.Tuning[spec.Key];
-                                    condition.ValueField = linked ? "tuning.SkidTrailOvergrowYears" : ""; changed = true;
+                                int thresholdKind = condition.ValueCurve != null ? 2 : condition.ValueField.Length > 0 ? 1 : 0;
+                                ImGui.SetNextItemWidth(-1);
+                                if (ImGui.Combo("Küszöb forrása", ref thresholdKind, new[] { "Rögzített szám", "Másik tulajdonság", "Tulajdonság görbéje" }, 3)) {
+                                    condition.ValueField = thresholdKind == 1 ? readable.FirstOrDefault(f => f != condition.Field) ?? readable[0] : "";
+                                    condition.ValueCurve = thresholdKind == 2 ? new() { Source = readable.Contains("shadeTolerance") ? "shadeTolerance" : readable[0] } : null;
+                                    changed = true;
                                 }
-                                if (linked) changed |= Pick("Határérték forrása", condition.ValueField,
-                                    readable, v => condition.ValueField = v);
+                                if (thresholdKind == 2) {
+                                    var factor = condition.ValueCurve;
+                                    changed |= Pick("Mi adja a küszöböt?", factor.Source, readable, v => factor.Source = v);
+                                    var curve = factor.ToCurve(); bool finished = false;
+                                    if (CurveEditor("threshold", curve, rule.Scope, readable, ref finished, bindings: false)) factor.SetCurve(curve);
+                                    changed |= finished;
+                                    EditorStyle.Text(HudTheme.Muted, "A görbe kimenete a feltétel határértéke, nem szorzó.");
+                                } else if (thresholdKind == 1) changed |= Pick("Határérték forrása", condition.ValueField, readable, v => condition.ValueField = v);
                                 else Number("Határérték" + (FieldUnit(rule.Scope, condition.Field) is { Length: > 0 } u && u != "0–1" ? $" ({u})" : ""), condition.Value, v => condition.Value = v);
                                 if (ImGui.SmallButton("Feltétel törlése")) { term.Conditions.RemoveAt(c--); changed = true; }
                                 }
@@ -272,13 +296,14 @@ internal sealed partial class RuleEditorView
         bool equality = condition.Comparison is "equal" or "notEqual";
         if (options.Length > 0) {
             if (!equality) condition.Comparison = "equal";
-            condition.ValueField = "";
+            condition.ValueField = ""; condition.ValueCurve = null;
             if (!options.Any(o => o.Value == condition.Value)) condition.Value = options[^1].Value;
         } else if (equality) condition.Comparison = "atLeast";
     }
 
     private void InfluencePreviewArea(GameWorld world, WorldRule rule, RuleScope scope)
     {
+        if (rule.Schedule == "passage") { PassagePreviewArea(world, rule); return; }
         // Folded when the rule has its own comparison trial below, so the two do not crowd each other.
         if (ImGui.CollapsingHeader("Próba a kiválasztott objektumon", HasComparisonTrial(rule) ? ImGuiTreeNodeFlags.None : ImGuiTreeNodeFlags.DefaultOpen)) {
             EditorStyle.Text(HudTheme.Muted, "A tesztvilág egy objektumán mutatja, mit tenne a szabály, változatlan környezettel. Nem ír a világba.");
@@ -294,7 +319,8 @@ internal sealed partial class RuleEditorView
                 ImGui.EndCombo();
             }
             PreviewMap(world, scope, elements);
-            ImGui.SetNextItemWidth(200); ImGui.SliderFloat("Eltelt idő (erdőév)", ref influencePreviewYears, .01f, 1, "%.2f");
+            ImGui.SetNextItemWidth(200); ImGui.SliderFloat("Eltelt idő (erdőév)", ref influencePreviewYears, .01f, 1, "%.3f");
+            if (rule.Schedule == "month" && ImGui.SmallButton("Egy erdőhónap időtartama")) influencePreviewYears = 1f / 12;
             var active = world.RuleBook.Rules.FirstOrDefault(r => r.Id == rule.Id && r.Scope == rule.Scope);
             if (active != null && active.Effects.All(e => e.Influence != null)) {
                 try { foreach (var row in world.RuleBook.PreviewInfluences(world, rule.Id, influencePreviewId, influencePreviewYears)) {
@@ -304,6 +330,8 @@ internal sealed partial class RuleEditorView
                     double change = row.After - row.Before;
                     ImGui.TextUnformatted($"{FieldDisplay(rule.Scope, row.Target)}: {FieldValue(rule.Scope, row.Target, row.Before)} › {FieldValue(rule.Scope, row.Target, row.After)}"
                         + $"  ({(change >= 0 ? "+" : "–")}{FieldValue(rule.Scope, row.Target, Math.Abs(change))})");
+                    if (active.Effects.Any(e => e.Target == row.Target && e.Mode == "approach"))
+                        ImGui.TextWrapped("Az alábbi részek a célértéket adják; a tényleges változást a közelítés sebessége korlátozza.");
                     double total = row.Contributions.Sum(p => Math.Abs(p.Change));
                     foreach (var part in row.Contributions)
                         EditorStyle.Text(part.Change == 0 ? HudTheme.Muted : part.Change < 0 ? HudTheme.AmberAccent : HudTheme.Good,

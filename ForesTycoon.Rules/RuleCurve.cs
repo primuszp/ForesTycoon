@@ -17,6 +17,8 @@ public sealed record RuleCurveFamily(string Id, string Name, string Help, int Ar
 public sealed class RuleCurve
 {
     public static readonly RuleCurveFamily[] Families = {
+        new("root", "Square root", "Strong initial response, then slower increase.", 4, "x0; y0; x1; y1"),
+        new("inverse", "Inverse", "Starts at A, approaches B asymptotically; x1 is the half-response distance.", 4, "x0; y0; x1; y1"),
         new("linear", "Linear", "Straight between A and B, flat outside.", 4, "x0; y0; x1; y1"),
         new("step", "Step", "Below the threshold one value, above it another.", 3, "küszöb; alatta; felette", OneX: true),
         new("smooth", "S-curve", "Soft transition from A to B.", 4, "x0; y0; x1; y1"),
@@ -43,6 +45,8 @@ public sealed class RuleCurve
         double Lerp(double a, double b, double t) => a + (b - a) * t;
         switch (Family) {
             case "step": return x < p[0].X ? p[0].Y : Above;
+            case "root": return Lerp(p[0].Y, p[1].Y, Math.Sqrt(Clamp01(T())));
+            case "inverse": return Lerp(p[1].Y, p[0].Y, 1 / (1 + Math.Max(0, T())));
             case "linear": return Lerp(p[0].Y, p[1].Y, Clamp01(T()));
             case "smooth": { double t = Clamp01(T()); return Lerp(p[0].Y, p[1].Y, t * t * (3 - 2 * t)); }
             case "saturate": return Lerp(p[0].Y, p[1].Y, (1 - Math.Exp(-3 * Math.Max(0, T()))) / (1 - Math.Exp(-3)));

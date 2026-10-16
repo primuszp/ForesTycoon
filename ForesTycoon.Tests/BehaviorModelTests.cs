@@ -26,7 +26,7 @@ public class BehaviorModelTests
     [Fact]
     public void ConditionalGraphUsesLiveInputsAndOutputBounds()
     {
-        var graph = Constant("forest.health", "tree", 2);
+        var graph = Constant("water.stress", "tile", 2);
         graph.Nodes.AddRange(new BehaviorNode[] {
             new() { Id = "health", Name = "Health", Operation = BehaviorOperation.State },
             new() { Id = "threshold", Name = "Threshold", Operation = BehaviorOperation.Constant, Value = .5 },
@@ -101,26 +101,24 @@ public class BehaviorModelTests
     }
 
     [Fact]
-    public void TreeBindingChangesActualGrowthRateAndSurvivesReload()
+    public void ObjectConditionChangesActualGrowthRateAndSurvivesReload()
     {
         using var world = new GameWorld(TerrainSettings.Default.WithNodeSize(17, 42), enableRendering: false);
-        var trees = world.CaptureCheckpoint().Ecology.Forest.Trees.Patches.SelectMany(p => p.Trees).ToArray();
-        var target = trees.First(t => t.AnnualGrowth.Height > 0);
-        world.QueueBehaviors(new() { Graphs = new() { Constant("forest.growth", "tree", 0, target.Id) }});
-        world.ExecutePendingCommands();
-        Assert.True(world.CaptureCheckpoint().PendingForestRateRefresh);
         world.Update(1d / 30);
-        var changed = world.CaptureCheckpoint().Ecology.Forest.Trees.Patches.SelectMany(p => p.Trees).ToArray();
-        Assert.Equal(default, changed.Single(t => t.Id == target.Id).AnnualGrowth);
-        Assert.Contains(changed, t => t.Id != target.Id && t.AnnualGrowth.Height > 0);
+        var target = world.CaptureCheckpoint().Ecology.Forest.Trees.Patches.SelectMany(p => p.Trees).First(t => t.AnnualGrowth.Height > 0);
+        var project = world.RuleProjectDocument;
+        foreach (var effect in project.Rules.Single(r => r.Id == "forest.growth").Effects)
+            foreach (var term in effect.Influence.Terms) term.Conditions.Add(new() { Field = "treeId", Comparison = "notEqual", Value = target.Id });
+        world.QueueRuleProject(project); world.ExecutePendingCommands();
+        Assert.True(world.CaptureCheckpoint().PendingForestRateRefresh); world.Update(1d / 30);
+        var stopped = world.CaptureCheckpoint().Ecology.Forest.Trees.Patches.SelectMany(p => p.Trees).Single(t => t.Id == target.Id);
+        Assert.Equal(default, stopped.AnnualGrowth);
         using var restored = new GameWorld(TerrainSettings.Default.WithNodeSize(17, 42), enableRendering: false);
         using var save = new MemoryStream(); world.Save(save); save.Position = 0; restored.Load(save);
         for (int i = 0; i < 160; i++) { world.Update(.5); restored.Update(.5); }
         Assert.Equal(System.Text.Json.JsonSerializer.Serialize(world.CaptureCheckpoint()), System.Text.Json.JsonSerializer.Serialize(restored.CaptureCheckpoint()));
-        var after = restored.CaptureCheckpoint().Ecology.Forest.Trees.Patches.SelectMany(p => p.Trees).Single(t => t.Id == target.Id);
-        Assert.Equal(target.Dimensions, after.Dimensions);
+        Assert.Equal(stopped.Dimensions, restored.CaptureCheckpoint().Ecology.Forest.Trees.Patches.SelectMany(p => p.Trees).Single(t => t.Id == target.Id).Dimensions);
     }
-
     [Fact]
     public void BehaviorCommandsAndCheckpointRestoreExecutableBindings()
     {

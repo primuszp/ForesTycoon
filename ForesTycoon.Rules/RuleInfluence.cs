@@ -9,6 +9,7 @@ namespace ForesTycoon.Rules;
 /// <summary>Composable, formula-free effect. The compiler and the editor share this saved representation.</summary>
 public sealed class RuleInfluence
 {
+    public string Combine { get; set; } = "sum";
     public bool PerYear { get; set; } = true;
     /// <summary>The strength is per hour of the environment's clock (rain, evaporation and other water rates are hourly).</summary>
     public bool PerHour { get; set; }
@@ -24,7 +25,11 @@ public sealed class RuleInfluence
     public string Compile()
     {
         if (Terms == null || Terms.Count > 16 || Terms.Any(t => t == null)) throw new InvalidDataException("Egy hatáshoz legfeljebb 16 összetevő adható.");
-        return "(" + (Terms.Count == 0 ? "0" : string.Join(" + ", Terms.Select(t => t.Compile()))) + ")"
+        if (Combine is not ("sum" or "maximum" or "minimum")) throw new InvalidDataException("Ismeretlen hatásösszesítés.");
+        var terms = Combine == "sum" ? Terms : Terms.Where(t => t.Enabled).ToList();
+        string result = terms.Count == 0 ? "0" : Combine == "sum" ? string.Join(" + ", terms.Select(t => t.Compile()))
+            : terms.Select(t => t.Compile()).Aggregate((a, b) => $"{(Combine == "maximum" ? "max" : "min")}({a}; {b})");
+        return "(" + result + ")"
             + (PerHour ? " * deltaYears * world.hoursPerYear" : PerYear ? " * deltaYears" : "");
     }
 }
@@ -36,16 +41,18 @@ public sealed class InfluenceTerm
     public bool Decrease { get; set; } = true;
     public double Amount { get; set; } = .1;
     public string AmountField { get; set; } = "";
+    public double AmountScale { get; set; } = 1;
     public List<InfluenceFactor> Factors { get; set; } = new();
     public List<InfluenceCondition> Conditions { get; set; } = new();
 
     internal string Compile()
     {
-        RuleInfluence.Finite(Amount);
+        RuleInfluence.Finite(Amount); RuleInfluence.Finite(AmountScale);
+        if (AmountScale < 0) throw new InvalidDataException("Az erősség szorzója nem lehet negatív.");
         if (Amount < 0 || Name == null || AmountField == null
             || Factors == null || Factors.Count > 8 || Factors.Any(f => f == null)
             || Conditions == null || Conditions.Count > 8 || Conditions.Any(c => c == null)) throw new InvalidDataException("Hibás hatásösszetevő.");
-        string amount = AmountField.Length == 0 ? RuleInfluence.Number(Amount) : RuleInfluence.Field(AmountField);
+        string amount = AmountField.Length == 0 ? RuleInfluence.Number(Amount) : "(" + RuleInfluence.Field(AmountField) + " * " + RuleInfluence.Number(AmountScale) + ")";
         string value = (Decrease ? "-" : "") + "(" + amount + string.Concat(Factors.Select(f => " * " + f.Compile())) + ")";
         foreach (var condition in Conditions) value = $"ha({condition.Compile()}; {value}; 0)";
         return Enabled ? value : "0";
@@ -59,19 +66,23 @@ public sealed class InfluenceCondition
     public string Comparison { get; set; } = "atLeast";
     public double Value { get; set; } = 1;
     public string ValueField { get; set; } = "";
+    /// <summary>A field mapped through the same curve editor, used as the comparison's threshold.</summary>
+    public InfluenceFactor ValueCurve { get; set; }
     internal string Compile()
     {
         RuleInfluence.Finite(Value);
         if (ValueField == null) throw new InvalidDataException("Hiányzó határértékforrás.");
+        if (ValueCurve != null && ValueField.Length != 0) throw new InvalidDataException("A küszöbnek egyetlen forrása legyen.");
+        string threshold = ValueCurve?.Compile() ?? (ValueField.Length == 0 ? RuleInfluence.Number(Value) : RuleInfluence.Field(ValueField));
         if (Comparison is "equal" or "notEqual") {
             // For bool and enum fields: exactly this option (or any other one).
-            string field = RuleInfluence.Field(Field), value = ValueField.Length == 0 ? RuleInfluence.Number(Value) : RuleInfluence.Field(ValueField);
+            string field = RuleInfluence.Field(Field), value = threshold;
             return Comparison == "equal" ? $"ha({field} < {value}; 0; ha({field} > {value}; 0; 1))" : $"ha({field} < {value}; 1; ha({field} > {value}; 1; 0))";
         }
         string op = Comparison switch { "less" or "atLeast" => "<", "greater" or "atMost" => ">",
             _ => throw new InvalidDataException("Válassz érvényes összehasonlítást.") };
         if (ValueField == null) throw new InvalidDataException("Hiányzó határértékforrás.");
-        string test = $"{RuleInfluence.Field(Field)} {op} {(ValueField.Length == 0 ? RuleInfluence.Number(Value) : RuleInfluence.Field(ValueField))}";
+        string test = $"{RuleInfluence.Field(Field)} {op} {threshold}";
         return Comparison is "atLeast" or "atMost" ? $"ha({test}; 0; 1)" : test;
     }
 }

@@ -70,7 +70,7 @@ public class RoadConditionTests
             var system = new VehicleSystem(cargo, route => VehicleRoadRoute.Create(m, route))
             {
                 RoadState = id => (m.GetRoadPaving(id) == RoadPaving.Asphalt ? RoadSurface.Asphalt : RoadSurface.Gravel, m.GetRoadCondition(id)),
-                RoadWear = (id, amount) => m.WearRoad(id, amount)
+                Passage = passage => m.WearRoad(passage.TileId, .0015f)
             };
             var truck = system.Spawn(route);
             double top = 0; damage = 0;

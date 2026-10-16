@@ -66,7 +66,7 @@ public sealed class RuleCausalMap
             foreach (var effect in rule.EffectiveEffects().Where(x => x.Mode != "action")) {
                 var to = Node(scope.Id, effect.Target); if (to == null) continue;
                 RuleCurve.TryParse(effect.Formula, out var curve);
-                foreach (string name in Mentioned(scope, rule.Condition + " " + effect.Formula, schema)) {
+                foreach (string name in Mentioned(scope, rule.Condition + " " + string.Join(" ", (rule.ConditionGraph?.Nodes ?? new()).Concat(effect.Computation?.Nodes ?? new()).Select(n => n.Key)) + " " + (effect.Influence?.Compile() ?? effect.Formula), schema)) {
                     var from = Resolve(name);
                     if (from == null || from.Key == to.Key && effect.Mode == "set") continue;
                     int sign = curve != null && Local(scope, curve.Input, schema) == name && !(curve.Tail ?? "").Contains(curve.Input) ? curve.Sign : 0;

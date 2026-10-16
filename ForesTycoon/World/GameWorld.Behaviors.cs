@@ -7,9 +7,6 @@ namespace ForesTycoon
     internal sealed class WorldBehaviorPolicy : IBehaviorPolicy
     {
         internal static readonly BehaviorHook[] Hooks = new BehaviorHook[] {
-            new("road.trafficWear", "Forgalmi útkopás", "road", "állapotveszteség", 0, 1, "Út sérültsége", "Áthaladási terhelés", "Teherautó csempeváltás"),
-            new("forest.growth", "Fanövekedési tényező", "tree", "1", 0, 10, "Egészség (0–1)", "Kor (erdőév)", "Növekedési ráta frissítése"),
-            new("forest.health", "Fa egészségének célértéke", "tree", "1", 0, 1, "Egészség (0–1)", "Kor (erdőév)", "Erdőhónap"),
             new("machine.pace", "Forwarder munkatempó", "forwarder", "munka-s", 0, 10, "Kopás (0–1)", "Rakomány (m³)", "Gép al-lépés"),
             new("machine.pace", "Processzor munkatempó", "processor", "munka-s", 0, 10, "Kopás (0–1)", "Rakomány (m³)", "Gép al-lépés"),
             new("mill.process", "Malom feldolgozása", "mill", "m³", 0, 1e6, "Már feldolgozott mennyiség (m³)", "Készlet (m³)", "Logisztikai lépés"),
@@ -89,25 +86,18 @@ namespace ForesTycoon
         void IWorldCommandTarget.ExecuteBehaviors(string json) => ApplyBehaviors(BehaviorModel.FromJson(json));
         private void ApplyBehaviors(BehaviorModel model)
         {
-            bool refreshForest = ForestBehaviorSignature(BehaviorDocument) != ForestBehaviorSignature(model);
             var replacement = new WorldBehaviorPolicy(model, DynamicsRuntime.Keys(dynamics.Document, RuleWorldFields), ruleValues.ReadRule);
             replacement.Controllers.PreserveUnchanged(behaviorPolicy.Controllers);
             behaviorPolicy = replacement;
             BindBehaviors();
             ApplyTuning(Tuning);
-            if (refreshForest) pendingForestRateRefresh = true;
         }
-        private static string ForestBehaviorSignature(BehaviorModel value) => System.Text.Json.JsonSerializer.Serialize(
-            value.Graphs.Where(g => g.Kind == "tree" && (g.Nodes.Find(n => n.Id == g.Output)?.Operation != BehaviorOperation.Native
-                || g.ObjectId.HasValue && value.Graphs.Any(type => type.Kind == "tree" && type.Hook == g.Hook && !type.ObjectId.HasValue
-                    && type.Nodes.Find(n => n.Id == type.Output)?.Operation != BehaviorOperation.Native)))
-                .OrderBy(g => g.Hook).ThenBy(g => g.ObjectId).Select(g => new { g.Hook, g.Kind, g.ObjectId, g.Output,
-                    Nodes = g.Nodes.OrderBy(n => n.Id).Select(n => new { n.Id, n.Operation, n.Value, n.Key, n.A, n.B, n.C }) }));
         private void BindBehaviors()
         {
             IBehaviorPolicy active = behaviorPolicy;
             Environment.Behaviors = active;
-            forest.Behaviors = active;
+            forest.MonthlyRules = TreeMonthWork;
+            forest.GrowthRules = TreeGrowthWork;
             Logistics.Behaviors = active;
             Logistics.Controllers = behaviorPolicy.Controllers.HasControllers ? behaviorPolicy.Controllers : null;
         }

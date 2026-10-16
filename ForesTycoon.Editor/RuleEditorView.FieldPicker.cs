@@ -99,7 +99,7 @@ internal sealed partial class RuleEditorView
         var f = SchemaField(scope, field);
         return new(FieldDisplay(scope, field), f?.Unit ?? "", f?.True, f?.False) {
             Options = f?.Options.Select(o => (o.Value, o.Display)).ToArray() ?? Array.Empty<(double, string)>() };
-    });
+    }, scope == "passage" ? "áthaladásonként" : "lépésenként");
 
     private bool ObjectFieldPicker(string label, string scope, string current, string[] choices, Action<string> set, bool empty = false)
     {

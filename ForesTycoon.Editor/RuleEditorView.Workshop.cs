@@ -37,8 +37,7 @@ internal sealed partial class RuleEditorView
         workshopVersions.Acknowledge(fresh ? liveObjects.ProjectRevision : null);
         if (workshopStarted) return;
         workshopStarted = true;
-        if (view == View.Graph) { workshopTool = WorkshopTool.Rules; workshopRule = "road.trafficWear"; workshopTopic = 3; workshopPhase = WorkshopPhase.Edit; }
-        else if (view == View.Behaviors && workshopTool == WorkshopTool.Rules) {
+        if (view == View.Behaviors && workshopTool == WorkshopTool.Rules) {
             workshopTool = WorkshopTool.ObjectRule; workshopPhase = WorkshopPhase.Edit; objectRuleTitle = "Importált viselkedésgráf";
         }
         if (currentRules.Index.Find(workshopRule) is GameRuleDefinition initialRule) workshopTopic = TopicOf(initialRule.Id, RuleWorkshopModel.Topic(initialRule));
@@ -68,7 +67,7 @@ internal sealed partial class RuleEditorView
         EditorStyle.Text(HudTheme.Info, ObjectSourceLabel(world));
         ImGui.Separator();
     }
-    private void WorkshopBody(GameWorld world, CompiledRoadRule compiled)
+    private void WorkshopBody(GameWorld world)
     {
         float sidebar = Math.Min(240, ImGui.GetContentRegionAvail().X * .27f);
         ImGui.BeginChild("workshop-navigation", new Vec2(sidebar, 0), ImGuiChildFlags.Borders);
@@ -134,7 +133,7 @@ internal sealed partial class RuleEditorView
         else if (workshopPhase == WorkshopPhase.Apply) WorkshopApply(world);
         else if (workshopTool == WorkshopTool.Objects) ObjectsView(world);
         else if (workshopTool == WorkshopTool.Map) currentRules.Draw(world,
-            model => { draft = model; SelectWorkshopRule("road.trafficWear"); SetWorkshopPhase(WorkshopPhase.Edit, currentRules.Index.Find(workshopRule)); },
+            ruleId => { var index = RuleBookRules(world).FindIndex(r => r.Id == ruleId); if (index >= 0) ShowRuleBook(index); },
             hook => { behaviors.SelectHook(hook); view = View.Behaviors; workshopTool = WorkshopTool.ObjectRule; workshopPhase = WorkshopPhase.Edit; objectRuleTitle = hook.Name; },
             kind => { behaviors.SelectController(kind); view = View.Behaviors; workshopTool = WorkshopTool.ObjectRule; workshopPhase = WorkshopPhase.Edit; objectRuleTitle = RuleWorkshopModel.KindName(kind) + " munkaciklusa"; });
         else if (workshopTool == WorkshopTool.Dynamics) DrawThematicDynamics(world);
@@ -144,7 +143,7 @@ internal sealed partial class RuleEditorView
         else if (workshopTool == WorkshopTool.ObjectRule) {
             ImGui.TextWrapped("Hatókör: " + behaviors.ScopeSummary); behaviors.DrawEmbedded(world);
         } else if (selectedRule != null && workshopPhase == WorkshopPhase.Understand) WorkshopUnderstanding(selectedRule);
-        else if (selectedRule != null) WorkshopEditing(world, selectedRule, compiled);
+        else if (selectedRule != null) WorkshopEditing(world, selectedRule);
         ImGui.EndChild();
         WorkshopFooter(world, selectedRule);
         ImGui.EndChild();
@@ -221,7 +220,6 @@ internal sealed partial class RuleEditorView
     private RuleBinding[] Bindings(GameRuleDefinition rule)
     {
         var result = new List<RuleBinding>();
-        if (rule.Id == "road.trafficWear") result.Add(new("Áthaladási kopás képlete", View.Graph));
         if (rule.Id is "machine.controller" or "machine.forwarder" or "machine.processor" or "vehicle.transfer" or "fleet.orders")
             foreach (string kind in new[] { "truck", "forwarder", "processor" })
                 if (rule.Id == "machine.controller" || rule.Id == "machine." + kind || kind == "truck" && rule.Id is "vehicle.transfer" or "fleet.orders")
@@ -251,9 +249,8 @@ internal sealed partial class RuleEditorView
             if (!controllerNeedsCreation) behaviors.SelectController(binding.Controller);
         }
         else if (binding.Source != null) algorithms.SelectSource(binding.Source);
-        else { selected = draft.Output; fitRequested = true; }
     }
-    private void WorkshopEditing(GameWorld world, GameRuleDefinition rule, CompiledRoadRule compiled)
+    private void WorkshopEditing(GameWorld world, GameRuleDefinition rule)
     {
         EnsureRuleBinding(rule);
         if (ruleBindings.Length == 0) { ImGui.TextWrapped("Ehhez a szabályhoz nincs szerkesztői kötés a katalógusban."); return; }
@@ -283,7 +280,7 @@ internal sealed partial class RuleEditorView
             ImGui.TextWrapped("Részletes belső gráf: a kiválasztott műveletből indulsz. Alkalmazáskor fordítás és új futtató szükséges.");
             algorithms.Draw(embedded: true);
         } else if (view == View.Behaviors) behaviors.DrawEmbedded(world);
-        else GraphView(world, compiled);
+        else ImGui.TextWrapped("A projekt szabályait a Szabályok közös gráfos felületén szerkesztheted.");
     }
     private void WorkshopTrial(GameWorld world)
     {
@@ -348,7 +345,7 @@ internal sealed partial class RuleEditorView
         bool any = false;
         void Change(string text) { ImGui.Bullet(); ImGui.SameLine(); ImGui.TextWrapped(text); any = true; }
         if (mine.Name != baseline.Name) Change("Projekt neve: " + mine.Name);
-        if (mine.Road.ToJson() != baseline.Road.ToJson()) Change("Áthaladási útkopás gráfja");
+        if (System.Text.Json.JsonSerializer.Serialize(mine.Rules) != System.Text.Json.JsonSerializer.Serialize(baseline.Rules)) Change("A közös szabálykönyv gráfjai");
         foreach (var spec in GameTuning.Specs)
             if ((mine.Tuning.TryGetValue(spec.Id, out double a) ? a : spec.Default) != (baseline.Tuning.TryGetValue(spec.Id, out double b) ? b : spec.Default)) Change("Hangolt érték: " + spec.Id);
         foreach (var graph in mine.Behaviors.Graphs)

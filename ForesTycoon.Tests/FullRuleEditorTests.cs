@@ -41,14 +41,14 @@ public sealed class FullRuleEditorTests
     public void TemplatesReplaceOnlyTheChosenBindingAndNeverShareActiveMutableNodes()
     {
         var model = new BehaviorModel { Graphs = new() {
-            new() { Id = "type", Hook = "forest.growth", Kind = "tree" }, new() { Id = "local", Hook = "forest.growth", Kind = "tree", ObjectId = 42 } } };
+            new() { Id = "type", Hook = "machine.pace", Kind = "forwarder" }, new() { Id = "local", Hook = "machine.pace", Kind = "forwarder", ObjectId = 42 } } };
         var template = AuthoringOperations.Template(model.Graphs[0]); template.Graph!.Nodes[0].Name = "Copied";
         Assert.NotEqual("Copied", model.Graphs[0].Nodes[0].Name);
         AuthoringOperations.Instantiate(model, template, 42);
         Assert.Equal(2, model.Graphs.Count); Assert.Contains(model.Graphs, g => g.Id == "type");
         var instance = model.Graphs.Single(g => g.ObjectId == 42); Assert.NotEqual(template.Graph.Id, instance.Id);
         instance.Nodes[0].Name = "User edited"; Assert.Equal("Copied", template.Graph.Nodes[0].Name);
-        Assert.Equal(2, new CompiledBehaviorModel(model, WorldBehaviorPolicy.Hooks).Evaluate("forest.growth", "tree", 42, new(2, 0, 0, 0, 0)));
+        Assert.Equal(2, new CompiledBehaviorModel(model, WorldBehaviorPolicy.Hooks).Evaluate("machine.pace", "forwarder", 42, new(2, 0, 0, 0, 0)));
     }
     [Fact]
     public void ExternalAgentEditsAreDetectedAndArchivedVersionsRemainImmutable()
@@ -71,7 +71,7 @@ public sealed class FullRuleEditorTests
         project.Authoring.Templates.Add(AuthoringOperations.Template(project.Behaviors.Graphs[0]));
         var copy = RuleProject.FromJson(project.ToJson()); Assert.Equal(1, copy.Authoring.Entries["forest.growth"].Topic);
         Assert.Equal(runtime, copy.ContentRevision());
-        copy.Road.Nodes.Single(n => n.Id == "scale").Value = 2; Assert.NotEqual(runtime, copy.ContentRevision());
+        copy.Rules.Add(TrafficWearRule.Default()); Assert.NotEqual(runtime, copy.ContentRevision());
     }
     [Fact]
     public void StockDependencyListingFindsFlowsAndActualRuleConsumers()

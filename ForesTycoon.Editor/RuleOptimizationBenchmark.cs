@@ -18,19 +18,15 @@ namespace ForesTycoon.Editor
         internal static void Run()
         {
             var catalog = CurrentGameRules.Build(); var index = new GameRuleIndex(catalog);
-            var draft = RuleModel.Default(); var compiler = new RoadRuleDraftCompiler(); compiler.Compile(draft);
             RuleConnection[] OriginalConnections() => catalog.Rules.SelectMany(producer => producer.Writes.SelectMany(field =>
                 catalog.Rules.Where(consumer => consumer.Id != producer.Id && consumer.Reads.Contains(field))
                     .Select(consumer => new RuleConnection(producer.Id, consumer.Id, field)))).Distinct().ToArray();
             object OriginalOverview() => index.Connections.Select(c => new RuleConnection(catalog.Rules.Find(r => r.Id == c.From).Module,
                 catalog.Rules.Find(r => r.Id == c.To).Module, c.Field)).Where(c => c.From != c.To).GroupBy(c => (c.From, c.To)).Select(g => g.First()).ToArray();
-            object UncachedCompilation() { var compiled = new CompiledRoadRule(draft); compiled.ValidateRange(); return compiled; }
             var rows = new List<Comparison>
             {
                 Compare("Catalog connections", 250, () => OriginalConnections(), () => catalog.Connections()),
                 Compare("Overview dependencies per frame (warm index)", 1000, OriginalOverview, () => index.ModuleConnections),
-                Compare("Independent rule snapshot", 2000, () => RuleModel.FromJson(draft.ToJson()), () => draft.Clone()),
-                Compare("Uncached vs cached unchanged draft validation", 1000, UncachedCompilation, () => compiler.Compile(draft))
             };
             string file = Path.GetFullPath("artifacts/rule-editor/optimization-benchmark.json"); Directory.CreateDirectory(Path.GetDirectoryName(file));
             File.WriteAllText(file, JsonSerializer.Serialize(new { Runtime = Environment.Version.ToString(), Rules = catalog.Rules.Count,

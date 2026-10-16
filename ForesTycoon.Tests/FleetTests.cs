@@ -13,7 +13,7 @@ public partial class FleetTests
     private static readonly int[] Stand = { 136, 137, 152, 153 };         // tiles (8..9, 8..9)
     private const int Depot = 67, Mill = 195, ForestStack = 151, RoadStack = 147;
 
-    private sealed record Scene(TerrainMap Map, ForestSystem Forest, ForestryLogistics Logistics, VehicleSystem Vehicles);
+    private sealed record Scene(TerrainMap Map, ForestSystem Forest, ForestryLogistics Logistics, VehicleSystem Vehicles, List<TrafficPassage> Passages);
 
     // Road along v = 2, a skid trail (8, 3) → (8, 7) to the stand, a mill at (12, 3), the depot at (4, 3).
     private static Scene Build(bool stacks = true, bool mixedRoads = false, RoadPaving firstSurface = RoadPaving.Asphalt)
@@ -43,7 +43,8 @@ public partial class FleetTests
             Assert.True(logistics.PlaceStack(ForestStack), logistics.Status);
             Assert.True(logistics.PlaceStack(RoadStack), logistics.Status);
         }
-        return new Scene(map, forest, logistics, vehicles);
+        var passages = new List<TrafficPassage>(); logistics.Passage = passages.Add; vehicles.Passage = passages.Add;
+        return new Scene(map, forest, logistics, vehicles, passages);
     }
 
     private static void Run(Scene s, double seconds)
@@ -148,7 +149,7 @@ public partial class FleetTests
         Assert.All(s.Logistics.Machines, m => { Assert.False(m.Working); Assert.Equal(Depot, m.Tile); Assert.Equal(ForestMachineState.Parked, m.State); });
         Assert.Equal(TruckPhase.Parked, s.Logistics.Trucks[0].Phase);
         Assert.Empty(s.Vehicles.Vehicles);
-        Assert.True(s.Map.GetSkidTrailWear(133) > 0.3f);
+        Assert.True(s.Passages.Count(p => p.TileId == 133 && p.Kind != TrafficVehicleKind.Truck) > 5);
     }
 
     private const double TimberPriceOak = 55;

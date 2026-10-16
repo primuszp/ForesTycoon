@@ -37,16 +37,19 @@ public class RuleProjectTests
         Assert.Equal(2, active.Evaluate(new("machine.pace", "forwarder", 1, 0)));
     }
     [Fact]
-    public void NativeObjectOverrideOfCustomTreeTypeRefreshesActualGrowth()
+    public void AnObjectConditionOverridesTheDefaultGrowthThroughTheSameRuleBook()
     {
-        using var world = World();
+        using var world = World(); world.Update(1d / 30);
         var target = world.CaptureCheckpoint().Ecology.Forest.Trees.Patches.SelectMany(p => p.Trees).First(t => t.AnnualGrowth.Height > 0);
-        var project = GameWorld.DefaultRuleProject();
-        var growth = project.Behaviors.Graphs.Single(g => g.Hook == "forest.growth");
-        growth.Nodes[0].Operation = BehaviorOperation.Constant; growth.Nodes[0].Value = 0;
+        var project = world.RuleProjectDocument;
+        project.Rules.Single(r => r.Id == "forest.growth").Enabled = false;
         world.QueueRuleProject(project); world.ExecutePendingCommands(); world.Update(1d / 30);
         Assert.Equal(default, world.CaptureCheckpoint().Ecology.Forest.Trees.Patches.SelectMany(p => p.Trees).Single(t => t.Id == target.Id).AnnualGrowth);
-        project.Behaviors.Graphs.Add(new() { Id = "individual", Hook = "forest.growth", Kind = "tree", ObjectId = target.Id });
+        var individual = TreeGrowthRule.Default(); individual.Id = "individual";
+        foreach (var effect in individual.Effects)
+            foreach (var term in effect.Influence.Terms)
+                term.Conditions.Add(new() { Field = "treeId", Comparison = "equal", Value = target.Id });
+        project.Rules.Add(individual);
         world.QueueRuleProject(project); world.ExecutePendingCommands(); world.Update(1d / 30);
         Assert.True(world.CaptureCheckpoint().Ecology.Forest.Trees.Patches.SelectMany(p => p.Trees).Single(t => t.Id == target.Id).AnnualGrowth.Height > 0);
     }

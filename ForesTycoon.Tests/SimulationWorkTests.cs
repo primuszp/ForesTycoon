@@ -131,11 +131,7 @@ public class SimulationWorkTests
     {
         using var world = World();
         var project = world.RuleProjectDocument;
-        project.Behaviors.Graphs.RemoveAll(g => g.Hook == "forest.growth");
-        project.Behaviors.Graphs.Add(new() {
-            Id = "growth-stop", Hook = "forest.growth", Kind = "tree", Output = "zero",
-            Nodes = new() { new() { Id = "zero", Name = "Zero growth", Operation = BehaviorOperation.Constant, Value = 0 } }
-        });
+        project.Rules.Single(r => r.Id == "forest.growth").Enabled = false;
         world.QueueRuleProject(project); world.ExecutePendingCommands();
         Assert.True(world.CaptureCheckpoint().PendingForestRateRefresh);
         using var save = new MemoryStream(); world.Save(save); save.Position = 0;

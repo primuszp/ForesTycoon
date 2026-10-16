@@ -8,7 +8,7 @@ namespace ForesTycoon
     internal sealed record VehicleCheckpoint(int Id, int[] Route, double Speed, float Capacity, bool Physics,
         RoadRouteCheckpoint RoadGeometry, double CurrentSpeed, double Position, double PreviousPosition, float Cargo,
         bool CargoStops, int[] SourceTiles, int Mill, bool Blocked, VehicleTransportState State, float TransferProgress,
-        double FuelUsed = 0, double Distance = 0, bool Transit = false, bool TransitArrived = false, bool Broken = false);
+        double FuelUsed = 0, double Distance = 0, bool Transit = false, bool TransitArrived = false, bool Broken = false, int LastPassageTile = -1);
     internal sealed record VehiclesCheckpoint(int NextId, bool RoadPhysics, bool CargoStops, VehicleCheckpoint[] Vehicles);
     internal sealed record AnimalCheckpoint(int Id, int Tile, int TargetTile, CheckpointPosition Position,
         CheckpointPosition PreviousPosition, CheckpointPosition Target, float Yaw, float PreviousYaw, float Blend,
@@ -37,7 +37,7 @@ namespace ForesTycoon
     internal sealed record WorldCheckpointData(int Version, ulong Tick, int CommandCursor, int PendingCommands,
         TerrainCheckpoint Terrain, EcologyCheckpoint Ecology, WildlifeCheckpoint Wildlife, LogisticsCheckpoint Logistics,
         VehiclesCheckpoint Vehicles, float AvailableTimber, float DeliveredTimber, EffectCheckpoint[] Effects,
-        ForestryActionResult LastAction, ForestryAreaSummary LastArea, double Expenses = 0, RuleModel Rules = null,
+        ForestryActionResult LastAction, ForestryAreaSummary LastArea, double Expenses = 0,
         Dictionary<string, double> Tuning = null, double RoadWeatherSeconds = 0, BehaviorModel Behaviors = null,
         BehaviorControllerSnapshot[] BehaviorStates = null, DynamicsModel Dynamics = null,
         Dictionary<string, double> DynamicsValues = null, string RuleProjectName = null, AlgorithmGraphReference Algorithms = null,

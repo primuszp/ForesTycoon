@@ -30,6 +30,7 @@ namespace ForesTycoon.Ecology
         private ulong topologyRevision;
         internal ulong Generation { get; private set; }
         internal int TreeCount { get; private set; }
+        internal int StateSize => checked((int)nextId);
         internal bool TryGet(int tileId, out Patch patch) => patches.TryGetValue(tileId, out patch);
 
         internal void Clear()

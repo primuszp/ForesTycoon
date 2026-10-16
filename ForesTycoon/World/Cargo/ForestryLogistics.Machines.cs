@@ -329,7 +329,9 @@ namespace ForesTycoon
             machine.PathPosition = Math.Min(machine.Path.Length - 1, machine.PathPosition + speed * dt);
             int after = machine.Tile;
             // Each tile entered is one pass: a loaded machine cuts the deepest ruts.
-            if (after != before) terrain.DriveSkidTrail(after, 0.04f + 0.06f * machine.CargoFill);
+            if (after != before) Passage?.Invoke(new(after,
+                machine.Kind == ForestMachineKind.Harvester ? TrafficVehicleKind.Processor : TrafficVehicleKind.Forwarder,
+                machine.Id, Tuning[machine.Kind == ForestMachineKind.Harvester ? Tune.ProcessorMass : Tune.ForwarderMass] + machine.Cargo * Tuning[Tune.TimberDensity], machine.CargoFill));
             if (machine.Arrived) { machine.State = machine.Goal; machine.WorkTime = 0; }
         }
 

@@ -57,7 +57,7 @@ public sealed class SystemModelTests
         Assert.Contains("economy.income", model.CoupledGroupOf("forest.trees")!);
         Assert.Contains("economy.result", model.CoupledGroupOf("forest.trees")!);
         // Vehicles wear the roads they drive on, and the road condition changes how they drive.
-        Assert.Contains(model.LoopsThroughProcess("road.trafficWear"), l => l.Variables.Contains("road.condition"));
+        Assert.Contains(model.LoopsThroughProcess("traffic.wear"), l => l.Variables.Contains("road.condition"));
         Assert.Contains(model.StocksChangedBy("water.drainage"), v => v.Id == "water.root");
         Assert.True(model.ReadsOwnStock("water.drainage"));
         Assert.DoesNotContain(all, l => l.Variables.Any(v => v.StartsWith("visual.")));
@@ -69,7 +69,7 @@ public sealed class SystemModelTests
     {
         var stock = new SystemVariable { Id = "stock.wearMultiplier", Name = "Útkopási szorzó", Subsystem = "roads", Kind = SystemVariableKind.Stock };
         var flow = new SystemProcess("flow.load", "Terhelés", "roads", new[] { "road.condition" }, new[] { "stock.wearMultiplier" });
-        var formula = new SystemProcess("graph.wear", "Kopás × szorzó", "roads", new[] { "stock.wearMultiplier" }, new[] { "road.condition" }, "road.trafficWear");
+        var formula = new SystemProcess("graph.wear", "Kopás × szorzó", "roads", new[] { "stock.wearMultiplier" }, new[] { "road.condition" }, "traffic.wear");
         var model = new SystemModelAnalysis(CurrentGameRules.Build(), extraProcesses: new[] { flow, formula }, extraVariables: new[] { stock });
         Assert.Contains(model.LoopsThroughVariable("stock.wearMultiplier"), l => l.Length == 2 && l.Variables.Contains("road.condition"));
         Assert.Contains(model.KeyLoops, l => l.Variables.Contains("stock.wearMultiplier"));

@@ -137,8 +137,7 @@ namespace ForesTycoon.Ecology
                     result.Resources[treeIndex] = resources;
                     result.Ids[treeIndex] = tree.Id;
                     float treeVolume = ForestTree.Volume(tree.Dimensions);
-                    result.Geometry[treeIndex] = new(tree.Dimensions, Math.Max(0, treeVolume - ForestTree.Volume(source.Dimensions)),
-                        ForestTreeGrowth.Shape(tree.Species, tree.Dimensions), MathF.Sqrt(Math.Clamp(resources.Space, 0, 1)));
+                    result.Geometry[treeIndex] = new(tree.Dimensions, Math.Max(0, treeVolume - ForestTree.Volume(source.Dimensions)));
                     age += tree.Age(year); health += tree.Health; volume += treeVolume;
                 }
                 result.Stand = new(patch.Trees[0].Species, age / patch.Count, volume / 100, health / patch.Count);

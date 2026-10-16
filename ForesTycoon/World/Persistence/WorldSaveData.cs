@@ -20,10 +20,10 @@ namespace ForesTycoon
         SendVehicle,
         SendHome,
         StackSite,
-        SetRuleModel,
-        SetTuning,
+        SetTuning = 16,
         SetBehaviors,
-        SetRuleProject
+        SetRuleProject,
+        TrafficPassage
     }
 
     readonly record struct WorldCommandRecord(
@@ -75,7 +75,7 @@ namespace ForesTycoon
         public const int CurrentVersion = 17;
         // Bump whenever native simulation semantics change. Editable graphs and tuning
         // are stored separately in the checkpoint/journal; this identifies their runtime.
-        public const string CurrentRuntimeRulesVersion = "forestycoon-simulation/2026-10-16.2";
+        public const string CurrentRuntimeRulesVersion = "forestycoon-simulation/2026-10-16.5";
         public string RuntimeRulesVersion { get; init; } = CurrentRuntimeRulesVersion;
         public WorldSaveData() { }
         // Missing JSON must not silently inherit today's runtime identifier.
@@ -123,8 +123,6 @@ namespace ForesTycoon
             _ = ReplayClimate;
             if (Checkpoint != null) {
                 if (Version >= 13) CheckpointGuard.Require(Checkpoint.Ecology?.Environment?.Snow != null, "seasonal snow checkpoint");
-                if (Checkpoint.Rules != null) { var rules = new CompiledRoadRule(Checkpoint.Rules); rules.ValidateRange(); }
-                if (Version >= 10 && Checkpoint.Rules == null) throw new InvalidOperationException("Save has no rule model.");
                 if (Checkpoint.Tuning != null) _ = GameTuning.FromOverrides(Checkpoint.Tuning);
                 if (Version >= 14 && Checkpoint.Behaviors == null) throw new InvalidOperationException("Save has no behavior model.");
                 var dynamics = new DynamicsRuntime(Checkpoint.Dynamics ?? new DynamicsModel(), GameWorld.RuleWorldFields, _ => 0);

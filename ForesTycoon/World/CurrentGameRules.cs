@@ -11,7 +11,6 @@ namespace ForesTycoon
         {
             saved.Validate();
             var tuning = GameTuning.FromOverrides(saved.TuningOverrides());
-            current.RoadTrafficModel = saved.RoadTrafficModel.Clone();
             current.Name = saved.Name;
             foreach (var rule in current.Rules)
             {
@@ -28,10 +27,10 @@ namespace ForesTycoon
         }
 
         internal static GameRuleCatalog Build(double forestYearSeconds = EcologyTime.DefaultGameSecondsPerYear,
-            ClimateDefinition climate = null, SoilLandscapeDefinition soils = null, RuleModel roadTraffic = null, GameTuning tuning = null)
+            ClimateDefinition climate = null, SoilLandscapeDefinition soils = null, GameTuning tuning = null)
         {
             tuning ??= GameTuning.Default;
-            var catalog = new GameRuleCatalog { RoadTrafficModel = roadTraffic?.Clone() ?? RuleModel.Default() };
+            var catalog = new GameRuleCatalog();
             GameRuleDefinition Add(string id, string name, string module, string scope, string schedule, string file, string symbol,
                 string reads, string writes, string description, string formula = "", GameRuleExecution execution = GameRuleExecution.NativeCode)
             {
@@ -170,17 +169,14 @@ namespace ForesTycoon
                 "Havi előkészítés / helyi beavatkozás", "ForesTycoon.Ecology/Forest/ForestCompetition.cs", "Evaluate",
                 "forest.trees|weather.forcing|water.growthFactor|forest.species", "forest.resources",
                 "Közös geometriapillanatkép, koronafedés és magassági dominancia alapján fény és tér. Környezeti vízelosztás mellett nincs második gyökérverseny-büntetés.");
-            Add("forest.growth", "Egyedi fanövekedés", "Erdő", "Faegyed", "Havi ráták; folytonos méretinterpoláció",
-                "ForesTycoon.Ecology/Species/ForestTree.cs", "Factor", "forest.fitness|forest.resources|water.growthFactor|forest.health|calendar.time|forest.species", "forest.trees|forest.volume",
-                "Átmérő, magasság és korona nő. Magasság fajfüggő plafonhoz közelít, az érett fa tovább vastagodik.",
-                "növekedési tényező = alkalmasság × fényválasz × vízválasz × sqrt(tér) × egészség × évszak");
-            Add("forest.health", "Egészség és tartós stressz", "Erdő", "Faegyed", "Erdőhónap", individuals, "stressThreshold",
-                "forest.resources|forest.fitness|forest.species|forest.health", "forest.health|forest.stress",
-                "Egészség a termőhely és a legszűkösebb erőforrás célértéke felé lép; tartós elnyomásnál nő a stressz, javulásnál csökken.",
-                "cél = clamp(alkalmasság × (0,15 + 0,85 × min(tér, víz, fényválasz)), 0, 1); havi egészséglépés: 0,035");
-            Add("forest.mortality", "Önritkulás, elhalás és holtfa", "Erdő", "Faegyed", "Erdőhónap", individuals, "DeadTrees",
-                "forest.stress|forest.health|forest.species|calendar.time|forest.trees", "forest.trees|forest.deadwood",
-                "Legalább 4 stresszév és alacsony egészség, vagy a faj maximális kora okoz elhalást. Holtfa 8 év után eltűnik; álló/fekvő megjelenítés külön szabály.");
+            Add("forest.growth", "Fák növekedése", "Erdő", "Faegyed", "Havi és helyi rátafrissítés",
+                "ForesTycoon.Rules/TreeGrowthRule.cs", "Default", "forest.fitness|forest.resources|water.growthFactor|forest.health|calendar.time|forest.species", "forest.trees|forest.volume",
+                "A projekt gráfja adja az éves átmérő-, magasság- és koronanövekedést. A motor csak interpolálja a méretet.", execution: GameRuleExecution.EditableGraph);
+            foreach (var vitality in ForesTycoon.Rules.TreeVitalityRules.Defaults())
+                Add(vitality.Id, vitality.Name, "Erdő", vitality.Scope, "Erdőhónap",
+                    "ForesTycoon.Rules/TreeVitalityRules.cs", "Defaults",
+                    "forest.resources|forest.fitness|forest.species|forest.health|forest.stress|calendar.time",
+                    vitality.Id == "forest.mortality" ? "forest.trees|forest.deadwood" : vitality.Id, vitality.Description, execution: GameRuleExecution.EditableGraph);
             Add("forest.regeneration", "Természetes újulat", "Erdő", "Üres cella és magszóró szomszédok", "Erdőhónap", forest, "TryRegenerate",
                 "forest.trees|forest.species|forest.fitness|world.seed|calendar.time|road.network|buildings.footprint", "forest.trees",
                 "Alkalmas üres cellákon a szomszédos magadó állományok és determinisztikus sorsolás alapján jelenik meg újulat.");
@@ -209,16 +205,11 @@ namespace ForesTycoon
                 "ForesTycoon.Rules/RuleInfluence.cs", "Compile", "terrain.moisture|weather.rain|calendar.time|road.condition|road.network", "road.condition",
                 "A térképi hidrológiai nedvességet olvassa, nem a dinamikus gyökérzónavizet. Makadám erősebben romlik esőben; időt erdőévre váltja.",
                 "makadám: 0,10 × (1 + 2,5 × nedvesség) + 1,6 × eső × (0,4 + nedvesség); aszfalt: 0,015 × (1 + nedvesség) + 0,08 × eső; állapot -= ráta × évek", GameRuleExecution.EditableExpressions);
-            var traffic = Add("road.trafficWear", "Forgalmi útkopás – gráf", "Utak és nyomok", "Közúti csempe", "Teherautó csempeváltás",
-                "ForesTycoon/World/GameWorld.Rules.cs", "ApplyTrafficWear", "vehicle.mass|road.network|road.condition|vehicle.position", "road.condition",
-                "A jelenleg szerkeszthető és a játékba bekötött gráf. Áthaladási terhelés, burkolati szorzó, állapot és szerkesztett egyenletek.",
-                "alapmodell: 0,0015 × össztömeg / 36000 × burkolati szorzó × kopási szorzó", GameRuleExecution.EditableGraph);
-            traffic.Sources.Add(new("ForesTycoon/World/Vehicles/RoadTrafficParameters.cs", "RoadTrafficParameters"));
+            Add("traffic.wear", "Forgalmi út- és nyomkopás", "Utak és nyomok", "Áthaladás", "Csempére belépés",
+                "ForesTycoon.Rules/TrafficWearRule.cs", "Default", "vehicle.mass|vehicle.cargo|vehicle.position|machine.position|road.condition|trail.wear", "road.condition|trail.wear|trail.idle",
+                "Egy közös, szerkeszthető eseménygráf az útállapot, a nyomvályú és a pihenőidő változtatására. A mozgáskód csak az áthaladás adatait jelenti.", "", GameRuleExecution.EditableGraph);
             var trail = Add("trail.build", "Közelítőnyom kijelölése", "Utak és nyomok", "Útvonal cellái", "Játékosparancs", game, "ExecuteSkidTrailPath",
                 "commands|terrain.water|buildings.footprint|road.network|economy.result", "trail.network|economy.expenses", "Csak a hitelkereten belüli egyenlegnél indul. Ideiglenes nyom száraz, épület nélküli talajon, az úthálózathoz csatlakozva; a növényzet nem teljes útépítésként kezelődik.");
-            Add("trail.traffic", "Nyomvályú és használat", "Utak és nyomok", "Nyomcsempe", "Gép vagy teherautó áthaladása",
-                "ForesTycoon.Map/Terrain/TerrainMap.SkidTrails.cs", "DriveSkidTrail", "vehicle.mass|vehicle.position|machine.position|trail.wear", "trail.wear|trail.idle",
-                "A vályú fokozatosan mélyül, az üresjárati idő nullázódik. A teherautó nyomterhelése a közúti alapkopás húszszorosa.", "vályú = clamp(vályú + terhelés × (1 - vályú), 0, 1)");
             var age = Add("trail.age", "Nyom regenerációja és benövése", "Utak és nyomok", "Nyomcsempe", "Út-időjárási frissítés",
                 "ForesTycoon.Rules/TrailAgeRule.cs", "Default", "trail.wear|trail.idle|calendar.time", "trail.wear|trail.idle|trail.network",
                 "A gráfos szabály alapbeállítása: a vályú évente 0,4-et enyhül; a két szerkeszthető feltétel (elég használat nélküli idő és kis vályúmélység) együtt váltja ki a megszűnést. Az útvonalak újraellenőrződnek.",

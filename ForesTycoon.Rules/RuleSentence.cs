@@ -23,12 +23,13 @@ public sealed class RuleSentence
 {
     private static readonly CultureInfo Hu = CultureInfo.GetCultureInfo("hu-HU");
     private readonly Func<string, RuleWord> word;
-    private readonly string element;
+    private readonly string element, occurrence;
 
     /// <param name="element">What one element of the scope is called (“út”).</param>
     /// <param name="word">Names a field, relation field (“tile.moisture”), action or parameter (“tuning.X”).</param>
-    public RuleSentence(string element, Func<string, RuleWord> word)
+    public RuleSentence(string element, Func<string, RuleWord> word, string occurrence = "lépésenként")
     {
+        this.occurrence = occurrence;
         this.element = string.IsNullOrWhiteSpace(element) ? "elem" : element;
         this.word = name => word(name) ?? new(name);
     }
@@ -69,7 +70,7 @@ public sealed class RuleSentence
     /// <summary>One condition: “az út aszfalt”, “az állásidő legalább 5”.</summary>
     public string Condition(InfluenceCondition c)
     {
-        if (c.ValueField.Length == 0) {
+        if (c.ValueField.Length == 0 && c.ValueCurve == null) {
             double v = c.Value;
             string named = Options(c.Field, x => c.Comparison switch {
                 "less" => x < v, "atMost" => x <= v, "greater" => x > v, "equal" => x == v, "notEqual" => x != v, _ => x >= v });
@@ -77,7 +78,7 @@ public sealed class RuleSentence
         }
         string op = c.Comparison switch { "less" => "kisebb, mint", "atMost" => "legfeljebb", "greater" => "nagyobb, mint",
             "equal" => "pontosan", "notEqual" => "nem", _ => "legalább" };
-        string limit = c.ValueField.Length > 0 ? (c.ValueField.StartsWith("tuning.", StringComparison.Ordinal) ? Parameter(c.ValueField) : The(c.ValueField)) : Value(c.Value, c.Field);
+        string limit = c.ValueCurve is { } curve ? $"{The(curve.Source)} görbéjéből adódó küszöb ({Number(curve.OutputLow)} → {Number(curve.OutputHigh)})" : c.ValueField.Length > 0 ? (c.ValueField.StartsWith("tuning.", StringComparison.Ordinal) ? Parameter(c.ValueField) : The(c.ValueField)) : Value(c.Value, c.Field);
         return $"{The(c.Field)} {op} {limit}";
     }
 
@@ -103,7 +104,7 @@ public sealed class RuleSentence
     }
 
     private string Amount(InfluenceTerm t, string target) =>
-        t.AmountField.Length > 0 ? Parameter(t.AmountField) : Value(t.Amount, target);
+        t.AmountField.Length > 0 ? Parameter(t.AmountField) + (t.AmountScale != 1 ? $" × {Number(t.AmountScale)}" : "") : Value(t.Amount, target);
 
     /// <summary>The connection, without the “Minden út esetén” opening.</summary>
     public string Clause(RuleEffect effect, InfluenceTerm t, bool perYear)
@@ -111,14 +112,15 @@ public sealed class RuleSentence
         var parts = new List<string>();
         string target = The(effect.Target);
         if (effect.Mode == "action") parts.Add($"megtörténik {target}");
+        else if (effect.Mode == "approach") parts.Add($"{target} célértékéhez {Amount(t, effect.Target)} járul hozzá");
         else if (effect.Mode == "set") parts.Add($"{target} értéke {Amount(t, effect.Target)} lesz");
         else if (effect.Mode == "flow") {
             // “a felszíni vízből évente 5 mm áramlik a szomszéd csempék gyökérzóna vizébe”
             string from = effect.Target.Length == 0 ? "kívülről" : $"{The(effect.Target)} készletéből";
             string into = effect.To.Length == 0 ? "a rendszeren kívülre" : $"{The(effect.To)} készletébe" + (effect.Spread == "downhill" ? " (lejtés szerint elosztva)" : "");
-            parts.Add($"{from} {(perYear ? "évente" : "lépésenként")} {Amount(t, effect.Target.Length > 0 ? effect.Target : effect.To)} {(t.Decrease ? "kevesebb" : "")} áramlik {into}".Replace("  ", " "));
+            parts.Add($"{from} {(perYear ? "évente" : occurrence)} {Amount(t, effect.Target.Length > 0 ? effect.Target : effect.To)} {(t.Decrease ? "kevesebb" : "")} áramlik {into}".Replace("  ", " "));
         }
-        else parts.Add($"{target} {(perYear ? "évente" : "lépésenként")} {Amount(t, effect.Target)} értékkel {(t.Decrease ? "csökken" : "nő")}");
+        else parts.Add($"{target} {(perYear ? "évente" : occurrence)} {Amount(t, effect.Target)} értékkel {(t.Decrease ? "csökken" : "nő")}");
         // Conditions that gate the whole connection read last, as “ha …”; factors read as manners.
         var gates = t.Factors.Where(f => f.Shape == "step").Select(Factor).ToList();
         parts.AddRange(t.Factors.Where(f => f.Shape != "step").Select(Factor));
@@ -141,8 +143,10 @@ public sealed class RuleSentence
             var terms = effect.Influence.Terms;
             if (terms.Count == 0) { lines.Add(Capital($"{The(effect.Target)}: még nincs kapcsolat, nem változik.")); continue; }
             foreach (var t in terms) lines.Add(Term(effect, t));
-            if (effect.Mode == "add" && terms.Count(t => t.Enabled) > 1)
+            if (effect.Influence.Combine != "sum") lines.Add(Capital($"{The(effect.Target)} a kapcsolatok {(effect.Influence.Combine == "maximum" ? "legnagyobb" : "legkisebb")} eredményét kapja."));
+            if (effect.Mode == "add" && effect.Influence.Combine == "sum" && terms.Count(t => t.Enabled) > 1)
                 lines.Add(Capital($"{The(effect.Target)} változása a(z) {terms.Count(t => t.Enabled)} kapcsolat összege."));
+            if (effect.Mode == "approach") lines.Add(Capital($"{The(effect.Target)} a kapcsolatok összesített eredményéhez közelít, évente legfeljebb {Number(effect.ApproachPerYear)} változással."));
             if (effect.Mode == "action") lines.Add(Capital($"{The(effect.Target)} után az elem további hatásai nem futnak."));
         }
         return lines;

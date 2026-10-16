@@ -286,6 +286,8 @@ public static class RuleFormula
             string Clamp01(string v) => Add(BehaviorOperation.Maximum, "korlát", C(0), Add(BehaviorOperation.Minimum, "korlát", v, C(1)));
             string x = a[0];
             switch (f.Id) {
+                case "root": return Lerp(a[2], a[4], Add(BehaviorOperation.Power, "gyökválasz", Clamp01(T(x, a[1], a[3])), C(.5)));
+                case "inverse": return Lerp(a[4], a[2], Add(BehaviorOperation.Divide, "inverz válasz", C(1), Add(BehaviorOperation.Add, "eltolás", C(1), Add(BehaviorOperation.Maximum, "korlát", C(0), T(x, a[1], a[3])))));
                 case "linear": return Lerp(a[2], a[4], Clamp01(T(x, a[1], a[3])));
                 case "step": return Add(BehaviorOperation.Select, "küszöb", Add(BehaviorOperation.Less, "kisebb", x, a[1]), a[2], a[3]);
                 case "smooth": { string t = Clamp01(T(x, a[1], a[3])); return Lerp(a[2], a[4], Mul(Mul(t, t), Sub(C(3), Mul(C(2), t)))); }

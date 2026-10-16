@@ -2,6 +2,12 @@
 
 Állapot: 2026-10-12. Cél: a játék szabályai C# nélkül, az editorban legyenek leírhatók, és a játék ezeket futtassa. A meglévő szabályokat egyenként költöztetjük át.
 
+Későbbi megvalósítás (2026-10-16): a `step` mellett a `passage` esemény is fut.
+Az út- és nyomkopás egy közös, képletírás nélkül szerkeszthető gráf; a régi
+`RuleModel` és külön útkopásszerkesztő már nincs a kódban. Az alábbi számszerű
+leltár az eredeti terv időpontját írja le. Aktuális működés:
+[forgalmi szabályok](traffic-rules.md), [fennmaradó átvezetések](rule-runtime-audit.md).
+
 ## 1. Mi van most?
 
 A szabálykatalógus (`CurrentGameRules`) **83 szabályt** ír le 14 modulban. Ezekből:

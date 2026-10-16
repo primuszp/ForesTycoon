@@ -27,7 +27,7 @@ public class ForestEnvironmentCouplingTests
         int trees = 1, float moisture = .65f, SoilProperties? soil = null, double secondsPerYear = 1200)
     {
         var habitat = new Habitat(moisture, soil);
-        var forest = new ForestSystem(habitat, secondsPerYear);
+        var forest = ProjectGrowthFixture.Attach(new ForestSystem(habitat, secondsPerYear));
         forest.Clear(); forest.Plant(0, ForestSpecies.Oak);
         forest.IndividualTrees.TryGet(0, out var patch);
         while (patch.Count > trees) forest.IndividualTrees.RemoveLiving(patch, patch.Count - 1);
@@ -44,7 +44,7 @@ public class ForestEnvironmentCouplingTests
     public void HarvestImmediatelyReleasesNeighbourLightWithoutChangingItsSizeOrHealth()
     {
         var habitat = new NeighbourHabitat();
-        var forest = new ForestSystem(habitat, secondsPerYear: 1200);
+        var forest = ProjectGrowthFixture.Attach(new ForestSystem(habitat, secondsPerYear: 1200));
         forest.Clear();
         for (int id = 0; id < 2; id++)
         {

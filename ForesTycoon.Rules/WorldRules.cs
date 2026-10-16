@@ -11,7 +11,7 @@ namespace ForesTycoon.Rules;
 /// </summary>
 public sealed class WorldRule
 {
-    public static readonly string[] Schedules = { "step" };
+    public static readonly string[] Schedules = { "step", "passage", "month", "growth" };
     public string Id { get; set; } = "szabaly";
     public string Name { get; set; } = "Új szabály";
     public string Description { get; set; } = "";
@@ -23,6 +23,7 @@ public sealed class WorldRule
     public string Schedule { get; set; } = "step";
     /// <summary>A formula; the effects apply where it is not 0. Empty: always.</summary>
     public string Condition { get; set; } = "";
+    public BehaviorGraph ConditionGraph { get; set; }
     /// <summary>Applied in order on each element; a later effect sees the earlier ones of the same element.</summary>
     public List<RuleEffect> Effects { get; set; } = new();
     public List<RuleEffect> EffectiveEffects() => Effects.Select(e => e.Executable()).ToList();
@@ -32,14 +33,26 @@ public sealed class WorldRule
         if (string.IsNullOrWhiteSpace(Id) || string.IsNullOrWhiteSpace(Name) || Description == null || string.IsNullOrWhiteSpace(Scope)
             || Array.IndexOf(Schedules, Schedule) < 0 || Condition == null || Effects == null || Effects.Count > 32)
             throw new InvalidDataException($"{Name}: a szabálynak azonosítója, neve, hatóköre, időzítése és legfeljebb 32 hatása legyen.");
+        if (Schedule == "growth" && (Scope != "tree" || Effects.Any(e => e == null || e.Mode is not ("set" or "add") || e.Target is not ("diameterGrowth" or "heightGrowth" or "crownGrowth") || e.Influence is { } rate && (rate.PerYear || rate.PerHour))))
+            throw new InvalidDataException("A növekedési rátafrissítés csak a fa növekedési rátáit írhatja.");
+        if ((Schedule == "passage") != (Scope == "passage"))
+            throw new InvalidDataException("Az áthaladási esemény hatóköre passage; ez az objektum csak áthaladáskor érhető el.");
+        if (Schedule == "passage" && Effects.Any(e => e?.Influence is { } influence && (influence.PerYear || influence.PerHour)))
+            throw new InvalidDataException("Az áthaladás hatása eseményenként értendő, nem időarányos.");
         foreach (var e in Effects)
             if (e == null || Array.IndexOf(RuleEffect.Modes, e.Mode) < 0 || e.Formula == null || e.To == null || e.FlowName == null || e.Level == null
                 || (e.Mode == "flow" ? string.IsNullOrWhiteSpace(e.Target) && string.IsNullOrWhiteSpace(e.To) || e.Target == e.To : string.IsNullOrWhiteSpace(e.Target))
                 || Array.IndexOf(RuleEffect.Spreads, e.Spread) < 0)
-                throw new InvalidDataException($"{Name}: minden hatásnak célja, módja (set, add, action, flow) és képlete legyen; egy áramlásnak forrása vagy célja, és a kettő különbözzön.");
+                throw new InvalidDataException($"{Name}: minden hatásnak célja, módja (set, add, approach, action, flow) és képlete legyen; egy áramlásnak forrása vagy célja, és a kettő különbözzön.");
+        if (ConditionGraph != null && Condition.Length != 0) throw new InvalidDataException("A feltételnek egyetlen szerkesztett alakja legyen.");
         foreach (var e in Effects) {
+            if (e.Computation != null && (e.Influence != null || e.Formula.Length != 0)) throw new InvalidDataException("A hatásnak egyetlen szerkesztett alakja legyen.");
+            if (!double.IsFinite(e.ApproachPerYear) || e.ApproachPerYear < 0 || e.ApproachPerYear > 1e9)
+                throw new InvalidDataException("A közelítés sebessége véges, nemnegatív szám legyen.");
+            if (e.Mode == "approach" && e.Influence is { } target && (target.PerYear || target.PerHour))
+                throw new InvalidDataException("A közelítés célérték, nem idővel szorzott változás.");
             if (e.Influence == null) continue;
-            if (e.Formula.Length != 0 || e.Mode is not ("add" or "set" or "action" or "flow")) throw new InvalidDataException("A vizuális hatást külön képlet nélkül kell tárolni.");
+            if (e.Formula.Length != 0) throw new InvalidDataException("A vizuális hatást külön képlet nélkül kell tárolni.");
             _ = e.Influence.Compile();
         }
 
@@ -48,7 +61,7 @@ public sealed class WorldRule
 
 public sealed class RuleEffect
 {
-    public static readonly string[] Modes = { "set", "add", "action", "flow" };
+    public static readonly string[] Modes = { "set", "add", "action", "flow", "approach" };
     /// <summary>How a flow into a collection (“neighbours.surfaceWater”) is shared: evenly, or by how much lower each member's level is.</summary>
     public static readonly string[] Spreads = { "even", "downhill" };
     /// <summary>A field name (set, add), an action name of the scope (action), or the stock a flow drains (flow; empty: from outside the model).</summary>
@@ -66,10 +79,13 @@ public sealed class RuleEffect
     public string Level { get; set; } = "";
     public bool IsFlow => Mode == "flow";
     public string Mode { get; set; } = "set";
+    /// <summary>Maximum absolute movement towards the computed target, per forest year.</summary>
+    public double ApproachPerYear { get; set; } = .42;
     /// <summary>The new value, the increment, or for an action its trigger (not 0 = do it; empty = always).</summary>
     public string Formula { get; set; } = "";
     public RuleInfluence Influence { get; set; }
-    public RuleEffect Executable() => Influence == null ? this : new() { Target = Target, Mode = Mode, To = To, FlowName = FlowName, Spread = Spread, Level = Level,
+    public BehaviorGraph Computation { get; set; }
+    public RuleEffect Executable() => Influence == null ? this : new() { Target = Target, Mode = Mode, To = To, FlowName = FlowName, Spread = Spread, Level = Level, ApproachPerYear = ApproachPerYear,
         Formula = Mode == "action" ? $"ha({Influence.Compile()} > 0; 1; 0)" : Influence.Compile() };
 }
 

@@ -102,3 +102,47 @@ A vízállapotból kikerült a négy már nem használt igény-/felvételi raste
 már nem tart külön szabályátvezető vagy elhagyott mezőket elfogadó kódot.
 A referencia-lenyomatok közül kizárólag a `Behaviors` változott az útromlási kötés törlése miatt;
 a terep, az ökológiai állapot, a logisztika és a grafika egyezését külön összevetés ellenőrizte.
+
+## Tizedik lépés: közös áthaladási kopás – 2026-10-16
+
+Az út- és nyomkopás most a közös szabálykönyv `traffic.wear` eseménygráfja.
+Eltávolítottuk a külön útkopási modellt, a `road.trafficWear` viselkedéskötést
+és az öt hozzá tartozó régi hangolási kötést a projektadatokból is. A beágyazott
+kezdőállapot és az archivált teljes mentés az új `.2026-10-16.3` futtatóhoz készült.
+
+A frissítést először külön könyvtárba rögzítettük, majd összevetettük az előző
+lenyomatokkal. Kizárólag a `Rules` kulcs szűnt meg és a `Behaviors` lenyomat változott;
+a terep, az ökológia, az erdő, a logisztika és a grafika változatlan. A szállított
+jelenet saját küldetéseit és pályaadatait megőriztük; csak a beágyazott runtime-állapot
+és a megszűnt programkötések frissültek. A nyitójelenetben nincs áthaladás, ezért
+a közös eseményszabály nem módosítja a kezdőállapotot.
+
+
+## Tizenegyedik lépés: havi faéletciklus-gráfok – 2026-10-16
+
+A `forest.health` natív viselkedéskötést eltávolítottuk a projektből és a beágyazott
+világból. Az egészség, stressz, elhalás és holtfa-eltűnés a projekt havi gráfjai.
+A futtató verziója `forestycoon-simulation/2026-10-16.4`.
+
+Külön könyvtárban újrarögzített referencia alapján kizárólag az `Ecology` és
+`Behaviors` lenyomat változott. A natív induló egészségközelítés megszűnt: a generált
+fák az eredeti egészségükkel indulnak, azt az első havi gráf módosítja. A terep,
+logisztika, grafika és minden más lenyomat egyezik. A jelenet küldetéseit és
+szerkesztett pályáját megőriztük; csak a kezdeti runtime-állapot és a megszűnt
+alapértelmezett programkötés frissült. Nincs betöltéskori régi szabályátvezetés.
+
+
+## Tizenkettedik lépés: növekedési ráták a projektgráfból – 2026-10-16
+
+A `forest.growth` natív eredményfelülírás megszűnt a kódban, a szállított
+projektben és a kezdeti világállapotban is. A növekedési alapszabály a közös
+szabálykönyv `growth` időzítésű gráfja. A futtató verziója
+`forestycoon-simulation/2026-10-16.5`; nincs régi szabályt átvezető betöltési ág.
+
+A külön mappában rögzített új referencia és az előző összevetése alapján csak
+az `Ecology`, `Behaviors`, `PendingForestRateRefresh` lenyomat változott. A
+natív induló rátaszámítás helyett az első logikai tick elején, szeletelten fut
+le a növekedési gráf. Az évszakválasz a projekt szerkeszthető, kilencpontos
+görbéje. Az előkészített geometria már nem tárol natív növekedési képlettagokat.
+A terep, logisztika, grafika és minden más lenyomat egyezik. A szállított
+jelenet küldetéseit, szerkesztett pályáját megőriztük.

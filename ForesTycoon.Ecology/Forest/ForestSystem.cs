@@ -264,7 +264,7 @@ namespace ForesTycoon.Ecology
                 foreach (int unit in competition.SnapshotWork(habitat, IndividualTrees, ForestYear)) yield return unit;
                 foreach (int id in paint.Keys)
                     if (IndividualTrees.TryGet(id, out var patch)) {
-                        foreach (int unit in UpdateIndividualRatesWork(id, patch, ForestYear, updateHealth: false)) yield return unit;
+                        foreach (int unit in UpdateIndividualRatesWork(id, patch, ForestYear)) yield return unit;
                         stands[id] = IndividualStand(id, ForestYear);
                     }
             }
@@ -486,11 +486,7 @@ namespace ForesTycoon.Ecology
             return profile.MaximumBiomass * normalizedAge * normalizedAge * (0.45f + health * 0.55f);
         }
 
-        private static float MoveTowards(float current, float target, float maximumDelta)
-        {
-            if (Math.Abs(target - current) <= maximumDelta) return target;
-            return current + Math.Sign(target - current) * maximumDelta;
-        }
+
 
         private static float UnitFloat(uint value) => (value >> 8) * (1f / 16777216f);
 

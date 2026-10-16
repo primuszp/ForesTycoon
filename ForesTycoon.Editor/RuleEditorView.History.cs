@@ -26,7 +26,7 @@ internal sealed partial class RuleEditorView
         try { map = new RuleProject { World = scenario }.ToJson(); } finally { scenario.InitialState = initial; }
         var tuning = currentRules.TuningOverrides(world);
         return new(map, JsonSerializer.Serialize(new SortedDictionary<string, double>(tuning, StringComparer.Ordinal)), null,
-            JsonSerializer.Serialize(new { Rules = RuleBookRules(world), Fields = RuleBookFields(world), RemovedStarters = RemovedStarters(world) }));
+            JsonSerializer.Serialize(new { Rules = RuleBookRules(world), Fields = RuleBookFields(world), RemovedStarters = RemovedStarters(world), Behaviors = behaviors.Document, Dynamics = dynamicsEditor.Document }));
     }
 
     private void ClearHistory() { history.Clear(); historyIndex = -1; }
@@ -72,6 +72,9 @@ internal sealed partial class RuleEditorView
         currentRules.SetTuning(JsonSerializer.Deserialize<Dictionary<string, double>>(to.Tuning));
         var book = JsonSerializer.Deserialize<RuleBookState>(to.Rules);
         if (book?.Rules != null) { ruleBook = book.Rules; ruleFields = book.Fields ?? new(); removedStarters = book.RemovedStarters ?? new(); ruleBookError = null; }
+        if (book?.Behaviors != null) behaviors.LoadDraft(book.Behaviors);
+        if (book?.Dynamics != null) dynamicsEditor.Load(book.Dynamics);
+        expressionKey = activeCommonKey = null;
         historyIndex = index; statusFrame = -1000;
         if (rebuild) ApplyScenario(world, verb + ": " + summary + ".");
         else { Try(() => ApplyProject(world, false)); message = verb + ": " + summary + "."; }
@@ -84,7 +87,7 @@ internal sealed partial class RuleEditorView
         return p.ToJson();
     }
 
-    private sealed record RuleBookState(List<WorldRule> Rules, List<RuleFieldDefinition> Fields, List<string> RemovedStarters = null);
+    private sealed record RuleBookState(List<WorldRule> Rules, List<RuleFieldDefinition> Fields, List<string> RemovedStarters = null, BehaviorModel Behaviors = null, DynamicsModel Dynamics = null);
     internal WorldScenario EditedScenario => scenario;
     internal void SetTuningForTest(string key, double value)
     {

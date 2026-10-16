@@ -92,7 +92,7 @@ internal sealed partial class RuleEditorView
         ImGui.TextUnformatted(label.Split("##")[0]);
         ImGui.SetNextItemWidth(Math.Max(80, ImGui.GetContentRegionAvail().X * .35f));
         double typed = value;
-        bool changed = ImGui.InputDouble("##number", ref typed, 0, 0, "%.17g") && double.IsFinite(typed) && Math.Abs(typed) <= 1e9;
+        bool changed = ImGui.InputDouble("##number", ref typed, 0, 0, "%.12g") && double.IsFinite(typed) && Math.Abs(typed) <= 1e9;
         if (changed) value = typed;
         finished |= ImGui.IsItemDeactivatedAfterEdit();
         ImGui.SameLine(); ImGui.SetNextItemWidth(-1);

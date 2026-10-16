@@ -2037,13 +2037,13 @@
     },
     {
       "id": "forest.growth",
-      "name": "Egyedi fan\u00F6veked\u00E9s",
+      "name": "F\u00E1k n\u00F6veked\u00E9se",
       "module": "Erd\u0151",
       "scope": "Faegyed",
-      "schedule": "Havi r\u00E1t\u00E1k; folytonos m\u00E9retinterpol\u00E1ci\u00F3",
-      "execution": "NativeCode",
-      "description": "\u00C1tm\u00E9r\u0151, magass\u00E1g \u00E9s korona n\u0151. Magass\u00E1g fajf\u00FCgg\u0151 plafonhoz k\u00F6zel\u00EDt, az \u00E9rett fa tov\u00E1bb vastagodik.",
-      "formula": "n\u00F6veked\u00E9si t\u00E9nyez\u0151 = alkalmass\u00E1g \u00D7 f\u00E9nyv\u00E1lasz \u00D7 v\u00EDzv\u00E1lasz \u00D7 sqrt(t\u00E9r) \u00D7 eg\u00E9szs\u00E9g \u00D7 \u00E9vszak",
+      "schedule": "Havi \u00E9s helyi r\u00E1tafriss\u00EDt\u00E9s",
+      "execution": "EditableGraph",
+      "description": "A projekt gr\u00E1fja adja az \u00E9ves \u00E1tm\u00E9r\u0151-, magass\u00E1g- \u00E9s koronan\u00F6veked\u00E9st. A motor csak interpol\u00E1lja a m\u00E9retet.",
+      "formula": "",
       "notes": "",
       "reads": [
         "forest.fitness",
@@ -2051,8 +2051,7 @@
         "water.growthFactor",
         "forest.health",
         "calendar.time",
-        "forest.species",
-        "rules.behaviors"
+        "forest.species"
       ],
       "writes": [
         "forest.trees",
@@ -2060,8 +2059,8 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon.Ecology/Species/ForestTree.cs",
-          "symbol": "Factor"
+          "file": "ForesTycoon.Rules/TreeGrowthRule.cs",
+          "symbol": "Default"
         }
       ],
       "parameters": [],
@@ -2070,29 +2069,29 @@
     },
     {
       "id": "forest.health",
-      "name": "Eg\u00E9szs\u00E9g \u00E9s tart\u00F3s stressz",
+      "name": "F\u00E1k eg\u00E9szs\u00E9ge",
       "module": "Erd\u0151",
-      "scope": "Faegyed",
+      "scope": "tree",
       "schedule": "Erd\u0151h\u00F3nap",
-      "execution": "NativeCode",
-      "description": "Eg\u00E9szs\u00E9g a term\u0151hely \u00E9s a legsz\u0171k\u00F6sebb er\u0151forr\u00E1s c\u00E9l\u00E9rt\u00E9ke fel\u00E9 l\u00E9p; tart\u00F3s elnyom\u00E1sn\u00E1l n\u0151 a stressz, javul\u00E1sn\u00E1l cs\u00F6kken.",
-      "formula": "c\u00E9l = clamp(alkalmass\u00E1g \u00D7 (0,15 \u002B 0,85 \u00D7 min(t\u00E9r, v\u00EDz, f\u00E9nyv\u00E1lasz)), 0, 1); havi eg\u00E9szs\u00E9gl\u00E9p\u00E9s: 0,035",
+      "execution": "EditableGraph",
+      "description": "Az eg\u00E9szs\u00E9g a term\u0151hely \u00E9s az el\u00E9rhet\u0151 er\u0151forr\u00E1sok adta c\u00E9lhoz k\u00F6zel\u00EDt. A kapcsolatok, a g\u00F6rb\u00E9k \u00E9s a k\u00F6zel\u00EDt\u00E9s sebess\u00E9ge szerkeszthet\u0151.",
+      "formula": "",
       "notes": "",
       "reads": [
         "forest.resources",
         "forest.fitness",
         "forest.species",
         "forest.health",
-        "rules.behaviors"
+        "forest.stress",
+        "calendar.time"
       ],
       "writes": [
-        "forest.health",
-        "forest.stress"
+        "forest.health"
       ],
       "sources": [
         {
-          "file": "ForesTycoon.Ecology/Forest/ForestSystem.Individuals.cs",
-          "symbol": "stressThreshold"
+          "file": "ForesTycoon.Rules/TreeVitalityRules.cs",
+          "symbol": "Defaults"
         }
       ],
       "parameters": [],
@@ -2100,21 +2099,53 @@
       "y": 160
     },
     {
-      "id": "forest.mortality",
-      "name": "\u00D6nritkul\u00E1s, elhal\u00E1s \u00E9s holtfa",
+      "id": "forest.stress",
+      "name": "F\u00E1k tart\u00F3s stressze",
       "module": "Erd\u0151",
-      "scope": "Faegyed",
+      "scope": "tree",
       "schedule": "Erd\u0151h\u00F3nap",
-      "execution": "NativeCode",
-      "description": "Legal\u00E1bb 4 stressz\u00E9v \u00E9s alacsony eg\u00E9szs\u00E9g, vagy a faj maxim\u00E1lis kora okoz elhal\u00E1st. Holtfa 8 \u00E9v ut\u00E1n elt\u0171nik; \u00E1ll\u00F3/fekv\u0151 megjelen\u00EDt\u00E9s k\u00FCl\u00F6n szab\u00E1ly.",
+      "execution": "EditableGraph",
+      "description": "Er\u0151forr\u00E1shi\u00E1ny vagy rossz eg\u00E9szs\u00E9g n\u00F6veli a stressz\u00E9veket; megfelel\u0151 k\u00F6r\u00FClm\u00E9nyek k\u00F6z\u00F6tt a fa lassan regener\u00E1l\u00F3dik. Az \u00E1rny\u00E9kt\u0171r\u00E9s a k\u00FCsz\u00F6b g\u00F6rb\u00E9j\u00E9t m\u00F3dos\u00EDtja.",
       "formula": "",
       "notes": "",
       "reads": [
-        "forest.stress",
-        "forest.health",
+        "forest.resources",
+        "forest.fitness",
         "forest.species",
-        "calendar.time",
-        "forest.trees"
+        "forest.health",
+        "forest.stress",
+        "calendar.time"
+      ],
+      "writes": [
+        "forest.stress"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Rules/TreeVitalityRules.cs",
+          "symbol": "Defaults"
+        }
+      ],
+      "parameters": [],
+      "x": 25,
+      "y": 290
+    },
+    {
+      "id": "forest.mortality",
+      "name": "F\u00E1k elhal\u00E1sa",
+      "module": "Erd\u0151",
+      "scope": "tree",
+      "schedule": "Erd\u0151h\u00F3nap",
+      "execution": "EditableGraph",
+      "description": "A tart\u00F3san stresszes, gyenge fa elhal; a legnagyobb kor\u00E1t meghalad\u00F3 fa is elhal. Az elhalt fa holtfak\u00E9nt marad a vil\u00E1gban, nem lesz bel\u0151le kitermelt faanyag vagy t\u00F6nk.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "forest.resources",
+        "forest.fitness",
+        "forest.species",
+        "forest.health",
+        "forest.stress",
+        "calendar.time"
       ],
       "writes": [
         "forest.trees",
@@ -2122,12 +2153,43 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon.Ecology/Forest/ForestSystem.Individuals.cs",
-          "symbol": "DeadTrees"
+          "file": "ForesTycoon.Rules/TreeVitalityRules.cs",
+          "symbol": "Defaults"
         }
       ],
       "parameters": [],
-      "x": 25,
+      "x": 270,
+      "y": 290
+    },
+    {
+      "id": "forest.deadwood",
+      "name": "Elhalt f\u00E1k elt\u0171n\u00E9se",
+      "module": "Erd\u0151",
+      "scope": "deadTree",
+      "schedule": "Erd\u0151h\u00F3nap",
+      "execution": "EditableGraph",
+      "description": "A holtfa a v\u00E1lasztott id\u0151 ut\u00E1n elt\u0171nik. A hat\u00E1r\u00E9rt\u00E9k, a tov\u00E1bbi felt\u00E9telek \u00E9s a hat\u00F3 t\u00E9nyez\u0151k a gr\u00E1fon v\u00E1ltoztathat\u00F3k.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "forest.resources",
+        "forest.fitness",
+        "forest.species",
+        "forest.health",
+        "forest.stress",
+        "calendar.time"
+      ],
+      "writes": [
+        "forest.deadwood"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Rules/TreeVitalityRules.cs",
+          "symbol": "Defaults"
+        }
+      ],
+      "parameters": [],
+      "x": 515,
       "y": 290
     },
     {
@@ -2159,8 +2221,8 @@
         }
       ],
       "parameters": [],
-      "x": 270,
-      "y": 290
+      "x": 25,
+      "y": 420
     },
     {
       "id": "forest.canopy",
@@ -2187,8 +2249,8 @@
         }
       ],
       "parameters": [],
-      "x": 515,
-      "y": 290
+      "x": 270,
+      "y": 420
     },
     {
       "id": "forest.plant",
@@ -2471,73 +2533,35 @@
       "y": 30
     },
     {
-      "id": "road.trafficWear",
-      "name": "Forgalmi \u00FAtkop\u00E1s \u2013 gr\u00E1f",
+      "id": "traffic.wear",
+      "name": "Forgalmi \u00FAt- \u00E9s nyomkop\u00E1s",
       "module": "Utak \u00E9s nyomok",
-      "scope": "K\u00F6z\u00FAti csempe",
-      "schedule": "Teheraut\u00F3 csempev\u00E1lt\u00E1s",
+      "scope": "\u00C1thalad\u00E1s",
+      "schedule": "Csemp\u00E9re bel\u00E9p\u00E9s",
       "execution": "EditableGraph",
-      "description": "A jelenleg szerkeszthet\u0151 \u00E9s a j\u00E1t\u00E9kba bek\u00F6t\u00F6tt gr\u00E1f. \u00C1thalad\u00E1si terhel\u00E9s, burkolati szorz\u00F3, \u00E1llapot \u00E9s szerkesztett egyenletek.",
-      "formula": "alapmodell: 0,0015 \u00D7 \u00F6sszt\u00F6meg / 36000 \u00D7 burkolati szorz\u00F3 \u00D7 kop\u00E1si szorz\u00F3",
+      "description": "Egy k\u00F6z\u00F6s, szerkeszthet\u0151 esem\u00E9nygr\u00E1f az \u00FAt\u00E1llapot, a nyomv\u00E1ly\u00FA \u00E9s a pihen\u0151id\u0151 v\u00E1ltoztat\u00E1s\u00E1ra. A mozg\u00E1sk\u00F3d csak az \u00E1thalad\u00E1s adatait jelenti.",
+      "formula": "",
       "notes": "",
       "reads": [
         "vehicle.mass",
-        "road.network",
-        "road.condition",
+        "vehicle.cargo",
         "vehicle.position",
-        "rules.behaviors"
+        "machine.position",
+        "road.condition",
+        "trail.wear"
       ],
       "writes": [
-        "road.condition"
+        "road.condition",
+        "trail.wear",
+        "trail.idle"
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/GameWorld.Rules.cs",
-          "symbol": "ApplyTrafficWear"
-        },
-        {
-          "file": "ForesTycoon/World/Vehicles/RoadTrafficParameters.cs",
-          "symbol": "RoadTrafficParameters"
+          "file": "ForesTycoon.Rules/TrafficWearRule.cs",
+          "symbol": "Default"
         }
       ],
-      "parameters": [
-        {
-          "name": "Referencia \u00E1thalad\u00E1si kop\u00E1s",
-          "value": 0.001500000013038516,
-          "unit": "\u00E1llapotvesztes\u00E9g/\u00E1thalad\u00E1s",
-          "key": "ReferenceWear",
-          "min": 0,
-          "max": 0.2,
-          "default": 0.001500000013038516
-        },
-        {
-          "name": "Referencia \u00F6sszt\u00F6meg",
-          "value": 36000,
-          "unit": "kg",
-          "key": "ReferenceMass",
-          "min": 1000,
-          "max": 200000,
-          "default": 36000
-        },
-        {
-          "name": "Aszfalt szorz\u00F3",
-          "value": 0.20000000298023224,
-          "unit": "1",
-          "key": "AsphaltFactor",
-          "min": 0,
-          "max": 10,
-          "default": 0.20000000298023224
-        },
-        {
-          "name": "Makad\u00E1m szorz\u00F3",
-          "value": 1,
-          "unit": "1",
-          "key": "MacadamFactor",
-          "min": 0,
-          "max": 10,
-          "default": 1
-        }
-      ],
+      "parameters": [],
       "x": 25,
       "y": 160
     },
@@ -2584,47 +2608,6 @@
       "y": 160
     },
     {
-      "id": "trail.traffic",
-      "name": "Nyomv\u00E1ly\u00FA \u00E9s haszn\u00E1lat",
-      "module": "Utak \u00E9s nyomok",
-      "scope": "Nyomcsempe",
-      "schedule": "G\u00E9p vagy teheraut\u00F3 \u00E1thalad\u00E1sa",
-      "execution": "NativeCode",
-      "description": "A v\u00E1ly\u00FA fokozatosan m\u00E9ly\u00FCl, az \u00FCresj\u00E1rati id\u0151 null\u00E1z\u00F3dik. A teheraut\u00F3 nyomterhel\u00E9se a k\u00F6z\u00FAti alapkop\u00E1s h\u00FAszszorosa.",
-      "formula": "v\u00E1ly\u00FA = clamp(v\u00E1ly\u00FA \u002B terhel\u00E9s \u00D7 (1 - v\u00E1ly\u00FA), 0, 1)",
-      "notes": "",
-      "reads": [
-        "vehicle.mass",
-        "vehicle.position",
-        "machine.position",
-        "trail.wear",
-        "rules.behaviors"
-      ],
-      "writes": [
-        "trail.wear",
-        "trail.idle"
-      ],
-      "sources": [
-        {
-          "file": "ForesTycoon.Map/Terrain/TerrainMap.SkidTrails.cs",
-          "symbol": "DriveSkidTrail"
-        }
-      ],
-      "parameters": [
-        {
-          "name": "Nyomterhel\u00E9si szorz\u00F3",
-          "value": 20,
-          "unit": "\u00D7 \u00FAtkop\u00E1s",
-          "key": "TrailLoadMultiplier",
-          "min": 0,
-          "max": 500,
-          "default": 20
-        }
-      ],
-      "x": 515,
-      "y": 160
-    },
-    {
       "id": "trail.age",
       "name": "Nyom regener\u00E1ci\u00F3ja \u00E9s ben\u00F6v\u00E9se",
       "module": "Utak \u00E9s nyomok",
@@ -2662,8 +2645,8 @@
           "default": 3
         }
       ],
-      "x": 25,
-      "y": 290
+      "x": 515,
+      "y": 160
     },
     {
       "id": "route.find",
@@ -2768,7 +2751,7 @@
         }
       ],
       "parameters": [],
-      "x": 270,
+      "x": 25,
       "y": 290
     },
     {
@@ -3322,6 +3305,15 @@
       ],
       "parameters": [
         {
+          "name": "G\u00E9p saj\u00E1t t\u00F6mege",
+          "value": 18000,
+          "unit": "kg",
+          "key": "ProcessorMass",
+          "min": 1000,
+          "max": 100000,
+          "default": 18000
+        },
+        {
           "name": "Rakom\u00E1nykapacit\u00E1s",
           "value": 3,
           "unit": "m\u00B3",
@@ -3402,6 +3394,15 @@
         }
       ],
       "parameters": [
+        {
+          "name": "G\u00E9p saj\u00E1t t\u00F6mege",
+          "value": 16000,
+          "unit": "kg",
+          "key": "ForwarderMass",
+          "min": 1000,
+          "max": 100000,
+          "default": 16000
+        },
         {
           "name": "Rakom\u00E1nykapacit\u00E1s",
           "value": 14,
@@ -4217,63 +4218,5 @@
     "A hitelkeret csak az \u00FAt- \u00E9s nyom\u00E9p\u00EDt\u00E9st, valamint az \u00FAtjav\u00EDt\u00E1st korl\u00E1tozza; alap\u00E9rt\u00E9ke korl\u00E1tlan. J\u00E1rm\u0171v\u00E1s\u00E1rl\u00E1s, kamat \u00E9s be\u00E9p\u00EDtett piaci kereslet\u2013k\u00EDn\u00E1lat modell m\u00E9g nincs: a piaci \u00E1rszorz\u00F3 k\u00E9plettel vagy saj\u00E1t k\u00E9szlettel modellezhet\u0151.",
     "A fa t\u00E9rfogat\u00E1nak p\u00E9nzbeli \u00E9rt\u00E9k\u00E9t a logisztikai TimberPrice adja; a teheraut\u00F3 fas\u0171r\u0171s\u00E9ge minden fajra azonos.",
     "A nat\u00EDv folyamatok t\u00F6bb \u00EDr\u00F3ja \u00E9s visszacsatol\u00E1sa a megl\u00E9v\u0151 futtat\u00E1si sorrend szerint m\u0171k\u00F6dik; a katal\u00F3gus \u00E9lei nem \u00FAj v\u00E9grehajt\u00E1si sorrendet jelentenek."
-  ],
-  "roadTrafficModel": {
-    "version": 1,
-    "name": "\u00DAtkop\u00E1s",
-    "binding": "road.trafficWear",
-    "output": "wear",
-    "nodes": [
-      {
-        "id": "traffic",
-        "name": "\u00C1thalad\u00E1si terhel\u00E9s",
-        "operation": "TrafficWear",
-        "value": 1,
-        "a": "",
-        "b": "",
-        "x": 20,
-        "y": 30
-      },
-      {
-        "id": "surface",
-        "name": "Burkolati szorz\u00F3",
-        "operation": "SurfaceFactor",
-        "value": 1,
-        "a": "",
-        "b": "",
-        "x": 20,
-        "y": 150
-      },
-      {
-        "id": "base",
-        "name": "Burkolati kop\u00E1s",
-        "operation": "Multiply",
-        "value": 1,
-        "a": "traffic",
-        "b": "surface",
-        "x": 260,
-        "y": 70
-      },
-      {
-        "id": "scale",
-        "name": "Kop\u00E1si szorz\u00F3",
-        "operation": "Constant",
-        "value": 1,
-        "a": "",
-        "b": "",
-        "x": 260,
-        "y": 210
-      },
-      {
-        "id": "wear",
-        "name": "\u00DAt\u00E1llapot cs\u00F6kken\u00E9se",
-        "operation": "Multiply",
-        "value": 1,
-        "a": "base",
-        "b": "scale",
-        "x": 500,
-        "y": 90
-      }
-    ]
-  }
+  ]
 }
