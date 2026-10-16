@@ -231,3 +231,14 @@ változott. Az ökológiai indulóállapot, a terep, logisztika és minden más
 lenyomat egyezik. A szállított jelenet saját beállításai megmaradtak.
 A referencia és a beágyazott állapot az új futtatóval készült; nincs régi
 környezeti képletet fenntartó futtatási ág. [Részletek](../../environment-rules.md).
+
+
+## Tizenkilencedik lépés: járművek és fenntartás gráfjai – 2026-10-16
+
+A tömeg-, gördülési, menetellenállási, vonóerő-, fogyasztási és sebességválaszok,
+valamint a közös kopás/meghibásodás/javítás/karbantartás 17 projektgráfból fut.
+A futtató `forestycoon-simulation/2026-10-16.12`. A frissen rögzített világot
+összevetve csak a `Behaviors` lenyomat változott; a többi kezdeti állapot egyezik.
+A jelenet saját szerkesztései megmaradtak. A fizikai integrátor és könyvelés
+motor marad, a régi párhuzamos válaszszámítások törölve.
+[Részletek, az 5/a és 5/b határa](../../vehicle-response-rules.md).

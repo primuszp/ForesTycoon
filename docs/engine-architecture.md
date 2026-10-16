@@ -528,3 +528,23 @@ A 64 egységes eső-/hószeletek p99 értéke 0,090/0,084 ms; a ritka maximum
 eső-/hóesetben bitre azonos, nincs eldobott idő.
 Ez a csomag a környezeti döntések szerkeszthetőségét zárja le; a hónaphatári
 hátralékot nem szünteti meg. [Részletes protokoll és eredmények](environment-rules.md).
+
+## Járművek és fenntartás: közös válaszprogram – 2026-10-16
+
+Az 5/a csomag 17 tiszta projektgráfból számolja a járműfizika és a közös
+fenntartás döntéseit. A fizikai integrátor, a készlet- és költségkönyvelés,
+a visszaszámláló és a seedelt sorsolás marad motorfeladat. A járműadatok
+cseréje közös `VehicleSystem`-referencián keresztül azonnali; az alkalmazás
+nem másolja végig a specifikációt minden teherautóra. A visszatöltés a
+meglévő szeletelt járműépítés közben köti vissza ezt a kapcsolatot.
+
+A járműgráfok cseréje nem érvényteleníti az erdei ráta-előkészítést.
+Az általános alapadatok nem tartanak globális módosítható kiértékelőpéldányt;
+az alapértelmezett program szálankénti, az aktív projekt programja világonkénti.
+
+10 000 fizikai járműnél a 64 egységes szeletek p99/max értéke 0,057/0,189 ms,
+a teljes és szeletelt járműállapot bitre azonos. Az 1000-es eset ritka maximuma
+3,083 ms; ezeket a méréseket nem általános időgaranciaként kezeljük.
+A külön 128²-es erdővilág hostpróbájának p99/max értéke 4,080/12,913 ms,
+csúcshátraléka 7,0667 szimuláció-s. A havi kapacitáskorlát megmaradt.
+[Részletes protokoll, korlátok és ellenőrzések](vehicle-response-rules.md).

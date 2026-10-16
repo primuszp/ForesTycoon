@@ -15,11 +15,10 @@ namespace ForesTycoon
 
         private void ApplyTuning(GameTuning tuning)
         {
-            Tuning = (tuning ?? GameTuning.Default).WithBehaviors(behaviorPolicy.HasGraphs ? behaviorPolicy : null);
+            Tuning = (tuning ?? GameTuning.Default).WithBehaviors(behaviorPolicy.HasGraphs ? behaviorPolicy : null, behaviorPolicy.VehicleResponses);
             if (Logistics != null) Logistics.Tuning = Tuning;
             vehicles.TimeScale = Tuning[Tune.VehicleTimeScale];
             vehicles.Spec = Tuning.Truck;
-            foreach (var vehicle in vehicles.Vehicles) vehicle.Spec = Tuning.Truck;
         }
         internal string ObserveRuleField(string field) => field switch
         {

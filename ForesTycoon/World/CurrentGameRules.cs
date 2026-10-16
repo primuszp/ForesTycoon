@@ -220,19 +220,19 @@ namespace ForesTycoon
                 "ForesTycoon.Map/Terrain/TerrainMap.Network.cs", "FindNetworkPath", "road.network|trail.network|trail.wear|buildings.footprint|timber.stacks", "vehicle.route",
                 "Közös út- és nyomhálózat, kölcsönös csatlakozások, burkolat és nyomvályú szerinti költség. A flottában a dokkpárok útvonalai közül a legkisebb összesített költségű nyer; azonos költségnél a rendezett dokksorrend dönt.");
             var mass = Add("vehicle.mass", "Rakomány és össztömeg", "Járművek", "Teherautó", "Mozgási lépés", dynamics, "Mass",
-                "vehicle.cargo", "vehicle.mass", "A rakomány térfogatból a rögzített frissfa-sűrűség alapján tömeg lesz. Ez a sűrűség jelenleg nem fajfüggő.", "tömeg = üres tömeg + m³ × fasűrűség");
+                "vehicle.cargo", "vehicle.mass", "A rakomány térfogatból a rögzített frissfa-sűrűség alapján tömeg lesz. Ez a sűrűség jelenleg nem fajfüggő.", "tömeg = üres tömeg + m³ × fasűrűség", execution: GameRuleExecution.EditableGraph);
             Add("trail.trafficability", "Földút járhatósága", "Utak és nyomok", "Burkolatlan csempe", "Jármű haladásakor",
                 "ForesTycoon/World/GameWorld.Rules.cs", "Trafficability", "soil.bearing|water.root|water.surface|trail.wear", "trail.trafficability",
                 "Átázott, gyenge teherbírású talajon a földút és a közelítőnyom felülete romlik, a jármű gördülési ellenállása nő. A teherbírás a talajtípus paramétere; az átnedvesedés a gyökérzóna telítettsége (a szabadföldi vízkapacitás felétől a telítettségig) vagy a felszíni víz.",
                 "járhatóság = 1 - átnedvesedés × (1 - teherbírás)", execution: GameRuleExecution.EditableGraph);
             var resistance = Add("vehicle.resistance", "Lejtés és menetellenállás", "Járművek", "Teherautó / aktuális útszakasz", "Legfeljebb 1/30 jármű-s", dynamics, "Resistance",
                 "vehicle.mass|vehicle.speed|terrain.height|road.condition|road.network|trail.wear|trail.trafficability", "vehicle.resistance",
-                "Gördülés, előjeles lejtőellenállás és légellenállás; durva, kopott felület növeli a gördülést.", "F = Crr × m × g × cos(atan(lejtés)) + m × g × sin(atan(lejtés)) + 0,5 × levegősűrűség × légellenállási felület × v²");
+                "Gördülés, előjeles lejtőellenállás és légellenállás; durva, kopott felület növeli a gördülést.", "F = Crr × m × g × cos(atan(lejtés)) + m × g × sin(atan(lejtés)) + 0,5 × levegősűrűség × légellenállási felület × v²", execution: GameRuleExecution.EditableGraph);
             Add("vehicle.motion", "Gyorsulás, kanyar és fékezés", "Járművek", "Teherautó", "Legfeljebb 1/30 jármű-s",
                 "ForesTycoon/World/Vehicles/Vehicle.cs", "VehicleDynamics.Step", "vehicle.time|vehicle.route|vehicle.resistance|vehicle.mass|road.condition|vehicle.broken", "vehicle.position|vehicle.speed|vehicle.fuel",
-                "Teljesítmény- és tapadáskorlátos vonóerő, terhelés és kanyar szerinti célsebesség, végponti fékezés. Kopás lassít, meghibásodás megállít.", "célsebesség szorzója: 1 - 0,55 × útsérülés; üzemanyag a tényleges motor-munkából és alapjáratból");
+                "Teljesítmény- és tapadáskorlátos vonóerő, terhelés és kanyar szerinti célsebesség, végponti fékezés. Kopás lassít, meghibásodás megállít.", "célsebesség szorzója: 1 - 0,55 × útsérülés; üzemanyag a tényleges motor-munkából és alapjáratból", execution: GameRuleExecution.EditableGraph);
             var fuel = Add("vehicle.fuel", "Motorfogyasztás", "Járművek", "Teherautó", "Mozgási lépés", dynamics, "FuelPerKilowattHour",
-                "vehicle.speed|vehicle.resistance|vehicle.mass", "vehicle.fuel", "A dinamika által ténylegesen kifejtett teljesítmény és alapjárat alapján számolt liter. Lejtőn fékezés nem termel negatív fogyasztást.", "liter = motorteljesítmény_kW × órák × fajlagos fogyasztás + alapjárati l/h × órák");
+                "vehicle.speed|vehicle.resistance|vehicle.mass", "vehicle.fuel", "A dinamika által ténylegesen kifejtett teljesítmény és alapjárat alapján számolt liter. Lejtőn fékezés nem termel negatív fogyasztást.", "liter = motorteljesítmény_kW × órák × fajlagos fogyasztás + alapjárati l/h × órák", execution: GameRuleExecution.EditableGraph);
             Add("vehicle.transfer", "Rakodási és szállítási állapotgép", "Járművek", "Teherautó / forrás / cél", "Járműidő",
                 "ForesTycoon/World/Vehicles/VehicleSystem.cs", "Update", "vehicle.route|timber.stacks|vehicle.cargo|vehicle.broken", "vehicle.cargo|vehicle.transportState|timber.stacks|mill.stock",
                 "Rakodás, fuvar, lerakodás, visszaút, várakozás. Hiányzó készletnél vár; megszakadt útvonalnál megőrzi a rakományt és megáll.");
@@ -240,14 +240,14 @@ namespace ForesTycoon
             var wear = Add("upkeep.wear", "Gép- és járműkopás, meghibásodás", "Fenntartás", "Flottajármű", "Munka / mozgás", upkeep, "Operate",
                 "machine.work|vehicle.cargo|trail.network|vehicle.speed|vehicle.wear|vehicle.time", "vehicle.wear|vehicle.broken",
                 "Terhelési szorzóval kopik; saját seedelt xorshift-generátorból sorsolt meghibásodás. Teherautó-terhelés: nyomon 2, úton 1, rakománytényező 1 + 0,5 × telítettség.",
-                "kopás += 0,00025 × igénybevétel × s; meghibásodás-esély = 0,004 × kopás² × igénybevétel × s");
+                "kopás += 0,00025 × igénybevétel × s; meghibásodás-esély = 0,004 × kopás² × igénybevétel × s", execution: GameRuleExecution.EditableGraph);
             Add("upkeep.effects", "Kopás hatása a munkára és költségre", "Fenntartás", "Flottajármű", "Munka / költségelszámolás", upkeep, "FuelFactor",
                 "vehicle.wear", "machine.pace|economy.fuelFactor", "Gépek munkaidejét és mozgását a PaceFactor lassítja. A teherautó PaceFactor jelenleg nincs bekötve a mozgásba; a fogyasztási szorzó a költségelszámolásban hat.",
-                "üzemanyag-szorzó = 1 + 0,5 × kopás; géptempó = 1 - 0,3 × kopás");
+                "üzemanyag-szorzó = 1 + 0,5 × kopás; géptempó = 1 - 0,3 × kopás", execution: GameRuleExecution.EditableGraph);
             var repair = Add("upkeep.repair", "Helyszíni szerelés", "Fenntartás", "Meghibásodott flottajármű", "Járműidő", upkeep, "RepairLeft",
-                "vehicle.broken|vehicle.wear|vehicle.time", "vehicle.broken|vehicle.wear|economy.runningCosts", "Szerelési várakozás után részben enyhül a kopás; alap- és kopásarányos költség keletkezik.");
+                "vehicle.broken|vehicle.wear|vehicle.time", "vehicle.broken|vehicle.wear|economy.runningCosts", "Szerelési várakozás után részben enyhül a kopás; alap- és kopásarányos költség keletkezik.", execution: GameRuleExecution.EditableGraph);
             var service = Add("upkeep.service", "Telephelyi karbantartás", "Fenntartás", "Parkoló flottajármű", "Járműidő", upkeep, "Service",
-                "vehicle.wear|fleet.state|vehicle.time", "vehicle.wear|economy.runningCosts", "A telephelyen álló, nem meghibásodott gép és teherautó kopása idővel csökken, a javított kopásmennyiségért költséget számol.");
+                "vehicle.wear|fleet.state|vehicle.time", "vehicle.wear|economy.runningCosts", "A telephelyen álló, nem meghibásodott gép és teherautó kopása idővel csökken, a javított kopásmennyiségért költséget számol.", execution: GameRuleExecution.EditableGraph);
 
             Add("fleet.depot", "Telephely és induló flotta", "Faanyag és logisztika", "2×2 cella", "Játékosparancs", fleet, "PlaceDepot",
                 "commands|terrain.height|terrain.water|road.network|forest.trees|harvest.sites|buildings.footprint", "buildings.footprint|fleet.state",

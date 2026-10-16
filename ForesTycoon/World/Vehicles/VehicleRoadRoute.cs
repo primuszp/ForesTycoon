@@ -170,14 +170,13 @@ namespace ForesTycoon
         /// Speed the driver aims for: cruise, slower in corners and when descending (more so when loaded).
         /// Climbing speed is not chosen here: the vehicle dynamics decide how fast the engine can pull.
         /// </summary>
-        public double TargetSpeed(double position, double cruise, float load)
+        public double TargetSpeed(double position, double cruise, float load, ForesTycoon.Rules.VehicleRuleProgram rules = null)
         {
             double d = Directed(position, Last, out int sign);
             double grade = Grade(position);
-            double target = grade < 0 ? cruise * Math.Clamp(1 + grade * (1.2 + load), 0.45, 1) : cruise;
             int tile = (int)Math.Floor(d + 0.5);
-            if (IsCorner(tile) || IsCorner(tile + sign)) target = Math.Min(target, cruise * 0.48);
-            return target;
+            return (rules ?? ForesTycoon.Rules.VehicleRuleProgram.Default).Evaluate(ForesTycoon.Rules.VehicleResponse.RouteSpeed,
+                [cruise, grade, load, IsCorner(tile) || IsCorner(tile + sign) ? 1 : 0]);
         }
     }
 }

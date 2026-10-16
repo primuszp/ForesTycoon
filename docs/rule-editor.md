@@ -599,3 +599,13 @@ A forrásválasztó objektumot és azon belül mezőt kínál; az angol kódazon
 megmarad. Az állandókat számmal/csúszkával, a válaszokat a közös görbékkel is
 alakíthatod. A kikapcsolás választott fix eredményt jelent.
 [Részletek, futási sorrend, mentési garanciák](environment-rules.md).
+
+
+## Jármű- és fenntartási válaszok – 2026-10-16
+
+A közös Szabályok listában 17 új válaszgráf szerkeszti a járműfizika és a
+közös fenntartás döntéseit. A rakományból tömeggörbe, a kopásból esély- vagy
+fogyasztásgörbe ugyanazzal a képlet nélküli szerkesztővel összeállítható.
+A mezők a kódból felderített Jármű/Járműadatok/Útfelület/Útvonal/Időlépés
+objektumokon jelennek meg. Ez az 5/a csomag; a gépi munkafázisok és a
+rakodás teljes átvezetése még következik. [Részletek](vehicle-response-rules.md).

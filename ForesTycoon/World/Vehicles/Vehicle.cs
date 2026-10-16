@@ -25,7 +25,9 @@ namespace ForesTycoon
         private readonly bool useRoadPhysics;
         public VehicleRoadRoute RoadRoute { get; }
         public double CurrentSpeed { get; private set; }
-        internal TruckSpec Spec { get; set; } = TruckSpec.Default;
+        private TruckSpec spec = TruckSpec.Default;
+        internal VehicleSystem SpecSource { get; set; }
+        internal TruckSpec Spec { get => SpecSource?.Spec ?? spec; set => spec = value; }
         internal Func<int, (RoadSurface Surface, float Condition)> RoadState;
         internal Action<TrafficPassage> Passage;
         /// <summary>Wear of the road under the truck (0 new … 1 ruined): it slows the truck and shakes it.</summary>
@@ -122,11 +124,10 @@ namespace ForesTycoon
                 double remaining = boundary - RoutePosition;
                 // Physical dynamics in metres: tractive force against rolling, grade and air resistance.
                 double metres = MetresPerTile;
-                double braking = Spec.Braking / metres;
                 var (surface, damage) = RoadUnderTruck();
                 // A worn road is driven slower and rolls heavier: potholes add to the geometric roughness.
-                double target = Math.Min(RoadRoute.TargetSpeed(RoutePosition, SpeedTilesPerSecond, CargoFill) * (1 - 0.55 * damage),
-                    Math.Sqrt(2 * braking * remaining));
+                double target = Spec.Responses.Evaluate(ForesTycoon.Rules.VehicleResponse.TargetSpeed,
+                    [RoadRoute.TargetSpeed(RoutePosition, SpeedTilesPerSecond, CargoFill, Spec.Responses), damage, Spec.Braking, metres, remaining]);
                 double before = CurrentSpeed;
                 var (speed, fuel) = VehicleDynamics.Step(Spec, Mass, (float)(CurrentSpeed * metres), (float)(target * metres),
                     RoadRoute.Grade(RoutePosition), surface, Math.Max(RoadRoute.Roughness(RoutePosition, 1f), damage), (float)dt);

@@ -81,17 +81,30 @@
       ]
     },
     {
-      "status": "pending",
+      "status": "graph",
       "ids": [
         "vehicle.mass",
         "vehicle.resistance",
         "vehicle.motion",
         "vehicle.fuel",
-        "vehicle.transfer",
         "upkeep.wear",
         "upkeep.effects",
         "upkeep.repair",
-        "upkeep.service",
+        "upkeep.service"
+      ],
+      "editor": "Szabályok → közös jármű- és fenntartási válaszgráfok.",
+      "remaining": "5/a kész: tömeg, útválaszok, fogyasztás, terhelés, kopás, sorsolási esély, javítás és karbantartás. A fizikai integrátor, a visszaszámláló és a költségkönyvelés motorfeladat.",
+      "tests": [
+        "ForesTycoon.Tests/VehicleResponseRuleTests.cs",
+        "ForesTycoon.Tests/FleetWorkTests.cs",
+        "ForesTycoon.Tests/VehicleDynamicsTests.cs",
+        "ForesTycoon.Tests/VehicleUpkeepTests.cs"
+      ]
+    },
+    {
+      "status": "pending",
+      "ids": [
+        "vehicle.transfer",
         "fleet.depot",
         "fleet.orders",
         "machine.processor",
@@ -101,7 +114,7 @@
         "mill.process"
       ],
       "editor": "Részleges folyamatkapcsolatok / munkaciklusok; Típusok paraméterei.",
-      "remaining": "5. csomag: munkafeltételek, terhelés-, fogyasztás-, kopás- és javításválaszok. Fizikai integrátor és útkereső motor marad.",
+      "remaining": "5/b: rakodás, munkafázisok, gépi út- és munkaválasztás, malom és megrendelési feltételek; a meglévő részleges folyamatkapcsolatok teljes átvezetése.",
       "tests": [
         "ForesTycoon.Tests/VehicleDynamicsTests.cs",
         "ForesTycoon.Tests/VehicleUpkeepTests.cs",

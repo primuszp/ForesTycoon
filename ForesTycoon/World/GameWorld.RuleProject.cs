@@ -122,7 +122,7 @@ sealed partial class GameWorld
         InstallRuleProject(preparing.GetAwaiter().GetResult());
     }
 
-    private static string ResponseSignature(BehaviorModel model) => System.Text.Json.JsonSerializer.Serialize(model.Graphs.Where(g => EcologyResponseProgram.IsPureKind(g.Kind)));
+    private static string ResponseSignature(BehaviorModel model) => System.Text.Json.JsonSerializer.Serialize(model.Graphs.Where(g => EcologyResponseProgram.Hooks.Any(h => h.Id == g.Hook && h.Kind == g.Kind)));
     private static string GrowthSignature(IEnumerable<WorldRule> rules) => System.Text.Json.JsonSerializer.Serialize(rules.Where(r => r.Schedule == "growth"));
 
     private void InitializeRuleProject()

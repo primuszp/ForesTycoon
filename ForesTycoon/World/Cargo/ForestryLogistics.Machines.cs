@@ -286,7 +286,7 @@ namespace ForesTycoon
                     if (wait && !machine.Upkeep.Broken) continue;
                     // Wear and breakdowns: rough trails and loads strain the machine; broken, it waits for the mechanic.
                     bool rough = terrain.IsSkidTrail(machine.Tile) || (machine.Site != null && Array.IndexOf(machine.Site.Tiles, machine.Tile) >= 0);
-                    float strain = (rough ? 1.5f : 1f) * (1 + 0.5f * machine.CargoFill) * (machine.State == ForestMachineState.Felling ? 1.3f : 1f);
+                    float strain = (float)Tuning.VehicleRules.Evaluate(ForesTycoon.Rules.VehicleResponse.Strain, [(int)machine.Kind + 1, machine.CargoFill, machine.State == ForestMachineState.Felling ? 1 : 0, rough ? 1 : 0]);
                     bool running = machine.Upkeep.Operate(dt, strain, out double repair, Tuning);
                     if (repair > 0) { RunningCosts += repair; Status = $"{MachineName(machine)} megjavítva ({repair:N0} eFt)."; }
                     if (!running)

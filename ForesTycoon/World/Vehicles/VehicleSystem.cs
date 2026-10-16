@@ -46,7 +46,7 @@ namespace ForesTycoon
             if (RoadRouteWorkFactory != null) {
                 foreach (int unit in RoadRouteWorkFactory(route, geometry)) yield return unit;
             } else geometry.Value = RoadRouteFactory?.Invoke(route);
-            var vehicle = new Vehicle(nextId++, route, 1.5, roadRoute: geometry.Value, roadPhysics: UseRoadPhysics) { Transit = transit };
+            var vehicle = new Vehicle(nextId++, route, 1.5, roadRoute: geometry.Value, roadPhysics: UseRoadPhysics) { Transit = transit, SpecSource = this };
             if (!transit) {
                 vehicle.SourceTiles = (int[])sources.Clone(); vehicle.SawmillTileId = mill; vehicle.CargoStopsEnabled = true;
                 vehicle.TransportState = VehicleTransportState.Loading; vehicle.Hold();
@@ -68,7 +68,7 @@ namespace ForesTycoon
         public Vehicle Spawn(int[] route, double speedTilesPerSecond = 1.5)
         {
             Vehicle vehicle = new Vehicle(nextId++, route, speedTilesPerSecond,
-                roadRoute: RoadRouteFactory?.Invoke(route), roadPhysics: UseRoadPhysics);
+                roadRoute: RoadRouteFactory?.Invoke(route), roadPhysics: UseRoadPhysics) { SpecSource = this };
             vehicle.CargoStopsEnabled = UseCargoStops && vehicle.RoadRoute != null && UseRoadPhysics;
             float initialCargo = timberCargo.Load(vehicle.CargoCapacity);
             if (vehicle.CargoStopsEnabled) vehicle.BeginLoading(initialCargo);
@@ -96,7 +96,7 @@ namespace ForesTycoon
         private void UpdateVehicle(Vehicle vehicle, double deltaSeconds)
         {
             {
-                vehicle.RoadState = RoadState; vehicle.Passage = Passage; vehicle.Spec = Spec;
+                vehicle.RoadState = RoadState; vehicle.Passage = Passage;
                 if(vehicle.RouteBlocked||vehicle.Broken||BehaviorPause?.Invoke(vehicle)==true){vehicle.Hold();return;}
                 if(vehicle.Transit){
                     if(!vehicle.TransitArrived){vehicle.Update(deltaSeconds);if(vehicle.RoutePosition>=vehicle.Route.Length-1-1e-6){vehicle.TransitArrived=true;vehicle.Hold();}}

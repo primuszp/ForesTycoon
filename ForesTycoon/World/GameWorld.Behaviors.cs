@@ -11,25 +11,26 @@ namespace ForesTycoon
             new("machine.pace", "Processzor munkatempó", "processor", "munka-s", 0, 10, "Kopás (0–1)", "Rakomány (m³)", "Gép al-lépés"),
             new("mill.process", "Malom feldolgozása", "mill", "m³", 0, 1e6, "Már feldolgozott mennyiség (m³)", "Készlet (m³)", "Logisztikai lépés"),
 
-        }.Concat(EcologyResponseProgram.Hooks).Concat(TransportHooks()).Concat(GameTuning.Specs.Select(s => new BehaviorHook("tuning." + s.Id, s.Name, "world", s.Unit, s.Min, s.Max,
+        }.Concat(EcologyResponseProgram.Hooks).Concat(VehicleResponseRules.Hooks).Concat(TransportHooks()).Concat(GameTuning.Specs.Select(s => new BehaviorHook("tuning." + s.Id, s.Name, "world", s.Unit, s.Min, s.Max,
             "Nem használt", "Nem használt", "Paraméter lekérdezése; járműspecifikáció alkalmazáskor", false))).ToArray();
         private readonly CompiledBehaviorModel model;
         internal CompiledBehaviorControllers Controllers { get; }
         internal EcologyResponseProgram Responses { get; }
+        internal VehicleRuleProgram VehicleResponses { get; }
         internal WorldBehaviorPolicy(BehaviorModel document, IReadOnlySet<string> keys = null, Func<string, double> read = null)
         {
             document = document.Clone();
-            foreach (var hook in EcologyResponseProgram.Hooks)
+            foreach (var hook in EcologyResponseProgram.Hooks.Concat(VehicleResponseRules.Hooks))
                 if (!document.Graphs.Any(g => g.Hook == hook.Id && g.Kind == hook.Kind)) document.Graphs.Add(DefaultGraph(hook));
-            model = new(document, Hooks, keys, read); Controllers = new(document); Responses = new(document);
+            model = new(document, Hooks, keys, read); Controllers = new(document); Responses = new(document); VehicleResponses = new(document);
         }
 
-        internal static BehaviorGraph DefaultGraph(BehaviorHook hook) => EcologyResponseProgram.IsPureKind(hook.Kind) ? EcologyResponseProgram.DefaultGraph(hook) : new() {
+        internal static BehaviorGraph DefaultGraph(BehaviorHook hook) => hook.Kind == "vehicleResponse" ? VehicleResponseRules.DefaultGraph(hook) : EcologyResponseProgram.IsPureKind(hook.Kind) ? EcologyResponseProgram.DefaultGraph(hook) : new() {
             Id = "default." + hook.Kind + "." + hook.Id, Name = hook.Name, Hook = hook.Id, Kind = hook.Kind
         };
         internal static BehaviorModel DefaultDocument() => new() { Graphs = Hooks.Select(DefaultGraph).ToList() };
         internal BehaviorModel Document => model.Document;
-        internal string LastError => model.LastError ?? Responses.LastError;
+        internal string LastError => model.LastError ?? Responses.LastError ?? VehicleResponses.LastError;
         internal bool HasGraphs => model.HasGraphs;
         public bool Overrides(string hook, string kind) => model.Overrides(hook, kind);
         public double Evaluate(in BehaviorQuery query) => model.Evaluate(query.Hook, query.Kind, query.Id,

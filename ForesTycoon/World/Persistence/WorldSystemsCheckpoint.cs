@@ -46,7 +46,7 @@ namespace ForesTycoon
             var restored = new List<Vehicle>(); var ids = new HashSet<int>();
             foreach (var v in s.Vehicles) { yield return 1;
                 CheckpointGuard.Require(v != null && v.Id < s.NextId && ids.Add(v.Id), "vehicle IDs");
-                restored.Add(Vehicle.Restore(v, tileCount));
+                var vehicle = Vehicle.Restore(v, tileCount); vehicle.SpecSource = this; restored.Add(vehicle);
             }
             vehicles.Clear(); vehicles.AddRange(restored); nextId = s.NextId;
             UseRoadPhysics = s.RoadPhysics; UseCargoStops = s.CargoStops;

@@ -8,6 +8,23 @@ namespace ForesTycoon.Rules;
 public sealed record ResponseRuleDescription(string Result, string Consumers, double SuggestedOffValue, string FixedMeaning, string[] OutputKeys)
 {
     public static ResponseRuleDescription For(string hook) => hook switch {
+        "vehicle.mass" => D("Jármű és rakomány össztömege", "Gyorsulás, menetellenállás és áthaladási kopás", 16000, "Minden teherautó ezt a tömeget kapja, a rakománytól függetlenül.", "vehicleResponse:vehicle.mass"),
+        "vehicle.rolling" => D("Gördülési tényező", "Menetellenállás", 0, "A gördülési tényező fix; 0 esetén nincs gördülési ellenállás.", "vehicleResponse:vehicle.rolling"),
+        "vehicle.resistance" => D("Előjeles menetellenállási erő", "A jármű fizikai integrátora", 0, "A fix érték az ellenállás; a negatív érték lejtőirányú gyorsító hatás."),
+        "vehicle.force" => D("Elérhető vonóerő", "Gyorsítás és sebességtartás", 0, "0 esetén a motor nem ad vonóerőt; a fékezés megmarad."),
+        "vehicle.fuel" => D("Al-lépés elfogyasztott üzemanyaga", "Jármű fogyasztásmérője és üzemeltetési költség", 0, "Minden fizikai al-lépés ennyi litert számol el. 0 esetén nincs alap motorfogyasztás."),
+        "vehicle.targetSpeed" => D("Útállapot és megállás szerinti célsebesség", "Fizikai integrátor és motorigény", 0, "0 esetén a teherautó megállásra fékez."),
+        "vehicle.routeSpeed" => D("Lejtő és kanyar szerinti útvonalsebesség", "Útállapot- és megállási sebességválasz", 0, "A teherautók ennyi célsebességet kapnak a geometriától függetlenül.", "vehicleResponse:route.targetSpeed"),
+        "upkeep.strain" => D("A munkalépés terhelése", "Kopás és meghibásodás", 1, "A terep, rakomány és munkafázis nem változtatja a terhelést.", "vehicleResponse:vehicle.strain"),
+        "upkeep.wear" => D("A munkalépés kopásnövekménye", "Jármű és erdészeti gép állapota", 0, "0 esetén a munkavégzés nem növeli a kopást."),
+        "upkeep.breakdown" => D("A munkalépés meghibásodási esélye", "A jármű saját, mentett seedelt sorsolása", 0, "0 esetén nem indul új meghibásodás. A már folyamatban lévő javítás folytatódik."),
+        "upkeep.fuelFactor" => D("Kopás fogyasztási szorzója", "Gépek fogyasztása és teherautók költségelszámolása", 1, "1 esetén nincs kopásból eredő többletfogyasztás."),
+        "upkeep.paceFactor" => D("Kopás munkatempó-szorzója", "Erdészeti gépek munkalépése", 1, "1 esetén a kopás nem lassítja a gépeket. A pozitív minimum védi az egy munkára jutó fogyasztás elszámolását."),
+        "upkeep.repairSeconds" => D("Új meghibásodás javítási ideje", "Mentett javítási visszaszámláló", 0, "Az új javítások ennyi másodpercig tartanak; a már rögzített visszaszámlálót nem írja át."),
+        "upkeep.repairRelief" => D("Javításkor elengedett kopás", "A megjavított gép és teherautó állapota", 0, "0 esetén a helyszíni javítás a kopást nem csökkenti."),
+        "upkeep.repairCost" => D("Befejezett helyszíni javítás költsége", "Működési költségkönyvelés", 0, "Minden befejezett javítás ennyibe kerül."),
+        "upkeep.serviceRelief" => D("Telephelyen enyhített kopás", "Járműállapot és karbantartási költség", 0, "0 esetén a telephelyi karbantartás nem enyhít kopást.", "vehicleResponse:service.relief"),
+        "upkeep.serviceCost" => D("Karbantartási lépés költsége", "Működési költségkönyvelés", 0, "Minden tényleges karbantartási lépés ennyibe kerül."),
         "soil.bearing" => D("Talaj teherbírása", "Burkolatlan utak járhatósága és áthaladási kopása", 1, "Minden talaj ezt a teherbírást adja. A talajtípusban megadott érték és a drénezés most nem számít.", "environment:soil.bearingCapacity"),
         "weather.initialType" => D("Új világ első időjárása", "Időjárási idővonal indítása", 0, "Az új világok ezzel az időjárással indulnak. A futó világot nem módosítja."),
         "weather.initialDuration" => D("Első esemény alaptempójú időtartama", "Időjárási idővonal indítása", 150, "Az új világ első eseménye ennyi alaptempójú másodpercig tart."),

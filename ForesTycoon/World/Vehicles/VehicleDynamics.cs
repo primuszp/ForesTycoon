@@ -1,4 +1,5 @@
 using System;
+using ForesTycoon.Rules;
 
 namespace ForesTycoon
 {
@@ -18,6 +19,8 @@ namespace ForesTycoon
         float IdleFuelPerHour = 2.5f, float Braking = 2.5f)
     {
         internal static TruckSpec Default { get; } = new();
+        internal VehicleRuleProgram Rules { get; init; }
+        internal VehicleRuleProgram Responses => Rules ?? VehicleRuleProgram.Default;
         internal float RollingAsphalt { get; init; } = VehicleDynamics.DefaultRollingAsphalt;
         internal float RollingGravel { get; init; } = VehicleDynamics.DefaultRollingGravel;
         internal float RollingDirt { get; init; } = VehicleDynamics.DefaultRollingDirt;
@@ -37,23 +40,23 @@ namespace ForesTycoon
 
         internal static float RollingCoefficient(RoadSurface surface, float roughness) => RollingCoefficient(TruckSpec.Default, surface, roughness);
         internal static float RollingCoefficient(TruckSpec spec, RoadSurface surface, float roughness) =>
-            surface switch { RoadSurface.Asphalt => spec.RollingAsphalt, RoadSurface.Gravel => spec.RollingGravel, _ => spec.RollingDirt }
-            * (1 + spec.RoughnessRolling * Math.Clamp(roughness, 0, 1));
+            (float)spec.Responses.Evaluate(VehicleResponse.Rolling,
+                [(int)surface, roughness, spec.RollingAsphalt, spec.RollingGravel, spec.RollingDirt, spec.RoughnessRolling]);
 
-        internal static float Mass(TruckSpec spec, float cargoCubicMetres) => spec.EmptyMass + Math.Max(0, cargoCubicMetres) * spec.TimberDensity;
+        internal static float Mass(TruckSpec spec, float cargoCubicMetres) =>
+            (float)spec.Responses.Evaluate(VehicleResponse.Mass, [spec.EmptyMass, spec.TimberDensity, cargoCubicMetres]);
 
         /// <summary>Total driving resistance at speed <paramref name="speed"/> (m/s) on a grade (rise/run, + uphill), N.</summary>
         internal static float Resistance(TruckSpec spec, float mass, float speed, float grade, RoadSurface surface, float roughness)
         {
             float angle = MathF.Atan(grade);
-            return RollingCoefficient(spec, surface, roughness) * mass * Gravity * MathF.Cos(angle)
-                + mass * Gravity * MathF.Sin(angle)
-                + 0.5f * AirDensity * spec.DragArea * speed * speed;
+            return (float)spec.Responses.Evaluate(VehicleResponse.Resistance,
+                [RollingCoefficient(spec, surface, roughness), mass, speed, MathF.Sin(angle), MathF.Cos(angle), spec.DragArea, Gravity, AirDensity]);
         }
 
-        /// <summary>Largest pulling force at this speed: power-limited, capped by grip, N.</summary>
+        /// <summary>The authored power/grip response; the integrator only applies the returned force.</summary>
         internal static float AvailableForce(TruckSpec spec, float speed) =>
-            Math.Min(spec.MaxTractiveForce, spec.Power * spec.Drivetrain / Math.Max(speed, 1f));
+            (float)spec.Responses.Evaluate(VehicleResponse.Force, [spec.MaxTractiveForce, spec.Power, spec.Drivetrain, speed]);
 
         /// <summary>Steady speed where full power just balances the resistance (bisection), m/s.</summary>
         internal static float BalanceSpeed(TruckSpec spec, float mass, float grade, RoadSurface surface, float roughness)
@@ -88,8 +91,7 @@ namespace ForesTycoon
                 drive = Math.Clamp(needed, 0, AvailableForce(spec, speed));
             }
             float power = drive * (speed + next) * 0.5f / spec.Drivetrain;
-            float hours = dt / 3600f;
-            float fuel = power / 1000f * hours * spec.FuelPerKilowattHour + spec.IdleFuelPerHour * hours;
+            float fuel = (float)spec.Responses.Evaluate(VehicleResponse.Fuel, [power, dt, spec.FuelPerKilowattHour, spec.IdleFuelPerHour]);
             return (next, fuel);
         }
     }

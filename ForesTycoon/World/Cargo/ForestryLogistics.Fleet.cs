@@ -185,7 +185,7 @@ namespace ForesTycoon
                     // Wear while on the move; a broken truck stands where it is until the mechanic is done.
                     var road = truck.Vehicle;
                     road.GetSegment(road.RoutePosition, out int from, out _, out _);
-                    float strain = (terrain.IsSkidTrail(from) ? 2f : 1f) * (1 + 0.5f * road.CargoFill);
+                    float strain = (float)Tuning.VehicleRules.Evaluate(ForesTycoon.Rules.VehicleResponse.Strain, [0, road.CargoFill, 0, terrain.IsSkidTrail(from) ? 1 : 0]);
                     bool moving = road.CurrentSpeed > 0.01 || road.TransportState is VehicleTransportState.Loading or VehicleTransportState.Unloading;
                     if (moving && !wait || truck.Upkeep.Broken)
                     {

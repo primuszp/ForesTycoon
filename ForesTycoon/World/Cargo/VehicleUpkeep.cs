@@ -1,4 +1,5 @@
 using System;
+using ForesTycoon.Rules;
 
 namespace ForesTycoon
 {
@@ -26,8 +27,8 @@ namespace ForesTycoon
         /// <summary>Fuel, and slowdown of work and driving, grow with the wear (default tuning).</summary>
         internal double FuelFactor => Fuel(GameTuning.Default);
         internal float PaceFactor => Pace(GameTuning.Default);
-        internal double Fuel(GameTuning t) => 1 + t[Tune.WearFuelPenalty] * Wear;
-        internal float Pace(GameTuning t) => 1 - t.F(Tune.WearPacePenalty) * Wear;
+        internal double Fuel(GameTuning t) => t.VehicleRules.Evaluate(VehicleResponse.FuelFactor, [t[Tune.WearFuelPenalty], Wear]);
+        internal float Pace(GameTuning t) => (float)t.VehicleRules.Evaluate(VehicleResponse.PaceFactor, [t[Tune.WearPacePenalty], Wear]);
 
         /// <param name="seed">Any number; it is scrambled first so small ids do not start with tiny draws.</param>
         internal VehicleUpkeep(uint seed)
@@ -59,16 +60,16 @@ namespace ForesTycoon
             {
                 RepairLeft -= (float)seconds;
                 if (RepairLeft > 0) return false;
-                repairCost = t[Tune.RepairBaseCost] + t[Tune.RepairWearCost] * Wear;
-                Broken = false; RepairLeft = 0; Wear = Math.Max(0, Wear - t.F(Tune.FieldRepairRelief));
+                repairCost = t.VehicleRules.Evaluate(VehicleResponse.RepairCost, [t[Tune.RepairBaseCost], t[Tune.RepairWearCost], Wear]);
+                Broken = false; RepairLeft = 0; Wear = Math.Max(0, Wear - (float)t.VehicleRules.Evaluate(VehicleResponse.RepairRelief, [t[Tune.FieldRepairRelief], Wear]));
                 return true;
             }
-            Wear = Math.Min(1, Wear + (float)(t[Tune.WearPerSecond] * strain * seconds));
+            Wear = Math.Min(1, Wear + (float)t.VehicleRules.Evaluate(VehicleResponse.Wear, [t[Tune.WearPerSecond], strain, seconds, Wear]));
             // Hazard rises steeply with wear: a new vehicle almost never stops, a worn-out one every few minutes.
-            double hazard = t[Tune.BreakdownHazard] * Wear * Wear * strain;
-            if (NextUnit() < hazard * seconds)
+            double chance = t.VehicleRules.Evaluate(VehicleResponse.Breakdown, [t[Tune.BreakdownHazard], Wear, strain, seconds]);
+            if (NextUnit() < chance)
             {
-                Broken = true; RepairLeft = t.F(Tune.RepairSeconds); Breakdowns++;
+                Broken = true; RepairLeft = (float)t.VehicleRules.Evaluate(VehicleResponse.RepairSeconds, [t[Tune.RepairSeconds], Wear, strain]); Breakdowns++;
                 return false;
             }
             return true;
@@ -79,9 +80,9 @@ namespace ForesTycoon
         {
             t ??= GameTuning.Default;
             if (Broken || Wear <= 0) return 0;
-            float relief = Math.Min(Wear, (float)(t[Tune.ServicePerSecond] * seconds));
+            float relief = Math.Min(Wear, (float)t.VehicleRules.Evaluate(VehicleResponse.ServiceRelief, [Wear, t[Tune.ServicePerSecond], seconds]));
             Wear -= relief;
-            return relief * t[Tune.ServiceCostPerWear];
+            return t.VehicleRules.Evaluate(VehicleResponse.ServiceCost, [relief, t[Tune.ServiceCostPerWear]]);
         }
     }
 }

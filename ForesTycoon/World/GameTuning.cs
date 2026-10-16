@@ -112,8 +112,10 @@ namespace ForesTycoon
 
         private readonly double[] values;
         private readonly IBehaviorPolicy behaviors;
-        private GameTuning(double[] values, IBehaviorPolicy behaviors = null) { this.values = values; this.behaviors = behaviors; Truck = BuildTruck(); }
-        internal GameTuning WithBehaviors(IBehaviorPolicy policy) => new(values, policy);
+        private readonly VehicleRuleProgram vehicleRules;
+        internal VehicleRuleProgram VehicleRules => vehicleRules ?? VehicleRuleProgram.Default;
+        private GameTuning(double[] values, IBehaviorPolicy behaviors = null, VehicleRuleProgram vehicleRules = null) { this.values = values; this.behaviors = behaviors; this.vehicleRules = vehicleRules; Truck = BuildTruck(); }
+        internal GameTuning WithBehaviors(IBehaviorPolicy policy, VehicleRuleProgram vehicleRules = null) => new(values, policy, vehicleRules);
 
         internal double BaseValue(Tune key) => values[(int)key];
         internal double this[Tune key] => behaviors?.Evaluate(new(behaviorKeys[(int)key], "world", 0, values[(int)key])) ?? values[(int)key];
@@ -127,7 +129,7 @@ namespace ForesTycoon
             F(Tune.TimberDensity), F(Tune.FuelPerKilowattHour), F(Tune.IdleFuelPerHour), F(Tune.Braking))
         {
             RollingAsphalt = F(Tune.RollingAsphalt), RollingGravel = F(Tune.RollingGravel), RollingDirt = F(Tune.RollingDirt),
-            RoughnessRolling = F(Tune.RoughnessRolling)
+            RoughnessRolling = F(Tune.RoughnessRolling), Rules = vehicleRules
         };
 
         internal bool IsDefault => Specs.All(s => values[(int)s.Key] == s.Default);
