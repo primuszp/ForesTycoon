@@ -1,0 +1,514 @@
+{
+  "schema": "rule-coverage-v1",
+  "groups": [
+    {
+      "status": "engine",
+      "ids": [
+        "time.world",
+        "time.ecology",
+        "commands.apply",
+        "save.restore",
+        "rules.behaviors",
+        "terrain.edit",
+        "water.balance",
+        "route.find",
+        "timber.stack"
+      ],
+      "editor": "Motor; kapcsolódó szabályok a Szabályok lapon.",
+      "remaining": "Ütemezés, geometria, útkeresés, állapot- és készletkönyvelés motorfeladat. A döntési feltételek külön tételek.",
+      "tests": [
+        "ForesTycoon.Tests/SimulationWorkTests.cs",
+        "ForesTycoon.Tests/ForegroundWorkTests.cs",
+        "ForesTycoon.Tests/RuleFlowTests.cs"
+      ]
+    },
+    {
+      "status": "mixed",
+      "ids": [
+        "terrain.generate",
+        "terrain.hydrology"
+      ],
+      "editor": "Pálya; generálási beállítások.",
+      "remaining": "Az algoritmus motor marad; az eloszlási profilok és válaszfüggvények még nem szabad gráfok.",
+      "tests": [
+        "ForesTycoon.Tests/ForegroundWorkTests.cs"
+      ]
+    },
+    {
+      "status": "data",
+      "ids": [
+        "soil.catalog",
+        "forest.species"
+      ],
+      "editor": "Típusok; katalógusadatok.",
+      "remaining": "Szerkeszthető típusadat, nem futó gráfszabály. Az erre épülő döntések külön tételek.",
+      "tests": [
+        "ForesTycoon.Tests/CurrentGameRulesTests.cs",
+        "ForesTycoon.Tests/RuleSchemaDrivenTests.cs"
+      ]
+    },
+    {
+      "status": "extension",
+      "ids": [
+        "machine.controller",
+        "route.policy",
+        "loading.policy"
+      ],
+      "editor": "Szabályok → Gépek munkaciklusai / Folyamatkapcsolatok.",
+      "remaining": "Szerkeszthető vezérlő vagy eredménykapcsolat; a natív alapfolyamat átvezetése még hiányzik.",
+      "tests": [
+        "ForesTycoon.Tests/TransportRuleTests.cs",
+        "ForesTycoon.Tests/FullRuleEditorTests.cs"
+      ]
+    },
+    {
+      "status": "pending",
+      "ids": [
+        "climate.regional",
+        "weather.events",
+        "weather.evaporation",
+        "water.snowdrift",
+        "forest.canopy",
+        "trail.trafficability"
+      ],
+      "editor": "Bemeneti adatok és hangolási pontok; teljes döntési gráf nincs.",
+      "remaining": "4. csomag: környezeti döntések és válaszok átvezetése.",
+      "tests": [
+        "ForesTycoon.Tests/SeasonalWeatherTests.cs",
+        "ForesTycoon.Tests/RegionalClimateTests.cs",
+        "ForesTycoon.Tests/WaterRulesTests.cs"
+      ]
+    },
+    {
+      "status": "pending",
+      "ids": [
+        "vehicle.mass",
+        "vehicle.resistance",
+        "vehicle.motion",
+        "vehicle.fuel",
+        "vehicle.transfer",
+        "upkeep.wear",
+        "upkeep.effects",
+        "upkeep.repair",
+        "upkeep.service",
+        "fleet.depot",
+        "fleet.orders",
+        "machine.processor",
+        "machine.forwarder",
+        "machine.logTransfer",
+        "machine.movement",
+        "mill.process"
+      ],
+      "editor": "Részleges folyamatkapcsolatok / munkaciklusok; Típusok paraméterei.",
+      "remaining": "5. csomag: munkafeltételek, terhelés-, fogyasztás-, kopás- és javításválaszok. Fizikai integrátor és útkereső motor marad.",
+      "tests": [
+        "ForesTycoon.Tests/VehicleDynamicsTests.cs",
+        "ForesTycoon.Tests/VehicleUpkeepTests.cs",
+        "ForesTycoon.Tests/ForwarderLoadingTests.cs",
+        "ForesTycoon.Tests/FleetWorkTests.cs"
+      ]
+    },
+    {
+      "status": "pending",
+      "ids": [
+        "forest.initial",
+        "forest.plant",
+        "forest.designate",
+        "forest.fell",
+        "road.build",
+        "road.repair",
+        "trail.build",
+        "timber.deliver",
+        "mill.place",
+        "economy.fuel",
+        "economy.balance",
+        "wildlife.habitat",
+        "wildlife.forage",
+        "wildlife.movement"
+      ],
+      "editor": "Pálya és játékparancsok, hangolási adatok; általános hatásgráf nincs.",
+      "remaining": "6. csomag: eloszlás, műveleti feltételek, költségek, bevételek és vadak döntései. Könyvelés és geometria motor marad.",
+      "tests": [
+        "ForesTycoon.Tests/EconomyFeedbackTests.cs",
+        "ForesTycoon.Tests/ForegroundWorkTests.cs"
+      ]
+    },
+    {
+      "status": "graph",
+      "ids": [
+        "water.precipitation"
+      ],
+      "editor": "Szabályok → Csapadék, hóesés és források.",
+      "remaining": "A projekt az alapdefiníció; nincs külön natív alapképlet.",
+      "tests": [
+        "ForesTycoon.Tests/WaterRulesTests.cs"
+      ]
+    },
+    {
+      "status": "graph",
+      "ids": [
+        "water.snowmelt"
+      ],
+      "editor": "Szabályok → Hóolvadás.",
+      "remaining": "A projekt az alapdefiníció; nincs külön natív alapképlet.",
+      "tests": [
+        "ForesTycoon.Tests/WaterRulesTests.cs"
+      ]
+    },
+    {
+      "status": "graph",
+      "ids": [
+        "water.infiltration"
+      ],
+      "editor": "Szabályok → Beszivárgás.",
+      "remaining": "A projekt az alapdefiníció; nincs külön natív alapképlet.",
+      "tests": [
+        "ForesTycoon.Tests/WaterRulesTests.cs"
+      ]
+    },
+    {
+      "status": "graph",
+      "ids": [
+        "water.evaporation"
+      ],
+      "editor": "Szabályok → Lomb-, felszín- és talajpárolgás.",
+      "remaining": "A projekt az alapdefiníció; nincs külön natív alapképlet.",
+      "tests": [
+        "ForesTycoon.Tests/WaterRulesTests.cs"
+      ]
+    },
+    {
+      "status": "graph",
+      "ids": [
+        "water.uptake"
+      ],
+      "editor": "Szabályok → Fák vízfelvétele.",
+      "remaining": "A projekt az alapdefiníció; nincs külön natív alapképlet.",
+      "tests": [
+        "ForesTycoon.Tests/WaterRulesTests.cs"
+      ]
+    },
+    {
+      "status": "graph",
+      "ids": [
+        "water.drainage"
+      ],
+      "editor": "Szabályok → Mélybe szivárgás és alaplefolyás.",
+      "remaining": "A projekt az alapdefiníció; nincs külön natív alapképlet.",
+      "tests": [
+        "ForesTycoon.Tests/WaterRulesTests.cs"
+      ]
+    },
+    {
+      "status": "graph",
+      "ids": [
+        "water.runoff"
+      ],
+      "editor": "Szabályok → Felszíni lefolyás és kifolyás.",
+      "remaining": "A projekt az alapdefiníció; nincs külön natív alapképlet.",
+      "tests": [
+        "ForesTycoon.Tests/WaterRulesTests.cs"
+      ]
+    },
+    {
+      "status": "graph",
+      "ids": [
+        "water.stress"
+      ],
+      "editor": "Szabályok → Aszály, víztöbblet és havi vízválasz.",
+      "remaining": "A projekt az alapdefiníció; nincs külön natív alapképlet.",
+      "tests": [
+        "ForesTycoon.Tests/WaterRulesTests.cs"
+      ]
+    },
+    {
+      "status": "graph",
+      "ids": [
+        "forest.initialSize"
+      ],
+      "editor": "Szabályok → Fák kezdő méretgörbéi.",
+      "remaining": "A projekt az alapdefiníció; nincs külön natív alapképlet.",
+      "tests": [
+        "ForesTycoon.Tests/TreeInitialSizeGraphTests.cs"
+      ]
+    },
+    {
+      "status": "graph",
+      "ids": [
+        "forest.site"
+      ],
+      "editor": "Szabályok → Termőhelyi alkalmasság.",
+      "remaining": "A projekt az alapdefiníció; nincs külön natív alapképlet.",
+      "tests": [
+        "ForesTycoon.Tests/SiteResponseGraphTests.cs"
+      ]
+    },
+    {
+      "status": "graph",
+      "ids": [
+        "forest.competition"
+      ],
+      "editor": "Szabályok → Fény- és koronatér-versengés.",
+      "remaining": "A projekt az alapdefiníció; nincs külön natív alapképlet.",
+      "tests": [
+        "ForesTycoon.Tests/ForestCompetitionGraphTests.cs"
+      ]
+    },
+    {
+      "status": "graph",
+      "ids": [
+        "forest.growth"
+      ],
+      "editor": "Szabályok → Fák növekedése.",
+      "remaining": "A projekt az alapdefiníció; nincs külön natív alapképlet.",
+      "tests": [
+        "ForesTycoon.Tests/TreeVitalityRuleTests.cs"
+      ]
+    },
+    {
+      "status": "graph",
+      "ids": [
+        "forest.health"
+      ],
+      "editor": "Szabályok → Fák egészsége.",
+      "remaining": "A projekt az alapdefiníció; nincs külön natív alapképlet.",
+      "tests": [
+        "ForesTycoon.Tests/TreeVitalityRuleTests.cs"
+      ]
+    },
+    {
+      "status": "graph",
+      "ids": [
+        "forest.stress"
+      ],
+      "editor": "Szabályok → Fák tartós stressze.",
+      "remaining": "A projekt az alapdefiníció; nincs külön natív alapképlet.",
+      "tests": [
+        "ForesTycoon.Tests/TreeVitalityRuleTests.cs"
+      ]
+    },
+    {
+      "status": "graph",
+      "ids": [
+        "forest.mortality"
+      ],
+      "editor": "Szabályok → Fák elhalása.",
+      "remaining": "A projekt az alapdefiníció; nincs külön natív alapképlet.",
+      "tests": [
+        "ForesTycoon.Tests/TreeVitalityRuleTests.cs"
+      ]
+    },
+    {
+      "status": "graph",
+      "ids": [
+        "forest.deadwood"
+      ],
+      "editor": "Szabályok → Elhalt fák eltűnése.",
+      "remaining": "A projekt az alapdefiníció; nincs külön natív alapképlet.",
+      "tests": [
+        "ForesTycoon.Tests/TreeVitalityRuleTests.cs"
+      ]
+    },
+    {
+      "status": "graph",
+      "ids": [
+        "forest.regeneration"
+      ],
+      "editor": "Szabályok → Természetes újulat.",
+      "remaining": "A projekt az alapdefiníció; nincs külön natív alapképlet.",
+      "tests": [
+        "ForesTycoon.Tests/ForestRegenerationGraphTests.cs"
+      ]
+    },
+    {
+      "status": "graph",
+      "ids": [
+        "forest.stumps"
+      ],
+      "editor": "Szabályok → Tönkök lebomlása.",
+      "remaining": "A projekt az alapdefiníció; nincs külön natív alapképlet.",
+      "tests": [
+        "ForesTycoon.Tests/StumpRuleExampleTests.cs"
+      ]
+    },
+    {
+      "status": "graph",
+      "ids": [
+        "road.weather"
+      ],
+      "editor": "Szabályok → Időjárási útromlás.",
+      "remaining": "A projekt az alapdefiníció; nincs külön natív alapképlet.",
+      "tests": [
+        "ForesTycoon.Tests/RoadWeatherRuleTests.cs"
+      ]
+    },
+    {
+      "status": "graph",
+      "ids": [
+        "traffic.wear"
+      ],
+      "editor": "Szabályok → Forgalmi út- és nyomkopás.",
+      "remaining": "A projekt az alapdefiníció; nincs külön natív alapképlet.",
+      "tests": [
+        "ForesTycoon.Tests/TrafficRuleTests.cs"
+      ]
+    },
+    {
+      "status": "graph",
+      "ids": [
+        "trail.age"
+      ],
+      "editor": "Szabályok → Nyom regenerációja és benövése.",
+      "remaining": "A projekt az alapdefiníció; nincs külön natív alapképlet.",
+      "tests": [
+        "ForesTycoon.Tests/TrailGraphRuleTests.cs"
+      ]
+    },
+    {
+      "status": "presentation",
+      "ids": [
+        "visual.tree"
+      ],
+      "editor": "Megjelenítés; most nem része az átvezetésnek.",
+      "remaining": "A szimulációs szabályok lezárása után vizsgálandó.",
+      "tests": [
+        "ForesTycoon.Tests/CurrentGameRulesTests.cs"
+      ]
+    },
+    {
+      "status": "presentation",
+      "ids": [
+        "visual.truck"
+      ],
+      "editor": "Megjelenítés; most nem része az átvezetésnek.",
+      "remaining": "A szimulációs szabályok lezárása után vizsgálandó.",
+      "tests": [
+        "ForesTycoon.Tests/CurrentGameRulesTests.cs"
+      ]
+    },
+    {
+      "status": "presentation",
+      "ids": [
+        "visual.weather"
+      ],
+      "editor": "Megjelenítés; most nem része az átvezetésnek.",
+      "remaining": "A szimulációs szabályok lezárása után vizsgálandó.",
+      "tests": [
+        "ForesTycoon.Tests/CurrentGameRulesTests.cs"
+      ]
+    },
+    {
+      "status": "presentation",
+      "ids": [
+        "visual.phenology"
+      ],
+      "editor": "Megjelenítés; most nem része az átvezetésnek.",
+      "remaining": "A szimulációs szabályok lezárása után vizsgálandó.",
+      "tests": [
+        "ForesTycoon.Tests/CurrentGameRulesTests.cs"
+      ]
+    },
+    {
+      "status": "presentation",
+      "ids": [
+        "visual.deadwood"
+      ],
+      "editor": "Megjelenítés; most nem része az átvezetésnek.",
+      "remaining": "A szimulációs szabályok lezárása után vizsgálandó.",
+      "tests": [
+        "ForesTycoon.Tests/CurrentGameRulesTests.cs"
+      ]
+    },
+    {
+      "status": "presentation",
+      "ids": [
+        "visual.machines"
+      ],
+      "editor": "Megjelenítés; most nem része az átvezetésnek.",
+      "remaining": "A szimulációs szabályok lezárása után vizsgálandó.",
+      "tests": [
+        "ForesTycoon.Tests/CurrentGameRulesTests.cs"
+      ]
+    },
+    {
+      "status": "presentation",
+      "ids": [
+        "visual.buildings"
+      ],
+      "editor": "Megjelenítés; most nem része az átvezetésnek.",
+      "remaining": "A szimulációs szabályok lezárása után vizsgálandó.",
+      "tests": [
+        "ForesTycoon.Tests/CurrentGameRulesTests.cs"
+      ]
+    },
+    {
+      "status": "presentation",
+      "ids": [
+        "visual.animals"
+      ],
+      "editor": "Megjelenítés; most nem része az átvezetésnek.",
+      "remaining": "A szimulációs szabályok lezárása után vizsgálandó.",
+      "tests": [
+        "ForesTycoon.Tests/CurrentGameRulesTests.cs"
+      ]
+    },
+    {
+      "status": "presentation",
+      "ids": [
+        "visual.fish"
+      ],
+      "editor": "Megjelenítés; most nem része az átvezetésnek.",
+      "remaining": "A szimulációs szabályok lezárása után vizsgálandó.",
+      "tests": [
+        "ForesTycoon.Tests/CurrentGameRulesTests.cs"
+      ]
+    },
+    {
+      "status": "presentation",
+      "ids": [
+        "visual.terrain"
+      ],
+      "editor": "Megjelenítés; most nem része az átvezetésnek.",
+      "remaining": "A szimulációs szabályok lezárása után vizsgálandó.",
+      "tests": [
+        "ForesTycoon.Tests/CurrentGameRulesTests.cs"
+      ]
+    },
+    {
+      "status": "presentation",
+      "ids": [
+        "visual.roads"
+      ],
+      "editor": "Megjelenítés; most nem része az átvezetésnek.",
+      "remaining": "A szimulációs szabályok lezárása után vizsgálandó.",
+      "tests": [
+        "ForesTycoon.Tests/CurrentGameRulesTests.cs"
+      ]
+    }
+  ],
+  "outsideCatalog": [
+    {
+      "id": "missions",
+      "status": "pending",
+      "source": "ForesTycoon/World/GameWorld.Missions.cs",
+      "symbol": "MissionStatus",
+      "editor": "Küldetések",
+      "remaining": "Metrika, küszöb és határidő szerkeszthető; általános feltétel- és eseménygráf még nincs.",
+      "tests": [
+        "ForesTycoon.Tests/MissionTests.cs"
+      ]
+    },
+    {
+      "id": "global.flows",
+      "status": "engine",
+      "source": "ForesTycoon.Rules/RuleProject.cs",
+      "symbol": "DynamicsRuntime",
+      "editor": "Szabályok → Saját készletek és áramlások",
+      "remaining": "A globális pillanatképes és a tárgyi, soros átadás eltérő jelentését egyértelműen jelezni kell.",
+      "tests": [
+        "ForesTycoon.Tests/DynamicsRuntimeTests.cs",
+        "ForesTycoon.Tests/RuleFlowTests.cs"
+      ]
+    }
+  ]
+}
