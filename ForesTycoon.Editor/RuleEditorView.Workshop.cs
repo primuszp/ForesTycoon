@@ -372,7 +372,7 @@ internal sealed partial class RuleEditorView
     private void WorkshopFooter(GameWorld world, GameRuleDefinition rule)
     {
         ImGui.Separator();
-        bool busy = algorithms.IsLoading || algorithmBuild != null || graphSimulation != null;
+        bool busy = algorithms.IsLoading || algorithmBuild != null || graphSimulation != null || world.ForegroundPending || world.BoundaryPending;
         if (workshopPhase == WorkshopPhase.Understand && workshopTool == WorkshopTool.Rules) {
             if (EditorStyle.PrimaryButton("Gráf szerkesztése ->", rule != null)) SetWorkshopPhase(WorkshopPhase.Edit, rule);
         } else if (workshopPhase == WorkshopPhase.Edit) {
@@ -429,7 +429,15 @@ internal sealed partial class RuleEditorView
         ImGui.SetNextItemWidth(600); ImGui.InputText("Játékmentés", ref worldPath, 1024);
         if (ImGui.Button("Világ beolvasása a tesztbe")) Try(() => { message = EditorWorldLoader.Load(world, worldPath); UseWorldFile(worldPath); });
         if (ImGui.Button("Tesztvilág szabályainak átvétele")) Try(() => SwitchProject(world, world.RuleProjectDocument));
-        if (ImGui.Button("Tesztvilág mentése")) Try(() => { world.ExecutePendingCommands(); using var stream = new MemoryStream(); world.Save(stream); RuleProject.WriteAtomic(worldPath + ".editor.json", System.Text.Encoding.UTF8.GetString(stream.ToArray())); message = "Tesztvilág mentve: " + worldPath + ".editor.json"; });
+        if (ImGui.Button("Tesztvilág mentése")) {
+            string savePath = worldPath + ".editor.json";
+            message = "Mentés a következő kész művelethatáron…";
+            world.AtTickBoundary(() => Try(() => {
+                using var stream = new MemoryStream(); world.Save(stream);
+                RuleProject.WriteAtomic(savePath, System.Text.Encoding.UTF8.GetString(stream.ToArray()));
+                message = "Tesztvilág mentve: " + savePath;
+            }));
+        }
         ImGui.EndPopup();
     }
     private void WorkshopStatus()

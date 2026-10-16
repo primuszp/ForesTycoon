@@ -139,3 +139,12 @@ validáltuk, hanem beágyazott állapotával betöltöttük és egy ticken át f
 versengési gráfok szöveges enumait is javítottuk a helyi snapshot előírt numerikus
 formátumára. A gráfok tartalma megmaradt; ez egyszeri adatjavítás, nem új legacy
 betöltési ág.
+
+
+## Későbbi kezdőméret-átvezetés
+
+A fent leírt közös fajméret-inicializáló időközben szintén három projektgráfra
+váltott: kezdő magasság, átmérő és koronasugár. A natív méretképlet megszűnt,
+a létrehozás egyedenként folytatható. A korábbi „kezdő méretgörbék még külön
+feladat” megjegyzés történeti. A kezdő koreltérés, az induló állomány létszáma
+és az ültetvény elrendezése változatlan. [Részletek](tree-initial-size-rules.md).

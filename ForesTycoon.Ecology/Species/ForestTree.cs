@@ -38,17 +38,15 @@ namespace ForesTycoon.Ecology
         internal static int Capacity(ForestSpecies species) =>
             species == ForestSpecies.None ? 0 : ForestSpeciesTraits.For(species).Capacity;
 
-        internal static ForestTreeDimensions Initial(ForestSpecies species, float age, float variation)
+        // Diagnostic callers use the same shipped graphs; live creation always supplies its project program.
+        internal static ForestTreeDimensions Initial(ForestSpecies species, float age, float variation,
+            ForesTycoon.Rules.EcologyResponseProgram responses = null, double random = .5, bool planted = false)
         {
             if (species == ForestSpecies.None) throw new ArgumentOutOfRangeException(nameof(species));
             var traits = ForestSpeciesTraits.For(species);
-            float mature = ForestSpeciesProfile.For(species).MatureAgeYears;
-            float growth = 1 - MathF.Exp(-Math.Max(0, age) / mature * 1.8f);
-            float startHeight = Math.Min(0.8f, 0.15f * traits.MatureHeight);
-            float startDiameter = Math.Min(0.012f, 0.1f * traits.MatureDiameter);
-            float h = (startHeight + (traits.MatureHeight - startHeight) * growth) * variation;
-            float d = (startDiameter + traits.MatureDiameter * growth) * variation;
-            return new(d, h, Math.Max(0.15f, h * traits.CrownRatio));
+            var result = (responses ?? ForesTycoon.Rules.EcologyResponseProgram.Default).InitialSize(age, random, variation, planted,
+                ForestSpeciesProfile.For(species).MatureAgeYears, traits.MatureHeight, traits.MatureDiameter, traits.CrownRatio);
+            return new((float)result.Diameter, (float)result.Height, (float)result.CrownRadius);
         }
 
     }

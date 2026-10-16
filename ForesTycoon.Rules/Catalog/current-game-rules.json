@@ -1979,6 +1979,34 @@
       "y": 30
     },
     {
+      "id": "forest.initialSize",
+      "name": "F\u00E1k kezd\u0151 m\u00E9retg\u00F6rb\u00E9i",
+      "module": "Erd\u0151",
+      "scope": "\u00DAj faegyed",
+      "schedule": "Minden fa l\u00E9trehoz\u00E1sakor",
+      "execution": "EditableGraph",
+      "description": "A projekt h\u00E1rom gr\u00E1fja adja az \u00FAj fa magass\u00E1g\u00E1t, t\u00F6rzs\u00E1tm\u00E9r\u0151j\u00E9t \u00E9s koronasugar\u00E1t. Ugyanez fut a gener\u00E1l\u00E1s, erd\u0151fest\u00E9s, \u00FCltet\u00E9s \u00E9s term\u00E9szetes \u00FAjulat sor\u00E1n, egyedenk\u00E9nt szeletelve.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "forest.species",
+        "forest.trees",
+        "world.seed"
+      ],
+      "writes": [
+        "forest.trees"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Rules/TreeInitialSizeRules.cs",
+          "symbol": "DefaultGraph"
+        }
+      ],
+      "parameters": [],
+      "x": 515,
+      "y": 30
+    },
+    {
       "id": "forest.site",
       "name": "Term\u0151helyi alkalmass\u00E1g",
       "module": "Erd\u0151",
@@ -2004,8 +2032,8 @@
         }
       ],
       "parameters": [],
-      "x": 515,
-      "y": 30
+      "x": 25,
+      "y": 160
     },
     {
       "id": "forest.competition",
@@ -2033,7 +2061,7 @@
         }
       ],
       "parameters": [],
-      "x": 25,
+      "x": 270,
       "y": 160
     },
     {
@@ -2065,7 +2093,7 @@
         }
       ],
       "parameters": [],
-      "x": 270,
+      "x": 515,
       "y": 160
     },
     {
@@ -2096,8 +2124,8 @@
         }
       ],
       "parameters": [],
-      "x": 515,
-      "y": 160
+      "x": 25,
+      "y": 290
     },
     {
       "id": "forest.stress",
@@ -2127,7 +2155,7 @@
         }
       ],
       "parameters": [],
-      "x": 25,
+      "x": 270,
       "y": 290
     },
     {
@@ -2159,7 +2187,7 @@
         }
       ],
       "parameters": [],
-      "x": 270,
+      "x": 515,
       "y": 290
     },
     {
@@ -2190,8 +2218,8 @@
         }
       ],
       "parameters": [],
-      "x": 515,
-      "y": 290
+      "x": 25,
+      "y": 420
     },
     {
       "id": "forest.regeneration",
@@ -2222,7 +2250,7 @@
         }
       ],
       "parameters": [],
-      "x": 25,
+      "x": 270,
       "y": 420
     },
     {
@@ -2250,7 +2278,7 @@
         }
       ],
       "parameters": [],
-      "x": 270,
+      "x": 515,
       "y": 420
     },
     {

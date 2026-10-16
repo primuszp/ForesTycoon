@@ -16,31 +16,34 @@ internal sealed partial class RuleEditorView
         ImGui.BeginChild("influence-editor", Vec2.Zero, ImGuiChildFlags.Borders);
         ImGui.PushTextWrapPos(0);
         ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vec2(8, 4));
+        WorldRuleCard(world, rule);
         bool changed = false;
-        string name = rule.Name;
-        ImGui.SetNextItemWidth(-1);
-        if (ImGui.InputText("##name", ref name, 120) && !string.IsNullOrWhiteSpace(name)) rule.Name = name;
-        changed |= ImGui.IsItemDeactivatedAfterEdit();
         var scope = RuleEngine.Scope(rule.Scope);
-        ImGui.SetNextItemWidth(230);
-        if (ImGui.BeginCombo("Mely objektumokon fusson?", ObjectDisplay(rule.Scope, rule.Scope))) {
-            foreach (var s in RuleEngine.Scopes.Where(s => s.Entity != null && (s.Fields.Any(f => f.Write != null) || s.Actions.Length > 0))) {
-                if (ImGui.Selectable(ObjectDisplay(s.Id, s.Id) + "##" + s.Id, s.Id == rule.Scope) && s.Id != rule.Scope) {
-                    SetRuleScope(rule, s.Id); scope = s;
-                    // Keep existing effects intact: incompatible bindings remain visible and require a deliberate replacement.
-                    changed = true;
+        if (ImGui.CollapsingHeader("Név, futási idő és egyéb beállítások")) {
+            string name = rule.Name;
+            ImGui.SetNextItemWidth(-1);
+            if (ImGui.InputText("##name", ref name, 120) && !string.IsNullOrWhiteSpace(name)) rule.Name = name;
+            changed |= ImGui.IsItemDeactivatedAfterEdit();
+            ImGui.SetNextItemWidth(230);
+            if (ImGui.BeginCombo("Mely objektumokon fusson?", ObjectDisplay(rule.Scope, rule.Scope))) {
+                foreach (var s in RuleEngine.Scopes.Where(s => s.Entity != null && (s.Fields.Any(f => f.Write != null) || s.Actions.Length > 0))) {
+                    if (ImGui.Selectable(ObjectDisplay(s.Id, s.Id) + "##" + s.Id, s.Id == rule.Scope) && s.Id != rule.Scope) {
+                        SetRuleScope(rule, s.Id); scope = s;
+                        // Keep existing effects intact: incompatible bindings remain visible and require a deliberate replacement.
+                        changed = true;
+                    }
+                    if (ImGui.IsItemHovered()) ImGui.SetTooltip((Objects.Find(s.Id)?.Help ?? "") + "\nKód: " + s.Id);
                 }
-                if (ImGui.IsItemHovered()) ImGui.SetTooltip((Objects.Find(s.Id)?.Help ?? "") + "\nKód: " + s.Id);
+                ImGui.EndCombo();
             }
-            ImGui.EndCombo();
-        }
-        DrawSchedule(rule, ref changed);
-        if (ImGui.SmallButton("Teljesülési feltétel / számítási csomópontok")) { editRuleCalculation = true; selectedCalculation = -1; }
-        if (rule.ConditionGraph != null || rule.Condition.Length > 0) ImGui.TextWrapped("Ez a szabály csak a teljesülési feltétel igaz állapotában hat. A feltétel a fenti gombbal, csomópontokból szerkeszthető.");
-        DrawCustomFields(world, rule.Scope);
-        if (rule.Template.Length > 0) {
-            if (ImGui.Button("Visszaállítás a mintára")) ResetVisualRule(world, rule.Id);
-            if (ImGui.IsItemHovered()) ImGui.SetTooltip("A szabály hatásai a minta szerinti változatra állnak vissza. Visszavonható.");
+            DrawSchedule(rule, ref changed);
+            if (ImGui.SmallButton("Teljesülési feltétel / számítási csomópontok")) { editRuleCalculation = true; selectedCalculation = -1; }
+            if (rule.ConditionGraph != null || rule.Condition.Length > 0) ImGui.TextWrapped("Ez a szabály csak a teljesülési feltétel igaz állapotában hat. A feltétel a fenti gombbal, csomópontokból szerkeszthető.");
+            DrawCustomFields(world, rule.Scope);
+            if (rule.Template.Length > 0) {
+                if (ImGui.Button("Visszaállítás a mintára")) ResetVisualRule(world, rule.Id);
+                if (ImGui.IsItemHovered()) ImGui.SetTooltip("A szabály hatásai a minta szerinti változatra állnak vissza. Visszavonható.");
+            }
         }
         var readable = ReadableFields(world, scope);
         var writable = WritableFields(world, scope);
@@ -59,13 +62,15 @@ internal sealed partial class RuleEditorView
         string current = null;
         if (rule.Effects.Count > 0 && rule.Effects[Math.Clamp(selectedInfluence, 0, rule.Effects.Count - 1)] is { } shown && shown.Influence.Terms.Count > 0)
             current = sentences.Term(shown, shown.Influence.Terms[Math.Clamp(selectedTerm, 0, shown.Influence.Terms.Count - 1)]);
-        ImGui.BeginChild("rule-sentences", new Vec2(0, Math.Min(126, 10 + InfluenceSentences.Count * ImGui.GetTextLineHeightWithSpacing() * 1.6f)), ImGuiChildFlags.Borders);
-        ImGui.PushTextWrapPos(0);
-        foreach (string line in InfluenceSentences)
-            EditorStyle.Text(line == current ? HudTheme.Parchment : HudTheme.Muted, (line == current ? "» " : "• ") + line);
-        ImGui.PopTextWrapPos();
-        ImGui.EndChild();
-        if (ImGui.IsItemHovered()) ImGui.SetTooltip("A szabály szövegesen, a gráfból számolva. A kijelölt kapcsolat világos.");
+        if (ImGui.CollapsingHeader("A szabály szövegesen")) {
+            ImGui.BeginChild("rule-sentences", new Vec2(0, Math.Min(126, 10 + InfluenceSentences.Count * ImGui.GetTextLineHeightWithSpacing() * 1.6f)), ImGuiChildFlags.Borders);
+            ImGui.PushTextWrapPos(0);
+            foreach (string line in InfluenceSentences)
+                EditorStyle.Text(line == current ? HudTheme.Parchment : HudTheme.Muted, (line == current ? "» " : "• ") + line);
+            ImGui.PopTextWrapPos();
+            ImGui.EndChild();
+            if (ImGui.IsItemHovered()) ImGui.SetTooltip("A szabály szövegesen, a gráfból számolva. A kijelölt kapcsolat világos.");
+        }
         OtherWriters(world, rule);
 
         if (ruleBookError != null) EditorStyle.Text(HudTheme.Bad, ruleBookError);

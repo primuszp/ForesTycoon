@@ -59,7 +59,7 @@ sealed partial class ForestSystem
             float health = (float)Responses.Regeneration("forest.seedlingHealth", selectedQuery);
             if (initialCount <= 0 || health <= 0) continue;
             float age = (float)Responses.Regeneration("forest.seedlingAge", selectedQuery);
-            IndividualTrees.Create(tile, new(selected, age, 0, health), year, habitat.Seed, authoredCount: initialCount);
+            foreach (int unit in IndividualTrees.CreateWork(tile, new(selected, age, 0, health), year, habitat.Seed, authoredCount: initialCount, responses: Responses)) yield return unit;
             IndividualTrees.TryGet(tile, out var patch);
             foreach (int unit in UpdateIndividualRatesWork(tile, patch, year)) yield return unit;
             MarkResourceArea(tile);

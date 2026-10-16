@@ -10,7 +10,7 @@ namespace ForesTycoon.Rules
     public enum BehaviorOperation { Constant, Native, Delta, Time, State, Amount, Add, Subtract, Multiply, Divide, Minimum, Maximum, Greater, Less, Select, Absolute, Negate,
         Capacity, Available, From, To, Surface, NamedValue,
         // A named input the hook declares (for example a soil parameter of the tile); Key holds its name.
-        Input, Exp, Power }
+        Input, Exp, Power, Curve }
     public sealed class BehaviorNode
     {
         public string Id { get; set; } = "";
@@ -32,6 +32,10 @@ namespace ForesTycoon.Rules
         public string Kind { get; set; } = "";
         // Null binds the type. An object binding replaces, rather than stacks with, the type graph.
         public ulong? ObjectId { get; set; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public bool Disabled { get; set; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public double? DisabledValue { get; set; }
         public string Output { get; set; } = "native";
         public List<BehaviorNode> Nodes { get; set; } = new() {
             new() { Id = "native", Name = "Beépített eredmény", Operation = BehaviorOperation.Native, X = 30, Y = 60 }
@@ -50,7 +54,7 @@ namespace ForesTycoon.Rules
         public static BehaviorModel FromJson(string json) => JsonSerializer.Deserialize<BehaviorModel>(json, Options) ?? throw new InvalidDataException("Üres viselkedésmodell.");
         public BehaviorModel Clone() => FromJson(ToJson());
         public static int Inputs(BehaviorOperation op) => op switch {
-            BehaviorOperation.Select => 3, BehaviorOperation.Absolute or BehaviorOperation.Negate or BehaviorOperation.Exp => 1,
+            BehaviorOperation.Select => 3, BehaviorOperation.Absolute or BehaviorOperation.Negate or BehaviorOperation.Exp or BehaviorOperation.Curve => 1,
             BehaviorOperation.Power => 2,
             >= BehaviorOperation.Add and <= BehaviorOperation.Less => 2, _ => 0
         };
@@ -113,6 +117,8 @@ namespace ForesTycoon.Rules
         }
         private sealed class Program
         {
+            private readonly bool disabled;
+            private readonly double disabledValue;
             private readonly BehaviorNode[] nodes;
             private readonly int[] a, b, c, inputIndex;
             private double[] extras;
@@ -127,6 +133,13 @@ namespace ForesTycoon.Rules
                 Func<string, Func<double>> bindValue = null)
             {
                 this.hook = hook;
+                graph = BehaviorCurves.Expand(graph);
+                disabled = graph.Disabled;
+                if (graph.DisabledValue.HasValue && (!double.IsFinite(graph.DisabledValue.Value) || graph.DisabledValue < hook.Min || graph.DisabledValue > hook.Max))
+                    throw new InvalidDataException("A kikapcsolási eredmény legyen véges és a szabály értéktartományán belül.");
+                if (disabled && (!EcologyResponseProgram.IsPureKind(hook.Kind) || !graph.DisabledValue.HasValue))
+                    throw new InvalidDataException("Értéket számoló szabály kikapcsolásához adj meg egyértelmű helyettesítő értéket.");
+                disabledValue = graph.DisabledValue ?? 0;
                 this.readValue = readValue;
                 if (graph.Nodes == null || graph.Nodes.Count is < 1 or > 256) throw new InvalidDataException("1–256 csomópont szükséges.");
                 var byId = new Dictionary<string, BehaviorNode>(StringComparer.Ordinal);
@@ -166,6 +179,7 @@ namespace ForesTycoon.Rules
             }
             internal double Evaluate(in BehaviorInputs input, double[] extraValues = null)
             {
+                if (disabled) return disabledValue;
                 // Tiered: a graph is interpreted until it proves hot, then compiled once (loading a project stays quick).
                 if (fast == null && !compileTried && ++evaluations >= CompileAfter) { compileTried = true; fast = Compile(); }
                 if (fast != null) return Math.Clamp(fast(input, extraValues), hook.Min, hook.Max);

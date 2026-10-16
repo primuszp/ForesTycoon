@@ -75,17 +75,10 @@ namespace ForesTycoon.Ecology
             IndividualTrees.Clear();
             ClearPlantations(); competition.Clear(); changedResourceTiles.Clear();
             for (int id = 0; id < stands.Length; id++)
-                { if (!stands[id].IsEmpty) IndividualTrees.Create(id, stands[id], ForestYear, habitat.Seed); yield return 1; }
+                { foreach (int unit in IndividualTrees.CreateWork(id, stands[id], ForestYear, habitat.Seed, responses: Responses)) yield return unit; yield return 1; }
             for (int id = 0; id < stands.Length; id++) { stands[id] = IndividualStand(id, ForestYear); yield return 1; }
             foreach (int unit in competition.SnapshotWork(habitat, IndividualTrees, ForestYear)) yield return unit;
             foreach (var entry in IndividualTrees.Patches) foreach (int unit in UpdateIndividualRatesWork(entry.Key, entry.Value, ForestYear)) yield return unit;
-        }
-
-        private void CreateIndividuals(int id, ForestStand stand, double year, bool planted = false)
-        {
-            IndividualTrees.Create(id, stand, year, habitat.Seed, planted);
-            IndividualTrees.TryGet(id, out var patch);
-            if (!planted) UpdateIndividualRates(id, patch, year);
         }
 
         private ForestStand IndividualStand(int id, double year)

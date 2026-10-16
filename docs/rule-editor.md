@@ -541,3 +541,50 @@ ugyanezeket a projektgráfokat értékeli ki, nincs külön újulatszerkesztő.
 A csempe- és szomszédvizsgálat, valamint az új fák erőforrás-frissítése szeletelt.
 A terjedési tér most a négy közvetlen szomszéd; a kezdő fajméret-inicializáló
 még közös motorkód. [Részletek és határok](natural-regeneration-rules.md).
+
+
+## Fák kezdő méretgörbéi – 2026-10-16
+
+A kezdő magasság, törzsátmérő és koronasugár három közös válaszgráf.
+Az Új fa életkora, seedelt változatossága és ültetett jelzője, a fafaj méretadatai,
+valamint a korábban kiértékelt kezdő méretek kapcsolhatók be. A játék ugyanezt
+futtatja a generált, festett, ültetett és természetes úton létrejövő fákra.
+A meglévő fák tárolt méretét a gráfcsere nem alakítja át. A létrehozás és a
+területültetés egyedenként is folytatható. [Részletek](tree-initial-size-rules.md).
+
+
+## Egységes szabálykártyák – 2026-10-16
+
+Az állapotot változtató és értéket számoló szabályok tömör, egysoros listát és
+közös grafikai elemeket használnak, saját működésük megtartásával. A kiválasztott
+szabály összecsukható részleteiben látszik a futási idő, a forrás, a cél/eredmény
+és annak felhasználása. A válaszgráf kikapcsolásához előbb egyértelmű fix eredményt
+választasz; a kártya annak következményét is kiírja, a gráf pedig megmarad.
+[Részletek és ellenőrzések](unified-rule-cards.md).
+
+
+## A közös szerkesztő lezárása
+
+A Folyamatkapcsolatok ugyanazt a forrás–számítás–eredmény vásznat használja,
+mint a válaszgráfok. A beépített alapfolyamatot olvasó kötés ezt külön kiírja;
+a törlés a típuskötésre vagy a natív alapra áll vissza, nem állítja le a gépet.
+Ezért a leltár ezeket részleges felülírásként tartja nyilván.
+
+A **Hatás hozzáadása → Görbe az eredményhez** egy bemenettel bekötött,
+szerkeszthető görbecsomópontot ad. A csomópont műveletválasztóból is felvehető.
+Ugyanaz a görbecsalád-választó, pontmozgatás, számbemenet és csúszka működik,
+mint az állapotszabályok hatásgörbéinél. A válasz-, feltétel-, hatás- és
+globális áramlásgráfok ugyanazt a kezelőfelületet kapják. A görbe a projektben
+megmarad; fordításkor a meglévő RuleFormula görbefordító bontja aritmetikai
+csomópontokra. Nincs külön képlet, amelyet a felhasználónak kell szinkronban tartania.
+A kibontott programra is érvényes a 256 műveletes korlát.
+
+A globális készletáramlás előző tickből, arányos korlátozással számol.
+Az objektumkészletek átadása a szabályok sorrendjében, az addig megmaradt
+készletből történik. Ezt mindkét nézet kiírja; az egységes megjelenítés nem
+változtatja meg észrevétlenül az átadások jelentését.
+
+Ellenőrzés: `BehaviorCurveTests`, `ResponseRuleCardTests`, `RuleCoverageTests`,
+`RuleFlowTests`, `DynamicsRuntimeTests` és az editor füsttesztje.
+A füstteszt `common-response-curve.png` képe a közös görbeszerkesztőt mutatja,
+és azt is ellenőrzi, hogy a gráf a játékba kerül, majd visszavonható.

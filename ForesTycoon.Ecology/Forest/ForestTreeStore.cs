@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 
 namespace ForesTycoon.Ecology
@@ -42,9 +43,12 @@ namespace ForesTycoon.Ecology
             TreeCount = 0;
         }
 
-        internal void Create(int tileId, ForestStand stand, double year, int worldSeed, bool planted = false, int? authoredCount = null)
+        internal void Create(int tileId, ForestStand stand, double year, int worldSeed, bool planted = false, int? authoredCount = null, ForesTycoon.Rules.EcologyResponseProgram responses = null)
+            => SimulationWork.Complete(CreateWork(tileId, stand, year, worldSeed, planted, authoredCount, responses));
+
+        internal IEnumerable<int> CreateWork(int tileId, ForestStand stand, double year, int worldSeed, bool planted = false, int? authoredCount = null, ForesTycoon.Rules.EcologyResponseProgram responses = null)
         {
-            if (stand.IsEmpty) return;
+            if (stand.IsEmpty) yield break;
             if (!patches.TryGetValue(tileId, out Patch patch))
             {
                 patches.Add(tileId, patch = new Patch(16));
@@ -60,32 +64,39 @@ namespace ForesTycoon.Ecology
             int lattice = (int)MathF.Ceiling(MathF.Sqrt(Math.Max(capacity, count)));
             if (planted) { count = PlantedTreesPerTile; lattice = PlantingRows; }
             if (patch.Trees.Length < count) Array.Resize(ref patch.Trees, count); // shrub tiles hold more than 16 stems
-            Span<int> cells = stackalloc int[lattice * lattice];
-            for (int i = 0; i < cells.Length; i++) cells[i] = i;
-            // Select scattered cells rather than filling every tile row from the same corner.
-            for (int i = 1; i < cells.Length; i++)
+            int cellCount = lattice * lattice;
+            int[] cells = ArrayPool<int>.Shared.Rent(cellCount);
+            try
             {
-                int cell = cells[i], previous = i - 1;
-                uint rank = CellRank(cell);
-                while (previous >= 0 && CellRank(cells[previous]) > rank)
+                for (int i = 0; i < cellCount; i++) { cells[i] = i; yield return 1; }
+                // Select scattered cells rather than filling every tile row from the same corner.
+                for (int i = 1; i < cellCount; i++)
                 {
-                    cells[previous + 1] = cells[previous];
-                    previous--;
+                    int cell = cells[i], previous = i - 1;
+                    uint rank = CellRank(cell);
+                    while (previous >= 0 && CellRank(cells[previous]) > rank)
+                    {
+                        cells[previous + 1] = cells[previous];
+                        previous--;
+                    }
+                    cells[previous + 1] = cell;
+                    yield return 1;
                 }
-                cells[previous + 1] = cell;
+                for (int i = 0; i < count; i++)
+                {
+                    uint seed = Random(unchecked((uint)worldSeed ^ (uint)tileId * 977u ^ (uint)nextId * 131u));
+                    int cell = planted ? i : cells[i];
+                    float u = (cell % lattice + 0.5f + (planted ? 0 : (Unit(seed) - 0.5f) * 0.7f)) / lattice;
+                    float v = (cell / lattice + 0.5f + (planted ? 0 : (Unit(Random(seed)) - 0.5f) * 0.7f)) / lattice;
+                    float age = planted ? stand.AgeYears : stand.AgeYears * (0.85f + Unit(Random(seed + 7)) * 0.3f);
+                    var tree = new ForestTree(nextId++, tileId, stand.Species, u, v, seed, year - age, year,
+                        ForestTreeGrowth.Initial(stand.Species, age, 1, responses, Unit(Random(seed + 17)), planted), default, stand.Health);
+                    patch.Trees[patch.Count++] = tree;
+                    TreeCount++;
+                    yield return 1;
+                }
             }
-            for (int i = 0; i < count; i++)
-            {
-                uint seed = Random(unchecked((uint)worldSeed ^ (uint)tileId * 977u ^ (uint)nextId * 131u));
-                int cell = planted ? i : cells[i];
-                float u = (cell % lattice + 0.5f + (planted ? 0 : (Unit(seed) - 0.5f) * 0.7f)) / lattice;
-                float v = (cell / lattice + 0.5f + (planted ? 0 : (Unit(Random(seed)) - 0.5f) * 0.7f)) / lattice;
-                float age = planted ? stand.AgeYears : stand.AgeYears * (0.85f + Unit(Random(seed + 7)) * 0.3f);
-                var tree = new ForestTree(nextId++, tileId, stand.Species, u, v, seed, year - age, year,
-                    ForestTreeGrowth.Initial(stand.Species, age, 0.88f + Unit(Random(seed + 17)) * 0.24f), default, stand.Health);
-                patch.Trees[patch.Count++] = tree;
-                TreeCount++;
-            }
+            finally { ArrayPool<int>.Shared.Return(cells); }
             patch.Revision++;
             NotifyTopologyChanged(patch);
             uint CellRank(int cell) => Random(unchecked((uint)worldSeed ^ (uint)tileId * 977u ^ (uint)cell * 313u));

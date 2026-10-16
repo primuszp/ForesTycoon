@@ -197,13 +197,15 @@ internal sealed partial class RuleEditorView
     }
     private void SimulateGraphs(GameWorld world)
     {
+        if (world.ForegroundPending || world.BoundaryPending)
+            throw new InvalidOperationException("A próba a tesztvilág aktuális műveletének befejezése után indítható.");
         var project = CollectProject(world); project.Algorithms = algorithms.Store(projectPath);
         project = GameWorld.NormalizeRuleProject(project);
         string folder = Path.Combine(AlgorithmBuild.CacheRoot, "editor-tests", Guid.NewGuid().ToString("N")); Directory.CreateDirectory(folder);
         string save = Path.Combine(folder, "world.json");
         if (graphTestSavedWorld) File.Copy(Path.GetFullPath(worldPath), save);
         else {
-            world.ExecutePendingCommands(); using var stream = new MemoryStream(); world.Save(stream);
+            using var stream = new MemoryStream(); world.Save(stream);
             RuleProject.WriteAtomic(save, System.Text.Encoding.UTF8.GetString(stream.ToArray()));
         }
         int ticks = graphTestTicks;

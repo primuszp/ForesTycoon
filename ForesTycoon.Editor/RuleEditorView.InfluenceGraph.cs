@@ -76,6 +76,7 @@ internal sealed partial class RuleEditorView
     /// </summary>
     private void FlowSettings(GameWorld world, WorldRule rule, RuleScope scope, RuleEffect effect, string[] writable, ref bool changed)
     {
+        ImGui.TextWrapped("Az objektum készletéből a szabályok sorrendjében ad át. Mindig a még rendelkezésre álló mennyiséget használja; az előbb futó átadás elsőbbséget kap.");
         const string outside = "";
         var into = writable.Concat(scope.Collections.SelectMany(c => RuleEngine.Scope(c.Target).Fields.Where(f => f.Write != null && !f.Name.Contains('.'))
             .Select(f => c.Name + "." + f.Name))).ToArray();
@@ -217,16 +218,9 @@ internal sealed partial class RuleEditorView
         bool Hit(Vec2 p, Vec2 size) => hovered && mouse.X >= p.X && mouse.Y >= p.Y && mouse.X <= p.X + size.X && mouse.Y <= p.Y + size.Y;
         void Box(Vec2 p, Vec2 size, uint border, string head, uint headColour, string middle, uint middleColour, string bottom = "", uint bottomColour = 0, bool lit = false)
         {
-            draw.AddRectFilled(p + new Vec2(0, 3), p + size + new Vec2(0, 3), EditorStyle.Fade(0xFF000000u, .35f), 6);
-            draw.AddRectFilled(p, p + size, lit ? EditorStyle.NodeBodyHover : EditorStyle.NodeBody, 6);
-            draw.AddRect(p, p + size, border, 6, ImDrawFlags.None, lit ? 2.2f : 1.5f);
-            draw.PushClipRect(p + new Vec2(8, 0), p + size - new Vec2(8, 0), true);
-            float y = p.Y + (size.Y - boxMin) / 2;
-            draw.AddText(new Vec2(p.X + 12, y + 5), headColour, head);
-            draw.AddText(new Vec2(p.X + 12, y + 24), middleColour, middle);
-            if (bottom.Length > 0) draw.AddText(new Vec2(p.X + 12, y + 43), bottomColour == 0 ? EditorStyle.TextMuted : bottomColour, bottom);
-            draw.PopClipRect();
+            EditorStyle.GraphBox(draw, p, size, border, head, headColour, middle, middleColour, bottom, bottomColour, lit);
         }
+
         draw.AddText(origin + new Vec2(10, 7), EditorStyle.TextMuted, "FORRÁS");
         draw.AddText(origin + new Vec2(termX, 7), EditorStyle.TextMuted, "KAPCSOLAT · ERŐSSÉG");
         draw.AddText(origin + new Vec2(targetX, 7), EditorStyle.TextMuted, "MIT VÁLTOZTAT");

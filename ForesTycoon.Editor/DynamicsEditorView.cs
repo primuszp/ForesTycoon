@@ -12,6 +12,7 @@ internal sealed class DynamicsEditorView
     private DynamicsModel model = new();
     private string selectedStock, selectedFlow, message = "";
     private readonly BehaviorEditorView equation = new();
+    internal BehaviorEditorView EquationEditor => equation;
     private readonly Stack<string> undo = new(), redo = new();
     internal DynamicsModel Document { get { SynchronizeEquation(); return new RuleProject { Dynamics = model }.Clone().Dynamics; } }
     internal DynamicsModel Draft => model;
@@ -142,7 +143,7 @@ internal sealed class DynamicsEditorView
         if (ImGui.InputText("Áramlás neve", ref flowName, 120)) { Remember(); active.Name = flowName; }
         Endpoint("Forráskészlet", active.From, v => active.From = v); ImGui.SameLine();
         Endpoint("Célkészlet", active.To, v => active.To = v);
-        ImGui.TextWrapped("A gráf másodpercenkénti átadást ad. A közös végrehajtó készlet- és kapacitáskorláttal alkalmazza.");
+        ImGui.TextWrapped("Fix tick elején fut; a gráf másodpercenkénti átadást ad. Az áramlások az előző készletállapotból számolnak. Kevés készlet esetén arányosan osztoznak rajta; a sorrendjük nem ad elsőbbséget.");
         equation.Configure(new[] { DynamicsRuntime.FlowHook(active) }, DynamicsRuntime.Keys(model, GameWorld.RuleWorldFields), read);
         equation.PickField = pick; equation.DrawEquation(world); SynchronizeEquation();
     }

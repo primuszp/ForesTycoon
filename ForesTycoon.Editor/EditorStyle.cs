@@ -193,9 +193,25 @@ namespace ForesTycoon.Editor
         /// leaving and entering horizontally, on a dark halo so it stays readable where wires cross, ending in a small
         /// arrowhead that touches the port. A wire running backwards loops out wider instead of folding onto itself.
         /// </summary>
-        internal static void Wire(ImDrawListPtr draw, Vec2 from, Vec2 to, uint colour, float width, bool dashed = false, uint halo = 0)
+        /// <summary>Shared visual card for effect and response graphs; only the data and ports differ.</summary>
+        internal static void GraphBox(ImDrawListPtr draw, Vec2 p, Vec2 size, uint border, string head, uint headColour,
+            string middle, uint middleColour, string bottom = "", uint bottomColour = 0, bool lit = false, float scale = 1)
         {
-            const float head = 8;
+            draw.AddRectFilled(p + new Vec2(0, 3) * scale, p + size + new Vec2(0, 3) * scale, NodeShadow, 6 * scale);
+            draw.AddRectFilled(p, p + size, lit ? NodeBodyHover : NodeBody, 6 * scale);
+            draw.AddRect(p, p + size, border, 6 * scale, ImDrawFlags.None, (lit ? 2.2f : 1.5f) * scale);
+            draw.PushClipRect(p + new Vec2(8, 0) * scale, p + size - new Vec2(8, 0) * scale, true);
+            float y = p.Y + (size.Y - 62 * scale) / 2;
+            void Line(float offset, uint colour, string value) => draw.AddText(ImGui.GetFont(), ImGui.GetFontSize() * scale,
+                new Vec2(p.X + 12 * scale, y + offset * scale), colour, value);
+            Line(5, headColour, head); Line(24, middleColour, middle);
+            if (bottom.Length > 0) Line(43, bottomColour == 0 ? TextMuted : bottomColour, bottom);
+            draw.PopClipRect();
+        }
+
+        internal static void Wire(ImDrawListPtr draw, Vec2 from, Vec2 to, uint colour, float width, bool dashed = false, uint halo = 0, float scale = 1)
+        {
+            float head = 8 * scale;
             Vec2 end = to - new Vec2(head, 0);
             float dx = end.X - from.X;
             float pull = dx > 0 ? Math.Max(Math.Min(24, dx), dx * .55f) : 60 + Math.Min(120, -dx * .5f + Math.Abs(to.Y - from.Y) * .25f);
@@ -233,11 +249,11 @@ namespace ForesTycoon.Editor
         }
 
         /// <summary>A port: a ring in the node's colour, filled when something is plugged in.</summary>
-        internal static void Port(ImDrawListPtr draw, Vec2 at, uint colour, bool connected)
+        internal static void Port(ImDrawListPtr draw, Vec2 at, uint colour, bool connected, float scale = 1)
         {
-            draw.AddCircleFilled(at, 5.5f, NodeBody);
-            if (connected) draw.AddCircleFilled(at, 3.5f, colour);
-            draw.AddCircle(at, 5.5f, colour, 0, 1.5f);
+            draw.AddCircleFilled(at, 5.5f * scale, NodeBody);
+            if (connected) draw.AddCircleFilled(at, 3.5f * scale, colour);
+            draw.AddCircle(at, 5.5f * scale, colour, 0, 1.5f * scale);
         }
 
         /// <summary>An arrowhead at <paramref name="tip"/> pointing along <paramref name="direction"/>.</summary>

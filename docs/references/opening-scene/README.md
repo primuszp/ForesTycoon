@@ -188,3 +188,31 @@ Külön mappába újrarögzített referencia alapján csak a `Behaviors` lenyoma
 változott. Minden más kezdeti lenyomat, a saját pálya és a küldetések megmaradtak.
 A referencia mentés az új gráfokat tartalmazza; nincs régi újulatszabályt
 átalakító betöltési kód.
+
+
+## Tizenhatodik lépés: fák kezdő méretgörbéi – 2026-10-16
+
+A generált, festett, ültetett és természetes újulati fák kezdő magasságát,
+törzsátmérőjét és koronasugarát a projekt három szerkeszthető gráfja adja.
+A régi `ForestTreeGrowth.Initial` matematikai ága törölve; az adapter ugyanazt
+a gráfmotort hívja. A létrehozási munka egyedenként is szeletelt.
+A futtató `forestycoon-simulation/2026-10-16.9`.
+
+A külön mappába újrarögzített és összevetett referencia alapján csak az
+`Ecology` és `Behaviors` lenyomat változott: a double gráfkiértékelésből float
+méretet tárolunk, így kis numerikus eltérés is lehetséges. A terep, logisztika,
+grafika és minden más lenyomat egyezik. A szállított jelenet saját pályája,
+küldetései és eddigi szerkesztett gráfjai megmaradtak. A helyi szerkesztett
+projektben a már élő fák méretét nem írjuk át. Nincs legacy méretképlet vagy
+régi futtatót fenntartó betöltési ág.
+
+
+## Tizenhetedik lépés: egységes szabálykártyák és explicit kikapcsolás – 2026-10-16
+
+A válaszgráfok kikapcsoláskor egy felhasználó által kiválasztott, mentett fix
+értéket adhatnak; visszakapcsoláskor az eredeti gráf marad meg. A futtató
+`forestycoon-simulation/2026-10-16.10`. Az aktív alapgráfok szerializált
+készlete és végrehajtása változatlan: a külön újrarögzített nyitóvilág minden
+lenyomata egyezik a tizenhatodik lépésével. A beágyazott és referencia mentés
+verziójele frissült, az állapotadatok és a saját jelenetszerkesztések megmaradtak.
+Nincs korábbi kikapcsolási jelentést átvezető betöltési ág.

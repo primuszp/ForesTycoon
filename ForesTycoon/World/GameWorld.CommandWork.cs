@@ -70,7 +70,9 @@ sealed partial class GameWorld
                     int[] ids = AreaTiles(record.A, record.B); int planted = 0, area = forest.AllocatePlantationId();
                     foreach (int id in ids)
                     {
-                        lastForestryAction = forest.PlantInArea(id, (ForestSpecies)record.C, area);
+                        var result = new WorkResult<ForestryActionResult>();
+                        foreach (int unit in forest.PlantInAreaWork(id, (ForestSpecies)record.C, area, result)) yield return unit;
+                        lastForestryAction = result.Value;
                         if (lastForestryAction == ForestryActionResult.Planted) planted++;
                         yield return 1;
                     }

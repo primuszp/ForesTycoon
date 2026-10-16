@@ -119,6 +119,7 @@ public static class RuleFormula
                 BehaviorOperation.Absolute => $"abs({a(0)})", BehaviorOperation.Negate => "-" + a(9),
                 BehaviorOperation.Exp => $"exp({a(0)})", BehaviorOperation.Power => $"hatvány({a(0)}; {b(0)})",
                 BehaviorOperation.Select => $"ha({a(0)}; {b(0)}; {Write(n.C, 0, depth + 1)})",
+                BehaviorOperation.Curve => BehaviorCurves.Read(n.Key).ToFormula().Replace(BehaviorCurves.Input, "(" + a(0) + ")", StringComparison.Ordinal),
                 _ => Name(n)
             };
             return own > 0 && own < parent ? "(" + text + ")" : text;

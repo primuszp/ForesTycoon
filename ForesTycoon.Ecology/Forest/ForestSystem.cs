@@ -101,22 +101,29 @@ namespace ForesTycoon.Ecology
         }
         internal IEnumerable<int> PlantWork(int tileId, ForestSpecies species, WorkResult<ForestryActionResult> result)
         {
-            result.Value = PlantCore(tileId, species, 0, true, deferRevision: true);
+            foreach (int unit in PlantCoreWork(tileId, species, 0, true, result, deferRevision: true)) yield return unit;
             if (result.Value != ForestryActionResult.Planted) yield break;
             foreach (int unit in FinishPlantingAreaWork(plantations[tileId].AreaId)) yield return unit;
             CompletePlantingRevision(tileId);
         }
 
+        // Explicit synchronous adapter for diagnostics. Interactive commands use PlantInAreaWork.
         internal ForestryActionResult PlantInArea(int tileId, ForestSpecies species, int areaId)
-            => PlantCore(tileId, species, areaId, true);
+        {
+            var result = new WorkResult<ForestryActionResult>();
+            SimulationWork.Complete(PlantInAreaWork(tileId, species, areaId, result)); return result.Value;
+        }
+        internal IEnumerable<int> PlantInAreaWork(int tileId, ForestSpecies species, int areaId, WorkResult<ForestryActionResult> result)
+            => PlantCoreWork(tileId, species, areaId, true, result);
 
-        private ForestryActionResult PlantCore(int tileId, ForestSpecies species, int areaId, bool deferStatistics, bool deferRevision = false)
+        private IEnumerable<int> PlantCoreWork(int tileId, ForestSpecies species, int areaId, bool deferStatistics,
+            WorkResult<ForestryActionResult> result, bool deferRevision = false)
         {
             if (!Enum.IsDefined(species) || species == ForestSpecies.None)
                 throw new ArgumentOutOfRangeException(nameof(species));
-            if ((uint)tileId >= (uint)stands.Length) return ForestryActionResult.InvalidTile;
-            if (!stands[tileId].IsEmpty) return ForestryActionResult.TileOccupied;
-            if (!habitat.CanSupportForest(tileId)) return ForestryActionResult.UnsuitableTerrain;
+            if ((uint)tileId >= (uint)stands.Length) { result.Value = ForestryActionResult.InvalidTile; yield break; }
+            if (!stands[tileId].IsEmpty) { result.Value = ForestryActionResult.TileOccupied; yield break; }
+            if (!habitat.CanSupportForest(tileId)) { result.Value = ForestryActionResult.UnsuitableTerrain; yield break; }
 
             ForestSpeciesProfile profile = ForestSpeciesProfile.For(species);
             float suitability = Suitability(species, tileId);
@@ -126,14 +133,14 @@ namespace ForesTycoon.Ecology
                 profile.MaximumBiomass * 0.015f,
                 0.50f + suitability * 0.40f);
             stands[tileId] = planted;
-            CreateIndividuals(tileId, planted, ForestYear, true);
+            foreach (int unit in IndividualTrees.CreateWork(tileId, planted, ForestYear, habitat.Seed, planted: true, responses: Responses)) yield return unit;
             if (areaId == 0) areaId = AllocatePlantationId();
             plantations[tileId] = new(areaId, species, ForestYear, ForestTreeStore.PlantedTreesPerTile);
             PlantationRevision++;
             stands[tileId] = IndividualStand(tileId, ForestYear);
-            if (!deferStatistics) FinishPlantingArea(areaId);
+            if (!deferStatistics) foreach (int unit in FinishPlantingAreaWork(areaId)) yield return unit;
             if (!deferRevision) CompletePlantingRevision(tileId);
-            return ForestryActionResult.Planted;
+            result.Value = ForestryActionResult.Planted;
         }
 
         private void CompletePlantingRevision(int tileId)
@@ -249,7 +256,7 @@ namespace ForesTycoon.Ecology
                 float age = 4f + UnitFloat(Hash(habitat.Seed, tileId, 1)) * profile.MatureAgeYears * 2.2f;
                 float health = Math.Clamp(0.72f + Suitability(species, tileId) * 0.28f, 0f, 1f);
                 stands[tileId] = new ForestStand(species, age, InitialBiomass(profile, age, health), health);
-                if (preserveUnpainted) IndividualTrees.Create(tileId, stands[tileId], ForestYear, habitat.Seed);
+                if (preserveUnpainted) foreach (int unit in IndividualTrees.CreateWork(tileId, stands[tileId], ForestYear, habitat.Seed, responses: Responses)) yield return unit;
             }
             if (preserveUnpainted) {
                 monthlyPreparation.Clear();

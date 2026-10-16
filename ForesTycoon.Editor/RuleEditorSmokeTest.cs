@@ -109,6 +109,9 @@ namespace ForesTycoon.Editor
                     (() => editor.ShowRuleBook(world.RuleProjectDocument.Rules.FindIndex(r => r.Id == "forest.growth")), "tree-growth-graph"),
                     (() => editor.ShowCommonRule("behavior:" + world.BehaviorDocument.Graphs.First(g => g.Hook == "water.stress").Id), "common-water-response"),
                     (() => editor.ShowCommonRule("behavior:" + world.BehaviorDocument.Graphs.First(g => g.Hook == "forest.site").Id), "site-fitness-graph"),
+                    (() => editor.ShowCommonRule("behavior:" + world.BehaviorDocument.Graphs.First(g => g.Hook == "forest.initialHeight").Id), "initial-size-height-graph"),
+                    (() => editor.ShowCommonRule("behavior:" + world.BehaviorDocument.Graphs.First(g => g.Hook == "forest.initialDiameter").Id), "initial-size-diameter-graph"),
+                    (() => editor.ShowCommonRule("behavior:" + world.BehaviorDocument.Graphs.First(g => g.Hook == "forest.initialCrown").Id), "initial-size-crown-graph"),
                     (() => editor.ShowCommonRule("behavior:" + world.BehaviorDocument.Graphs.First(g => g.Hook == "forest.seedSupply").Id), "regeneration-seedSupply-graph"),
                     (() => editor.ShowCommonRule("behavior:" + world.BehaviorDocument.Graphs.First(g => g.Hook == "forest.seedSelection").Id), "regeneration-seedSelection-graph"),
                     (() => editor.ShowCommonRule("behavior:" + world.BehaviorDocument.Graphs.First(g => g.Hook == "forest.germination").Id), "regeneration-germination-graph"),
@@ -142,6 +145,7 @@ namespace ForesTycoon.Editor
                     for (int frame = 0; frame < n; frame++) {
                         ui.Update(width, height, width, height, Vec2.One, 1f / 60);
                         ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 900)); editor.Draw(world, ref open);
+                        GL.Viewport(0, 0, width, height); GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
                         ui.Render();
                     }
                 }
@@ -177,6 +181,39 @@ namespace ForesTycoon.Editor
                 Require(world.RuleProjectDocument.Rules.Single(r => r.Id == "road.weather").Effects[0].Influence.Terms.Count == connectionCount, "Undo did not remove the clicked relationship.");
                 Require(RuleEditorView.FieldUses(world.RuleProjectDocument.Rules).Any(u => u.Key == "road.condition" && u.Writers.Count > 0) && RuleEditorView.FieldUses(world.RuleProjectDocument.Rules).Any(u => u.Key == "tile.moisture" && u.Readers.Count > 0),
                     "Overview does not list the road condition rule.");
+                // Response cards use a real checkbox and an explicit off-result choice, preserving the authored graph.
+                var responseBefore = editor.CollectProject(world).Behaviors.Graphs.Single(g => g.Hook == "forest.shading");
+                string responseKey = "behavior:" + responseBefore.Id;
+                editor.ShowCommonRule(responseKey); ui.MouseMove(0, 0); Frames(12);
+                void CardClick(string key) {
+                    var point = editor.RuleCardAnchors[key]; ui.MouseMove((int)point.X, (int)point.Y); Frames(2);
+                    ui.MouseButton(0, true); Frames(2); ui.MouseButton(0, false); Frames(12); world.ExecutePendingCommands();
+                }
+                CardClick("enable:" + responseKey);
+                Require(!editor.CollectProject(world).Behaviors.Graphs.Single(g => g.Id == responseBefore.Id).Disabled,
+                    "Response was disabled before choosing its replacement result.");
+                CardClick("off.cancel");
+                Require(!editor.CollectProject(world).Behaviors.Graphs.Single(g => g.Id == responseBefore.Id).Disabled, "Cancelling off changed the response.");
+                CardClick("enable:" + responseKey);
+                ui.MouseMove(0, 0); Frames(2);
+                FramebufferCapture.SavePng(Path.Combine(output, "response-card-off-choice.png"), width, height);
+                CardClick("off.confirm");
+                ui.MouseMove(0, 0); Frames(2);
+                FramebufferCapture.SavePng(Path.Combine(output, "response-card-off.png"), width, height);
+                var responseOff = world.BehaviorDocument.Graphs.Single(g => g.Id == responseBefore.Id);
+                Require(responseOff.Disabled && responseOff.DisabledValue == 0, "Chosen off result was not applied to the game.");
+                Require(System.Text.Json.JsonSerializer.Serialize(responseOff.Nodes) == System.Text.Json.JsonSerializer.Serialize(responseBefore.Nodes), "Off replaced the saved graph.");
+                using (var offSave = new MemoryStream()) { world.Save(offSave); offSave.Position = 0; restored.Load(offSave);
+                    Require(restored.BehaviorDocument.Graphs.Single(g => g.Id == responseBefore.Id).Disabled, "Response off state was not saved."); }
+                CardClick("enable:" + responseKey);
+                Require(!world.BehaviorDocument.Graphs.Single(g => g.Id == responseBefore.Id).Disabled, "Re-enabling did not restore the graph.");
+                editor.AddResponseCurve("water.stress"); ui.MouseMove(0, 0); Frames(12); world.ExecutePendingCommands();
+                var curveResponse = world.BehaviorDocument.Graphs.Single(g => g.Hook == "water.stress");
+                Require(curveResponse.Nodes.Single(n => n.Id == curveResponse.Output).Operation == BehaviorOperation.Curve, "Shared curve was not applied to the game.");
+                Require(GL.GetError() == ErrorCode.NoError, "Shared graph curve editor OpenGL error.");
+                FramebufferCapture.SavePng(Path.Combine(output, "common-response-curve.png"), width, height);
+                editor.Undo(world); world.ExecutePendingCommands(); Frames(12);
+                Require(!world.BehaviorDocument.Graphs.Single(g => g.Hook == "water.stress").Nodes.Any(n => n.Operation == BehaviorOperation.Curve), "Undo did not restore the original response graph.");
                 editor.ShowMissions(); Frames(12);
                 int missions = editor.EditedScenario.Missions.Count;
                 editor.EditedScenario.Missions.Add(new MissionGoal { Id = "undo-proba", Title = "Visszavonási próba" }); Frames(12);

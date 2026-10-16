@@ -17,14 +17,16 @@ public sealed class EcologyResponseProgram
         new("water.waterlogging", "Pangóvíz követése", "site", "0–1", 0, 1, "", "", "Szeletelt környezeti lépés, csempénként", false,
             new[] { "tile.rawWaterlogging", "tile.waterlogging", "step.seconds" })
     };
-    public static readonly BehaviorHook[] Hooks = SiteHooks.Concat(ForestCompetitionRules.Hooks).Concat(ForestRegenerationRules.Hooks).ToArray();
-    public static bool IsPureKind(string kind) => kind is "site" or "competitionPair" or "competition" or "resource" or "regeneration";
+    public static readonly BehaviorHook[] Hooks = SiteHooks.Concat(ForestCompetitionRules.Hooks).Concat(ForestRegenerationRules.Hooks).Concat(TreeInitialSizeRules.Hooks).ToArray();
+    private static readonly int InitialSizeIndex = Array.FindIndex(Hooks, h => h.Id == "forest.initialHeight" && h.Kind == "initialTree");
+    public static bool IsPureKind(string kind) => kind is "site" or "competitionPair" or "competition" or "resource" or "regeneration" or "initialTree";
     public static bool AllowedOperation(BehaviorOperation op) => op is BehaviorOperation.Constant or BehaviorOperation.Input
         or BehaviorOperation.Add or BehaviorOperation.Subtract or BehaviorOperation.Multiply or BehaviorOperation.Divide
         or BehaviorOperation.Minimum or BehaviorOperation.Maximum or BehaviorOperation.Greater or BehaviorOperation.Less
-        or BehaviorOperation.Select or BehaviorOperation.Absolute or BehaviorOperation.Negate or BehaviorOperation.Exp or BehaviorOperation.Power;
+        or BehaviorOperation.Select or BehaviorOperation.Absolute or BehaviorOperation.Negate or BehaviorOperation.Exp or BehaviorOperation.Power or BehaviorOperation.Curve;
     public static BehaviorGraph DefaultGraph(BehaviorHook hook)
     {
+        if (hook.Kind == "initialTree") return TreeInitialSizeRules.DefaultGraph(hook);
         if (hook.Kind == "regeneration") return ForestRegenerationRules.DefaultGraph(hook);
         if (hook.Kind != "site") return ForestCompetitionRules.DefaultGraph(hook);
         string expression = hook.Id switch {
@@ -139,4 +141,18 @@ public sealed class EcologyResponseProgram
         v[18] = query.Radiation;
         return Evaluate(index);
     }
+    public (double Height, double Diameter, double CrownRadius) InitialSize(double age, double random, double scale, bool planted,
+        double matureAge, double matureHeight, double matureDiameter, double crownRatio)
+    {
+        // Hook order is fixed: height, then diameter, then crown; no recursive graph dependency.
+        int index = InitialSizeIndex;
+        var h = inputs[index]; h[0] = age; h[1] = random; h[2] = scale; h[3] = planted ? 1 : 0;
+        h[4] = matureAge; h[5] = matureHeight; h[6] = matureDiameter; h[7] = crownRatio;
+        double height = Evaluate(index);
+        var d = inputs[index + 1]; Array.Copy(h, d, h.Length); d[8] = height;
+        double diameter = Evaluate(index + 1);
+        var c = inputs[index + 2]; Array.Copy(d, c, d.Length); c[9] = diameter;
+        return (height, diameter, Evaluate(index + 2));
+    }
+
 }

@@ -27,6 +27,16 @@ namespace ForesTycoon.Editor
 
         internal RuleEditorView(string modelPath = null)
         {
+            foreach (var editor in new[] { behaviors, expressionEditor, dynamicsEditor.EquationEditor }) {
+                editor.EditCurve = (id, curve) => {
+                    bool finished = false;
+                    return CurveEditor(id, curve, "world", Array.Empty<string>(), ref finished, bindings: false);
+                };
+                editor.EditNumber = (label, value, set) => {
+                    bool finished = false;
+                    if (CurveNumber(label, ref value, Math.Min(0, value * 2), Math.Max(1, value * 2), ref finished)) set(value);
+                };
+            }
             if (modelPath == null) return;
             string path = Path.GetFullPath(modelPath);
             projectPath = RuleWorkshopModel.PublishedPath(path);

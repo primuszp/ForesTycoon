@@ -17,7 +17,13 @@ internal sealed partial class RuleEditorView
     private int selectedCalculation = -1;
     private readonly BehaviorEditorView expressionEditor = new();
     internal void ShowRuleCalculation(int index, int effect = -1) { ShowRuleBook(index); editRuleCalculation = true; selectedCalculation = effect; expressionKey = null; }
-    internal void ShowCommonRule(string key) { worldTab = WorldTab.Rules; commonSelection = key; ruleOverview = false; }
+    internal void ShowCommonRule(string key) { if (commonSelection != key) scrollRuleCard = true; worldTab = WorldTab.Rules; commonSelection = key; ruleOverview = false; }
+    internal void AddResponseCurve(string hook)
+    {
+        var graph = behaviors.Document.Graphs.Single(g => g.Hook == hook);
+        behaviors.SelectGraph(graph.Id); behaviors.AddOutputCurve();
+        ShowCommonRule("behavior:" + graph.Id); pendingCommonChange = true;
+    }
 
     private void DrawCommonRuleList(GameWorld world)
     {
@@ -25,7 +31,10 @@ internal sealed partial class RuleEditorView
             if (ImGui.Selectable(label + "##common-" + key, commonSelection == key)) ShowCommonRule(key);
         }
         var model = behaviors.Document;
-        foreach (var g in model.Graphs.Where(g => EcologyResponseProgram.IsPureKind(g.Kind))) Item("behavior:" + g.Id, g.Name);
+        foreach (var g in model.Graphs.Where(g => EcologyResponseProgram.IsPureKind(g.Kind)))
+            RuleCardEntry("behavior:" + g.Id, g.Name, "Értéket számol", commonSelection == "behavior:" + g.Id, !g.Disabled,
+                () => ShowCommonRule("behavior:" + g.Id), enabled => RequestResponseAvailability(g, enabled),
+                g.Disabled ? "Fix eredményt ad. Kattintás: az összefüggés visszakapcsolása." : "Kikapcsoláskor te választod ki a helyettesítő eredményt.");
         if (ImGui.Selectable("Szabálytár és sablonok", commonSelection == "library")) ShowCommonRule("library");
         if (ImGui.CollapsingHeader("Folyamatkapcsolatok"))
             foreach (var g in model.Graphs.Where(g => !EcologyResponseProgram.IsPureKind(g.Kind) && (!g.Hook.StartsWith("tuning.", StringComparison.Ordinal)
@@ -69,10 +78,17 @@ internal sealed partial class RuleEditorView
             var selected = behaviors.Document.Graphs.FirstOrDefault(g => g.Id == key[9..]);
             behaviors.SourceDisplay = field => FieldTitle(selected?.Kind ?? "world", field);
             behaviors.PickField = (label, current, choices, set) => ObjectFieldPicker(label, selected?.Kind ?? "world", current, choices, set);
+            if (selected != null) {
+                if (EcologyResponseProgram.IsPureKind(selected.Kind)) ResponseRuleCard(selected);
+                else ProcessRuleCard(selected);
+            }
             behaviors.DrawEmbedded(world);
         } else if (key.StartsWith("controller:", StringComparison.Ordinal)) {
             if (activeCommonKey != key) behaviors.SelectController(key[11..]); behaviors.DrawEmbedded(world);
-        } else dynamicsEditor.DrawSelected(world, key, world.ReadRuleValue, (label, current, choices, set) => ObjectFieldPicker(label, "world", current, choices, set));
+        } else {
+            dynamicsEditor.EquationEditor.SourceDisplay = field => FieldTitle("world", field);
+            dynamicsEditor.DrawSelected(world, key, world.ReadRuleValue, (label, current, choices, set) => ObjectFieldPicker(label, "world", current, choices, set));
+        }
         string after = new RuleProject { Behaviors = behaviors.Document, Dynamics = dynamicsEditor.Document }.ToJson();
         activeCommonKey = key;
         pendingCommonChange |= before != after;
@@ -103,6 +119,7 @@ internal sealed partial class RuleEditorView
     private void DrawRuleCalculation(GameWorld world, WorldRule rule)
     {
         ImGui.BeginChild("rule-calculation", Vec2.Zero, ImGuiChildFlags.Borders);
+        WorldRuleCard(world, rule);
         bool changed = false; string name = rule.Name;
         if (ImGui.InputText("Szabály neve", ref name, 120)) rule.Name = name; if (ImGui.IsItemDeactivatedAfterEdit()) { rule.Name = name; changed = true; }
         DrawSchedule(rule, ref changed); DrawCustomFields(world, rule.Scope);

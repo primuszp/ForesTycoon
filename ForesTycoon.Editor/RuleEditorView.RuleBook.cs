@@ -53,7 +53,7 @@ internal sealed partial class RuleEditorView
         rules.Add(starter); selectedBookRule = rules.Count - 1; selectedInfluence = selectedTerm = 0; commonSelection = null; editRuleCalculation = false; ruleOverview = false;
         ApplyRuleBook(world, starter.Name + ": hozzáadva a mintából.");
     }
-    internal void ShowRuleBook(int index = 0) { worldTab = WorldTab.Rules; commonSelection = null; selectedBookRule = index; editRuleCalculation = false; if (!projectInitialized) initialBookSelection = index; ruleOverview = false; }
+    internal void ShowRuleBook(int index = 0) { scrollRuleCard = true; worldTab = WorldTab.Rules; commonSelection = null; selectedBookRule = index; editRuleCalculation = false; if (!projectInitialized) initialBookSelection = index; ruleOverview = false; }
     private void RulesArea(GameWorld world) => RuleBookArea(world);
 
     /// <summary>Checks the whole book as the game will; on success the test world runs it at once.</summary>
@@ -77,15 +77,12 @@ internal sealed partial class RuleEditorView
         EditorStyle.Section("Szabályok");
         {
             for (int i = 0; i < rules.Count; i++) {
-                bool enabled = rules[i].Enabled;
-                if (ImGui.Checkbox("##on" + i, ref enabled)) { rules[i].Enabled = enabled; ApplyRuleBook(world, rules[i].Name + (enabled ? ": bekapcsolva." : ": kikapcsolva.")); }
-                if (ImGui.IsItemHovered()) ImGui.SetTooltip(enabled ? "Fut a játékban. Kattintás: kikapcsolás." : "Nem fut. Kattintás: bekapcsolás.");
-                ImGui.SameLine();
-                ImGui.PushStyleColor(ImGuiCol.Text, enabled ? HudTheme.Parchment : HudTheme.Muted);
-                if (ImGui.Selectable(rules[i].Name + "##rule" + i, selectedBookRule == i && commonSelection == null && !ruleOverview)) { selectedBookRule = i; commonSelection = null; editRuleCalculation = false; ruleOverview = false; }
-                ImGui.PopStyleColor();
-                if (ImGui.IsItemHovered()) ImGui.SetTooltip($"{ObjectDisplay(rules[i].Scope, rules[i].Scope)} · {rules[i].Effects.Count} hatás"
-                    + (rules[i].Template.Length > 0 ? "\nMintából készült; a mintára visszaállítható." : ""));
+                var entry = rules[i]; int index = i;
+                RuleCardEntry("rule:" + entry.Id, entry.Name, "Állapotot változtat",
+                    selectedBookRule == i && commonSelection == null && !ruleOverview, entry.Enabled,
+                    () => { selectedBookRule = index; commonSelection = null; editRuleCalculation = false; ruleOverview = false; },
+                    enabled => { entry.Enabled = enabled; ApplyRuleBook(world, entry.Name + (enabled ? ": bekapcsolva." : ": kikapcsolva.")); },
+                    "Kikapcsolva nem hajtja végre a hatásait. A korábbi változtatások és más szabályok hatásai megmaradnak.");
             }
             if (rules.Count == 0) EditorStyle.Text(HudTheme.Muted, "Nincs szabály. Az „+ Új szabály” üresen vagy mintából indít egyet.");
         }

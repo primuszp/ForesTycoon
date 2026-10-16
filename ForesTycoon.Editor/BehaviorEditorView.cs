@@ -19,6 +19,8 @@ namespace ForesTycoon.Editor
         internal Func<string, string, string[], Action<string>, bool> PickField { get; set; }
         internal Func<string, string> SourceDisplay { get; set; }
         internal Action<BehaviorGraph> StoreGraphTemplate { get; set; }
+        internal Func<string, RuleCurve, bool> EditCurve { get; set; }
+        internal Action<string, double, Action<double>> EditNumber { get; set; }
         internal Action<BehaviorController> StoreControllerTemplate { get; set; }
         internal void SelectGraph(string id) { selectedController = null; selectedGraph = id; selectedNode = model.Graphs.Find(g => g.Id == id)?.Output; }
         internal void RestoreDefault(string hook, string kind, ulong? id) {
@@ -78,8 +80,13 @@ namespace ForesTycoon.Editor
         internal void RequestTime(double seconds) => clock.RequestTime(seconds);
         private static readonly string[] Names = { "Állandó", "Beépített eredmény", "Időlépés", "Szimulációs idő", "Állapot", "Mennyiség",
             "Összeadás", "Kivonás", "Szorzás", "Osztás", "Minimum", "Maximum", "Nagyobb", "Kisebb", "Feltételes választás", "Abszolút érték", "Negálás",
-            "Kapacitás", "Elérhető készlet", "Kiinduló csempe", "Célcsempe", "Burkolattípus", "Készlet / világmező", "Objektum tulajdonsága", "Exponenciális válasz", "Hatvány / gyökválasz" };
+            "Kapacitás", "Elérhető készlet", "Kiinduló csempe", "Célcsempe", "Burkolattípus", "Készlet / világmező", "Objektum tulajdonsága", "Exponenciális válasz", "Hatvány / gyökválasz", "Görbe" };
         internal BehaviorModel Document => model.Clone();
+        internal void SetAvailability(string id, bool disabled, double? value = null)
+        {
+            var graph = model.Graphs.Single(g => g.Id == id); Remember();
+            graph.Disabled = disabled; if (value.HasValue) graph.DisabledValue = value.Value;
+        }
         internal string ScopeSummary {
             get {
                 var controller = model.Controllers.Find(c => c.Id == selectedController);
@@ -155,17 +162,28 @@ namespace ForesTycoon.Editor
                 ImGui.TextWrapped(EcologyResponseProgram.IsPureKind(graph.Kind)
                     ? "Te választod a forrásokat és a kapcsolatokat. Új csomópont: objektum tulajdonsága, majd objektum és mező választása. A pontokat összekötheted; a kimenet adja a játékban használt választ. Jobb gomb: mozgatás, görgő: nagyítás."
                     : "Kezdés: jelölj ki egy csomópontot, majd módosítsd jobb oldalt. A szorzó új, összekötött csomópontokat ad az eredményhez; 1 = változatlan, 1,1 = +10%, 0,9 = -10%, a szabály korlátain belül.");
-                if (ImGui.Button("Teljes gráf")) framedGraph = null;
+                if (ImGui.Button("Folyamatnézet")) { processLayout = true; fitGraphRequested = false; framedGraph = null; }
+                ImGui.SameLine();
+                if (ImGui.Button("Szabad elrendezés")) { processLayout = false; framedGraph = null; }
+                ImGui.SameLine();
+                if (ImGui.Button("Teljes gráf")) { fitGraphRequested = true; framedGraph = null; }
                 ImGui.SameLine();
                 ImGui.BeginDisabled(graph.Nodes.Count > 254 || !graph.Nodes.Any(n => n.Id == graph.Output));
-                if (ImGui.Button("Szorzó hozzáadása az eredményhez")) AddOutputMultiplier();
+                if (ImGui.Button("Hatás hozzáadása")) ImGui.OpenPopup("add-output-effect");
+                if (ImGui.BeginPopup("add-output-effect")) {
+                    if (ImGui.Selectable("Szorzó az eredményhez")) AddOutputMultiplier();
+                    if (ImGui.Selectable("Görbe az eredményhez")) AddOutputCurve();
+                    ImGui.EndPopup();
+                }
                 ImGui.EndDisabled();
             }
             float inspectorWidth = Math.Min(330, ImGui.GetContentRegionAvail().X * .42f);
             ImGui.BeginChild("embedded-behavior-canvas", new Vec2(-inspectorWidth - 8, 0), ImGuiChildFlags.Borders, ImGuiWindowFlags.NoScrollbar);
-            if (controller != null) ControllerCanvas(controller, world);
-            else if (graph != null) Canvas(graph);
-            else ImGui.TextWrapped("Válassz egy szabálykötést a szerkesztéshez.");
+            if (ImGui.GetContentRegionAvail().X > 0 && ImGui.GetContentRegionAvail().Y > 0) {
+                if (controller != null) ControllerCanvas(controller, world);
+                else if (graph != null) Canvas(graph);
+                else ImGui.TextWrapped("Válassz egy szabálykötést a szerkesztéshez.");
+            }
             ImGui.EndChild(); ImGui.SameLine();
             ImGui.BeginChild("embedded-behavior-inspector", new Vec2(0, 0), ImGuiChildFlags.Borders);
             if (controller != null) ControllerInspector(controller, world);
@@ -191,6 +209,16 @@ namespace ForesTycoon.Editor
             Remember();
             model.Graphs.RemoveAll(g => g.Hook == graph.Hook && g.Kind == graph.Kind && g.ObjectId == null);
             model.Graphs.Add(graph); selectedGraph = graph.Id; selectedNode = graph.Output;
+        }
+        internal void AddOutputCurve()
+        {
+            var graph = model.Graphs.Find(g => g.Id == selectedGraph);
+            if (graph == null || graph.Nodes.Count >= 256 || !graph.Nodes.Any(n => n.Id == graph.Output)) return;
+            Remember();
+            string id = "curve." + Guid.NewGuid().ToString("N")[..8];
+            graph.Nodes.Add(new() { Id = id, Name = "Válaszgörbe", Operation = BehaviorOperation.Curve,
+                Key = BehaviorCurves.Default, A = graph.Output, X = 260, Y = 40 });
+            selectedNode = graph.Output = id; framedGraph = null;
         }
         internal void AddOutputMultiplier()
         {
@@ -249,15 +277,48 @@ namespace ForesTycoon.Editor
             else if (selected != null) Inspector(world, selected);
             ImGui.EndChild();
         }
+        private bool processLayout = true;
+        // Layout is derived from the authored edges; it never introduces another rule model.
+        private static System.Collections.Generic.Dictionary<string, Vec2> ProcessPositions(BehaviorGraph graph)
+        {
+            var positions = new System.Collections.Generic.Dictionary<string, Vec2>();
+            var depths = new System.Collections.Generic.Dictionary<string, int>();
+            var visiting = new System.Collections.Generic.HashSet<string>();
+            int Depth(BehaviorNode node) {
+                if (depths.TryGetValue(node.Id, out int known)) return known;
+                if (!visiting.Add(node.Id)) return 0;
+                int depth = 0;
+                foreach (string id in new[] { node.A, node.B, node.C }.Take(BehaviorModel.Inputs(node.Operation))) {
+                    var input = graph.Nodes.Find(n => n.Id == id);
+                    if (input != null) depth = Math.Max(depth, Depth(input) + 1);
+                }
+                visiting.Remove(node.Id);
+                return depths[node.Id] = depth;
+            }
+            foreach (var node in graph.Nodes) Depth(node);
+            int resultColumn = Math.Max(2, depths.Values.DefaultIfEmpty(0).Max());
+            foreach (var column in graph.Nodes.GroupBy(n => n.Id == graph.Output ? resultColumn : depths[n.Id])) {
+                int row = 0;
+                foreach (var node in column) positions[node.Id] = new Vec2(column.Key * 238, 36 + row++ * 88);
+            }
+            return positions;
+        }
+        private bool fitGraphRequested;
         private string framedGraph;
         private void Canvas(BehaviorGraph graph)
         {
             var origin = ImGui.GetCursorScreenPos(); var size = ImGui.GetContentRegionAvail(); var io = ImGui.GetIO();
+            if (size.X <= 0 || size.Y <= 0) return; // A clipped/narrow child has no drawable canvas this frame.
+            var layout = processLayout ? ProcessPositions(graph) : null;
+            Vec2 Location(BehaviorNode node) => layout != null ? layout[node.Id] : new Vec2(node.X, node.Y);
+            const float nodeWidth = 174, nodeHeight = 70;
             if (framedGraph != graph.Id && graph.Nodes.Count > 0) {
-                float left = graph.Nodes.Min(n => n.X), top = graph.Nodes.Min(n => n.Y);
-                var bounds = new Vec2(graph.Nodes.Max(n => n.X) - left + 190, graph.Nodes.Max(n => n.Y) - top + 85);
-                zoom = Math.Clamp(Math.Min((size.X - 32) / bounds.X, (size.Y - 32) / bounds.Y), .15f, 1);
-                pan = (size - bounds * zoom) / 2 - new Vec2(left, top) * zoom; framedGraph = graph.Id;
+                float left = graph.Nodes.Min(n => Location(n).X), top = graph.Nodes.Min(n => Location(n).Y);
+                var bounds = new Vec2(graph.Nodes.Max(n => Location(n).X) - left + nodeWidth, graph.Nodes.Max(n => Location(n).Y) - top + nodeHeight);
+                float fitted = Math.Clamp(Math.Min((size.X - 32) / bounds.X, (size.Y - 32) / bounds.Y), .15f, 1);
+                zoom = fitGraphRequested || fitted >= .65f ? fitted : .85f;
+                pan = zoom > fitted ? new Vec2(16, 24) - new Vec2(left, top) * zoom : (size - bounds * zoom) / 2 - new Vec2(left, top) * zoom;
+                fitGraphRequested = false; framedGraph = graph.Id;
             }
             ImGui.InvisibleButton("behavior-map", size, ImGuiButtonFlags.MouseButtonLeft | ImGuiButtonFlags.MouseButtonRight);
             bool hover = ImGui.IsItemHovered();
@@ -266,45 +327,73 @@ namespace ForesTycoon.Editor
                 float next = Math.Clamp(zoom * (1 + io.MouseWheel * .1f), .15f, 1.8f);
                 pan = io.MousePos - origin - (io.MousePos - origin - pan) * next / zoom; zoom = next;
             }
-            EditorStyle.Grid(ImGui.GetWindowDrawList(), origin, size, pan, zoom);
+            ImGui.GetWindowDrawList().AddRectFilled(origin, origin + size, EditorStyle.Canvas, 5);
             var draw = ImGui.GetWindowDrawList(); draw.PushClipRect(origin, origin + size, true);
-            Vec2 Pos(BehaviorNode n) => origin + pan + new Vec2(n.X, n.Y) * zoom;
+            var connected = ResponseRuleDescription.ConnectedNodes(graph).Select(n => n.Id).ToHashSet();
+            Vec2 Pos(BehaviorNode n) => origin + pan + Location(n) * zoom;
+            if (processLayout && graph.Nodes.Count > 0) {
+                float right = layout.Values.Max(p => p.X);
+                foreach (var column in layout.Values.Select(p => p.X).Distinct()) {
+                    string title = column == 0 ? "FORRÁS" : column == right ? "EREDMÉNY" : "KAPCSOLAT · SZÁMÍTÁS";
+                    draw.AddText(origin + pan + new Vec2(column, 8) * zoom, EditorStyle.TextMuted, title);
+                }
+            }
             foreach (var n in graph.Nodes) {
                 string[] ports = { n.A, n.B, n.C };
                 for (int i = 0; i < BehaviorModel.Inputs(n.Operation); i++) {
                     var from = graph.Nodes.Find(x => x.Id == ports[i]); if (from == null) continue;
-                    Vec2 a = Pos(from) + new Vec2(190, 32) * zoom, b = Pos(n) + new Vec2(0, 32 + i * 14) * zoom;
-                    EditorStyle.BezierArrow(draw, a, a + new Vec2(60, 0) * zoom, b - new Vec2(60, 0) * zoom, b, 7 * zoom, EditorStyle.U(HudTheme.Info), 2, Vec2.UnitX);
+                    Vec2 a = Pos(from) + new Vec2(nodeWidth, 32) * zoom, b = Pos(n) + new Vec2(0, 32 + i * 14) * zoom;
+                    uint wire = EditorStyle.U(graph.Disabled || !connected.Contains(n.Id) ? HudTheme.Muted : from.Operation == BehaviorOperation.Input ? EditorStyle.InputKind : HudTheme.Good);
+                    EditorStyle.Wire(draw, a, b - new Vec2(6, 0) * zoom, wire, 1.8f * zoom, graph.Disabled || !connected.Contains(n.Id), EditorStyle.Canvas, zoom);
                 }
             }
             foreach (var n in graph.Nodes) {
-                Vec2 p = Pos(n), box = new Vec2(190, 85) * zoom;
+                Vec2 p = Pos(n), box = new Vec2(nodeWidth, nodeHeight) * zoom;
                 bool over = hover && io.MousePos.X >= p.X && io.MousePos.Y >= p.Y && io.MousePos.X <= p.X + box.X && io.MousePos.Y <= p.Y + box.Y;
                 bool portClicked = false;
-                Vec2 output = p + new Vec2(190, 32) * zoom;
-                draw.AddCircleFilled(output, 5 * zoom, EditorStyle.U(HudTheme.AmberAccent));
+                Vec2 output = p + new Vec2(nodeWidth, 32) * zoom;
+
                 if (hover && Vec2.Distance(io.MousePos, output) < 10 * zoom && ImGui.IsMouseClicked(ImGuiMouseButton.Left)) { linking = n.Id; portClicked = true; }
                 for (int port = 0; port < BehaviorModel.Inputs(n.Operation); port++) {
                     Vec2 input = p + new Vec2(0, 32 + port * 14) * zoom;
-                    draw.AddCircleFilled(input, 5 * zoom, EditorStyle.U(HudTheme.Info));
+
                     if (hover && linking != null && Vec2.Distance(io.MousePos, input) < 10 * zoom && ImGui.IsMouseClicked(ImGuiMouseButton.Left)) {
                         Remember(); if (port == 0) n.A = linking; else if (port == 1) n.B = linking; else n.C = linking;
                         linking = null; portClicked = true;
                     }
                 }
                 if (over && !portClicked && ImGui.IsMouseClicked(ImGuiMouseButton.Left)) { Remember(); selectedNode = dragging = n.Id; }
-                if (dragging == n.Id && ImGui.IsMouseDragging(ImGuiMouseButton.Left)) { n.X += io.MouseDelta.X / zoom; n.Y += io.MouseDelta.Y / zoom; }
-                draw.AddRectFilled(p, p + box, EditorStyle.NodeBodyHover, 5);
-                draw.AddRect(p, p + box, n.Id == selectedNode ? EditorStyle.Selection : EditorStyle.U(HudTheme.Muted), 5);
-                draw.PushClipRect(p + new Vec2(6, 4), p + box - new Vec2(6, 4), true);
-                draw.AddText(ImGui.GetFont(), ImGui.GetFontSize() * zoom, p + new Vec2(8, 8) * zoom, EditorStyle.U(HudTheme.Parchment), n.Operation is BehaviorOperation.Input or BehaviorOperation.NamedValue ? SourceDisplay?.Invoke(n.Key) ?? n.Name : n.Name);
-                draw.AddText(ImGui.GetFont(), ImGui.GetFontSize() * zoom, p + new Vec2(8, 32) * zoom, EditorStyle.U(HudTheme.Info), Names[(int)n.Operation]);
-                draw.AddText(ImGui.GetFont(), ImGui.GetFontSize() * zoom, p + new Vec2(8, 57) * zoom, EditorStyle.U(HudTheme.AmberAccent),
-                    graph.Output == n.Id ? "KIMENET" : n.Operation == BehaviorOperation.Constant ? n.Value.ToString("G5") : n.Id);
-                draw.PopClipRect();
+                if (dragging == n.Id && ImGui.IsMouseDragging(ImGuiMouseButton.Left)) {
+                    if (processLayout) {
+                        foreach (var item in graph.Nodes) { item.X = layout[item.Id].X; item.Y = layout[item.Id].Y; }
+                        processLayout = false;
+                    }
+                    n.X += io.MouseDelta.X / zoom; n.Y += io.MouseDelta.Y / zoom;
+                }
+                bool result = graph.Output == n.Id;
+                bool inactive = graph.Disabled || !connected.Contains(n.Id);
+                bool sourceNode = BehaviorModel.Inputs(n.Operation) == 0 && n.Operation != BehaviorOperation.Constant;
+                uint tone = inactive ? EditorStyle.TextMuted : result ? EditorStyle.Selection
+                    : sourceNode ? EditorStyle.U(EditorStyle.InputKind) : EditorStyle.GridMajor;
+                string source = n.Operation is BehaviorOperation.Input or BehaviorOperation.NamedValue ? SourceDisplay?.Invoke(n.Key) ?? n.Name : null;
+                string head = source == null ? result ? graph.Name : n.Operation == BehaviorOperation.Constant ? "Állandó érték" : n.Name : source.Split(" · ")[0];
+                string middle = source == null ? n.Operation == BehaviorOperation.Constant ? n.Value.ToString("G5") : n.Operation == BehaviorOperation.Curve && RuleCurve.TryParse(n.Key, out var shape) ? RuleCurve.Find(shape.Family)?.Name ?? "Görbe" : Names[(int)n.Operation]
+                    : source.Contains(" · ") ? source[(source.IndexOf(" · ", StringComparison.Ordinal) + 3)..] : source;
+                if (result && graph.Disabled) middle = "Fix érték: " + (graph.DisabledValue ?? 0).ToString("G5");
+                string bottom = result ? graph.Disabled ? "FIX EREDMÉNY" : "EREDMÉNY" : sourceNode ? connected.Contains(n.Id) ? "Forrás" : "Nincs bekötve" : "Számítás";
+                EditorStyle.GraphBox(draw, p, box, n.Id == selectedNode ? EditorStyle.Selection : tone,
+                    head, source != null ? EditorStyle.TextMuted : EditorStyle.TextBright, middle,
+                    source != null ? EditorStyle.TextBright : EditorStyle.U(inactive ? HudTheme.Muted : HudTheme.Good),
+                    bottom, inactive ? EditorStyle.TextMuted : result ? EditorStyle.Selection : source != null ? EditorStyle.U(EditorStyle.InputKind) : EditorStyle.TextMuted, over || n.Id == selectedNode, zoom);
+                uint portTone = inactive ? EditorStyle.TextMuted : result ? EditorStyle.Selection : source != null ? EditorStyle.U(EditorStyle.InputKind) : EditorStyle.TextBright;
+                EditorStyle.Port(draw, output, portTone, graph.Nodes.Any(o => o.A == n.Id || o.B == n.Id || o.C == n.Id), zoom);
+                for (int port = 0; port < BehaviorModel.Inputs(n.Operation); port++)
+                    EditorStyle.Port(draw, p + new Vec2(0, 32 + port * 14) * zoom, portTone, true, zoom);
+                if (over) ImGui.SetTooltip(source ?? n.Name);
+
             }
             var linkFrom = graph.Nodes.Find(n => n.Id == linking);
-            if (linkFrom != null) draw.AddLine(Pos(linkFrom) + new Vec2(190, 32) * zoom, io.MousePos, EditorStyle.U(HudTheme.Info), 2);
+            if (linkFrom != null) draw.AddLine(Pos(linkFrom) + new Vec2(nodeWidth, 32) * zoom, io.MousePos, EditorStyle.U(HudTheme.Info), 2);
             if (ImGui.IsKeyPressed(ImGuiKey.Escape) || ImGui.IsMouseClicked(ImGuiMouseButton.Right)) linking = null;
             if (!ImGui.IsMouseDown(ImGuiMouseButton.Left)) dragging = null;
             draw.PopClipRect();
@@ -339,20 +428,30 @@ namespace ForesTycoon.Editor
                     if (ImGui.Selectable(Names[(int)op])) {
                         Remember(); string id = Guid.NewGuid().ToString("N")[..8];
                         graph.Nodes.Add(new() { Id = id, Name = Names[(int)op], Operation = op, Value = 1,
-                            A = graph.Output, B = graph.Output, C = graph.Output, X = 260, Y = 40 + graph.Nodes.Count * 30 }); selectedNode = id;
+                            A = graph.Output, B = graph.Output, C = graph.Output, Key = op == BehaviorOperation.Curve ? BehaviorCurves.Default : "", X = 260, Y = 40 + graph.Nodes.Count * 30 }); selectedNode = id;
                     }
                 ImGui.EndCombo();
             }
             SelectPort("Kimenet", graph.Output, graph, value => graph.Output = value);
             var node = graph.Nodes.Find(n => n.Id == selectedNode);
             if (node != null) {
-                ImGui.TextUnformatted(node.Id); string nodeName = node.Name;
+                string nodeName = node.Name;
                 if (ImGui.InputText("Csomópont neve", ref nodeName, 120)) { Remember(); node.Name = nodeName; }
                 if (node.Operation == BehaviorOperation.Constant) {
+                    if (EditNumber != null) EditNumber("Érték", node.Value, value => { Remember(); node.Value = value; });
+                    else {
                     double value = node.Value;
                     if (ImGui.InputDouble("Érték", ref value, 0, 0, "%.12g")) { Remember(); node.Value = value; }
                     float slide = (float)value;
                     if (ImGui.SliderFloat("Érték csúszkával", ref slide, (float)Math.Min(0, value * 2), (float)Math.Max(1, value * 2), "%.4g")) { Remember(); node.Value = slide; }
+                    }
+                }
+                if (node.Operation == BehaviorOperation.Curve) {
+                    try {
+                        var curve = BehaviorCurves.Read(node.Key);
+                        if (EditCurve != null && EditCurve("node-curve-" + node.Id, curve)) { Remember(); node.Key = curve.ToFormula(); }
+                        else if (EditCurve == null) ImGui.TextWrapped("A görbét a közös Szabályok felületen szerkesztheted.");
+                    } catch (System.IO.InvalidDataException e) { ImGui.TextWrapped(e.Message); }
                 }
                 if (node.Operation == BehaviorOperation.Input) {
                     var fields = hook.Inputs ?? Array.Empty<string>();
@@ -371,9 +470,9 @@ namespace ForesTycoon.Editor
                     }
                 }
                 int count = BehaviorModel.Inputs(node.Operation);
-                if (count > 0) SelectPort("A / feltétel", node.A, graph, value => node.A = value);
-                if (count > 1) SelectPort("B / igaz", node.B, graph, value => node.B = value);
-                if (count > 2) SelectPort("C / hamis", node.C, graph, value => node.C = value);
+                if (count > 0) SelectPort(node.Operation == BehaviorOperation.Select ? "Feltétel" : "Első bemenet", node.A, graph, value => node.A = value);
+                if (count > 1) SelectPort(node.Operation == BehaviorOperation.Select ? "Ha igaz" : "Második bemenet", node.B, graph, value => node.B = value);
+                if (count > 2) SelectPort("Ha hamis", node.C, graph, value => node.C = value);
                 if (ImGui.Button("Csomópont törlése")) { Remember(); graph.Nodes.Remove(node); selectedNode = null; }
             }
             ImGui.Separator(); ImGui.TextUnformatted("Próbaszámítás");

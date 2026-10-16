@@ -162,6 +162,9 @@ namespace ForesTycoon
             }
             Add("forest.initial", "Induló erdő eloszlása", "Erdő", "Térképcella / egyed", "Új világ", forest, "GenerateInitialForest",
                 "world.seed|terrain.height|terrain.moisture|soil.profile|forest.species", "forest.trees", "Termőhelyből és seedből induló természetes vagy választott erdőminta; egyedi életkor, méret, hely és változatosság.");
+            Add("forest.initialSize", "Fák kezdő méretgörbéi", "Erdő", "Új faegyed", "Minden fa létrehozásakor",
+                "ForesTycoon.Rules/TreeInitialSizeRules.cs", "DefaultGraph", "forest.species|forest.trees|world.seed", "forest.trees",
+                "A projekt három gráfja adja az új fa magasságát, törzsátmérőjét és koronasugarát. Ugyanez fut a generálás, erdőfestés, ültetés és természetes újulat során, egyedenként szeletelve.", execution: GameRuleExecution.EditableGraph);
             Add("forest.site", "Termőhelyi alkalmasság", "Erdő", "Cella / fafaj", "Generálás, fajajánló, telepítés és rátafrissítés", "ForesTycoon.Rules/EcologyResponseProgram.cs", "Fitness",
                 "terrain.height|soil.fertility|forest.species", "forest.fitness", "Egy közös projektgráf adja a fafaj termőhelyi alkalmasságát minden hívónak. A nedvesség is beköthető; az alapgráf a termékenységet és a faj magasságigényét használja.", execution: GameRuleExecution.EditableGraph);
             Add("forest.competition", "Fény- és koronatér-versengés", "Erdő", "Faegyed és két szomszédsági gyűrű",
