@@ -510,3 +510,12 @@ A felső Vissza / Újra a folyamatkapcsolatokat, munkaciklusokat, készleteket
 és áramlásokat is a szabályokkal együtt őrzi. A jelenet mentése és alkalmazása
 minden fenti adatot egyetlen projektként kezel. Részletek:
 [fanövekedés és ellenőrzés](tree-growth-rules.md).
+
+## Termőhely és vízstressz – 2026-10-16
+
+A Szabályok közös listájában közvetlenül választható a Termőhelyi alkalmasság,
+Fafaj vízválasza, Aszály követése és Pangóvíz követése. A kapcsolatok és
+műveletek számítási gráfként szerkeszthetők, képletírás nélkül. A forrásválasztó
+Csempe / Fafaj / Időlépés objektumot és azon belül felderített nevű mezőt kínál;
+a teljes hálót a Teljes gráf gomb mutatja meg. A játék ezeket a gráfokat futtatja,
+a korábbi natív számítások törölve. Részletek: [termőhely és vízstressz](site-water-response-rules.md).

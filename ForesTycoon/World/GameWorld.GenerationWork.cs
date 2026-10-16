@@ -117,8 +117,11 @@ sealed partial class GameWorld
         var terrainResult = new WorkResult<TerrainMap>();
         foreach (int unit in TerrainMap.CreateWork(settings, terrainResult)) yield return unit;
         GenerationStage = "Talaj, erdő és környezet";
+        var preparingResponses = Task.Run(() => ForesTycoon.Rules.EcologyResponseProgram.FromModel(project?.Behaviors ?? WorldBehaviorPolicy.DefaultDocument()));
+        while (!preparingResponses.IsCompleted) yield return 64;
+        var responses = preparingResponses.GetAwaiter().GetResult();
         var ecologyResult = new WorkResult<Ecosystem>();
-        foreach (int unit in Ecosystem.CreateWork(terrainResult.Value, yearSeconds, soils, climate, ecologyResult)) yield return unit;
+        foreach (int unit in Ecosystem.CreateWork(terrainResult.Value, yearSeconds, soils, climate, ecologyResult, responses)) yield return unit;
         using var candidate = new GameWorld(terrainResult.Value, Graphics, yearSeconds, soils, climate, false, ecologyResult.Value, deferRules: true);
         GenerationStage = "Szabályok előkészítése";
         foreach (int unit in candidate.ApplyRuleProjectWork(DefaultRuleProject())) yield return unit;

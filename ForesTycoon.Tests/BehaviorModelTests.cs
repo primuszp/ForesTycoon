@@ -26,7 +26,7 @@ public class BehaviorModelTests
     [Fact]
     public void ConditionalGraphUsesLiveInputsAndOutputBounds()
     {
-        var graph = Constant("water.stress", "tile", 2);
+        var graph = Constant("trail.trafficability", "tile", 2);
         graph.Nodes.AddRange(new BehaviorNode[] {
             new() { Id = "health", Name = "Health", Operation = BehaviorOperation.State },
             new() { Id = "threshold", Name = "Threshold", Operation = BehaviorOperation.Constant, Value = .5 },
@@ -130,7 +130,7 @@ public class BehaviorModelTests
         Assert.Equal(forestBefore, System.Text.Json.JsonSerializer.Serialize(world.CaptureCheckpoint().Ecology.Forest));
         Assert.Equal(1.2, world.Tuning[Tune.DieselPrice]);
         using var save = new MemoryStream(); world.Save(save); save.Position = 0; restored.Load(save);
-        Assert.Equal(model.ToJson(), restored.BehaviorDocument.ToJson());
+        Assert.Equal(new WorldBehaviorPolicy(model).Document.ToJson(), restored.BehaviorDocument.ToJson());
         Assert.Equal(1.2, restored.Tuning[Tune.DieselPrice]);
         world.Update(.5); restored.Update(.5);
         Assert.Equal(System.Text.Json.JsonSerializer.Serialize(world.CaptureCheckpoint()), System.Text.Json.JsonSerializer.Serialize(restored.CaptureCheckpoint()));

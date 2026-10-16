@@ -25,10 +25,11 @@ internal sealed partial class RuleEditorView
             if (ImGui.Selectable(label + "##common-" + key, commonSelection == key)) ShowCommonRule(key);
         }
         var model = behaviors.Document;
+        foreach (var g in model.Graphs.Where(g => g.Kind == "site")) Item("behavior:" + g.Id, g.Name);
         if (ImGui.Selectable("Szabálytár és sablonok", commonSelection == "library")) ShowCommonRule("library");
         if (ImGui.CollapsingHeader("Folyamatkapcsolatok"))
-            foreach (var g in model.Graphs.Where(g => !g.Hook.StartsWith("tuning.", StringComparison.Ordinal)
-                || g.Nodes.Any(n => n.Operation != BehaviorOperation.Native))) Item("behavior:" + g.Id, g.Name);
+            foreach (var g in model.Graphs.Where(g => g.Kind != "site" && (!g.Hook.StartsWith("tuning.", StringComparison.Ordinal)
+                || g.Nodes.Any(n => n.Operation != BehaviorOperation.Native)))) Item("behavior:" + g.Id, g.Name);
         if (ImGui.CollapsingHeader("Gépek munkaciklusai")) {
             foreach (var c in model.Controllers) Item("controllerId:" + c.Id, c.Name + (c.ObjectId.HasValue ? " · #" + c.ObjectId : ""));
             foreach (string kind in new[] { "forwarder", "processor", "truck" })

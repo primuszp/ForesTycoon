@@ -143,10 +143,9 @@ namespace ForesTycoon
                 "water.surface|terrain.height|terrain.outlets", "water.surface",
                 "Áramlás a vízszint szerint az alacsonyabb szomszédokra, az eséssel arányosan; a pálya szélén és az állóvizekben kifolyik. A térfogat megmarad.",
                 "lefolyás = 15 × esés mm/óra, lejtés szerint elosztva", GameRuleExecution.EditableGraph);
-            Add("water.stress", "Aszály, víztöbblet és havi vízválasz", "Vízháztartás", "Cellánként / fafajonként", "Környezeti lépés + erdőhónap", water, "WaterResponse",
+            Add("water.stress", "Aszály, víztöbblet és havi vízválasz", "Vízháztartás", "Cellánként / fafajonként", "Környezeti lépés + erdőhónap", "ForesTycoon.Rules/EcologyResponseProgram.cs", "WaterFactor",
                 "water.root|water.monthBudget|soil.profile|forest.species", "water.growthFactor",
-                "A növekedési vízellátás a gyökérzóna pillanatnyi vízellátottsága, a víztöbblet a havi átlagos pangóvíz. Fafajfüggő szárazságérzékenység. Képletként felülírható; származtatott érték, ezért nem áramlásszabály.",
-                "vízválasz = clamp(ellátottság ^ szárazságérzékenység × (1 - víztöbblet × 0,65), 0, 1)");
+                "A projekt gráfjai számolják az aszály és a pangóvíz simítását, valamint a fafaj pillanatnyi és havi vízválaszát. A havi integrál csak a kiválasztott állapot időátlagát gyűjti.", execution: GameRuleExecution.EditableGraph);
             Add("water.balance", "Vízmérleg és havi integrálzárás", "Vízháztartás", "Világ / cella", "Összegzés; hónapzárás", water, "BalanceError",
                 "water.canopy|water.surface|water.root|water.deep|water.snow|weather.rain|weather.snowfall|water.evaporated|water.transpired|water.outflow|forest.month", "water.balance|water.monthBudget",
                 "A szabályok minden áramlását könyveli: ami egy készletbe kívülről érkezik vagy onnan kilép, a szabálycsere része; a havi integrálok a hónap végén törlődnek.", "mérleghiba = tárolt víz (hóval együtt) - (induló víz + szabályok cseréje + korábbi natív tételek)");
@@ -163,8 +162,8 @@ namespace ForesTycoon
             }
             Add("forest.initial", "Induló erdő eloszlása", "Erdő", "Térképcella / egyed", "Új világ", forest, "GenerateInitialForest",
                 "world.seed|terrain.height|terrain.moisture|soil.profile|forest.species", "forest.trees", "Termőhelyből és seedből induló természetes vagy választott erdőminta; egyedi életkor, méret, hely és változatosság.");
-            Add("forest.site", "Termőhelyi alkalmasság", "Erdő", "Cella / fafaj", "Telepítés és rátafrissítés", forest, "Suitability",
-                "terrain.height|soil.fertility|forest.species", "forest.fitness", "Bekötött környezet mellett a talajtermékenység és fajfüggő magassági alkalmasság adja a termőhelyet. A nedvesség külön vízválaszon keresztül hat; környezet nélküli régi tesztmódban a Fitness nedvességet is olvas.", "alkalmasság = termékenység × (0,45 + magassági alkalmasság × 0,55)");
+            Add("forest.site", "Termőhelyi alkalmasság", "Erdő", "Cella / fafaj", "Generálás, fajajánló, telepítés és rátafrissítés", "ForesTycoon.Rules/EcologyResponseProgram.cs", "Fitness",
+                "terrain.height|soil.fertility|forest.species", "forest.fitness", "Egy közös projektgráf adja a fafaj termőhelyi alkalmasságát minden hívónak. A nedvesség is beköthető; az alapgráf a termékenységet és a faj magasságigényét használja.", execution: GameRuleExecution.EditableGraph);
             Add("forest.competition", "Fény- és koronatér-versengés", "Erdő", "Faegyed és két szomszédsági gyűrű",
                 "Havi előkészítés / helyi beavatkozás", "ForesTycoon.Ecology/Forest/ForestCompetition.cs", "Evaluate",
                 "forest.trees|weather.forcing|water.growthFactor|forest.species", "forest.resources",

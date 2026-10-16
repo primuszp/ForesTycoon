@@ -58,7 +58,6 @@ public static class RuleFormula
     private static readonly Dictionary<string, (string State, string Amount)> Preferred = new() {
         ["trail.trafficability"] = ("átnedvesedés", "talaj.teherbírás"),
         ["road.weather"] = ("útállapot", "csapadék"),
-        ["water.stress"] = ("vízellátottság", "pangóvíz"),
     };
 
     private static string InputHelp(string name) => name switch {
@@ -70,7 +69,6 @@ public static class RuleFormula
         "talaj.drénezés" => "A talajtípus drénezése (mm/óra).",
         "lombborítás" => "A csempe lombborítása (0–1).",
         "burkolt" => "1, ha a csempe burkolt (út, épület); különben 0.",
-        "faj.szárazságérzékenység" => "A fafaj szárazságérzékenysége (a vízválasz kitevője).",
         _ => "A szabály bemenete."
     };
 

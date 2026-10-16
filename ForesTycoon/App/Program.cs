@@ -6,6 +6,7 @@ namespace ForesTycoon
     {
         static void Main(string[] args)
         {
+            if (args.Length == 1 && args[0] == "--site-response-benchmark") { RuleStepBenchmark.Run(64, 256); return; }
             if (args.Length == 1 && args[0] == "--tree-vitality-benchmark") { TreeVitalityBenchmark.Run(); return; }
             if (args.Length == 1 && args[0] == "--traffic-benchmark") { TrafficRuleBenchmark.Run(); return; }
             if (args.Length == 2 && args[0] == "--record-opening-reference") {
@@ -13,6 +14,9 @@ namespace ForesTycoon
                 System.IO.Directory.CreateDirectory(args[1]);
                 System.IO.File.WriteAllText(System.IO.Path.Combine(args[1], "fingerprints.json"),
                     System.Text.Json.JsonSerializer.Serialize(OpeningSceneReference.Fingerprints(reference), new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+                System.IO.File.WriteAllText(System.IO.Path.Combine(args[1], "catalog.json"), CurrentGameRules.Build().ToJson());
+                var project = reference.RuleProjectDocument; project.World = WorldLoader.CaptureScenario(reference);
+                System.IO.File.WriteAllText(System.IO.Path.Combine(args[1], "opening.project.json"), project.ToJson());
                 using var save = System.IO.File.Create(System.IO.Path.Combine(args[1], "opening.world.json.gz"));
                 using var compressed = new System.IO.Compression.GZipStream(save, System.IO.Compression.CompressionLevel.Optimal);
                 reference.Save(compressed);

@@ -146,3 +146,16 @@ le a növekedési gráf. Az évszakválasz a projekt szerkeszthető, kilencponto
 görbéje. Az előkészített geometria már nem tárol natív növekedési képlettagokat.
 A terep, logisztika, grafika és minden más lenyomat egyezik. A szállított
 jelenet küldetéseit, szerkesztett pályáját megőriztük.
+
+## Tizenharmadik lépés: termőhely és vízstressz gráfok – 2026-10-16
+
+Az alkalmasság, fafajfüggő vízválasz, aszály- és pangóvízsimítás szerkeszthető
+projektgráfból fut. A natív Fitness és WaterResponse, a külön fajajánló-szorzó
+és a régi `water.stress / tile` felülírás törölve. A futtató
+`forestycoon-simulation/2026-10-16.6`; nincs régi szabályátvezető betöltési ág.
+
+A külön könyvtárba újrarögzített referencia összevetése alapján csak az
+`Ecology` és `Behaviors` változott. A kezdeti alkalmasság is a közös gráfból
+származik, ezért a korábbi, nedvességet külön beszorzó induló egészség eltér.
+A terep, a logisztika, a grafika és minden más lenyomat egyezik. A projekt
+saját küldetéseit és szerkesztett pályáját megőriztük.

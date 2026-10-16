@@ -998,9 +998,9 @@
       "module": "V\u00EDzh\u00E1ztart\u00E1s",
       "scope": "Cell\u00E1nk\u00E9nt / fafajonk\u00E9nt",
       "schedule": "K\u00F6rnyezeti l\u00E9p\u00E9s \u002B erd\u0151h\u00F3nap",
-      "execution": "NativeCode",
-      "description": "A n\u00F6veked\u00E9si v\u00EDzell\u00E1t\u00E1s a gy\u00F6k\u00E9rz\u00F3na pillanatnyi v\u00EDzell\u00E1totts\u00E1ga, a v\u00EDzt\u00F6bblet a havi \u00E1tlagos pang\u00F3v\u00EDz. Fafajf\u00FCgg\u0151 sz\u00E1razs\u00E1g\u00E9rz\u00E9kenys\u00E9g. K\u00E9pletk\u00E9nt fel\u00FCl\u00EDrhat\u00F3; sz\u00E1rmaztatott \u00E9rt\u00E9k, ez\u00E9rt nem \u00E1raml\u00E1sszab\u00E1ly.",
-      "formula": "v\u00EDzv\u00E1lasz = clamp(ell\u00E1totts\u00E1g ^ sz\u00E1razs\u00E1g\u00E9rz\u00E9kenys\u00E9g \u00D7 (1 - v\u00EDzt\u00F6bblet \u00D7 0,65), 0, 1)",
+      "execution": "EditableGraph",
+      "description": "A projekt gr\u00E1fjai sz\u00E1molj\u00E1k az asz\u00E1ly \u00E9s a pang\u00F3v\u00EDz sim\u00EDt\u00E1s\u00E1t, valamint a fafaj pillanatnyi \u00E9s havi v\u00EDzv\u00E1lasz\u00E1t. A havi integr\u00E1l csak a kiv\u00E1lasztott \u00E1llapot id\u0151\u00E1tlag\u00E1t gy\u0171jti.",
+      "formula": "",
       "notes": "",
       "reads": [
         "water.root",
@@ -1014,8 +1014,8 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon.Ecology/Water/EnvironmentSystem.cs",
-          "symbol": "WaterResponse"
+          "file": "ForesTycoon.Rules/EcologyResponseProgram.cs",
+          "symbol": "WaterFactor"
         }
       ],
       "parameters": [],
@@ -1983,23 +1983,24 @@
       "name": "Term\u0151helyi alkalmass\u00E1g",
       "module": "Erd\u0151",
       "scope": "Cella / fafaj",
-      "schedule": "Telep\u00EDt\u00E9s \u00E9s r\u00E1tafriss\u00EDt\u00E9s",
-      "execution": "NativeCode",
-      "description": "Bek\u00F6t\u00F6tt k\u00F6rnyezet mellett a talajterm\u00E9kenys\u00E9g \u00E9s fajf\u00FCgg\u0151 magass\u00E1gi alkalmass\u00E1g adja a term\u0151helyet. A nedvess\u00E9g k\u00FCl\u00F6n v\u00EDzv\u00E1laszon kereszt\u00FCl hat; k\u00F6rnyezet n\u00E9lk\u00FCli r\u00E9gi tesztm\u00F3dban a Fitness nedvess\u00E9get is olvas.",
-      "formula": "alkalmass\u00E1g = term\u00E9kenys\u00E9g \u00D7 (0,45 \u002B magass\u00E1gi alkalmass\u00E1g \u00D7 0,55)",
+      "schedule": "Gener\u00E1l\u00E1s, fajaj\u00E1nl\u00F3, telep\u00EDt\u00E9s \u00E9s r\u00E1tafriss\u00EDt\u00E9s",
+      "execution": "EditableGraph",
+      "description": "Egy k\u00F6z\u00F6s projektgr\u00E1f adja a fafaj term\u0151helyi alkalmass\u00E1g\u00E1t minden h\u00EDv\u00F3nak. A nedvess\u00E9g is bek\u00F6thet\u0151; az alapgr\u00E1f a term\u00E9kenys\u00E9get \u00E9s a faj magass\u00E1gig\u00E9ny\u00E9t haszn\u00E1lja.",
+      "formula": "",
       "notes": "",
       "reads": [
         "terrain.height",
         "soil.fertility",
-        "forest.species"
+        "forest.species",
+        "rules.behaviors"
       ],
       "writes": [
         "forest.fitness"
       ],
       "sources": [
         {
-          "file": "ForesTycoon.Ecology/Forest/ForestSystem.cs",
-          "symbol": "Suitability"
+          "file": "ForesTycoon.Rules/EcologyResponseProgram.cs",
+          "symbol": "Fitness"
         }
       ],
       "parameters": [],

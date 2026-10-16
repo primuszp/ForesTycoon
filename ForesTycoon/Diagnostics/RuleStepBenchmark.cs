@@ -9,9 +9,9 @@ namespace ForesTycoon
     // No window/GPU: the measured scope is simulation CPU work, not total displayed frame time.
     internal static class RuleStepBenchmark
     {
-        internal static void Run()
+        internal static void Run(params int[] sizes)
         {
-            foreach (int size in new[] { 64, 128 })
+            foreach (int size in sizes.Length == 0 ? new[] { 64, 128 } : sizes)
                 foreach (var weather in new[] { WeatherPreset.Rain, WeatherPreset.Snow }) RunCase(size, weather);
         }
 

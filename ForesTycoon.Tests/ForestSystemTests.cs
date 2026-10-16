@@ -156,21 +156,21 @@ public class ForestSystemTests
     [Fact]
     public void Fitness_RanksSpeciesByHowWellTheSiteMatchesThem()
     {
-        // Wet, high ground is spruce country; dry lowland belongs to oak.
-        Assert.True(ForestSystem.Fitness(ForestSpecies.Spruce, 0.78f, 0.74f)
-            > ForestSystem.Fitness(ForestSpecies.Oak, 0.78f, 0.74f));
-        Assert.True(ForestSystem.Fitness(ForestSpecies.Oak, 0.50f, 0.30f)
-            > ForestSystem.Fitness(ForestSpecies.Spruce, 0.50f, 0.30f));
+        // The shipped site graph follows elevation and fertility; moisture may be connected by the author.
+        Assert.True(ProjectGrowthFixture.Fitness(ForestSpecies.Spruce, 0.78f, 0.74f)
+            > ProjectGrowthFixture.Fitness(ForestSpecies.Oak, 0.78f, 0.74f));
+        Assert.True(ProjectGrowthFixture.Fitness(ForestSpecies.Oak, 0.50f, 0.30f)
+            > ProjectGrowthFixture.Fitness(ForestSpecies.Spruce, 0.50f, 0.30f));
     }
 
     [Fact]
     public void Fitness_PenalisesTheWrongElevationOnOtherwisePerfectSoil()
     {
-        float onSlope = ForestSystem.Fitness(ForestSpecies.Spruce, 0.76f, 0.72f);
-        float inValley = ForestSystem.Fitness(ForestSpecies.Spruce, 0.76f, 0.00f);
+        float onSlope = ProjectGrowthFixture.Fitness(ForestSpecies.Spruce, 0.76f, 0.72f);
+        float inValley = ProjectGrowthFixture.Fitness(ForestSpecies.Spruce, 0.76f, 0.00f);
 
         Assert.True(onSlope > inValley);
-        Assert.True(inValley > 0f, "Moisture must still carry a site the species can otherwise use.");
+        Assert.True(inValley > 0f, "The default elevation response keeps a positive baseline on fertile soil.");
     }
 
     [Fact]

@@ -163,13 +163,13 @@ public class BehaviorControllerTests
         using var pending = new MemoryStream(); world.Save(pending); pending.Position = 0; restored.Load(pending);
         Assert.Equal(5, restored.BehaviorDocument.Controllers[0].States[0].Transitions[0].Conditions[0].Value);
         restored.ExecutePendingCommands(); world.ExecutePendingCommands();
-        Assert.Equal(model.ToJson(), restored.BehaviorDocument.ToJson());
+        Assert.Equal(new WorldBehaviorPolicy(model).Document.ToJson(), restored.BehaviorDocument.ToJson());
         using var saved = new MemoryStream(); world.Save(saved); saved.Position = 0; var data = WorldSaveSerializer.Read(saved);
         using var journal = new MemoryStream();
         WorldSaveSerializer.Write(journal, new WorldSaveData { Terrain = data.Terrain, SoilModel = data.SoilModel, Climate = data.Climate,
             Tick = data.Tick, TickRate = data.TickRate, ForestYearSeconds = data.ForestYearSeconds, Commands = data.Commands });
         journal.Position = 0; restored.Load(journal);
-        Assert.Equal(model.ToJson(), restored.BehaviorDocument.ToJson());
+        Assert.Equal(new WorldBehaviorPolicy(model).Document.ToJson(), restored.BehaviorDocument.ToJson());
         Assert.Equal(JsonSerializer.Serialize(world.CaptureCheckpoint()), JsonSerializer.Serialize(restored.CaptureCheckpoint()));
     }
     [Fact]

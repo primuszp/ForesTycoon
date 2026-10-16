@@ -102,7 +102,7 @@ public class ForestManagementSurveyTests
     [Fact]
     public void RecommendationsAreRankedPlayableTrees()
     {
-        var ranked = ForestManagementSurvey.Recommend(new Habitat(), 3);
+        var ranked = ForestManagementSurvey.Recommend(new ForestSystem(new Habitat()), 3);
         Assert.Equal(3, ranked.Length);
         Assert.All(ranked, r => Assert.False(ForestSpeciesTraits.For(r.Species).Shrub));
         Assert.True(ranked[0].Suitability >= ranked[1].Suitability && ranked[1].Suitability >= ranked[2].Suitability);

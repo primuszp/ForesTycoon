@@ -2,7 +2,7 @@ using System.Reflection;
 
 namespace ForesTycoon.Tests;
 
-// The layering is Engine <- Ecology <- TreeModels <- game (terrain, rendering, app). Lower layers know
+// The layering is Engine / Rules <- Ecology <- TreeModels <- game (terrain, rendering, app). Lower layers know
 // nothing about higher ones and none of the three libraries touches OpenGL, windowing or UI.
 public class ArchitectureTests
 {
@@ -31,8 +31,8 @@ public class ArchitectureTests
     }
 
     [Fact]
-    public void EcologyDependsOnlyOnTheEngine() =>
-        Assert.Equal(new[] { "ForesTycoon.Engine", "OpenTK.Mathematics" }, References(Ecology).OrderBy(n => n));
+    public void EcologyDependsOnlyOnTheEngineAndPureRuleRuntime() =>
+        Assert.Equal(new[] { "ForesTycoon.Engine", "ForesTycoon.Rules", "OpenTK.Mathematics" }, References(Ecology).OrderBy(n => n));
 
     [Fact]
     public void TreeModelsContainTheGeneratorAndDependOnlyOnEcologyAndEngine() =>

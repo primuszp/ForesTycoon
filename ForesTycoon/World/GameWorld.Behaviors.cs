@@ -10,23 +10,27 @@ namespace ForesTycoon
             new("machine.pace", "Forwarder munkatempó", "forwarder", "munka-s", 0, 10, "Kopás (0–1)", "Rakomány (m³)", "Gép al-lépés"),
             new("machine.pace", "Processzor munkatempó", "processor", "munka-s", 0, 10, "Kopás (0–1)", "Rakomány (m³)", "Gép al-lépés"),
             new("mill.process", "Malom feldolgozása", "mill", "m³", 0, 1e6, "Már feldolgozott mennyiség (m³)", "Készlet (m³)", "Logisztikai lépés"),
-            new("water.stress", "Növekedési vízválasz", "tile", "1", 0, 1, "Vízellátottság (0–1)", "Pangóvíz aránya (0–1)", "Havi növekedési ráta és fa-erőforrás",
-                Inputs: new[] { "faj.szárazságérzékenység" }, Formula: WaterFormulas.Stress),
             new("trail.trafficability", "Földút járhatósága", "tile", "0–1", 0, 1, "Átnedvesedés (0–1)", "Talaj teherbírása (0–1)", "Jármű haladása burkolatlan csempén; 1 = száraz, jól járható",
                 Formula: "# Átázott, gyenge teherbírású talajon a földút nehezen járható.\n1 - átnedvesedés * (1 - talaj.teherbírás)")
-        }.Concat(TransportHooks()).Concat(GameTuning.Specs.Select(s => new BehaviorHook("tuning." + s.Id, s.Name, "world", s.Unit, s.Min, s.Max,
+        }.Concat(EcologyResponseProgram.Hooks).Concat(TransportHooks()).Concat(GameTuning.Specs.Select(s => new BehaviorHook("tuning." + s.Id, s.Name, "world", s.Unit, s.Min, s.Max,
             "Nem használt", "Nem használt", "Paraméter lekérdezése; járműspecifikáció alkalmazáskor", false))).ToArray();
         private readonly CompiledBehaviorModel model;
         internal CompiledBehaviorControllers Controllers { get; }
+        internal EcologyResponseProgram Responses { get; }
         internal WorldBehaviorPolicy(BehaviorModel document, IReadOnlySet<string> keys = null, Func<string, double> read = null)
-        { model = new(document, Hooks, keys, read); Controllers = new(document); }
+        {
+            document = document.Clone();
+            foreach (var hook in EcologyResponseProgram.Hooks)
+                if (!document.Graphs.Any(g => g.Hook == hook.Id && g.Kind == hook.Kind)) document.Graphs.Add(DefaultGraph(hook));
+            model = new(document, Hooks, keys, read); Controllers = new(document); Responses = new(document);
+        }
 
-        internal static BehaviorGraph DefaultGraph(BehaviorHook hook) => new() {
+        internal static BehaviorGraph DefaultGraph(BehaviorHook hook) => hook.Kind == "site" ? EcologyResponseProgram.DefaultGraph(hook) : new() {
             Id = "default." + hook.Kind + "." + hook.Id, Name = hook.Name, Hook = hook.Id, Kind = hook.Kind
         };
         internal static BehaviorModel DefaultDocument() => new() { Graphs = Hooks.Select(DefaultGraph).ToList() };
         internal BehaviorModel Document => model.Document;
-        internal string LastError => model.LastError;
+        internal string LastError => model.LastError ?? Responses.LastError;
         internal bool HasGraphs => model.HasGraphs;
         public bool Overrides(string hook, string kind) => model.Overrides(hook, kind);
         public double Evaluate(in BehaviorQuery query) => model.Evaluate(query.Hook, query.Kind, query.Id,
@@ -88,6 +92,7 @@ namespace ForesTycoon
         {
             var replacement = new WorldBehaviorPolicy(model, DynamicsRuntime.Keys(dynamics.Document, RuleWorldFields), ruleValues.ReadRule);
             replacement.Controllers.PreserveUnchanged(behaviorPolicy.Controllers);
+            if (SiteSignature(behaviorPolicy.Document) != SiteSignature(replacement.Document)) pendingForestRateRefresh = true;
             behaviorPolicy = replacement;
             BindBehaviors();
             ApplyTuning(Tuning);
@@ -96,6 +101,8 @@ namespace ForesTycoon
         {
             IBehaviorPolicy active = behaviorPolicy;
             Environment.Behaviors = active;
+            Environment.ResponseRules = behaviorPolicy.Responses;
+            forest.ResponseRules = behaviorPolicy.Responses;
             forest.MonthlyRules = TreeMonthWork;
             forest.GrowthRules = TreeGrowthWork;
             Logistics.Behaviors = active;

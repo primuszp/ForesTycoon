@@ -26,6 +26,8 @@
  └────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
+Az önálló `ForesTycoon.Rules` a tiszta, korlátozott gráffuttató és a szabálydokumentumok könyvtára. Az Ecology az Engine mellett ezt is használja a termőhelyi és vízstressz-válaszokhoz; a Rules nem hivatkozik sem a játékra, sem az Editorra vagy grafikai könyvtárra.
+
 A függőség csak lefelé mehet. Ezt a fordító (projekthivatkozások) és az `ArchitectureTests` is
 kikényszeríti: a szimulációs és modellezési könyvtárak (Engine, Ecology, TreeModels) nem használhatnak
 grafikai, ablakozó vagy UI csomagot; a render-modulok (Rendering, Models, Effects) GL-t igen, ablakot és

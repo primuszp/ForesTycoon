@@ -24,19 +24,19 @@ namespace ForesTycoon.Ecology
         internal double ForestYearSeconds { get; private set; }
 
         internal Ecosystem(IForestHabitat habitat, double forestYearSeconds = EcologyTime.DefaultGameSecondsPerYear,
-            SoilLandscapeDefinition soils = null, ClimateDefinition climate = null)
+            SoilLandscapeDefinition soils = null, ClimateDefinition climate = null, ForesTycoon.Rules.EcologyResponseProgram responseRules = null)
         {
             if (habitat == null) throw new ArgumentNullException(nameof(habitat));
             // Validate before allocating the forest, including direct diagnostic callers.
             if (!EcologyTime.IsValidForestYearSeconds(forestYearSeconds)) throw new ArgumentOutOfRangeException(nameof(forestYearSeconds));
             habitat = BindSoils(habitat, soils);
-            Forest = new ForestSystem(habitat);
+            Forest = new ForestSystem(habitat, responseRules: responseRules);
             Attach(habitat, forestYearSeconds, climate);
         }
 
         private Ecosystem() { }
         internal static IEnumerable<int> CreateWork(IForestHabitat habitat, double forestYearSeconds,
-            SoilLandscapeDefinition soils, ClimateDefinition climate, WorkResult<Ecosystem> result)
+            SoilLandscapeDefinition soils, ClimateDefinition climate, WorkResult<Ecosystem> result, ForesTycoon.Rules.EcologyResponseProgram responseRules = null)
         {
             if (!EcologyTime.IsValidForestYearSeconds(forestYearSeconds)) throw new ArgumentOutOfRangeException(nameof(forestYearSeconds));
             var model = new Ecosystem { ForestYearSeconds = forestYearSeconds };
@@ -46,10 +46,11 @@ namespace ForesTycoon.Ecology
                 foreach (int unit in model.Soils.InitializeWork(habitat)) yield return unit;
                 habitat = new SoilHabitat(habitat, model.Soils);
             }
-            model.Forest = new ForestSystem(habitat, deferInitialization: true);
+            model.Forest = new ForestSystem(habitat, deferInitialization: true, responseRules: responseRules);
             foreach (int unit in model.Forest.ResetWork(habitat)) yield return unit;
             model.Forest.UseEnvironmentTempo(forestYearSeconds);
             model.Environment = new EnvironmentSystem(habitat, model.Forest, forestYearSeconds, climate, true);
+            model.Environment.ResponseRules = responseRules;
             foreach (int unit in model.Environment.InitializeWork()) yield return unit;
             model.coordinator = new ForestEnvironmentCoordinator(model.Forest, model.Environment, deferInitialization: true);
             foreach (int unit in model.Forest.RefreshEnvironmentRatesWork()) yield return unit;
@@ -80,6 +81,7 @@ namespace ForesTycoon.Ecology
             Forest.Environment = null;
             Forest.UseEnvironmentTempo(forestYearSeconds);
             Environment = new EnvironmentSystem(habitat, Forest, forestYearSeconds, climate);
+            Environment.ResponseRules = Forest.ResponseRules;
             coordinator = new ForestEnvironmentCoordinator(Forest, Environment);
         }
 

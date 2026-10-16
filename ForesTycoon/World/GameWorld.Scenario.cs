@@ -91,7 +91,7 @@ namespace ForesTycoon
                 Adopt(candidate);
                 return;
             }
-            Regenerate(ScenarioSettings(scenario), SoilModel(scenario));
+            Regenerate(ScenarioSettings(scenario), SoilModel(scenario), ForesTycoon.Rules.EcologyResponseProgram.FromModel(project.Behaviors));
             InitializeProjectScene(project);
         }
 
@@ -100,6 +100,11 @@ namespace ForesTycoon
         internal IEnumerable<int> InitializeProjectSceneWork(RuleProject project)
         {
             var scenario = project.World;
+            // Scene planting is already a site query. Install the same pure response program before painting,
+            // then journal the full project at its ordinary command boundary below.
+            var preparingResponses = Task.Run(() => ForesTycoon.Rules.EcologyResponseProgram.FromModel(project.Behaviors));
+            while (!preparingResponses.IsCompleted) yield return 64;
+            forest.ResponseRules = Environment.ResponseRules = preparingResponses.GetAwaiter().GetResult();
             // The painted map is the initial state: terrain (and so water) first, then the forest that grows on it.
             if (scenario != null) {
                 ForestSpeciesBook.Apply(SpeciesEdits(scenario));

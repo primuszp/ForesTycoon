@@ -36,6 +36,8 @@ namespace ForesTycoon.Ecology
             }
         }
         internal double SpringReceived => springReceived;
+        internal ForesTycoon.Rules.EcologyResponseProgram ResponseRules { get; set; }
+        private ForesTycoon.Rules.EcologyResponseProgram Responses => ResponseRules ?? ForesTycoon.Rules.EcologyResponseProgram.Default;
         private readonly IForestHabitat habitat;
         private readonly IForestCanopy forest;
         private readonly double[] canopy, surface, soil, deep, drought, wet, wetIntegral, snow;
@@ -230,9 +232,8 @@ namespace ForesTycoon.Ecology
                 rainLeftToRules += rain;
                 // Drought and waterlogging follow the root zone smoothly: tree growth and trafficability read them.
                 var profile = soils[id];
-                double dry = 1 - profile.Availability(soil[id]), waterlogged = profile.Waterlogging(soil[id]);
-                double blend = 1 - Math.Exp(-dt / 90);
-                drought[id] += (dry - drought[id]) * blend; wet[id] += (waterlogged - wet[id]) * blend;
+                drought[id] = Responses.Drought(profile.Availability(soil[id]), drought[id], dt);
+                wet[id] = Responses.Waterlogging(profile.Waterlogging(soil[id]), wet[id], dt);
                 wetIntegral[id] += wet[id] * dt;
             }
             if (interval.Snow || MeanSnowCover > 0)
@@ -294,11 +295,7 @@ namespace ForesTycoon.Ecology
             if ((uint)id >= (uint)CellCount) return 1;
             double supply = soils[id].Availability(soil[id]);
             double waterlogging = monthSeconds > 0 ? wetIntegral[id] / monthSeconds : wet[id];
-            double response = WaterResponse(supply, waterlogging, species);
-            return Behaviors?.Overrides("water.stress", "tile") == true
-                ? Math.Clamp(Behaviors.Evaluate(new("water.stress", "tile", (ulong)id, response, 0, Time, Math.Clamp(supply, 0, 1), waterlogging,
-                    Extras: new double[] { ForestSpeciesTraits.For(species).DrySensitivity })), 0, 1)
-                : response;
+            return Responses.WaterFactor(supply, waterlogging, ForestSpeciesTraits.For(species).DrySensitivity);
         }
 
         /// <summary>
@@ -316,13 +313,7 @@ namespace ForesTycoon.Ecology
         internal static double BearingCapacity(SoilProperties profile) => profile.BearingCapacity ?? Math.Clamp(0.25 + profile.DrainagePerHour / 8, 0.25, 0.9);
 
         internal double CurrentWaterFactor(int id, ForestSpecies species) => (uint)id < (uint)CellCount
-            ? WaterResponse(soils[id].Availability(soil[id]), wet[id], species) : 1;
-
-        private static double WaterResponse(double supply, double waterlogging, ForestSpecies species)
-        {
-            double drySensitivity = ForestSpeciesTraits.For(species).DrySensitivity;
-            return Math.Clamp(Math.Pow(Math.Clamp(supply, 0, 1), drySensitivity) * (1 - waterlogging * 0.65), 0, 1);
-        }
+            ? Responses.WaterFactor(soils[id].Availability(soil[id]), wet[id], ForestSpeciesTraits.For(species).DrySensitivity) : 1;
 
         internal void FinishForestMonth()
         {

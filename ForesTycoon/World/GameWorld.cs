@@ -58,13 +58,13 @@ namespace ForesTycoon
         }
 
         public GameWorld(TerrainSettings settings, double forestYearSeconds = EcologyTime.DefaultGameSecondsPerYear,
-            SoilLandscapeDefinition soils = null, ClimateDefinition climate = null, bool enableRendering = true)
+            SoilLandscapeDefinition soils = null, ClimateDefinition climate = null, bool enableRendering = true, ForesTycoon.Rules.EcologyResponseProgram responseRules = null)
             : this(settings, new GraphicsSettings { AutomaticWeather = true }, forestYearSeconds, soils ?? SoilLandscapeDefinition.Default,
-                climate ?? ClimateDefinition.Default, enableRendering) { }
+                climate ?? ClimateDefinition.Default, enableRendering, responseRules) { }
 
         private GameWorld(TerrainSettings settings, GraphicsSettings graphics, double forestYearSeconds, SoilLandscapeDefinition soilModel,
-            ClimateDefinition climate, bool enableRendering = false)
-            : this(CreateMap(settings, forestYearSeconds), graphics, forestYearSeconds, soilModel, climate, enableRendering) { }
+            ClimateDefinition climate, bool enableRendering = false, ForesTycoon.Rules.EcologyResponseProgram responseRules = null)
+            : this(CreateMap(settings, forestYearSeconds), graphics, forestYearSeconds, soilModel, climate, enableRendering, initialResponses: responseRules) { }
 
         private static TerrainMap CreateMap(TerrainSettings settings, double forestYearSeconds)
         {
@@ -79,14 +79,14 @@ namespace ForesTycoon
                 SoilLandscapeDefinition.Default, ClimateDefinition.Default, false) { }
 
         private GameWorld(TerrainMap map, GraphicsSettings graphics, double forestYearSeconds, SoilLandscapeDefinition soilModel,
-            ClimateDefinition climate, bool enableRendering, Ecosystem preparedEcosystem = null, bool deferRules = false)
+            ClimateDefinition climate, bool enableRendering, Ecosystem preparedEcosystem = null, bool deferRules = false, ForesTycoon.Rules.EcologyResponseProgram initialResponses = null)
         {
             Graphics = graphics;
             ruleValues = new(this);
             this.map = map ?? throw new ArgumentNullException(nameof(map));
             try
             {
-                ecosystem = preparedEcosystem ?? new Ecosystem(map, forestYearSeconds, soilModel, climate);
+                ecosystem = preparedEcosystem ?? new Ecosystem(map, forestYearSeconds, soilModel, climate, initialResponses ?? behaviorPolicy.Responses);
                 timberCargo = systems.Add(new TimberCargoSystem());
                 vehicles = systems.Add(new VehicleSystem(timberCargo, route => VehicleRoadRoute.Create(this.map, route)) { TimeScale = VehicleTimeScale });
                 vehicles.RoadRouteWorkFactory = (route, result) => VehicleRoadRoute.CreateWork(this.map, route, result);
@@ -147,7 +147,7 @@ namespace ForesTycoon
         internal ulong ForestRevision => forest.Revision;
         internal ForestTileSurvey[] BuildManagementSurvey() => ForestManagementSurvey.Build(forest, Environment, Soils);
         internal (ForestSpecies Species, float Suitability)[] RecommendSpecies(int tileId) =>
-            ForestManagementSurvey.Recommend(forest.Habitat, tileId);
+            ForestManagementSurvey.Recommend(forest, tileId);
         internal bool TryGetTileCenter(int tileId, out Vector3 centre) => map.TryGetTileCenter(tileId, out centre);
         /// <summary>Per-tile RGBA tint of the active management lens drawn onto the terrain; null clears it.</summary>
         internal void SetManagementOverlay(uint[] colours) => terrain?.SetManagementOverlay(colours);
@@ -526,12 +526,12 @@ namespace ForesTycoon
 
         public void Regenerate(TerrainSettings settings) => Regenerate(settings, SoilLandscapeDefinition.Default);
         /// <summary>A new world from a seed and a soil model, for example a world-editor scenario with painted soil.</summary>
-        internal void Regenerate(TerrainSettings settings, SoilLandscapeDefinition soils)
+        internal void Regenerate(TerrainSettings settings, SoilLandscapeDefinition soils, ForesTycoon.Rules.EcologyResponseProgram responseRules = null)
         {
             EnsureAvailable(allowFaulted: true);
             terrainRenderer?.VerifyAccess();
             using var candidate = new GameWorld(settings, Graphics, EcologyTime.DefaultGameSecondsPerYear,
-                soils ?? SoilLandscapeDefinition.Default, ClimateDefinition.Default);
+                soils ?? SoilLandscapeDefinition.Default, ClimateDefinition.Default, responseRules: responseRules);
             candidate.ApplyTuning(Tuning);
             if (HasPresentation) candidate.AttachRendering();
             Adopt(candidate);

@@ -202,7 +202,7 @@ public sealed class GrowthWaterResponseTests
 {
 
     [Fact]
-    public void WaterResponseFormulaKeepsTheSameWaterBalanceAndGrowth()
+    public void SerializedResponseGraphKeepsTheSameWaterBalanceAndGrowth()
     {
         (double Stored, double Evaporated, double Transpired, double Outflow, double Balance, int Trees) Run(bool formulas)
         {
@@ -211,7 +211,7 @@ public sealed class GrowthWaterResponseTests
                 var project = GameWorld.DefaultRuleProject();
                 foreach (var hook in WorldBehaviorPolicy.Hooks.Where(h => h.Id == "water.stress")) {
                     int i = project.Behaviors.Graphs.FindIndex(g => g.Hook == hook.Id && g.Kind == hook.Kind && g.ObjectId == null);
-                    project.Behaviors.Graphs[i] = RuleFormula.Compile(RuleFormula.Default(hook), project.Behaviors.Graphs[i], RuleFormula.Names(hook));
+                    project.Behaviors.Graphs[i] = BehaviorModel.FromJson(new BehaviorModel { Graphs = { EcologyResponseProgram.DefaultGraph(hook) } }.ToJson()).Graphs[0];
                 }
                 world.QueueRuleProject(project); world.ExecutePendingCommands();
             }
@@ -230,11 +230,11 @@ public sealed class GrowthWaterResponseTests
     }
 
     [Fact]
-    public void GrowthWaterResponseHasItsFormulaAndInputs()
+    public void GrowthWaterResponseHasAnExecutableGraphAndEnglishInputs()
     {
         foreach (var hook in WorldBehaviorPolicy.Hooks.Where(h => h.Id == "water.stress")) {
-            Assert.NotNull(hook.Formula);
-            var graph = RuleFormula.Compile(hook.Formula!, new BehaviorGraph { Id = "g", Name = hook.Name, Hook = hook.Id, Kind = hook.Kind }, RuleFormula.Names(hook));
+            var graph = EcologyResponseProgram.DefaultGraph(hook);
+            Assert.All(hook.Inputs!, input => Assert.Contains(".", input));
             Assert.DoesNotContain(graph.Nodes, n => n.Operation == BehaviorOperation.Native);
         }
     }

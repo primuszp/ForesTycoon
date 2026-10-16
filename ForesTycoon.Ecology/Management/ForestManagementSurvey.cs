@@ -122,15 +122,14 @@ namespace ForesTycoon.Ecology
         private static byte Grade(float ratio) => ratio >= 2 ? (byte)3 : ratio >= 1.5f ? (byte)2 : (byte)1;
 
         /// <summary>Playable trees ranked by how well they suit a tile's site (0..1).</summary>
-        internal static (ForestSpecies Species, float Suitability)[] Recommend(IForestHabitat habitat, int tileId, int top = 3)
+        internal static (ForestSpecies Species, float Suitability)[] Recommend(ForestSystem forest, int tileId, int top = 3)
         {
             var ranked = new System.Collections.Generic.List<(ForestSpecies, float)>();
-            float fertility = habitat.GetSoilProperties(tileId).Fertility;
             foreach (var species in ForestSpeciesTraits.Playable)
             {
                 if (ForestSpeciesTraits.For(species).Shrub) continue;
-                float fit = ForestSystem.Fitness(species, habitat.GetMoisture(tileId), habitat.GetNormalizedElevation(tileId));
-                ranked.Add((species, fit * (0.6f + 0.4f * fertility)));
+                float fit = forest.SiteFitness(species, tileId);
+                ranked.Add((species, fit));
             }
             ranked.Sort((a, b) => b.Item2.CompareTo(a.Item2));
             return ranked.GetRange(0, Math.Min(top, ranked.Count)).ToArray();

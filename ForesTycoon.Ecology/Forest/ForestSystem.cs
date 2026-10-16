@@ -16,6 +16,8 @@ namespace ForesTycoon.Ecology
 
         private IForestHabitat habitat;
         internal IForestHabitat Habitat => habitat;
+        internal ForesTycoon.Rules.EcologyResponseProgram ResponseRules { get; set; }
+        private ForesTycoon.Rules.EcologyResponseProgram Responses => ResponseRules ?? ForesTycoon.Rules.EcologyResponseProgram.Default;
         private ForestStand[] stands = Array.Empty<ForestStand>();
         // Empty tiles that border a seeding stand. Rebuilt every month so that the
         // regeneration pass never has to probe the whole map through the habitat interface.
@@ -33,12 +35,13 @@ namespace ForesTycoon.Ecology
         private float totalBiomass;
         private float totalHealth;
 
-        public ForestSystem(IForestHabitat habitat, double secondsPerYear = DefaultSecondsPerYear, bool deferInitialization = false)
+        public ForestSystem(IForestHabitat habitat, double secondsPerYear = DefaultSecondsPerYear, bool deferInitialization = false, ForesTycoon.Rules.EcologyResponseProgram responseRules = null)
         {
             if (secondsPerYear <= 0.0 || !double.IsFinite(secondsPerYear))
                 throw new ArgumentOutOfRangeException(nameof(secondsPerYear));
             this.secondsPerYear = secondsPerYear;
             this.habitat = habitat;
+            ResponseRules = responseRules;
             if (!deferInitialization) Reset(habitat);
         }
 
@@ -255,7 +258,7 @@ namespace ForesTycoon.Ecology
                 float moisture = habitat.GetMoisture(tileId), elevation = habitat.GetNormalizedElevation(tileId);
                 ForestSpeciesProfile profile = ForestSpeciesProfile.For(species);
                 float age = 4f + UnitFloat(Hash(habitat.Seed, tileId, 1)) * profile.MatureAgeYears * 2.2f;
-                float health = Math.Clamp(0.72f + Fitness(species, moisture, elevation) * 0.28f, 0f, 1f);
+                float health = Math.Clamp(0.72f + Suitability(species, tileId) * 0.28f, 0f, 1f);
                 stands[tileId] = new ForestStand(species, age, InitialBiomass(profile, age, health), health);
                 if (preserveUnpainted) IndividualTrees.Create(tileId, stands[tileId], ForestYear, habitat.Seed);
             }
@@ -303,7 +306,7 @@ namespace ForesTycoon.Ecology
                 ForestSpecies species = SelectSpecies(moisture, elevation, Hash(habitat.Seed, tileId, 2));
                 ForestSpeciesProfile profile = ForestSpeciesProfile.For(species);
                 float age = 4f + UnitFloat(Hash(habitat.Seed, tileId, 1)) * profile.MatureAgeYears * 2.2f;
-                float health = Math.Clamp(0.72f + Fitness(species, moisture, elevation) * 0.28f, 0f, 1f);
+                float health = Math.Clamp(0.72f + Suitability(species, tileId) * 0.28f, 0f, 1f);
                 float biomass = InitialBiomass(profile, age, health);
                 stands[tileId] = new ForestStand(species, age, biomass, health);
             }
@@ -456,28 +459,9 @@ namespace ForesTycoon.Ecology
 
         private float Suitability(ForestSpecies species, int tileId)
         {
-            if (Environment == null) return Fitness(species, habitat.GetMoisture(tileId), habitat.GetNormalizedElevation(tileId));
             var profile = ForestSpeciesProfile.For(species);
-            float elevationFit = Math.Clamp(1 - Math.Abs(habitat.GetNormalizedElevation(tileId) - profile.PreferredElevation)
-                / profile.ElevationTolerance, 0, 1);
-            return habitat.GetSoilProperties(tileId).Fertility * (0.45f + elevationFit * 0.55f);
-        }
-
-        /// <summary>
-        /// How well a species matches the site. Moisture and elevation are combined
-        /// multiplicatively so that a stand on the right slope but the wrong soil still suffers.
-        /// </summary>
-        internal static float Fitness(ForestSpecies species, float moisture, float elevation)
-        {
-            ForestSpeciesProfile profile = ForestSpeciesProfile.For(species);
-            if (profile.MoistureTolerance <= 0f || profile.ElevationTolerance <= 0f) return 0f;
-
-            float moistureFit = Math.Clamp(
-                1f - Math.Abs(moisture - profile.PreferredMoisture) / profile.MoistureTolerance, 0f, 1f);
-            float elevationFit = Math.Clamp(
-                1f - Math.Abs(elevation - profile.PreferredElevation) / profile.ElevationTolerance, 0f, 1f);
-            // Elevation is the weaker of the two signals; soil moisture decides most sites.
-            return moistureFit * (0.45f + elevationFit * 0.55f);
+            return (float)Responses.Fitness(habitat.GetMoisture(tileId), habitat.GetNormalizedElevation(tileId),
+                habitat.GetSoilProperties(tileId).Fertility, profile.PreferredElevation, profile.ElevationTolerance);
         }
 
         private static float InitialBiomass(ForestSpeciesProfile profile, float age, float health)

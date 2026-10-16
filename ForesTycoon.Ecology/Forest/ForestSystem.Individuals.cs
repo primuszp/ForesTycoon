@@ -120,7 +120,7 @@ namespace ForesTycoon.Ecology
                     siteSpecies = tree.Species;
                     water = Environment != null
                         ? (float)(currentConditions ? Environment.CurrentWaterFactor(id, tree.Species) : Environment.GrowthFactor(id, tree.Species))
-                        : Math.Clamp(habitat.GetMoisture(id) / ForestSpeciesProfile.For(tree.Species).PreferredMoisture, 0, 1);
+                        : (float)Responses.WaterFactor(habitat.GetMoisture(id), 0, ForestSpeciesTraits.For(tree.Species).DrySensitivity);
                 }
                 ForestResources resources = default;
                 ForestBoundaryGeometry geometry = default;

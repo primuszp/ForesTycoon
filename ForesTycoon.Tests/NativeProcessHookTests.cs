@@ -10,7 +10,7 @@ public sealed class NativeProcessHookTests
     public void DefaultGraphsDoNotOverrideAndNewHooksExist()
     {
         var model = new CompiledBehaviorModel(WorldBehaviorPolicy.DefaultDocument(), WorldBehaviorPolicy.Hooks);
-        foreach (var hook in WorldBehaviorPolicy.Hooks) Assert.False(model.Overrides(hook.Id, hook.Kind));
+        foreach (var hook in WorldBehaviorPolicy.Hooks) Assert.Equal(hook.Kind == "site", model.Overrides(hook.Id, hook.Kind));
         Assert.DoesNotContain(WorldBehaviorPolicy.Hooks, h => h.Id == "road.weather");
     }
 

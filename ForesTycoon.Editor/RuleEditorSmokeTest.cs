@@ -108,6 +108,9 @@ namespace ForesTycoon.Editor
                     (() => editor.ShowRuleBook(world.RuleProjectDocument.Rules.FindIndex(r => r.Id == "forest.deadwood")), "tree-deadwood-graph"),
                     (() => editor.ShowRuleBook(world.RuleProjectDocument.Rules.FindIndex(r => r.Id == "forest.growth")), "tree-growth-graph"),
                     (() => editor.ShowCommonRule("behavior:" + world.BehaviorDocument.Graphs.First(g => g.Hook == "water.stress").Id), "common-water-response"),
+                    (() => editor.ShowCommonRule("behavior:" + world.BehaviorDocument.Graphs.First(g => g.Hook == "forest.site").Id), "site-fitness-graph"),
+                    (() => editor.ShowCommonRule("behavior:" + world.BehaviorDocument.Graphs.First(g => g.Hook == "water.drought").Id), "site-drought-graph"),
+                    (() => editor.ShowCommonRule("behavior:" + world.BehaviorDocument.Graphs.First(g => g.Hook == "water.waterlogging").Id), "site-waterlogging-graph"),
                                         (() => editor.ShowRuleCalculation(world.RuleProjectDocument.Rules.FindIndex(r => r.Id == "forest.growth"), 0), "common-calculation"),
                     (() => editor.ShowRuleOverview(), "world-rule-overview"),
                     (() => { editor.ShowWorld(WorldTab.Trial); editor.ShowWorldTrial(rainTrial); }, "world-trial") }) {

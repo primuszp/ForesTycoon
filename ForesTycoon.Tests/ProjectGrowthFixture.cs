@@ -3,6 +3,11 @@ namespace ForesTycoon.Tests;
 /// <summary>Hosts the real project growth graph for small ecology-only habitats; contains no growth formula.</summary>
 internal static class ProjectGrowthFixture
 {
+    internal static float Fitness(ForestSpecies species, float moisture, float elevation)
+    {
+        var p = ForestSpeciesProfile.For(species);
+        return (float)EcologyResponseProgram.Default.Fitness(moisture, elevation, 1, p.PreferredElevation, p.ElevationTolerance);
+    }
     internal static ForestSystem Attach(ForestSystem forest)
     {
         string[] fields = { "fitness", "lightResponse", "water", "health", "space", "yearFraction", "diameter", "relativeHeight", "radialRate", "heightRate", "heightGrowth", "diameterGrowth", "crownRatio", "crownSpread" };
