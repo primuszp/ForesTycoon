@@ -22,6 +22,8 @@ jobs:
       - uses: actions/setup-dotnet@v6.0.0
         with:
           dotnet-version: 8.0.x
+      - name: Check current rule coverage report
+        run: python tools/update-rule-audit.py --check
       - name: Release build and headless tests
         shell: pwsh
         run: ./tools/verify-engine.ps1

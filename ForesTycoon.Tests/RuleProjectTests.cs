@@ -77,6 +77,25 @@ public class RuleProjectTests
         Assert.Equal(0, restored.ExecutePendingCommands()); Assert.Equal("next", restored.RuleProjectDocument.Name);
     }
     [Fact]
+    public void FileLinkWaitsForUnstartedInputWithoutExecutingItOnThePollingFrame()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "forestycoon-project-pending-" + Guid.NewGuid()); Directory.CreateDirectory(directory);
+        try {
+            using var world = World(); string file = Path.Combine(directory, "project.json");
+            var project = Project(); project.Name = "After input"; RuleProject.WriteAtomic(file, project.ToJson());
+            var link = new RuleProjectLink(file, bootstrapAlgorithms: false);
+            world.QueueWeather(WeatherPreset.Storm, 30, 20);
+            link.Poll(world, 1);
+            Assert.Equal(1, world.CaptureCheckpoint().PendingCommands);
+            Assert.NotEqual(project.Name, world.RuleProjectDocument.Name);
+            do { world.ContinueCommands(1); } while (world.CommandPending);
+            Assert.Equal(WeatherPreset.Storm, world.Environment.Preset);
+            link.Poll(world, 1);
+            do { world.ContinueCommands(1); } while (world.CommandPending);
+            Assert.Equal(project.Name, world.RuleProjectDocument.Name);
+        } finally { Directory.Delete(directory, true); }
+    }
+    [Fact]
     public void FileLinkAppliesChangesOnceAndKeepsLastValidRuntimeOnInvalidFile()
     {
         string directory = Path.Combine(Path.GetTempPath(), "forestycoon-project-" + Guid.NewGuid()); Directory.CreateDirectory(directory);

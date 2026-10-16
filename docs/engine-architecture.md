@@ -54,6 +54,31 @@ A pályagenerálás és a nagy szerkesztések külön folytatható munkafolyamat
 kaptak. A részleteket a következő szakasz írja le; a fájlkiírás és a teljes
 rajzolási képkocka továbbra sem kap ettől kemény valós idejű garanciát.
 
+### A szeletelés ellenőrzött határa
+
+A `SimulationWork.MoveNext` a tick, a szabályfuttatás, a parancscsomag és a
+pályagenerálás munkaszeletének belsejében tiltja a `SimulationWork.Complete`
+szinkron adapterét. Az `Update`, `ExecutePendingCommands`, `Regenerate`,
+`StartScenario` és `RuleEngine.Run` adapterei is ellenőrzik ezt a határt.
+A guard kivétel után is visszaáll; az izolált háttérmunka külön szálon fut.
+Ez a védelem a szinkron adapterek véletlen visszahívását fogja meg; nem bizonyítja
+önmagában minden `MoveNext` belső ciklusának vagy memóriafoglalásának időkorlátját.
+Ezt kódvizsgálat és p95/p99/max mérés egészíti ki.
+
+Az algoritmusfuttató-csere megvárja, hogy a host szeletekben végrehajtsa a
+még el nem kezdett parancsokat is; a fájlfigyelő nem üríti ki a sort.
+Az algoritmusváltás teljes, függő parancs nélküli checkpointot kap. A régebbi editor-mentési gomb is
+`AtTickBoundary`-ra ütemez. A mentésbe a még el nem kezdett parancsok is bekerülnek.
+Az összehasonlító próba megvárja a tesztvilág műveletének végét; nem zárja azt
+korlátlanul a renderhívásból. A futtatócsere utáni induló projektparancsok a
+betöltőképernyő 4 ms-os munkakeretében haladnak.
+
+A fájlok sorosítása, tömörítése, IO-ja és a közvetlen, teljes mentésbetöltés
+külön költség: ezekre ez a munkaszeletelési védelem nem ad valós idejű garanciát.
+A mentési konzisztencia és a parancsok sorrendje ettől függetlenül kötelező.
+A fix 16×16-os induló bootstrap korlátos; a kért pályamérettel növő rész a
+folytatható generálási munkában fut.
+
 ### Pályagenerálás és nagy szerkesztések
 
 A játék és az Editor `RequestRegenerate` / `RequestScenario` kérést ad;
@@ -310,3 +335,80 @@ then terrain/forest state, effects, composition and UI. Require native resize/di
 regressions and completed-frame benchmarks on each enabled platform. The next performance priorities
 remain bounded forest LOD residency and correct chunk-local terrain invalidation, with explicit dependency
 tracking and continuity guarantees. Current measurements are in [engine-performance.md](engine-performance.md).
+
+
+## Az 1–3. alapcsomag ellenőrzése és kapacitásmérése
+
+Mérés: 2026-10-16, Release, Intel Core i7-8700 @ 3.20 GHz, képernyő és GPU
+nélkül. A táblák kizárólag a CPU-munkát mérik, nem a teljes megjelenített
+képkockát. A p95/p99 nem felső időgarancia; a JIT, GC és operációs rendszer
+miatt a legrosszabb minta nagyobb lehet a 4 ms-os hostkeretnél.
+
+### Szimuláció, 64 munkaegységes szelet
+
+`dotnet ForesTycoon/bin/Release/net8.0/ForesTycoon.dll --rule-benchmark`
+
+| Pálya / időjárás | Fák | Teljes tick p99 / max, ms | Szelet p99 / max, ms | Azonos teljes állapot |
+| --- | ---: | ---: | ---: | --- |
+| 64×64, eső | 15 797 | 55,749 / 684,462 | 0,074 / 1,347 | igen |
+| 64×64, hó | 15 797 | 57,049 / 567,809 | 0,048 / 1,309 | igen |
+| 128×128, eső | 65 086 | 216,320 / 2573,854 | 0,052 / 4,357 | igen |
+| 128×128, hó | 65 086 | 230,095 / 2426,306 | 0,046 / 9,609 | igen |
+
+### Tényleges hostkeret és munkahátralék
+
+`--rule-host-benchmark`: 4 ms CPU-keret képkockánként, virtuális 60 Hz-es
+időbeérkezés, 900 s/erdőév, 120 szimulációs másodperc egy hónaphatárral.
+Nincs alvás vagy rajzolás a mérésben. A lemaradás szimulációs idő, nem egyetlen
+hosszú képkocka. A végén új idő hozzáadása nélkül is megmérjük a ledolgozást.
+
+| Pálya | Host CPU p95 / p99 / max, ms | Legnagyobb hátralék, s | Hátralék a mérés végén, s | Plusz ledolgozó képkockák |
+| --- | ---: | ---: | ---: | ---: |
+| 64×64 | 4,021 / 4,046 / 12,347 | 3,2833 | 0,0333 | 0 |
+| 128×128 | 4,037 / 4,052 / 10,957 | 10,1500 | 0,0333 | 25 |
+
+Az időveszteség minden esetben 0. A lebegőpontos kerekítésből megmaradó,
+egy ticknél kisebb idő a következő képkockára marad; nem dobjuk el.
+128×128-on a plusz ledolgozás után a hátralék 0 lett.
+
+**Kapacitáshatár:** a gyorsított, 120 s/erdőév stresszpróbán a 128×128-as pálya
+4 ms/60 Hz mellett nem tartja a kért tempót: a 15 másodperces hostmérés végén
+8,0333 s a hátralék, esőben 972, hóban 1037 további munkaképkocka kellett hozzá.
+Ez nem korlátlan befejezés és nem időeldobás, de a gyorsítás kiszolgálásához
+kevés a rendelkezésre álló CPU-keret. Az alaptempó hónaphatári, 10,15 s-os
+csúcshátraléka szintén valós szimulációs késleltetés: a rövid képkockákból nem
+következik azonnali állapotfrissítés. A következő motoroptimalizálás célja a havi
+munka összköltsége és ez a késleltetés, a determinisztikus sorrend megtartásával.
+
+### Generálás és nagy szerkesztési parancsok
+
+`--foreground-benchmark`, 4 ms-os hostkeret. Az ecset, út, nyom, területi
+ültetés és kitermelési kijelölés közös parancscsomag.
+
+| Pálya / művelet | Egészben, ms | Host CPU p95 / p99 / max, ms |
+| --- | ---: | ---: |
+| 128×128 generálás | 596,420 | 4,031 / 7,564 / 12,065 |
+| 128×128 parancscsomag | 227,328 | 4,039 / 14,261 / 14,261 |
+| 256×256 generálás | 1071,983 | 4,178 / 14,085 / 16,037 |
+| 256×256 parancscsomag | 119,785 | 4,008 / 4,678 / 4,678 |
+
+Mindkét méretnél pontosan egyezett az egészben és szeletelten elkészült
+checkpoint, a mentés/betöltés és a folytatás. A számok egyszeri helyi mérésből
+származnak; a 256-os generálás rövidebb aktív ideje nem általános skálázódási
+állítás, a háttérfeladatok várakozása és a bemelegedés eltérhet.
+
+A szöveges nyers eredmények az ignorált `artifacts/foundation-*-benchmark.txt`
+fájlokba kerülnek. A fenti parancsok újra előállítják őket.
+Ellenőrzések: `SimulationWorkTests`, `ForegroundWorkTests`,
+`BoundedWorkGuardTests`, `RuleProjectTests`, `BehaviorCurveTests`,
+`ResponseRuleCardTests`, `RuleFlowTests`, `DynamicsRuntimeTests`,
+`RuleCoverageTests`, valamint a teljes csomag és az editor két füsttesztje.
+
+
+Lezárási ellenőrzés: a teljes Release tesztcsomag **1887/1887** eredménnyel
+átment (`artifacts/foundation-final-tests.txt`). A művelethatár és a fájlfigyelő
+módosításának célzott tesztjei is zöldek; az editor füsttesztje és az önálló
+editorablak füsttesztje sikeres (`artifacts/foundation-editor-smoke.txt`).
+A Release editor- és játékfordítás 0 hibát és 0 figyelmeztetést adott.
+A CI a tesztek előtt a `python tools/update-rule-audit.py --check` paranccsal
+a generált leltár frissességét is ellenőrzi.

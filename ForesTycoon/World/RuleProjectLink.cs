@@ -42,12 +42,14 @@ internal sealed class RuleProjectLink
             }
             return;
         }
+        if (world.ForegroundPending) return;
         if (building?.IsCompleted == true) {
             try {
                 var result = building.GetAwaiter().GetResult();
                 if (File.ReadAllText(path) == buildingJson) {
                     if (result.Project != buildingJson) { RuleProject.WriteAtomic(path, result.Project); buildingJson = result.Project; }
-                    world.ExecutePendingCommands();
+                    // The host finishes pending input in slices before Poll reaches this boundary.
+                    // Runtime migration requires a complete checkpoint without pending commands.
                     string handoff = System.IO.Path.Combine(AlgorithmBuild.CacheRoot, "handoff-" + Guid.NewGuid().ToString("N"));
                     acknowledgement = handoff + ".ready";
                     using var save = new MemoryStream(); world.Save(save);

@@ -76,7 +76,7 @@ sealed partial class GameWorld
             LastForegroundWorkUnits = 0;
             while (LastForegroundWorkUnits < budget)
             {
-                if (!generationWork.MoveNext())
+                if (!SimulationWork.MoveNext(generationWork))
                 {
                     generationWork.Dispose(); generationWork = null;
                     GenerationStage = ""; published = true;

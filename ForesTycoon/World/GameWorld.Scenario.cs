@@ -77,6 +77,7 @@ namespace ForesTycoon
         /// <summary>Replaces this world with a new one built from the scenario; the scenario stays the project's map.</summary>
         internal void StartScenario(WorldScenario scenario, RuleProject definition = null)
         {
+            SimulationWork.RequireSynchronousContext();
             // A new world starts with default rules; the project's rules and formulas carry over as one journaled change.
             var project = definition?.Clone() ?? RuleProjectDocument;
             project.World = RuleProject.FromJson(new RuleProject { World = scenario }.ToJson()).World;

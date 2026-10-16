@@ -36,9 +36,15 @@ namespace ForesTycoon
                     if (resumeWorld != null) {
                         using var input = System.IO.File.OpenRead(resumeWorld); world.Load(input, allowAlgorithmMigration: true);
                         var project = RuleProject.FromJson(System.IO.File.ReadAllText(RuleProject.DefaultPath));
-                        world.QueueRuleProject(project); world.ExecutePendingCommands();
+                        world.QueueRuleProject(project);
                     }
                     interaction = new WorldInteractionController(world) { TargetPicked = SendTargetPicked };
+                }
+                if (world.ForegroundPending) {
+                    long commandsStarted = Stopwatch.GetTimestamp();
+                    do { world.ContinueCommands(); }
+                    while (world.ForegroundPending && Stopwatch.GetElapsedTime(commandsStarted).TotalMilliseconds < 4);
+                    if (world.ForegroundPending) { DrawLoadingScreen(); return; }
                 }
                 mapPreparation ??= world.PrepareMapGeometry().GetEnumerator();
                 long started = Stopwatch.GetTimestamp();

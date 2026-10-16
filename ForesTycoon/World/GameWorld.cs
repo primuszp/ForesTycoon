@@ -217,6 +217,7 @@ namespace ForesTycoon
         // Synchronous simulation adapter for headless replay/tests. Interactive hosts use ContinueUpdate.
         public void Update(double fixedDeltaSeconds)
         {
+            SimulationWork.RequireSynchronousContext();
             while (!ContinueUpdate(fixedDeltaSeconds, 256)) { }
         }
 
@@ -247,7 +248,7 @@ namespace ForesTycoon
             long phaseStarted = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
             try {
                 while (LastUpdateWorkUnits < budget) {
-                    bool more = updateWork.MoveNext();
+                    bool more = SimulationWork.MoveNext(updateWork);
                     if (ProfileUpdates && measuredPhase != workPhase) {
                         workCpu[measuredPhase] += Stopwatch.GetElapsedTime(phaseStarted).TotalMilliseconds;
                         measuredPhase = workPhase; phaseStarted = Stopwatch.GetTimestamp();
@@ -303,6 +304,7 @@ namespace ForesTycoon
 
         public int ExecutePendingCommands()
         {
+            SimulationWork.RequireSynchronousContext();
             EnsureAvailable(); terrainRenderer?.VerifyAccess();
             if (UpdatePending || RulesBlockCommands) return 0;
             if (generationWork != null) throw new InvalidOperationException("Use ContinueCommands while generating a world.");
@@ -528,6 +530,7 @@ namespace ForesTycoon
         /// <summary>A new world from a seed and a soil model, for example a world-editor scenario with painted soil.</summary>
         internal void Regenerate(TerrainSettings settings, SoilLandscapeDefinition soils, ForesTycoon.Rules.EcologyResponseProgram responseRules = null)
         {
+            SimulationWork.RequireSynchronousContext();
             EnsureAvailable(allowFaulted: true);
             terrainRenderer?.VerifyAccess();
             using var candidate = new GameWorld(settings, Graphics, EcologyTime.DefaultGameSecondsPerYear,

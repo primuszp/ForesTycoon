@@ -397,6 +397,7 @@ internal sealed class RuleEngine
     /// <summary>One whole step of <paramref name="years"/>; returns true when an action changed the network (routes need a refresh).</summary>
     internal bool Run(GameWorld world, double years, double time, string schedule = "step")
     {
+        ForesTycoon.Engine.SimulationWork.RequireSynchronousContext();
         Begin(world, years, time, schedule);
         bool changed = false;
         while (StepPending) changed |= Continue(world, 256);
@@ -450,10 +451,10 @@ internal sealed class RuleEngine
 
     private bool AdvanceWorkUnit()
     {
-        if (Profile == null) return execution.MoveNext();
+        if (Profile == null) return ForesTycoon.Engine.SimulationWork.MoveNext(execution);
         string id = stepRule < compiled.Length ? compiled[stepRule].Source.Id : null;
         long started = System.Diagnostics.Stopwatch.GetTimestamp();
-        bool more = execution.MoveNext();
+        bool more = ForesTycoon.Engine.SimulationWork.MoveNext(execution);
         if (id != null) Profile[id] = Profile.GetValueOrDefault(id) + System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         return more;
     }

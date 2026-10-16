@@ -15,6 +15,17 @@ namespace ForesTycoon
                 foreach (var weather in new[] { WeatherPreset.Rain, WeatherPreset.Snow }) RunCase(size, weather);
         }
 
+        internal static void RunHosts()
+        {
+            foreach (int size in new[] { 64, 128 }) {
+                using var world = new GameWorld(TerrainSettings.Default.WithNodeSize(size + 1, 42).WithForestPattern(ForestPattern.LargeMixed),
+                    forestYearSeconds: 900, enableRendering: false);
+                world.Environment.ForceWeather(WeatherPreset.Rain, 30, 600);
+                Console.WriteLine($"Normal tempo: {size}x{size}, {world.ForestTreeCount} trees, 900 s/year; 120 simulated seconds including a month boundary");
+                MeasureHost(world, size, WeatherPreset.Rain, 7200);
+            }
+        }
+
         private static void RunCase(int size, WeatherPreset preset)
         {
             var settings = TerrainSettings.Default.WithNodeSize(size + 1, 42).WithForestPattern(ForestPattern.LargeMixed);
@@ -44,6 +55,33 @@ namespace ForesTycoon
             Console.WriteLine($"{size}x{size} {preset}: {sliced.ForestTreeCount} trees; whole tick p95/p99/max {P(full,.95):0.000}/{P(full,.99):0.000}/{full[^1]:0.000} ms; "
                 + $"64-unit slice p95/p99/max {P(slices,.95):0.000}/{P(slices,.99):0.000}/{slices[^1]:0.000} ms; {sliceCount} slices; exact state equal: {equal}");
             if (!equal) throw new InvalidOperationException("Work slicing changed the simulation result.");
+            MeasureHost(sliced, size, preset);
+        }
+
+        private static void MeasureHost(GameWorld world, int size, WeatherPreset preset, int frameCount = 900)
+        {
+            var runner = new ForesTycoon.Engine.SimulationFrameRunner(maximumWorkMilliseconds: 4);
+            runner.Clock.Reset(world.SimulationTick);
+            var frames = new List<double>(); double peakDebt = 0;
+            // Virtual 60 Hz arrival rate; no GPU or sleeps. Both normal and accelerated forest years are measured.
+            for (int frame = 0; frame < frameCount; frame++) {
+                long start = System.Diagnostics.Stopwatch.GetTimestamp();
+                runner.AdvanceWork(1d / 60, () => world.ContinueCommands(), dt => world.ContinueUpdate(dt), () => world.ForegroundPending);
+                frames.Add(System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds);
+                peakDebt = Math.Max(peakDebt, runner.Clock.PendingSimulationSeconds);
+            }
+            double debt = runner.Clock.PendingSimulationSeconds;
+            int recovery = 0;
+            while (runner.Clock.WorkInProgress || runner.Clock.PendingSimulationSeconds >= runner.Clock.StepSeconds) {
+                if (++recovery > 100000) throw new InvalidOperationException("Simulation debt did not clear.");
+                runner.AdvanceWork(0, () => world.ContinueCommands(), dt => world.ContinueUpdate(dt), () => world.ForegroundPending);
+            }
+            frames.Sort();
+            double P(double q) => frames[Math.Min(frames.Count - 1, (int)(frames.Count * q))];
+            Console.WriteLine($"{size}x{size} {preset} host 4ms/60Hz: CPU frame p95/p99/max {P(.95):F3}/{P(.99):F3}/{frames[^1]:F3} ms; "
+                + $"debt peak/end {peakDebt:F4}/{debt:F4} simulation-s; {recovery} recovery frames without new time; "
+                + $"dropped {runner.Clock.DroppedSimulationSeconds:F4} s; final debt {runner.Clock.PendingSimulationSeconds:F4} s");
+            if (runner.Clock.DroppedSimulationSeconds != 0) throw new InvalidOperationException("Host discarded simulation time.");
         }
 
         /// <summary>A hash of every tile's water stores, the flow ledger and the road conditions, exact to the bit.</summary>

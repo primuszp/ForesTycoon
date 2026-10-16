@@ -56,6 +56,7 @@ namespace ForesTycoon
             if (Array.Exists(args, argument => argument == "--foreground-render-benchmark")) { ForegroundWorkBenchmark.Run(true); return; }
             if (Array.Exists(args, argument => argument == "--foreground-benchmark")) { ForegroundWorkBenchmark.Run(); return; }
             if (Array.Exists(args, argument => argument == "--rule-benchmark")) { RuleStepBenchmark.Run(); return; }
+            if (Array.Exists(args, argument => argument == "--rule-host-benchmark")) { RuleStepBenchmark.RunHosts(); return; }
             if (Array.Exists(args, argument => argument == "--simulation-benchmark")) { ForestSimulationBenchmark.Run(); return; }
             if (Array.Exists(args, argument => argument == "--plantation-smoke-test"))
             {
