@@ -90,7 +90,6 @@ namespace ForesTycoon.Ecology
             CheckpointGuard.NonNegative(rainLeftToRules, "rain left to rules");
             CheckpointGuard.Require(double.IsFinite(ruleExchanged), "rule water exchange");
             CheckpointGuard.NonNegative(regionalRainReceived, "received precipitation");
-            if (Climate.Uniform) CheckpointGuard.Require(regionalRainReceived == weather.TotalRain * CellCount, "uniform precipitation ledger");
             for (int i = 0; i < fields.Length; i++) { yield return 1; state.Fields[i].CopyTo(fields[i], 0); }
             Array.Clear(snow);
             state.Snow?.CopyTo(snow, 0);

@@ -1,4 +1,5 @@
 using System;
+using ForesTycoon.Rules;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -19,7 +20,6 @@ namespace ForesTycoon.Ecology
         internal const double StepSeconds = EcologyTime.StepSeconds;
         internal double HoursPerStep => StepSeconds * weather.HoursPerSecond;
         internal double Cover(int id) => (uint)id < (uint)CellCount ? vegetation[id].Cover : 0;
-        internal IBehaviorPolicy Behaviors { get; set; }
         private double[] springRates;
         private double springReceived;
         /// <summary>Water springs add to these tiles' surface (mm per environment hour): sources of streams and rivers.</summary>
@@ -36,7 +36,15 @@ namespace ForesTycoon.Ecology
             }
         }
         internal double SpringReceived => springReceived;
-        internal ForesTycoon.Rules.EcologyResponseProgram ResponseRules { get; set; }
+        private EcologyResponseProgram responseRules;
+        internal EcologyResponseProgram ResponseRules {
+            get => responseRules;
+            set {
+                responseRules = value;
+                weather.ResponseRules = value; Climate.ResponseRules = value;
+                RefreshLocalClimate();
+            }
+        }
         private ForesTycoon.Rules.EcologyResponseProgram Responses => ResponseRules ?? ForesTycoon.Rules.EcologyResponseProgram.Default;
         private readonly IForestHabitat habitat;
         private readonly IForestCanopy forest;
@@ -49,7 +57,7 @@ namespace ForesTycoon.Ecology
         private readonly WeatherSystem weather;
         private double regionalRainReceived;
         internal RegionalClimate Climate { get; }
-        internal double RainReceived => Climate.Uniform ? TotalRain * CellCount : regionalRainReceived;
+        internal double RainReceived => regionalRainReceived;
         internal ClimateCell ClimateAt(int id) => Climate.Cell(id, new(Radiation, Temperature, RelativeHumidity, WindSpeed));
         internal double ForestYearSeconds => weather.ForestYearSeconds;
 
@@ -114,6 +122,7 @@ namespace ForesTycoon.Ecology
         private ClimateCell[] localClimate; private ulong[] localClimateStamp; private ulong localClimateEpoch = 1;
         /// <summary>Forgets the kept local weather: the next reading of every tile computes it again.</summary>
         internal void RefreshLocalClimate() => localClimateEpoch++;
+        internal void InvalidateVegetation() => vegetationRevision = ulong.MaxValue;
         internal ForestHydrologyInputs HydrologyInputs(int id)
         {
             if ((uint)id >= (uint)CellCount) return default;
@@ -147,12 +156,13 @@ namespace ForesTycoon.Ecology
         double IForestEnvironment.CurrentWaterFactor(int tileId, ForestSpecies species) => CurrentWaterFactor(tileId, species);
 
         internal EnvironmentSystem(IForestHabitat habitat, IForestCanopy forest, double forestYearSeconds = SecondsPerForestYear,
-            ClimateDefinition climate = null, bool deferInitialization = false)
+            ClimateDefinition climate = null, bool deferInitialization = false, EcologyResponseProgram responseRules = null)
         {
             this.habitat = habitat ?? throw new ArgumentNullException(nameof(habitat));
             this.forest = forest;
             Climate = new RegionalClimate(habitat, climate ?? ClimateDefinition.Legacy, deferInitialization: true);
-            weather = new WeatherSystem(habitat.Seed, forestYearSeconds);
+            weather = new WeatherSystem(habitat.Seed, forestYearSeconds, responseRules);
+            ResponseRules = responseRules;
             int n = habitat.TileCount;
             canopy = new double[n]; surface = new double[n]; soil = new double[n]; deep = new double[n];
             snow = new double[n];
@@ -214,7 +224,12 @@ namespace ForesTycoon.Ecology
         internal IEnumerable<int> RefreshVegetationWork()
         {
             if (forest == null || vegetationRevision == forest.Revision) yield break;
-            for (int id = 0; id < CellCount; id++) { vegetation[id] = forest.HydrologyInputs(id); yield return 1; }
+            var result = new WorkResult<ForestHydrologyInputs>();
+            for (int id = 0; id < CellCount; id++) {
+                yield return 1;
+                foreach (int unit in forest.HydrologyInputsWork(id, result)) yield return unit;
+                vegetation[id] = result.Value;
+            }
             vegetationRevision = forest.Revision;
         }
 
@@ -228,7 +243,7 @@ namespace ForesTycoon.Ecology
             {
                 yield return 1;
                 double rain = interval.Rain * Climate.Cell(id, interval.Forcing).RainMultiplier;
-                if (!Climate.Uniform) regionalRainReceived += rain;
+                regionalRainReceived += rain;
                 rainLeftToRules += rain;
                 // Drought and waterlogging follow the root zone smoothly: tree growth and trafficability read them.
                 var profile = soils[id];
@@ -244,13 +259,12 @@ namespace ForesTycoon.Ecology
         // Inspired by SnowTran-3D's terrain/vegetation coupling, with gameplay coefficients.
         private IEnumerable<int> RedistributeSnowWork(WeatherForcing forcing, double hours)
         {
-            if (forcing.Temperature > 0 || forcing.Wind <= .8) yield break;
-            snowFlux.BeginStep();
+            foreach (int work in snowFlux.BeginStepWork()) yield return work;
             int[] adjacent = new int[4];
             for (int id = 0; id < CellCount; id++)
             {
                 yield return 1;
-                if (snow[id] <= .25) continue;
+                if (snow[id] <= 0) continue;
                 var cell = habitat.GetForestTileGeometry(id);
                 double height = habitat.GetNormalizedElevation(id), lee = 0;
                 int target = -1, count = habitat.GetAdjacentTileIds(id, adjacent);
@@ -261,14 +275,14 @@ namespace ForesTycoon.Ecology
                     double dx = neighbour.X - cell.X, dy = neighbour.Y - cell.Y;
                     double length = Math.Sqrt(dx * dx + dy * dy);
                     if (length <= 0) continue;
-                    double downwind = (dx + .35 * dy) / length;
+                    double downwind = Responses.Environment(EnvironmentResponse.SnowDirection, [dx / length, dy / length]);
                     if (downwind < 0) lee = Math.Max(lee, habitat.GetNormalizedElevation(next) - height);
                     if (downwind > best) { best = downwind; target = next; }
                 }
                 if (target < 0) continue; // Closed map edge: retain the snow, never discard water.
-                double shelter = Math.Clamp(vegetation[id].Cover + lee * 8, 0, 1);
-                var step = new SurfaceRunoffStep(.25 + shelter * 3,
-                    1 - Math.Exp(-hours * (forcing.Wind - .8) * 4 * (1 - shelter * .85)));
+                double shelter = Responses.Environment(EnvironmentResponse.SnowShelter, [vegetation[id].Cover, lee]);
+                var step = new SurfaceRunoffStep(Responses.Environment(EnvironmentResponse.SnowRetention, [shelter]),
+                    Responses.Environment(EnvironmentResponse.SnowRelease, [forcing.Temperature, forcing.Wind, shelter, hours, snow[id]]));
                 snowFlux.Schedule(id, target, false, snow[id], step);
             }
             foreach (int work in snowFlux.CommitWork(snow)) yield return work;
@@ -307,10 +321,12 @@ namespace ForesTycoon.Ecology
             if ((uint)id >= (uint)CellCount) return (0, 1);
             var profile = soils[id];
             // Soil softens well before saturation: wetness rises from half the field capacity to full saturation.
-            double softening = (soil[id] - profile.FieldCapacity / 2) / (profile.Saturation - profile.FieldCapacity / 2);
-            return (Math.Clamp(Math.Max(softening, surface[id] / 10), 0, 1), BearingCapacity(profile));
+            return (Responses.Environment(EnvironmentResponse.SoilWetness,
+                [soil[id], surface[id], profile.FieldCapacity, profile.Saturation]), BearingCapacity(profile, Responses));
         }
-        internal static double BearingCapacity(SoilProperties profile) => profile.BearingCapacity ?? Math.Clamp(0.25 + profile.DrainagePerHour / 8, 0.25, 0.9);
+        internal static double BearingCapacity(SoilProperties profile, EcologyResponseProgram rules = null) =>
+            (rules ?? EcologyResponseProgram.Default).Environment(EnvironmentResponse.SoilBearing,
+                [profile.BearingCapacity ?? 0, profile.BearingCapacity.HasValue ? 1 : 0, profile.DrainagePerHour]);
 
         internal double CurrentWaterFactor(int id, ForestSpecies species) => (uint)id < (uint)CellCount
             ? Responses.WaterFactor(soils[id].Availability(soil[id]), wet[id], ForestSpeciesTraits.For(species).DrySensitivity) : 1;

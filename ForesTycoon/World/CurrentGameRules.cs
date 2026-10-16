@@ -97,7 +97,7 @@ namespace ForesTycoon
             }
             var regional = Add("climate.regional", "Regionális klíma", "Talaj és klíma", "Térképcella", "Induló mezők + minden környezeti lépés",
                 "ForesTycoon.Ecology/Climate/RegionalClimate.cs", "Cell", "world.seed|terrain.height|weather.forcing", "climate.local|climate.rainMultiplier",
-                "Simított regionális hőmérséklet-, páratartalom- és esőeltérések. Magasság élőben hűti a helyi levegőt; terraform nem generál új klímamagot.", "T_helyi = T + eltérés - normalizált_magasság × hűtés");
+                "Simított regionális hőmérséklet-, páratartalom- és esőeltérések. Magasság élőben hűti a helyi levegőt; terraform nem generál új klímamagot.", "T_helyi = T + eltérés - normalizált_magasság × hűtés", execution: GameRuleExecution.EditableGraph);
             climate ??= ClimateDefinition.Default;
             Param(regional, "Régióméret", climate.RegionSizeTiles, "csempe"); Param(regional, "Hőmérsékleti kontraszt", climate.TemperatureContrast, "°C");
             Param(regional, "Csapadékkontraszt", climate.RainContrast, "1"); Param(regional, "Magassági hűtés", climate.ElevationCooling, "°C");
@@ -105,11 +105,11 @@ namespace ForesTycoon
             Add("weather.events", "Seedelt időjárási események", "Talaj és klíma", "Világ", "Eseményhatárok és környezeti lépés",
                 "ForesTycoon.Ecology/Climate/WeatherSystem.cs", "NextEvent", "world.seed|calendar.time|commands", "weather.rain|weather.snowfall|weather.forcing",
                 "Évszakos, seedelt átmenetek: ősszel gyakori tartós eső, nyáron rövid zápor és erős vihar, télen havazás. A hó menthető vízkészlet, melegedéskor olvad. A csapadék rámpáinak integrálása pontos.",
-                "T = 10 + 15 × sin(2π × (idő / erdőév - 0,125)); havazáskor T ≤ -1 °C; sugárzás = 1 - 0,75 × felhőzet");
+                "T = 10 + 15 × sin(2π × (idő / erdőév - 0,125)); havazáskor T ≤ -1 °C; sugárzás = 1 - 0,75 × felhőzet", execution: GameRuleExecution.EditableGraph);
             Add("weather.evaporation", "Légköri párologtató igény", "Talaj és klíma", "Térképcella", "Környezeti lépés",
-                "ForesTycoon.Ecology/Climate/WeatherSystem.cs", "PotentialEvaporationPerHour", "climate.local|weather.forcing", "water.potential",
+                "ForesTycoon.Rules/EnvironmentRules.cs", "weather.evaporation", "climate.local|weather.forcing", "water.potential",
                 "A talajpárolgás és a növényzeti vízigény ugyanabból a helyi légköri kényszerből származik.",
-                "E = (0,12 + max(0,T) × 0,015) × sugárzás × (1 - 0,5 × pára) × (1 + 0,035 × szél)");
+                "E = (0,12 + max(0,T) × 0,015) × sugárzás × (1 - 0,5 × pára) × (1 + 0,035 × szél)", execution: GameRuleExecution.EditableGraph);
 
             // The water balance is the project's stock-and-flow rules (WaterRules): every flow is an editable graph.
             const string waterRules = "ForesTycoon.Rules/WaterRules.cs";
@@ -122,7 +122,7 @@ namespace ForesTycoon
                 "Áramlás a hóból a felszínre: fagypont fölött fokonként 0,5 mm/óra.", "olvadás = 0,5 × max(0; T) mm/óra", GameRuleExecution.EditableGraph);
             Add("water.snowdrift", "Szél általi hóátrendezés", "Vízháztartás", "Szomszédos cellák", "Vízlépés után, fagyban", water, "RedistributeSnow",
                 "water.snow|weather.forcing|terrain.height|forest.canopy", "water.snow",
-                "A szél a következő szélirányú cellába hordja a havat; növényzet és domborzat mérsékli az áthordást. Zárt térképszélen megmarad a hó.");
+                "A szél a következő szélirányú cellába hordja a havat; növényzet és domborzat mérsékli az áthordást. Zárt térképszélen megmarad a hó.", execution: GameRuleExecution.EditableGraph);
             Add("water.infiltration", "Beszivárgás", "Vízháztartás", "Térképcella", "Szabálylépés", waterRules, "water.infiltration",
                 "water.surface|water.root|soil.profile|road.network|buildings.footprint", "water.surface|water.root",
                 "Áramlás a felszínről a gyökérzónába a talaj beszivárgási képessége szerint, amíg a talaj telítődik; burkolt felületen 0,5 mm/óra.",
@@ -184,7 +184,7 @@ namespace ForesTycoon
                 "A projekt gráfjai adják a magadó képességet, a megtelepedő faj pontszámát, a csírázást és az újulat kezdő állapotát. Szeletelt szomszédvizsgálat és determinisztikus sorsolás.", execution: GameRuleExecution.EditableGraph);
             Add("forest.canopy", "Lombborítás és vízigény visszacsatolása", "Erdő", "Térképcella", "Erdőrevízió-változás",
                 "ForesTycoon.Ecology/Forest/ForestHydrology.cs", "HydrologyInputs", "forest.trees|forest.health|forest.species", "forest.canopy",
-                "Koronafelület és egészség összegéből lombborítás, interceptiós kapacitás és LAI. A kivágás megváltoztatja a következő vízlépés igényét és esőfelfogását.", "borítás = 1 - exp(-koronafelület / cellaterület); LAI legfeljebb 6");
+                "Koronafelület és egészség összegéből lombborítás, interceptiós kapacitás és LAI. A kivágás megváltoztatja a következő vízlépés igényét és esőfelfogását.", "borítás = 1 - exp(-koronafelület / cellaterület); LAI legfeljebb 6", execution: GameRuleExecution.EditableGraph);
             Add("forest.plant", "Telepítés és ültetvény-nyilvántartás", "Erdészeti beavatkozás", "Kijelölt cellák", "Játékosparancs", forest, "PlantInArea",
                 "commands|terrain.height|terrain.water|road.network|buildings.footprint|forest.species|forest.fitness", "forest.trees|forest.plantations",
                 "Érvényes termőhelyen választott fajból csemeték; területazonosító, telepítési év és kezdő egyedszám. A jelenlegi telepítés nem számol pénzügyi költséget.");
@@ -224,7 +224,7 @@ namespace ForesTycoon
             Add("trail.trafficability", "Földút járhatósága", "Utak és nyomok", "Burkolatlan csempe", "Jármű haladásakor",
                 "ForesTycoon/World/GameWorld.Rules.cs", "Trafficability", "soil.bearing|water.root|water.surface|trail.wear", "trail.trafficability",
                 "Átázott, gyenge teherbírású talajon a földút és a közelítőnyom felülete romlik, a jármű gördülési ellenállása nő. A teherbírás a talajtípus paramétere; az átnedvesedés a gyökérzóna telítettsége (a szabadföldi vízkapacitás felétől a telítettségig) vagy a felszíni víz.",
-                "járhatóság = 1 - átnedvesedés × (1 - teherbírás)");
+                "járhatóság = 1 - átnedvesedés × (1 - teherbírás)", execution: GameRuleExecution.EditableGraph);
             var resistance = Add("vehicle.resistance", "Lejtés és menetellenállás", "Járművek", "Teherautó / aktuális útszakasz", "Legfeljebb 1/30 jármű-s", dynamics, "Resistance",
                 "vehicle.mass|vehicle.speed|terrain.height|road.condition|road.network|trail.wear|trail.trafficability", "vehicle.resistance",
                 "Gördülés, előjeles lejtőellenállás és légellenállás; durva, kopott felület növeli a gördülést.", "F = Crr × m × g × cos(atan(lejtés)) + m × g × sin(atan(lejtés)) + 0,5 × levegősűrűség × légellenállási felület × v²");

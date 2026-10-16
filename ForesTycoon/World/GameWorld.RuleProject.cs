@@ -106,7 +106,7 @@ sealed partial class GameWorld
         Environment.Springs = next.Document.World?.Springs;
         algorithmGraphs = next.Document.Algorithms ?? AlgorithmBuild.CurrentReference;
         BindBehaviors(); ApplyTuning(next.Tuning);
-        if (refresh) pendingForestRateRefresh = true;
+        if (refresh) { pendingForestRateRefresh = true; Environment.InvalidateVegetation(); }
         LastRuleSample = "Szabályprojekt alkalmazva; a következő események ezt futtatják.";
     }
 

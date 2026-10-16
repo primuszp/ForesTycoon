@@ -49,7 +49,7 @@ namespace ForesTycoon.Ecology
             model.Forest = new ForestSystem(habitat, deferInitialization: true, responseRules: responseRules);
             foreach (int unit in model.Forest.ResetWork(habitat)) yield return unit;
             model.Forest.UseEnvironmentTempo(forestYearSeconds);
-            model.Environment = new EnvironmentSystem(habitat, model.Forest, forestYearSeconds, climate, true);
+            model.Environment = new EnvironmentSystem(habitat, model.Forest, forestYearSeconds, climate, true, responseRules);
             model.Environment.ResponseRules = responseRules;
             foreach (int unit in model.Environment.InitializeWork()) yield return unit;
             model.coordinator = new ForestEnvironmentCoordinator(model.Forest, model.Environment, deferInitialization: true);
@@ -80,7 +80,7 @@ namespace ForesTycoon.Ecology
             ForestYearSeconds = forestYearSeconds;
             Forest.Environment = null;
             Forest.UseEnvironmentTempo(forestYearSeconds);
-            Environment = new EnvironmentSystem(habitat, Forest, forestYearSeconds, climate);
+            Environment = new EnvironmentSystem(habitat, Forest, forestYearSeconds, climate, responseRules: Forest.ResponseRules);
             Environment.ResponseRules = Forest.ResponseRules;
             coordinator = new ForestEnvironmentCoordinator(Forest, Environment);
         }

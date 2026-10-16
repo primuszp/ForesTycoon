@@ -29,6 +29,10 @@ namespace ForesTycoon.Ecology
         /// <summary>Changes whenever the vegetation (and so interception and uptake demand) changes.</summary>
         ulong Revision { get; }
         ForestHydrologyInputs HydrologyInputs(int tileId);
+        System.Collections.Generic.IEnumerable<int> HydrologyInputsWork(int tileId, WorkResult<ForestHydrologyInputs> result)
+        {
+            result.Value = HydrologyInputs(tileId); yield return 1;
+        }
         /// <summary>Species of the stand on the tile, if any, for species-specific drought response.</summary>
         bool TryGetSpecies(int tileId, out ForestSpecies species);
     }

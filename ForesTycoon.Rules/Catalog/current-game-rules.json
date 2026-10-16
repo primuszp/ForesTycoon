@@ -627,7 +627,7 @@
       "module": "Talaj \u00E9s kl\u00EDma",
       "scope": "T\u00E9rk\u00E9pcella",
       "schedule": "Indul\u00F3 mez\u0151k \u002B minden k\u00F6rnyezeti l\u00E9p\u00E9s",
-      "execution": "NativeCode",
+      "execution": "EditableGraph",
       "description": "Sim\u00EDtott region\u00E1lis h\u0151m\u00E9rs\u00E9klet-, p\u00E1ratartalom- \u00E9s es\u0151elt\u00E9r\u00E9sek. Magass\u00E1g \u00E9l\u0151ben h\u0171ti a helyi leveg\u0151t; terraform nem gener\u00E1l \u00FAj kl\u00EDmamagot.",
       "formula": "T_helyi = T \u002B elt\u00E9r\u00E9s - normaliz\u00E1lt_magass\u00E1g \u00D7 h\u0171t\u00E9s",
       "notes": "",
@@ -702,7 +702,7 @@
       "module": "Talaj \u00E9s kl\u00EDma",
       "scope": "Vil\u00E1g",
       "schedule": "Esem\u00E9nyhat\u00E1rok \u00E9s k\u00F6rnyezeti l\u00E9p\u00E9s",
-      "execution": "NativeCode",
+      "execution": "EditableGraph",
       "description": "\u00C9vszakos, seedelt \u00E1tmenetek: \u0151sszel gyakori tart\u00F3s es\u0151, ny\u00E1ron r\u00F6vid z\u00E1por \u00E9s er\u0151s vihar, t\u00E9len havaz\u00E1s. A h\u00F3 menthet\u0151 v\u00EDzk\u00E9szlet, meleged\u00E9skor olvad. A csapad\u00E9k r\u00E1mp\u00E1inak integr\u00E1l\u00E1sa pontos.",
       "formula": "T = 10 \u002B 15 \u00D7 sin(2\u03C0 \u00D7 (id\u0151 / erd\u0151\u00E9v - 0,125)); havaz\u00E1skor T \u2264 -1 \u00B0C; sug\u00E1rz\u00E1s = 1 - 0,75 \u00D7 felh\u0151zet",
       "notes": "",
@@ -732,21 +732,22 @@
       "module": "Talaj \u00E9s kl\u00EDma",
       "scope": "T\u00E9rk\u00E9pcella",
       "schedule": "K\u00F6rnyezeti l\u00E9p\u00E9s",
-      "execution": "NativeCode",
+      "execution": "EditableGraph",
       "description": "A talajp\u00E1rolg\u00E1s \u00E9s a n\u00F6v\u00E9nyzeti v\u00EDzig\u00E9ny ugyanabb\u00F3l a helyi l\u00E9gk\u00F6ri k\u00E9nyszerb\u0151l sz\u00E1rmazik.",
       "formula": "E = (0,12 \u002B max(0,T) \u00D7 0,015) \u00D7 sug\u00E1rz\u00E1s \u00D7 (1 - 0,5 \u00D7 p\u00E1ra) \u00D7 (1 \u002B 0,035 \u00D7 sz\u00E9l)",
       "notes": "",
       "reads": [
         "climate.local",
-        "weather.forcing"
+        "weather.forcing",
+        "rules.behaviors"
       ],
       "writes": [
         "water.potential"
       ],
       "sources": [
         {
-          "file": "ForesTycoon.Ecology/Climate/WeatherSystem.cs",
-          "symbol": "PotentialEvaporationPerHour"
+          "file": "ForesTycoon.Rules/EnvironmentRules.cs",
+          "symbol": "weather.evaporation"
         }
       ],
       "parameters": [],
@@ -819,7 +820,7 @@
       "module": "V\u00EDzh\u00E1ztart\u00E1s",
       "scope": "Szomsz\u00E9dos cell\u00E1k",
       "schedule": "V\u00EDzl\u00E9p\u00E9s ut\u00E1n, fagyban",
-      "execution": "NativeCode",
+      "execution": "EditableGraph",
       "description": "A sz\u00E9l a k\u00F6vetkez\u0151 sz\u00E9lir\u00E1ny\u00FA cell\u00E1ba hordja a havat; n\u00F6v\u00E9nyzet \u00E9s domborzat m\u00E9rs\u00E9kli az \u00E1thord\u00E1st. Z\u00E1rt t\u00E9rk\u00E9psz\u00E9len megmarad a h\u00F3.",
       "formula": "",
       "notes": "",
@@ -2259,7 +2260,7 @@
       "module": "Erd\u0151",
       "scope": "T\u00E9rk\u00E9pcella",
       "schedule": "Erd\u0151rev\u00EDzi\u00F3-v\u00E1ltoz\u00E1s",
-      "execution": "NativeCode",
+      "execution": "EditableGraph",
       "description": "Koronafel\u00FClet \u00E9s eg\u00E9szs\u00E9g \u00F6sszeg\u00E9b\u0151l lombbor\u00EDt\u00E1s, intercepti\u00F3s kapacit\u00E1s \u00E9s LAI. A kiv\u00E1g\u00E1s megv\u00E1ltoztatja a k\u00F6vetkez\u0151 v\u00EDzl\u00E9p\u00E9s ig\u00E9ny\u00E9t \u00E9s es\u0151felfog\u00E1s\u00E1t.",
       "formula": "bor\u00EDt\u00E1s = 1 - exp(-koronafel\u00FClet / cellater\u00FClet); LAI legfeljebb 6",
       "notes": "",
@@ -2759,7 +2760,7 @@
       "module": "Utak \u00E9s nyomok",
       "scope": "Burkolatlan csempe",
       "schedule": "J\u00E1rm\u0171 halad\u00E1sakor",
-      "execution": "NativeCode",
+      "execution": "EditableGraph",
       "description": "\u00C1t\u00E1zott, gyenge teherb\u00EDr\u00E1s\u00FA talajon a f\u00F6ld\u00FAt \u00E9s a k\u00F6zel\u00EDt\u0151nyom fel\u00FClete romlik, a j\u00E1rm\u0171 g\u00F6rd\u00FCl\u00E9si ellen\u00E1ll\u00E1sa n\u0151. A teherb\u00EDr\u00E1s a talajt\u00EDpus param\u00E9tere; az \u00E1tnedvesed\u00E9s a gy\u00F6k\u00E9rz\u00F3na tel\u00EDtetts\u00E9ge (a szabadf\u00F6ldi v\u00EDzkapacit\u00E1s fel\u00E9t\u0151l a tel\u00EDtetts\u00E9gig) vagy a felsz\u00EDni v\u00EDz.",
       "formula": "j\u00E1rhat\u00F3s\u00E1g = 1 - \u00E1tnedvesed\u00E9s \u00D7 (1 - teherb\u00EDr\u00E1s)",
       "notes": "",

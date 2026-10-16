@@ -588,3 +588,14 @@ Ellenőrzés: `BehaviorCurveTests`, `ResponseRuleCardTests`, `RuleCoverageTests`
 `RuleFlowTests`, `DynamicsRuntimeTests` és az editor füsttesztje.
 A füstteszt `common-response-curve.png` képe a közös görbeszerkesztőt mutatja,
 és azt is ellenőrzi, hogy a gráf a játékba kerül, majd visszavonható.
+
+
+## Környezeti szabályok – 2026-10-16
+
+Az időjárás indulása és eseményei, a levegő válaszai, a helyi klíma, a
+párologtató képesség, a lombkorona vízháztartási hatásai, a hóhordás, a talaj
+teherbírása és a járhatóság is a közös pipás válaszgráfok között szerkeszthető.
+A forrásválasztó objektumot és azon belül mezőt kínál; az angol kódazonosító
+megmarad. Az állandókat számmal/csúszkával, a válaszokat a közös görbékkel is
+alakíthatod. A kikapcsolás választott fix eredményt jelent.
+[Részletek, futási sorrend, mentési garanciák](environment-rules.md).

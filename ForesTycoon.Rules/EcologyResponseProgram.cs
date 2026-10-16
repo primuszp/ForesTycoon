@@ -17,15 +17,17 @@ public sealed class EcologyResponseProgram
         new("water.waterlogging", "Pangóvíz követése", "site", "0–1", 0, 1, "", "", "Szeletelt környezeti lépés, csempénként", false,
             new[] { "tile.rawWaterlogging", "tile.waterlogging", "step.seconds" })
     };
-    public static readonly BehaviorHook[] Hooks = SiteHooks.Concat(ForestCompetitionRules.Hooks).Concat(ForestRegenerationRules.Hooks).Concat(TreeInitialSizeRules.Hooks).ToArray();
+    public static readonly BehaviorHook[] Hooks = SiteHooks.Concat(ForestCompetitionRules.Hooks).Concat(ForestRegenerationRules.Hooks).Concat(TreeInitialSizeRules.Hooks).Concat(EnvironmentRules.Hooks).ToArray();
+    private static readonly int EnvironmentIndex = Hooks.Length - EnvironmentRules.Hooks.Length;
     private static readonly int InitialSizeIndex = Array.FindIndex(Hooks, h => h.Id == "forest.initialHeight" && h.Kind == "initialTree");
-    public static bool IsPureKind(string kind) => kind is "site" or "competitionPair" or "competition" or "resource" or "regeneration" or "initialTree";
+    public static bool IsPureKind(string kind) => kind is "site" or "competitionPair" or "competition" or "resource" or "regeneration" or "initialTree" or "environment";
     public static bool AllowedOperation(BehaviorOperation op) => op is BehaviorOperation.Constant or BehaviorOperation.Input
         or BehaviorOperation.Add or BehaviorOperation.Subtract or BehaviorOperation.Multiply or BehaviorOperation.Divide
         or BehaviorOperation.Minimum or BehaviorOperation.Maximum or BehaviorOperation.Greater or BehaviorOperation.Less
         or BehaviorOperation.Select or BehaviorOperation.Absolute or BehaviorOperation.Negate or BehaviorOperation.Exp or BehaviorOperation.Power or BehaviorOperation.Curve;
     public static BehaviorGraph DefaultGraph(BehaviorHook hook)
     {
+        if (hook.Kind == "environment") return EnvironmentRules.DefaultGraph(hook);
         if (hook.Kind == "initialTree") return TreeInitialSizeRules.DefaultGraph(hook);
         if (hook.Kind == "regeneration") return ForestRegenerationRules.DefaultGraph(hook);
         if (hook.Kind != "site") return ForestCompetitionRules.DefaultGraph(hook);
@@ -75,6 +77,14 @@ public sealed class EcologyResponseProgram
             LastError ??= Hooks[index].Name + ": " + error.Message + " A hibás válasz 0; javítsd a kijelzett gráfot.";
             return 0;
         }
+    }
+    public double Environment(EnvironmentResponse response, ReadOnlySpan<double> values)
+    {
+        int index = EnvironmentIndex + (int)response;
+        if ((uint)(int)response >= (uint)EnvironmentRules.Hooks.Length || values.Length != inputs[index].Length)
+            throw new ArgumentException("Environment response input mismatch.", nameof(values));
+        values.CopyTo(inputs[index]);
+        return Evaluate(index);
     }
     public double Fitness(double moisture, double elevation, double fertility, double preferredElevation, double elevationTolerance)
     {

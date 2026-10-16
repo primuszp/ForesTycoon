@@ -59,10 +59,7 @@ namespace ForesTycoon
         {
             if (Environment == null) return 1;
             var (wetness, bearing) = Environment.Trafficability(id);
-            double native = 1 - wetness * (1 - bearing);
-            if (behaviorPolicy.Overrides("trail.trafficability", "tile"))
-                native = behaviorPolicy.Evaluate(new("trail.trafficability", "tile", (ulong)id, native, Time: forest.ForestYear, State: wetness, Amount: bearing));
-            return (float)System.Math.Clamp(native, 0, 1);
+            return (float)behaviorPolicy.Responses.Environment(ForesTycoon.Rules.EnvironmentResponse.Trafficability, [wetness, bearing]);
         }
         /// <summary>A vertical section of one tile: the current value of its per-tile quantities, by system-model ID.</summary>
         internal Dictionary<string, string> DescribeTile(int id)
@@ -73,7 +70,7 @@ namespace ForesTycoon
                 var profile = Soils.Profile(id);
                 result["soil.profile"] = profile.Name;
                 result["soil.fertility"] = profile.Properties.Fertility.ToString("0.00");
-                result["soil.bearing"] = EnvironmentSystem.BearingCapacity(profile.Properties).ToString("0.00");
+                result["soil.bearing"] = EnvironmentSystem.BearingCapacity(profile.Properties, behaviorPolicy.Responses).ToString("0.00");
             }
             if (Environment != null) {
                 var cell = Environment.Cell(id);

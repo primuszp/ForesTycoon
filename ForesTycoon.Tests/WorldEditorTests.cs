@@ -8,15 +8,15 @@ public sealed class RuleFormulaTests
     {
         var graph = RuleFormula.Compile(text, Target(Traffic), RuleFormula.Names(Traffic));
         var model = new CompiledBehaviorModel(new BehaviorModel { Graphs = { graph } }, WorldBehaviorPolicy.Hooks);
-        return model.Evaluate("trail.trafficability", "tile", 1, new BehaviorInputs(native, 0, 0, wetness, bearing));
+        return model.Evaluate("trail.trafficability", Traffic.Kind, 1, new BehaviorInputs(native, 0, 0, wetness, bearing));
     }
 
     [Fact]
     public void TheMovedTrafficabilityRuleComputesWhatTheGameComputed()
     {
-        string text = RuleFormula.Default(Traffic);
-        Assert.Equal(1 - 0.8 * (1 - 0.3), Run(text, 0.8, 0.3), 9);
-        Assert.Equal(1, Run(text, 0, 0.3), 9);
+        var response = EcologyResponseProgram.FromModel(WorldBehaviorPolicy.DefaultDocument());
+        Assert.Equal(1 - 0.8 * (1 - 0.3), response.Environment(EnvironmentResponse.Trafficability, [.8, .3]), 9);
+        Assert.Equal(1, response.Environment(EnvironmentResponse.Trafficability, [0, .3]), 9);
     }
 
     [Fact]

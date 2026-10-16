@@ -1,12 +1,12 @@
 using System;
+using ForesTycoon.Rules;
 
 namespace ForesTycoon.Ecology
 {
     internal readonly record struct WeatherForcing(double Radiation, double Temperature, double Humidity, double Wind)
     {
-        // Gameplay approximation, mm/environment hour, shared by soil evaporation and tree demand.
-        internal double PotentialEvaporationPerHour => (0.12 + Math.Max(0, Temperature) * 0.015)
-            * Radiation * (1 - Humidity * 0.5) * (1 + Wind * 0.035);
+        internal double Evaporation(EcologyResponseProgram rules) => rules.Environment(EnvironmentResponse.Evaporation,
+            [Radiation, Temperature, Humidity, Wind]);
     }
 
     internal readonly record struct WeatherInterval(double Seconds, double Rain, WeatherForcing Forcing, bool Snow = false);
@@ -27,36 +27,33 @@ namespace ForesTycoon.Ecology
         internal double EventRain { get; private set; }
         internal double TotalRain { get; private set; }
         internal double RainRate => RateAt(Time);
-        private double Ramp => Math.Min(10 * timeScale, (EventEnd - EventStart) * 0.2);
+        internal EcologyResponseProgram ResponseRules { get; set; }
+        private EcologyResponseProgram Responses => ResponseRules ?? EcologyResponseProgram.Default;
+        private double Ramp => Math.Clamp(Responses.Environment(EnvironmentResponse.Ramp,
+            [EventEnd - EventStart, timeScale]), 0.000000001, Math.Max(0.000000001, (EventEnd - EventStart) / 2));
         internal double ExpectedEventRain => PeakRain * (EventEnd - EventStart - Ramp) * HoursPerSecond;
         internal int Season => (int)Math.Floor(Time / ForestYearSeconds * 4 + 1e-9) % 4;
-        internal double Temperature => Preset == WeatherPreset.Snow
-            ? Math.Min(-1, SeasonalTemperature) : SeasonalTemperature;
-        private double SeasonalTemperature => 10 + 15 * Math.Sin(2 * Math.PI * (Time / ForestYearSeconds - .125));
-        internal double Humidity => Preset is WeatherPreset.Rain or WeatherPreset.Storm or WeatherPreset.Snow ? 0.9 : 0.55;
-        internal double Wind => 1.5 + (Preset == WeatherPreset.Storm ? 8.5 : Preset == WeatherPreset.Rain ? 1.5 : 0)
-            * Math.Clamp(RainRate / Math.Max(1, PeakRain), 0, 1);
-        internal double Radiation => 1 - Cloud * 0.75;
-        internal double Cloud
-        {
-            get
-            {
-                double target = Preset == WeatherPreset.Sunny ? 0.12 : Preset == WeatherPreset.Cloudy ? 0.65 : 1;
-                double t = Math.Clamp((Time - EventStart) / (10 * timeScale), 0, 1);
-                t = t * t * (3 - 2 * t);
-                return previousCloud + (target - previousCloud) * t;
-            }
-        }
+        internal double Temperature => Responses.Environment(EnvironmentResponse.Temperature,
+            [Math.Sin(2 * Math.PI * (Time / ForestYearSeconds - .125)), (int)Preset,
+                Time / ForestYearSeconds - Math.Floor(Time / ForestYearSeconds), Season]);
+        internal double Humidity => Responses.Environment(EnvironmentResponse.Humidity, [(int)Preset]);
+        internal double Wind => Responses.Environment(EnvironmentResponse.Wind, [(int)Preset, RainRate, PeakRain]);
+        internal double Radiation => Responses.Environment(EnvironmentResponse.Radiation, [Cloud]);
+        internal double Cloud => Responses.Environment(EnvironmentResponse.Cloud, [(int)Preset, Time - EventStart, timeScale, previousCloud]);
 
-        internal WeatherSystem(int seed, double forestYearSeconds = EnvironmentSystem.SecondsPerForestYear)
+        internal WeatherSystem(int seed, double forestYearSeconds = EnvironmentSystem.SecondsPerForestYear, EcologyResponseProgram responseRules = null)
         {
             if (!EnvironmentSystem.IsValidForestYearSeconds(forestYearSeconds))
                 throw new ArgumentOutOfRangeException(nameof(forestYearSeconds));
             ForestYearSeconds = forestYearSeconds;
+            ResponseRules = responseRules;
             timeScale = forestYearSeconds / EnvironmentSystem.SecondsPerForestYear;
             random = unchecked((uint)seed) ^ 0x73A94F21u;
             if (random == 0) random = 1;
-            StartEvent(WeatherPreset.Sunny, 150 * timeScale, 0);
+            var initial = (WeatherPreset)(int)Math.Round(Responses.Environment(EnvironmentResponse.InitialType, []));
+            StartEvent(initial, Math.Max(.001, Responses.Environment(EnvironmentResponse.InitialDuration, [])) * timeScale,
+                initial is WeatherPreset.Rain or WeatherPreset.Snow or WeatherPreset.Storm
+                    ? Responses.Environment(EnvironmentResponse.InitialPeak, []) : 0);
         }
 
         private double Random()
@@ -77,38 +74,21 @@ namespace ForesTycoon.Ecology
             if (peak < -1 || peak > 100) throw new ArgumentOutOfRangeException(nameof(peak));
             if (duration < -1 || (duration != -1 && duration < 20) || duration > 600)
                 throw new ArgumentOutOfRangeException(nameof(duration));
-            StartEvent(preset, duration < 0 ? (preset == WeatherPreset.Storm ? 45 : preset == WeatherPreset.Rain ? 90 : 180) * timeScale : duration,
-                preset is WeatherPreset.Rain or WeatherPreset.Storm or WeatherPreset.Snow ? (peak < 0 ? (preset == WeatherPreset.Storm ? 32 : preset == WeatherPreset.Snow ? 8 : 12) : peak) : 0);
+            StartEvent(preset, duration < 0 ? Math.Max(.001, Responses.Environment(EnvironmentResponse.ForcedDuration, [(int)preset])) * timeScale : duration,
+                preset is WeatherPreset.Rain or WeatherPreset.Storm or WeatherPreset.Snow
+                    ? (peak < 0 ? Responses.Environment(EnvironmentResponse.ForcedPeak, [(int)preset]) : peak) : 0);
         }
 
         private void NextEvent()
         {
-            double r = Random();
-            WeatherPreset next;
-            next = Season switch
-            {
-                1 => r < .45 ? WeatherPreset.Sunny : r < .70 ? WeatherPreset.Cloudy : r < .85 ? WeatherPreset.Rain : WeatherPreset.Storm,
-                2 => r < .10 ? WeatherPreset.Sunny : r < .38 ? WeatherPreset.Cloudy : r < .96 ? WeatherPreset.Rain : WeatherPreset.Storm,
-                3 => r < .15 ? WeatherPreset.Sunny : r < .40 ? WeatherPreset.Cloudy : WeatherPreset.Snow,
-                _ => r < .35 ? WeatherPreset.Sunny : r < .65 ? WeatherPreset.Cloudy : r < .96 ? WeatherPreset.Rain : WeatherPreset.Storm
-            };
-            double duration = (Season, next) switch
-            {
-                (1, WeatherPreset.Rain) => 8 + Random() * 12,
-                (1, WeatherPreset.Storm) => 8 + Random() * 10,
-                (2, WeatherPreset.Rain) => 45 + Random() * 45,
-                (_, WeatherPreset.Snow) => 40 + Random() * 35,
-                (_, WeatherPreset.Sunny) => 45 + Random() * 65,
-                (_, WeatherPreset.Cloudy) => 25 + Random() * 35,
-                (_, WeatherPreset.Rain) => 25 + Random() * 30,
-                _ => 20 + Random() * 15
-            };
+            var next = (WeatherPreset)(int)Math.Round(Responses.Environment(EnvironmentResponse.EventType, [Season, Random()]));
+            double duration = Responses.Environment(EnvironmentResponse.EventDuration, [Season, (int)next, Random()]);
             double quarter = ForestYearSeconds / 4;
             double boundary = (Math.Floor(Time / quarter + 1e-9) + 1) * quarter;
-            double peak = next == WeatherPreset.Snow ? 4 + Random() * 6
-                : next == WeatherPreset.Storm ? (Season == 1 ? 32 : 20) + Random() * 20
-                : next == WeatherPreset.Rain ? (Season == 1 ? 16 : 6) + Random() * 12 : 0;
-            StartEvent(next, Math.Min(duration * timeScale, boundary - Time), peak);
+            // Keep the seeded stream's draw count stable: dry events have no intensity draw.
+            double peak = next is WeatherPreset.Snow or WeatherPreset.Storm or WeatherPreset.Rain
+                ? Responses.Environment(EnvironmentResponse.EventPeak, [Season, (int)next, Random()]) : 0;
+            StartEvent(next, Math.Min(Math.Max(0.001, duration) * timeScale, boundary - Time), peak);
         }
 
         private double RateAt(double time) => PeakRain * Math.Clamp(

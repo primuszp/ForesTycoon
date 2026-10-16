@@ -3,28 +3,6 @@ using System.Collections.Generic;
 
 namespace ForesTycoon.Ecology
 {
-    /// <summary>Local runoff response: retained surface water in mm and release rate per weather hour.</summary>
-    internal readonly record struct SurfaceRunoffLaw
-    {
-        internal static SurfaceRunoffLaw Legacy { get; } = new(2, 6);
-        internal double RetainedWater { get; }
-        internal double ReleasePerHour { get; }
-
-        internal SurfaceRunoffLaw(double retainedWater, double releasePerHour)
-        {
-            if (!double.IsFinite(retainedWater) || retainedWater < 0) throw new ArgumentOutOfRangeException(nameof(retainedWater));
-            if (!double.IsFinite(releasePerHour) || releasePerHour < 0) throw new ArgumentOutOfRangeException(nameof(releasePerHour));
-            RetainedWater = retainedWater; ReleasePerHour = releasePerHour;
-        }
-
-        // The exponential depends only on the interval, so prepare it once outside the raster loop.
-        internal SurfaceRunoffStep Prepare(double hours)
-        {
-            if (!double.IsFinite(hours) || hours < 0) throw new ArgumentOutOfRangeException(nameof(hours));
-            return new(RetainedWater, ReleasePerHour == 0 ? 0 : 1 - Math.Exp(-hours * ReleasePerHour));
-        }
-    }
-
     internal readonly struct SurfaceRunoffStep
     {
         private readonly double retainedWater, releasedFraction;
@@ -63,6 +41,12 @@ namespace ForesTycoon.Ecology
         {
             if (active) throw new InvalidOperationException("Commit or cancel the previous surface flux step.");
             Array.Clear(delta); Array.Clear(scheduled); active = true;
+        }
+        internal IEnumerable<int> BeginStepWork()
+        {
+            if (active) throw new InvalidOperationException("Commit or cancel the previous surface flux step.");
+            active = true;
+            for (int id = 0; id < delta.Length; id++) { delta[id] = 0; scheduled[id] = false; yield return 1; }
         }
 
         // Returns exported depth, allowing the caller to accumulate its existing ordered water ledger.

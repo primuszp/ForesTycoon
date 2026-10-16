@@ -511,3 +511,20 @@ szeletelési és korlátbizonyítási csomag **38/38** teszttel átment
 is sikeres. A forgalmi tesztek a tényleges munkakeretet és a félkész esemény
 eldobását ellenőrzik; nem követelik meg az elhagyott, más időzítésű szabályok
 miatti mesterséges felfüggesztéseket.
+
+## Környezeti gráfok szeletelt futása – 2026-10-16
+
+Az időjárás, helyi klíma, párologtató képesség, lomb-víz visszacsatolás,
+hóhordás és járhatóság 31 tiszta projektgráfot használ. A lombok összegzése
+fánként is szeletelt; a hófluxus előkészítése, vizsgálata és publikálása
+csempénként folytatható. A félkész hópublikálás közbeni betöltés tesztelt:
+a megszakított világ munkája eldobódik, a visszatöltött világ pontosan folytatódik.
+A száraz és csapadékos események sorsolási streamje és a redukciós sorrend rögzített.
+
+Az újramért 128²/65 086 fás alaptempós host p99 értéke 4,081 ms,
+maximuma 13,048 ms; a csúcshátralék továbbra is 7,05 szimuláció-s.
+A 64 egységes eső-/hószeletek p99 értéke 0,090/0,084 ms; a ritka maximum
+6,031/3,516 ms. A teljes és szeletelt checkpoint mind a négy 64²/128²
+eső-/hóesetben bitre azonos, nincs eldobott idő.
+Ez a csomag a környezeti döntések szerkeszthetőségét zárja le; a hónaphatári
+hátralékot nem szünteti meg. [Részletes protokoll és eredmények](environment-rules.md).

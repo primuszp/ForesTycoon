@@ -314,7 +314,7 @@ sealed partial class GameWorld
         private Ecology.ClimateCell Climate => World.Environment.LocalClimate(Id);
         public double Rain => Inside ? World.Environment.LiquidRainRate * Climate.RainMultiplier : 0;
         public double Snowfall => Inside ? World.Environment.SnowfallRate * Climate.RainMultiplier : 0;
-        public double PotentialEvaporation => Inside ? Climate.Forcing.PotentialEvaporationPerHour : 0;
+        public double PotentialEvaporation => Inside ? Climate.Forcing.Evaporation(World.Environment.ResponseRules ?? ForesTycoon.Rules.EcologyResponseProgram.Default) : 0;
         public double Temperature => Inside ? Climate.Forcing.Temperature : 0;
         public double LeafAreaIndex => Inside ? World.Environment.HydrologyInputs(Id).LeafAreaIndex : 0;
         public double InterceptionCapacity => Inside ? World.Environment.HydrologyInputs(Id).InterceptionCapacity : 0;
@@ -370,7 +370,7 @@ sealed partial class GameWorld
             nameof(Paved) => (w, id) => Within(w, id) && (w.Map.IsRoadTile(id) || w.Map.IsBuildingTile(id)) ? 1 : 0,
             nameof(Rain) => (w, id) => Within(w, id) ? w.Environment.LiquidRainRate * w.Environment.LocalClimate(id).RainMultiplier : 0,
             nameof(Snowfall) => (w, id) => Within(w, id) ? w.Environment.SnowfallRate * w.Environment.LocalClimate(id).RainMultiplier : 0,
-            nameof(PotentialEvaporation) => (w, id) => Within(w, id) ? w.Environment.LocalClimate(id).Forcing.PotentialEvaporationPerHour : 0,
+            nameof(PotentialEvaporation) => (w, id) => Within(w, id) ? w.Environment.LocalClimate(id).Forcing.Evaporation(w.Environment.ResponseRules ?? ForesTycoon.Rules.EcologyResponseProgram.Default) : 0,
             nameof(Temperature) => (w, id) => Within(w, id) ? w.Environment.LocalClimate(id).Forcing.Temperature : 0,
             nameof(LeafAreaIndex) => (w, id) => Within(w, id) ? w.Environment.HydrologyInputs(id).LeafAreaIndex : 0,
             nameof(InterceptionCapacity) => Interception,

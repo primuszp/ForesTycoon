@@ -10,8 +10,7 @@ namespace ForesTycoon
             new("machine.pace", "Forwarder munkatempó", "forwarder", "munka-s", 0, 10, "Kopás (0–1)", "Rakomány (m³)", "Gép al-lépés"),
             new("machine.pace", "Processzor munkatempó", "processor", "munka-s", 0, 10, "Kopás (0–1)", "Rakomány (m³)", "Gép al-lépés"),
             new("mill.process", "Malom feldolgozása", "mill", "m³", 0, 1e6, "Már feldolgozott mennyiség (m³)", "Készlet (m³)", "Logisztikai lépés"),
-            new("trail.trafficability", "Földút járhatósága", "tile", "0–1", 0, 1, "Átnedvesedés (0–1)", "Talaj teherbírása (0–1)", "Jármű haladása burkolatlan csempén; 1 = száraz, jól járható",
-                Formula: "# Átázott, gyenge teherbírású talajon a földút nehezen járható.\n1 - átnedvesedés * (1 - talaj.teherbírás)")
+
         }.Concat(EcologyResponseProgram.Hooks).Concat(TransportHooks()).Concat(GameTuning.Specs.Select(s => new BehaviorHook("tuning." + s.Id, s.Name, "world", s.Unit, s.Min, s.Max,
             "Nem használt", "Nem használt", "Paraméter lekérdezése; járműspecifikáció alkalmazáskor", false))).ToArray();
         private readonly CompiledBehaviorModel model;
@@ -85,14 +84,16 @@ namespace ForesTycoon
                     if (kind == "tile" || kind == "road" && map.IsRoadTile(i)) yield return ((ulong)i, $"{kind} #{i}");
             }
         }
-        internal static string[] RuleObjectKinds => WorldBehaviorPolicy.Hooks.Select(h => h.Kind).Concat(new[] { "wildlife", "depot", "stack" }).Distinct().ToArray();
+        internal static string[] RuleObjectKinds => WorldBehaviorPolicy.Hooks.Where(h => h.SupportsObjects).Select(h => h.Kind).Concat(RuleEngine.Scopes.Select(s => s.Id)).Concat(new[] { "wildlife", "depot", "stack" }).Distinct().ToArray();
         internal void QueueBehaviors(BehaviorModel model) => Enqueue(new SetBehaviorsCommand(model.ToJson()));
         void IWorldCommandTarget.ExecuteBehaviors(string json) => ApplyBehaviors(BehaviorModel.FromJson(json));
         private void ApplyBehaviors(BehaviorModel model)
         {
             var replacement = new WorldBehaviorPolicy(model, DynamicsRuntime.Keys(dynamics.Document, RuleWorldFields), ruleValues.ReadRule);
             replacement.Controllers.PreserveUnchanged(behaviorPolicy.Controllers);
-            if (ResponseSignature(behaviorPolicy.Document) != ResponseSignature(replacement.Document)) pendingForestRateRefresh = true;
+            if (ResponseSignature(behaviorPolicy.Document) != ResponseSignature(replacement.Document)) {
+                pendingForestRateRefresh = true; Environment.InvalidateVegetation();
+            }
             behaviorPolicy = replacement;
             BindBehaviors();
             ApplyTuning(Tuning);
@@ -100,7 +101,6 @@ namespace ForesTycoon
         private void BindBehaviors()
         {
             IBehaviorPolicy active = behaviorPolicy;
-            Environment.Behaviors = active;
             Environment.ResponseRules = behaviorPolicy.Responses;
             forest.ResponseRules = behaviorPolicy.Responses;
             forest.MonthlyRules = TreeMonthWork;

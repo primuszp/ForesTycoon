@@ -26,7 +26,7 @@ public class BehaviorModelTests
     [Fact]
     public void ConditionalGraphUsesLiveInputsAndOutputBounds()
     {
-        var graph = Constant("trail.trafficability", "tile", 2);
+        var graph = Constant("trail.trafficability", "environment", 2);
         graph.Nodes.AddRange(new BehaviorNode[] {
             new() { Id = "health", Name = "Health", Operation = BehaviorOperation.State },
             new() { Id = "threshold", Name = "Threshold", Operation = BehaviorOperation.Constant, Value = .5 },

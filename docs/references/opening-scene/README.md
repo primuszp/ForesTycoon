@@ -216,3 +216,18 @@ készlete és végrehajtása változatlan: a külön újrarögzített nyitóvil�
 lenyomata egyezik a tizenhatodik lépésével. A beágyazott és referencia mentés
 verziójele frissült, az állapotadatok és a saját jelenetszerkesztések megmaradtak.
 Nincs korábbi kikapcsolási jelentést átvezető betöltési ág.
+
+
+## Tizennyolcadik lépés: környezeti projektgráfok – 2026-10-16
+
+Az időjárási események és légköri válaszok, a helyi klíma, a párologtató
+képesség, a lombkorona vízháztartási visszacsatolása, a hóhordás és a
+burkolatlan talaj járhatósága a projekt 31 válaszgráfjából fut. A korábbi
+járhatósági Native-kötést valódi bemeneti gráf váltja. A futtató
+`forestycoon-simulation/2026-10-16.11`.
+
+A külön újrarögzített nyitóvilággal összevetve csak a `Behaviors` lenyomat
+változott. Az ökológiai indulóállapot, a terep, logisztika és minden más
+lenyomat egyezik. A szállított jelenet saját beállításai megmaradtak.
+A referencia és a beágyazott állapot az új futtatóval készült; nincs régi
+környezeti képletet fenntartó futtatási ág. [Részletek](../../environment-rules.md).

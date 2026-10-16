@@ -62,7 +62,7 @@
       ]
     },
     {
-      "status": "pending",
+      "status": "graph",
       "ids": [
         "climate.regional",
         "weather.events",
@@ -71,9 +71,10 @@
         "forest.canopy",
         "trail.trafficability"
       ],
-      "editor": "Bemeneti adatok és hangolási pontok; teljes döntési gráf nincs.",
-      "remaining": "4. csomag: környezeti döntések és válaszok átvezetése.",
+      "editor": "Szabályok → közös környezeti válaszgráfok; objektum → mező, görbe, szám és csúszka.",
+      "remaining": "A seedelt régióminta, az eseményóra, a szomszédbejárás és a megmaradó hó könyvelése motorfeladat. Minden környezeti döntés projektgráf.",
       "tests": [
+        "ForesTycoon.Tests/EnvironmentRuleTests.cs",
         "ForesTycoon.Tests/SeasonalWeatherTests.cs",
         "ForesTycoon.Tests/RegionalClimateTests.cs",
         "ForesTycoon.Tests/WaterRulesTests.cs"

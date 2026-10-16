@@ -94,6 +94,7 @@ internal sealed partial class RuleEditorView
         var downstream = info.GraphConsumers(behaviors.Document.Graphs.Where(g => g.Id != graph.Id));
         string consumers = "Bekötött szabályok: " + (downstream.Length == 0 ? "nincs" : string.Join("; ", downstream)) + ". Játékbeli felhasználás: " + info.Consumers;
         string when = graph.Kind switch {
+            "environment" => hook.Schedule,
             "initialTree" => "Új fa létrehozásakor: generálás, festés, ültetés vagy újulat",
             "regeneration" => "Az erdőhónap végén, az újulat megtelepedésénél",
             "competitionPair" => "A szomszédos fák versengésének frissítésekor, fapáronként",

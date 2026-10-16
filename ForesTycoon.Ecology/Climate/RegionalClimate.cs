@@ -1,4 +1,5 @@
 using System;
+using ForesTycoon.Rules;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using System.Text.Json;
@@ -76,15 +77,16 @@ namespace ForesTycoon.Ecology
             if (!deferInitialization) SimulationWork.Complete(InitializeWork());
         }
 
+        internal EcologyResponseProgram ResponseRules { get; set; }
+        private EcologyResponseProgram Responses => ResponseRules ?? EcologyResponseProgram.Default;
         internal ClimateCell Cell(int id, WeatherForcing forcing)
         {
             if ((uint)id >= (uint)rain.Length) throw new ArgumentOutOfRangeException(nameof(id));
-            if (Uniform) return new(forcing, 1);
             return new(forcing with
             {
-                Temperature = forcing.Temperature + temperature[id] - habitat.GetNormalizedElevation(id) * Definition.ElevationCooling,
-                Humidity = Math.Clamp(forcing.Humidity + humidity[id], 0, 1)
-            }, rain[id]);
+                Temperature = Responses.Environment(EnvironmentResponse.LocalTemperature, [forcing.Temperature, temperature[id], habitat.GetNormalizedElevation(id), Definition.ElevationCooling]),
+                Humidity = Responses.Environment(EnvironmentResponse.LocalHumidity, [forcing.Humidity, humidity[id]])
+            }, Responses.Environment(EnvironmentResponse.LocalRain, [rain[id]]));
         }
 
         internal IEnumerable<int> InitializeWork()
