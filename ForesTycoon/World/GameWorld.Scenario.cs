@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
+using System.Threading.Tasks;
 
 namespace ForesTycoon
 {
@@ -94,20 +95,26 @@ namespace ForesTycoon
             InitializeProjectScene(project);
         }
 
-        internal void InitializeProjectScene(RuleProject project)
+        internal void InitializeProjectScene(RuleProject project) => SimulationWork.Complete(InitializeProjectSceneWork(project));
+
+        internal IEnumerable<int> InitializeProjectSceneWork(RuleProject project)
         {
             var scenario = project.World;
             // The painted map is the initial state: terrain (and so water) first, then the forest that grows on it.
             if (scenario != null) {
                 ForestSpeciesBook.Apply(SpeciesEdits(scenario));
-                int[] changed = map.ApplyHeightTargets(scenario.HeightPaint);
-                if (changed.Length > 0) ecosystem.ApplyTerrainEdit(changed);
-                forest.PaintInitialForest(scenario.ForestPaint.ToDictionary(p => p.Key,
+                var changed = new WorkResult<int[]>();
+                foreach (int unit in map.ApplyHeightTargetsWork(scenario.HeightPaint, changed)) yield return unit;
+                foreach (int unit in forest.ClearTerrainTilesWork(changed.Value)) yield return unit;
+                foreach (int unit in forest.PaintInitialForestWork(scenario.ForestPaint.ToDictionary(p => p.Key,
                     p => p.Value.Length == 0 ? ForestSpecies.None : Enum.TryParse(p.Value, out ForestSpecies s) ? s : ForestSpecies.None),
-                    preserveUnpainted: scenario.InitialState != null);
-                BuildSceneStructures(scenario);
+                    preserveUnpainted: scenario.InitialState != null)) yield return unit;
+                foreach (int unit in BuildSceneStructuresWork(scenario)) yield return unit;
             }
-            QueueRuleProject(project); ExecutePendingCommands();
+            var command = Task.Run(() => new SetRuleProjectCommand(project.ToJson()));
+            while (!command.IsCompleted) yield return 64;
+            Enqueue(command.GetAwaiter().GetResult());
+            do { ContinueCommands(16); yield return 16; } while (commands.WorkPending);
         }
 
         /// <summary>What the scene asked for but the map did not allow, e.g. a mill on a slope; shown in the editor.</summary>
@@ -117,25 +124,27 @@ namespace ForesTycoon
         /// The scene's roads, sawmills and depots, built in that order like a player would, but free: they are the starting
         /// estate, not spending. Forest under a building's footprint is cleared first.
         /// </summary>
-        private void BuildSceneStructures(WorldScenario scenario)
+
+
+        private IEnumerable<int> BuildSceneStructuresWork(WorldScenario scenario)
         {
             SceneProblems.Clear();
-            if (scenario.Roads.Count + scenario.Sawmills.Count + scenario.Depots.Count == 0) return;
+            if (scenario.Roads.Count + scenario.Sawmills.Count + scenario.Depots.Count == 0) yield break;
             double expenses = Expenses; string status = Logistics?.Status;
             foreach (var road in scenario.Roads) {
                 var surface = road.Surface == "Asphalt" ? RoadPaving.Asphalt : RoadPaving.Macadam;
                 int before = RoadCount;
-                ((IWorldCommandTarget)this).ExecuteRoadPath(road.From, road.To, false, surface);
+                foreach (int unit in RoadCommandWork(road.From, road.To, false, surface)) yield return unit;
                 if (RoadCount == before && !map.IsRoadTile(road.From)) SceneProblems.Add($"Az út #{road.From} → #{road.To} nem épülhetett meg (víz vagy meredek).");
             }
-            void Place(int tile, string what, Func<int, bool> place)
+            IEnumerable<int> Place(int tile, string what, Func<int, bool> place)
             {
                 if (map.TryGetSawmillFootprint(tile, out var footprint, out _))
-                    forest.PaintInitialForest(footprint.ToDictionary(t => t, _ => ForestSpecies.None), preserveUnpainted: true);
+                    foreach (int unit in forest.PaintInitialForestWork(footprint.ToDictionary(t => t, _ => ForestSpecies.None), preserveUnpainted: true)) yield return unit;
                 if (Logistics == null || !place(tile)) SceneProblems.Add($"{what} #{tile}: {Logistics?.Status ?? "nincs logisztika."}");
             }
-            foreach (int tile in scenario.Sawmills) Place(tile, "Fűrészmalom", t => Logistics.PlaceMill(t));
-            foreach (int tile in scenario.Depots) Place(tile, "Telephely", t => Logistics.PlaceDepot(t));
+            foreach (int tile in scenario.Sawmills) foreach (int unit in Place(tile, "Fűrészmalom", t => Logistics.PlaceMill(t))) yield return unit;
+            foreach (int tile in scenario.Depots) foreach (int unit in Place(tile, "Telephely", t => Logistics.PlaceDepot(t))) yield return unit;
             Expenses = expenses;
             if (Logistics != null) Logistics.Status = status;
         }

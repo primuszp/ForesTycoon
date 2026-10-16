@@ -17,16 +17,24 @@ namespace ForesTycoon
         /// <summary>Captures the frozen road geometry of <paramref name="route"/> from the map.</summary>
         internal static VehicleRoadRoute Create(TerrainMap map, int[] route)
         {
+            var result = new WorkResult<VehicleRoadRoute>();
+            SimulationWork.Complete(CreateWork(map, route, result));
+            return result.Value;
+        }
+
+        internal static System.Collections.Generic.IEnumerable<int> CreateWork(TerrainMap map, int[] route, WorkResult<VehicleRoadRoute> result)
+        {
             var centers = new Vector3[route.Length];
             var gradients = new Vector2[route.Length];
             for (int i = 0; i < route.Length; i++)
             {
+                yield return 1;
                 if (i > 0 && !map.AreNetworkNeighbours(route[i - 1], route[i]))
                     throw new ArgumentException("Vehicle route contains disconnected network tiles.", nameof(route));
                 if (!map.TryGetNetworkSurface(route[i], out centers[i], out gradients[i]))
                     throw new ArgumentException("Vehicle route contains a missing road tile.", nameof(route));
             }
-            return new VehicleRoadRoute(centers, gradients);
+            result.Value = new VehicleRoadRoute(centers, gradients);
         }
 
         public VehicleRoadRoute(Vector3[] centers, Vector2[] gradients)

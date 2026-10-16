@@ -198,19 +198,18 @@ public sealed class WorldPaintingTests
     }
 }
 
-public sealed class WaterFormulaEquivalenceTests
+public sealed class GrowthWaterResponseTests
 {
-    private static readonly string[] WaterHooks = { "water.snowmelt", "water.infiltration", "water.evaporation", "water.uptake", "water.drainage", "water.baseflow", "water.stress" };
 
     [Fact]
-    public void TheWaterBalanceRunsTheSameAsFormulasAsInCode()
+    public void WaterResponseFormulaKeepsTheSameWaterBalanceAndGrowth()
     {
         (double Stored, double Evaporated, double Transpired, double Outflow, double Balance, int Trees) Run(bool formulas)
         {
             using var world = new GameWorld(TerrainSettings.Default.WithNodeSize(17, 42), enableRendering: false);
             if (formulas) {
                 var project = GameWorld.DefaultRuleProject();
-                foreach (var hook in WorldBehaviorPolicy.Hooks.Where(h => WaterHooks.Contains(h.Id))) {
+                foreach (var hook in WorldBehaviorPolicy.Hooks.Where(h => h.Id == "water.stress")) {
                     int i = project.Behaviors.Graphs.FindIndex(g => g.Hook == hook.Id && g.Kind == hook.Kind && g.ObjectId == null);
                     project.Behaviors.Graphs[i] = RuleFormula.Compile(RuleFormula.Default(hook), project.Behaviors.Graphs[i], RuleFormula.Names(hook));
                 }
@@ -231,9 +230,9 @@ public sealed class WaterFormulaEquivalenceTests
     }
 
     [Fact]
-    public void EveryWaterRuleHasItsFormulaAndInputs()
+    public void GrowthWaterResponseHasItsFormulaAndInputs()
     {
-        foreach (var hook in WorldBehaviorPolicy.Hooks.Where(h => WaterHooks.Contains(h.Id))) {
+        foreach (var hook in WorldBehaviorPolicy.Hooks.Where(h => h.Id == "water.stress")) {
             Assert.NotNull(hook.Formula);
             var graph = RuleFormula.Compile(hook.Formula!, new BehaviorGraph { Id = "g", Name = hook.Name, Hook = hook.Id, Kind = hook.Kind }, RuleFormula.Names(hook));
             Assert.DoesNotContain(graph.Nodes, n => n.Operation == BehaviorOperation.Native);

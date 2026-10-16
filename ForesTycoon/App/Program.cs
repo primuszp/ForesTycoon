@@ -45,6 +45,9 @@ namespace ForesTycoon
             if (Array.Exists(args, argument => argument == "--road-build-benchmark")) { RoadBuildBenchmark.Run(); return; }
             if (Array.Exists(args, argument => argument == "--world-benchmark")) { WorldFrameBenchmark.Run(); return; }
             if (Array.Exists(args, argument => argument == "--map-benchmark")) { TerrainMapBenchmark.Run(); return; }
+            if (Array.Exists(args, argument => argument == "--foreground-render-benchmark")) { ForegroundWorkBenchmark.Run(true); return; }
+            if (Array.Exists(args, argument => argument == "--foreground-benchmark")) { ForegroundWorkBenchmark.Run(); return; }
+            if (Array.Exists(args, argument => argument == "--rule-benchmark")) { RuleStepBenchmark.Run(); return; }
             if (Array.Exists(args, argument => argument == "--simulation-benchmark")) { ForestSimulationBenchmark.Run(); return; }
             if (Array.Exists(args, argument => argument == "--plantation-smoke-test"))
             {

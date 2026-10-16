@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using OpenTK.Graphics.OpenGL;
 using OpenTK.Mathematics;
 
@@ -7,11 +9,12 @@ namespace ForesTycoon.OpenGl
     internal sealed class OpenGlSurfaceVisualRenderer : ISurfaceRenderBackend
     {
         private readonly RenderResourceOwner owner = new();
-        private bool disposed;
+        private bool disposed, initialized;
+        private IEnumerator<int> initialization, environmentUpload;
         private int program, depthProgram, textures, shadowTexture, shadowFramebuffer;
         private int environmentTexture;
         private float[] environmentPixels;
-        private ulong environmentRevision=ulong.MaxValue;
+        private ulong environmentRevision = ulong.MaxValue;
         private readonly EnvironmentSystem environment;
         private readonly Terrain environmentTerrain;
         private readonly GraphicsSettings settings;
@@ -19,9 +22,9 @@ namespace ForesTycoon.OpenGl
         public SurfaceKind Kind { get; set; }
         public bool ShadowPass { get; private set; }
         public Matrix4 ShadowCamera => lightMatrix;
-        public Vector4 Atmosphere => settings.Weather ? new Vector4(weather.Cloud,weather.Storm,weather.Flash,weather.Wetness) : Vector4.Zero;
+        public Vector4 Atmosphere => settings.Weather ? new Vector4(weather.Cloud, weather.Storm, weather.Flash, weather.Wetness) : Vector4.Zero;
         public bool ShadowsReady => shadowsReady;
-        public bool Active => settings.Enhanced || ShadowPass;
+        public bool Active => settings.Enhanced && initialized || ShadowPass;
         private Matrix4 lightMatrix;
         private Vector3 sun;
         private bool shadowsReady;
@@ -29,8 +32,35 @@ namespace ForesTycoon.OpenGl
         private bool globalsUploaded, mainCameraUploaded, shadowCameraUploaded;
         private Matrix4 mainCamera, shadowCamera;
 
-        internal OpenGlSurfaceVisualRenderer(GraphicsSettings settings, WeatherVisualState weather,EnvironmentSystem environment=null,Terrain terrain=null)
-        { this.settings = settings; this.weather = weather;this.environment=environment;environmentTerrain=terrain; }
+        internal OpenGlSurfaceVisualRenderer(GraphicsSettings settings, WeatherVisualState weather, EnvironmentSystem environment = null, Terrain terrain = null)
+        { this.settings = settings; this.weather = weather; this.environment = environment; environmentTerrain = terrain; }
+
+        public IEnumerable<int> PrepareWork()
+        {
+            ObjectDisposedException.ThrowIf(disposed, this); owner.Check();
+            if (!settings.Enhanced) yield break;
+            while (!PrepareOneUnit()) yield return 64;
+            if (environment != null)
+            {
+                environmentUpload ??= UploadEnvironmentWork().GetEnumerator();
+                while (true) {
+                    owner.Check();
+                    if (!environmentUpload.MoveNext()) break;
+                    GL.ActiveTexture(TextureUnit.Texture0); yield return 64;
+                }
+                environmentUpload.Dispose(); environmentUpload = null;
+            }
+            GL.ActiveTexture(TextureUnit.Texture0);
+        }
+
+        private bool PrepareOneUnit()
+        {
+            ObjectDisposedException.ThrowIf(disposed, this); owner.Check();
+            if (initialized) return true;
+            initialization ??= InitializeWork().GetEnumerator();
+            if (initialization.MoveNext()) return false;
+            initialization.Dispose(); initialization = null; initialized = true; return true;
+        }
 
         public void BeginFrame()
         {
@@ -39,8 +69,18 @@ namespace ForesTycoon.OpenGl
             sun = new Vector3(MathF.Cos(az) * MathF.Cos(el), MathF.Sin(az) * MathF.Cos(el), MathF.Sin(el));
             shadowsReady = false;
             globalsUploaded = mainCameraUploaded = shadowCameraUploaded = false;
-            if (settings.Enhanced && program == 0) Initialize();
-            if(settings.Enhanced&&environment!=null)UploadEnvironment();
+            if (settings.Enhanced && !PrepareOneUnit()) return;
+            if (settings.Enhanced && environment != null)
+            {
+                environmentUpload ??= UploadEnvironmentWork().GetEnumerator();
+                long started = Stopwatch.GetTimestamp(); int units = 0;
+                do
+                {
+                    if (environmentUpload.MoveNext()) continue;
+                    environmentUpload.Dispose(); environmentUpload = null; break;
+                } while (++units < 16 && Stopwatch.GetElapsedTime(started).TotalMilliseconds < 1);
+                GL.ActiveTexture(TextureUnit.Texture0);
+            }
             if (settings.Enhanced && shadowSize != settings.ShadowResolution)
             {
                 shadowSize = settings.ShadowResolution;
@@ -53,7 +93,7 @@ namespace ForesTycoon.OpenGl
         public void RenderShadows(Terrain terrain, Action draw)
         {
             ObjectDisposedException.ThrowIf(disposed, this); owner.Check();
-            if (!settings.Enhanced || !settings.Lighting || !settings.Shadows) return;
+            if (!settings.Enhanced || !initialized || !settings.Lighting || !settings.Shadows) return;
             terrain.GetWeatherBounds(out Vector3 min, out Vector3 max);
             Vector3 center = (min + max) * 0.5f;
             float radius = Math.Max(24, (max - min).Length * 0.6f + 12);
@@ -86,7 +126,7 @@ namespace ForesTycoon.OpenGl
             ObjectDisposedException.ThrowIf(disposed, this); owner.Check();
             int shader = ShadowPass ? depthProgram : program;
             GL.UseProgram(shader);
-            GL.Uniform2(GlProgram.Uniform(shader,"lod_range"),RenderDevice.LodRange);
+            GL.Uniform2(GlProgram.Uniform(shader, "lod_range"), RenderDevice.LodRange);
             Matrix4 model = RenderDevice.Model;
             Matrix4 camera = ShadowPass ? lightMatrix : RenderDevice.ViewProjection;
             GL.UniformMatrix4(GlProgram.Uniform(shader, "model"), false, ref model);
@@ -116,44 +156,57 @@ namespace ForesTycoon.OpenGl
                 GL.Uniform1(GlProgram.Uniform(shader, "storm"), settings.Weather ? weather.Storm : 0);
                 GL.Uniform1(GlProgram.Uniform(shader, "time"), (float)(weather.Time % 4096));
                 GL.Uniform1(GlProgram.Uniform(shader, "materials"), 0);
-                GL.Uniform1(GlProgram.Uniform(shader,"environment_map"),5);
-                GL.Uniform1(GlProgram.Uniform(shader,"environment_active"),environment!=null&&settings.AutomaticWeather&&settings.Weather?1:0);
-                if(environmentTerrain!=null){environmentTerrain.GetWeatherBounds(out var min,out var max);
-                    GL.Uniform4(GlProgram.Uniform(shader,"environment_bounds"),min.X,min.Y,max.X-min.X,max.Y-min.Y);}
+                GL.Uniform1(GlProgram.Uniform(shader, "environment_map"), 5);
+                GL.Uniform1(GlProgram.Uniform(shader, "environment_active"), environment != null && environmentRevision != ulong.MaxValue && settings.AutomaticWeather && settings.Weather ? 1 : 0);
+                if (environmentTerrain != null)
+                {
+                    environmentTerrain.GetWeatherBounds(out var min, out var max);
+                    GL.Uniform4(GlProgram.Uniform(shader, "environment_bounds"), min.X, min.Y, max.X - min.X, max.Y - min.Y);
+                }
                 GL.Uniform1(GlProgram.Uniform(shader, "shadow_map"), 1);
                 globalsUploaded = true;
             }
+            GL.ActiveTexture(TextureUnit.Texture5); GL.BindTexture(TextureTarget.Texture2D, environmentTexture);
             GL.ActiveTexture(TextureUnit.Texture0); GL.BindTexture(TextureTarget.Texture2DArray, textures);
             GL.ActiveTexture(TextureUnit.Texture1); GL.BindTexture(TextureTarget.Texture2D, shadowTexture);
             GL.ActiveTexture(TextureUnit.Texture0);
         }
 
-        private void UploadEnvironment()
+        private IEnumerable<int> UploadEnvironmentWork()
         {
+            if (environmentRevision == environment.Revision) yield break;
+            ulong targetRevision = environment.Revision;
             GL.ActiveTexture(TextureUnit.Texture5);
-            if(environmentTexture==0){environmentTexture=GL.GenTexture();GL.BindTexture(TextureTarget.Texture2D,environmentTexture);
-                GL.TexParameter(TextureTarget.Texture2D,TextureParameterName.TextureMinFilter,(int)TextureMinFilter.Nearest);
-                GL.TexParameter(TextureTarget.Texture2D,TextureParameterName.TextureMagFilter,(int)TextureMagFilter.Nearest);
-                GL.TexParameter(TextureTarget.Texture2D,TextureParameterName.TextureWrapS,(int)TextureWrapMode.ClampToEdge);
-                GL.TexParameter(TextureTarget.Texture2D,TextureParameterName.TextureWrapT,(int)TextureWrapMode.ClampToEdge);}
-            GL.BindTexture(TextureTarget.Texture2D,environmentTexture);
-            if(environmentRevision!=environment.Revision){
-                int columns=environmentTerrain.Settings.TileColumns,rows=environmentTerrain.Settings.TileRows;
-                environmentPixels??=new float[columns*rows*4];
-                for(int id=0;id<environment.CellCount;id++){
-                    var cell=environment.Cell(id);int offset=((id%rows)*columns+id/rows)*4;
-                    environmentPixels[offset]=(float)Math.Clamp(cell.Surface/2+cell.Canopy/4,0,1);
-                    environmentPixels[offset+1]=(float)(cell.Soil/cell.Capacity);
-                    environmentPixels[offset+2]=(float)cell.Drought;
-                    environmentPixels[offset+3]=(float)(environment.SnowWaterAt(id)/6);
+            if (environmentTexture == 0)
+            {
+                environmentTexture = GL.GenTexture(); GL.BindTexture(TextureTarget.Texture2D, environmentTexture);
+                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Nearest);
+                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Nearest);
+                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
+                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
+            }
+            GL.BindTexture(TextureTarget.Texture2D, environmentTexture);
+            if (environmentRevision != environment.Revision)
+            {
+                int columns = environmentTerrain.Settings.TileColumns, rows = environmentTerrain.Settings.TileRows;
+                environmentPixels ??= new float[columns * rows * 4];
+                for (int id = 0; id < environment.CellCount; id++)
+                {
+                    if (id % 128 == 0) { GL.ActiveTexture(TextureUnit.Texture0); yield return 1; }
+                    var cell = environment.Cell(id); int offset = ((id % rows) * columns + id / rows) * 4;
+                    environmentPixels[offset] = (float)Math.Clamp(cell.Surface / 2 + cell.Canopy / 4, 0, 1);
+                    environmentPixels[offset + 1] = (float)(cell.Soil / cell.Capacity);
+                    environmentPixels[offset + 2] = (float)cell.Drought;
+                    environmentPixels[offset + 3] = (float)(environment.SnowWaterAt(id) / 6);
                 }
-                GL.TexImage2D(TextureTarget.Texture2D,0,PixelInternalFormat.Rgba32f,columns,rows,0,PixelFormat.Rgba,PixelType.Float,environmentPixels);
-                environmentRevision=environment.Revision;
+                GL.ActiveTexture(TextureUnit.Texture5); GL.BindTexture(TextureTarget.Texture2D, environmentTexture);
+                GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba32f, columns, rows, 0, PixelFormat.Rgba, PixelType.Float, environmentPixels);
+                environmentRevision = targetRevision;
             }
             GL.ActiveTexture(TextureUnit.Texture0);
         }
 
-        private void Initialize()
+        private IEnumerable<int> InitializeWork()
         {
             string vertex = @"#version 330 core
 layout(location=0) in vec3 position;
@@ -384,6 +437,7 @@ void main() {
     output_color = vec4(pow(max(base,vec3(0)),vec3(1.0/2.2)),species_code > 0 || crown_species > 0 ? 1.0 : tint.a);
 }";
             program = GlProgram.Create(vertex, fragment);
+            yield return 64;
             depthProgram = GlProgram.Create(@"#version 330 core
 layout(location=0) in vec3 position;
 layout(location=1) in vec4 color;
@@ -402,7 +456,10 @@ void lodMask(){
     if(rank<lod_range.x||rank>=lod_range.y)discard;
 }
 void main(){lodMask(); forestLeafMask(); }");
-            textures = ProceduralSurfaceTextures.Upload();
+            yield return 64;
+            var uploaded = new WorkResult<int>();
+            foreach (int unit in ProceduralSurfaceTextures.UploadWork(uploaded)) { textures = uploaded.Value; yield return unit; }
+            textures = uploaded.Value;
             shadowTexture = GL.GenTexture();
             shadowSize = settings.ShadowResolution;
             GL.BindTexture(TextureTarget.Texture2D, shadowTexture);
@@ -418,7 +475,7 @@ void main(){lodMask(); forestLeafMask(); }");
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, shadowFramebuffer);
             GL.FramebufferTexture2D(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.DepthAttachment, TextureTarget.Texture2D, shadowTexture, 0);
             GL.DrawBuffer(DrawBufferMode.None);
-            if(GL.CheckFramebufferStatus(FramebufferTarget.DrawFramebuffer) != FramebufferErrorCode.FramebufferComplete)
+            if (GL.CheckFramebufferStatus(FramebufferTarget.DrawFramebuffer) != FramebufferErrorCode.FramebufferComplete)
                 throw new InvalidOperationException("Shadow framebuffer is incomplete.");
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, oldFramebuffer);
         }
@@ -426,12 +483,13 @@ void main(){lodMask(); forestLeafMask(); }");
         public void Dispose()
         {
             if (disposed) return; owner.CheckIfBound(); disposed = true;
-            if(program != 0) GlProgram.Delete(program);
-            if(depthProgram != 0) GlProgram.Delete(depthProgram);
-            if(textures != 0) GL.DeleteTexture(textures);
-            if(shadowTexture != 0) GL.DeleteTexture(shadowTexture);
-            if(shadowFramebuffer != 0) GL.DeleteFramebuffer(shadowFramebuffer);
-            if(environmentTexture!=0)GL.DeleteTexture(environmentTexture);environmentTexture=0;
+            initialization?.Dispose(); environmentUpload?.Dispose(); initialization = environmentUpload = null;
+            if (program != 0) GlProgram.Delete(program);
+            if (depthProgram != 0) GlProgram.Delete(depthProgram);
+            if (textures != 0) GL.DeleteTexture(textures);
+            if (shadowTexture != 0) GL.DeleteTexture(shadowTexture);
+            if (shadowFramebuffer != 0) GL.DeleteFramebuffer(shadowFramebuffer);
+            if (environmentTexture != 0) GL.DeleteTexture(environmentTexture); environmentTexture = 0;
             program = depthProgram = textures = shadowTexture = shadowFramebuffer = 0;
             environmentPixels = null; shadowsReady = ShadowPass = false;
         }

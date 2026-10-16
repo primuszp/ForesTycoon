@@ -16,8 +16,8 @@ public sealed class WorldRule
     public string Name { get; set; } = "Új szabály";
     public string Description { get; set; } = "";
     public bool Enabled { get; set; } = true;
-    /// <summary>A rule the game ships; it can be edited or switched off, not deleted, and can be reset to the original.</summary>
-    public bool BuiltIn { get; set; }
+    /// <summary>The starter rule this one was made from (its id), so it can be reset to it; empty for a rule written from scratch.</summary>
+    public string Template { get; set; } = "";
     /// <summary>The entity set the rule runs on: <c>world</c>, <c>tile</c>, <c>trail</c>…</summary>
     public string Scope { get; set; } = "tile";
     public string Schedule { get; set; } = "step";
@@ -25,94 +25,52 @@ public sealed class WorldRule
     public string Condition { get; set; } = "";
     /// <summary>Applied in order on each element; a later effect sees the earlier ones of the same element.</summary>
     public List<RuleEffect> Effects { get; set; } = new();
-    public RoadWeatherCard RoadWeather { get; set; }
-    public bool UseLegacyRoadOverride { get; set; }
-    public List<RuleEffect> EffectiveEffects() => RoadWeather?.CompileEffects() ?? Effects.Select(e => e.Executable()).ToList();
-
-    public void UpgradeAuthoring()
-    {
-        TrailAgeRule.Upgrade(this);
-        if (Scope == "stump" && Condition == "" && Effects != null && Effects.Count == 1 && Effects[0].Influence == null
-            && Effects[0].Target == "remove" && Effects[0].Mode == "action"
-            && RuleCurve.TryParse(Effects[0].Formula, out var curve) && curve.Family == "step" && curve.Input == "age"
-            && curve.Tail.Length == 0 && curve.Points[0].X > 0 && curve.Points[0].Y == 0 && curve.Above == 1) {
-            double lifetime = curve.Points[0].X;
-            Effects = new() {
-                new() { Target = "decayProgress", Mode = "set", Influence = new() { PerYear = false, Terms = new() {
-                    new() { Name = "Lebomlás az életkor alapján", Decrease = false, Amount = 1, Factors = new() {
-                        new() { Source = "age", InputHigh = lifetime } } } } } },
-                new() { Target = "remove", Mode = "action", Influence = new() { PerYear = false, Terms = new() {
-                    new() { Name = "Eltűnés teljes lebomláskor", Decrease = false, Amount = 1, Factors = new() {
-                        new() { Source = "decayProgress", Shape = "step", InputHigh = 1 } } } } } }
-            };
-        }
-        if (RoadWeather != null) {
-            Validate();
-            Effects = RoadWeather.ToInfluences();
-            UseLegacyRoadOverride = RoadWeather.UseLegacyOverride;
-            RoadWeather = null;
-        }
-        if (Effects != null) foreach (var term in Effects.Where(e => e?.Influence?.Terms != null).SelectMany(e => e.Influence.Terms)) term?.UpgradeConditions();
-    }
-
-    /// <summary>Renames whole field and action names everywhere the rule mentions them (formulas, targets, visual effects).</summary>
-    public void RenameFields(IReadOnlyDictionary<string, string> names)
-    {
-        if (names.Count == 0 || Effects == null || Effects.Any(e => e == null)) return;
-        string Map(string value)
-        {
-            if (string.IsNullOrEmpty(value)) return value;
-            foreach (var (oldName, newName) in names)
-                if (value.Contains(oldName, StringComparison.Ordinal))
-                    value = System.Text.RegularExpressions.Regex.Replace(value,
-                        @"(?<![\w.])" + System.Text.RegularExpressions.Regex.Escape(oldName) + @"(?![\w.])", newName.Replace("$", "$$"));
-            return value;
-        }
-        Condition = Map(Condition);
-        foreach (var effect in Effects) {
-            effect.Target = Map(effect.Target); effect.Formula = Map(effect.Formula);
-            if (effect.Influence?.Terms == null) continue;
-            foreach (var term in effect.Influence.Terms.Where(t => t != null)) {
-                term.WhenField = Map(term.WhenField); term.AmountField = Map(term.AmountField);
-                foreach (var factor in term.Factors ?? new()) if (factor != null) factor.Source = Map(factor.Source);
-                foreach (var condition in term.Conditions ?? new()) if (condition != null) { condition.Field = Map(condition.Field); condition.ValueField = Map(condition.ValueField); }
-            }
-        }
-    }
+    public List<RuleEffect> EffectiveEffects() => Effects.Select(e => e.Executable()).ToList();
 
     public void Validate()
     {
-        if (RoadWeather != null) {
-            RoadWeather.Validate();
-            if (Scope != "road" || Schedule != "step" || Condition != "" || Effects == null || Effects.Count != 0)
-                throw new InvalidDataException("Az útromlási kártya road/step szabály; külön feltétel és hatás nélkül tárolandó.");
-        }
         if (string.IsNullOrWhiteSpace(Id) || string.IsNullOrWhiteSpace(Name) || Description == null || string.IsNullOrWhiteSpace(Scope)
             || Array.IndexOf(Schedules, Schedule) < 0 || Condition == null || Effects == null || Effects.Count > 32)
             throw new InvalidDataException($"{Name}: a szabálynak azonosítója, neve, hatóköre, időzítése és legfeljebb 32 hatása legyen.");
         foreach (var e in Effects)
-            if (e == null || string.IsNullOrWhiteSpace(e.Target) || Array.IndexOf(RuleEffect.Modes, e.Mode) < 0 || e.Formula == null)
-                throw new InvalidDataException($"{Name}: minden hatásnak célja, módja (set, add, action) és képlete legyen.");
+            if (e == null || Array.IndexOf(RuleEffect.Modes, e.Mode) < 0 || e.Formula == null || e.To == null || e.FlowName == null || e.Level == null
+                || (e.Mode == "flow" ? string.IsNullOrWhiteSpace(e.Target) && string.IsNullOrWhiteSpace(e.To) || e.Target == e.To : string.IsNullOrWhiteSpace(e.Target))
+                || Array.IndexOf(RuleEffect.Spreads, e.Spread) < 0)
+                throw new InvalidDataException($"{Name}: minden hatásnak célja, módja (set, add, action, flow) és képlete legyen; egy áramlásnak forrása vagy célja, és a kettő különbözzön.");
         foreach (var e in Effects) {
             if (e.Influence == null) continue;
-            if (e.Formula.Length != 0 || e.Mode is not ("add" or "set" or "action")) throw new InvalidDataException("A vizuális hatást külön képlet nélkül kell tárolni.");
+            if (e.Formula.Length != 0 || e.Mode is not ("add" or "set" or "action" or "flow")) throw new InvalidDataException("A vizuális hatást külön képlet nélkül kell tárolni.");
             _ = e.Influence.Compile();
         }
-        if (UseLegacyRoadOverride && (Scope != "road" || Effects.Count != 1 || Effects[0].Target != "condition" || Effects[0].Mode != "add"))
-            throw new InvalidDataException("A régi útromlási felülírás csak egyetlen condition hatással használható. Kapcsold ki a régi felülírást.");
+
     }
 }
 
 public sealed class RuleEffect
 {
-    public static readonly string[] Modes = { "set", "add", "action" };
-    /// <summary>A field name (set, add) or an action name of the scope (action).</summary>
+    public static readonly string[] Modes = { "set", "add", "action", "flow" };
+    /// <summary>How a flow into a collection (“neighbours.surfaceWater”) is shared: evenly, or by how much lower each member's level is.</summary>
+    public static readonly string[] Spreads = { "even", "downhill" };
+    /// <summary>A field name (set, add), an action name of the scope (action), or the stock a flow drains (flow; empty: from outside the model).</summary>
     public string Target { get; set; } = "";
+    /// <summary>
+    /// Flow only: the stock that receives what <see cref="Target"/> loses — a field of the element or an attached object,
+    /// a collection's field (“neighbours.surfaceWater”), or empty when it leaves the model (a sink).
+    /// </summary>
+    public string To { get; set; } = "";
+    /// <summary>Flow only: its name in the flow ledger (“párolgás”); the game totals what each named flow has moved.</summary>
+    public string FlowName { get; set; } = "";
+    /// <summary>Flow into a collection: <c>even</c> or <c>downhill</c> by <see cref="Level"/>.</summary>
+    public string Spread { get; set; } = "even";
+    /// <summary>Downhill flow: the members' field compared (“waterLevel”); a member gets a share as much as it is lower.</summary>
+    public string Level { get; set; } = "";
+    public bool IsFlow => Mode == "flow";
     public string Mode { get; set; } = "set";
     /// <summary>The new value, the increment, or for an action its trigger (not 0 = do it; empty = always).</summary>
     public string Formula { get; set; } = "";
     public RuleInfluence Influence { get; set; }
-    public RuleEffect Executable() => Influence == null ? this : new() { Target = Target, Mode = Mode, Formula = Mode == "action" ? $"ha({Influence.Compile()} > 0; 1; 0)" : Influence.Compile() };
+    public RuleEffect Executable() => Influence == null ? this : new() { Target = Target, Mode = Mode, To = To, FlowName = FlowName, Spread = Spread, Level = Level,
+        Formula = Mode == "action" ? $"ha({Influence.Compile()} > 0; 1; 0)" : Influence.Compile() };
 }
 
 /// <summary>A state variable the designer adds to a scope; the game keeps one value per element and saves it.</summary>

@@ -92,44 +92,62 @@ namespace ForesTycoon
         /// <summary>The cheapest network route between any dock of the source and any dock of the destination.</summary>
         private int[] TruckRoute(FleetTruck truck, int sourceTile, int destination)
         {
+            var result = new WorkResult<int[]>();
+            SimulationWork.Complete(TruckRouteWork(truck, sourceTile, destination, result));
+            return result.Value;
+        }
+
+        private IEnumerable<int> TruckRouteWork(FleetTruck truck, int sourceTile, int destination, WorkResult<int[]> result)
+        {
             var mill = MillAt(destination);
             var ends = terrain.FindNetworkDocks(mill != null ? mill.Footprint : new[] { destination });
-            int[] best = null;
             float bestCost = float.PositiveInfinity;
             foreach (int start in terrain.FindNetworkDocks(new[] { sourceTile }))
-                foreach (int end in ends)
-                {
-                    int[] route = TruckPath(truck, start, end, out float cost);
-                    // Docks are sorted; preserve their order for equal-cost routes.
-                    if (route.Length >= 2 && cost < bestCost) { best = route; bestCost = cost; }
+                foreach (int end in ends) {
+                    var path = new WorkResult<(int[] Path, float Cost)>();
+                    foreach (int unit in TruckPathWork(truck, start, end, path)) yield return unit;
+                    if (path.Value.Path.Length >= 2 && path.Value.Cost < bestCost) {
+                        result.Value = path.Value.Path; bestCost = path.Value.Cost;
+                    }
                 }
-            return best;
         }
 
         /// <summary>Gives a parked truck its order: load at <paramref name="source"/>, unload at <paramref name="destination"/> (a mill or a stack site).</summary>
-        internal bool AssignTruck(FleetTruck truck, TimberStack source, int destination)
+        internal bool AssignTruck(FleetTruck truck, TimberStack source, int destination) { var result = new WorkResult<bool>(); SimulationWork.Complete(AssignTruckWork(truck, source, destination, result)); return result.Value; }
+
+        internal IEnumerable<int> AssignTruckWork(FleetTruck truck, TimberStack source, int destination, WorkResult<bool> result)
         {
-            if (truck.Phase != TruckPhase.Parked) { Status = "A rönkszállító épp úton van: előbb hívd haza."; return false; }
+            if (truck.Phase != TruckPhase.Parked) { Status = "A rönkszállító épp úton van: előbb hívd haza."; yield break; }
             bool mill = MillAt(destination) != null;
-            if (!mill && StackAt(destination) == null && !CanPlaceStack(destination)) { Status = "Ide nem rakható le a fa."; return false; }
-            int[] route = TruckRoute(truck, source.Tile, destination);
-            if (route == null) { Status = "A sarangtól nem vezet út a célig: a teherautó csak úton és nyomon jár."; return false; }
+            if (!mill && StackAt(destination) == null && !CanPlaceStack(destination)) { Status = "Ide nem rakható le a fa."; yield break; }
+            var routeResult = new WorkResult<int[]>();
+            foreach (int unit in TruckRouteWork(truck, source.Tile, destination, routeResult)) yield return unit;
+            int[] route = routeResult.Value;
+            if (route == null) { Status = "A sarangtól nem vezet út a célig: a teherautó csak úton és nyomon jár."; yield break; }
             int dock = DepotDock(truck.Home);
-            int[] approach = dock < 0 ? Array.Empty<int>() : TruckPath(truck, dock, route[0], out _);
-            if (dock != route[0] && approach.Length < 2) { Status = "A telephelyről nem vezet út a sarangig."; return false; }
+            var approachResult = new WorkResult<(int[] Path, float Cost)> { Value = (Array.Empty<int>(), 0) };
+            if (dock >= 0) foreach (int unit in TruckPathWork(truck, dock, route[0], approachResult)) yield return unit;
+            int[] approach = approachResult.Value.Path;
+            if (dock != route[0] && approach.Length < 2) { Status = "A telephelyről nem vezet út a sarangig."; yield break; }
             truck.Source = source; truck.Destination = destination; truck.Target = mill ? null : StackAt(destination); truck.HomeRequested = false;
             if (truck.Target == null && !mill) { truck.Target = new TimberStack { Id = nextStackId++, Tile = destination }; Stacks.Add(truck.Target); }
-            if (approach.Length >= 2) { truck.Vehicle = Vehicles.SpawnTransit(approach); truck.Phase = TruckPhase.ToWork; }
-            else StartShuttle(truck, route);
+            if (approach.Length >= 2) {
+                var vehicle = new WorkResult<Vehicle>();
+                foreach (int unit in Vehicles.SpawnFleetWork(approach, null, -1, true, vehicle)) yield return unit;
+                truck.Vehicle = vehicle.Value; truck.Phase = TruckPhase.ToWork;
+            } else foreach (int unit in StartShuttleWork(truck, route)) yield return unit;
             Status = mill ? "A rönkszállító a sarangtól a malomba fuvaroz." : "A rönkszállító áthordja a sarangot.";
-            return true;
+            result.Value = true;
         }
 
-        private void StartShuttle(FleetTruck truck, int[] route)
+        private void StartShuttle(FleetTruck truck, int[] route) => SimulationWork.Complete(StartShuttleWork(truck, route));
+        private IEnumerable<int> StartShuttleWork(FleetTruck truck, int[] route)
         {
             ChargeTruckFuel(truck);
             if (truck.Vehicle != null) Vehicles.Remove(truck.Vehicle);
-            truck.Vehicle = Vehicles.SpawnLogistics(route, new[] { truck.Source.Tile }, truck.Destination);
+            var result = new WorkResult<Vehicle>();
+            foreach (int unit in Vehicles.SpawnFleetWork(route, new[] { truck.Source.Tile }, truck.Destination, false, result)) yield return unit;
+            truck.Vehicle = result.Value;
             truck.FuelCharged = 0;
             truck.Phase = TruckPhase.Working;
         }
@@ -152,10 +170,11 @@ namespace ForesTycoon
             truck.FuelCharged = used;
         }
 
-        private void UpdateTrucks(double seconds)
+        private System.Collections.Generic.IEnumerable<int> UpdateTrucksWork(double seconds)
         {
             foreach (var truck in Trucks)
             {
+                yield return 1;
                 truck.Control = Controllers?.Step("truck", (ulong)truck.Id, new(seconds, truck.Vehicle?.CargoAmount ?? 0,
                     TruckState(truck), truck.Phase is TruckPhase.ToWork or TruckPhase.Working, truck.Upkeep.Broken)) ?? BehaviorAction.Autonomous;
                 if (truck.Control == BehaviorAction.ReturnHome) SendHome(truck);
@@ -184,9 +203,11 @@ namespace ForesTycoon
                 {
                     case TruckPhase.ToWork when truck.Vehicle.TransitArrived:
                     {
-                        int[] route = truck.HomeRequested ? null : TruckRoute(truck, truck.Source.Tile, truck.Destination);
-                        if (route == null) { Return(truck, truck.Vehicle.Route[^1]); break; }
-                        StartShuttle(truck, route);
+                        var result = new WorkResult<int[]>();
+                        if (!truck.HomeRequested) foreach (int unit in TruckRouteWork(truck, truck.Source.Tile, truck.Destination, result)) yield return unit;
+                        int[] route = result.Value;
+                        if (route == null) { foreach (int unit in ReturnWork(truck, truck.Vehicle.Route[^1])) yield return unit; break; }
+                        foreach (int unit in StartShuttleWork(truck, route)) yield return unit;
                         break;
                     }
                     case TruckPhase.Working:
@@ -195,7 +216,7 @@ namespace ForesTycoon
                         bool done = truck.HomeRequested || (truck.Source.Volume <= 0.01f && !BeingFed(truck.Source));
                         // Leave only empty and standing at the source, so no timber is carried off.
                         if (done && v.CargoAmount <= 0.0001f && v.TransportState is VehicleTransportState.Loading or VehicleTransportState.Waiting)
-                            Return(truck, v.Route[0]);
+                            foreach (int unit in ReturnWork(truck, v.Route[0])) yield return unit;
                         break;
                     }
                     case TruckPhase.ToHome when truck.Vehicle.TransitArrived:
@@ -205,17 +226,21 @@ namespace ForesTycoon
             }
         }
 
-        private void Return(FleetTruck truck, int from)
+        private IEnumerable<int> ReturnWork(FleetTruck truck, int from)
         {
             ChargeTruckFuel(truck);
             int dock = DepotDock(truck.Home);
-            int[] path = dock < 0 ? Array.Empty<int>() : TruckPath(truck, from, dock, out _);
+            var result = new WorkResult<(int[] Path, float Cost)> { Value = (Array.Empty<int>(), float.PositiveInfinity) };
+            if (dock >= 0) foreach (int unit in TruckPathWork(truck, from, dock, result)) yield return unit;
+            int[] path = result.Value.Path;
             // No route means wait at the current location, not teleport to the depot.
-            if (dock != from && path.Length < 2) { Status = "A teherautó nem talál engedélyezett hazautat."; return; }
+            if (dock != from && path.Length < 2) { Status = "A teherautó nem talál engedélyezett hazautat."; yield break; }
             if (truck.Vehicle != null) Vehicles.Remove(truck.Vehicle);
             truck.Vehicle = null; truck.FuelCharged = 0;
-            if (path.Length < 2) { Park(truck); return; }
-            truck.Vehicle = Vehicles.SpawnTransit(path);
+            if (path.Length < 2) { Park(truck); yield break; }
+            var spawned = new WorkResult<Vehicle>();
+            foreach (int unit in Vehicles.SpawnFleetWork(path, null, -1, true, spawned)) yield return unit;
+            truck.Vehicle = spawned.Value;
             truck.Phase = TruckPhase.ToHome;
         }
 

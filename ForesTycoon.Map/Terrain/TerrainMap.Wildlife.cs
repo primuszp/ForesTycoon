@@ -21,20 +21,23 @@ namespace ForesTycoon.Map
             return TryGetTileCenter(id, out position);
         }
         internal void CollectWildlifeSpots(ForestSystem forest,List<WildlifeSpot> output,bool stopAfterFirst=false)
+            => SimulationWork.Complete(CollectWildlifeSpotsWork(forest, output, stopAfterFirst));
+        internal IEnumerable<int> CollectWildlifeSpotsWork(ForestSystem forest, List<WildlifeSpot> output, bool stopAfterFirst = false)
         {
             output.Clear();
             // Reuse one flattened sample for all nine candidate positions. Preserve the
             // original own-tile/adjacent-tile order so minimum-distance ties stay identical.
-            Span<Vector2> stems=stackalloc Vector2[ForestTreeStore.PlantedTreesPerTile * 5];
+            Vector2[] stems=new Vector2[ForestTreeStore.PlantedTreesPerTile * 5];
             foreach(Tile tile in tiles)
             {
+                yield return 1;
                 if(roads.Has(tile.Id)||ShouldDrawStandingWater(tile)||CountRiverCorners(tile)>0||!((IForestHabitat)this).CanSupportForest(tile.Id))continue;
                 float low=Math.Min(Math.Min(tile.W.zPos,tile.S.zPos),Math.Min(tile.E.zPos,tile.N.zPos));
                 float high=Math.Max(Math.Max(tile.W.zPos,tile.S.zPos),Math.Max(tile.E.zPos,tile.N.zPos));
                 if(high-low>Math.Min(data.TileSizeH,data.TileSizeV)*0.4f)continue;
                 forest.TryGetStand(tile.Id,out var stand);
                 int forestNeighbours=0;bool nearRoad=false;
-                foreach(Tile adjacent in data.GetAdjacentTiles(tile)) {
+                foreach(Tile adjacent in data.GetAdjacentTiles(tile).ToArray()) {
                     if(roads.Has(adjacent.Id))nearRoad=true;
                     if(forest.TryGetStand(adjacent.Id,out var neighbouring)&&neighbouring.Maturity>=0.2f)forestNeighbours++;
                 }
@@ -45,10 +48,10 @@ namespace ForesTycoon.Map
                 rank=(rank&0x7fffffffu)|(stand.IsEmpty?0u:0x80000000u);
                 if(output.Count==16&&rank>=output[^1].Rank)continue;
                 Vector3 center=new((tile.W.xPos+tile.E.xPos)*0.5f,(tile.W.yPos+tile.E.yPos)*0.5f,0);
-                int count=CollectWildlifeStemPositions(forest,tile,stems.Slice(0,ForestTreeStore.PlantedTreesPerTile));
-                foreach(Tile adjacent in data.GetAdjacentTiles(tile)) {
+                int count=CollectWildlifeStemPositions(forest,tile,stems.AsSpan(0,ForestTreeStore.PlantedTreesPerTile));
+                foreach(Tile adjacent in data.GetAdjacentTiles(tile).ToArray()) {
                     if(!forest.TryGetStand(adjacent.Id,out _))continue;
-                    count+=CollectWildlifeStemPositions(forest,adjacent,stems.Slice(count,ForestTreeStore.PlantedTreesPerTile));
+                    count+=CollectWildlifeStemPositions(forest,adjacent,stems.AsSpan(count,ForestTreeStore.PlantedTreesPerTile));
                 }
                 Vector2 best=center.Xy;float bestDistance=-1;
                 for(int x=-1;x<=1;x++)for(int y=-1;y<=1;y++) {
@@ -60,7 +63,7 @@ namespace ForesTycoon.Map
                 var spot=new WildlifeSpot(tile.Id,new Vector3(best.X,best.Y,z),rank);
                 int index=0;while(index<output.Count&&output[index].Rank<rank)index++;
                 output.Insert(index,spot);if(output.Count>16)output.RemoveAt(16);
-                if(stopAfterFirst)return;
+                if(stopAfterFirst)yield break;
             }
         }
 

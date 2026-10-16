@@ -8,34 +8,22 @@ namespace ForesTycoon
     {
         internal static readonly BehaviorHook[] Hooks = new BehaviorHook[] {
             new("road.trafficWear", "Forgalmi útkopás", "road", "állapotveszteség", 0, 1, "Út sérültsége", "Áthaladási terhelés", "Teherautó csempeváltás"),
-            new("water.snowmelt", "Hóolvadás", "tile", "mm", 0, 1e9, "Helyi hőmérséklet (°C)", "Hókészlet (mm)", "Környezeti lépés, beszivárgás előtt",
-                Inputs: new[] { "óra" }, Formula: WaterFormulas.Snowmelt),
-            new("water.infiltration", "Beszivárgás", "tile", "mm", 0, 1e9, "Gyökérzónavíz (mm)", "Felszíni víz (mm)", "Környezeti lépés",
-                Inputs: new[] { "talaj.beszivárgás", "talaj.telítettség", "óra", "burkolt" }, Formula: WaterFormulas.Infiltration),
             new("forest.growth", "Fanövekedési tényező", "tree", "1", 0, 10, "Egészség (0–1)", "Kor (erdőév)", "Növekedési ráta frissítése"),
             new("forest.health", "Fa egészségének célértéke", "tree", "1", 0, 1, "Egészség (0–1)", "Kor (erdőév)", "Erdőhónap"),
             new("machine.pace", "Forwarder munkatempó", "forwarder", "munka-s", 0, 10, "Kopás (0–1)", "Rakomány (m³)", "Gép al-lépés"),
             new("machine.pace", "Processzor munkatempó", "processor", "munka-s", 0, 10, "Kopás (0–1)", "Rakomány (m³)", "Gép al-lépés"),
             new("mill.process", "Malom feldolgozása", "mill", "m³", 0, 1e6, "Már feldolgozott mennyiség (m³)", "Készlet (m³)", "Logisztikai lépés"),
-            new("water.evaporation", "Talajpárolgás", "tile", "mm", 0, 1e9, "Gyökérzónavíz (mm)", "Maradék párolgási igény (mm)", "Környezeti lépés; a hervadáspont feletti vízre korlátozva",
-                Inputs: new[] { "talaj.hervadáspont", "talaj.vízkapacitás", "lombborítás" }, Formula: WaterFormulas.Evaporation),
-            new("water.uptake", "Gyökérvíz-felvétel", "tile", "mm", 0, 1e9, "Gyökérzónavíz (mm)", "Lombfelület vízigénye (mm)", "Környezeti lépés; a hervadáspont feletti vízre korlátozva",
-                Inputs: new[] { "talaj.hervadáspont", "talaj.vízkapacitás" }, Formula: WaterFormulas.Uptake),
-            new("water.drainage", "Mélybe szivárgás", "tile", "mm", 0, 1e9, "Gyökérzónavíz (mm)", "Szabadföldi vízkapacitás feletti víz (mm)", "Környezeti lépés; a gyökérzóna vizére korlátozva",
-                Inputs: new[] { "talaj.drénezés", "óra" }, Formula: WaterFormulas.Drainage),
-            new("water.baseflow", "Alaplefolyás", "tile", "mm", 0, 1e9, "Mélyvíz (mm)", "Lépés hossza (óra)", "Környezeti lépés; a mélyvízre korlátozva",
-                Formula: WaterFormulas.Baseflow),
             new("water.stress", "Növekedési vízválasz", "tile", "1", 0, 1, "Vízellátottság (0–1)", "Pangóvíz aránya (0–1)", "Havi növekedési ráta és fa-erőforrás",
                 Inputs: new[] { "faj.szárazságérzékenység" }, Formula: WaterFormulas.Stress),
             new("trail.trafficability", "Földút járhatósága", "tile", "0–1", 0, 1, "Átnedvesedés (0–1)", "Talaj teherbírása (0–1)", "Jármű haladása burkolatlan csempén; 1 = száraz, jól járható",
-                Formula: "# Átázott, gyenge teherbírású talajon a földút nehezen járható.\n1 - átnedvesedés * (1 - talaj.teherbírás)"),
-            new("road.weather", "Időjárási útromlás", "road", "állapotveszteség / erdőév", 0, 100, "Útállapot (0–1)", "Csapadék-intenzitás (0–1)", "Legalább 0,5 játék-s összegzése")
+                Formula: "# Átázott, gyenge teherbírású talajon a földút nehezen járható.\n1 - átnedvesedés * (1 - talaj.teherbírás)")
         }.Concat(TransportHooks()).Concat(GameTuning.Specs.Select(s => new BehaviorHook("tuning." + s.Id, s.Name, "world", s.Unit, s.Min, s.Max,
             "Nem használt", "Nem használt", "Paraméter lekérdezése; járműspecifikáció alkalmazáskor", false))).ToArray();
         private readonly CompiledBehaviorModel model;
         internal CompiledBehaviorControllers Controllers { get; }
         internal WorldBehaviorPolicy(BehaviorModel document, IReadOnlySet<string> keys = null, Func<string, double> read = null)
         { model = new(document, Hooks, keys, read); Controllers = new(document); }
+
         internal static BehaviorGraph DefaultGraph(BehaviorHook hook) => new() {
             Id = "default." + hook.Kind + "." + hook.Id, Name = hook.Name, Hook = hook.Id, Kind = hook.Kind
         };
@@ -102,12 +90,12 @@ namespace ForesTycoon
         private void ApplyBehaviors(BehaviorModel model)
         {
             bool refreshForest = ForestBehaviorSignature(BehaviorDocument) != ForestBehaviorSignature(model);
-            var replacement = new WorldBehaviorPolicy(model, DynamicsRuntime.Keys(dynamics.Document, RuleWorldFields), ReadRuleValue);
+            var replacement = new WorldBehaviorPolicy(model, DynamicsRuntime.Keys(dynamics.Document, RuleWorldFields), ruleValues.ReadRule);
             replacement.Controllers.PreserveUnchanged(behaviorPolicy.Controllers);
             behaviorPolicy = replacement;
             BindBehaviors();
             ApplyTuning(Tuning);
-            if (refreshForest) forest.RefreshEnvironmentRates();
+            if (refreshForest) pendingForestRateRefresh = true;
         }
         private static string ForestBehaviorSignature(BehaviorModel value) => System.Text.Json.JsonSerializer.Serialize(
             value.Graphs.Where(g => g.Kind == "tree" && (g.Nodes.Find(n => n.Id == g.Output)?.Operation != BehaviorOperation.Native

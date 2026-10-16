@@ -28,8 +28,7 @@ internal static class RuleWorkshopModel
         || h.Id.StartsWith("tuning.") && GameTuning.Spec(h.Id[7..])?.Rule == rule.Id
         || h.Id.StartsWith("route.") && rule.Id is "route.find" or "route.policy"
         || (h.Id.StartsWith("loading.") || h.Id == "unloading.amount") && (rule.Id == "loading.policy" || rule.Id == "machine.logTransfer" && h.Kind == "forwarder" || rule.Id == "vehicle.transfer" && h.Kind == "truck")
-        || h.Id == "machine.pace" && rule.Id == (h.Kind == "forwarder" ? "machine.forwarder" : "machine.processor")
-        || h.Id == "water.baseflow" && rule.Id == "water.drainage";
+        || h.Id == "machine.pace" && rule.Id == (h.Kind == "forwarder" ? "machine.forwarder" : "machine.processor");
 
     /// <summary>
     /// The game's system model with this project's own stocks, flows and the formulas that read model quantities, so a

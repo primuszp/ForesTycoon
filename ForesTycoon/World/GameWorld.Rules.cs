@@ -32,7 +32,6 @@ namespace ForesTycoon
             vehicles.TimeScale = Tuning[Tune.VehicleTimeScale];
             vehicles.Spec = Tuning.Truck;
             foreach (var vehicle in vehicles.Vehicles) vehicle.Spec = Tuning.Truck;
-            map.SkidTrailOvergrowYears = Tuning.F(Tune.SkidTrailOvergrowYears);
         }
         internal string ObserveRuleField(string field) => field switch
         {

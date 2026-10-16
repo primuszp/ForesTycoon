@@ -46,6 +46,8 @@ namespace ForesTycoon.Editor
         private ImGuiController ui;
         protected override ImGuiController UiController => ui;
         private GameWorld sandbox;
+        private System.Collections.Generic.IEnumerator<int> startupWork;
+        private readonly WorkResult<GameWorld> startupResult = new();
         private readonly RuleEditorView editor;
         private bool open = true;
         private readonly bool smoke;
@@ -62,14 +64,26 @@ namespace ForesTycoon.Editor
         {
             VSync = VSyncMode.On;
             // The editor opens the scene the game starts from, missions and rules included.
-            sandbox = WorldLoader.CreateStart(enableRendering: false);
-            if (worldFile != null) { EditorWorldLoader.Load(sandbox, worldFile); editor.UseWorldFile(worldFile); }
-            if (smoke) openingReference = OpeningSceneReference.Fingerprints(sandbox);
+            startupWork = WorldLoader.CreateStartWork(startupResult, enableRendering: false).GetEnumerator();
             ui = new ImGuiController(); HudTheme.Apply();
         }
         protected override void RenderScene(FrameEventArgs args)
         {
-            sandbox.ExecutePendingCommands();
+            if (sandbox == null) {
+                long started = System.Diagnostics.Stopwatch.GetTimestamp(); int slices = 0;
+                while (slices++ < 4096 && System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds < 4) {
+                    if (startupWork.MoveNext()) continue;
+                    startupWork.Dispose(); startupWork = null; sandbox = startupResult.Value;
+                    if (worldFile != null) { EditorWorldLoader.Load(sandbox, worldFile); editor.UseWorldFile(worldFile); }
+                    if (smoke) openingReference = OpeningSceneReference.Fingerprints(sandbox);
+                    break;
+                }
+                if (sandbox == null) {
+                    ui.Update(ClientSize.X, ClientSize.Y, FramebufferSize.X, FramebufferSize.Y, Vec2.One, (float)Math.Max(.001, args.Time));
+                    ImGui.Begin("Pálya előkészítése"); ImGui.TextUnformatted("A tesztvilág szakaszosan épül fel…"); ImGui.End();
+                    GL.Clear(ClearBufferMask.ColorBufferBit); ui.Render(); return;
+                }
+            }
             editor.AdvanceSandbox(sandbox, args.Time);
             Vec2 scale = new((float)FramebufferSize.X / Math.Max(1, ClientSize.X), (float)FramebufferSize.Y / Math.Max(1, ClientSize.Y));
             ui.Update(ClientSize.X, ClientSize.Y, FramebufferSize.X, FramebufferSize.Y, scale, (float)Math.Max(0.001, args.Time));
@@ -79,7 +93,7 @@ namespace ForesTycoon.Editor
             GL.Viewport(0, 0, FramebufferSize.X, FramebufferSize.Y);
             GL.ClearColor(.08f, .1f, .12f, 1); GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
             ui.Render();
-            if (smoke && ++frames == 3)
+            if (smoke && !sandbox.BoundaryPending && ++frames == 3)
             {
                 var actual = OpeningSceneReference.Fingerprints(sandbox);
                 foreach (string field in new[] { "Terrain", "Ecology", "Graphics" })
@@ -127,6 +141,7 @@ namespace ForesTycoon.Editor
         protected override void UnloadScene()
         {
             editor?.StopBackgroundOperations(sandbox);
+            startupWork?.Dispose(); startupWork = null;
             ui?.Dispose(); sandbox?.Dispose(); ui = null; sandbox = null; }
     }
 }

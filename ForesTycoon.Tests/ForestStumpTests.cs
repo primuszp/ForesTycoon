@@ -47,15 +47,13 @@ public class ForestStumpTests
     }
 
     [Fact]
-    public void Stumps_DecayIndividuallyAndDisappearAfterTheirLifetime()
+    public void Stumps_RemainUntilTheWorldRulesDecomposeAndRemoveThem()
     {
         var (forest, _, tile, patch) = MatureStand(11);
         forest.Harvest(tile, out _);
-        forest.Update(ForestTreeStump.LifetimeYears * 0.5);
+        forest.Update(6.2);
         Assert.NotEmpty(patch.Stumps);
-        Assert.All(patch.Stumps, stump => Assert.InRange(stump.Decay(forest.ForestYear), 0.4f, 0.6f));
-        forest.Update(ForestTreeStump.LifetimeYears * 0.5 + 0.2);
-        Assert.Empty(patch.Stumps);
+        Assert.All(patch.Stumps, stump => Assert.Equal(0, stump.DecayProgress));
     }
 
     [Fact]

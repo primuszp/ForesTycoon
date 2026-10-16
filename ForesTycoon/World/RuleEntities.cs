@@ -22,33 +22,50 @@ internal interface IWorldObject
 [RuleEntity("place", Abstract = true, Help = "A point of the map: soil, water, cover.")]
 internal interface IPlace : IWorldObject { }
 
-// Aliases are the names older projects used in formulas (the Hungarian tile inputs, isMacadam); they are migrated on load.
 [RuleEntity("tile", Element = "tile", Help = "One map tile: its soil, water and cover. Other objects read it through their tile relation.")]
 internal interface ITile : IPlace
 {
     [RuleField("Hydrological map moisture used by road weathering (not root-zone water).", Unit = "0–1", Min = 0, Max = 1)]
     double Moisture { get; }
-    [RuleField("Water in the root zone.", Unit = "mm", Min = 0, Aliases = new[] { "gyökérzónavíz" })]
+    [RuleField("Water in the root zone.", Unit = "mm", Min = 0)]
     [RuleCause("tile.cover", -1, "water.interception", Help = "Canopy intercepts rain and transpires.")]
-    double RootWater { get; }
-    [RuleField("Water standing on the surface.", Unit = "mm", Min = 0, Aliases = new[] { "felszíni_víz" })] double SurfaceWater { get; }
-    [RuleField("Water below the root zone.", Unit = "mm", Min = 0, Aliases = new[] { "mélyvíz" })] double DeepWater { get; }
-    [RuleField("Root-zone water above field capacity.", Unit = "mm", Min = 0, Aliases = new[] { "többletvíz" })] double ExcessWater { get; }
-    [RuleField("Share of plant-available water.", Unit = "0–1", Min = 0, Max = 1, Aliases = new[] { "vízellátottság" })]
+    double RootWater { get; set; }
+    [RuleField("Water standing on the surface.", Unit = "mm", Min = 0)] double SurfaceWater { get; set; }
+    [RuleField("Water below the root zone.", Unit = "mm", Min = 0)] double DeepWater { get; set; }
+    [RuleField("Root-zone water above field capacity.", Unit = "mm", Min = 0)] double ExcessWater { get; }
+    [RuleField("Share of plant-available water.", Unit = "0–1", Min = 0, Max = 1)]
     [RuleCause("tile.rootWater", +1, "water.stress")]
     double WaterSupply { get; }
-    [RuleField("Share of the soil under standing water.", Unit = "0–1", Min = 0, Max = 1, Aliases = new[] { "pangóvíz" })] double Waterlogging { get; }
-    [RuleField("Infiltration rate of the soil.", Unit = "mm/h", Min = 0, Aliases = new[] { "talaj.beszivárgás" })] double Infiltration { get; }
-    [RuleField("Total water the soil holds when saturated.", Unit = "mm", Min = 0, Aliases = new[] { "talaj.telítettség" })] double Saturation { get; }
-    [RuleField("Field capacity of the soil.", Unit = "mm", Min = 0, Aliases = new[] { "talaj.vízkapacitás" })] double FieldCapacity { get; }
-    [RuleField("Wilting point of the soil.", Unit = "mm", Min = 0, Aliases = new[] { "talaj.hervadáspont" })] double WiltingPoint { get; }
-    [RuleField("Drainage rate of the soil.", Unit = "mm/h", Min = 0, Aliases = new[] { "talaj.drénezés" })] double Drainage { get; }
-    [RuleField("Bearing capacity of the soil.", Unit = "0–1", Min = 0, Max = 1, Aliases = new[] { "talaj.teherbírás" })] double BearingCapacity { get; }
-    [RuleField("Canopy cover.", Unit = "0–1", Min = 0, Max = 1, Aliases = new[] { "lombborítás" })]
+    [RuleField("Share of the soil under standing water.", Unit = "0–1", Min = 0, Max = 1)] double Waterlogging { get; }
+    [RuleField("Infiltration rate of the soil.", Unit = "mm/h", Min = 0)] double Infiltration { get; }
+    [RuleField("Total water the soil holds when saturated.", Unit = "mm", Min = 0)] double Saturation { get; }
+    [RuleField("Field capacity of the soil.", Unit = "mm", Min = 0)] double FieldCapacity { get; }
+    [RuleField("Wilting point of the soil.", Unit = "mm", Min = 0)] double WiltingPoint { get; }
+    [RuleField("Drainage rate of the soil.", Unit = "mm/h", Min = 0)] double Drainage { get; }
+    [RuleField("Bearing capacity of the soil.", Unit = "0–1", Min = 0, Max = 1)] double BearingCapacity { get; }
+    [RuleField("Canopy cover.", Unit = "0–1", Min = 0, Max = 1)]
     [RuleCause("tree.height", +1, "forest.canopy", Help = "Taller trees close the canopy.")]
     double Cover { get; }
-    [RuleField("A road or building covers the tile.", Aliases = new[] { "burkolt" })] bool Paved { get; }
-    [RuleField("How soaked the soil is.", Unit = "0–1", Min = 0, Max = 1, Aliases = new[] { "átnedvesedés" })] double Wetness { get; }
+    [RuleField("A road or building covers the tile.")] bool Paved { get; }
+    [RuleField("How soaked the soil is.", Unit = "0–1", Min = 0, Max = 1)] double Wetness { get; }
+    [RuleField("Rain caught on the crowns.", Unit = "mm", Min = 0)] double CanopyWater { get; set; }
+    [RuleField("Water stored in the snowpack.", Unit = "mm", Min = 0)] double Snow { get; set; }
+    [RuleField("Rain falling on the tile now.", Unit = "mm/h", Min = 0)] double Rain { get; }
+    [RuleField("Snow falling on the tile now, as water.", Unit = "mm/h", Min = 0)] double Snowfall { get; }
+    [RuleField("What the air could evaporate now from a wet surface.", Unit = "mm/h", Min = 0)] double PotentialEvaporation { get; }
+    [RuleField("Air temperature on the tile.", Unit = "°C")] double Temperature { get; }
+    [RuleField("Leaf area of the trees per ground area.", Min = 0)] double LeafAreaIndex { get; }
+    [RuleField("Rain the crowns can hold.", Unit = "mm", Min = 0)] double InterceptionCapacity { get; }
+    [RuleField("How full the crowns are: crown water over what they can hold.", Unit = "0–1", Min = 0, Max = 1)] double CanopyFill { get; }
+    [RuleField("How far the water surface lies above the lower neighbours', summed: what drives runoff.", Unit = "mm", Min = 0)] double Drop { get; }
+    [RuleField("A sealed surface (road, building) lets little water in.")] bool Sealed { get; }
+    [RuleField("Water leaves the map here (map edge, lake or river).")] bool Outlet { get; }
+    [RuleField("Water a spring adds to the surface.", Unit = "mm/h", Min = 0)] double SpringRate { get; }
+    [RuleField("Height of the ground above the map's base.", Unit = "m")] double Elevation { get; }
+    [RuleField("Height of the water surface: ground plus standing water. Water flows towards a lower level.", Unit = "m")] double WaterLevel { get; }
+    [RuleCollection("The four tiles next to this one.", Addressable = true)] IEnumerable<ITile> Neighbours { get; }
+    [RuleCollection("The living trees standing on the tile.")] IEnumerable<ITree> Trees { get; }
+    [RuleCollection("The stumps left on the tile.")] IEnumerable<IStump> Stumps { get; }
 }
 
 [RuleEntity("world", Element = "world",
@@ -66,13 +83,14 @@ internal interface IWorld : IWorldObject
     [RuleField("Construction and road repair spending so far.", Unit = "eFt")] double Expenses { get; }
     [RuleField("Running costs so far.", Unit = "eFt")] double RunningCosts { get; }
     [RuleField("Income minus spending.", Unit = "eFt")] double Balance { get; }
+    [RuleField("Hours of the environment's clock in one forest year: hourly rates times this give yearly ones.", Unit = "h")] double HoursPerYear { get; }
 }
 
 [RuleEntity("road", Element = "road", Help = "A paved road tile; weather rules change its condition.")]
 internal interface IRoad : IWorldObject
 {
     [RuleField("Road condition: 1 is new, 0 is worn out.", Unit = "0–1", Min = 0, Max = 1)] double Condition { get; set; }
-    [RuleField("Paving of the road.", Aliases = new[] { "isMacadam" })] RoadPaving Surface { get; }
+    [RuleField("Paving of the road.")] RoadPaving Surface { get; }
     [RuleField("Current RainRate / 20, clamped to 0–1.", Unit = "0–1", Min = 0, Max = 1)] double RainIntensity { get; }
     [RuleRelation("The road's tile and hydrological map moisture.")] ITile Tile { get; }
 }
@@ -104,8 +122,8 @@ internal interface ITree : IPlant
     [RuleCause("tree.health", +1, "forest.growth")]
     [RuleCause("tree.light", +1, "forest.growth")]
     [RuleCause("tree.water", +1, "forest.growth")]
-    double Height { get; }
-    [RuleField("Diameter at breast height.", Unit = "m", Min = 0)] double Diameter { get; }
+    double Height { get; set; }
+    [RuleField("Diameter at breast height.", Unit = "m", Min = 0)] double Diameter { get; set; }
     [RuleField("Light reaching the tree under its neighbours.", Unit = "0–1", Min = 0, Max = 1)]
     [RuleCause("tile.cover", -1, "forest.competition", Help = "Neighbours shade the tree.")]
     double Light { get; }
@@ -144,6 +162,28 @@ internal interface ITruck : IVehicle
     [RuleField("Timber carried.", Unit = "m³", Min = 0)] double Cargo { get; }
     [RuleField("Cargo as a share of capacity.", Unit = "0–1", Min = 0, Max = 1)] double Fill { get; }
     [RuleField("Mass without cargo.", Unit = "kg", Min = 0)] double EmptyMass { get; }
+    [RuleField("Total mass with cargo.", Unit = "kg", Min = 0)] double Mass { get; }
+    [RuleField("Engine power at the wheels.", Unit = "W", Min = 0)] double Power { get; }
+    [RuleField("Grip-limited pulling force.", Unit = "N", Min = 0)] double MaxTractiveForce { get; }
+    [RuleField("Drivetrain efficiency.", Unit = "0–1", Min = 0, Max = 1)] double Drivetrain { get; }
+    [RuleField("Braking deceleration.", Unit = "m/s²", Min = 0)] double Braking { get; }
+    [RuleField("Drag coefficient times frontal area.", Unit = "m²", Min = 0)] double DragArea { get; }
+    [RuleField("Fresh round wood density used for the cargo mass.", Unit = "kg/m³", Min = 0)] double TimberDensity { get; }
+    [RuleField("Diesel per engine kWh.", Unit = "l/kWh", Min = 0)] double FuelPerKilowattHour { get; }
+    [RuleField("Diesel while idling.", Unit = "l/h", Min = 0)] double IdleFuelPerHour { get; }
+}
+
+[RuleEntity("machine", Element = "machine", Help = "A forest machine: a processor fells and cuts, a forwarder carries logs to the roadside.")]
+internal interface IForestMachine : IWorldObject
+{
+    [RuleField("Processor or forwarder.")] ForestMachineKind Kind { get; }
+    [RuleField("What the machine is doing.")] ForestMachineState State { get; }
+    [RuleField("Timber carried.", Unit = "m³", Min = 0)] double Cargo { get; }
+    [RuleField("Timber the machine can carry.", Unit = "m³", Min = 0)] double Capacity { get; }
+    [RuleField("Cargo as a share of capacity.", Unit = "0–1", Min = 0, Max = 1)] double Fill { get; }
+    [RuleField("Diesel burnt so far.", Unit = "l", Min = 0)] double Fuel { get; }
+    [RuleField("Wear of the machine; 1 is worn out.", Unit = "0–1", Min = 0, Max = 1)] double Wear { get; set; }
+    [RuleRelation("The tile the machine is on.")] ITile Tile { get; }
 }
 
 sealed partial class GameWorld
@@ -161,42 +201,202 @@ sealed partial class GameWorld
         internal abstract int[] Elements();
         /// <summary>Element IDs are below this; custom fields keep one value per ID.</summary>
         internal abstract int Size();
+        internal int[] PreparedElements { get; set; }
+        internal virtual IEnumerable<int> PrepareElementsWork()
+        {
+            PreparedElements = Elements();
+            yield return 1;
+        }
     }
 
     private sealed class TileView : RuleView, ITile
     {
-        // Trees of one tile are visited together: one environment lookup serves them all.
-        private int cached = -1; private bool known;
-        private Ecology.EnvironmentCell cell; private SoilProperties soil; private double wetness, bearing;
-        internal void Invalidate() => cached = -1;
+        // The soil of one tile is looked up once for all the fields read from it (trees of a tile are visited together).
+        // Water stores are read directly; trafficability is computed only when a rule reads it.
+        private int cached = -1, trafficable = -1; private bool known; private ulong cachedRevision;
+        private SoilProperties soil; private double wetness, bearing;
+        internal void Invalidate() { cached = -1; trafficable = -1; }
+        private bool Inside => World.Environment != null && Id >= 0 && Id < World.Environment.CellCount;
         private void Load()
         {
             if (cached == Id) return;
-            cached = Id; var environment = World.Environment;
-            known = environment != null && Id >= 0 && Id < environment.CellCount;
-            if (!known) return;
-            cell = environment.Cell(Id); soil = World.Soils?.Profile(Id).Properties ?? SoilProperties.Standard;
-            (wetness, bearing) = environment.Trafficability(Id);
+            cached = Id; known = Inside;
+            if (known) soil = World.Soils?.Profile(Id).Properties ?? SoilProperties.Standard;
         }
         private double Read(Func<TileView, double> value) { Load(); return known ? value(this) : 0; }
-        internal override int[] Elements() { Invalidate(); return Enumerable.Range(0, World.Map.Tiles.Count).ToArray(); }
+        private double Store(Ecology.EnvironmentSystem.WaterStore store) => Inside ? World.Environment.Water(Id, store) : 0;
+        private (double Wetness, double Bearing) Traffic()
+        {
+            // Another view may have written this tile's water since: then it is read again.
+            ulong revision = World.Environment?.WriteRevision ?? 0;
+            if (trafficable != Id || cachedRevision != revision) {
+                trafficable = Id; cachedRevision = revision;
+                (wetness, bearing) = Inside ? World.Environment.Trafficability(Id) : (0, 0);
+            }
+            return (wetness, bearing);
+        }
+        // Every tile, in ID order; the list is kept, as a step asks for it again in every tick it runs.
+        private int[] elements = Array.Empty<int>();
+        internal override int[] Elements()
+        {
+            Invalidate();
+            if (elements.Length != World.Map.Tiles.Count) elements = Enumerable.Range(0, World.Map.Tiles.Count).ToArray();
+            return elements;
+        }
         internal override int Size() => World.Map.Tiles.Count;
         public double Moisture => World.Map.GetRuleMoisture(Id);
-        public double RootWater => Read(t => t.cell.Soil);
-        public double SurfaceWater => Read(t => t.cell.Surface);
-        public double DeepWater => Read(t => t.cell.Deep);
-        public double ExcessWater => Read(t => Math.Max(0, t.cell.Soil - t.soil.FieldCapacity));
-        public double WaterSupply => Read(t => Math.Clamp(t.cell.Soil <= t.soil.WiltingPoint ? 0 : t.soil.Availability(t.cell.Soil), 0, 1));
-        public double Waterlogging => Read(t => t.cell.Waterlogging);
+        // Water stores are state: a rule may set them; the environment books the change in its water balance.
+        public double RootWater { get => Store(Ecology.EnvironmentSystem.WaterStore.Soil); set => Write(Ecology.EnvironmentSystem.WaterStore.Soil, value); }
+        public double SurfaceWater { get => Store(Ecology.EnvironmentSystem.WaterStore.Surface); set => Write(Ecology.EnvironmentSystem.WaterStore.Surface, value); }
+        public double DeepWater { get => Store(Ecology.EnvironmentSystem.WaterStore.Deep); set => Write(Ecology.EnvironmentSystem.WaterStore.Deep, value); }
+        private void Write(Ecology.EnvironmentSystem.WaterStore store, double value)
+        {
+            if (World.Environment == null || Id < 0 || Id >= World.Environment.CellCount) return;
+            World.Environment.SetWater(Id, store, value); Invalidate();
+        }
+        public double ExcessWater => Read(t => Math.Max(0, t.RootWater - t.soil.FieldCapacity));
+        public double WaterSupply => Read(t => Math.Clamp(t.RootWater <= t.soil.WiltingPoint ? 0 : t.soil.Availability(t.RootWater), 0, 1));
+        public double Waterlogging => Inside ? World.Environment.Waterlogging(Id) : 0;
         public double Infiltration => Read(t => t.soil.InfiltrationPerHour);
         public double Saturation => Read(t => t.soil.Saturation);
         public double FieldCapacity => Read(t => t.soil.FieldCapacity);
         public double WiltingPoint => Read(t => t.soil.WiltingPoint);
         public double Drainage => Read(t => t.soil.DrainagePerHour);
-        public double BearingCapacity => Read(t => t.bearing);
+        public double BearingCapacity => Traffic().Bearing;
         public double Cover => Read(t => t.World.Environment.Cover(t.Id));
         public bool Paved => Read(t => t.World.Map.IsRoadTile(t.Id) || t.World.Map.IsBuildingTile(t.Id) ? 1 : 0) != 0;
-        public double Wetness => Read(t => t.wetness);
+        public double Wetness => Traffic().Wetness;
+        public double CanopyWater { get => Store(Ecology.EnvironmentSystem.WaterStore.Canopy); set => Write(Ecology.EnvironmentSystem.WaterStore.Canopy, value); }
+        public double Snow { get => Store(Ecology.EnvironmentSystem.WaterStore.Snow);
+            set => Write(Ecology.EnvironmentSystem.WaterStore.Snow, value); }
+        // The local weather changes with the environment's steps only; the environment keeps it per tile.
+        private Ecology.ClimateCell Climate => World.Environment.LocalClimate(Id);
+        public double Rain => Inside ? World.Environment.LiquidRainRate * Climate.RainMultiplier : 0;
+        public double Snowfall => Inside ? World.Environment.SnowfallRate * Climate.RainMultiplier : 0;
+        public double PotentialEvaporation => Inside ? Climate.Forcing.PotentialEvaporationPerHour : 0;
+        public double Temperature => Inside ? Climate.Forcing.Temperature : 0;
+        public double LeafAreaIndex => Inside ? World.Environment.HydrologyInputs(Id).LeafAreaIndex : 0;
+        public double InterceptionCapacity => Inside ? World.Environment.HydrologyInputs(Id).InterceptionCapacity : 0;
+        public bool Sealed => World.Map.IsValidTileId(Id) && ((Ecology.IForestHabitat)World.Map).IsImpervious(Id);
+        public bool Outlet => World.Map.IsValidTileId(Id) && ((Ecology.IForestHabitat)World.Map).IsWaterOutlet(Id);
+        public double SpringRate => Inside ? World.Environment.SpringRate(Id) : 0;
+        public double CanopyFill => InterceptionCapacity > 0 ? Math.Clamp(CanopyWater / InterceptionCapacity, 0, 1) : 1;
+        public double Drop
+        {
+            get {
+                double level = WaterLevel, drop = 0;
+                foreach (var n in Neighbours) drop += Math.Max(0, level - n.WaterLevel);
+                return drop * 1000;
+            }
+        }
+        public double Elevation => World.Map.IsValidTileId(Id) ? ((Ecology.IForestHabitat)World.Map).GetGroundHeight(Id) : 0;
+        public double WaterLevel => Elevation + SurfaceWater / 1000;
+
+        // ── Direct access: the same values as the properties above, without binding the view ──
+        // Rules visit every tile several times a step, so the fields the environment keeps in arrays are read (and the
+        // water stores written) straight from it. Each must compute exactly what its property does: the results are
+        // compared bit for bit (RuleStepBenchmark, RuleStepPerformanceTests).
+        private static bool Within(GameWorld w, int id) => w.Environment != null && id >= 0 && id < w.Environment.CellCount;
+        private static double Store(GameWorld w, int id, Ecology.EnvironmentSystem.WaterStore store) => Within(w, id) ? w.Environment.Water(id, store) : 0;
+        private static SoilProperties SoilAt(GameWorld w, int id) => w.Soils?.Profile(id).Properties ?? SoilProperties.Standard;
+        private static double Interception(GameWorld w, int id) => Within(w, id) ? w.Environment.HydrologyInputs(id).InterceptionCapacity : 0;
+        private static double Height(GameWorld w, int id) => w.Map.IsValidTileId(id) ? ((Ecology.IForestHabitat)w.Map).GetGroundHeight(id) : 0;
+        private static double Level(GameWorld w, int id) => Height(w, id) + Store(w, id, Ecology.EnvironmentSystem.WaterStore.Surface) / 1000;
+        private static double Flag(bool value) => value ? 1 : 0;
+
+        /// <summary>A reader of the property named <paramref name="property"/> that skips the view; null when it has none.</summary>
+        internal static Func<GameWorld, int, double> DirectRead(string property) => property switch {
+            nameof(Index) => (w, id) => id,
+            nameof(Moisture) => (w, id) => w.Map.GetRuleMoisture(id),
+            nameof(RootWater) => (w, id) => Store(w, id, Ecology.EnvironmentSystem.WaterStore.Soil),
+            nameof(SurfaceWater) => (w, id) => Store(w, id, Ecology.EnvironmentSystem.WaterStore.Surface),
+            nameof(DeepWater) => (w, id) => Store(w, id, Ecology.EnvironmentSystem.WaterStore.Deep),
+            nameof(CanopyWater) => (w, id) => Store(w, id, Ecology.EnvironmentSystem.WaterStore.Canopy),
+            nameof(Snow) => (w, id) => Store(w, id, Ecology.EnvironmentSystem.WaterStore.Snow),
+            nameof(ExcessWater) => (w, id) => Within(w, id) ? Math.Max(0, Store(w, id, Ecology.EnvironmentSystem.WaterStore.Soil) - SoilAt(w, id).FieldCapacity) : 0,
+            nameof(WaterSupply) => (w, id) => {
+                if (!Within(w, id)) return 0;
+                var soil = SoilAt(w, id); double root = Store(w, id, Ecology.EnvironmentSystem.WaterStore.Soil);
+                return Math.Clamp(root <= soil.WiltingPoint ? 0 : soil.Availability(root), 0, 1);
+            },
+            nameof(Waterlogging) => (w, id) => Within(w, id) ? w.Environment.Waterlogging(id) : 0,
+            nameof(Infiltration) => (w, id) => Within(w, id) ? SoilAt(w, id).InfiltrationPerHour : 0,
+            nameof(Saturation) => (w, id) => Within(w, id) ? SoilAt(w, id).Saturation : 0,
+            nameof(FieldCapacity) => (w, id) => Within(w, id) ? SoilAt(w, id).FieldCapacity : 0,
+            nameof(WiltingPoint) => (w, id) => Within(w, id) ? SoilAt(w, id).WiltingPoint : 0,
+            nameof(Drainage) => (w, id) => Within(w, id) ? SoilAt(w, id).DrainagePerHour : 0,
+            nameof(Cover) => (w, id) => Within(w, id) ? w.Environment.Cover(id) : 0,
+            nameof(Paved) => (w, id) => Within(w, id) && (w.Map.IsRoadTile(id) || w.Map.IsBuildingTile(id)) ? 1 : 0,
+            nameof(Rain) => (w, id) => Within(w, id) ? w.Environment.LiquidRainRate * w.Environment.LocalClimate(id).RainMultiplier : 0,
+            nameof(Snowfall) => (w, id) => Within(w, id) ? w.Environment.SnowfallRate * w.Environment.LocalClimate(id).RainMultiplier : 0,
+            nameof(PotentialEvaporation) => (w, id) => Within(w, id) ? w.Environment.LocalClimate(id).Forcing.PotentialEvaporationPerHour : 0,
+            nameof(Temperature) => (w, id) => Within(w, id) ? w.Environment.LocalClimate(id).Forcing.Temperature : 0,
+            nameof(LeafAreaIndex) => (w, id) => Within(w, id) ? w.Environment.HydrologyInputs(id).LeafAreaIndex : 0,
+            nameof(InterceptionCapacity) => Interception,
+            nameof(CanopyFill) => (w, id) => Interception(w, id) > 0
+                ? Math.Clamp(Store(w, id, Ecology.EnvironmentSystem.WaterStore.Canopy) / Interception(w, id), 0, 1) : 1,
+            nameof(Drop) => (w, id) => {
+                double level = Level(w, id), drop = 0;
+                Span<int> ids = stackalloc int[4];
+                int count = w.Map.IsValidTileId(id) ? w.Map.GetTileNeighbours(id, ids) : 0;
+                for (int i = 0; i < count; i++) drop += Math.Max(0, level - Level(w, ids[i]));
+                return drop * 1000;
+            },
+            nameof(Sealed) => (w, id) => Flag(w.Map.IsValidTileId(id) && ((Ecology.IForestHabitat)w.Map).IsImpervious(id)),
+            nameof(Outlet) => (w, id) => Flag(w.Map.IsValidTileId(id) && ((Ecology.IForestHabitat)w.Map).IsWaterOutlet(id)),
+            nameof(SpringRate) => (w, id) => Within(w, id) ? w.Environment.SpringRate(id) : 0,
+            nameof(Elevation) => Height,
+            nameof(WaterLevel) => Level,
+            _ => null,
+        };
+
+        /// <summary>A writer of the water store named <paramref name="property"/> that skips the view; null for other fields.</summary>
+        internal static Action<GameWorld, int, double> DirectWrite(string property)
+        {
+            Ecology.EnvironmentSystem.WaterStore? store = property switch {
+                nameof(RootWater) => Ecology.EnvironmentSystem.WaterStore.Soil, nameof(SurfaceWater) => Ecology.EnvironmentSystem.WaterStore.Surface,
+                nameof(DeepWater) => Ecology.EnvironmentSystem.WaterStore.Deep, nameof(CanopyWater) => Ecology.EnvironmentSystem.WaterStore.Canopy,
+                nameof(Snow) => Ecology.EnvironmentSystem.WaterStore.Snow, _ => null };
+            if (store is not { } s) return null;
+            return (w, id, value) => { if (Within(w, id)) w.Environment.SetWater(id, s, value); };
+        }
+
+        /// <summary>The members of a collection without binding the view: <see cref="Neighbours"/> by tile ID, in the same order.</summary>
+        internal static Func<GameWorld, int, int[]> DirectMembers(string property) => property != nameof(Neighbours) ? null : (w, id) => {
+            Span<int> ids = stackalloc int[4];
+            int count = w.Map.IsValidTileId(id) ? w.Map.GetTileNeighbours(id, ids) : 0;
+            return ids[..count].ToArray();
+        };
+
+        // Collections hand out views of their own, so reading them never rebinds the view a rule is visiting.
+        private TileView neighbour; private TreeView trees; private StumpView stumps;
+        public IEnumerable<ITile> Neighbours
+        {
+            get {
+                var ids = new int[4];
+                int count = World.Map.IsValidTileId(Id) ? World.Map.GetTileNeighbours(Id, ids) : 0;
+                neighbour ??= new();
+                for (int i = 0; i < count; i++) { neighbour.Bind(World, ids[i]); neighbour.Invalidate(); yield return neighbour; }
+            }
+        }
+        public IEnumerable<ITree> Trees
+        {
+            get {
+                if (World.forest == null || !World.forest.IndividualTrees.TryGet(Id, out var patch)) yield break;
+                trees ??= new(); int tile = Id;
+                trees.Trees = Enumerable.Range(0, patch.Count).Select(i => (tile, i)).ToArray();
+                for (int i = 0; i < trees.Trees.Length; i++) { trees.Bind(World, i); yield return trees; }
+            }
+        }
+        public IEnumerable<IStump> Stumps
+        {
+            get {
+                if (World.forest == null || !World.forest.IndividualTrees.TryGet(Id, out var patch) || patch.Stumps == null) yield break;
+                stumps ??= new(); int tile = Id;
+                stumps.Stumps = Enumerable.Range(0, patch.Stumps.Count).Select(i => (tile, i)).ToArray();
+                for (int i = 0; i < stumps.Stumps.Length; i++) { stumps.Bind(World, i); yield return stumps; }
+            }
+        }
     }
 
     private sealed class WorldView : RuleView, IWorld
@@ -214,12 +414,23 @@ sealed partial class GameWorld
         public double Expenses => World.Expenses;
         public double RunningCosts => World.Logistics.RunningCosts;
         public double Balance => World.Balance;
+        public double HoursPerYear => Ecology.EnvironmentSystem.HoursPerForestYear;
     }
 
     private sealed class RoadView : RuleView, IRoad
     {
         private readonly TileView tile = new();
         internal override int[] Elements() => World.Map.RoadTiles.OrderBy(id => id).ToArray();
+        internal override IEnumerable<int> PrepareElementsWork()
+        {
+            if (World.Map.RoadCount == 0) { PreparedElements = Array.Empty<int>(); yield break; }
+            var ids = new List<int>();
+            for (int id = 0; id < World.Map.Tiles.Count; id++) {
+                if (World.Map.IsRoadTile(id)) ids.Add(id);
+                yield return 1;
+            }
+            PreparedElements = ids.ToArray();
+        }
         internal override int Size() => World.Map.Tiles.Count;
         public double Condition { get => World.Map.GetRoadCondition(Id); set => World.Map.SetRoadCondition(Id, (float)value); }
         public RoadPaving Surface => World.Map.GetRoadPaving(Id);
@@ -231,6 +442,16 @@ sealed partial class GameWorld
     {
         private readonly TileView tile = new();
         internal override int[] Elements() => World.Map.SkidTrailTiles.OrderBy(id => id).ToArray();
+        internal override IEnumerable<int> PrepareElementsWork()
+        {
+            if (World.Map.SkidTrailCount == 0) { PreparedElements = Array.Empty<int>(); yield break; }
+            var ids = new List<int>();
+            for (int id = 0; id < World.Map.Tiles.Count; id++) {
+                if (World.Map.IsSkidTrail(id)) ids.Add(id);
+                yield return 1;
+            }
+            PreparedElements = ids.ToArray();
+        }
         internal override int Size() => World.Map.Tiles.Count;
         public double Wear { get => World.Map.GetSkidTrailWear(Id); set => World.Map.SetSkidTrailState(Id, (float)value, World.Map.GetSkidTrailIdle(Id)); }
         public double IdleYears { get => World.Map.GetSkidTrailIdle(Id); set => World.Map.SetSkidTrailState(Id, World.Map.GetSkidTrailWear(Id), (float)value); }
@@ -253,8 +474,17 @@ sealed partial class GameWorld
         public double Age => Tree.Age(World.forest.ForestYear);
         public double Health { get => Tree.Health; set => Tree = Tree with { Health = (float)Math.Clamp(value, 0, 1) }; }
         public ITile Tile { get { tile.Bind(World, Trees[Id].Tile); return tile; } }
-        public double Height => Tree.At(World.forest.ForestYear).Height;
-        public double Diameter => Tree.At(World.forest.ForestYear).Diameter;
+        // Size is state anchored at a year; writing it re-anchors the tree there, and growth continues from the new size.
+        public double Height { get => Tree.At(World.forest.ForestYear).Height; set => Resize(d => d with { Height = (float)Math.Max(0, value) }); }
+        public double Diameter { get => Tree.At(World.forest.ForestYear).Diameter; set => Resize(d => d with { Diameter = (float)Math.Max(0, value) }); }
+        private void Resize(Func<ForestTreeDimensions, ForestTreeDimensions> change)
+        {
+            var (t, i) = Trees[Id];
+            if (!World.forest.IndividualTrees.TryGet(t, out var patch)) return;
+            var settled = patch.Trees[i].Settle(World.forest.ForestYear);
+            patch.Trees[i] = settled with { Dimensions = change(settled.Dimensions) };
+            patch.Revision++;
+        }
         public double Light => Tree.Resources.Light;
         public double Water => Tree.Resources.Water;
         public double StressYears { get => Tree.StressYears; set => Tree = Tree with { StressYears = (float)Math.Max(0, value) }; }
@@ -269,6 +499,17 @@ sealed partial class GameWorld
             Trees = list.ToArray(); tile.Invalidate();
             return Enumerable.Range(0, Trees.Length).ToArray();
         }
+        internal override IEnumerable<int> PrepareElementsWork()
+        {
+            var list = new List<(int, int)>(World.forest.IndividualTreeCount);
+            for (int id = 0; id < World.Map.Tiles.Count; id++) {
+                yield return 1;
+                if (!World.forest.IndividualTrees.TryGet(id, out var patch)) continue;
+                for (int i = 0; i < patch.Count; i++) { list.Add((id, i)); yield return 1; }
+            }
+            Trees = list.ToArray(); tile.Invalidate();
+            PreparedElements = Enumerable.Range(0, Trees.Length).ToArray();
+        }
         internal override int Size() => Trees.Length;
     }
 
@@ -278,7 +519,7 @@ sealed partial class GameWorld
         private readonly TileView tile = new();
         private ForestTreeStump Stump { get { var (t, i) = Stumps[Id]; World.forest.IndividualTrees.TryGet(t, out var p); return p.Stumps[i]; } }
         public double DecayProgress {
-            get => Stump.DecayProgress ?? Math.Clamp((World.forest.ForestYear - Stump.FelledYear) / ForestTreeStump.LifetimeYears, 0, 1);
+            get => Stump.DecayProgress;
             set { var (t, i) = Stumps[Id]; World.forest.IndividualTrees.TryGet(t, out var patch);
                 patch.Stumps[i] = patch.Stumps[i] with { DecayProgress = Math.Clamp(value, 0, 1) }; }
         }
@@ -302,6 +543,17 @@ sealed partial class GameWorld
             Stumps = list.ToArray(); tile.Invalidate();
             return Enumerable.Range(0, Stumps.Length).ToArray();
         }
+        internal override IEnumerable<int> PrepareElementsWork()
+        {
+            var list = new List<(int, int)>();
+            for (int id = 0; id < World.Map.Tiles.Count; id++) {
+                yield return 1;
+                if (!World.forest.IndividualTrees.TryGet(id, out var patch) || patch.Stumps == null) continue;
+                for (int i = patch.Stumps.Count - 1; i >= 0; i--) { list.Add((id, i)); yield return 1; }
+            }
+            Stumps = list.ToArray(); tile.Invalidate();
+            PreparedElements = Enumerable.Range(0, Stumps.Length).ToArray();
+        }
         internal override int Size() => Stumps.Length;
     }
 
@@ -317,7 +569,34 @@ sealed partial class GameWorld
         public double Cargo => V.CargoAmount;
         public double Fill => V.CargoFill;
         public double EmptyMass => V.Spec.EmptyMass;
+        public double Mass => V.Mass;
+        public double Power => V.Spec.Power;
+        public double MaxTractiveForce => V.Spec.MaxTractiveForce;
+        public double Drivetrain => V.Spec.Drivetrain;
+        public double Braking => V.Spec.Braking;
+        public double DragArea => V.Spec.DragArea;
+        public double TimberDensity => V.Spec.TimberDensity;
+        public double FuelPerKilowattHour => V.Spec.FuelPerKilowattHour;
+        public double IdleFuelPerHour => V.Spec.IdleFuelPerHour;
     }
+
+    private sealed class MachineView : RuleView, IForestMachine
+    {
+        private readonly TileView tile = new();
+        private ForestMachine M => World.Logistics.Machines[Id];
+        internal override int[] Elements() => Enumerable.Range(0, World.Logistics.Machines.Count).ToArray();
+        internal override int Size() => World.Logistics.Machines.Count;
+        public ForestMachineKind Kind => M.Kind;
+        public ForestMachineState State => M.State;
+        public double Cargo => M.Cargo;
+        public double Capacity => M.Capacity;
+        public double Fill => M.CargoFill;
+        public double Fuel => M.FuelUsed;
+        public double Wear { get => M.Upkeep.Wear; set => M.Upkeep.Wear = (float)Math.Clamp(value, 0, 1); }
+        public ITile Tile { get { tile.Bind(World, M.Path is { Length: > 0 } ? M.Tile : -1); tile.Invalidate(); return tile; } }
+    }
+
+    private sealed record BoundView(GameWorld World, RuleView View);
 
     // Views hold per-world element snapshots; each world gets its own instance of every view.
     private static readonly ConditionalWeakTable<GameWorld, Dictionary<Type, RuleView>> Views = new();
@@ -361,39 +640,78 @@ sealed partial class GameWorld
 
     private static RuleScope EntityScope(RuleSchema schema, RuleEntitySchema entity, Type viewType)
     {
-        RuleView Bound(GameWorld w, int id) { var v = View(w, viewType); v.Bind(w, id); return v; }
+        // Every field read binds the kind's view; remembering the last world's view skips the per-world lookup and its lock.
+        // The pair is one reference, swapped atomically, so worlds on other threads never see a mixed pair.
+        BoundView last = null;
+        RuleView Bound(GameWorld w, int id)
+        {
+            var cached = last;
+            if (cached == null || cached.World != w) last = cached = new(w, View(w, viewType));
+            cached.View.Bind(w, id); return cached.View;
+        }
+        // A view may read some fields (and members) without being bound: its static DirectRead/DirectWrite/DirectMembers.
+        T Direct<T>(string method, string property) where T : Delegate =>
+            (T)viewType.GetMethod(method, System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)?.Invoke(null, new object[] { property });
         var fields = new List<RuleScopeField>();
         foreach (var f in entity.Fields) {
             var get = Getter(f.Property); var set = f.Writable ? Setter(f.Property) : null;
-            fields.Add(new(f.Name, $"{f.Display}: {Help(f)}", (w, id) => get(Bound(w, id)), set == null ? null : (w, id, v) => set(Bound(w, id), Math.Clamp(v, f.Min, f.Max))));
+            var directGet = Direct<Func<GameWorld, int, double>>("DirectRead", f.Property.Name);
+            var directSet = set == null ? null : Direct<Action<GameWorld, int, double>>("DirectWrite", f.Property.Name);
+            fields.Add(new(f.Name, $"{f.Display}: {Help(f)}", directGet ?? ((w, id) => get(Bound(w, id))), set == null ? null
+                : directSet != null ? (w, id, v) => directSet(w, id, Math.Clamp(v, f.Min, f.Max)) : (w, id, v) => set(Bound(w, id), Math.Clamp(v, f.Min, f.Max))) {
+                Min = f.Min, Max = f.Max, ViewRead = directGet == null ? null : (w, id) => get(Bound(w, id)) });
+        }
+        // Summaries of the object's own collections (“trees.avg.height”), then the attached objects' fields and summaries.
+        foreach (var s in entity.Summaries) {
+            var get = Summary(s);
+            fields.Add(new(s.Name, $"{s.Display}: {Help(s)}", (w, id) => get(Bound(w, id))));
         }
         foreach (var r in entity.Relations) {
             var target = schema.Find(r.Target); var follow = r.Property.GetMethod;
             foreach (var f in target.Fields) {
-                var get = Getter(f.Property);
-                fields.Add(new(r.Name + "." + f.Name, $"{r.Display} › {f.Display}: {Help(f)}", (w, id) => get(follow.Invoke(Bound(w, id), null))));
+                // A writable field of an attached object is writable through the relation: a tree may take its tile's water.
+                var get = Getter(f.Property); var set = f.Writable ? Setter(f.Property) : null;
+                fields.Add(new(r.Name + "." + f.Name, $"{r.Display} › {f.Display}: {Help(f)}", (w, id) => get(follow.Invoke(Bound(w, id), null)),
+                    set == null ? null : (w, id, v) => set(follow.Invoke(Bound(w, id), null), Math.Clamp(v, f.Min, f.Max))) { Min = f.Min, Max = f.Max });
+            }
+            foreach (var s in target.Summaries) {
+                var get = Summary(s);
+                fields.Add(new(r.Name + "." + s.Name, $"{r.Display} › {s.Display}: {Help(s)}", (w, id) => get(follow.Invoke(Bound(w, id), null))));
             }
         }
         var actions = entity.Actions.Select(a => new RuleScopeAction(a.Name, a.Help, (w, id) => (bool)a.Method.Invoke(Bound(w, id), null))).ToArray();
-        return new(entity.Id, entity.Name, entity.Element, w => View(w, viewType).Elements(), w => View(w, viewType).Size(), fields.ToArray(), actions) { Entity = entity.Id };
-    }
-
-    /// <summary>Former field names on a scope (own and relation fields) mapped to the current ones, for migrating saved rules.</summary>
-    internal static IReadOnlyDictionary<string, string> FieldAliases(string scope)
-    {
-        var names = new Dictionary<string, string>(StringComparer.Ordinal);
-        var entity = RuleObjects.Find(scope);
-        if (entity == null) return names;
-        foreach (var f in entity.Fields) foreach (string alias in f.Aliases) names.TryAdd(alias, f.Name);
-        foreach (var r in entity.Relations)
-            foreach (var f in RuleObjects.Find(r.Target).Fields) foreach (string alias in f.Aliases) names.TryAdd(r.Name + "." + alias, r.Name + "." + f.Name);
-        return names;
+        // Collections whose members are elements of a kind (a tile's neighbours): flows can write into them by element ID.
+        var collections = entity.Collections.Where(c => c.Addressable).Select(c => {
+            var items = c.Property.GetMethod;
+            return new RuleScopeCollection(c.Name, c.Target, Direct<Func<GameWorld, int, int[]>>("DirectMembers", c.Property.Name)
+                ?? ((w, id) => ((IEnumerable<object>)items.Invoke(Bound(w, id), null)).Select(m => (int)((RuleView)m).Index).ToArray()));
+        }).ToArray();
+        return new(entity.Id, entity.Name, entity.Element, w => View(w, viewType).Elements(), w => View(w, viewType).Size(), fields.ToArray(), actions) {
+            PrepareElements = w => View(w, viewType).PrepareElementsWork(), PreparedElements = w => View(w, viewType).PreparedElements,
+            Entity = entity.Id, Collections = collections };
     }
 
     private static string Help(RuleFieldSchema f)
     {
         string options = f.Kind == RuleFieldKind.Number ? "" : " [" + string.Join(", ", f.Options.Select(o => $"{o.Display} = {o.Value}")) + "]";
         return (f.Unit.Length == 0 ? f.Help : $"{f.Help} ({f.Unit})") + options;
+    }
+
+    /// <summary>Reads a collection summary: how many elements, or the average, smallest, largest or total of one field (0 when empty).</summary>
+    private static Func<object, double> Summary(RuleFieldSchema s)
+    {
+        var items = s.Collection.Property.GetMethod;
+        var get = s.Aggregate == "count" ? null : Getter(s.Property);
+        return o => {
+            double n = 0, sum = 0, min = double.PositiveInfinity, max = double.NegativeInfinity;
+            foreach (object item in (System.Collections.IEnumerable)items.Invoke(o, null)) {
+                n++;
+                if (get == null) continue;
+                double v = get(item); sum += v; min = Math.Min(min, v); max = Math.Max(max, v);
+            }
+            return s.Aggregate switch {
+                "count" => n, "sum" => sum, "avg" => n > 0 ? sum / n : 0, "min" => n > 0 ? min : 0, _ => n > 0 ? max : 0 };
+        };
     }
 
     private static Func<object, double> Getter(System.Reflection.PropertyInfo p)

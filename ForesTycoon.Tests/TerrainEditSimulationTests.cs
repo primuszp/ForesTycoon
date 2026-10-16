@@ -15,7 +15,6 @@ public class TerrainEditSimulationTests
         int[] changed = map.BuildRoadTilePath(132, 134);
         Assert.Equal(new[] { 132, 133, 134 }, changed);
         forest.RefreshHabitat(changed);
-        ecosystem.Environment.RefreshRouting(changed);
         foreach (var entry in before)
             if (changed.Contains(entry.Key)) Assert.False(forest.IndividualTrees.TryGet(entry.Key, out _));
             else
@@ -120,7 +119,6 @@ public class TerrainEditSimulationTests
         first.Update(21.5); second.Update(21.5);
         first.ApplyTerrainEdit(firstMap.EditElevationAtNode(firstMap.GetNode(5, 5).Id, 1, 1, 3));
         second.ApplyTerrainEdit(secondMap.EditElevationAtNode(secondMap.GetNode(5, 5).Id, 1, 1, 3));
-        second.Environment.RefreshRouting();
         first.Update(90); second.Update(90);
         Assert.Equal(first.Forest.ForestYear, second.Forest.ForestYear);
         Assert.Equal(first.Forest.Statistics, second.Forest.Statistics);

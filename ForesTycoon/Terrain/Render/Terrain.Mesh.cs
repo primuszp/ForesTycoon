@@ -146,10 +146,9 @@ namespace ForesTycoon
             return vertex;
         }
 
-        private void makeTiles()
+        internal IEnumerable<int> PrepareBaseGeometryWork()
         {
-            foreach (Tile tile in tiles)
-                makeBuffer(tile.Code, tile.Low);
+            foreach (Tile tile in tiles) { makeBuffer(tile.Code, tile.Low); yield return 1; }
         }
 
         // The map re-derived its own data; here only the GPU copies follow the new heights.
@@ -171,14 +170,10 @@ namespace ForesTycoon
             }
         }
 
-        private void OnRoadDiagonalsChanged()
+        private void OnRoadDiagonalPrepared(int id)
         {
-            foreach (int id in map.FlippedDiagonalTiles)
-            {
-                Tile inner = tiles[id];
-                if (!vbos.ContainsKey(inner.Code + "_" + inner.Low + "_f"))
-                    makeBuffer(inner.Code, inner.Low, true);
-            }
+            Tile inner = tiles[id];
+            if (!vbos.ContainsKey(inner.Code + "_" + inner.Low + "_f")) makeBuffer(inner.Code, inner.Low, true);
         }
 
         private uint ColorToUInt(Color color)

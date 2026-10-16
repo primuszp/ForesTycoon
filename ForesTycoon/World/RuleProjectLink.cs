@@ -33,6 +33,7 @@ internal sealed class RuleProjectLink
     }
     internal void Poll(GameWorld world, double elapsed)
     {
+        if (world.BoundaryPending) return;
         if (replacement != null) {
             if (File.Exists(acknowledgement)) { closeOldRuntime(); return; }
             if (replacement.HasExited) {

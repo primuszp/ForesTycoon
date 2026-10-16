@@ -14,7 +14,6 @@ public class RuleInfluenceTests
     private static WorldRule EmptyRoad(RuleProject p)
     {
         var r = p.Rules.Single(r => r.Id == "road.weather");
-        r.UseLegacyRoadOverride = false;
         r.Effects = new() { new() { Target = "condition", Mode = "add", Influence = new() } };
         p.Algorithms = null;
         return r;
@@ -45,18 +44,6 @@ public class RuleInfluenceTests
         Assert.All(scope.Elements(restored), id => Assert.Equal(.1, field.Read(restored, id), 7));
         restored.RuleBook.Run(restored, 1, 0);
         Assert.Null(restored.RuleBook.LastError); Assert.Empty(scope.Elements(restored));
-    }
-
-    [Fact]
-    public void LegacyStumpThresholdMigratesWithoutChangingItsDuration()
-    {
-        var rule = new WorldRule { Scope = "stump", Effects = new() {
-            new() { Target = "remove", Mode = "action", Formula = "curve.step(age; 9; 0; 1)" } } };
-        rule.UpgradeAuthoring(); rule.Validate();
-        Assert.Equal(9, rule.Effects[0].Influence.Terms[0].Factors[0].InputHigh);
-        Assert.Equal("action", rule.Effects[1].Mode);
-        string once = JsonSerializer.Serialize(rule); rule.UpgradeAuthoring();
-        Assert.Equal(once, JsonSerializer.Serialize(rule));
     }
 
     [Theory]
@@ -128,10 +115,10 @@ public class RuleInfluenceTests
     {
         using var w = World(); int id = Road(w);
         var p = w.RuleProjectDocument; var r = EmptyRoad(p);
-        r.Effects[0].Influence.Terms.Add(new() { Name = "Dry damage", Amount = .2, WhenField = "isMacadam", Comparison = "less", Threshold = .5,
+        r.Effects[0].Influence.Terms.Add(new() { Name = "Dry damage", Amount = .2, Conditions = { new() { Field = "surface", Comparison = "less", Value = .5 } },
             Factors = new() { new() { Source = "condition", Shape = "step", InputHigh = .9, OutputLow = 0, OutputHigh = 2 },
                 new() { Source = "tile.moisture", OutputLow = .5, OutputHigh = .5 } } });
-        r.Effects[0].Influence.Terms.Add(new() { Name = "Excluded", Amount = 10, WhenField = "isMacadam", Comparison = "greater", Threshold = .5 });
+        r.Effects[0].Influence.Terms.Add(new() { Name = "Excluded", Amount = 10, Conditions = { new() { Field = "surface", Comparison = "greater", Value = .5 } } });
         w.QueueRuleProject(p); w.ExecutePendingCommands(); w.RuleBook.Run(w, .25, 0);
         Assert.Equal(.95, w.Map.GetRoadCondition(id), 6);
         using var stream = new MemoryStream(); w.Save(stream); stream.Position = 0;
@@ -154,7 +141,7 @@ public class RuleInfluenceTests
         var field = scope.Fields.Single(f => f.Name == "stressYears"); double before = field.Read(w, id);
         w.RuleBook.Run(w, .2, 0);
         Assert.Equal(before + .1, field.Read(w, id), 6);
-        r.Effects[0].Target = "height"; // Read-only targets must never be written.
+        r.Effects[0].Target = "light"; // Read-only (computed) targets must never be written.
         Assert.Throws<InvalidDataException>(() => w.QueueRuleProject(p));
         r.Effects[0].Target = "health";
         r.Effects[0].Influence.Terms[0].Factors[0].Source = "missing.field";
@@ -163,19 +150,4 @@ public class RuleInfluenceTests
         Assert.Throws<InvalidDataException>(() => w.QueueRuleProject(p));
     }
 
-    [Fact]
-    public void OldCardMigratesOnceWithoutLosingCoefficientsOrDuplicatingStoredFormulas()
-    {
-        var r = new WorldRule { Id = "road.weather", Scope = "road", RoadWeather = new() { AsphaltBase = .37, MacadamMoistureFactor = 4 } };
-        string oldFormula = r.EffectiveEffects()[0].Formula;
-        r.UpgradeAuthoring(); r.Validate();
-        Assert.Null(r.RoadWeather); Assert.Single(r.Effects);
-        Assert.Empty(r.Effects[0].Formula);
-        Assert.Equal(4, r.Effects[0].Influence.Terms.Count);
-        Assert.Equal(.37, r.Effects[0].Influence.Terms[0].Amount);
-        Assert.Equal(5, r.Effects[0].Influence.Terms[2].Factors[0].OutputHigh);
-        string json = JsonSerializer.Serialize(r); r.UpgradeAuthoring();
-        Assert.Equal(json, JsonSerializer.Serialize(r));
-        Assert.NotEmpty(oldFormula);
-    }
 }

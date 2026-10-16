@@ -22,6 +22,8 @@ public sealed class RuleProject
     public WorldScenario World { get; set; }
     /// <summary>The rule book: rules written as schedule + scope + condition + effects, run by the game in this order.</summary>
     public List<WorldRule> Rules { get; set; } = new();
+    /// <summary>Starter rules the author deleted. A project gets every starter rule it has not seen yet; these never come back.</summary>
+    public List<string> RemovedStarters { get; set; } = new();
     /// <summary>State variables the rules may add to a scope.</summary>
     public List<RuleFieldDefinition> Fields { get; set; } = new();
     public RuleAuthoring Authoring { get; set; } = new();
@@ -201,32 +203,37 @@ public sealed class DynamicsRuntime
             if (previous.model.Stocks.Any(s => s.Id == stock.Id && s.Unit == stock.Unit))
                 values[stock.Id] = Math.Clamp(previous.values[stock.Id], stock.Minimum, stock.Maximum);
     }
-    public void Step(double delta, double time)
+    public void Step(double delta, double time) { foreach (int _ in StepWork(delta, time)) { } }
+    public IEnumerable<int> StepWork(double delta, double time)
     {
         if (!double.IsFinite(delta) || delta < 0 || !double.IsFinite(time)) throw new ArgumentOutOfRangeException(nameof(delta));
         LastError = null;
         rates.ClearError();
-        if (delta == 0 || model.Flows.Count == 0) return;
+        if (delta == 0 || model.Flows.Count == 0) yield break;
         Array.Clear(incoming); Array.Clear(outgoing); Array.Clear(changes);
         for (int i = 0; i < amounts.Length; i++) {
+            yield return 1;
             var flow = model.Flows[i];
             amounts[i] = rates.Evaluate(flow.Rate.Hook, "dynamics", 0, new(0, delta, time, 0, 0)) * delta;
-            if (rates.LastError != null || !double.IsFinite(amounts[i])) { LastError = rates.LastError ?? "Áramlási túlcsordulás."; return; }
+            if (rates.LastError != null || !double.IsFinite(amounts[i])) { LastError = rates.LastError ?? "Áramlási túlcsordulás."; yield break; }
             if (sources[i] >= 0) outgoing[sources[i]] += amounts[i];
             if (targets[i] >= 0) incoming[targets[i]] += amounts[i];
         }
         for (int i = 0; i < model.Stocks.Count; i++) {
-            if (!double.IsFinite(incoming[i]) || !double.IsFinite(outgoing[i])) { LastError = "Összesített áramlási túlcsordulás."; return; }
+            yield return 1;
+            if (!double.IsFinite(incoming[i]) || !double.IsFinite(outgoing[i])) { LastError = "Összesített áramlási túlcsordulás."; yield break; }
             var s = model.Stocks[i];
             outScale[i] = outgoing[i] == 0 ? 1 : Math.Min(1, (values[s.Id] - s.Minimum) / outgoing[i]);
             inScale[i] = incoming[i] == 0 ? 1 : Math.Min(1, (s.Maximum - values[s.Id]) / incoming[i]);
         }
         for (int i = 0; i < amounts.Length; i++) {
+            yield return 1;
             double amount = amounts[i] * Math.Min(sources[i] < 0 ? 1 : outScale[sources[i]], targets[i] < 0 ? 1 : inScale[targets[i]]);
             if (sources[i] >= 0) changes[sources[i]] -= amount;
             if (targets[i] >= 0) changes[targets[i]] += amount;
         }
         for (int i = 0; i < model.Stocks.Count; i++) {
+            yield return 1;
             var stock = model.Stocks[i]; values[stock.Id] = Math.Clamp(values[stock.Id] + changes[i], stock.Minimum, stock.Maximum);
         }
     }

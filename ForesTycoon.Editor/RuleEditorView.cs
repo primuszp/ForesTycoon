@@ -75,14 +75,18 @@ namespace ForesTycoon.Editor
             if (standalone) flags |= ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoTitleBar;
             if (!standalone) ImGui.SetNextWindowSize(new Vec2(1280, 820), ImGuiCond.FirstUseEver);
             if (!ImGui.Begin("Világszerkesztő", ref open, flags)) { ImGui.End(); return; }
-            RefreshProjectOperations();
+            RefreshProjectOperations(); RefreshSceneSave();
             currentRules.EnsureCatalog(world);
             RefreshWorkshopRevision(world);
             CompiledRoadRule compiled = compiler.Compile(draft);
             WorldHeader(world);
             float statusHeight = ImGui.GetFrameHeightWithSpacing() + 6;
             ImGui.BeginChild("editor-body", new Vec2(0, -statusHeight), ImGuiChildFlags.None, ImGuiWindowFlags.NoScrollbar);
-            WorldBody(world, standalone);
+            if (sceneSaveTask != null) ImGui.TextUnformatted("Jelenet ellenőrzése és mentése…");
+            else if (world.BoundaryPending) ImGui.TextUnformatted(world.GenerationPending ? world.GenerationStage + "…" : "Szimulációs vagy szerkesztési munka folyamatban…");
+            else WorldBody(world, standalone);
+            if (world.GenerationCanCancel && ImGui.Button("Pályaépítés megszakítása")) world.CancelGeneration();
+            if (!string.IsNullOrEmpty(world.GenerationError)) ImGui.TextWrapped("A pályaépítés nem sikerült: " + world.GenerationError);
             ImGui.EndChild();
             WorkshopStatus();
             ImGui.End();

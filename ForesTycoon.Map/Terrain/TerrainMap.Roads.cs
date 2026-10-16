@@ -5,10 +5,7 @@ using OpenTK.Mathematics;
 namespace ForesTycoon.Map
 {
     /// <summary>Weathering of paved roads: condition loss per forest year when dry, and per unit of rain.</summary>
-    internal readonly record struct RoadWeathering(float AsphaltBase, float AsphaltRain, float MacadamBase, float MacadamRain)
-    {
-        internal static RoadWeathering Default => new(0.015f, 0.08f, 0.10f, 1.6f);
-    }
+
 
     internal sealed partial class TerrainMap
     {
@@ -244,23 +241,28 @@ namespace ForesTycoon.Map
         /// Builds the a → b road with the given surface. Road tiles already on the path that carry the other surface are
         /// resurfaced. Returns every tile newly built or resurfaced.
         /// </summary>
-        public int[] BuildRoadTilePath(Tile a, Tile b, RoadPaving surface)
+        public int[] BuildRoadTilePath(Tile a, Tile b, RoadPaving surface) { var result = new WorkResult<int[]>(); SimulationWork.Complete(BuildRoadTilePathWork(a, b, surface, result)); return result.Value; }
+
+        private IEnumerable<int> BuildRoadTilePathWork(Tile a, Tile b, RoadPaving surface, WorkResult<int[]> result)
         {
             List<int> changed = new();
-            foreach (RoadPlanStep step in BuildRoadPlan(a, b))
+            foreach (RoadPlanStep step in RoadPlanSteps(a, b))
             {
+                yield return 1;
                 Tile tile = tiles[step.TileId];
                 RoadEdge edges = step.Edges | GetNetworkEdges(step.TileId);
                 RoadPlacement placement = AnalyzeRoadPlacement(tile, edges);
                 bool resurfaced = placement.IsValid && roads.Resurface(step.TileId, surface);
                 if (resurfaced && !roads.Add(step.TileId, edges, surface))
                 {
+                    yield return 1;
                     changed.Add(step.TileId);
                     chunkIndex.MarkTileAndNeighboursDirty(step.TileId, ChunkDirtyFlags.Roads);
                     continue;
                 }
                 if (resurfaced || (placement.IsValid && roads.Add(step.TileId, edges, surface)))
                 {
+                    yield return 1;
                     skidTrails.Remove(step.TileId);
                     changed.Add(step.TileId);
                     CaptureRoadSurface(tile, placement);
@@ -268,8 +270,8 @@ namespace ForesTycoon.Map
                     chunkIndex.MarkTileAndNeighboursDirty(step.TileId, ChunkDirtyFlags.Roads | ChunkDirtyFlags.Foundations);
                 }
             }
-            if (changed.Count > 0) RebuildFlippedDiagonalTiles();
-            return changed.ToArray();
+            if (changed.Count > 0) foreach (int unit in RebuildFlippedDiagonalTilesWork()) yield return unit;
+            result.Value = changed.ToArray();
         }
 
         public int[] BuildRoadTilePath(int startTileId, int endTileId, RoadPaving surface = RoadPaving.Asphalt)
@@ -278,43 +280,25 @@ namespace ForesTycoon.Map
             return BuildRoadTilePath(tiles[startTileId], tiles[endTileId], surface);
         }
 
-        /// <summary>
-        /// Weathering over <paramref name="years"/>: macadam washes out, much faster on wet ground and in rain; asphalt
-        /// ages slowly. <paramref name="rain"/> is the present rain intensity (0 dry … 1 downpour).
-        /// </summary>
-        /// <param name="rates">Condition loss per forest year by surface, dry and in rain; defaults to the built-in rates.</param>
-        /// <param name="adjust">Optional rate override per tile (condition loss per forest year).</param>
-        public void WeatherRoads(float years, float rain, Func<int, float, float> adjust = null, RoadWeathering? rates = null)
-        {
-            var r = rates ?? RoadWeathering.Default;
-            if (years <= 0 || roads.Count == 0) return;
-            float[] moisture = hydro.TileMoisture;
-            foreach (int id in roads.Tiles)
-            {
-                float wet = Math.Clamp(moisture[id], 0, 1);
-                float rate = roads.GetPaving(id) == RoadPaving.Macadam
-                    ? r.MacadamBase * (1 + 2.5f * wet) + r.MacadamRain * rain * (0.4f + wet)
-                    : r.AsphaltBase * (1 + wet) + r.AsphaltRain * rain;
-                if (adjust != null) rate = Math.Max(0, adjust(id, rate));
-                roads.SetCondition(id, roads.GetCondition(id) - rate * years);
-            }
-        }
+        public int[] RemoveRoadTilePath(Tile a, Tile b) { var result = new WorkResult<int[]>(); SimulationWork.Complete(RemoveRoadTilePathWork(a, b, result)); return result.Value; }
 
-        public int[] RemoveRoadTilePath(Tile a, Tile b)
+        private IEnumerable<int> RemoveRoadTilePathWork(Tile a, Tile b, WorkResult<int[]> result)
         {
             List<int> changed = new();
-            foreach (RoadPlanStep step in BuildRoadPlan(a, b))
+            foreach (RoadPlanStep step in RoadPlanSteps(a, b))
             {
+                yield return 1;
                 if (roads.Remove(step.TileId, step.Edges))
                 {
+                    yield return 1;
                     changed.Add(step.TileId);
                     ReleaseRoadSurface(tiles[step.TileId]);
                     InvalidateSurface();
                     chunkIndex.MarkTileAndNeighboursDirty(step.TileId, ChunkDirtyFlags.Roads | ChunkDirtyFlags.Foundations);
                 }
             }
-            if (changed.Count > 0) RebuildFlippedDiagonalTiles();
-            return changed.ToArray();
+            if (changed.Count > 0) foreach (int unit in RebuildFlippedDiagonalTilesWork()) yield return unit;
+            result.Value = changed.ToArray();
         }
 
         public int[] RemoveRoadTilePath(int startTileId, int endTileId)
@@ -323,14 +307,17 @@ namespace ForesTycoon.Map
             return RemoveRoadTilePath(tiles[startTileId], tiles[endTileId]);
         }
 
-                // Teljes újraépítés minden road módosítás után: sorrendfüggetlen, univerzális.
+        // Teljes újraépítés minden road módosítás után: sorrendfüggetlen, univerzális.
         // Minden road tile minden szomszédos él-párjánál beállítja a diagonális szomszéd flipjét.
-        private void RebuildFlippedDiagonalTiles()
+        private void RebuildFlippedDiagonalTiles() => SimulationWork.Complete(RebuildFlippedDiagonalTilesWork());
+
+        private IEnumerable<int> RebuildFlippedDiagonalTilesWork()
         {
             flippedDiagonalTiles.Clear();
             int tpc = nodeRows - 1;
             foreach (int id in roads.Tiles)
             {
+                yield return 1;
                 RoadEdge e = roads.GetEdges(id);
                 int u = id / tpc, v = id % tpc;
                 if ((e & RoadEdge.NW) != 0 && (e & RoadEdge.WS) != 0) AddFlipTile(u - 1, v - 1);
@@ -338,7 +325,32 @@ namespace ForesTycoon.Map
                 if ((e & RoadEdge.SE) != 0 && (e & RoadEdge.EN) != 0) AddFlipTile(u + 1, v + 1);
                 if ((e & RoadEdge.EN) != 0 && (e & RoadEdge.NW) != 0) AddFlipTile(u - 1, v + 1);
             }
+            foreach (int id in flippedDiagonalTiles) { RoadDiagonalPrepared?.Invoke(id); yield return 1; }
             RoadDiagonalsChanged?.Invoke();
+        }
+
+        internal IEnumerable<int> RoadPathWork(int start, int end, bool remove, RoadPaving surface, WorkResult<int[]> result)
+        {
+            result.Value = Array.Empty<int>();
+            if (!IsValidTileId(start) || !IsValidTileId(end)) yield break;
+            var work = remove ? RemoveRoadTilePathWork(tiles[start], tiles[end], result) : BuildRoadTilePathWork(tiles[start], tiles[end], surface, result);
+            foreach (int unit in work) yield return unit;
+        }
+
+        internal IEnumerable<int> RepairRoadPathWork(int start, int end, WorkResult<(int Tile, float Damage)[]> result)
+        {
+            result.Value = Array.Empty<(int, float)>();
+            if (!IsValidTileId(start) || !IsValidTileId(end)) yield break;
+            var repaired = new List<(int, float)>();
+            foreach (var step in RoadPlanSteps(tiles[start], tiles[end]))
+            {
+                yield return 1;
+                if (!roads.Has(step.TileId)) continue;
+                float damage = 1 - roads.GetCondition(step.TileId);
+                if (damage < .005f) continue;
+                roads.SetCondition(step.TileId, 1); repaired.Add((step.TileId, damage));
+            }
+            result.Value = repaired.ToArray();
         }
 
         private void AddFlipTile(int iu, int iv)
@@ -347,7 +359,7 @@ namespace ForesTycoon.Map
             Tile inner = getTileByCoords(iu, iv);
             if (roads.Has(inner.Id)) return;
             flippedDiagonalTiles.Add(inner.Id);
-                    }
+        }
 
         // Az út-csempe 4 sarkának aktuális magasságát befagyasztjuk vezetőfelületnek
         // (csak ha még nincs rögzítve, hogy a meglévő szomszéd-úttal folytonos maradjon).
@@ -415,10 +427,11 @@ namespace ForesTycoon.Map
             }
         }
 
-        internal List<RoadPlanStep> BuildRoadPlan(Tile a, Tile b)
+        internal List<RoadPlanStep> BuildRoadPlan(Tile a, Tile b) => new(RoadPlanSteps(a, b));
+
+        private IEnumerable<RoadPlanStep> RoadPlanSteps(Tile a, Tile b)
         {
-            List<RoadPlanStep> result = new List<RoadPlanStep>();
-            if (a == null || b == null) return result;
+            if (a == null || b == null) yield break;
             int tpc = nodeRows - 1;
             int startU = a.Id / tpc, startV = a.Id % tpc;
             int endU = b.Id / tpc, endV = b.Id % tpc;
@@ -428,8 +441,8 @@ namespace ForesTycoon.Map
             if (du == 0 && dv == 0)
             {
                 RoadEdge existing = roads.GetEdges(a.Id);
-                result.Add(new RoadPlanStep(a.Id, existing != RoadEdge.None ? existing : RoadEdge.WS | RoadEdge.EN));
-                return result;
+                yield return new RoadPlanStep(a.Id, existing != RoadEdge.None ? existing : RoadEdge.WS | RoadEdge.EN);
+                yield break;
             }
 
             // L-alakú útvonal: előbb a domináns tengely mentén a törésig, majd a másik
@@ -459,7 +472,7 @@ namespace ForesTycoon.Map
                 RoadEdge exit = nextU != u || nextV != v ? EdgeToNeighbor(u, v, nextU, nextV) : RoadEdge.None;
                 RoadEdge edges = previousEntry | exit;
                 if (edges != RoadEdge.None)
-                    result.Add(new RoadPlanStep(getTileByCoords(u, v).Id, edges));
+                    yield return new RoadPlanStep(getTileByCoords(u, v).Id, edges);
 
                 if (u == endU && v == endV) break;
 
@@ -468,7 +481,7 @@ namespace ForesTycoon.Map
                 v = nextV;
             }
 
-            return result;
+            yield break;
         }
 
         private static RoadEdge Opposite(RoadEdge edge) => edge switch

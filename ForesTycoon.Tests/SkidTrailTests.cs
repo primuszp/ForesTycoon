@@ -19,34 +19,9 @@ public class SkidTrailTests
     }
 
     [Fact]
-    public void MachinesDeepenTheRutsWhichFadeAndAnUnusedTrailGrowsOver()
-    {
-        var map = Flat(); map.MarkSkidTrailPath(34, 82);
-        for (int i = 0; i < 10; i++) map.DriveSkidTrail(50, 0.15f);
-        float deep = map.GetSkidTrailWear(50);
-        Assert.InRange(deep, 0.7f, 1f);
-        Assert.Equal(0f, map.GetSkidTrailWear(66));
-        map.AgeSkidTrails(1);
-        Assert.InRange(map.GetSkidTrailWear(50), deep - 0.41f, deep - 0.39f);
-        // Still marked while the ruts show; once faded and unused long enough the trail is gone.
-        Assert.Empty(map.AgeSkidTrails(1.5f));
-        int[] gone = map.AgeSkidTrails(1f);
-        Assert.Equal(new[] { 34, 50, 66, 82 }, System.Linq.Enumerable.OrderBy(gone, id => id));
-        Assert.Equal(0, map.SkidTrailCount);
-    }
-
-    [Fact]
-    public void DrivingKeepsATrailAlive()
-    {
-        var map = Flat(); map.MarkSkidTrailPath(34, 50);
-        for (int year = 0; year < 6; year++) { map.DriveSkidTrail(34, 0.1f); map.DriveSkidTrail(50, 0.1f); map.AgeSkidTrails(1); }
-        Assert.True(map.IsSkidTrail(34));
-    }
-
-    [Fact]
     public void CheckpointRoundTripsTrailsAndRejectsBadOnesWithoutChanges()
     {
-        var map = Flat(); map.MarkSkidTrailPath(34, 82); map.DriveSkidTrail(50, 0.5f); map.AgeSkidTrails(0.25f);
+        var map = Flat(); map.MarkSkidTrailPath(34, 82); map.DriveSkidTrail(50, 0.5f); map.SetSkidTrailState(50, .4f, .25f);
         var state = JsonSerializer.Deserialize<TerrainCheckpoint>(JsonSerializer.Serialize(map.Capture()))!;
         var restored = Flat(); restored.Restore(state);
         Assert.Equal(map.GetSkidTrailWear(50), restored.GetSkidTrailWear(50));

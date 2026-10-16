@@ -112,6 +112,12 @@ public sealed class RuleSentence
         string target = The(effect.Target);
         if (effect.Mode == "action") parts.Add($"megtörténik {target}");
         else if (effect.Mode == "set") parts.Add($"{target} értéke {Amount(t, effect.Target)} lesz");
+        else if (effect.Mode == "flow") {
+            // “a felszíni vízből évente 5 mm áramlik a szomszéd csempék gyökérzóna vizébe”
+            string from = effect.Target.Length == 0 ? "kívülről" : $"{The(effect.Target)} készletéből";
+            string into = effect.To.Length == 0 ? "a rendszeren kívülre" : $"{The(effect.To)} készletébe" + (effect.Spread == "downhill" ? " (lejtés szerint elosztva)" : "");
+            parts.Add($"{from} {(perYear ? "évente" : "lépésenként")} {Amount(t, effect.Target.Length > 0 ? effect.Target : effect.To)} {(t.Decrease ? "kevesebb" : "")} áramlik {into}".Replace("  ", " "));
+        }
         else parts.Add($"{target} {(perYear ? "évente" : "lépésenként")} {Amount(t, effect.Target)} értékkel {(t.Decrease ? "csökken" : "nő")}");
         // Conditions that gate the whole connection read last, as “ha …”; factors read as manners.
         var gates = t.Factors.Where(f => f.Shape == "step").Select(Factor).ToList();

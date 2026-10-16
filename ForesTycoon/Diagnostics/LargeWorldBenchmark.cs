@@ -38,7 +38,7 @@ namespace ForesTycoon
 
         private static void Measure(int tiles, WeatherPreset preset, string output)
         {
-            const int warmupFrames = 180, measuredFrames = 600;
+            const int warmupFrames = 180, measuredFrames = 900;
             const double tickSeconds = 1.0 / 30;
             long started = Stopwatch.GetTimestamp();
             using var world = new GameWorld(TerrainSettings.Default.WithNodeSize(tiles + 1, 42));
@@ -94,11 +94,13 @@ namespace ForesTycoon
             // Default year = 900 seconds, month = 75 seconds. Measure the first boundary at t=75.
             for (int tick = 0; tick < 65 * 30; tick++) world.Update(tickSeconds);
             for (int frame = -warmupFrames + 1; frame < 0; frame++) Draw(frame, false);
+            var simulation = new SimulationFrameRunner(maximumTicksPerFrame: 2048, maximumWorkMilliseconds: 4);
+            simulation.Clock.Reset(world.SimulationTick);
             var samples = new Sample[measuredFrames];
             for (int frame = 0; frame < samples.Length; frame++) {
                 int month = (int)(world.Environment.Time / (EcologyTime.DefaultGameSecondsPerYear / 12));
                 long allocated = GC.GetTotalAllocatedBytes(false); started = Stopwatch.GetTimestamp();
-                world.ExecutePendingCommands(); world.Update(tickSeconds);
+                simulation.AdvanceWork(tickSeconds, world.ExecutePendingCommands, dt => world.ContinueUpdate(dt));
                 double updateMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
                 bool moving = frame >= measuredFrames / 2;
                 double renderMs = Draw(frame, moving);
@@ -115,9 +117,13 @@ namespace ForesTycoon
             if (boundary.Length != 1) throw new InvalidOperationException($"Expected one month boundary, found {boundary.Length}.");
             using var process = Process.GetCurrentProcess(); process.Refresh();
             var result = new {
-                Protocol = "large-world-v1", Tiles = tiles, Weather = preset.ToString(), Seed = 42,
+                Protocol = "large-world-cooperative-v2", Tiles = tiles, Weather = preset.ToString(), Seed = 42,
                 WarmupFrames = warmupFrames, MeasuredFrames = measuredFrames, Width = 1280, Height = 720,
                 Quality = "High", Msaa = 4, TickRate = 30, ForestYearSeconds = EcologyTime.DefaultGameSecondsPerYear,
+                CooperativeWorkBudgetMs = 4, PendingTick = world.UpdatePending, PendingSimulationSeconds = simulation.Clock.PendingSimulationSeconds,
+                UpdateP95Ms = Percentile95(samples.Select(sample => sample.UpdateMs)),
+                UpdateP99Ms = samples.Select(sample => sample.UpdateMs).Order().ElementAt((int)(samples.Length * .99)),
+                MaxUpdateMs = samples.Max(sample => sample.UpdateMs),
                 Includes = "simulation, completed GPU render, diorama postprocess; no UI/input/swap/pacing; default world vehicle population",
                 Hardware = new { Vendor = GL.GetString(StringName.Vendor), Renderer = GL.GetString(StringName.Renderer),
                     Driver = GL.GetString(StringName.Version), OS = RuntimeInformation.OSDescription,
@@ -136,6 +142,7 @@ namespace ForesTycoon
             };
             Directory.CreateDirectory(Path.GetDirectoryName(output)!);
             File.WriteAllText(output, JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
+            Console.WriteLine($"Simulation CPU p95/p99/max: {result.UpdateP95Ms:F3}/{result.UpdateP99Ms:F3}/{result.MaxUpdateMs:F3} ms; pending {result.PendingSimulationSeconds:F3}s.");
             Console.WriteLine($"World{tiles} {preset}: stationary P95 {result.StationaryP95Ms:F2} ms, moving P95 {result.MovingP95Ms:F2} ms, month {result.MonthBoundaryMs:F2} ms; load {loadMs:F1} ms; sampled load working set {loadPeak.PeakWorkingSetBytes / 1048576.0:F1} MiB, process high water {process.PeakWorkingSet64 / 1048576.0:F1} MiB. {output}");
         }
 

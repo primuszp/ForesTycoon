@@ -17,16 +17,29 @@ namespace ForesTycoon.Ecology
         internal CompetitionCheckpoint Capture() => new(cells.Where(p => p.Value.Count > 0).OrderBy(p => p.Key)
             .Select(p => new CompetitionCellCheckpoint(p.Key, p.Value.Trees.Take(p.Value.Count).ToArray())).ToArray(),
             neighbours.OrderBy(p => p.Key).Select(p => new NeighboursCheckpoint(p.Key, (int[])p.Value.Clone())).ToArray());
-        internal void Restore(CompetitionCheckpoint s, int tileCount)
+        internal void Restore(CompetitionCheckpoint s, int tileCount) => SimulationWork.Complete(RestoreWork(s, tileCount));
+
+        internal IEnumerable<int> RestoreWork(CompetitionCheckpoint s, int tileCount)
         {
             CheckpointGuard.Require(s != null && s.Cells != null && s.Neighbours != null, "competition snapshot");
             Clear();
-            foreach (var c in s.Cells) {
+            foreach (var c in s.Cells)
+            {
+                yield return 1;
                 CheckpointGuard.Require(c != null && (uint)c.Tile < (uint)tileCount && c.Trees != null &&
                     c.Trees.Length > 0 && !cells.ContainsKey(c.Tile), "competition cell");
-                var cell = new Cell { Trees = (Sample[])c.Trees.Clone(), Count = c.Trees.Length,
-                    MinX = float.PositiveInfinity, MinY = float.PositiveInfinity, MaxX = float.NegativeInfinity, MaxY = float.NegativeInfinity };
-                foreach (var tree in cell.Trees) {
+                var cell = new Cell
+                {
+                    Trees = (Sample[])c.Trees.Clone(),
+                    Count = c.Trees.Length,
+                    MinX = float.PositiveInfinity,
+                    MinY = float.PositiveInfinity,
+                    MaxX = float.NegativeInfinity,
+                    MaxY = float.NegativeInfinity
+                };
+                foreach (var tree in cell.Trees)
+                {
+                    yield return 1;
                     CheckpointGuard.Require(tree.Id > 0 && float.IsFinite(tree.X) && float.IsFinite(tree.Y), "competition sample");
                     CheckpointGuard.Unit(tree.Health, "competition health");
                     CheckpointGuard.NonNegative(tree.Size.Diameter, "competition diameter");
@@ -37,7 +50,9 @@ namespace ForesTycoon.Ecology
                 }
                 cells.Add(c.Tile, cell);
             }
-            foreach (var n in s.Neighbours) {
+            foreach (var n in s.Neighbours)
+            {
+                yield return 1;
                 CheckpointGuard.Require(n != null && (uint)n.Tile < (uint)tileCount && n.Neighbours != null &&
                     n.Neighbours.Length > 0 && n.Neighbours.All(id => (uint)id < (uint)tileCount) &&
                     neighbours.TryAdd(n.Tile, (int[])n.Neighbours.Clone()), "competition neighbours");
@@ -52,35 +67,52 @@ namespace ForesTycoon.Ecology
                 p.Value.Resources.Take(p.Value.Count).ToArray(), p.Value.Ids.Take(p.Value.Count).ToArray(),
                 p.Value.Geometry.Take(p.Value.Count).ToArray(), p.Value.Stand)).ToArray(), revision, year, cursor, published,
             snapshotRepairs.ToArray(), resourceRepairs.ToArray());
-        internal void Restore(PreparationCheckpoint s, ForestTreeStore store, int tileCount)
+        internal void Restore(PreparationCheckpoint s, ForestTreeStore store, int tileCount) => SimulationWork.Complete(RestoreWork(s, store, tileCount));
+
+        internal IEnumerable<int> RestoreWork(PreparationCheckpoint s, ForestTreeStore store, int tileCount)
         {
             CheckpointGuard.Require(s != null && s.Patches != null && s.Prepared != null && s.SnapshotRepairs != null &&
                 s.ResourceRepairs != null && s.Cursor >= 0 && s.Cursor <= (long)s.Patches.Length * 2, "preparation cursor");
             CheckpointGuard.NonNegative(s.Year, "preparation calendar");
-            Clear(); competition.Restore(s.Competition, tileCount);
+            Clear(); foreach (int unit in competition.RestoreWork(s.Competition, tileCount)) yield return unit;
             var unique = new HashSet<int>();
-            foreach (int id in s.Patches) {
+            foreach (int id in s.Patches)
+            {
+                yield return 1;
                 CheckpointGuard.Require((uint)id < (uint)tileCount && unique.Add(id), "preparation patch order");
                 store.TryGet(id, out var patch); patches.Add(new(id, patch));
             }
-            foreach (var p in s.Prepared) {
+            foreach (var p in s.Prepared)
+            {
+                yield return 1;
                 CheckpointGuard.Require(p != null && (uint)p.Tile < (uint)tileCount && p.Ids != null && p.Resources != null &&
                     p.Geometry != null && p.Ids.Length == p.Resources.Length && p.Ids.Length == p.Geometry.Length &&
                     !prepared.ContainsKey(p.Tile), "prepared geometry");
-                foreach (var r in p.Resources) { CheckpointGuard.Unit(r.Light, "prepared light");
-                    CheckpointGuard.Unit(r.Water, "prepared water"); CheckpointGuard.Unit(r.Space, "prepared space"); }
-                foreach (var g in p.Geometry) {
+                foreach (var r in p.Resources)
+                {
+                    yield return 1; CheckpointGuard.Unit(r.Light, "prepared light");
+                    CheckpointGuard.Unit(r.Water, "prepared water"); CheckpointGuard.Unit(r.Space, "prepared space");
+                }
+                foreach (var g in p.Geometry)
+                {
+                    yield return 1;
                     CheckpointGuard.NonNegative(g.VolumeIncrement, "prepared volume"); CheckpointGuard.Unit(g.SpaceResponse, "prepared space response");
                     foreach (double v in new[] { g.Dimensions.Diameter, g.Dimensions.Height, g.Dimensions.CrownRadius,
                         g.Growth.DiameterNumerator, g.Growth.HeightMultiplier, g.Growth.CrownRatio, g.Growth.CrownSpread })
-                        CheckpointGuard.NonNegative(v, "prepared growth");
+                    { yield return 1; CheckpointGuard.NonNegative(v, "prepared growth"); }
                     CheckpointGuard.Require(float.IsFinite(g.Growth.DiameterDenominator) && g.Growth.DiameterDenominator > 0, "prepared denominator");
                 }
-                prepared.Add(p.Tile, new PreparedPatch { Resources = (ForestResources[])p.Resources.Clone(), Ids = (ulong[])p.Ids.Clone(),
-                    Geometry = (ForestBoundaryGeometry[])p.Geometry.Clone(), Stand = p.Stand, Count = p.Ids.Length });
+                prepared.Add(p.Tile, new PreparedPatch
+                {
+                    Resources = (ForestResources[])p.Resources.Clone(),
+                    Ids = (ulong[])p.Ids.Clone(),
+                    Geometry = (ForestBoundaryGeometry[])p.Geometry.Clone(),
+                    Stand = p.Stand,
+                    Count = p.Ids.Length
+                });
             }
-            foreach (int id in s.SnapshotRepairs) { CheckpointGuard.Require((uint)id < (uint)tileCount && snapshotPending.Add(id), "snapshot repair"); snapshotRepairs.Enqueue(id); }
-            foreach (int id in s.ResourceRepairs) { CheckpointGuard.Require((uint)id < (uint)tileCount && resourcePending.Add(id), "resource repair"); resourceRepairs.Enqueue(id); }
+            foreach (int id in s.SnapshotRepairs) { yield return 1; CheckpointGuard.Require((uint)id < (uint)tileCount && snapshotPending.Add(id), "snapshot repair"); snapshotRepairs.Enqueue(id); }
+            foreach (int id in s.ResourceRepairs) { yield return 1; CheckpointGuard.Require((uint)id < (uint)tileCount && resourcePending.Add(id), "resource repair"); resourceRepairs.Enqueue(id); }
             revision = s.Revision; year = s.Year; cursor = s.Cursor; published = s.Published;
         }
     }

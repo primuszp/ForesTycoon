@@ -81,26 +81,35 @@ namespace ForesTycoon.Map
 
         public int[] FindNetworkPath(int start, int end, out float totalCost, Func<int, int, float, float> edgeCost = null)
         {
-            totalCost = float.PositiveInfinity;
-            if (!IsNetworkTile(start) || !IsNetworkTile(end)) return Array.Empty<int>();
-            if (start == end) { totalCost = 0; return new[] { start }; }
+            var result = new WorkResult<(int[] Path, float Cost)>();
+            SimulationWork.Complete(FindNetworkPathWork(start, end, result, edgeCost));
+            totalCost = result.Value.Cost;
+            return result.Value.Path;
+        }
+
+        internal IEnumerable<int> FindNetworkPathWork(int start, int end, WorkResult<(int[] Path, float Cost)> result,
+            Func<int, int, float, float> edgeCost = null)
+        {
+            result.Value = (Array.Empty<int>(), float.PositiveInfinity);
+            if (!IsNetworkTile(start) || !IsNetworkTile(end)) yield break;
+            if (start == end) { result.Value = (new[] { start }, 0); yield break; }
             var cost = new Dictionary<int, float> { [start] = 0 };
             var previous = new Dictionary<int, int> { [start] = -1 };
             // Tile id breaks equal-cost ties independently of heap implementation details.
             var open = new PriorityQueue<int, (float Cost, int Tile)>();
             open.Enqueue(start, (0, start));
-            Span<int> next = stackalloc int[4];
+            int[] next = new int[4];
             while (open.TryDequeue(out int tile, out var priority))
             {
+                yield return 1;
                 float c = priority.Cost;
                 if (c > cost[tile]) continue;
                 if (tile == end)
                 {
-                    totalCost = c;
                     var path = new List<int>();
-                    for (int t = end; t >= 0; t = previous[t]) path.Add(t);
+                    for (int t = end; t >= 0; t = previous[t]) { path.Add(t); yield return 1; }
                     path.Reverse();
-                    return path.ToArray();
+                    result.Value = (path.ToArray(), c); yield break;
                 }
                 int count = GetNetworkNeighbours(tile, next);
                 for (int i = 0; i < count; i++)
@@ -114,7 +123,7 @@ namespace ForesTycoon.Map
                     cost[next[i]] = nc; previous[next[i]] = tile; open.Enqueue(next[i], (nc, next[i]));
                 }
             }
-            return Array.Empty<int>();
+            yield break;
         }
 
         /// <summary>Centre and slope of the surface a vehicle drives on: the frozen road surface, or the natural ground of a trail.</summary>

@@ -25,27 +25,36 @@ namespace ForesTycoon.Map
         /// Moves each corner to its target height in ID order, keeping neighbouring corners within one step, then
         /// rebuilds the water once. Targets are clamped to the map's height range. Returns the changed tiles.
         /// </summary>
-        public int[] ApplyHeightTargets(IReadOnlyDictionary<int, int> targets)
+        public int[] ApplyHeightTargets(IReadOnlyDictionary<int, int> targets) { var result = new WorkResult<int[]>(); SimulationWork.Complete(ApplyHeightTargetsWork(targets, result)); return result.Value; }
+
+        internal IEnumerable<int> ApplyHeightTargetsWork(IReadOnlyDictionary<int, int> targets, WorkResult<int[]> result)
         {
-            if (targets == null || targets.Count == 0) return Array.Empty<int>();
+            result.Value = Array.Empty<int>();
+            if (targets == null || targets.Count == 0) yield break;
             var changedTiles = new HashSet<int>();
             elevationEditTiles = changedTiles;
             suppressHydrologyRebuild = true;
-            try {
-                foreach (var (id, target) in targets.OrderBy(p => p.Key)) {
-                    if ((uint)id >= (uint)nodes.Length) continue;
+            try
+            {
+                for (int id = 0; id < nodes.Length; id++)
+                {
+                    yield return 1;
+                    if (!targets.TryGetValue(id, out int target)) continue;
                     int delta = Math.Clamp(target, 0, settings.MaxHeight) - nodes[id].W;
-                    if (delta != 0) RaiseOrLower(nodes[id], delta);
+                    if (delta != 0) foreach (int unit in RaiseOrLowerWork(nodes[id], delta)) yield return unit;
                 }
-            } finally {
+            }
+            finally
+            {
                 suppressHydrologyRebuild = false;
                 elevationEditTiles = null;
                 if (changedTiles.Count > 0) EditsFlushed?.Invoke();
             }
-            if (changedTiles.Count == 0) return Array.Empty<int>();
-            RebuildHydrology();
-            var result = changedTiles.ToArray(); Array.Sort(result);
-            return result;
+            if (changedTiles.Count == 0) yield break;
+            foreach (int unit in RebuildHydrologyWork()) yield return unit;
+            var ordered = new List<int>(changedTiles.Count);
+            for (int id = 0; id < tiles.Length; id++) { if (changedTiles.Contains(id)) ordered.Add(id); yield return 1; }
+            result.Value = ordered.ToArray();
         }
     }
 }

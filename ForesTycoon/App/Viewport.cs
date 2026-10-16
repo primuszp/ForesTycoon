@@ -76,7 +76,7 @@ namespace ForesTycoon
         protected override ImGuiController UiController => imgui;
         private readonly FrameClock frameClock = new FrameClock();
         private readonly SimulationFrameRunner simulation = new SimulationFrameRunner(
-            ticksPerSecond: 30.0, maximumTicksPerFrame: 2048, maximumWorkMilliseconds: 8);
+            ticksPerSecond: 30.0, maximumTicksPerFrame: 2048, maximumWorkMilliseconds: 4);
         private FixedStepClock simulationClock => simulation.Clock;
         /// <summary>
         /// Simulated seconds per real second at "1×". The game's 1× is a slow, thoughtful calendar (a year an hour) while
@@ -373,8 +373,13 @@ namespace ForesTycoon
                 RefreshPointerHover();
                 UpdateCameraFrame();
                 performance.BeginSimulation();
-                SimulationFrameResult result = ruleProjectLink.HandoffPending ? new(0, 0) : simulation.Advance(
-                    frameClock.DeltaTimeSeconds, world.ExecutePendingCommands, world.Update);
+                TerrainMap frameMap = world.Map;
+                SimulationFrameResult result = ruleProjectLink.HandoffPending ? new(0, 0) : simulation.AdvanceWork(
+                    frameClock.DeltaTimeSeconds, () => world.ContinueCommands(), dt => world.ContinueUpdate(dt), () => world.ForegroundPending);
+                if (!ReferenceEquals(frameMap, world.Map)) {
+                    currentMapTiles = world.MapTileColumns;
+                    simulationClock.Reset(world.SimulationTick); frameClock.Reset();
+                }
                 performance.EndSimulation(result.Commands, result.Ticks, simulationClock.DroppedSimulationSeconds);
                 SetupViewport();
                 performance.BeginRender();
@@ -503,13 +508,15 @@ namespace ForesTycoon
             if (tileCount.HasValue) currentMapTiles = tileCount.Value;
             interaction.CancelGesture();
             // A published world-editor map is the new world; an explicit size or pattern request still generates freely.
-            if (world.RuleProjectDocument.World is WorldScenario scenario && tileCount == null && forestPattern == null) world.StartScenario(scenario);
-            else world.Regenerate(TerrainSettings.Default.WithNodeSize(currentMapTiles + 1, seed).WithForestPattern(forestPattern ?? world.InitialForestPattern));
+            if (world.RuleProjectDocument.World is WorldScenario scenario && tileCount == null && forestPattern == null) world.RequestScenario(scenario);
+            else world.RequestRegenerate(TerrainSettings.Default.WithNodeSize(currentMapTiles + 1, seed).WithForestPattern(forestPattern ?? world.InitialForestPattern));
             simulationClock.Reset();
             RequestFrame();
         }
 
-        private void QuickSave()
+        private void QuickSave() => world.AtTickBoundary(QuickSaveAtBoundary);
+
+        private void QuickSaveAtBoundary()
         {
             try
             {
@@ -613,6 +620,7 @@ namespace ForesTycoon
         private void DisposeGlResources()
         {
             if (glResourcesDisposed) return;
+            worldCreation?.Dispose(); worldCreation = null;
             mapPreparation?.Dispose(); mapPreparation = null;
             imgui?.Dispose(); postProcess?.Dispose(); world?.Dispose();
             imgui = null; postProcess = null; world = null; isLoaded = false; glResourcesDisposed = true;

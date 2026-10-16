@@ -6,6 +6,23 @@ namespace ForesTycoon.Engine
     public sealed class FixedStepClock
     {
         private double accumulatorSeconds;
+        private bool workInProgress;
+        private int requestedTicks;
+        public bool WorkInProgress => workInProgress;
+        public double PendingSimulationSeconds => accumulatorSeconds;
+        public void RequestTick()
+        {
+            accumulatorSeconds += StepSeconds;
+            requestedTicks++;
+        }
+        public void RequestTime(double seconds)
+        {
+            if (!double.IsFinite(seconds) || seconds < 0 || seconds / StepSeconds > int.MaxValue - requestedTicks)
+                throw new ArgumentOutOfRangeException(nameof(seconds));
+            int ticks = (int)Math.Ceiling(seconds / StepSeconds);
+            accumulatorSeconds += ticks * StepSeconds;
+            requestedTicks += ticks;
+        }
 
         public FixedStepClock(double ticksPerSecond = 30.0, int maxTicksPerFrame = 8)
         {
@@ -23,7 +40,7 @@ namespace ForesTycoon.Engine
         public bool IsPaused { get; set; }
         public ulong Tick { get; private set; }
         public double SimulationTimeSeconds => Tick * StepSeconds;
-        public float InterpolationAlpha => (float)(accumulatorSeconds / StepSeconds);
+        public float InterpolationAlpha => (float)Math.Clamp(accumulatorSeconds / StepSeconds, 0, 1);
         /// <summary>Simulated time discarded by the catch-up cap or host work budget.</summary>
         public double DroppedSimulationSeconds { get; private set; }
         public double LastDroppedSimulationSeconds { get; private set; }
@@ -64,9 +81,39 @@ namespace ForesTycoon.Engine
             return executed;
         }
 
+        /// <summary>Interactive scheduling: retain debt and resume a partial tick without skipping simulation time.</summary>
+        public int AdvanceWork(double elapsedSeconds, Func<double, bool> continueTick, Func<bool> canContinue = null)
+        {
+            ArgumentNullException.ThrowIfNull(continueTick);
+            if (!double.IsFinite(elapsedSeconds) || elapsedSeconds < 0 || !double.IsFinite(Speed) || Speed < 0)
+                throw new ArgumentOutOfRangeException(nameof(elapsedSeconds));
+            if (!IsPaused) {
+                double next = accumulatorSeconds + elapsedSeconds * Speed;
+                if (!double.IsFinite(next)) throw new ArgumentOutOfRangeException(nameof(elapsedSeconds));
+                accumulatorSeconds = next;
+            }
+            LastDroppedSimulationSeconds = 0;
+            int ticks = 0, slices = 0;
+            // Bound even an accidental host without a wall-clock budget. Decisions within a tick never depend on time.
+            while ((workInProgress || (!IsPaused && Speed > 0 || requestedTicks > 0) && accumulatorSeconds >= StepSeconds) && ticks < MaxTicksPerFrame && slices < 4096) {
+                if (slices > 0 && canContinue != null && !canContinue()) break;
+                workInProgress = true;
+                bool complete = continueTick(StepSeconds);
+                slices++;
+                if (!complete) continue;
+                workInProgress = false;
+                if (requestedTicks > 0) requestedTicks--;
+                accumulatorSeconds = Math.Max(0, accumulatorSeconds - StepSeconds);
+                Tick++; ticks++;
+            }
+            return ticks;
+        }
+
         public void Reset(ulong tick = 0)
         {
             accumulatorSeconds = 0.0;
+            workInProgress = false;
+            requestedTicks = 0;
             Tick = tick;
             DroppedSimulationSeconds = LastDroppedSimulationSeconds = 0;
         }

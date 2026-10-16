@@ -431,3 +431,229 @@ UI-font és teljes játékablak OpenGL-próba sikeres. A graphics próba a korá
 A teljes játékablak próbájában a simított frame 7,20 ms volt; ez rövid működési próba,
 nem kontrollált előtte/utána teljesítménymérés. A `TreePreviewDump` korábbi nullable
 figyelmeztetései megmaradtak.
+## Szabálylépés a csempéken (2026-10-16)
+
+Ez az első, csak csempés szabályokat szeletelő változat történeti mérése.
+Az alább következő általános munkafuttató és a mostani `--rule-benchmark`
+protokoll felváltja ezt a megvalósítást; a régi számok változatlan referenciák.
+
+A vízmérleg szerkeszthető kezdő szabályokként fut mind a 4096 csempén (`WaterRules`), félmásodpercenként
+egy szabálylépésben. Egy lépés egyetlen tickben 11–15 ms volt (Release, p95 akár 35 ms):
+látható akadás játékmásodpercenként kétszer. Két változtatás:
+
+- **Gyorsabb lépés, bitre azonos eredménnyel.** A `TileView` a környezet tömbjeiben tartott mezőket nézet
+  kötése nélkül olvassa (`DirectRead`/`DirectWrite`/`DirectMembers`); a helyi időjárást a környezet csempénként
+  megőrzi az időjárás következő változásáig; a képletek névvel jelölt értékei (`world.hoursPerYear`) fordításkor
+  kapnak helyet, nem szótárból olvasódnak; az áramlásnapló egy lépés alatt tömbben gyűlik. Egész lépésben futtatva
+  az ujjlenyomat azonos a korábbiéval.
+- **A lépés szétosztása a tickekre.** A lépés esedékességekor indul (`RuleEngine.Begin`), és tickenként egy
+  szelet fut belőle (`Continue`), a lépés ugyanazon sorrendjében; a csempés (stabil elemű) szabályok szelet
+  közben megállhatnak, a többi (fa, tönk, út) egészben fut, amikor sorra kerül. A szelet mérete csak a tickhossztól
+  függ, így a visszajátszás ugyanúgy vág; a folyamatban lévő lépés (idő, hely, eddig olvasott névvel jelölt értékek)
+  a mentésbe kerül (`RuleStepCheckpoint`). Szabályprojekt cseréje előtt a félbe lévő lépés befejeződik.
+
+A rögzítéshez:
+
+```powershell
+dotnet run --project ForesTycoon -c Release -- --rule-benchmark
+```
+
+Alapértelmezett 64×64-es pálya, 10 bekapcsolt szabály, 30 Hz, 10 s bemelegítés után 60 s mérés, Release, egy gépen:
+
+| Időjárás | Előtte: lépés medián / p95 | Egész lépés most: medián / p95 | Szeletelve tickenként: medián / p95 / max |
+| --- | ---: | ---: | ---: |
+| Eső | 14,9 / 19,7 ms | 7,9 / 12,4 ms | 0,50 / 0,98 / 1,94 ms |
+| Hó | 11,3 / 12,8 ms | 6,6 / 7,7 ms | 0,43 / 0,97 / 1,60 ms |
+| Napsütés | 11,1 / 12,8 ms | 6,5 / 7,0 ms | 0,43 / 0,90 / 1,73 ms |
+
+Az „előtte” értékek futásonként ingadoztak (eső p95 20–35 ms, max 25–61 ms). A szeletelt futás eredménye eltér az
+egész lépésestől, mert közben a többi rendszer is lép; két szeletelt futás ujjlenyomata azonos. A `RuleStepTests`
+ellenőrzi a közvetlen olvasók bitre azonos értékét, a szeletelt és egész lépés egyezését, a lépés közbeni mentést
+és a visszajátszást. A párhuzamos futtatást (saját elemre ható szabályok szálanként) nem vezettük be: a szeletelés
+után nincs rá szükség, és a vízmérleg- és naplóösszegek sorrendje miatt bitre azonos eredményhez külön összevonás kellene.
+
+## Általános kooperatív szimuláció (2026-10-16)
+
+A játék és az Editor `ContinueUpdate` munkaszeleteket hajt végre. A teljes
+logikai tick rendje megmarad; a szeletelés a megjelenítési képkockáknak adja
+vissza a vezérlést. A csempék mellett az egyedek, utak, nyomok, gépek,
+objektumlista-előkészítés, saját mezők inicializálása, környezeti ciklusok,
+erdőhónap, erdőráta-frissítés, automatikus útkeresés és útvonalgeometria is
+felfüggeszthető. A regisztrált világrendszerek munkavégrehajtása kötelező API.
+Nincs esedékességkor vagy projektcserénél meghívott korlátlan szabálybefejezés.
+
+Mentéskor az interaktív host kész tickre vár, a számítást nem gyorsítja végig.
+A közben sorba állított parancsok a következő tickre kerülnek. A folyamatban
+lévő, következő hónapra előkészítő ökológiai állapot és a még függő
+szabálycsere utáni erdőfrissítés is checkpointadat. A szimulációs időhátralék
+megmarad; a játék fejlesztői nézete mutatja. Ez más modell, mint a korábbi,
+rendszerek között is elnyújtott szabálylépés: most azonos logikai tickeket
+összehasonlítva a különböző szeletméretek eredménye bitre azonos.
+
+### Izolált CPU-mérés
+
+Intel Core i7-8700 @ 3,20 GHz, Windows, .NET 8, Release. Egy folyamat,
+más tesztfutás nélkül; két külön világ ugyanazzal a seeddel és beállításokkal.
+`LargeMixed` erdő, 120 szimulációs másodperc/erdőév, 30 Hz, 60 bemelegítő
+és 330 mért tick: a mért szakasz erdőhónap-határt is átlép. Az egyik világ
+teljes tickeket, a másik legfeljebb 64 munkaegységes részeket futtat.
+Az „egész tick” ugyanennek az új motornak a szinkron adaptere, **nem régi
+programverzió**. A táblázat nem renderelt képkockaidő.
+
+| Pálya / időjárás | Fák | Egész tick p99 / max (ms) | 64 egységes részlet p99 / max (ms) |
+| --- | ---: | ---: | ---: |
+| 64×64 / eső | 15 797 | 43,509 / 58,907 | 0,167 / 3,284 |
+| 64×64 / hó | 15 797 | 12,988 / 18,428 | 0,060 / 2,705 |
+| 128×128 / eső | 65 086 | 60,677 / 65,435 | 0,072 / 7,333 |
+| 128×128 / hó | 65 086 | 58,938 / 144,706 | 0,089 / 3,033 |
+
+Mind a négy esetben egyezik a teljes checkpoint JSON-ja és a víz-/út-/áramlás-
+lenyomat. A mérés nem választja le a GC, JIT és OS késleltetését;
+nincs minden részletre garantált, kemény milliszekundumos korlát.
+A munkaegységszám determinisztikus, a host időkerete a részletek között állít meg.
+
+```powershell
+dotnet run --project ForesTycoon -c Release -- --rule-benchmark
+```
+
+Nyers eredmény: `artifacts/test-results/simulation-work-benchmark.txt`.
+Mentés, közbenső kérés, visszajátszás, projektcsere, hónaphatár, sorsolás,
+rakomány/érték és különböző szeletméretek tesztjei: **1801/1801 Release-teszt sikeres**.
+Ez a korábbi mérés a folyamatos szimulációt fedi le. A pályagenerálás és
+nagy szerkesztések későbbi átállítását és önálló mérését alább dokumentáljuk. A flotta útkeresési/rakodási útjait
+külön állapotegyezési tesztek ellenőrzik; a CPU-táblázat nem flottaterhelési mérés.
+
+### Nagy pálya, befejezett grafikus képkockák
+
+`large-world-cooperative-v2`: 128×128, seed 42, alapértelmezett természetes
+erdő és induló járműállomány, vihar, High, 1280×720, MSAA4, diorama,
+RTX 5060 / NVIDIA 616.92, .NET 8.0.32, `DOTNET_TieredCompilation=0`.
+180 bemelegítő és 900 mért képkocka, a mért szakasz előtt t=65 s állapotig
+futtatott világ; minden mérési képkocka 1/30 s szimulációs időt kér.
+A második félben mozog a kamera. A GPU-befejezést `GL.Finish` megvárja;
+UI/input/swap/pacing nincs a mérésben. Az interaktív hosttal azonos 4 ms-os
+keret működik a legfeljebb 64 egységes munkarészletek között.
+
+| Mért költség | ms |
+| --- | ---: |
+| Szimuláció / képkocka p95 | 4,066 |
+| Szimuláció / képkocka p99 | 4,162 |
+| Szimuláció / képkocka maximum | 6,727 |
+| Teljes képkocka p95, álló kamera | 23,552 |
+| Teljes képkocka p95, mozgó kamera | 24,806 |
+| Teljes képkocka maximum | 71,192 |
+| Hónaphatár képkockája | 20,247 |
+
+A 30 s kért időből a futás végén 4,9 s megőrzött hátralék maradt. Ez
+terhelési/átbocsátási korlát, nem elveszett idő és nem állítás garantált 30 Hz-es
+felzárkózásról. A 4 ms-os keret egy részlet végén ellenőrizhető; az OS és a GC
+miatt a mért hívás túllépheti. A futás a szimuláció profilozását is bekapcsolja.
+
+**Fennmaradó grafikai csúcs:** a 495. képkocka 71,192 ms, ebből 4,019 ms
+szimuláció és 67,169 ms rajzolás, hónapváltás nélkül. A renderprofilban ezen
+a képkockán a `weather` és `props` CPU-szakasz emelkedett meg, de ez önmagában
+nem bizonyít konkrét kiváltó okot (a grafikai hívás várakozást is tartalmazhat).
+A teljes játék összes látható akadásának megszűnését ezért nem állítjuk.
+A rajzolási többletet külön kell feltárni; nem a szabálylépés korlátlan
+befejezésével vagy szimulációs idő eldobásával kezeljük.
+
+```powershell
+$env:DOTNET_TieredCompilation='0'
+dotnet run --project ForesTycoon -c Release --no-build -- --large-world-benchmark 128 Storm artifacts/simulation-work/128-storm.json
+```
+
+Teljes mintasor: `artifacts/simulation-work/128-storm.json`;
+konzolkimenet: `artifacts/test-results/simulation-work-render-benchmark.txt`.
+Editor füstteszt: `artifacts/test-results/simulation-work-editor-smoke.txt`.
+
+
+## Pályagenerálás és nagy szerkesztések szakaszos futása (2026-10-16)
+
+A `--foreground-benchmark` azonos új számítást futtat egyben, majd 4 ms-os
+hostkerettel, 16 egységes parancsrészletekben. 128×128 és 256×256 természetes
+erdős pálya, seed 42, Release, .NET 8, `DOTNET_TieredCompilation=0`.
+A teljes checkpoint JSON-ja bitre azonos a két úton. A mentett állapot
+betöltése, húsz további tick és a függő bemenet visszaállítása is egyezik.
+
+| Pálya / művelet | Egyben, ms | Képkockák | Előtér CPU p95, ms | p99, ms | maximum, ms |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 128×128 generálás | 106,941 | 63 | 4,862 | 13,030 | 13,030 |
+| 128×128 nagy szerkesztési csomag | 91,072 | 10 | 4,003 | 4,003 | 4,003 |
+| 256×256 generálás | 394,735 | 141 | 4,314 | 14,697 | 27,800 |
+| 256×256 nagy szerkesztési csomag | 159,192 | 39 | 4,009 | 4,010 | 4,010 |
+
+A szerkesztési csomag nagy, háromszoros magasságecsetet (sugár: pályaoldal/4),
+átlós út- és nyomépítést, területi ültetést és kitermelési kijelölést tartalmaz.
+A 4 ms célkeret, nem kemény valós idejű garancia: a GC, az OS ütemezése és
+egyetlen natív hívás a felfüggesztési pont előtt is túllépheti. A nyers napló
+külön jelzi a hosszú részletek munkafázisát és a GC-számlálók változását.
+A rövid szerkesztési sorok percentilisei kevés képkockából készülnek; a
+mintaszámot ezért is közöljük. A szinkron összehasonlító hívás és a szeletelt
+hívás eltérő gyorsítótár-/JIT-állapotban lehet, ezért ez főként képkockaterhelési,
+nem átviteli sebességi összehasonlítás.
+
+```powershell
+$env:DOTNET_TieredCompilation='0'
+dotnet run --project ForesTycoon -c Release --no-build -- --foreground-benchmark
+```
+
+Nyers eredmény: `artifacts/test-results/foreground-work-benchmark-final.txt`.
+
+### Grafikus pályacsere és szerkesztés
+
+A `--foreground-render-benchmark` valódi GL-képkockák között generál 128×128-as
+pályát a látható 64×64-es világ mellé. 1280×720, 4× MSAA, álló kamera,
+alapértelmezett grafikai beállítások, kézzel beállított Sunny, utófeldolgozó
+nélkül; a rajzolás végét `GL.Finish` várja meg. A régi világ látható marad a
+pályacsere alatt; a szimuláció szünetel. A háttérben készülő geometriák
+várakozási képkockái is a mintába tartoznak. A teljes előkészítés sokáig
+tarthat: minden csempe minden fa-LOD-ját előállítja és megtartja; ez nem
+állítás gyors indulásról vagy korlátos grafikai memóriahasználatról.
+
+A mérés közben két, a CPU-only vizsgálatban láthatatlan teljes befejezési
+út derült ki és szűnt meg: az útépítés kényszerített erdő-újraépítése és az
+első rajzolás anyagtextúra-generálása. A faágmodellek tisztán CPU-s építése
+külön háttérfeladat; az anyagpixelek egyszer, háttérben készülnek el, a GPU
+22 rétegét külön lépések töltik fel. A környezeti színraszter szintén
+részletekben épül, nem egy teljespálya-ciklus a `BeginFrame` hívásban.
+
+| 128×128 GL, 4 ms hostkeret | Generálás | Nagy szerkesztési csomag |
+| --- | ---: | ---: |
+| Mért képkockák | 10 905 | 11 |
+| Előtér CPU p95 / p99, ms | 2,203 / 4,478 | 4,014 / 4,014 |
+| Előtér CPU maximum, ms | 14,082 | 4,014 |
+| Teljes képkocka p95 / p99, ms | 12,510 / 16,708 | 48,253 / 48,253 |
+| Teljes képkocka maximum, ms | 104,569 | 48,253 |
+
+**Maradó grafikai tüske:** a 104,569 ms-os képkocka még a régi 64×64-es
+világ rajzolásakor, a jelölt előkészítése alatt jelentkezett. A `water-surface`
+CPU-idő 100,200 ms, miközben a GPU-időbélyegek már a korábbi `fish` szakaszban
+101,323 ms-ot jeleztek. Ez grafikai várakozással is összefér; önmagában nem
+bizonyít vízmodell-számítási hibát vagy konkrét driverokot. A teljes játék
+minden látható akadásának megszűnését továbbra sem állítjuk.
+
+A korábbi köztes futás publikálás utáni 520,225 ms-os képkockájában a
+`frame-preparation` 490,484 ms volt. Az ott azonosított szinkron
+anyagpixel-generálás a végleges útvonalról már hiányzik; a végleges futásban
+ilyen publikálási csúcs nem jelentkezett.
+
+```powershell
+$env:DOTNET_TieredCompilation='0'
+dotnet run --project ForesTycoon -c Release --no-build -- --foreground-render-benchmark
+```
+
+Nyers végleges mérés: `artifacts/test-results/foreground-work-render-benchmark-fixed.txt`.
+A korábbi, hibát feltáró futás: `artifacts/test-results/foreground-work-render-benchmark-final.txt`.
+
+A mentés/visszajátszás és a szeletméret-függetlenség mellett külön teszteli a
+csomag a megszakítást, a közben érkező bemenetet, a hibás világ helyreállítását,
+a csak olvasó lombkorona-lekérdezést és a háttérmunka külön fajkontextusát.
+Az Editor füsttesztje és a natív erdő-GL-füstteszt az aszinkron elkészülést
+várja meg; a teljes elkészülési időt nem nevezi egyetlen rajzolás idejének.
+
+
+Végleges ellenőrzés: **1812/1812 Release-teszt sikeres**, az Editor és a natív
+erdő-GL-füstteszt is sikeres. Naplók:
+`artifacts/test-results/foreground-work-tests.txt`,
+`artifacts/test-results/foreground-work-editor-smoke.txt`,
+`artifacts/test-results/foreground-work-forest-smoke.txt`.

@@ -112,44 +112,45 @@ namespace ForesTycoon
                 "A talajpárolgás és a növényzeti vízigény ugyanabból a helyi légköri kényszerből származik.",
                 "E = (0,12 + max(0,T) × 0,015) × sugárzás × (1 - 0,5 × pára) × (1 + 0,035 × szél)");
 
-            Add("water.snowfall", "Hó felhalmozódása", "Vízháztartás", "Térképcella", "Környezeti lépés, olvadás előtt", water, "interval.Snow",
-                "weather.snowfall|climate.rainMultiplier", "water.snow",
-                "A havazás vízegyenértéke a helyi hókészletbe kerül, nem a lombvízbe. A készlet menthető és része a vízmérlegnek.", "hó += csapadék × helyi csapadékszorzó");
-            var thaw = Add("water.snowmelt", "Hótorlaszok olvadása", "Vízháztartás", "Térképcella", "Környezeti lépés, beszivárgás előtt", water, "SnowMeltDepthRate",
+            // The water balance is the project's stock-and-flow rules (WaterRules): every flow is an editable graph.
+            const string waterRules = "ForesTycoon.Rules/WaterRules.cs";
+            Add("water.precipitation", "Csapadék, hóesés és források", "Vízháztartás", "Térképcella", "Szabálylépés", waterRules, "water.precipitation",
+                "weather.rain|weather.snowfall|climate.rainMultiplier|forest.canopy|water.canopy", "water.canopy|water.surface|water.snow",
+                "Áramlások kívülről: az eső a koronák borításuk és telítettségük szerint a lombkoronára, a többi a felszínre hull; a hó a hótakaróba, a források vize a felszínre kerül.",
+                "korona += eső × borítás × (1 - telítettség); felszín += eső × (1 - borítás × (1 - telítettség))", GameRuleExecution.EditableGraph);
+            Add("water.snowmelt", "Hóolvadás", "Vízháztartás", "Térképcella", "Szabálylépés", waterRules, "water.snowmelt",
                 "water.snow|climate.local", "water.snow|water.surface",
-                "Pozitív helyi hőmérsékleten a mély hótorlasz is olvad. Az olvadék teljes egészében felszíni víz lesz; nincs eltüntetett víztömeg.",
-                "olvadék = min(hó, (hó + alapráta / mélységi ráta) × (1 - exp(-mélységi ráta × max(0,T) × környezeti órák)))");
-            Param(thaw, "Olvadási alapráta", EnvironmentSystem.SnowMeltBaseRate, "mm/(°C·környezeti óra)");
-            Param(thaw, "Mélységfüggő olvadási ráta", EnvironmentSystem.SnowMeltDepthRate, "1/(°C·környezeti óra)");
+                "Áramlás a hóból a felszínre: fagypont fölött fokonként 0,5 mm/óra.", "olvadás = 0,5 × max(0; T) mm/óra", GameRuleExecution.EditableGraph);
             Add("water.snowdrift", "Szél általi hóátrendezés", "Vízháztartás", "Szomszédos cellák", "Vízlépés után, fagyban", water, "RedistributeSnow",
                 "water.snow|weather.forcing|terrain.height|forest.canopy", "water.snow",
-                "A szél a következő szélirányú cellába hordja a havat; növényzet és domborzat mérsékli az áthordást. Zárt térképszélen megmarad a hó, a fluxusok együtt kerülnek publikálásra.");
-            Add("water.interception", "Csapadék és lombkorona-víz", "Vízháztartás", "Térképcella", "Környezeti lépés", water, "WaterStep",
-                "weather.rain|climate.rainMultiplier|forest.canopy|water.canopy", "water.canopy|water.surface",
-                "A lombkorona kapacitásáig felfogja az esőt, a többi a felszínre jut. Koronavesztéskor a többlet lecsepeg, a vízmérleg megmarad.", "felfogás = min(eső, max(0, kapacitás - lombvíz))");
-            Add("water.infiltration", "Beszivárgás", "Vízháztartás", "Térképcella", "Környezeti lépés", water, "infiltration",
+                "A szél a következő szélirányú cellába hordja a havat; növényzet és domborzat mérsékli az áthordást. Zárt térképszélen megmarad a hó.");
+            Add("water.infiltration", "Beszivárgás", "Vízháztartás", "Térképcella", "Szabálylépés", waterRules, "water.infiltration",
                 "water.surface|water.root|soil.profile|road.network|buildings.footprint", "water.surface|water.root",
-                "A felszíni víz a talaj szabad kapacitásáig szivárog. A burkolt felszínek beszivárgása 0,5 mm/környezeti óra.", "I = min(felszíni víz, beszivárgási ráta × idő, telítési készlet - gyökérzónavíz)");
-            Add("water.evaporation", "Lomb-, felszín- és talajpárolgás", "Vízháztartás", "Térképcella", "Környezeti lépés", water, "Evaporated",
-                "water.potential|water.canopy|water.surface|water.root|soil.profile|forest.canopy", "water.canopy|water.surface|water.root|water.evaporated",
-                "A párolgási keret sorrendben a lombvízből, felszíni vízből és a hervadáspont feletti talajvízből fogy. A lombborítás mérsékli a talajpárolgást.");
-            Add("water.uptake", "Gyökérvíz felvétele és igényelosztás", "Vízháztartás", "Cellán belüli élő fák", "Környezeti lépés", water, "uptake",
-                "water.potential|water.root|soil.profile|forest.canopy|road.network|buildings.footprint", "water.root|water.transpired|water.monthBudget",
-                "A levélfelület arányában kér vizet; minden fa ugyanazt a teljesített igényhányadot kapja. Burkolt felszínen nincs növényzeti igény.", "igény = E × LAI × 0,8; felvétel = min(elérhető víz, igény × talajvíz-ellátottság)");
-            Add("water.drainage", "Mélyvíz és alaplefolyás", "Vízháztartás", "Térképcella", "Környezeti lépés", water, "drainage",
-                "water.root|water.deep|soil.profile", "water.root|water.deep|water.outflow",
-                "Szabadföldi vízkapacitás felett a drénezési ráta szerint mélyvízbe jut a víz; a mélyvízből 0,15 mm/környezeti óra távozik.");
-            Add("water.runoff", "Felszíni vízfolyás és elöntés", "Vízháztartás", "Szomszédos csempék, források és kifolyók", "Környezeti lépés",
-                "ForesTycoon.Ecology/Water/SurfaceWaterFlow.cs", "Step", "water.surface|water.routing|terrain.height|terrain.outlets", "water.surface|water.outflow",
-                "A víz a vízfelszín szintje (terep + vízmélység) szerint folyik minden alacsonyabb szomszéd felé: lejtőn le, sík terepen szétterül, árokban végigfolyik, mélyedést a pereméig tölt, túltöltött mederből kiönt, felfelé soha. Lépésenként legfeljebb egy csempét halad; a térfogat megmarad, csak a pálya szélén és állóvízbe távozik. Források folyamatosan táplálják.",
-                "átfolyás élenként = 0,2-ig korlátozott 1,5 / óra × szintkülönbség; a csempe 0,5 mm-t megtart");
+                "Áramlás a felszínről a gyökérzónába a talaj beszivárgási képessége szerint, amíg a talaj telítődik; burkolt felületen 0,5 mm/óra.",
+                "beszivárgás = talaj beszivárgása (burkolva 0,5) mm/óra", GameRuleExecution.EditableGraph);
+            Add("water.evaporation", "Lomb-, felszín- és talajpárolgás", "Vízháztartás", "Térképcella", "Szabálylépés", waterRules, "water.evaporation",
+                "water.potential|water.canopy|water.surface|water.root|forest.canopy", "water.canopy|water.surface|water.root",
+                "Áramlások ki a rendszerből a levegő párologtató képessége szerint: a koronáról, a felszínről és a csupasz talajból (a vízellátottsággal és a borítással csökkenve).",
+                "talajpárolgás = E × vízellátottság × 0,65 × (1 - borítás)", GameRuleExecution.EditableGraph);
+            Add("water.uptake", "Fák vízfelvétele", "Vízháztartás", "Térképcella", "Szabálylépés", waterRules, "water.uptake",
+                "water.potential|water.root|forest.canopy|road.network|buildings.footprint", "water.root",
+                "Áramlás a gyökérzónából ki: a fák a lombfelületük és a párologtató képesség szerint vesznek fel vizet, szárazabb talajból kevesebbet.",
+                "felvétel = E × 0,8 × LAI × vízellátottság", GameRuleExecution.EditableGraph);
+            Add("water.drainage", "Mélybe szivárgás és alaplefolyás", "Vízháztartás", "Térképcella", "Szabálylépés", waterRules, "water.drainage",
+                "water.root|water.deep|soil.profile", "water.root|water.deep",
+                "Áramlás a szabadföldi vízkapacitás feletti vízből a mélyvízbe a drénezés szerint; a mélyvízből 0,15 mm/óra alaplefolyás távozik.",
+                "", GameRuleExecution.EditableGraph);
+            Add("water.runoff", "Felszíni lefolyás és kifolyás", "Vízháztartás", "Szomszédos csempék és kifolyók", "Szabálylépés", waterRules, "water.runoff",
+                "water.surface|terrain.height|terrain.outlets", "water.surface",
+                "Áramlás a vízszint szerint az alacsonyabb szomszédokra, az eséssel arányosan; a pálya szélén és az állóvizekben kifolyik. A térfogat megmarad.",
+                "lefolyás = 15 × esés mm/óra, lejtés szerint elosztva", GameRuleExecution.EditableGraph);
             Add("water.stress", "Aszály, víztöbblet és havi vízválasz", "Vízháztartás", "Cellánként / fafajonként", "Környezeti lépés + erdőhónap", water, "WaterResponse",
                 "water.root|water.monthBudget|soil.profile|forest.species", "water.growthFactor",
-                "Simított szárazság és víztöbblet; a havi igény/felvétel integrálja adja a növekedési vízellátást. Fafajfüggő szárazságérzékenység.",
+                "A növekedési vízellátás a gyökérzóna pillanatnyi vízellátottsága, a víztöbblet a havi átlagos pangóvíz. Fafajfüggő szárazságérzékenység. Képletként felülírható; származtatott érték, ezért nem áramlásszabály.",
                 "vízválasz = clamp(ellátottság ^ szárazságérzékenység × (1 - víztöbblet × 0,65), 0, 1)");
             Add("water.balance", "Vízmérleg és havi integrálzárás", "Vízháztartás", "Világ / cella", "Összegzés; hónapzárás", water, "BalanceError",
                 "water.canopy|water.surface|water.root|water.deep|water.snow|weather.rain|weather.snowfall|water.evaporated|water.transpired|water.outflow|forest.month", "water.balance|water.monthBudget",
-                "A havi növényzetfrissítés után törlődnek a felvételi, igény- és sugárzási integrálok; a víz- és hókészletek megmaradnak.", "mérleghiba = tárolt víz (hóval együtt) - (induló víz + összes csapadék - párolgás - transzspiráció - kifolyás)");
+                "A szabályok minden áramlását könyveli: ami egy készletbe kívülről érkezik vagy onnan kilép, a szabálycsere része; a havi integrálok a hónap végén törlődnek.", "mérleghiba = tárolt víz (hóval együtt) - (induló víz + szabályok cseréje + korábbi natív tételek)");
 
             var species = Add("forest.species", "Fafajkatalógus", "Erdő", "Fafaj", "Új világ / fajlekérdezés",
                 "ForesTycoon.Ecology/Species/ForestSpeciesCatalog.cs", "Playable", "", "forest.species",

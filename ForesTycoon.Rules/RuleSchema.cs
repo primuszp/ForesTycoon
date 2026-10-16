@@ -42,8 +42,6 @@ public sealed class RuleFieldAttribute : Attribute
     public string Unit { get; set; } = "";
     public double Min { get; set; } = double.NegativeInfinity;
     public double Max { get; set; } = double.PositiveInfinity;
-    /// <summary>Former formula names of the field; saved rules using them are renamed when loaded.</summary>
-    public string[] Aliases { get; set; } = Array.Empty<string>();
     /// <summary>
     /// Non-zero when an add effect on the field is the pace of a process, not a plain change: +1 when the process raises
     /// the field (decay progress), −1 when it lowers it (ruts smoothing out). The editor then says “speeds up” / “slows down”.
@@ -79,6 +77,22 @@ public sealed class RuleRelationAttribute : Attribute
     public string Name { get; set; }
     public string Display { get; set; }
     public string Help { get; }
+}
+
+/// <summary>
+/// Other objects this one holds or touches, many at a time (the trees on a tile, the tile's neighbours): an
+/// <c>IEnumerable</c> of a marked interface. Rules read them summarised: <c>name.count</c> and, for every number of the
+/// target, <c>name.avg.field</c>, <c>name.min.field</c>, <c>name.max.field</c> and <c>name.sum.field</c>.
+/// </summary>
+[AttributeUsage(AttributeTargets.Property)]
+public sealed class RuleCollectionAttribute : Attribute
+{
+    public RuleCollectionAttribute(string help) { Help = help; }
+    public string Name { get; set; }
+    public string Display { get; set; }
+    public string Help { get; }
+    /// <summary>The members are elements of the target kind itself (a tile's neighbours are tiles), so a flow can write into them.</summary>
+    public bool Addressable { get; set; }
 }
 
 /// <summary>Something a rule may do to the object; a parameterless method returning whether the world's structure changed.</summary>
@@ -127,9 +141,16 @@ public sealed record RuleFieldSchema(string Name, string Display, string Help, s
     public RuleFieldKind Kind { get; init; }
     /// <summary>The values of a bool or enum field, in value order; empty for a number.</summary>
     public RuleFieldOption[] Options { get; init; } = Array.Empty<RuleFieldOption>();
-    public string[] Aliases { get; init; } = Array.Empty<string>();
     /// <inheritdoc cref="RuleFieldAttribute.Pace"/>
     public int Pace { get; init; }
+    /// <summary>For a summary of a collection: the collection, and the summary (count, avg, min, max, sum); null otherwise.</summary>
+    public RuleCollectionSchema Collection { get; init; }
+    public string Aggregate { get; init; }
+}
+public sealed record RuleCollectionSchema(string Name, string Display, string Help, string Target, PropertyInfo Property)
+{
+    /// <inheritdoc cref="RuleCollectionAttribute.Addressable"/>
+    public bool Addressable { get; init; }
 }
 public sealed record RuleRelationSchema(string Name, string Display, string Help, string Target, PropertyInfo Property);
 public sealed record RuleActionSchema(string Name, string Display, string Help, string DeclaredBy, MethodInfo Method);
@@ -151,6 +172,9 @@ public sealed class RuleEntitySchema
     public RuleFieldSchema[] Fields { get; init; } = Array.Empty<RuleFieldSchema>();
     public RuleRelationSchema[] Relations { get; init; } = Array.Empty<RuleRelationSchema>();
     public RuleActionSchema[] Actions { get; init; } = Array.Empty<RuleActionSchema>();
+    public RuleCollectionSchema[] Collections { get; init; } = Array.Empty<RuleCollectionSchema>();
+    /// <summary>The read-only summaries of <see cref="Collections"/> (“trees.avg.height”), shown and read like fields.</summary>
+    public RuleFieldSchema[] Summaries { get; internal set; } = Array.Empty<RuleFieldSchema>();
 }
 
 /// <summary>The object model the game exposes to rules, discovered from <see cref="RuleEntityAttribute"/> interfaces.</summary>
@@ -198,6 +222,7 @@ public sealed class RuleSchema
             var parents = type.GetInterfaces().Where(ids.ContainsKey)
                 .Where(p => !type.GetInterfaces().Any(o => o != p && ids.ContainsKey(o) && p.IsAssignableFrom(o))).Select(p => ids[p]).ToArray();
             var fields = new List<RuleFieldSchema>(); var relations = new List<RuleRelationSchema>(); var actions = new List<RuleActionSchema>();
+            var collections = new List<RuleCollectionSchema>();
             foreach (var level in lineage) {
                 foreach (var p in level.GetProperties()) {
                     if (p.GetCustomAttribute<RuleFieldAttribute>() is { } f) {
@@ -206,11 +231,16 @@ public sealed class RuleSchema
                         var (kind, options) = Kind(p.PropertyType, ids[level] + "." + name, texts);
                         double min = options.Length > 0 ? options[0].Value : f.Min, max = options.Length > 0 ? options[^1].Value : f.Max;
                         fields.Add(new(name, t?.Name ?? code, t?.Help ?? f.Help, texts.Unit(f.Unit, t), min, max, p.CanWrite, ids[level], p) {
-                            CodeDisplay = code, True = t?.True, False = t?.False, Kind = kind, Options = options, Aliases = f.Aliases ?? Array.Empty<string>(), Pace = Math.Sign(f.Pace) });
+                            CodeDisplay = code, True = t?.True, False = t?.False, Kind = kind, Options = options, Pace = Math.Sign(f.Pace) });
                     }
                     if (p.GetCustomAttribute<RuleRelationAttribute>() is { } r && ids.TryGetValue(p.PropertyType, out string target)) {
                         string name = r.Name ?? Camel(p.Name); var t = texts.Find(ids[level] + "." + name);
                         relations.Add(new(name, t?.Name ?? r.Display ?? Words(p.Name), t?.Help ?? r.Help, target, p));
+                    }
+                    if (p.GetCustomAttribute<RuleCollectionAttribute>() is { } c && p.PropertyType.IsGenericType
+                        && p.PropertyType.GetGenericTypeDefinition() == typeof(IEnumerable<>) && ids.TryGetValue(p.PropertyType.GetGenericArguments()[0], out string of)) {
+                        string name = c.Name ?? Camel(p.Name); var t = texts.Find(ids[level] + "." + name);
+                        collections.Add(new(name, t?.Name ?? c.Display ?? Words(p.Name), t?.Help ?? c.Help, of, p) { Addressable = c.Addressable });
                     }
                 }
                 foreach (var m in level.GetMethods())
@@ -222,9 +252,28 @@ public sealed class RuleSchema
             var text = texts.Find(a.Id);
             string entityCode = a.Display ?? Words(type.Name.StartsWith("I") ? type.Name[1..] : type.Name);
             list.Add(new() { Id = a.Id, Name = text?.Name ?? entityCode, CodeName = entityCode, Element = text?.Element ?? a.Element, Help = text?.Help ?? a.Help, Abstract = a.Abstract, Parents = parents,
-                Type = type, Fields = fields.ToArray(), Relations = relations.ToArray(), Actions = actions.ToArray() });
+                Type = type, Fields = fields.ToArray(), Relations = relations.ToArray(), Actions = actions.ToArray(), Collections = collections.ToArray() });
         }
-        return new(list);
+        var schema = new RuleSchema(list);
+        foreach (var e in list) e.Summaries = e.Collections.SelectMany(c => Summaries(c, schema.Find(c.Target), texts)).ToArray();
+        return schema;
+    }
+
+    /// <summary>The summaries a rule reads from a collection, in the designer's words when <paramref name="texts"/> has them.</summary>
+    public static readonly (string Id, string Display)[] Aggregates = { ("avg", "average"), ("min", "smallest"), ("max", "largest"), ("sum", "total") };
+    private static IEnumerable<RuleFieldSchema> Summaries(RuleCollectionSchema c, RuleEntitySchema target, RuleTexts texts)
+    {
+        string Word(string id, string fallback) => texts.Find("aggregate." + id)?.Name ?? fallback;
+        yield return new(c.Name + ".count", $"{c.Display}: {Word("count", "count")}", $"{Word("count", "count")}: {c.Help}", "", 0, double.PositiveInfinity, false, target.Id, c.Property) {
+            CodeDisplay = c.Name + " count", Collection = c, Aggregate = "count" };
+        foreach (var f in target.Fields.Where(f => f.Kind != RuleFieldKind.Enum && f.Name != "index"))
+            foreach (var (id, display) in Aggregates) {
+                bool sum = id == "sum";
+                yield return new(c.Name + "." + id + "." + f.Name, $"{c.Display}: {Word(id, display)} {f.Display.ToLowerInvariant()}",
+                    $"{f.Help} ({Word(id, display)}, {c.Display.ToLowerInvariant()})", f.Kind == RuleFieldKind.Bool && !sum ? "0–1" : f.Unit,
+                    sum ? Math.Min(0, f.Min) : f.Kind == RuleFieldKind.Bool ? 0 : f.Min, sum ? double.PositiveInfinity : f.Kind == RuleFieldKind.Bool ? 1 : f.Max,
+                    false, target.Id, f.Property) { CodeDisplay = $"{c.Name} {id} {f.Name}", Collection = c, Aggregate = id };
+            }
     }
 
     /// <summary>The kind of a field from its property type; option displays come from <c>key.option</c> texts when present.</summary>

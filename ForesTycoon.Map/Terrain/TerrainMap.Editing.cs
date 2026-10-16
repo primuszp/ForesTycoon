@@ -6,6 +6,7 @@ namespace ForesTycoon.Map
     internal sealed partial class TerrainMap
     {
         private Node actualNode;
+        private readonly TerrainElevationPlanner.Scratch elevationPlan = new();
         private HashSet<int> elevationEditTiles;
 
         /// <summary>The node under the editing cursor, or -1.</summary>
@@ -21,9 +22,12 @@ namespace ForesTycoon.Map
         /// terület, sugár = radius (0 = csak a középpont), erősség = ismétlésszám.
         /// A hidrológiát csak egyszer, a végén építi újra.
         /// </summary>
-        public int[] EditElevation(int delta, int radius, int strength)
+        public int[] EditElevation(int delta, int radius, int strength) { var result = new WorkResult<int[]>(); SimulationWork.Complete(EditElevationWork(delta, radius, strength, result)); return result.Value; }
+
+        private IEnumerable<int> EditElevationWork(int delta, int radius, int strength, WorkResult<int[]> result)
         {
-            if (actualNode == null || delta == 0 || radius < 0 || strength <= 0) return Array.Empty<int>();
+            result.Value = Array.Empty<int>();
+            if (actualNode == null || delta == 0 || radius < 0 || strength <= 0) yield break;
 
             Node center = actualNode;
             int cu = center.U, cv = center.V;
@@ -40,12 +44,13 @@ namespace ForesTycoon.Map
                 for (int du = -radius; du <= radius; du++)
                     for (int dv = -radius; dv <= radius; dv++)
                     {
-                        if (du * du + dv * dv > radius * radius) continue;
+                        yield return 1;
+                        if ((long)du * du + (long)dv * dv > (long)radius * radius) continue;
                         if (!data.CheckNode(cu + du, cv + dv)) continue;
 
                         Node n = GetNode(cu + du, cv + dv);
                         for (int s = 0; s < strength; s++)
-                            RaiseOrLower(n, delta);
+                            foreach (int unit in RaiseOrLowerWork(n, delta)) yield return unit;
                     }
             }
             finally
@@ -56,12 +61,12 @@ namespace ForesTycoon.Map
             }
 
             actualNode = center;
-            if (changedTiles.Count == 0) return Array.Empty<int>();
-            RebuildHydrology();
-            int[] result = new int[changedTiles.Count];
-            changedTiles.CopyTo(result);
-            Array.Sort(result);
-            return result;
+            if (changedTiles.Count == 0) yield break;
+            foreach (int unit in RebuildHydrologyWork()) yield return unit;
+            // Walking IDs is bounded and gives the same sorted result without a full sort.
+            var ordered = new List<int>(changedTiles.Count);
+            for (int id = 0; id < tiles.Length; id++) { if (changedTiles.Contains(id)) ordered.Add(id); yield return 1; }
+            result.Value = ordered.ToArray();
         }
 
         public int[] EditElevationAtNode(int nodeId, int delta, int radius, int strength)
@@ -69,6 +74,16 @@ namespace ForesTycoon.Map
             if (nodeId < 0 || nodeId >= nodes.Length) return Array.Empty<int>();
             actualNode = nodes[nodeId];
             return EditElevation(delta, radius, strength);
+        }
+
+        internal IEnumerable<int> EditElevationAtNodeWork(int nodeId, int delta, int radius, int strength, WorkResult<int[]> result)
+        {
+            result.Value = Array.Empty<int>();
+            if ((uint)nodeId >= (uint)nodes.Length) yield break;
+            actualNode = nodes[nodeId];
+            // Clip traversal to the finite grid even for oversized brush requests.
+            radius = Math.Min(radius, Math.Max(nodeCols, nodeRows) * 2);
+            foreach (int unit in EditElevationWork(delta, radius, strength, result)) yield return unit;
         }
 
         private void RaiseOrLowerSelected(int delta)
@@ -81,27 +96,37 @@ namespace ForesTycoon.Map
         // szomszédos sarok eltérése ≤1 (a szemközti sarok 2-vel is → meredek, érvényes).
         // A változásokat előbb egy pending-térképbe gyűjti; ha bármelyik a [0, MaxHeight]
         // korláton kívülre esne, az EGÉSZ művelet elbukik és semmi nem változik (atomikus).
-        private void RaiseOrLower(Node corner, int delta)
+        private void RaiseOrLower(Node corner, int delta) => SimulationWork.Complete(RaiseOrLowerWork(corner, delta));
+
+        private IEnumerable<int> RaiseOrLowerWork(Node corner, int delta)
         {
-            if (!TerrainElevationPlanner.TryCreate(data, corner.Id, delta, settings.MaxHeight,
-                out Dictionary<int, int> pending)) return;
-            if (!ValidateRoadsAgainstPendingTerrain(pending)) return;
+            var planned = new WorkResult<Dictionary<int, int>>();
+            foreach (int unit in TerrainElevationPlanner.CreateWork(data, corner.Id, delta, settings.MaxHeight, planned, elevationPlan)) yield return unit;
+            var pending = planned.Value;
+            if (pending == null) yield break;
+            var valid = new WorkResult<bool>();
+            foreach (int unit in ValidateRoadsAgainstPendingTerrainWork(pending, valid)) yield return unit;
+            if (!valid.Value) yield break;
 
             List<Node> changed = generatingTerrain ? null : new List<Node>(pending.Count);
             foreach (KeyValuePair<int, int> kv in pending)
             {
+                yield return 1;
                 Node nd = data.Nodes[kv.Key];
                 if (nd.W == kv.Value) continue;
                 nd.W = kv.Value;
                 nd.zPos = nd.W * tileSizeM;   // zPos szinkron a hidrológiához
                 changed?.Add(nd);
             }
-            if (!generatingTerrain) ApplyNodeChanges(changed);
+            if (!generatingTerrain) foreach (int unit in ApplyNodeChangesWork(changed)) yield return unit;
         }
 
-        private bool ValidateRoadsAgainstPendingTerrain(Dictionary<int, int> pending)
+
+
+        private IEnumerable<int> ValidateRoadsAgainstPendingTerrainWork(Dictionary<int, int> pending, WorkResult<bool> result)
         {
-            if (roads.Count == 0 && buildingTiles.Count == 0) return true;
+            result.Value = true;
+            if (roads.Count == 0 && buildingTiles.Count == 0) yield break;
 
             int HeightOf(Node nd) => pending.TryGetValue(nd.Id, out int v) ? v : nd.W;
             Tile[] nodeTiles = new Tile[4];
@@ -109,6 +134,7 @@ namespace ForesTycoon.Map
             // Út-csempe csomópontok (Node) magasságának módosítása tilos!
             foreach (KeyValuePair<int, int> kv in pending)
             {
+                yield return 1;
                 Node node = data.Nodes[kv.Key];
                 if (kv.Value != node.W)
                 {
@@ -117,7 +143,7 @@ namespace ForesTycoon.Map
                     {
                         Tile tile = nodeTiles[i];
                         if (roads.Has(tile.Id) || IsBuildingTile(tile.Id))
-                            return false;
+                        { result.Value = false; yield break; }
                     }
                 }
             }
@@ -126,6 +152,7 @@ namespace ForesTycoon.Map
 
             foreach (int nodeId in pending.Keys)
             {
+                yield return 1;
                 Node node = data.Nodes[nodeId];
                 int nodeTileCount = data.GetTilesByNode(node, nodeTiles);
                 for (int i = 0; i < nodeTileCount; i++)
@@ -137,9 +164,9 @@ namespace ForesTycoon.Map
 
             foreach (int tileId in affectedRoadTiles)
                 if (!ValidateExistingRoadAgainstTerrain(tiles[tileId], HeightOf))
-                    return false;
+                { result.Value = false; yield break; }
 
-            return true;
+            yield break;
         }
 
         private bool ValidateExistingRoadAgainstTerrain(Tile t, Func<Node, int> heightOf)

@@ -13,11 +13,13 @@ namespace ForesTycoon.Ecology
         internal int PlantationTileCount => plantations.Count;
         internal int AllocatePlantationId() => nextPlantationId++;
         internal bool TryGetPlantation(int tileId, out ForestPlantation plantation) => plantations.TryGetValue(tileId, out plantation);
-        internal void FinishPlantingArea(int areaId)
+        internal void FinishPlantingArea(int areaId) => SimulationWork.Complete(FinishPlantingAreaWork(areaId));
+
+        internal IEnumerable<int> FinishPlantingAreaWork(int areaId)
         {
             foreach (var entry in plantations)
-                if (entry.Value.AreaId == areaId) MarkResourceArea(entry.Key);
-            RefreshChangedResourceRates(ForestYear, currentConditions: true);
+                { if (entry.Value.AreaId == areaId) MarkResourceArea(entry.Key); yield return 1; }
+            foreach (int unit in RefreshChangedResourceRatesWork(ForestYear, currentConditions: true)) yield return unit;
         }
         private void ClearPlantations() { plantations.Clear(); nextPlantationId = 1; PlantationRevision++; }
         internal bool TryGetPlantationStatus(int tileId, out PlantationStatus status)

@@ -25,7 +25,16 @@ namespace ForesTycoon.Map
         /// <summary>Legenerálja a kvantált magasságot és a folyó-maszkot. size = nodeCols (négyzetes rács, 2^n+1).</summary>
         public void Generate(int nodeCols, int nodeRows, int maxHeight, out int[,] targetW, out bool[,] isRiver)
         {
+            var result = new WorkResult<(int[,] Heights, bool[,] Rivers)>();
+            SimulationWork.Complete(GenerateWork(nodeCols, nodeRows, maxHeight, result));
+            (targetW, isRiver) = result.Value;
+        }
+
+        internal IEnumerable<int> GenerateWork(int nodeCols, int nodeRows, int maxHeight,
+            WorkResult<(int[,] Heights, bool[,] Rivers)> result)
+        {
             int size = nodeCols;
+            int[,] targetW; bool[,] isRiver;
             Random rnd = new Random(seed);
             double[,] h = new double[size, size];
             InitNoise(seed);
@@ -45,6 +54,7 @@ namespace ForesTycoon.Map
                 for (int x = 0; x < size - 1; x += step)
                     for (int y = 0; y < size - 1; y += step)
                     {
+                        yield return 1;
                         double avg = (h[x, y] + h[x + step, y] +
                                       h[x, y + step] + h[x + step, y + step]) * 0.25;
                         h[x + half, y + half] = avg + (rnd.NextDouble() * 2 - 1) * range;
@@ -53,6 +63,7 @@ namespace ForesTycoon.Map
                 for (int x = 0; x < size; x += half)
                     for (int y = ((x / half) % 2 == 0) ? half : 0; y < size; y += step)
                     {
+                        yield return 1;
                         double sum = 0; int cnt = 0;
                         if (x - half >= 0) { sum += h[x - half, y]; cnt++; }
                         if (x + half < size) { sum += h[x + half, y]; cnt++; }
@@ -67,18 +78,20 @@ namespace ForesTycoon.Map
             for (int x = 0; x < size; x++)
                 for (int y = 0; y < size; y++)
                 {
+                    yield return 1;
                     if (h[x, y] < hMin) hMin = h[x, y];
                     if (h[x, y] > hMax) hMax = h[x, y];
                 }
             double hRange = hMax - hMin;
             for (int x = 0; x < size; x++)
                 for (int y = 0; y < size; y++)
-                    h[x, y] = (h[x, y] - hMin) / hRange;
+                { h[x, y] = (h[x, y] - hMin) / hRange; yield return 1; }
 
             // ── 3. Sziget falloff ─────────────────────────────────────────────
             for (int x = 0; x < size; x++)
                 for (int y = 0; y < size; y++)
                 {
+                    yield return 1;
                     double nx = x / (double)(size - 1);
                     double ny = y / (double)(size - 1);
                     double coastDrop = Math.Max(0.0, 0.32 - nx) * 2.4;
@@ -97,6 +110,7 @@ namespace ForesTycoon.Map
                 for (int x = 0; x < size; x++)
                     for (int y = 0; y < size; y++)
                     {
+                        yield return 1;
                         double sum = h[x, y]; int cnt = 1;
                         if (x > 0) { sum += h[x - 1, y]; cnt++; }
                         if (x < size - 1) { sum += h[x + 1, y]; cnt++; }
@@ -108,60 +122,61 @@ namespace ForesTycoon.Map
             }
 
             // ── 5. Folyó generálás ────────────────────────────────────────────
-            int[,] flowAcc = ComputeFlowAccumulation(h, size);
+            var accumulation = new WorkResult<int[,]>();
+            foreach (int unit in ComputeFlowAccumulationWork(h, size, accumulation)) yield return unit;
+            int[,] flowAcc = accumulation.Value;
             isRiver = new bool[size, size];
             for (int x = 0; x < size; x++)
                 for (int y = 0; y < size; y++)
-                    if (flowAcc[x, y] >= RiverThreshold && h[x, y] > 0.08)
+                {
+                    yield return 1; if (flowAcc[x, y] >= RiverThreshold && h[x, y] > 0.08)
                     {
                         isRiver[x, y] = true;
                         h[x, y] = Math.Max(0.02, h[x, y] - RiverCarve);
                     }
+
+                }
 
             // ── 6. Terasz + kvantizálás ───────────────────────────────────────
             targetW = new int[nodeCols, nodeRows];
             for (int u = 0; u < nodeCols; u++)
                 for (int v = 0; v < nodeRows; v++)
                 {
+                    yield return 1;
                     double val = TerraceMap(h[u, v], maxHeight);
                     int height = (int)Math.Round(val * maxHeight);
                     targetW[u, v] = Math.Max(0, Math.Min(maxHeight, height));
                 }
+            result.Value = (targetW, isRiver);
         }
 
         // ── D4 flow accumulation ──────────────────────────────────────────────
-        private static int[,] ComputeFlowAccumulation(double[,] h, int size)
+        private static IEnumerable<int> ComputeFlowAccumulationWork(double[,] h, int size, WorkResult<int[,]> result)
         {
             int[,] acc = new int[size, size];
+            var order = new PriorityQueue<(int x, int y), double>();
             for (int x = 0; x < size; x++)
                 for (int y = 0; y < size; y++)
-                    acc[x, y] = 1;
-
-            var order = new List<(int x, int y)>(size * size);
-            for (int x = 0; x < size; x++)
-                for (int y = 0; y < size; y++)
-                    order.Add((x, y));
-            order.Sort((a, b) => h[b.x, b.y].CompareTo(h[a.x, a.y]));
-
-            int[] dx = { 0, 0, 1, -1 };
-            int[] dy = { 1, -1, 0, 0 };
-
-            foreach (var (x, y) in order)
+                {
+                    acc[x, y] = 1; order.Enqueue((x, y), -h[x, y]); yield return 1;
+                }
+            int[] dx = { 0, 0, 1, -1 }, dy = { 1, -1, 0, 0 };
+            while (order.TryDequeue(out var cell, out _))
             {
-                double lowest = h[x, y];
-                int bx = -1, by = -1;
+                var (x, y) = cell;
+                double lowest = h[x, y]; int bx = -1, by = -1;
                 for (int d = 0; d < 4; d++)
                 {
                     int nx = x + dx[d], ny = y + dy[d];
                     if (nx >= 0 && nx < size && ny >= 0 && ny < size && h[nx, ny] < lowest)
                     {
-                        lowest = h[nx, ny];
-                        bx = nx; by = ny;
+                        lowest = h[nx, ny]; bx = nx; by = ny;
                     }
                 }
                 if (bx >= 0) acc[bx, by] += acc[x, y];
+                yield return 1;
             }
-            return acc;
+            result.Value = acc;
         }
 
         private static double TerraceMap(double t, int levels)

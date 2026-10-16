@@ -222,11 +222,20 @@ internal sealed partial class RuleEditorView
     {
         var e = Objects.Find(scope);
         if (e == null || name == null) return null;
-        var own = e.Fields.FirstOrDefault(f => f.Name == name);
+        var own = e.Fields.FirstOrDefault(f => f.Name == name) ?? e.Summaries.FirstOrDefault(f => f.Name == name);
         if (own != null) return own;
+        // Every rule reads the world's fields as world.<field>.
+        if (name.StartsWith("world.", StringComparison.Ordinal) && scope != "world") return SchemaField("world", name[6..]);
         foreach (var r in e.Relations)
             if (name.StartsWith(r.Name + ".", StringComparison.Ordinal))
-                return Objects.Find(r.Target)?.Fields.FirstOrDefault(f => f.Name == name[(r.Name.Length + 1)..]);
+            {
+                var target = Objects.Find(r.Target); string rest = name[(r.Name.Length + 1)..];
+                return target?.Fields.FirstOrDefault(f => f.Name == rest) ?? target?.Summaries.FirstOrDefault(f => f.Name == rest);
+            }
+        // A field of a collection's members (“neighbours.surfaceWater”): where a flow can be shared out.
+        foreach (var c in e.Collections)
+            if (name.StartsWith(c.Name + ".", StringComparison.Ordinal) && Objects.Find(c.Target)?.Fields.FirstOrDefault(f => f.Name == name[(c.Name.Length + 1)..]) is { } member)
+                return member with { Display = c.Display + " › " + member.Display };
         return null;
     }
 }

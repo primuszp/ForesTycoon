@@ -184,6 +184,62 @@ namespace ForesTycoon.Editor
             Arrow(draw, tip, unit, headSize, colour);
         }
 
+        /// <summary><paramref name="colour"/> with its alpha scaled by <paramref name="alpha"/> (0–1).</summary>
+        internal static uint Fade(uint colour, float alpha) =>
+            (colour & 0x00FFFFFFu) | (uint)Math.Clamp((colour >> 24) * alpha, 0, 255) << 24;
+
+        /// <summary>
+        /// A node-editor wire from an output port <paramref name="from"/> to an input port <paramref name="to"/>: a cubic curve
+        /// leaving and entering horizontally, on a dark halo so it stays readable where wires cross, ending in a small
+        /// arrowhead that touches the port. A wire running backwards loops out wider instead of folding onto itself.
+        /// </summary>
+        internal static void Wire(ImDrawListPtr draw, Vec2 from, Vec2 to, uint colour, float width, bool dashed = false, uint halo = 0)
+        {
+            const float head = 8;
+            Vec2 end = to - new Vec2(head, 0);
+            float dx = end.X - from.X;
+            float pull = dx > 0 ? Math.Max(Math.Min(24, dx), dx * .55f) : 60 + Math.Min(120, -dx * .5f + Math.Abs(to.Y - from.Y) * .25f);
+            Vec2 c1 = from + new Vec2(pull, 0), c2 = end - new Vec2(pull, 0);
+            const int steps = 32;
+            var points = new Vec2[steps + 1];
+            for (int i = 0; i <= steps; i++) {
+                float t = i / (float)steps, u = 1 - t;
+                points[i] = u * u * u * from + 3 * u * u * t * c1 + 3 * u * t * t * c2 + t * t * t * end;
+            }
+            void Stroke(uint c, float w, bool dash)
+            {
+                if (!dash) {
+                    draw.PathClear();
+                    foreach (var p in points) draw.PathLineTo(p);
+                    draw.PathLineTo(to - new Vec2(head * .6f, 0));
+                    draw.PathStroke(c, ImDrawFlags.None, w);
+                    return;
+                }
+                // Dashes of even screen length, whatever the curve's parameter speed.
+                float on = 6, off = 4, along = 0;
+                for (int i = 0; i < steps; i++) {
+                    Vec2 a = points[i], b = points[i + 1]; float length = Vec2.Distance(a, b);
+                    for (float s = 0; s < length;) {
+                        float phase = along % (on + off), step = Math.Min(length - s, phase < on ? on - phase : on + off - phase);
+                        if (phase < on) draw.AddLine(Vec2.Lerp(a, b, s / length), Vec2.Lerp(a, b, (s + step) / length), c, w);
+                        s += step; along += step;
+                    }
+                }
+            }
+            if (halo != 0) Stroke(halo, width + 3.5f, false);
+            Stroke(colour, width, dashed);
+            if (halo != 0) Arrow(draw, to + new Vec2(1.5f, 0), Vec2.UnitX, head + 3, halo);
+            Arrow(draw, to, Vec2.UnitX, head, colour);
+        }
+
+        /// <summary>A port: a ring in the node's colour, filled when something is plugged in.</summary>
+        internal static void Port(ImDrawListPtr draw, Vec2 at, uint colour, bool connected)
+        {
+            draw.AddCircleFilled(at, 5.5f, NodeBody);
+            if (connected) draw.AddCircleFilled(at, 3.5f, colour);
+            draw.AddCircle(at, 5.5f, colour, 0, 1.5f);
+        }
+
         /// <summary>An arrowhead at <paramref name="tip"/> pointing along <paramref name="direction"/>.</summary>
         internal static void Arrow(ImDrawListPtr draw, Vec2 tip, Vec2 direction, float size, uint colour)
         {

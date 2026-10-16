@@ -19,6 +19,7 @@ namespace ForesTycoon
             if (world == null) throw new ArgumentNullException(nameof(world));
             if (isExecuting) throw new InvalidOperationException("World commands cannot be executed recursively.");
 
+            if (WorkPending) throw new InvalidOperationException("Finish the active sliced command batch before synchronous execution.");
             int count = pending.Count;
             isExecuting = true;
             try
@@ -34,6 +35,28 @@ namespace ForesTycoon
             return count;
         }
 
-        public void Clear() => pending.Clear();
+        private IEnumerator<int> active;
+        private int batchRemaining;
+        internal bool WorkPending => active != null || batchRemaining > 0;
+        internal int Continue(IWorldCommandTarget world, Func<IWorldCommand, IEnumerable<int>> execute, int budget)
+        {
+            ArgumentNullException.ThrowIfNull(world); ArgumentNullException.ThrowIfNull(execute);
+            if (budget <= 0) throw new ArgumentOutOfRangeException(nameof(budget));
+            if (isExecuting) throw new InvalidOperationException("World commands cannot be executed recursively.");
+            if (!WorkPending) batchRemaining = pending.Count;
+            int completed = 0, units = 0;
+            isExecuting = true;
+            try {
+                while (batchRemaining > 0 && units < budget) {
+                    active ??= execute(pending.Peek()).GetEnumerator();
+                    if (active.MoveNext()) { units += Math.Max(1, active.Current); continue; }
+                    active.Dispose(); active = null;
+                    pending.Dequeue(); batchRemaining--; completed++; units++;
+                }
+            } finally { isExecuting = false; }
+            return completed;
+        }
+
+        public void Clear() { active?.Dispose(); active = null; batchRemaining = 0; pending.Clear(); }
     }
 }

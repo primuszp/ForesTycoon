@@ -46,6 +46,14 @@ internal static partial class WorldLoader
 
     internal static void RestoreInitialState(GameWorld world, WorldScenario scenario)
     {
+        var saved = ReadInitialState(scenario);
+        using var stream = new MemoryStream(); WorldSaveSerializer.Write(stream, saved); stream.Position = 0;
+        world.Load(stream);
+    }
+
+    // Pure parsing/remapping. Safe on a worker; never reads or changes the live world or species context.
+    internal static WorldSaveData ReadInitialState(WorldScenario scenario)
+    {
         scenario.Validate();
         using var unpacked = new MemoryStream();
         try {
@@ -63,8 +71,7 @@ internal static partial class WorldLoader
             throw new InvalidDataException("A kiinduló jelenet teljes, parancselőzmény nélküli állapotmentés legyen.");
         if (saved.Terrain.Seed != scenario.Seed || saved.Terrain.NodeColumns != scenario.Size + 1 || saved.Terrain.NodeRows != scenario.Size + 1)
             throw new InvalidDataException("A rögzített jelenet mérete és seedje nem változtatható; ehhez új generált pályát kell létrehozni.");
-        unpacked.Position = 0;
-        world.Load(unpacked);
-        ApplySceneSoils(world, saved, scenario);
+        saved.ValidateReplay();
+        return PrepareSceneSnapshot(saved, scenario);
     }
 }

@@ -4,7 +4,7 @@ namespace ForesTycoon.Rules;
 public static class StumpDecayRule
 {
     public static WorldRule Default() => new() {
-        Id = "forest.stumps", Name = "Tönkök lebomlása", Scope = "stump", BuiltIn = true,
+        Id = "forest.stumps", Name = "Tönkök lebomlása", Scope = "stump",
         Description = "A nagyobb nedvesség gyorsítja, a nagyobb tönkátmérő lassítja a felhalmozódó lebomlást. Teljes lebomláskor a tönk eltűnik.",
         Effects = {
             new() { Target = "decayProgress", Mode = "add", Influence = new() { PerYear = true, Terms = {

@@ -16,6 +16,9 @@ namespace ForesTycoon
         }
         private int[] TruckPath(FleetTruck truck, int from, int to, out float cost) => terrain.FindNetworkPath(from, to, out cost,
             Behaviors == null ? null : (a, b, native) => RouteCost("truck", truck?.Id ?? -1, truck?.Vehicle?.CargoAmount ?? 0, truck?.Vehicle?.CargoCapacity ?? 25, a, b, native));
+        private System.Collections.Generic.IEnumerable<int> TruckPathWork(FleetTruck truck, int from, int to, WorkResult<(int[] Path, float Cost)> result)
+            => terrain.FindNetworkPathWork(from, to, result, Behaviors == null ? null
+                : (a, b, native) => RouteCost("truck", truck?.Id ?? -1, truck?.Vehicle?.CargoAmount ?? 0, truck?.Vehicle?.CargoCapacity ?? 25, a, b, native));
         private double TruckRule(Vehicle vehicle, string hook, double native, double dt)
         {
             var truck = TruckOf(vehicle);

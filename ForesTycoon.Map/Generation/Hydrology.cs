@@ -32,7 +32,9 @@ namespace ForesTycoon.Map
         }
 
         // ── Teljes újraszámítás ──────────────────────────────────────────────
-        public void Rebuild()
+        public void Rebuild() => SimulationWork.Complete(RebuildWork());
+
+        internal IEnumerable<int> RebuildWork()
         {
             Tile[] tiles = data.Tiles;
             StandingWaterTileIds.Clear();
@@ -40,7 +42,7 @@ namespace ForesTycoon.Map
 
             bool[] waterCandidates = new bool[tiles.Length];
             for (int i = 0; i < tiles.Length; i++)
-                waterCandidates[i] = HasWaterSurfaceCandidate(tiles[i]);
+            { waterCandidates[i] = HasWaterSurfaceCandidate(tiles[i]); yield return 1; }
 
             bool[] visited = new bool[tiles.Length];
             Queue<Tile> open = new Queue<Tile>();
@@ -49,6 +51,7 @@ namespace ForesTycoon.Map
 
             for (int i = 0; i < tiles.Length; i++)
             {
+                yield return 1;
                 if (!waterCandidates[i] || visited[i]) continue;
 
                 open.Enqueue(tiles[i]);
@@ -58,6 +61,7 @@ namespace ForesTycoon.Map
                 bool touchesBorder = false;
                 while (open.Count > 0)
                 {
+                    yield return 1;
                     Tile current = open.Dequeue();
                     basin.Add(current);
                     if (data.IsBorderTile(current)) touchesBorder = true;
@@ -75,12 +79,13 @@ namespace ForesTycoon.Map
                 if (!touchesBorder)
                 {
                     foreach (Tile basinTile in basin)
-                        StandingWaterTileIds.Add(basinTile.Id);
+                    { StandingWaterTileIds.Add(basinTile.Id); yield return 1; }
                 }
             }
 
             for (int i = 0; i < tiles.Length; i++)
             {
+                yield return 1;
                 Tile tile = tiles[i];
                 float moisture = ShouldDrawStandingWater(tile) ? 1.0f : 0.0f;
 
@@ -101,10 +106,12 @@ namespace ForesTycoon.Map
                 TileMoisture[i] = moisture;
             }
 
-            BuildGravityWaterFromTerrain();
+            foreach (int unit in BuildGravityWaterFromTerrainWork()) yield return unit;
         }
 
-        private void BuildGravityWaterFromTerrain()
+
+
+        private IEnumerable<int> BuildGravityWaterFromTerrainWork()
         {
             Node[] nodes = data.Nodes;
             NodeWaterDepth = new float[nodes.Length];
@@ -112,7 +119,7 @@ namespace ForesTycoon.Map
             bool[] settled = new bool[nodes.Length];
             float[] spillLevel = new float[nodes.Length];
             for (int i = 0; i < spillLevel.Length; i++)
-                spillLevel[i] = float.PositiveInfinity;
+            { spillLevel[i] = float.PositiveInfinity; yield return 1; }
 
             PriorityQueue<Node, float> open = new PriorityQueue<Node, float>();
             Node[] neighbors = new Node[4];
@@ -134,17 +141,20 @@ namespace ForesTycoon.Map
             int nodeCols = data.NodeCols, nodeRows = data.NodeRows;
             for (int u = 0; u < nodeCols; u++)
             {
+                yield return 1;
                 AddBoundary(data.GetNode(u, 0));
                 AddBoundary(data.GetNode(u, nodeRows - 1));
             }
             for (int v = 1; v < nodeRows - 1; v++)
             {
+                yield return 1;
                 AddBoundary(data.GetNode(0, v));
                 AddBoundary(data.GetNode(nodeCols - 1, v));
             }
 
             while (open.Count > 0)
             {
+                yield return 1;
                 Node node = open.Dequeue();
                 if (settled[node.Id]) continue;
 
@@ -165,6 +175,7 @@ namespace ForesTycoon.Map
 
             for (int i = 0; i < nodes.Length; i++)
             {
+                yield return 1;
                 if (float.IsPositiveInfinity(spillLevel[i])) continue;
 
                 float surfaceLevel = Math.Min(spillLevel[i], SeaLevel);

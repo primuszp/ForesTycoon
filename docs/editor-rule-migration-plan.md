@@ -1,3 +1,5 @@
+> Archivált tervezési anyag. A korábbi szabályalakok kompatibilitási átvezetései 2026-10-16-án kivezetésre kerültek; a jelenlegi működést a [szabályszerkesztő útmutatója](rule-editor.md) írja le.
+
 # Szerkeszthető világszabályok: értékelés és első közös minta
 
 2026-10-15 · Átvizsgált kiindulás: `0f90403`.

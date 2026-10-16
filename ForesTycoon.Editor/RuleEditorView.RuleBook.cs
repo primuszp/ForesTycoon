@@ -10,13 +10,14 @@ using Vec4 = System.Numerics.Vector4;
 namespace ForesTycoon.Editor;
 
 /// <summary>
-/// The rule book: a rule reads as a sentence – WHEN · WHERE · IF · THEN – and is run by the game. Built-in rules moved out
-/// of C# appear here too; they can be edited, switched off and reset, not deleted.
+/// The rule book: a rule reads as a sentence – WHEN · WHERE · IF · THEN – and is run by the game. Every rule is the
+/// project's own: a starter rule only seeds a new project and can be edited, switched off, reset to its starter or deleted.
 /// </summary>
 internal sealed partial class RuleEditorView
 {
     private List<WorldRule> ruleBook;
     private List<RuleFieldDefinition> ruleFields;
+    private List<string> removedStarters;
     private int selectedBookRule;
     private string ruleBookError, nameFilter = "";
     private int lastFormula = -1; // -1 condition, 0.. effect index: where a clicked name is inserted
@@ -29,12 +30,34 @@ internal sealed partial class RuleEditorView
 
     private void LoadRuleBook(RuleProject project)
     {
-        ruleBook = RuleEngine.Clone(project.Rules ?? new()); RuleEngine.AddMissingBuiltIns(ruleBook);
+        removedStarters = (project.RemovedStarters ?? new()).ToList();
+        ruleBook = RuleEngine.Clone(project.Rules ?? new()); RuleEngine.AddMissingStarters(ruleBook, removedStarters);
         ruleFields = RuleEngine.CloneFields(project.Fields ?? new());
         selectedBookRule = 0; ruleBookError = null;
     }
     private List<WorldRule> RuleBookRules(GameWorld world) => ruleBook ??= RuleEngine.Clone(world.RuleProjectDocument.Rules);
     private List<RuleFieldDefinition> RuleBookFields(GameWorld world) => ruleFields ??= RuleEngine.CloneFields(world.RuleProjectDocument.Fields);
+    private List<string> RemovedStarters(GameWorld world) => removedStarters ??= world.RuleProjectDocument.RemovedStarters.ToList();
+
+    /// <summary>Deletes a rule. A starter it was made from is remembered, so loading the project does not add it back.</summary>
+    private void DeleteRule(GameWorld world, WorldRule rule)
+    {
+        var rules = RuleBookRules(world); var removed = RemovedStarters(world);
+        rules.Remove(rule);
+        if (rule.Template.Length > 0 && !rules.Exists(r => r.Template == rule.Template) && !removed.Contains(rule.Template)) removed.Add(rule.Template);
+        selectedBookRule = Math.Clamp(selectedBookRule, 0, Math.Max(0, rules.Count - 1));
+        ApplyRuleBook(world, rule.Name + ": törölve.");
+    }
+
+    /// <summary>Adds a starter rule as a new own rule, with a fresh id when the starter's is taken.</summary>
+    private void AddStarterRule(GameWorld world, WorldRule starter)
+    {
+        var rules = RuleBookRules(world);
+        if (rules.Exists(r => r.Id == starter.Id)) starter.Id = starter.Id + "-" + Guid.NewGuid().ToString("N")[..4];
+        RemovedStarters(world).Remove(starter.Template);
+        rules.Add(starter); selectedBookRule = rules.Count - 1; selectedInfluence = selectedTerm = 0; ruleOverview = false;
+        ApplyRuleBook(world, starter.Name + ": hozzáadva a mintából.");
+    }
     internal void ShowRuleBook(int index = 0) { worldTab = WorldTab.Rules; selectedBookRule = index; ruleOverview = false; }
     private void RulesArea(GameWorld world) => RuleBookArea(world);
 
@@ -56,12 +79,9 @@ internal sealed partial class RuleEditorView
 
         // ── Left: the book ───────────────────────────────────────────────
         ImGui.BeginChild("book-list", new Vec2(290, 0), ImGuiChildFlags.Borders);
-        foreach (var (title, builtIn) in new[] { ("Beépített szabályok", true), ("Saját szabályok", false) }) {
-            EditorStyle.Section(title);
-            bool any = false;
+        EditorStyle.Section("Szabályok");
+        {
             for (int i = 0; i < rules.Count; i++) {
-                if (rules[i].BuiltIn != builtIn) continue;
-                any = true;
                 bool enabled = rules[i].Enabled;
                 if (ImGui.Checkbox("##on" + i, ref enabled)) { rules[i].Enabled = enabled; ApplyRuleBook(world, rules[i].Name + (enabled ? ": bekapcsolva." : ": kikapcsolva.")); }
                 if (ImGui.IsItemHovered()) ImGui.SetTooltip(enabled ? "Fut a játékban. Kattintás: kikapcsolás." : "Nem fut. Kattintás: bekapcsolás.");
@@ -69,23 +89,34 @@ internal sealed partial class RuleEditorView
                 ImGui.PushStyleColor(ImGuiCol.Text, enabled ? HudTheme.Parchment : HudTheme.Muted);
                 if (ImGui.Selectable(rules[i].Name + "##rule" + i, selectedBookRule == i && !ruleOverview)) { selectedBookRule = i; lastFormula = -1; ruleOverview = false; }
                 ImGui.PopStyleColor();
-                if (ImGui.IsItemHovered()) ImGui.SetTooltip($"{ScopeName(rules[i].Scope)} · {(rules[i].RoadWeather != null ? 1 : rules[i].Effects.Count)} hatás");
+                if (ImGui.IsItemHovered()) ImGui.SetTooltip($"{ScopeName(rules[i].Scope)} · {rules[i].Effects.Count} hatás"
+                    + (rules[i].Template.Length > 0 ? "\nMintából készült; a mintára visszaállítható." : ""));
             }
-            if (!any) EditorStyle.Text(HudTheme.Muted, builtIn ? "Nincs." : "Még nincs saját szabály.");
+            if (rules.Count == 0) EditorStyle.Text(HudTheme.Muted, "Nincs szabály. Az „+ Új szabály” üresen vagy mintából indít egyet.");
         }
         ImGui.Spacing();
         if (ImGui.Selectable("Áttekintés: ki mit ír és olvas", ruleOverview)) ruleOverview = !ruleOverview;
         if (ImGui.IsItemHovered()) ImGui.SetTooltip("Melyik szabály melyik mezőt írja és olvassa, és melyik mezőt írja több szabály.");
         ImGui.Spacing();
-        if (ImGui.Button("Új szabály", new Vec2(-1, 0))) {
-            int n = rules.Count(r => !r.BuiltIn) + 1;
-            while (rules.Exists(r => r.Id == $"sajat-{n}")) n++;
-            // The first kind of object, in the object model's order, that a rule can change.
-            var first = RuleEngine.Scopes.First(s => s.Fields.Any(f => f.Write != null));
-            rules.Add(new WorldRule { Id = $"rule-{Guid.NewGuid():N}", Name = $"Saját szabály {n}", Scope = first.Id, Enabled = false,
-                Effects = { new() { Target = first.Fields.First(f => f.Write != null).Name, Mode = "add", Influence = new() } } });
-            selectedBookRule = rules.Count - 1; lastFormula = -1;
-            message = "Új szabály: válaszd ki, hol fusson, és adj hozzá hatást.";
+        if (ImGui.Button("+ Új szabály", new Vec2(-1, 0))) ImGui.OpenPopup("new-rule");
+        if (ImGui.BeginPopup("new-rule")) {
+            if (ImGui.Selectable("Üres szabály")) {
+                int n = rules.Count + 1;
+                while (rules.Exists(r => r.Name == $"Szabály {n}")) n++;
+                // The first kind of object, in the object model's order, that a rule can change.
+                var first = RuleEngine.Scopes.First(s => s.Fields.Any(f => f.Write != null));
+                rules.Add(new WorldRule { Id = $"rule-{Guid.NewGuid():N}", Name = $"Szabály {n}", Scope = first.Id, Enabled = false,
+                    Effects = { new() { Target = first.Fields.First(f => f.Write != null).Name, Mode = "add", Influence = new() } } });
+                selectedBookRule = rules.Count - 1; lastFormula = -1; ruleOverview = false;
+                message = "Új szabály: válaszd ki, hol fusson, és adj hozzá hatást.";
+            }
+            ImGui.Separator();
+            EditorStyle.Text(HudTheme.Muted, "Mintából");
+            foreach (var template in RuleEngine.StarterRules()) {
+                if (ImGui.Selectable(template.Name + "##starter-" + template.Id)) AddStarterRule(world, template);
+                if (ImGui.IsItemHovered()) ImGui.SetTooltip(template.Description);
+            }
+            ImGui.EndPopup();
         }
         ImGui.Spacing();
         ImGui.PushTextWrapPos(0);
@@ -113,14 +144,10 @@ internal sealed partial class RuleEditorView
         string description = rule.Description ?? "";
         if (ImGui.InputTextMultiline("##rule-desc", ref description, 2000, new Vec2(-1, 48))) rule.Description = description;
         finished |= ImGui.IsItemDeactivatedAfterEdit();
-        if (rule.BuiltIn) {
-            ImGui.PushTextWrapPos(0);
-            EditorStyle.Text(HudTheme.Muted, "Beépített szabály: korábban C# kód volt, most adatként fut. Szerkeszthető és kikapcsolható.");
-            ImGui.PopTextWrapPos();
-            if (EditorStyle.QuietButton("Eredeti visszaállítása", "A szabály a játék eredeti változatára áll vissza.")) {
-                var original = RuleEngine.BuiltIn().Find(r => r.Id == rule.Id);
-                if (original != null) { rules[selectedBookRule] = original; rule = original; ApplyRuleBook(world, rule.Name + ": eredeti visszaállítva."); }
-            }
+        if (rule.Template.Length > 0 && RuleEngine.StarterRules().Find(r => r.Id == rule.Template) is { } starter
+            && EditorStyle.QuietButton("Visszaállítás a mintára", "A szabály a(z) " + starter.Name + " minta szerinti változatára áll vissza.")) {
+            starter.Id = rule.Id; starter.Name = rule.Name;
+            rules[selectedBookRule] = starter; rule = starter; ApplyRuleBook(world, rule.Name + ": visszaállítva a mintára.");
         }
 
         Clause("MIKOR", "Minden lépésben, a lépés hossza: lépés (erdőév).");
@@ -215,13 +242,11 @@ internal sealed partial class RuleEditorView
         if (world.RuleBook.LastError != null) { ImGui.PushTextWrapPos(0); EditorStyle.Text(HudTheme.AmberAccent, "Futás közben: " + world.RuleBook.LastError); ImGui.PopTextWrapPos(); }
 
         ImGui.Spacing();
-        if (!rule.BuiltIn) {
-            if (ImGui.Button("Szabály törlése")) { rules.RemoveAt(selectedBookRule); selectedBookRule = Math.Max(0, selectedBookRule - 1); ApplyRuleBook(world, "Szabály törölve."); ImGui.EndChild(); return; }
-            ImGui.SameLine();
-        }
+        if (ImGui.Button("Szabály törlése")) { DeleteRule(world, rule); ImGui.EndChild(); return; }
+        ImGui.SameLine();
         if (ImGui.Button("Másolat")) {
             var copy = RuleEngine.Clone(new List<WorldRule> { rule })[0];
-            copy.BuiltIn = false; copy.Id = rule.Id + "-masolat-" + Guid.NewGuid().ToString("N")[..4]; copy.Name = rule.Name + " (másolat)"; copy.Enabled = false;
+            copy.Id = rule.Id + "-masolat-" + Guid.NewGuid().ToString("N")[..4]; copy.Name = rule.Name + " (másolat)"; copy.Enabled = false;
             rules.Add(copy); selectedBookRule = rules.Count - 1;
             message = "Másolat kikapcsolva készült: módosítsd, majd kapcsold be.";
         }

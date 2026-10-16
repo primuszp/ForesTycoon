@@ -9,6 +9,7 @@ namespace ForesTycoon
         private readonly TimberCargoSystem timberCargo;
         private int nextId = 1;
         internal Func<int[], VehicleRoadRoute> RoadRouteFactory { get; set; }
+        internal Func<int[], WorkResult<VehicleRoadRoute>, IEnumerable<int>> RoadRouteWorkFactory { get; set; }
         public bool UseRoadPhysics { get; set; } = true;
         /// <summary>Vehicle seconds per world second (the world's vehicle clock runs faster than its calendar).</summary>
         internal double TimeScale { get; set; } = 1;
@@ -26,18 +27,32 @@ namespace ForesTycoon
         /// <summary>Truck physics and road load every vehicle uses (the world's tuning).</summary>
         internal TruckSpec Spec = TruckSpec.Default;
         internal Func<float,float> RoadLoad;
-        internal Vehicle SpawnLogistics(int[] route,int[] sources,int mill)
+        internal Vehicle SpawnLogistics(int[] route, int[] sources, int mill)
         {
-            var vehicle=new Vehicle(nextId++,route,1.5,roadRoute:RoadRouteFactory?.Invoke(route),roadPhysics:UseRoadPhysics);
-            vehicle.SourceTiles=(int[])sources.Clone();vehicle.SawmillTileId=mill;vehicle.CargoStopsEnabled=true;
-            vehicle.TransportState=VehicleTransportState.Loading;vehicle.Hold();vehicles.Add(vehicle);return vehicle;
+            var result = new WorkResult<Vehicle>();
+            SimulationWork.Complete(SpawnFleetWork(route, sources, mill, false, result));
+            return result.Value;
         }
 
-        /// <summary>A fleet truck driving one way along <paramref name="route"/>; <see cref="Vehicle.TransitArrived"/> marks the end.</summary>
         internal Vehicle SpawnTransit(int[] route)
         {
-            var vehicle=new Vehicle(nextId++,route,1.5,roadRoute:RoadRouteFactory?.Invoke(route),roadPhysics:UseRoadPhysics){Transit=true};
-            vehicles.Add(vehicle);return vehicle;
+            var result = new WorkResult<Vehicle>();
+            SimulationWork.Complete(SpawnFleetWork(route, null, -1, true, result));
+            return result.Value;
+        }
+
+        internal IEnumerable<int> SpawnFleetWork(int[] route, int[] sources, int mill, bool transit, WorkResult<Vehicle> result)
+        {
+            var geometry = new WorkResult<VehicleRoadRoute>();
+            if (RoadRouteWorkFactory != null) {
+                foreach (int unit in RoadRouteWorkFactory(route, geometry)) yield return unit;
+            } else geometry.Value = RoadRouteFactory?.Invoke(route);
+            var vehicle = new Vehicle(nextId++, route, 1.5, roadRoute: geometry.Value, roadPhysics: UseRoadPhysics) { Transit = transit };
+            if (!transit) {
+                vehicle.SourceTiles = (int[])sources.Clone(); vehicle.SawmillTileId = mill; vehicle.CargoStopsEnabled = true;
+                vehicle.TransportState = VehicleTransportState.Loading; vehicle.Hold();
+            }
+            vehicles.Add(vehicle); result.Value = vehicle;
         }
         internal void Remove(Vehicle vehicle)=>vehicles.Remove(vehicle);
         internal bool Contains(Vehicle vehicle)=>vehicles.Contains(vehicle);
@@ -63,12 +78,14 @@ namespace ForesTycoon
             return vehicle;
         }
 
-        public void Update(double deltaSeconds)
+        public void Update(double deltaSeconds) => SimulationWork.Complete(UpdateWork(deltaSeconds));
+        public IEnumerable<int> UpdateWork(double deltaSeconds)
         {
             if (!double.IsFinite(deltaSeconds) || deltaSeconds < 0) throw new ArgumentOutOfRangeException(nameof(deltaSeconds));
             deltaSeconds *= TimeScale;
             for (int i = 0; i < vehicles.Count; i++)
             {
+                yield return 1;
                 Vehicle vehicle = vehicles[i];
                 // A tick runs in several substeps; drawing interpolates across the whole tick, not just the last substep.
                 double before = vehicle.RoutePosition;
@@ -175,6 +192,29 @@ namespace ForesTycoon
         {
             vehicles.Clear();
             nextId = 1;
+        }
+
+        internal IEnumerable<int> RemoveInvalidRoutesWork(Func<int, bool> isNetworkTile, Func<int, int, bool> connected)
+        {
+            // Stable compaction preserves cargo accounting and fleet iteration order.
+            int keep = 0, count = vehicles.Count;
+            for (int i = 0; i < count; i++) {
+                var vehicle = vehicles[i];
+                bool valid = true;
+                for (int r = 0; r < vehicle.Route.Length; r++) {
+                    yield return 1;
+                    if (!isNetworkTile(vehicle.Route[r]) || r > 0 && !connected(vehicle.Route[r - 1], vehicle.Route[r])) { valid = false; break; }
+                }
+                if (vehicle.LocalCargo || vehicle.Transit) {
+                    vehicle.RouteBlocked = !valid;
+                    if (!valid) vehicle.Hold();
+                } else if (!valid) {
+                    timberCargo.AddHarvested(vehicle.Unload());
+                    continue;
+                }
+                vehicles[keep++] = vehicle;
+            }
+            if (keep < count) vehicles.RemoveRange(keep, count - keep);
         }
 
         public int RemoveInvalidRoutes(Func<int, bool> isRoadTile)

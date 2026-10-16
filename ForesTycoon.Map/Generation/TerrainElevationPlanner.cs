@@ -5,24 +5,39 @@ namespace ForesTycoon.Map
 {
     static class TerrainElevationPlanner
     {
-        public static bool TryCreate(TerrainData data, int startNodeId, int delta, int maxHeight,
-            out Dictionary<int, int> changes)
+        internal sealed class Scratch
+        {
+            internal readonly Dictionary<int, int> Pending = new();
+            internal readonly Queue<(Node node, int height)> Queue = new();
+        }
+
+        public static bool TryCreate(TerrainData data, int startNodeId, int delta, int maxHeight, out Dictionary<int, int> changes)
+        {
+            var result = new WorkResult<Dictionary<int, int>>();
+            SimulationWork.Complete(CreateWork(data, startNodeId, delta, maxHeight, result));
+            changes = result.Value ?? new(); return result.Value != null;
+        }
+
+        internal static IEnumerable<int> CreateWork(TerrainData data, int startNodeId, int delta, int maxHeight,
+            WorkResult<Dictionary<int, int>> result, Scratch scratch = null)
         {
             if (data == null) throw new ArgumentNullException(nameof(data));
-            Dictionary<int, int> pending = new Dictionary<int, int>();
-            changes = pending;
-            if (startNodeId < 0 || startNodeId >= data.Nodes.Length || delta == 0) return false;
+            scratch ??= new Scratch();
+            var pending = scratch.Pending; pending.Clear();
+            var plannedHeights = scratch.Queue; plannedHeights.Clear();
+            result.Value = pending;
+            if (startNodeId < 0 || startNodeId >= data.Nodes.Length || delta == 0) { result.Value = null; yield break; }
 
-            Queue<(Node node, int height)> plannedHeights = new Queue<(Node node, int height)>();
             plannedHeights.Enqueue((data.Nodes[startNodeId], data.Nodes[startNodeId].W + delta));
 
             while (plannedHeights.Count > 0)
             {
+                yield return 1;
                 (Node node, int height) = plannedHeights.Dequeue();
                 if (height < 0 || height > maxHeight)
                 {
                     pending.Clear();
-                    return false;
+                    result.Value = null; yield break;
                 }
 
                 int currentHeight = pending.TryGetValue(node.Id, out int value) ? value : node.W;
@@ -35,10 +50,10 @@ namespace ForesTycoon.Map
                 EnqueueRelaxedNeighbour(node.U - 1, node.V, height);
             }
 
-            if (pending.Count > 0) return true;
+            if (pending.Count > 0) yield break;
 
             pending.Clear();
-            return false;
+            result.Value = null; yield break;
 
             void EnqueueRelaxedNeighbour(int u, int v, int height)
             {

@@ -49,9 +49,11 @@ namespace ForesTycoon.Ecology
         }
 
         internal void InvalidateLocal(IForestHabitat habitat, ulong before, ulong after, double targetYear, IEnumerable<int> changed)
+            => SimulationWork.Complete(InvalidateLocalWork(habitat, before, after, targetYear, changed));
+        internal IEnumerable<int> InvalidateLocalWork(IForestHabitat habitat, ulong before, ulong after, double targetYear, IEnumerable<int> changed)
         {
-            if (published || revision != before || year != targetYear) return;
-            foreach (int id in changed) InvalidateTile(habitat, id);
+            if (published || revision != before || year != targetYear) yield break;
+            foreach (int id in changed) { InvalidateTile(habitat, id); yield return 1; }
             revision = after;
         }
 
@@ -73,13 +75,17 @@ namespace ForesTycoon.Ecology
 
         internal void Advance(IForestHabitat habitat, ForestTreeStore store, ulong currentRevision,
             double targetYear, double secondsUntilMonth)
+            => SimulationWork.Complete(AdvanceWork(habitat, store, currentRevision, targetYear, secondsUntilMonth));
+
+        internal IEnumerable<int> AdvanceWork(IForestHabitat habitat, ForestTreeStore store, ulong currentRevision,
+            double targetYear, double secondsUntilMonth)
         {
             if (revision != currentRevision || year != targetYear)
             {
                 revision = currentRevision; year = targetYear; cursor = 0;
                 patches.Clear();
-                foreach (var entry in store.Patches) patches.Add(entry);
-                competition.BeginSnapshot();
+                foreach (var entry in store.Patches) { patches.Add(entry); yield return 1; }
+                foreach (int unit in competition.BeginSnapshotWork()) yield return unit;
                 ClearRepairs(); published = false;
             }
             LastStepSnapshotPatches = LastStepResourcePatches = 0;
@@ -88,6 +94,7 @@ namespace ForesTycoon.Ecology
             int work = (int)Math.Ceiling((double)remaining / steps);
             for (int i = 0; i < work; i++)
             {
+                yield return 1;
                 if (cursor < patches.Count)
                 {
                     competition.SnapshotPatch(habitat, store, patches[cursor++].Key, year);
@@ -123,6 +130,7 @@ namespace ForesTycoon.Ecology
                 float age = 0, health = 0, volume = 0;
                 for (int treeIndex = 0; treeIndex < patch.Count; treeIndex++)
                 {
+                    yield return 1;
                     var source = patch.Trees[treeIndex];
                     var tree = source.Settle(year);
                     var resources = competition.Evaluate(habitat, tree, year, 1, 1, waterAllocated: true);

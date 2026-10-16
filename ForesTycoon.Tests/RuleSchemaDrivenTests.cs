@@ -64,7 +64,7 @@ public sealed class RuleSchemaDrivenTests
     }
 
     [Fact]
-    public void TheTileIsATypedEntityAndItsFormerNamesStillWork()
+    public void TheTileIsATypedEntityAndRulesUseItsCurrentFields()
     {
         var tile = RuleEngine.Scope("tile");
         Assert.Contains(tile.Fields, f => f.Name == "rootWater");
@@ -74,18 +74,18 @@ public sealed class RuleSchemaDrivenTests
         using var world = World();
         var project = world.RuleProjectDocument; project.Algorithms = null;
         project.Fields.Add(new RuleFieldDefinition { Name = "saját.wet", Scope = "tile", Max = 100 });
-        project.Rules.Add(new WorldRule { Id = "old-names", Name = "Old names", Scope = "tile",
-            Condition = "gyökérzónavíz > talaj.hervadáspont", Effects = { new() { Target = "saját.wet", Mode = "set", Formula = "vízellátottság + burkolt" } } });
-        project.Rules.Add(new WorldRule { Id = "old-relation", Name = "Old road", Scope = "road",
+        project.Rules.Add(new WorldRule { Id = "typed-fields", Name = "Typed fields", Scope = "tile",
+            Condition = "rootWater > wiltingPoint", Effects = { new() { Target = "saját.wet", Mode = "set", Formula = "waterSupply + paved" } } });
+        project.Rules.Add(new WorldRule { Id = "typed-road", Name = "Typed road", Scope = "road",
             Effects = { new() { Target = "condition", Mode = "add", Influence = new() { Terms = {
-                new() { Name = "Macadam", Amount = 0, Conditions = { new() { Field = "isMacadam", Comparison = "greater", Value = .5 } } } } } } } });
+                new() { Name = "Macadam", Amount = 0, Conditions = { new() { Field = "surface", Comparison = "greater", Value = .5 } } } } } } } });
         world.QueueRuleProject(project); world.ExecutePendingCommands();
 
         var saved = world.RuleProjectDocument.Rules;
-        var migrated = saved.Single(r => r.Id == "old-names");
-        Assert.Equal("rootWater > wiltingPoint", migrated.Condition);
-        Assert.Equal("waterSupply + paved", migrated.Effects[0].Formula);
-        Assert.Equal("surface", saved.Single(r => r.Id == "old-relation").Effects[0].Influence.Terms[0].Conditions[0].Field);
+        var authored = saved.Single(r => r.Id == "typed-fields");
+        Assert.Equal("rootWater > wiltingPoint", authored.Condition);
+        Assert.Equal("waterSupply + paved", authored.Effects[0].Formula);
+        Assert.Equal("surface", saved.Single(r => r.Id == "typed-road").Effects[0].Influence.Terms[0].Conditions[0].Field);
 
         world.RuleBook.Run(world, .1, 0);
         Assert.Null(world.RuleBook.LastError);
@@ -110,7 +110,6 @@ public sealed class RuleSchemaDrivenTests
 
         var project = world.RuleProjectDocument; project.Algorithms = null;
         var rule = project.Rules.Single(r => r.Id == "road.weather");
-        rule.UseLegacyRoadOverride = false;
         rule.Effects = new() { new() { Target = "condition", Mode = "add", Influence = new() { PerYear = false, Terms = {
             new() { Name = "Macadam only", Amount = .25, Conditions = { new() { Field = "surface", Comparison = "equal", Value = 1 } } } } } } };
         world.QueueRuleProject(project); world.ExecutePendingCommands();
@@ -125,7 +124,7 @@ public sealed class RuleSchemaDrivenTests
     public void WorldValuesAreTheWorldEntityFields()
     {
         Assert.Equal(new[] { "world.time", "world.treeCount", "world.roadCount", "world.rain", "world.temperature",
-            "world.snow", "world.water", "world.income", "world.expenses", "world.runningCosts", "world.balance" }, GameWorld.RuleWorldFields);
+            "world.snow", "world.water", "world.income", "world.expenses", "world.runningCosts", "world.balance", "world.hoursPerYear" }, GameWorld.RuleWorldFields);
         using var world = World();
         for (int i = 0; i < 30; i++) world.Update(1d / 30);
         var scope = RuleEngine.Scope("world");

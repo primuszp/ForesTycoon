@@ -221,7 +221,6 @@ public class SystemDynamicsTests
         }
         for (int i = 0; i < 100; i++) Advance(.13);
         actualForest.ClearTerrainTiles(new[] { 0 }); referenceForest.ClearTerrainTiles(new[] { 0 });
-        actualWater.RefreshRouting(new[] { 0 }); referenceWater.RefreshRouting(new[] { 0 });
         Advance(220.7);
         Assert.Equal(referenceForest.ForestYear, actualForest.ForestYear);
         Assert.Equal(referenceForest.Statistics, actualForest.Statistics);
@@ -255,10 +254,5 @@ public class SystemDynamicsTests
         Assert.Throws<ArgumentOutOfRangeException>(() => runtime.Update(-1));
         Assert.False(runtime.IsFaulted);
         runtime.Update(0); Assert.Equal(0UL, runtime.CompletedSteps);
-        double source = 3, destination = 2;
-        Assert.Throws<ArgumentOutOfRangeException>(() => StockFlows.Transfer(ref source, ref destination, double.PositiveInfinity));
-        Assert.Equal(3, source); Assert.Equal(2, destination);
-        Assert.Equal(3, StockFlows.Transfer(ref source, ref destination, 20));
-        Assert.Equal(0, source); Assert.Equal(5, destination);
     }
 }

@@ -20,22 +20,21 @@ namespace ForesTycoon.TreeModels
         // A mixed forest touches a fraction of species x phase x light x variant; ~22 KB each caps this near 45 MB.
         private const int Capacity = 2048;
 
-        private readonly record struct Key(ForestSpecies Species, int Variant, TreeLifePhase Phase, int Light);
+        private readonly record struct Key(ForestSpecies Species, int Variant, TreeLifePhase Phase, int Light, float ShadeTolerance);
         private static readonly Dictionary<Key, TreeSkeleton> Cache = new();
         private static readonly Queue<Key> Order = new();
 
         internal static TreeSkeleton Skeleton(ForestSpecies species, int seed, TreeLifePhase phase, int lightBand)
         {
-            var key = new Key(species, seed & (Variants - 1), phase, lightBand);
-            lock (Cache)
-            {
-                if (Cache.TryGetValue(key, out var skeleton)) return skeleton;
-                var tree = new TreeImpl(key.Variant, Parameters(key));
-                tree.Make();
-                skeleton = TreeSkeleton.From(tree, key.Variant, MaxLeafSamples);
+            var key = new Key(species, seed & (Variants - 1), phase, lightBand, ForestSpeciesProfile.For(species).ShadeTolerance);
+            lock (Cache) if (Cache.TryGetValue(key, out var ready)) return ready;
+            var tree = new TreeImpl(key.Variant, Parameters(key));
+            tree.Make();
+            var skeleton = TreeSkeleton.From(tree, key.Variant, MaxLeafSamples);
+            lock (Cache) {
+                if (Cache.TryGetValue(key, out var ready)) return ready;
                 if (Cache.Count == Capacity) Cache.Remove(Order.Dequeue());
-                Cache.Add(key, skeleton); Order.Enqueue(key);
-                return skeleton;
+                Cache.Add(key, skeleton); Order.Enqueue(key); return skeleton;
             }
         }
 

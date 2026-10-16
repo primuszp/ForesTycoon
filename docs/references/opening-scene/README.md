@@ -89,3 +89,16 @@ Editor: a Pálya lap **Utak és épületek** rétege szerkeszthető.
 A rögzített nyitójelenet meglévő útjai és épületei változatlanok, a referencia-lenyomatok egyeznek.
 
 Ellenőrzés: 1729 teszt sikeres. Új a `SceneStructureTests`: ingyenes építés járműparkkal, determinisztikus betöltés, hibás elhelyezés jelzése, érvénytelen út elutasítása. A játék és az editor OpenGL-próbája is sikeres.
+
+## Nyolcadik lépés: a vízháztartás a projekt szabályai
+
+A vízmérleg (csapadék, lombkorona, beszivárgás, párolgás, fák vízfelvétele, mélybe szivárgás, alaplefolyás, lefolyás, hóolvadás) a projekt szerkeszthető áramlásszabályaiból fut; a natív vízlépés és a hozzá tartozó régi képletcsatlakozások megszűntek. A lenyomatok közül emiatt a `Behaviors` (a megszűnt csatlakozások gráfjai kimaradnak) és az `Ecology` (a fák igény-/felvételi rasterei nélkül) változott; a terep, az erdő, a logisztika és a grafika lenyomata változatlan. Az archivált `opening.world.json.gz` megmaradt: betöltéskor ugyanerre az állapotra vezetődik át, ezt a `WorldLoaderTests` ellenőrzi.
+
+## Kilencedik lépés: korábbi szabályalakok kivezetése – 2026-10-16
+
+A szállított és archivált projektben, valamint a tömörített kezdeti világállapotokban
+eltávolítottuk a hat megszűnt vízformula-kötést és az útromlás külön formula-kötését.
+A vízállapotból kikerült a négy már nem használt igény-/felvételi raster. A betöltő ezekhez
+már nem tart külön szabályátvezető vagy elhagyott mezőket elfogadó kódot.
+A referencia-lenyomatok közül kizárólag a `Behaviors` változott az útromlási kötés törlése miatt;
+a terep, az ökológiai állapot, a logisztika és a grafika egyezését külön összevetés ellenőrizte.

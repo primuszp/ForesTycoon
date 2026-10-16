@@ -79,38 +79,43 @@ namespace ForesTycoon
                 SoilLandscapeDefinition.Default, ClimateDefinition.Default, false) { }
 
         private GameWorld(TerrainMap map, GraphicsSettings graphics, double forestYearSeconds, SoilLandscapeDefinition soilModel,
-            ClimateDefinition climate, bool enableRendering)
+            ClimateDefinition climate, bool enableRendering, Ecosystem preparedEcosystem = null, bool deferRules = false)
         {
             Graphics = graphics;
+            ruleValues = new(this);
             this.map = map ?? throw new ArgumentNullException(nameof(map));
             try
             {
-                ecosystem = new Ecosystem(map, forestYearSeconds, soilModel, climate);
-                ecosystem.Forest.StumpsByRules = true; // the rule book runs stump decay (forest.stumps)
+                ecosystem = preparedEcosystem ?? new Ecosystem(map, forestYearSeconds, soilModel, climate);
                 timberCargo = systems.Add(new TimberCargoSystem());
                 vehicles = systems.Add(new VehicleSystem(timberCargo, route => VehicleRoadRoute.Create(this.map, route)) { TimeScale = VehicleTimeScale });
+                vehicles.RoadRouteWorkFactory = (route, result) => VehicleRoadRoute.CreateWork(this.map, route, result);
                 effects = systems.Add(new WorldEffectSystem());
                 InitializeLogistics();
-                InitializeRuleProject();
+                if (!deferRules) InitializeRuleProject();
                 if (enableRendering) AttachRendering();
             }
             catch { Dispose(); throw; }
         }
 
-        internal void AttachRendering()
+        internal void AttachRendering() => SimulationWork.Complete(AttachRenderingWork());
+
+        private IEnumerable<int> AttachRenderingWork()
         {
             EnsureAvailable();
-            if (terrainRenderer != null) { terrainRenderer.VerifyAccess(); return; }
-            var scene = new Terrain(map);
+            if (terrainRenderer != null) { terrainRenderer.VerifyAccess(); yield break; }
+            var scene = new Terrain(map, deferGeometry: true);
+            bool attached = false;
             try
             {
+                foreach (int unit in scene.PrepareBaseGeometryWork()) yield return unit;
                 var renderer = new TerrainRenderer(scene, vehicles, effects, forest, Graphics, Environment, wildlife, Logistics);
                 // The ecosystem may rebuild its environment (new map, loaded save): always draw the current one.
                 renderer.FloodDepth = id => Environment?.SurfaceDepth(id) ?? 0;
                 terrain = scene;
-                terrainRenderer = renderer;
+                terrainRenderer = renderer; attached = true;
             }
-            catch { scene.Dispose(); throw; }
+            finally { if (!attached) scene.Dispose(); }
         }
 
         public Tile HoveredTile => map.HoveredTile;
@@ -205,46 +210,102 @@ namespace ForesTycoon
         internal ulong LastLoadReplayedTicks { get; private set; }
         internal bool ProfileUpdates { get; set; }
         internal WorldUpdateProfile LastUpdateProfile { get; private set; }
+        /// <summary>With <see cref="ProfileUpdates"/>: what the rule step of the last update cost (null when none ran).</summary>
+        internal double? LastRuleStepMilliseconds { get; private set; }
 
+        // Synchronous simulation adapter for headless replay/tests. Interactive hosts use ContinueUpdate.
         public void Update(double fixedDeltaSeconds)
         {
-            EnsureAvailable();
-            terrainRenderer?.VerifyAccess();
-            if (!double.IsFinite(fixedDeltaSeconds) || fixedDeltaSeconds < 0)
+            while (!ContinueUpdate(fixedDeltaSeconds, 256)) { }
+        }
+
+        private IEnumerator<int> updateWork;
+        private double updateDelta;
+        private int workPhase;
+        private bool pendingForestRateRefresh;
+        private readonly double[] workCpu = new double[6];
+        private static readonly string[] WorkPhaseNames = { "dynamics", "ecology", "logistics", "rules", "wildlife", "systems" };
+        internal string ActiveWorkProcess => WorkPhaseNames[workPhase];
+        internal bool UpdatePending => updateWork != null;
+        private readonly Queue<Action> tickBoundaryActions = new();
+        internal int LastUpdateWorkUnits { get; private set; }
+
+        /// <summary>Runs at most budget deterministic work units. The logical tick commits only on completion.</summary>
+        internal bool ContinueUpdate(double fixedDeltaSeconds, int budget = 64)
+        {
+            EnsureAvailable(); terrainRenderer?.VerifyAccess();
+            if (!double.IsFinite(fixedDeltaSeconds) || fixedDeltaSeconds < 0 || budget <= 0)
                 throw new ArgumentOutOfRangeException(nameof(fixedDeltaSeconds));
-            try
-            {
-                long start = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
-                dynamics.Step(fixedDeltaSeconds, forest.ForestYear * ecosystem.ForestYearSeconds);
-                ecosystem.Update(fixedDeltaSeconds);
-                long environmentUpdated = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
-                // Vehicles and machines keep their own clock, faster than the calendar (see VehicleTimeScale).
-                Logistics?.Update(fixedDeltaSeconds * Tuning[Tune.VehicleTimeScale]);
-                WeatherRoads(fixedDeltaSeconds);
-                long logisticsUpdated = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
-                wildlife.Update(fixedDeltaSeconds * WildlifeTimeScale, map, forest, Environment);
-                long wildlifeUpdated = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
-                systems.Update(fixedDeltaSeconds);
-                worldTick++;
-                if (ProfileUpdates)
-                    LastUpdateProfile = new(Stopwatch.GetElapsedTime(start, environmentUpdated).TotalMilliseconds,
-                        Stopwatch.GetElapsedTime(environmentUpdated, logisticsUpdated).TotalMilliseconds,
-                        Stopwatch.GetElapsedTime(logisticsUpdated, wildlifeUpdated).TotalMilliseconds,
-                        Stopwatch.GetElapsedTime(wildlifeUpdated).TotalMilliseconds);
+            if (updateWork != null && fixedDeltaSeconds != updateDelta)
+                throw new InvalidOperationException("A pending tick must retain its time step.");
+            if (generationWork != null || commands.WorkPending) return false;
+            updateDelta = fixedDeltaSeconds;
+            if (updateWork == null) { Array.Clear(workCpu); workPhase = 0; updateWork = UpdateWork(fixedDeltaSeconds).GetEnumerator(); }
+            LastUpdateWorkUnits = 0;
+            int measuredPhase = workPhase;
+            long phaseStarted = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
+            try {
+                while (LastUpdateWorkUnits < budget) {
+                    bool more = updateWork.MoveNext();
+                    if (ProfileUpdates && measuredPhase != workPhase) {
+                        workCpu[measuredPhase] += Stopwatch.GetElapsedTime(phaseStarted).TotalMilliseconds;
+                        measuredPhase = workPhase; phaseStarted = Stopwatch.GetTimestamp();
+                    }
+                    if (!more) {
+                        updateWork.Dispose(); updateWork = null;
+                        if (ProfileUpdates) {
+                            workCpu[measuredPhase] += Stopwatch.GetElapsedTime(phaseStarted).TotalMilliseconds;
+                            LastUpdateProfile = new(workCpu[0] + workCpu[1], workCpu[2] + workCpu[3], workCpu[4], workCpu[5]);
+                            LastRuleStepMilliseconds = workCpu[3] > 0 ? workCpu[3] : null;
+                        }
+                        PublishBoundaryActions();
+                        return true;
+                    }
+                    LastUpdateWorkUnits += Math.Max(1, updateWork.Current);
+                }
+                if (ProfileUpdates) workCpu[measuredPhase] += Stopwatch.GetElapsedTime(phaseStarted).TotalMilliseconds;
+                return false;
             }
-            catch { faulted = true; throw; }
+            catch when (updateWork != null) { updateWork.Dispose(); updateWork = null; faulted = true; throw; }
+        }
+
+        /// <summary>Requests a snapshot/operation at a complete tick, without draining unfinished work.</summary>
+        internal void AtTickBoundary(Action action)
+        {
+            ArgumentNullException.ThrowIfNull(action);
+            if (BoundaryPending) tickBoundaryActions.Enqueue(action); else action();
+        }
+
+        private IEnumerable<int> UpdateWork(double fixedDeltaSeconds)
+        {
+            LastRuleStepMilliseconds = null;
+            if (pendingForestRateRefresh) {
+                foreach (int unit in forest.RefreshEnvironmentRatesWork()) yield return unit;
+                pendingForestRateRefresh = false;
+            }
+            foreach (int unit in dynamics.StepWork(fixedDeltaSeconds, forest.ForestYear * ecosystem.ForestYearSeconds)) yield return unit;
+            workPhase = 1;
+            foreach (int unit in ecosystem.UpdateWork(fixedDeltaSeconds)) yield return unit;
+            workPhase = 2;
+            foreach (int unit in Logistics.UpdateWork(fixedDeltaSeconds * Tuning[Tune.VehicleTimeScale])) yield return unit;
+            workPhase = 3;
+            foreach (int unit in Environment.RefreshVegetationWork()) yield return unit;
+            foreach (int unit in WeatherRoadsWork(fixedDeltaSeconds)) yield return unit;
+            workPhase = 4;
+            foreach (int unit in wildlife.UpdateWork(fixedDeltaSeconds * WildlifeTimeScale, map, forest, Environment)) yield return unit;
+            workPhase = 5;
+            foreach (int unit in systems.UpdateWork(fixedDeltaSeconds)) yield return unit;
+            worldTick++;
         }
 
         public int ExecutePendingCommands()
         {
-            EnsureAvailable();
-            terrainRenderer?.VerifyAccess();
-            try
-            {
-                backgroundJobs.PublishCompleted();
-                return commands.ExecutePending(this);
-            }
-            catch { faulted = true; throw; }
+            EnsureAvailable(); terrainRenderer?.VerifyAccess();
+            if (UpdatePending || ruleEngine?.StepPending == true) return 0;
+            if (generationWork != null) throw new InvalidOperationException("Use ContinueCommands while generating a world.");
+            int completed = 0, count = commands.Count;
+            do { completed += ContinueCommands(256); } while (commands.WorkPending && completed < count);
+            return completed;
         }
         public void QueueElevationEdit(int nodeId, int delta, int radius, int strength) =>
             Enqueue(new EditElevationCommand(nodeId, delta, radius, strength));
@@ -344,27 +405,16 @@ namespace ForesTycoon
         private void Enqueue(IWorldCommand command)
         {
             EnsureAvailable();
-            commandJournal.Add(command.ToRecord(worldTick));
+            if (GenerationPending) generationInputs.Add(command);
+            commandJournal.Add(command.ToRecord(worldTick + (UpdatePending ? 1UL : 0UL)));
             commands.Enqueue(command);
         }
 
-        void IWorldCommandTarget.ExecuteElevationEdit(int nodeId, int delta, int radius, int strength)
-        {
-            int[] changedTiles = map.EditElevationAtNode(nodeId, delta, radius, strength);
-            if (changedTiles.Length == 0) return;
-            ecosystem.ApplyTerrainEdit(changedTiles);
-            if (map.TryGetNodePosition(nodeId, out Vector3 position))
-                effects.Spawn(WorldEffectKind.TerrainChanged, position);
-        }
+        void IWorldCommandTarget.ExecuteElevationEdit(int nodeId, int delta, int radius, int strength) =>
+            SimulationWork.Complete(ExecuteCommandWork(new EditElevationCommand(nodeId, delta, radius, strength)));
 
-        void IWorldCommandTarget.ExecuteLegacyElevationEdit(int nodeId, int delta, int radius, int strength)
-        {
-            // Only historical commands use the old rule; new edits in loaded worlds use the fixed rule.
-            map.EditElevationAtNode(nodeId, delta, radius, strength);
-            forest.RefreshHabitat();
-            Environment.RefreshRouting();
-            if (map.TryGetNodePosition(nodeId, out Vector3 position)) effects.Spawn(WorldEffectKind.TerrainChanged, position);
-        }
+        void IWorldCommandTarget.ExecuteLegacyElevationEdit(int nodeId, int delta, int radius, int strength) =>
+            SimulationWork.Complete(ExecuteCommandWork(new EditElevationCommand(nodeId, delta, radius, strength, true)));
 
         void IWorldCommandTarget.ExecuteRoadPath(int startTileId, int endTileId, bool remove) =>
             ((IWorldCommandTarget)this).ExecuteRoadPath(startTileId, endTileId, remove, RoadPaving.Asphalt);
@@ -377,105 +427,52 @@ namespace ForesTycoon
             return false;
         }
 
-        void IWorldCommandTarget.ExecuteRoadRepair(int startTileId, int endTileId)
-        {
-            if (!Fundable()) return;
-            foreach (var (tile, damage) in map.RepairRoadTilePath(startTileId, endTileId))
-                Expenses += RoadCosts.Repair(map.GetRoadPaving(tile), damage, Tuning);
-            if (map.TryGetRoadTileCenter(endTileId, out Vector3 position)) effects.Spawn(WorldEffectKind.RoadChanged, position);
-        }
+        void IWorldCommandTarget.ExecuteRoadRepair(int startTileId, int endTileId) =>
+            SimulationWork.Complete(ExecuteCommandWork(new RoadRepairCommand(startTileId, endTileId)));
+
+        /// <summary>Game seconds between rule steps; each logical step can suspend between bounded work units.</summary>
+        internal const double RuleStepSeconds = 0.5;
 
         /// <summary>Rain and wet ground wear the roads, and skid-trail ruts fade; applied twice a second of game time.</summary>
-        private void WeatherRoads(double seconds)
+        private IEnumerable<int> WeatherRoadsWork(double seconds)
         {
             roadWeatherSeconds += seconds;
-            if (roadWeatherSeconds < 0.5) return;
-            float years = (float)(roadWeatherSeconds / ecosystem.ForestYearSeconds);
-            // The rule book runs here, every half game second: built-in rules (e.g. trail ageing) and the project's own.
-            if (ruleEngine.Run(this, years, forest.ForestYear))
-            {
-                Logistics?.TrailsChanged();
-                vehicles.RemoveInvalidRoutes(map.IsNetworkTile);
+            if (!ruleEngine.StepPending && roadWeatherSeconds >= RuleStepSeconds) {
+                float years = (float)(roadWeatherSeconds / ecosystem.ForestYearSeconds);
+                Environment.RefreshLocalClimate();
+                ruleEngine.Begin(this, years, forest.ForestYear);
+                roadWeatherSeconds = 0;
             }
-            roadWeatherSeconds = 0;
+            if (ruleEngine.StepPending) {
+                foreach (int unit in ruleEngine.ContinueWork(this)) yield return unit;
+                if (ruleEngine.NetworkChanged) {
+                    Logistics?.TrailsChanged();
+                    foreach (int unit in vehicles.RemoveInvalidRoutesWork(map.IsNetworkTile, map.AreNetworkNeighbours)) yield return unit;
+                }
+            }
         }
 
-        // Compatibility only: the card supplies the base rate; the former native weather loop no longer runs.
-        internal double AdjustRoadWeatherRate(int id, double rate, double years, double time) =>
-            behaviorPolicy.Overrides("road.weather", "road")
-                ? Math.Max(0, behaviorPolicy.Evaluate(new("road.weather", "road", (ulong)id, rate, years, time,
-                    map.GetRoadCondition(id), (float)Math.Clamp(Environment.RainRate / 20, 0, 1)))) : rate;
+        void IWorldCommandTarget.ExecuteSkidTrailPath(int startTileId, int endTileId, bool remove) =>
+            SimulationWork.Complete(ExecuteCommandWork(new SkidTrailPathCommand(startTileId, endTileId, remove)));
 
-        void IWorldCommandTarget.ExecuteSkidTrailPath(int startTileId, int endTileId, bool remove)
-        {
-            if (!remove && !Fundable()) return;
-            int[] changed = remove ? map.RemoveSkidTrailPath(startTileId, endTileId) : map.MarkSkidTrailPath(startTileId, endTileId);
-            if (changed.Length == 0) return;
-            if (!remove) Expenses += changed.Length * Tuning[Tune.TrailCost];
-            Logistics?.TrailsChanged();
-            if (remove) vehicles.RemoveInvalidRoutes(map.IsNetworkTile); else vehicles.RefreshLogisticsRoutes(map.IsNetworkTile);
-            if (map.TryGetTileCenter(endTileId, out Vector3 position)) effects.Spawn(WorldEffectKind.RoadChanged, position);
-        }
-
-        void IWorldCommandTarget.ExecuteRoadPath(int startTileId, int endTileId, bool remove, RoadPaving surface)
-        {
-            if (!remove && !Fundable()) return;
-            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
-            int[] changed = remove ? map.RemoveRoadTilePath(startTileId, endTileId)
-                : map.BuildRoadTilePath(startTileId, endTileId, surface);
-            if (changed.Length == 0) return;
-            if (!remove) Expenses += changed.Length * RoadCosts.Build(surface, Tuning);
-            long t1 = System.Diagnostics.Stopwatch.GetTimestamp();
-            forest.RefreshHabitat(changed);
-            long t2 = System.Diagnostics.Stopwatch.GetTimestamp();
-            Environment?.RefreshRouting(changed);
-            long t3 = System.Diagnostics.Stopwatch.GetTimestamp();
-            if (remove) vehicles.RemoveInvalidRoutes(map.IsNetworkTile);
-            else vehicles.RefreshLogisticsRoutes(map.IsNetworkTile);
-            long t4 = System.Diagnostics.Stopwatch.GetTimestamp();
-            static double Ms(long a, long b) => System.Diagnostics.Stopwatch.GetElapsedTime(a, b).TotalMilliseconds;
-            LastRoadBuildProfile = $"[{changed.Length} tiles: map {Ms(t0, t1):F1}, habitat {Ms(t1, t2):F1}, routing {Ms(t2, t3):F1}, vehicles {Ms(t3, t4):F1}]";
-            if (map.TryGetRoadTileCenter(endTileId, out Vector3 position))
-                effects.Spawn(WorldEffectKind.RoadChanged, position);
-        }
+        void IWorldCommandTarget.ExecuteRoadPath(int startTileId, int endTileId, bool remove, RoadPaving surface) =>
+            SimulationWork.Complete(RoadCommandWork(startTileId, endTileId, remove, surface));
 
         void IWorldCommandTarget.ExecuteSpawnVehicle()
         {
             Logistics.Dispatch(vehicles);
         }
 
-        void IWorldCommandTarget.ExecutePlantForest(int tileId, ForestSpecies species)
-        {
-            lastForestryAction = forest.Plant(tileId, species);
-            if (map.TryGetTileCenter(tileId, out Vector3 position))
-                effects.Spawn(lastForestryAction == ForestryActionResult.Planted
-                    ? WorldEffectKind.TreePlanted
-                    : WorldEffectKind.ForestryRejected, position);
-        }
+        void IWorldCommandTarget.ExecutePlantForest(int tileId, ForestSpecies species) =>
+            SimulationWork.Complete(ExecuteCommandWork(new PlantForestCommand(tileId, species)));
 
         void IWorldCommandTarget.ExecuteHarvestForest(int tileId)
         {
             DesignateHarvest(tileId, tileId);
         }
 
-        void IWorldCommandTarget.ExecutePlantForestArea(int startTileId, int endTileId, ForestSpecies species)
-        {
-            Span<int> tileIds = stackalloc int[TerrainMap.MaximumAreaTiles];
-            int count = map.GetTileRectangle(startTileId, endTileId, tileIds);
-
-            int planted = 0;
-            int areaId = forest.AllocatePlantationId();
-            for (int i = 0; i < count; i++)
-            {
-                lastForestryAction = forest.PlantInArea(tileIds[i], species, areaId);
-                if (lastForestryAction == ForestryActionResult.Planted) planted++;
-            }
-
-            lastForestryArea = new ForestryAreaSummary(count, planted, 0f);
-            if (planted > 0) forest.FinishPlantingArea(areaId);
-            SpawnAreaEffect(startTileId, endTileId,
-                planted > 0 ? WorldEffectKind.TreePlanted : WorldEffectKind.ForestryRejected);
-        }
+        void IWorldCommandTarget.ExecutePlantForestArea(int startTileId, int endTileId, ForestSpecies species) =>
+            SimulationWork.Complete(ExecuteCommandWork(new PlantForestAreaCommand(startTileId, endTileId, species)));
 
         void IWorldCommandTarget.ExecuteHarvestForestArea(int startTileId, int endTileId)
         {
@@ -541,6 +538,7 @@ namespace ForesTycoon
         public void Save(Stream destination, double tickRate = 30.0)
         {
             EnsureAvailable();
+            if (BoundaryPending) throw new InvalidOperationException("Save must be requested at a completed tick (AtTickBoundary).");
             WorldSaveSerializer.Write(destination, new WorldSaveData
             {
                 TickRate = tickRate,
@@ -579,8 +577,9 @@ namespace ForesTycoon
             LastLoadReplayedTicks = replayedTicks;
         }
 
-        private void Adopt(GameWorld candidate)
+        private void Adopt(GameWorld candidate, bool preserveBoundaryActions = false)
         {
+            updateWork?.Dispose(); updateWork = null; if (!preserveBoundaryActions) tickBoundaryActions.Clear();
             (map, candidate.map) = (candidate.map, map);
             (terrain, candidate.terrain) = (candidate.terrain, terrain);
             (terrainRenderer, candidate.terrainRenderer) = (candidate.terrainRenderer, terrainRenderer);
@@ -596,17 +595,18 @@ namespace ForesTycoon
             (commandJournal, candidate.commandJournal) = (candidate.commandJournal, commandJournal);
             // Route creation must follow this world's terrain after the ownership transfer.
             vehicles.RoadRouteFactory = route => VehicleRoadRoute.Create(map, route);
+            vehicles.RoadRouteWorkFactory = (route, result) => VehicleRoadRoute.CreateWork(map, route, result);
             roadRule = candidate.roadRule;
             ruleProjectName = candidate.ruleProjectName; ruleProjectWorld = candidate.ruleProjectWorld;
             algorithmGraphs = candidate.algorithmGraphs;
             ruleEngine = candidate.ruleEngine;
-            dynamics = new(candidate.dynamics.Document, RuleWorldFields, ReadWorldValue);
-            dynamics.Restore(candidate.dynamics.Capture());
-            behaviorPolicy = new(candidate.BehaviorDocument, DynamicsRuntime.Keys(dynamics.Document, RuleWorldFields), ReadRuleValue);
-            behaviorPolicy.Controllers.Restore(candidate.BehaviorStates);
+            dynamics = candidate.dynamics;
+            behaviorPolicy = candidate.behaviorPolicy;
+            ruleValues = candidate.ruleValues; ruleValues.World = this;
             BindBehaviors();
             Expenses = candidate.Expenses;
             roadWeatherSeconds = candidate.roadWeatherSeconds;
+            pendingForestRateRefresh = candidate.pendingForestRateRefresh;
             BindRoadRules();
             ApplyTuning(candidate.Tuning);
             foreach (var vehicle in vehicles.Vehicles) { vehicle.RoadState = vehicles.RoadState; vehicle.RoadWear = vehicles.RoadWear; }
@@ -626,7 +626,7 @@ namespace ForesTycoon
             {
                 while (commandIndex < save.Commands.Count && save.Commands[commandIndex].Tick == tick)
                     commands.Enqueue(WorldCommandFactory.Create(save.ReplayCommand(save.Commands[commandIndex++])));
-                commands.ExecutePending(this);
+                ExecutePendingCommands();
                 if (tick == save.Tick) break;
                 Update(fixedDelta);
             }
@@ -657,6 +657,8 @@ namespace ForesTycoon
             if (disposed) return;
             terrainRenderer?.VerifyAccess();
             disposed = true;
+            updateWork?.Dispose(); updateWork = null; tickBoundaryActions.Clear();
+            generationWork?.Dispose(); generationWork = null; commands.Clear();
             backgroundJobs.Dispose();
             terrainRenderer?.Dispose();
             terrain?.Dispose();

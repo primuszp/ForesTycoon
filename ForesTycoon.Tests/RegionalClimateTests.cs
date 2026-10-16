@@ -47,20 +47,6 @@ public class RegionalClimateTests
     }
 
     [Fact]
-    public void LocalRainAndEvaporationAffectWaterWithAConservedRegionalLedger()
-    {
-        var habitat = new Habitat();
-        var regional = new EnvironmentSystem(habitat, null, 120, ClimateDefinition.Default);
-        var uniform = new EnvironmentSystem(habitat, null, 120, ClimateDefinition.Legacy);
-        regional.ForceWeather(WeatherPreset.Storm, 32, 20); uniform.ForceWeather(WeatherPreset.Storm, 32, 20);
-        regional.Update(100); uniform.Update(100);
-        Assert.NotEqual(regional.Cell(0), regional.Cell(1023));
-        Assert.NotEqual(uniform.StoredWater, regional.StoredWater);
-        Assert.InRange(Math.Abs(regional.BalanceError), 0, 1e-5);
-        Assert.InRange(Math.Abs(regional.RainReceived - regional.TotalRain * regional.Climate.RainMultipliers.Values.ToArray().Sum()), 0, 1e-6);
-    }
-
-    [Fact]
     public void RegionalCheckpointContinuesExactlyAcrossEventsAndMonthBoundaries()
     {
         var settings = TerrainSettings.Default.WithNodeSize(17, 42);

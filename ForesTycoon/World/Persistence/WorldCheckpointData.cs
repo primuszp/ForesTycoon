@@ -43,5 +43,10 @@ namespace ForesTycoon
         Dictionary<string, double> DynamicsValues = null, string RuleProjectName = null, AlgorithmGraphReference Algorithms = null,
         // Null: the built-in rule book with no custom fields, so older saves and the opening reference stay unchanged.
         [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-        RuleBookCheckpoint RuleBook = null);
+        RuleBookCheckpoint RuleBook = null,
+        // Null between rule steps; set while a step is spread over ticks (GameWorld.WeatherRoads).
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        RuleStepCheckpoint RuleStep = null,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+        bool PendingForestRateRefresh = false);
 }

@@ -8,12 +8,12 @@ namespace ForesTycoon;
 
 internal static partial class WorldLoader
 {
-    private static void ApplySceneSoils(GameWorld world, WorldSaveData saved, WorldScenario scenario)
+    private static WorldSaveData PrepareSceneSnapshot(WorldSaveData saved, WorldScenario scenario)
     {
         var original = saved.ReplaySoilModel.Catalog;
         // Keep the exact original catalog (including implicit built-in values) in the unedited scene.
         bool sameTypes = JsonSerializer.Serialize(scenario.SoilTypes) == JsonSerializer.Serialize(GameWorld.EditableSoils(original));
-        if (scenario.SoilPaint.Count == 0 && sameTypes) return;
+        if (scenario.SoilPaint.Count == 0 && sameTypes) return saved;
 
         var catalog = GameWorld.SoilModel(scenario).Catalog;
         var indices = scenario.SoilTypes.Select((s, i) => (s.Id, Index: (byte)i)).ToDictionary(p => p.Id, p => p.Index);
@@ -28,7 +28,7 @@ internal static partial class WorldLoader
             // Pin every original tile. Catalog order and generator preferences cannot move existing soil patches.
             overrides[tile] = index;
         }
-        if (sameTypes && raster.SequenceEqual(source.SoilProfiles)) return;
+        if (sameTypes && raster.SequenceEqual(source.SoilProfiles)) return saved;
 
         var water = source.Environment;
         var fields = water.Fields.Select(a => (double[])a.Clone()).ToArray();
@@ -49,8 +49,6 @@ internal static partial class WorldLoader
             Climate = saved.Climate, Tick = saved.Tick, Terrain = saved.Terrain,
             Checkpoint = saved.Checkpoint with { Ecology = ecology }
         };
-        using var stream = new MemoryStream();
-        WorldSaveSerializer.Write(stream, replacement); stream.Position = 0;
-        world.Load(stream);
+        return replacement;
     }
 }

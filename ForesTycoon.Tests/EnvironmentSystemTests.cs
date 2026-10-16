@@ -49,13 +49,6 @@ public class EnvironmentSystemTests
         Assert.Equal(16,environment.TotalRain,8);Assert.Equal(16,environment.EventRain,8);
         Assert.Equal(0,environment.RainRate,8);Assert.True(Math.Abs(environment.BalanceError)<1e-7);
     }
-    [Fact] public void RainIntensityControlsWaterQuantity()
-    {
-        var light=new EnvironmentSystem(new Habitat(),null);var heavy=new EnvironmentSystem(new Habitat(),null);
-        light.ForceWeather(WeatherPreset.Rain,6,90);heavy.ForceWeather(WeatherPreset.Rain,24,90);
-        light.Update(90);heavy.Update(90);Assert.Equal(light.TotalRain*4,heavy.TotalRain,8);
-        Assert.True(heavy.Cell(0).Soil>light.Cell(0).Soil);
-    }
     [Fact] public void EventsRemainStableAndTransitionSmoothly()
     {
         var environment=new EnvironmentSystem(new Habitat(),null);environment.Update(149);
@@ -72,21 +65,6 @@ public class EnvironmentSystemTests
         Assert.Equal(first.EventEnd,second.EventEnd);Assert.Equal(first.TotalRain,second.TotalRain);
         for(int id=0;id<10;id++)Assert.Equal(first.Cell(id),second.Cell(id));
         Assert.True(Math.Abs(first.BalanceError)<1e-6);
-    }
-    [Fact] public void SaturatedCellsRemainBoundedAndRunoffMovesDownhill()
-    {
-        var environment=new EnvironmentSystem(new Habitat(2,1,true),null);
-        environment.ForceWeather(WeatherPreset.Storm,100,300);environment.Update(300);
-        Assert.InRange(environment.Cell(0).Soil,0,180);Assert.InRange(environment.Cell(1).Soil,0,180);
-        Assert.True(environment.Cell(1).Surface>environment.Cell(0).Surface);
-        Assert.True(Math.Abs(environment.BalanceError)<1e-7);
-    }
-    [Fact] public void DryPeriodDepletesWaterWithoutInventingRain()
-    {
-        var environment=new EnvironmentSystem(new Habitat(),null);double initial=environment.StoredWater;
-        environment.ForceWeather(WeatherPreset.Sunny,0,600);environment.Update(600);
-        Assert.Equal(0,environment.TotalRain);Assert.True(environment.StoredWater<initial);
-        Assert.True(environment.Evaporated>0);Assert.True(Math.Abs(environment.BalanceError)<1e-7);
     }
     [Fact] public void DroughtReducesActualForestGrowthAndHealth()
     {

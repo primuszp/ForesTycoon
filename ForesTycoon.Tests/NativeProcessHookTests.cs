@@ -6,51 +6,14 @@ public sealed class NativeProcessHookTests
 {
     private static GameWorld Create() => new(TerrainSettings.Default.WithNodeSize(17, 42), enableRendering: false);
 
-    private static RuleProject WithConstant(string hook, string kind, double value)
-    {
-        var project = GameWorld.DefaultRuleProject();
-        var graph = project.Behaviors.Graphs.Single(g => g.Hook == hook && g.Kind == kind && g.ObjectId == null);
-        graph.Nodes.Add(new BehaviorNode { Id = "value", Name = "Érték", Operation = BehaviorOperation.Constant, Value = value });
-        graph.Output = "value";
-        return project;
-    }
-
     [Fact]
     public void DefaultGraphsDoNotOverrideAndNewHooksExist()
     {
         var model = new CompiledBehaviorModel(WorldBehaviorPolicy.DefaultDocument(), WorldBehaviorPolicy.Hooks);
-        foreach (string hook in new[] { "water.evaporation", "water.uptake", "water.drainage", "water.baseflow", "water.stress" })
-            Assert.False(model.Overrides(hook, "tile"));
-        Assert.False(model.Overrides("road.weather", "road"));
+        foreach (var hook in WorldBehaviorPolicy.Hooks) Assert.False(model.Overrides(hook.Id, hook.Kind));
+        Assert.DoesNotContain(WorldBehaviorPolicy.Hooks, h => h.Id == "road.weather");
     }
 
-    [Fact]
-    public void UptakeFormulaReplacesTranspirationAndKeepsTheWaterBalance()
-    {
-        using var world = Create();
-        world.QueueRuleProject(WithConstant("water.uptake", "tile", 0)); world.ExecutePendingCommands();
-        world.QueueWeather(WeatherPreset.Storm, 32, 20); world.ExecutePendingCommands();
-        for (int i = 0; i < 300; i++) world.Update(1.0 / 30);
-        Assert.Equal(0, world.Environment.Transpired);
-        Assert.True(Math.Abs(world.Environment.BalanceError) < 1e-6 * Math.Max(1, world.Environment.StoredWater));
-    }
-
-    [Fact]
-    public void RoadWeatheringFollowsItsFormula()
-    {
-        double Condition(RuleProject project)
-        {
-            using var world = Create();
-            if (project != null) { world.QueueRuleProject(project); world.ExecutePendingCommands(); }
-            for (int id = 0; id < world.Map.Tiles.Count - 1 && world.RoadCount == 0; id++) { world.QueueRoadPath(id, id + 1, false); world.ExecutePendingCommands(); }
-            int tile = world.CaptureCheckpoint().Terrain.Roads[0].TileId;
-            for (int i = 0; i < 600; i++) world.Update(1.0 / 30);
-            return world.GetRoadCondition(tile);
-        }
-        double native = Condition(null), sheltered = Condition(WithConstant("road.weather", "road", 0));
-        Assert.True(native < 1);
-        Assert.Equal(1, sheltered, 6);
-    }
 }
 
 public sealed class LayeredModelTests

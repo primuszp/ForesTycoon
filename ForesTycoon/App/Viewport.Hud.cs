@@ -692,7 +692,6 @@ namespace ForesTycoon
                 HudTheme.Meter("Gyökérzóna", (float)(cell.Soil / cell.Capacity), $"{cell.Soil:0.0} / {cell.Capacity:0} mm", new NVec4(0.36f, 0.62f, 0.86f, 1f));
                 HudTheme.KeyValue("Felszíni víz", $"{cell.Surface:0.00} mm");
                 HudTheme.KeyValue("Koronavíz", $"{cell.Canopy:0.00} mm");
-                HudTheme.KeyValue("Fák vízfelvétele / igénye", $"{cell.UptakePerHour:0.000} / {cell.DemandPerHour:0.000} mm/óra");
                 HudTheme.KeyValue("Aszálystressz", $"{cell.Drought * 100:0}%");
                 HudTheme.KeyValue("Túlnedvesség", $"{cell.Waterlogging * 100:0}%");
                 HudTheme.KeyValue("Növekedés (víz)", $"{cell.GrowthFactor * 100:0}%");
@@ -885,6 +884,8 @@ namespace ForesTycoon
                 HudTheme.KeyValue("Képkocka", $"{performance.FrameMilliseconds:F1} ms");
                 HudTheme.KeyValue("Kihagyott szimulációs idő", $"{performance.DroppedSimulationSeconds:F2} s");
                 HudTheme.KeyValue("Szimuláció", $"{performance.SimulationMilliseconds:F2} ms · tick {simulationClock.Tick}");
+                HudTheme.KeyValue("Megőrzött időhátralék", $"{simulationClock.PendingSimulationSeconds:F2} s");
+                if (world.UpdatePending) HudTheme.KeyValue("Folyamatban", world.ActiveWorkProcess);
                 HudTheme.KeyValue("Renderelés", $"{performance.RenderMilliseconds:F1} ms · {performance.DrawCalls} draw");
                 HudTheme.KeyValue("GC / képkocka", $"{performance.AllocatedBytes / 1024.0:F1} KiB");
                 HudTheme.KeyValue("Chunkok", $"{world.VisibleChunkCount}/{world.TotalChunkCount} · erdő újraépítés {world.ForestChunkRebuilds}");

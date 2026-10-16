@@ -25,9 +25,7 @@ namespace ForesTycoon.Ecology
 
     internal readonly record struct ForestTreeStump(ForestTree Felled, double FelledYear)
     {
-        public double? DecayProgress { get; init; }
-        internal const float LifetimeYears = 6f;
-        internal float Decay(double year) => (float)Math.Clamp(DecayProgress ?? (year - FelledYear) / LifetimeYears, 0, 1);
+        public double DecayProgress { get; init; }
     }
 
     internal readonly record struct ForestDeadTree(ForestTree Tree, double DeathYear);

@@ -20,10 +20,6 @@ namespace ForesTycoon.Map
             internal float Idle;   // years since a machine last drove on it
         }
 
-        /// <summary>A trail unused this long, with its ruts faded, grows over and disappears.</summary>
-        internal const float DefaultSkidTrailOvergrowYears = 3f;
-        /// <summary>Idle forest years after which an unused trail without ruts is overgrown (set from the world's tuning).</summary>
-        internal float SkidTrailOvergrowYears = DefaultSkidTrailOvergrowYears;
         private readonly Dictionary<int, SkidTrail> skidTrails = new();
 
         public int SkidTrailCount => skidTrails.Count;
@@ -42,7 +38,7 @@ namespace ForesTycoon.Map
             return true;
         }
 
-        /// <summary>Rule-engine access: the trail is gone (overgrown), as in <see cref="AgeSkidTrails"/>.</summary>
+        /// <summary>Rule-engine access: the trail is gone (overgrown), and routes can be refreshed.</summary>
         public bool RemoveSkidTrail(int tileId) => skidTrails.Remove(tileId);
 
         /// <summary>Forest floor a machine can drive on: no road, building or open water.</summary>
@@ -54,12 +50,15 @@ namespace ForesTycoon.Map
         }
 
         /// <summary>Marks the a → b trail (the same L-shaped plan as roads); road tiles on the way are crossed. Returns the tiles marked.</summary>
-        public int[] MarkSkidTrailPath(int startTileId, int endTileId)
+        public int[] MarkSkidTrailPath(int startTileId, int endTileId) { var result = new WorkResult<int[]>(); SimulationWork.Complete(MarkSkidTrailPathWork(startTileId, endTileId, result)); return result.Value; }
+
+        internal IEnumerable<int> MarkSkidTrailPathWork(int startTileId, int endTileId, WorkResult<int[]> result)
         {
-            if (!IsValidTileId(startTileId) || !IsValidTileId(endTileId)) return Array.Empty<int>();
+            if (!IsValidTileId(startTileId) || !IsValidTileId(endTileId)) { result.Value = Array.Empty<int>(); yield break; }
             var changed = new List<int>();
-            foreach (RoadPlanStep step in BuildRoadPlan(tiles[startTileId], tiles[endTileId]))
+            foreach (RoadPlanStep step in RoadPlanSteps(tiles[startTileId], tiles[endTileId]))
             {
+                yield return 1;
                 if (!CanCarrySkidTrail(step.TileId)) continue;
                 skidTrails.TryGetValue(step.TileId, out var trail);
                 bool isNew = trail.Edges == RoadEdge.None;
@@ -70,16 +69,18 @@ namespace ForesTycoon.Map
                 skidTrails[step.TileId] = trail;
                 changed.Add(step.TileId);
             }
-            return changed.ToArray();
+            result.Value = changed.ToArray();
         }
 
-        public int[] RemoveSkidTrailPath(int startTileId, int endTileId)
+        public int[] RemoveSkidTrailPath(int startTileId, int endTileId) { var result = new WorkResult<int[]>(); SimulationWork.Complete(RemoveSkidTrailPathWork(startTileId, endTileId, result)); return result.Value; }
+
+        internal IEnumerable<int> RemoveSkidTrailPathWork(int startTileId, int endTileId, WorkResult<int[]> result)
         {
-            if (!IsValidTileId(startTileId) || !IsValidTileId(endTileId)) return Array.Empty<int>();
+            if (!IsValidTileId(startTileId) || !IsValidTileId(endTileId)) { result.Value = Array.Empty<int>(); yield break; }
             var removed = new List<int>();
-            foreach (RoadPlanStep step in BuildRoadPlan(tiles[startTileId], tiles[endTileId]))
-                if (skidTrails.Remove(step.TileId)) removed.Add(step.TileId);
-            return removed.ToArray();
+            foreach (RoadPlanStep step in RoadPlanSteps(tiles[startTileId], tiles[endTileId]))
+            { yield return 1; if (skidTrails.Remove(step.TileId)) removed.Add(step.TileId); }
+            result.Value = removed.ToArray();
         }
 
         /// <summary>One machine pass: the ruts deepen (less so once they are already deep) and the trail counts as used.</summary>
@@ -89,25 +90,6 @@ namespace ForesTycoon.Map
             trail.Wear = Math.Clamp(trail.Wear + amount * (1 - trail.Wear), 0, 1);
             trail.Idle = 0;
             skidTrails[tileId] = trail;
-        }
-
-        /// <summary>
-        /// Over <paramref name="years"/> the ruts settle and grass covers them; a trail left unused for
-        /// <see cref="SkidTrailOvergrowYears"/> with no visible ruts is gone. Returns the tiles that disappeared.
-        /// </summary>
-        public int[] AgeSkidTrails(float years)
-        {
-            if (years <= 0 || skidTrails.Count == 0) return Array.Empty<int>();
-            List<int> gone = null;
-            foreach (int id in skidTrails.Keys.ToArray())
-            {
-                var trail = skidTrails[id];
-                trail.Wear = Math.Max(0, trail.Wear - 0.4f * years);
-                trail.Idle += years;
-                if (trail.Idle >= SkidTrailOvergrowYears && trail.Wear <= 0.001f) { skidTrails.Remove(id); (gone ??= new()).Add(id); }
-                else skidTrails[id] = trail;
-            }
-            return gone?.ToArray() ?? Array.Empty<int>();
         }
 
         /// <summary>The 4-neighbours of a tile (the directions a skid trail or road connects in).</summary>

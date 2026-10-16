@@ -95,19 +95,4 @@ public sealed class TrailGraphRuleTests
         restored.Map.SetSkidTrailState(id, 0, 10); restored.Update(.5); Assert.False(restored.Map.IsSkidTrail(id));
     }
 
-    [Fact]
-    public void LegacyTrailRuleMigratesIdempotentlyAndCustomFormulaKeepsItsRate()
-    {
-        var rule = new WorldRule { Id = "trail.age", Scope = "trail", Enabled = false, Effects = {
-            new() { Target = "nyom.kopás", Mode = "set", Formula = "max(0; nyom.kopás - 0,4 * lépés)" },
-            new() { Target = "nyom.tétlenség", Mode = "add", Formula = "lépés" },
-            new() { Target = "nyom.megszüntetése", Mode = "action", Formula = "ha(nyom.tétlenség < hangolás.SkidTrailOvergrowYears; 0; ha(nyom.kopás > 0,001; 0; 1))" }
-        } };
-        rule.UpgradeAuthoring(); rule.Validate(); Assert.False(rule.Enabled);
-        Assert.All(rule.Effects, e => Assert.NotNull(e.Influence));
-        string once = JsonSerializer.Serialize(rule); rule.UpgradeAuthoring(); Assert.Equal(once, JsonSerializer.Serialize(rule));
-        var custom = new WorldRule { Scope = "trail", Effects = { new() { Target = "nyom.kopás", Formula = "max(0; nyom.kopás - 0,9 * lépés)" } } };
-        custom.UpgradeAuthoring(); Assert.Equal("wear", custom.Effects[0].Target);
-        Assert.Equal("max(0; wear - 0,9 * lépés)", custom.Effects[0].Formula); Assert.Null(custom.Effects[0].Influence);
-    }
 }

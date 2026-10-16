@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 
 namespace ForesTycoon.Ecology
 {
@@ -19,29 +20,46 @@ namespace ForesTycoon.Ecology
     {
         private sealed record Book(ForestSpeciesProfile[] Profiles, ForestSpeciesTraits[] Traits, float?[] Prices);
         private static volatile Book current;
+        private sealed record WorkerContext(Book Book);
+        private static readonly AsyncLocal<WorkerContext> workerContext = new();
+        private static Book ActiveBook => workerContext.Value is { } context ? context.Book : current;
+        internal static T WithContext<T>(object context, Func<T> compute)
+        {
+            var previous = workerContext.Value;
+            try { workerContext.Value = new((Book)context); return compute(); }
+            finally { workerContext.Value = previous; }
+        }
+
+        internal static object CaptureContext() => ActiveBook;
+        internal static void RestoreContext(object context) => InstallBook((Book)context);
+        private static void InstallBook(Book book)
+        {
+            if (workerContext.Value != null) workerContext.Value = new(book);
+            else current = book;
+        }
 
         internal static bool TryProfile(ForestSpecies species, out ForestSpeciesProfile profile)
         {
-            var book = current;
+            var book = ActiveBook;
             if (book != null && (int)species < book.Profiles.Length) { profile = book.Profiles[(int)species]; return true; }
             profile = default; return false;
         }
         internal static bool TryTraits(ForestSpecies species, out ForestSpeciesTraits traits)
         {
-            var book = current;
+            var book = ActiveBook;
             if (book != null && (int)species < book.Traits.Length && book.Traits[(int)species].Preset != null) { traits = book.Traits[(int)species]; return true; }
             traits = default; return false;
         }
         internal static float? TimberPrice(ForestSpecies species)
         {
-            var book = current;
+            var book = ActiveBook;
             return book != null && (int)species < book.Prices.Length ? book.Prices[(int)species] : null;
         }
 
         /// <summary>Installs the edits; an empty set restores the built-in tables.</summary>
         internal static void Apply(IReadOnlyDictionary<ForestSpecies, ForestSpeciesEdit> edits)
         {
-            if (edits == null || edits.Count == 0) { current = null; return; }
+            if (edits == null || edits.Count == 0) { InstallBook(null); return; }
             int count = Enum.GetValues<ForestSpecies>().Length + 2;
             var profiles = new ForestSpeciesProfile[count]; var traits = new ForestSpeciesTraits[count]; var prices = new float?[count];
             foreach (ForestSpecies s in Enum.GetValues<ForestSpecies>()) {
@@ -63,7 +81,7 @@ namespace ForesTycoon.Ecology
                         MatureHeight = e.MatureHeight ?? t.MatureHeight, MaxHeight = e.MaxHeight ?? t.MaxHeight, Capacity = e.Capacity ?? t.Capacity };
                 prices[(int)s] = e.TimberPrice;
             }
-            current = new Book(profiles, traits, prices);
+            InstallBook(new Book(profiles, traits, prices));
         }
     }
 }

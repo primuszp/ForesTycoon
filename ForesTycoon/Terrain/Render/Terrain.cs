@@ -88,14 +88,14 @@ namespace ForesTycoon
         {
         }
 
-        public Terrain(TerrainMap map)
+        public Terrain(TerrainMap map, bool deferGeometry = false)
         {
             this.map = map ?? throw new ArgumentNullException(nameof(map));
             try
             {
-                makeTiles();
+                if (!deferGeometry) SimulationWork.Complete(PrepareBaseGeometryWork());
                 map.NodesChanged += OnNodesChanged;
-                map.RoadDiagonalsChanged += OnRoadDiagonalsChanged;
+                map.RoadDiagonalPrepared += OnRoadDiagonalPrepared;
             }
             catch { Dispose(); throw; }
         }
@@ -161,15 +161,17 @@ namespace ForesTycoon
 
 
         /// <summary>GL-erőforrások felszabadítása (regeneráláskor a régi terep buffereihez).</summary>
-        public void Dispose()
+        public void Dispose() => SimulationWork.Complete(DisposeWork());
+
+        internal IEnumerable<int> DisposeWork()
         {
-            if (disposed) return; renderOwner.VerifyAccess();
+            if (disposed) yield break; renderOwner.VerifyAccess();
             map.NodesChanged -= OnNodesChanged;
-            map.RoadDiagonalsChanged -= OnRoadDiagonalsChanged;
-            foreach (VertexBuffer vbo in vbos.Values) vbo.Dispose();
+            map.RoadDiagonalPrepared -= OnRoadDiagonalPrepared;
+            foreach (VertexBuffer vbo in vbos.Values) { vbo.Dispose(); yield return 1; }
             vbos.Clear();
-            DisposeForestGeometry();
-            DisposeStaticTerrain();
+            foreach (int unit in DisposeForestGeometryWork()) yield return unit;
+            foreach (int unit in DisposeStaticTerrainWork()) yield return unit;
             fogSources.Clear(); fogSourceOrder.Clear();
             disposed = true;
         }

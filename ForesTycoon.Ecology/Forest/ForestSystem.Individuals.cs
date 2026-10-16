@@ -7,8 +7,7 @@ namespace ForesTycoon.Ecology
     sealed partial class ForestSystem
     {
         internal ForestTreeStore IndividualTrees { get; } = new();
-        /// <summary>Stump decay runs as a rule-book rule (forest.stumps) in the game; standalone forests keep the native removal.</summary>
-        internal bool StumpsByRules { get; set; }
+        /// <summary>The resource snapshot shared by individual-tree growth.</summary>
         private ForestCompetition competition = new();
         private readonly ForestMonthlyPreparation monthlyPreparation = new();
         internal int LastMonthlyPreparedTrees { get; private set; }
@@ -22,11 +21,9 @@ namespace ForesTycoon.Ecology
             Revision++; EditRevision++;
             monthlyPreparation.AcceptLocalRevision(before, Revision);
         }
-        internal void PrepareNextMonthStep()
-        {
-            if (Environment != null)
-                monthlyPreparation.Advance(habitat, IndividualTrees, Revision, (month + 1) / 12.0, SecondsUntilMonth);
-        }
+        internal void PrepareNextMonthStep() => SimulationWork.Complete(PrepareNextMonthWork());
+        internal IEnumerable<int> PrepareNextMonthWork() => Environment == null ? Array.Empty<int>()
+            : monthlyPreparation.AdvanceWork(habitat, IndividualTrees, Revision, (month + 1) / 12.0, SecondsUntilMonth);
         private readonly HashSet<int> changedResourceTiles = new();
         internal double ForestYear => month / 12.0 + accumulatedSeconds / secondsPerYear;
         internal int IndividualTreeCount => IndividualTrees.TreeCount;
@@ -39,17 +36,19 @@ namespace ForesTycoon.Ecology
             Revision++; EditRevision++;
         }
 
-        private void InitializeIndividuals()
+        private void InitializeIndividuals() => SimulationWork.Complete(InitializeIndividualsWork());
+
+        private IEnumerable<int> InitializeIndividualsWork()
         {
             monthlyPreparation.Clear();
             currentYearGrowth = lastYearGrowth = 0;
             IndividualTrees.Clear();
             ClearPlantations(); competition.Clear(); changedResourceTiles.Clear();
             for (int id = 0; id < stands.Length; id++)
-                if (!stands[id].IsEmpty) IndividualTrees.Create(id, stands[id], ForestYear, habitat.Seed);
-            for (int id = 0; id < stands.Length; id++) stands[id] = IndividualStand(id, ForestYear);
-            competition.Snapshot(habitat, IndividualTrees, ForestYear);
-            foreach (var entry in IndividualTrees.Patches) UpdateIndividualRates(entry.Key, entry.Value, ForestYear);
+                { if (!stands[id].IsEmpty) IndividualTrees.Create(id, stands[id], ForestYear, habitat.Seed); yield return 1; }
+            for (int id = 0; id < stands.Length; id++) { stands[id] = IndividualStand(id, ForestYear); yield return 1; }
+            foreach (int unit in competition.SnapshotWork(habitat, IndividualTrees, ForestYear)) yield return unit;
+            foreach (var entry in IndividualTrees.Patches) foreach (int unit in UpdateIndividualRatesWork(entry.Key, entry.Value, ForestYear)) yield return unit;
         }
 
         private void CreateIndividuals(int id, ForestStand stand, double year, bool planted = false)
@@ -80,6 +79,9 @@ namespace ForesTycoon.Ecology
         }
 
         private void UpdateIndividualRates(int id, ForestTreeStore.Patch patch, double year, bool updateHealth = true, bool currentConditions = false)
+            => SimulationWork.Complete(UpdateIndividualRatesWork(id, patch, year, updateHealth, currentConditions));
+
+        private IEnumerable<int> UpdateIndividualRatesWork(int id, ForestTreeStore.Patch patch, double year, bool updateHealth = true, bool currentConditions = false)
         {
             float radiation = Environment != null ? (float)(currentConditions ? Environment.Radiation : Environment.PeriodRadiation) : 1;
             ForestSpecies siteSpecies = ForestSpecies.None;
@@ -87,6 +89,7 @@ namespace ForesTycoon.Ecology
             float season = ForestTreeGrowth.Season(year);
             for (int i = 0; i < patch.Count; i++)
             {
+                yield return 1;
                 ForestTree tree = patch.Trees[i];
                 if (siteSpecies != tree.Species)
                 {
@@ -128,11 +131,12 @@ namespace ForesTycoon.Ecology
             patch.Revision++;
         }
 
-        internal void RefreshEnvironmentRates()
+        internal void RefreshEnvironmentRates() => SimulationWork.Complete(RefreshEnvironmentRatesWork());
+        internal IEnumerable<int> RefreshEnvironmentRatesWork()
         {
-            competition.Snapshot(habitat, IndividualTrees, ForestYear);
+            foreach (int unit in competition.SnapshotWork(habitat, IndividualTrees, ForestYear)) yield return unit;
             foreach (var entry in IndividualTrees.Patches)
-                UpdateIndividualRates(entry.Key, entry.Value, ForestYear, updateHealth: false, currentConditions: true);
+                foreach (int unit in UpdateIndividualRatesWork(entry.Key, entry.Value, ForestYear, updateHealth: false, currentConditions: true)) yield return unit;
             Revision++;
         }
 
@@ -149,44 +153,51 @@ namespace ForesTycoon.Ecology
             }
         }
 
-        private void RefreshChangedResourceRates(double year, bool currentConditions)
+        private void RefreshChangedResourceRates(double year, bool currentConditions) => SimulationWork.Complete(RefreshChangedResourceRatesWork(year, currentConditions));
+
+        private IEnumerable<int> RefreshChangedResourceRatesWork(double year, bool currentConditions)
         {
-            if (changedResourceTiles.Count == 0) return;
+            if (changedResourceTiles.Count == 0) yield break;
             ulong before = Revision;
-            competition.SnapshotAffected(habitat, IndividualTrees, year, changedResourceTiles);
+            foreach (int unit in competition.SnapshotAffectedWork(habitat, IndividualTrees, year, changedResourceTiles)) yield return unit;
             foreach (int id in changedResourceTiles)
                 if (IndividualTrees.TryGet(id, out var patch))
                 {
-                    UpdateIndividualRates(id, patch, year, updateHealth: false, currentConditions: currentConditions);
+                    foreach (int work in UpdateIndividualRatesWork(id, patch, year, updateHealth: false, currentConditions: currentConditions)) yield return work;
                     stands[id] = IndividualStand(id, year);
                 }
-            RecalculateStatistics();
+            foreach (int unit in RecalculateStatisticsWork()) yield return unit;
             Revision++;
-            monthlyPreparation.InvalidateLocal(habitat, before, Revision, (month + 1) / 12.0, changedResourceTiles);
+            foreach (int unit in monthlyPreparation.InvalidateLocalWork(habitat, before, Revision, (month + 1) / 12.0, changedResourceTiles)) yield return unit;
             changedResourceTiles.Clear();
         }
-        private void StepIndividualMonth()
+        private IEnumerable<int> StepIndividualMonthWork()
         {
             long started = ProfileMonthlyWork ? Stopwatch.GetTimestamp() : 0;
             LastMonthlyPreparedTrees = 0;
             double year = month / 12.0;
             // Close all growth intervals first. Competition reads a common immutable tile snapshot.
-            foreach (var entry in IndividualTrees.Patches)
+            foreach (var entry in IndividualTrees.Patches) {
                 stands[entry.Key] = monthlyPreparation.TryGetStand(Revision, year, entry.Key, out var preparedStand)
                     ? preparedStand : IndividualStand(entry.Key, year);
+                yield return 1;
+            }
             long closed = ProfileMonthlyWork ? Stopwatch.GetTimestamp() : 0;
             if (!monthlyPreparation.PublishSnapshot(Revision, year, ref competition))
-                competition.Snapshot(habitat, IndividualTrees, year);
+                foreach (int work in competition.SnapshotWork(habitat, IndividualTrees, year)) yield return work;
             ClearSeedCandidates();
-            for (int id = 0; id < stands.Length; id++)
+            for (int id = 0; id < stands.Length; id++) {
                 if (IsSeedSource(stands[id])) MarkSeedCandidates(id);
+                yield return 1;
+            }
             long seeded = ProfileMonthlyWork ? Stopwatch.GetTimestamp() : 0;
             foreach (var entry in IndividualTrees.Patches)
             {
                 var patch = entry.Value;
-                UpdateIndividualRates(entry.Key, patch, year);
+                foreach (int work in UpdateIndividualRatesWork(entry.Key, patch, year)) yield return work;
                 for (int i = patch.Count - 1; i >= 0; i--)
                 {
+                    yield return 1;
                     var tree = patch.Trees[i];
                     float shadeTolerance = ForestSpeciesProfile.For(tree.Species).ShadeTolerance;
                     // Pioneers need more sustained light; shade-tolerant species can
@@ -206,26 +217,26 @@ namespace ForesTycoon.Ecology
                 }
                 if (patch.DeadTrees != null)
                     for (int i = patch.DeadTrees.Count - 1; i >= 0; i--)
+                    {
+                        yield return 1;
                         if (year - patch.DeadTrees[i].DeathYear >= 8) {
                             patch.DeadTrees.RemoveAt(i); IndividualTrees.NotifyTopologyChanged(patch);
                         }
-                if (patch.Stumps == null || StumpsByRules) continue;
-                for (int i = patch.Stumps.Count - 1; i >= 0; i--)
-                    if (patch.Stumps[i].Decay(year) >= 1) {
-                        patch.Stumps.RemoveAt(i); IndividualTrees.NotifyTopologyChanged(patch);
                     }
+
             }
             long grown = ProfileMonthlyWork ? Stopwatch.GetTimestamp() : 0;
             for (int i = 0; i < seedCandidateCount; i++)
             {
+                yield return 1;
                 int id = seedCandidateTiles[i];
                 if (!stands[id].IsEmpty) continue;
                 ForestStand seedling = TryRegenerate(id);
                 if (!seedling.IsEmpty) { CreateIndividuals(id, seedling, year); MarkResourceArea(id); }
             }
-            RefreshChangedResourceRates(year, currentConditions: false);
-            foreach (var entry in IndividualTrees.Patches) stands[entry.Key] = IndividualStand(entry.Key, year);
-            RecalculateStatistics();
+            foreach (int work in RefreshChangedResourceRatesWork(year, currentConditions: false)) yield return work;
+            foreach (var entry in IndividualTrees.Patches) { stands[entry.Key] = IndividualStand(entry.Key, year); yield return 1; }
+            foreach (int work in RecalculateStatisticsWork()) yield return work;
             if (month % 12 == 0)
             {
                 lastYearGrowth = currentYearGrowth;
@@ -250,18 +261,25 @@ namespace ForesTycoon.Ecology
         {
             ForestTree tree = SettleIndividual(patch.Trees[index], ForestYear) with { AnnualGrowth = default };
             patch.Depot += ForestTree.Volume(tree.Dimensions);
-            (patch.Stumps ??= new List<ForestTreeStump>()).Add(new(tree, ForestYear) { DecayProgress = StumpsByRules ? 0 : null });
+            (patch.Stumps ??= new List<ForestTreeStump>()).Add(new(tree, ForestYear));
             IndividualTrees.RemoveLiving(patch, index);
         }
 
         private float ExtractIndividualTimber(int id, float requested)
         {
-            if (requested == 0 || !IndividualTrees.TryGet(id, out var patch)) return 0;
+            var result = new WorkResult<float>();
+            SimulationWork.Complete(ExtractTimberWork(id, requested, result));
+            return result.Value;
+        }
+        internal IEnumerable<int> ExtractTimberWork(int id, float requested, WorkResult<float> result)
+        {
+            if (requested == 0 || !IndividualTrees.TryGet(id, out var patch)) yield break;
             // Fell whole trees into a depot; a partial truck load never shrinks surviving trees.
             bool felled = false;
             while (patch.Depot < requested && patch.Count > 0)
             {
                 FellIndividual(patch, 0);
+                yield return 1;
                 felled = true;
             }
             float loaded = Math.Min(requested, patch.Depot);
@@ -269,10 +287,11 @@ namespace ForesTycoon.Ecology
             if (felled)
             {
                 stands[id] = IndividualStand(id, ForestYear);
-                MarkResourceArea(id); RefreshChangedResourceRates(ForestYear, currentConditions: true);
+                MarkResourceArea(id);
+                foreach (int unit in RefreshChangedResourceRatesWork(ForestYear, currentConditions: true)) yield return unit;
                 CompleteLocalEditRevision();
             }
-            return loaded;
+            result.Value = loaded;
         }
 
         private ForestryActionResult HarvestIndividuals(int id, out ForestHarvest harvest)

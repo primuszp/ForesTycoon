@@ -2,12 +2,22 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using ForesTycoon.RuleCompiler;
 
 namespace ForesTycoon;
 
 sealed partial class GameWorld
 {
+    // Compiled programs survive a world publication. Only this small indirection changes owner.
+    private sealed class RuleValueBinding(GameWorld world)
+    {
+        internal GameWorld World = world;
+        internal double ReadWorld(string key) => World.ReadWorldValue(key);
+        internal double ReadRule(string key) => World.ReadRuleValue(key);
+    }
+    private RuleValueBinding ruleValues;
+
     private DynamicsRuntime dynamics;
     private RuleEngine ruleEngine;
     internal RuleEngine RuleBook => ruleEngine;
@@ -15,7 +25,7 @@ sealed partial class GameWorld
     private AlgorithmGraphReference algorithmGraphs;
     internal RuleProject RuleProjectDocument => new() { Name = ruleProjectName, Road = RuleDocument,
         Tuning = Tuning.ToOverrides(), Behaviors = BehaviorDocument, Dynamics = dynamics.Document, Algorithms = AlgorithmSnapshot(),
-        Rules = RuleEngine.Clone(ruleEngine.Rules), Fields = RuleEngine.CloneFields(ruleEngine.Fields),
+        Rules = RuleEngine.Clone(ruleEngine.Rules), RemovedStarters = ruleEngine.RemovedStarters.ToList(), Fields = RuleEngine.CloneFields(ruleEngine.Fields),
         World = ruleProjectWorld == null ? null : RuleProject.FromJson(new RuleProject { World = ruleProjectWorld }.ToJson()).World };
     /// <summary>The world map of the active project: used by the next new world, never applied to the running one.</summary>
     private WorldScenario ruleProjectWorld;
@@ -58,10 +68,10 @@ sealed partial class GameWorld
             if (!copy.Behaviors.Graphs.Any(g => g != null && g.Hook == hook.Id && g.Kind == hook.Kind && !g.ObjectId.HasValue))
                 copy.Behaviors.Graphs.Add(WorldBehaviorPolicy.DefaultGraph(hook));
         var policy = new WorldBehaviorPolicy(copy.Behaviors, DynamicsRuntime.Keys(copy.Dynamics, RuleWorldFields), runtime.Read);
-        // The rule book always holds the built-in rules (moved out of C#); a project may edit or disable them.
-        copy.Rules ??= new(); copy.Fields ??= new();
-        RuleEngine.AddMissingBuiltIns(copy.Rules);
-        var engine = new RuleEngine(copy.Rules, copy.Fields, copy.Dynamics.Stocks.Select(s => s.Id), readRule ?? (_ => 0));
+        // Every rule is the project's own; starter rules seed what the project has not seen yet, deleted ones stay deleted.
+        copy.Rules ??= new(); copy.Fields ??= new(); copy.RemovedStarters ??= new();
+        RuleEngine.AddMissingStarters(copy.Rules, copy.RemovedStarters);
+        var engine = new RuleEngine(copy.Rules, copy.Fields, copy.Dynamics.Stocks.Select(s => s.Id), readRule ?? (_ => 0)) { RemovedStarters = copy.RemovedStarters };
         return (copy, road, tuning, runtime, policy, engine);
     }
     internal void QueueRuleProject(RuleProject project)
@@ -74,9 +84,15 @@ sealed partial class GameWorld
     private void ApplyRuleProject(RuleProject project)
     {
         RequireAlgorithmRuntime(project.Algorithms);
-        var next = PrepareRuleProject(project, ReadWorldValue, ReadRuleValue);
+        var next = PrepareRuleProject(project, ruleValues.ReadWorld, ruleValues.ReadRule);
+        InstallRuleProject(next);
+    }
+
+    private void InstallRuleProject((RuleProject Document, CompiledRoadRule Road, GameTuning Tuning, DynamicsRuntime Dynamics, WorldBehaviorPolicy Policy, RuleEngine Engine) next)
+    {
+        if (UpdatePending) throw new InvalidOperationException("A rule project is applied at a complete tick boundary.");
         next.Engine.Preserve(ruleEngine);
-        next.Dynamics.Preserve(dynamics);
+        if (dynamics != null) next.Dynamics.Preserve(dynamics);
         next.Policy.Controllers.PreserveUnchanged(behaviorPolicy.Controllers);
         bool refresh = ForestBehaviorSignature(BehaviorDocument) != ForestBehaviorSignature(next.Document.Behaviors);
         roadRule = next.Road; dynamics = next.Dynamics; behaviorPolicy = next.Policy; ruleEngine = next.Engine; ruleProjectName = next.Document.Name;
@@ -88,12 +104,25 @@ sealed partial class GameWorld
         Environment.Springs = next.Document.World?.Springs;
         algorithmGraphs = next.Document.Algorithms ?? AlgorithmBuild.CurrentReference;
         BindBehaviors(); ApplyTuning(next.Tuning);
-        if (refresh) forest.RefreshEnvironmentRates();
+        if (refresh) pendingForestRateRefresh = true;
         LastRuleSample = "Szabályprojekt alkalmazva; a következő események ezt futtatják.";
     }
+
+    private IEnumerable<int> ApplyRuleProjectWork(RuleProject project) => CompileProjectWork(() => project);
+    private IEnumerable<int> ApplyRuleProjectJsonWork(string json) => CompileProjectWork(() => RuleProject.FromJson(json));
+    private IEnumerable<int> CompileProjectWork(Func<RuleProject> source)
+    {
+        var preparing = Task.Run(() => {
+            var project = source(); RequireAlgorithmRuntime(project.Algorithms);
+            return PrepareRuleProject(project, ruleValues.ReadWorld, ruleValues.ReadRule);
+        });
+        while (!preparing.IsCompleted) yield return 64;
+        InstallRuleProject(preparing.GetAwaiter().GetResult());
+    }
+
     private void InitializeRuleProject()
     {
-        dynamics = new(new DynamicsModel(), RuleWorldFields, ReadWorldValue);
+        dynamics = new(new DynamicsModel(), RuleWorldFields, ruleValues.ReadWorld);
         ApplyRuleProject(DefaultRuleProject());
     }
     private static void RequireAlgorithmRuntime(AlgorithmGraphReference reference)

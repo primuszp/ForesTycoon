@@ -34,6 +34,12 @@ namespace ForesTycoon
                 throw new ArgumentOutOfRangeException(nameof(fixedDeltaSeconds));
         }
 
+        public System.Collections.Generic.IEnumerable<int> UpdateWork(double seconds)
+        {
+            Update(seconds); // O(1): authoritative inventory changes through explicit transfers.
+            yield return 1;
+        }
+
         public void Clear()
         {
             Available = 0f;

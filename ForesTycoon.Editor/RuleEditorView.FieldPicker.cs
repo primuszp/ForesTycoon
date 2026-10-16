@@ -9,19 +9,52 @@ internal sealed partial class RuleEditorView
 {
     private readonly System.Collections.Generic.Dictionary<string, string> fieldPickerObjects = new();
     private static string Words(string text) => System.Text.RegularExpressions.Regex.Replace(text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..], "([a-z])([A-Z])", "$1 $2");
-    private static string FieldObject(string scope, string field) => field.Contains('.') ? field[..field.IndexOf('.')] : scope;
+    /// <summary>The object a field belongs to: the scope, an attached object (“tile”), or a collection (“trees”, “tile.trees”) for a summary.</summary>
+    private static string FieldObject(string scope, string field)
+    {
+        if (SchemaField(scope, field)?.Collection is { } c) {
+            int at = field.LastIndexOf(c.Name + ".", StringComparison.Ordinal);
+            if (at >= 0) return field[..(at + c.Name.Length)];
+        }
+        return field.Contains('.') ? field[..field.IndexOf('.')] : scope;
+    }
     private static string FieldDisplay(string scope, string field) => (field.StartsWith("tuning.", StringComparison.Ordinal) ? GameTuning.Spec(field[7..])?.Name : null) ?? SchemaField(scope, field)?.Display
         ?? Objects.Find(scope)?.Actions.FirstOrDefault(a => a.Name == field)?.Display
         ?? Words(field[(field.LastIndexOf('.') + 1)..]);
-    private static string FieldTitle(string scope, string field) => ObjectDisplay(scope, FieldObject(scope, field)) + " · " + FieldDisplay(scope, field);
+    private static string FieldTitle(string scope, string field)
+    {
+        string obj = ObjectDisplay(scope, FieldObject(scope, field)), name = FieldDisplay(scope, field);
+        // A collection member's name already says its collection (“Szomszéd csempék › Felszíni víz”).
+        return name.StartsWith(obj, StringComparison.Ordinal) ? name : obj + " · " + name;
+    }
+
+    /// <summary>
+    /// Everything a rule on <paramref name="scope"/> can read, as one system: its own and attached objects' fields, its custom
+    /// fields, the world, the project parameters and the stocks of the system model. Nothing here is listed by hand.
+    /// </summary>
+    private string[] ReadableFields(GameWorld world, RuleScope scope) => scope.Fields.Select(f => f.Name)
+        .Concat(RuleBookFields(world).Where(f => f.Scope == scope.Id).Select(f => f.Name))
+        .Concat(scope.Id == "world" ? Array.Empty<string>() : GameWorld.RuleWorldFields)
+        .Concat(dynamicsEditor.Draft.Stocks.Select(s => "stock." + s.Id))
+        .Concat(GameTuning.Specs.Select(s => "tuning." + s.Id)).Distinct().ToArray();
+
+    /// <summary>What a rule on <paramref name="scope"/> can change: every writable field of the object and its custom fields.</summary>
+    private string[] WritableFields(GameWorld world, RuleScope scope) => scope.Fields.Where(f => f.Write != null).Select(f => f.Name)
+        .Concat(RuleBookFields(world).Where(f => f.Scope == scope.Id).Select(f => f.Name)).Distinct().ToArray();
 
     /// <summary>The designer's name of the object a field belongs to: the scope itself, an attached object (“Csempe”) or the project parameters.</summary>
     private static string ObjectDisplay(string scope, string obj)
     {
         if (obj == "tuning") return "Játékparaméter";
+        if (obj == "saját") return "Saját mező";
+        if (obj == "stock") return "Készlet";
+        if (obj == "world" && scope != "world") return Objects.Find("world")?.Name ?? "Világ";
         var entity = Objects.Find(scope);
         if (obj == scope) return entity?.Name ?? RuleEngine.Scope(scope)?.Name ?? Words(scope);
-        return entity?.Relations.FirstOrDefault(r => r.Name == obj)?.Display ?? Words(obj);
+        // A collection of an attached object: “Csempe › Fák a csempén”.
+        if (obj.Contains('.') && entity?.Relations.FirstOrDefault(r => r.Name == obj[..obj.IndexOf('.')]) is { } relation)
+            return relation.Display + " › " + (Objects.Find(relation.Target)?.Collections.FirstOrDefault(c => c.Name == obj[(obj.IndexOf('.') + 1)..])?.Display ?? Words(obj));
+        return entity?.Relations.FirstOrDefault(r => r.Name == obj)?.Display ?? entity?.Collections.FirstOrDefault(c => c.Name == obj)?.Display ?? Words(obj);
     }
     private static string ScopeElement(string scope) => Objects.Find(scope)?.Element is { Length: > 0 } e ? e : RuleEngine.Scope(scope)?.Element ?? "elem";
 

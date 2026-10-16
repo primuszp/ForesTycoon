@@ -36,11 +36,13 @@ namespace ForesTycoon
     sealed partial class VehicleSystem
     {
         internal VehiclesCheckpoint Capture() => new(nextId, UseRoadPhysics, UseCargoStops, vehicles.Select(v => v.Capture()).ToArray());
-        internal void Restore(VehiclesCheckpoint s, int tileCount)
+        internal void Restore(VehiclesCheckpoint s, int tileCount) => SimulationWork.Complete(RestoreWork(s, tileCount));
+
+        internal IEnumerable<int> RestoreWork(VehiclesCheckpoint s, int tileCount)
         {
             CheckpointGuard.Require(s != null && s.Vehicles != null && s.NextId > 0, "vehicle system");
             var restored = new List<Vehicle>(); var ids = new HashSet<int>();
-            foreach (var v in s.Vehicles) {
+            foreach (var v in s.Vehicles) { yield return 1;
                 CheckpointGuard.Require(v != null && v.Id < s.NextId && ids.Add(v.Id), "vehicle IDs");
                 restored.Add(Vehicle.Restore(v, tileCount));
             }
@@ -67,11 +69,13 @@ namespace ForesTycoon
         internal WildlifeCheckpoint Capture() => new(Animals.Select(a => new AnimalCheckpoint(a.Id, a.TileId, a.TargetTile,
             new(a.Position), new(a.PreviousPosition), new(a.Target), a.Yaw, a.PreviousYaw, a.Blend, a.Hunger, a.WanderNeed,
             a.WalkTime, a.Age, a.Seed, a.PreviousWalkTime, a.PreviousAge)).ToArray(), forageTiles.Select(id => new ForageCheckpoint(id, forage[id])).ToArray(), revision, surfaceRevision);
-        internal void Restore(WildlifeCheckpoint s, int tileCount)
+        internal void Restore(WildlifeCheckpoint s, int tileCount) => SimulationWork.Complete(RestoreWork(s, tileCount));
+
+        internal IEnumerable<int> RestoreWork(WildlifeCheckpoint s, int tileCount)
         {
             CheckpointGuard.Require(s != null && s.Animals != null && s.Forage != null, "wildlife system");
             var restored = new List<Animal>(); var ids = new HashSet<int>(); var food = new Dictionary<int, float>();
-            foreach (var a in s.Animals) {
+            foreach (var a in s.Animals) { yield return 1;
                 CheckpointGuard.Require(a != null && ids.Add(a.Id) && (uint)a.Tile < (uint)tileCount && (uint)a.TargetTile < (uint)tileCount,
                     "animal identity/tiles");
                 a.Position.Validate(); a.PreviousPosition.Validate(); a.Target.Validate();
@@ -87,12 +91,12 @@ namespace ForesTycoon
                     Blend = a.Blend, Hunger = a.Hunger, WanderNeed = a.WanderNeed, WalkTime = a.WalkTime, Age = a.Age, Seed = a.Seed,
                     PreviousWalkTime = previousWalk, PreviousAge = previousAge });
             }
-            foreach (var f in s.Forage) {
+            foreach (var f in s.Forage) { yield return 1;
                 CheckpointGuard.Require(f != null && (uint)f.Tile < (uint)tileCount && food.TryAdd(f.Tile, f.Depletion), "forage tile");
                 CheckpointGuard.Unit(f.Depletion, "forage depletion");
             }
             Animals.Clear(); Animals.AddRange(restored); forage.Clear(); forageTiles.Clear(); spots.Clear();
-            foreach (var f in food) { forage.Add(f.Key, f.Value); forageTiles.Add(f.Key); }
+            foreach (var f in food) { yield return 1;  forage.Add(f.Key, f.Value); forageTiles.Add(f.Key); }
             revision = s.ForestRevision; surfaceRevision = s.SurfaceRevision;
         }
     }

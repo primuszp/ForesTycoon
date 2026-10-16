@@ -22,8 +22,9 @@ public class CurrentGameRulesTests
             Assert.True(File.Exists(file), $"{rule.Id}: missing {source.File}");
             Assert.Contains(source.Symbol, File.ReadAllText(file));
         }
-        Assert.Single(catalog.Rules, r => r.Execution == GameRuleExecution.EditableGraph);
-        Assert.Equal("road.trafficWear", catalog.Rules.Single(r => r.Execution == GameRuleExecution.EditableGraph).Id);
+        // The water balance is the project's flow rules; road traffic wear is a behaviour graph.
+        Assert.Equal(new[] { "road.trafficWear", "water.drainage", "water.evaporation", "water.infiltration", "water.precipitation", "water.runoff", "water.snowmelt", "water.uptake" },
+            catalog.Rules.Where(r => r.Execution == GameRuleExecution.EditableGraph).Select(r => r.Id).OrderBy(id => id, StringComparer.Ordinal));
         Assert.Equal("machine.controller", catalog.Rules.Single(r => r.Execution == GameRuleExecution.EditableController).Id);
         Assert.Contains(catalog.Rules, r => r.Id == "route.policy" && r.Execution == GameRuleExecution.EditableExpressions);
         Assert.Contains(catalog.Rules, r => r.Id == "loading.policy" && r.Execution == GameRuleExecution.EditableExpressions);
@@ -34,7 +35,7 @@ public class CurrentGameRulesTests
     {
         var catalog = CurrentGameRules.Build(); var links = catalog.Connections();
         Assert.Contains(new("forest.canopy", "water.uptake", "forest.canopy"), links);
-        Assert.Contains(new("water.uptake", "water.stress", "water.monthBudget"), links);
+        Assert.Contains(new("water.uptake", "water.stress", "water.root"), links);
         Assert.Contains(new("water.stress", "forest.growth", "water.growthFactor"), links);
         Assert.Contains(new("forest.growth", "forest.canopy", "forest.trees"), links);
         Assert.Contains(new("road.trafficWear", "vehicle.motion", "road.condition"), links);
@@ -81,15 +82,13 @@ public class CurrentGameRulesTests
     public void SnowAndGrappleAreConnectedToConservationPersistenceAndPresentation()
     {
         var catalog = CurrentGameRules.Build(); var links = catalog.Connections();
-        Assert.Contains(new("water.snowfall", "water.snowmelt", "water.snow"), links);
+        Assert.Contains(new("water.precipitation", "water.snowmelt", "water.snow"), links);
         Assert.Contains(new("water.snowdrift", "visual.weather", "water.snow"), links);
         Assert.Contains(new("water.snowmelt", "water.infiltration", "water.surface"), links);
         Assert.Contains(new("water.snowmelt", "water.balance", "water.snow"), links);
         Assert.Contains(new("water.snowmelt", "save.restore", "water.snow"), links);
         Assert.Contains(new("machine.logTransfer", "save.restore", "machine.grapple"), links);
         Assert.Contains(new("machine.logTransfer", "visual.machines", "machine.grapple"), links);
-        Assert.Contains(catalog.Rules.Single(r => r.Id == "water.snowmelt").Parameters,
-            p => p.Value == EnvironmentSystem.SnowMeltDepthRate);
     }
 
     [Fact]
@@ -109,7 +108,7 @@ public class CurrentGameRulesTests
         var route = refreshed.Rules.Single(r => r.Id == "route.find");
         Assert.Equal(description, route.Description);
         Assert.Equal("My route experiment", route.Notes); Assert.Equal(987, route.X);
-        Assert.Equal(3, refreshed.Rules.Count(r => r.Id.StartsWith("water.snow")));
+        Assert.Equal(2, refreshed.Rules.Count(r => r.Id.StartsWith("water.snow")));
         Assert.Equal(1.2, refreshed.TuningOverrides()["DieselPrice"]);
         Assert.Equal(3, refreshed.RoadTrafficModel.Nodes.Single(n => n.Id == "scale").Value);
         Assert.Contains(new RuleParameter("Erdőév", 240, "játék-s"), refreshed.Rules.Single(r => r.Id == "time.world").Parameters);

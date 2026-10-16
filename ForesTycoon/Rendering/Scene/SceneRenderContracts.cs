@@ -1,10 +1,12 @@
 using System;
+using System.Collections.Generic;
 using ImGuiNET;
 
 namespace ForesTycoon
 {
     internal interface ISurfaceRenderBackend : ISurfaceVisuals, IDisposable
     {
+        IEnumerable<int> PrepareWork();
         void BeginFrame();
         void RenderShadows(Terrain terrain, Action draw);
     }

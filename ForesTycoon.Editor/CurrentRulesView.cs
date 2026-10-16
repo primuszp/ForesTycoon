@@ -791,10 +791,12 @@ namespace ForesTycoon.Editor
         }
 
         /// <summary>Every tunable number of the game in one list, by system and rule.</summary>
-        internal void DrawTuning(GameWorld world)
+        /// <summary>The tuning tables; <paramref name="include"/> limits them to some rules (by rule id), as the Vehicles tab does.</summary>
+        internal void DrawTuning(GameWorld world, Func<string, bool> include = null)
         {
             if (catalog == null) Load(world.DescribeCurrentRules());
-            var all = catalog.Rules.SelectMany(r => r.Parameters).Where(p => p.Tunable).ToList();
+            include ??= _ => true;
+            var all = catalog.Rules.Where(r => include(r.Id)).SelectMany(r => r.Parameters).Where(p => p.Tunable).ToList();
             int changed = all.Count(p => p.Changed), unapplied = UnappliedTuning(world);
             ImGui.SetNextItemWidth(320);
             ImGui.InputTextWithHint("##tuning-search", "Keresés: paraméter, szabály, rendszer…", ref tuningSearch, 120);
@@ -807,7 +809,7 @@ namespace ForesTycoon.Editor
             {
                 ImGui.SameLine(0, 18);
                 if (EditorStyle.QuietButton("Mind alapra", "Minden hangolt értéket visszaállít az alapértékre (alkalmazni külön kell)."))
-                    foreach (var rule in catalog.Rules)
+                    foreach (var rule in catalog.Rules.Where(r => include(r.Id)))
                         for (int i = 0; i < rule.Parameters.Count; i++)
                             if (rule.Parameters[i].Changed) rule.Parameters[i] = rule.Parameters[i] with { Value = rule.Parameters[i].Default };
             }
@@ -815,7 +817,7 @@ namespace ForesTycoon.Editor
             ImGui.BeginChild("tuning-list", new Vec2(0, 0), ImGuiChildFlags.Borders);
             string query = tuningSearch.Trim();
             bool Match(GameRuleDefinition r, RuleParameter p) =>
-                (!changedOnly || p.Changed) && (query.Length == 0 || p.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                include(r.Id) && (!changedOnly || p.Changed) && (query.Length == 0 || p.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                     p.Key.Contains(query, StringComparison.OrdinalIgnoreCase) || r.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                     r.Module.Contains(query, StringComparison.OrdinalIgnoreCase));
             bool any = false;

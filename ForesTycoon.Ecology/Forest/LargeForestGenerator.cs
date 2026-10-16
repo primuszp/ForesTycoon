@@ -1,18 +1,25 @@
 using System;
+using System.Collections.Generic;
 namespace ForesTycoon.Ecology
 {
     internal static class LargeForestGenerator
     {
         internal static ForestStand[] Create(IForestHabitat habitat,int columns,int rows,ForestPattern pattern)
         {
+            var result = new ForestStand[habitat.TileCount];
+            SimulationWork.Complete(CreateWork(habitat, columns, rows, pattern, result)); return result;
+        }
+        internal static IEnumerable<int> CreateWork(IForestHabitat habitat,int columns,int rows,ForestPattern pattern, ForestStand[] result)
+        {
             if(columns*rows!=habitat.TileCount) throw new ArgumentException("Incorrect forest grid.");
-            var result=new ForestStand[habitat.TileCount];
+
             float Hash(int x,int y,int salt){
                 uint h=unchecked((uint)(habitat.Seed+x*374761393+y*668265263+salt*1442695041));
                 h=(h^(h>>13))*1274126177; return (h^(h>>16))/(float)uint.MaxValue;
             }
             float shiftX=(Hash(0,0,1)-0.5f)*0.1f, shiftY=(Hash(0,0,2)-0.5f)*0.1f;
             for(int x=0;x<columns;x++) for(int y=0;y<rows;y++){
+                yield return 1;
                 int id=x*rows+y;
                 if(!habitat.CanSupportForest(id)) continue;
                 float u=(x+0.5f)/columns, v=(y+0.5f)/rows;
@@ -30,7 +37,7 @@ namespace ForesTycoon.Ecology
                 float biomass=profile.MaximumBiomass*Math.Clamp(age/profile.MatureAgeYears,0,1)*health;
                 result[id]=new ForestStand(species,age,biomass,health);
             }
-            return result;
+
         }
         private static float Ellipse(float x,float y,float cx,float cy,float rx,float ry)
             => MathF.Pow((x-cx)/rx,2)+MathF.Pow((y-cy)/ry,2);

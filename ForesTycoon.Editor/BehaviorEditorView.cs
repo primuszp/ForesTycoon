@@ -53,11 +53,20 @@ namespace ForesTycoon.Editor
         private string error;
         private float sampleNative = 1, sampleState, sampleAmount, sampleDelta = .5f, sampleTime;
         private float sampleCapacity = 25, sampleAvailable = 100, sampleFrom, sampleTo = 1, sampleSurface = 1;
-        private readonly FixedStepClock clock = new() { IsPaused = true };
-        internal void Advance(GameWorld world, double elapsed) => clock.Advance(Math.Min(elapsed, .25), world.Update);
+        private readonly SimulationFrameRunner sandboxRunner = CreateSandboxRunner();
+        private static SimulationFrameRunner CreateSandboxRunner() { var runner = new SimulationFrameRunner(maximumTicksPerFrame: 2048, maximumWorkMilliseconds: 4); runner.Clock.IsPaused = true; return runner; }
+        private FixedStepClock clock => sandboxRunner.Clock;
+        private TerrainMap sandboxMap;
+        internal void Advance(GameWorld world, double elapsed)
+        {
+            if (sandboxMap != world.Map) { sandboxMap = world.Map; clock.Reset(world.SimulationTick); }
+            sandboxRunner.AdvanceWork(elapsed, () => world.ContinueCommands(), dt => world.ContinueUpdate(dt), () => world.ForegroundPending);
+            if (sandboxMap != world.Map) { sandboxMap = world.Map; clock.Reset(world.SimulationTick); }
+        }
         internal bool IsPaused => clock.IsPaused;
         internal void TogglePause() => clock.IsPaused = !clock.IsPaused;
-        internal void Step(GameWorld world) { world.ExecutePendingCommands(); world.Update(clock.StepSeconds); }
+        internal void Step(GameWorld world) => clock.RequestTick();
+        internal void RequestTime(double seconds) => clock.RequestTime(seconds);
         private static readonly string[] Names = { "Állandó", "Beépített eredmény", "Időlépés", "Szimulációs idő", "Állapot", "Mennyiség",
             "Összeadás", "Kivonás", "Szorzás", "Osztás", "Minimum", "Maximum", "Nagyobb", "Kisebb", "Feltételes választás", "Abszolút érték", "Negálás",
             "Kapacitás", "Elérhető készlet", "Kiinduló csempe", "Célcsempe", "Burkolattípus", "Készlet / világmező" };
@@ -198,7 +207,7 @@ namespace ForesTycoon.Editor
                 Try(() => { if (ApplyProject != null) ApplyProject(); else world.QueueBehaviors(model); message = "Szabályváltás naplózva."; });
             ImGui.SameLine(); if (ImGui.Button("Aktív viselkedések átvétele")) { Remember(); model = world.BehaviorDocument; selectedGraph = model.Graphs.FirstOrDefault()?.Id; }
             if (ImGui.Button(clock.IsPaused ? "Tesztvilág indítása" : "Szünet")) clock.IsPaused = !clock.IsPaused;
-            ImGui.SameLine(); if (ImGui.Button("Egy szimulációs lépés")) { world.ExecutePendingCommands(); world.Update(clock.StepSeconds); }
+            ImGui.SameLine(); if (ImGui.Button("Egy szimulációs lépés")) Step(world);
             ImGui.SameLine(); ImGui.TextUnformatted($"Tick: {world.SimulationTick} · {world.ObserveRuleField("water.snow")}");
             ImGui.TextWrapped(error ?? message);
             if (world.BehaviorError != null) ImGui.TextWrapped(world.BehaviorError);

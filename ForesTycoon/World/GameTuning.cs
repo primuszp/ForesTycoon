@@ -75,7 +75,7 @@ namespace ForesTycoon
             new(Tune.AsphaltFactor, "road.trafficWear", "Aszfalt szorzó", "1", RoadTrafficParameters.AsphaltFactor, 0, 10),
             new(Tune.MacadamFactor, "road.trafficWear", "Makadám szorzó", "1", RoadTrafficParameters.MacadamFactor, 0, 10),
             new(Tune.TrailLoadMultiplier, "trail.traffic", "Nyomterhelési szorzó", "× útkopás", RoadTrafficParameters.TrailLoadMultiplier, 0, 500),
-            new(Tune.SkidTrailOvergrowYears, "trail.age", "Benövési idő", "erdőév", TerrainMap.DefaultSkidTrailOvergrowYears, 0.1, 50),
+            new(Tune.SkidTrailOvergrowYears, "trail.age", "Benövési idő", "erdőév", TrailAgeRule.DefaultOvergrowYears, 0.1, 50),
 
             new(Tune.EmptyMass, "vehicle.mass", "Üres tömeg", "kg", TruckSpec.Default.EmptyMass, 2000, 60000),
             new(Tune.TimberDensity, "vehicle.mass", "Fasűrűség", "kg/m³", TruckSpec.Default.TimberDensity, 300, 1300),
@@ -95,10 +95,10 @@ namespace ForesTycoon
             new(Tune.TimberPriceFactor, "timber.deliver", "Faanyag piaci árszorzó", "×", 1, 0, 10),
             new(Tune.CreditLimit, "economy.balance", "Hitelkeret", "eFt", Economy.UnlimitedCredit, 0, Economy.UnlimitedCredit),
 
-            new(Tune.AsphaltWeather, "road.weather", "Aszfalt romlása szárazon", "állapot/erdőév", RoadWeathering.Default.AsphaltBase, 0, 5),
-            new(Tune.AsphaltRainWeather, "road.weather", "Aszfalt romlása esőben", "állapot/erdőév/eső", RoadWeathering.Default.AsphaltRain, 0, 20),
-            new(Tune.MacadamWeather, "road.weather", "Makadám romlása szárazon", "állapot/erdőév", RoadWeathering.Default.MacadamBase, 0, 5),
-            new(Tune.MacadamRainWeather, "road.weather", "Makadám romlása esőben", "állapot/erdőév/eső", RoadWeathering.Default.MacadamRain, 0, 20),
+            new(Tune.AsphaltWeather, "road.weather", "Aszfalt romlása szárazon", "állapot/erdőév", RoadWeatherRule.AsphaltBaseRate, 0, 5),
+            new(Tune.AsphaltRainWeather, "road.weather", "Aszfalt romlása esőben", "állapot/erdőév/eső", RoadWeatherRule.AsphaltRainRate, 0, 20),
+            new(Tune.MacadamWeather, "road.weather", "Makadám romlása szárazon", "állapot/erdőév", RoadWeatherRule.MacadamBaseRate, 0, 5),
+            new(Tune.MacadamRainWeather, "road.weather", "Makadám romlása esőben", "állapot/erdőév/eső", RoadWeatherRule.MacadamRainRate, 0, 20),
         };
 
         private static readonly Dictionary<string, TuningSpec> byId = Specs.ToDictionary(s => s.Id, StringComparer.Ordinal);

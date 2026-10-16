@@ -75,18 +75,6 @@ public class BehaviorModelTests
     }
 
     [Fact]
-    public void SnowAndInfiltrationGraphsPreserveWaterAndTargetIndividualTiles()
-    {
-        var map = new TerrainMap(TerrainSettings.Default.WithNodeSize(9, 42), (_, _) => 4);
-        var environment = new EnvironmentSystem(map, null);
-        environment.Behaviors = new WorldBehaviorPolicy(new() { Graphs = new() {
-            Constant("water.snowmelt", "tile", 0), Constant("water.snowmelt", "tile", 1e9, 0), Constant("water.infiltration", "tile", 1e9)
-        }});
-        environment.ForceWeather(WeatherPreset.Snow, 10, 120); environment.Update(30);
-        Assert.Equal(0, environment.SnowWaterAt(0)); Assert.True(environment.SnowWaterAt(1) > 0);
-        Assert.InRange(Math.Abs(environment.BalanceError), 0, 1e-6);
-    }
-    [Fact]
     public void MillBindingChangesOnlyItsTargetAndConservesTimber()
     {
         var map = new TerrainMap(TerrainSettings.Default.WithNodeSize(9, 42), (_, _) => 4);
@@ -120,6 +108,8 @@ public class BehaviorModelTests
         var target = trees.First(t => t.AnnualGrowth.Height > 0);
         world.QueueBehaviors(new() { Graphs = new() { Constant("forest.growth", "tree", 0, target.Id) }});
         world.ExecutePendingCommands();
+        Assert.True(world.CaptureCheckpoint().PendingForestRateRefresh);
+        world.Update(1d / 30);
         var changed = world.CaptureCheckpoint().Ecology.Forest.Trees.Patches.SelectMany(p => p.Trees).ToArray();
         Assert.Equal(default, changed.Single(t => t.Id == target.Id).AnnualGrowth);
         Assert.Contains(changed, t => t.Id != target.Id && t.AnnualGrowth.Height > 0);

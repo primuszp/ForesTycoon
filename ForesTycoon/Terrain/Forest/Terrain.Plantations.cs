@@ -84,9 +84,11 @@ namespace ForesTycoon
             }
         }
 
-        private void DisposePlantations()
+
+
+        private IEnumerable<int> DisposePlantationsWork()
         {
-            foreach (var geometry in plantationGeometry.Values) geometry.Dispose();
+            foreach (var geometry in plantationGeometry.Values) { geometry.Dispose(); yield return 1; }
             plantationGeometry.Clear(); plantationFill.Clear(); plantationLines.Clear();
         }
     }

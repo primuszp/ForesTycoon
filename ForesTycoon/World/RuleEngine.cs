@@ -7,7 +7,14 @@ using System.Text.Json;
 namespace ForesTycoon;
 
 /// <summary>A field of a scope: read for every element, writable when <see cref="Write"/> is set.</summary>
-internal sealed record RuleScopeField(string Name, string Help, Func<GameWorld, int, double> Read, Action<GameWorld, int, double> Write = null);
+internal sealed record RuleScopeField(string Name, string Help, Func<GameWorld, int, double> Read, Action<GameWorld, int, double> Write = null)
+{
+    /// <summary>The range the field keeps; a flow never takes a stock below <see cref="Min"/> or fills it above <see cref="Max"/>.</summary>
+    public double Min { get; init; } = double.NegativeInfinity;
+    public double Max { get; init; } = double.PositiveInfinity;
+    /// <summary>When <see cref="Read"/> skips the view (a direct reader), the reading through the view; tests compare the two.</summary>
+    public Func<GameWorld, int, double> ViewRead { get; init; }
+}
 /// <summary>A named action of a scope; returns true when it changed the world's structure (routes must be refreshed).</summary>
 internal sealed record RuleScopeAction(string Name, string Help, Func<GameWorld, int, bool> Apply);
 /// <summary>An entity set a rule runs on: its elements, fields and actions. Custom fields are kept per element ID.</summary>
@@ -16,14 +23,26 @@ internal sealed record RuleScope(string Id, string Name, string Element, Func<Ga
 {
     /// <summary>The discovered object kind (<see cref="GameWorld.RuleObjects"/>) behind the scope.</summary>
     public string Entity { get; init; }
-}
+    public Func<GameWorld, IEnumerable<int>> PrepareElements { get; init; }
+    public Func<GameWorld, int[]> PreparedElements { get; init; }
+    /// <summary>Collections whose members are elements of a scope, so flows can be shared out among them.</summary>
+    public RuleScopeCollection[] Collections { get; init; } = Array.Empty<RuleScopeCollection>();
 
-internal sealed record RuleBookCheckpoint(List<WorldRule> Rules, List<RuleFieldDefinition> Fields, Dictionary<string, double[]> Values);
+}
+/// <summary>A collection of a scope's element (“neighbours”) whose members are elements of scope <paramref name="Target"/>.</summary>
+internal sealed record RuleScopeCollection(string Name, string Target, Func<GameWorld, int, int[]> Members);
+
+internal sealed record RuleBookCheckpoint(List<WorldRule> Rules, List<RuleFieldDefinition> Fields, Dictionary<string, double[]> Values,
+    List<string> RemovedStarters = null, Dictionary<string, double> FlowTotals = null);
+/// <summary>A rule step under way: its time step, where it stands (rule, element) and the named values it has read so far.</summary>
+internal sealed record RuleStepCheckpoint(double Years, double Time, int Rule, int Element, Dictionary<string, double> Named);
 
 /// <summary>
 /// Runs the rule book: every enabled rule, in order, on every element of its scope. Per element the condition is
 /// evaluated, then the effects in order; a later effect sees the earlier writes of the same element. Expressions are the
 /// editor's formula language, compiled to the bounded behavior graphs (no IO, no C#). Deterministic: fixed element order.
+/// A step may be spread over several world ticks (<see cref="Begin"/>, <see cref="Continue"/>): the order of the work is
+/// the same, only other systems run in between.
 /// </summary>
 internal sealed class RuleEngine
 {
@@ -33,72 +52,91 @@ internal sealed class RuleEngine
     internal static RuleScope Scope(string id) => Array.Find(Scopes, s => s.Id == id);
 
 
-    // ── Built-in rules, moved out of C# one by one ───────────────────────
-    internal static List<WorldRule> BuiltIn() => new List<WorldRule> {
-        new() { Id = "road.weather", BuiltIn = true, Name = "Időjárási útromlás", Scope = "road",
-            Description = "Az eső és a térképi nedvesség burkolatonként csökkenti az út állapotát.", RoadWeather = new() },
+    // ── Starter rules: what a new project begins with ────────────────────
+    // They were C# once; now they are ordinary rules of the project, edited, switched off or deleted like any other.
+    // A starter only seeds a project (and older projects that have not seen it yet); the game itself owns no rule.
+    internal static List<WorldRule> StarterRules() => WaterRules.Defaults().Concat(new List<WorldRule> {
+        RoadWeatherRule.Default(),
         TrailAgeRule.Default(),
         StumpDecayRule.Default(),
         // A sample of the object model: a tree rule reading its own tile through a relation. Off by default, so the
         // shipped game behaves as before; switch it on in the editor to see dry ground weaken the trees on it.
-        new() { Id = "tree.drought", BuiltIn = true, Enabled = false, Name = "Aszálykár a fákon", Scope = "tree", Schedule = "step",
+        new() { Id = "tree.drought", Enabled = false, Name = "Aszálykár a fákon", Scope = "tree", Schedule = "step",
             Description = "Kiszáradt talajon a fa egészsége romlik; az árnyéktűrő fajok jobban bírják. A havi növekedés ezt a csökkent egészséget látja.",
             Effects = {
                 new() { Target = "health", Mode = "add",
                     Formula = "curve.linear(tile.waterSupply; 0; -0,3; 0,2; 0) * (1 - 0,5 * shadeTolerance) * lépés" } } },
-    }.Select(r => { Upgrade(r); return r; }).ToList();
+    }).Select(r => { r.Template = r.Id; return r; }).ToList();
 
-    /// <summary>Brings a saved rule to the current model: authoring upgrades, then former field names (aliases) renamed.</summary>
-    internal static void Upgrade(WorldRule rule)
+    /// <summary>
+    /// Starter rules the project has not seen yet are added (a new project gets them all); one the author deleted is
+    /// listed in <paramref name="removed"/> and stays deleted. A rule made from a starter counts as having seen it.
+    /// </summary>
+    internal static void AddMissingStarters(List<WorldRule> rules, ICollection<string> removed)
     {
-        rule.UpgradeAuthoring();
-        if (rule.Scope != null) rule.RenameFields(GameWorld.FieldAliases(rule.Scope));
+        foreach (var rule in StarterRules())
+            if (!rules.Exists(r => r.Id == rule.Id || r.Template == rule.Id) && removed?.Contains(rule.Id) != true) rules.Add(rule);
     }
 
-    /// <summary>Built-in rules a project does not list yet are added at their place in the built-in order.</summary>
-    internal static void AddMissingBuiltIns(List<WorldRule> rules)
-    {
-        foreach (var rule in rules) Upgrade(rule);
-        foreach (var rule in BuiltIn())
-            if (!rules.Exists(r => r.Id == rule.Id)) rules.Add(rule);
-    }
-
-    internal static bool IsDefault(List<WorldRule> rules, List<RuleFieldDefinition> fields) =>
-        fields.Count == 0 && JsonSerializer.Serialize(rules) == JsonSerializer.Serialize(BuiltIn());
+    internal static bool IsDefault(List<WorldRule> rules, List<RuleFieldDefinition> fields, ICollection<string> removed) =>
+        fields.Count == 0 && (removed == null || removed.Count == 0) && JsonSerializer.Serialize(rules) == JsonSerializer.Serialize(StarterRules());
 
     // ── Compilation ──────────────────────────────────────────────────────
     private sealed class Expression
     {
-        private readonly CompiledBehaviorModel model;
+        private readonly Func<BehaviorInputs, double[], double> evaluate;
         private readonly string hook, kind;
-        internal Expression(CompiledBehaviorModel model, string hook, string kind) { this.model = model; this.hook = hook; this.kind = kind; }
+        internal Expression(CompiledBehaviorModel model, string hook, string kind) { evaluate = model.Evaluator(hook, kind); this.hook = hook; this.kind = kind; }
         internal double Evaluate(double years, double time, double[] inputs, out string error)
         {
-            model.ClearError();
-            double value = model.Evaluate(hook, kind, 0, new BehaviorInputs(0, years, time, 0, 0), inputs);
-            error = model.LastError;
-            return value;
+            error = null;
+            try { return evaluate(new BehaviorInputs(0, years, time, 0, 0), inputs); }
+            catch (ArithmeticException e) { error = $"{hook} / {kind} #0: {e.Message} A beépített eredmény maradt érvényben."; return 0; }
         }
     }
-    private sealed record CompiledEffect(RuleEffect Source, Expression Value, int Field, RuleScopeAction Action, Expression[] Parts = null);
+    private sealed record CompiledEffect(RuleEffect Source, Expression Value, int Field, RuleScopeAction Action, Expression[] Parts = null, CompiledFlow Flow = null);
+    /// <summary>
+    /// A flow: what <see cref="From"/> loses <see cref="To"/> gains (−1: outside the model). Into a collection it is shared among
+    /// the members' <see cref="SpreadField"/>, evenly or by how much lower their <see cref="SpreadLevel"/> is than <see cref="OwnLevel"/>.
+    /// </summary>
+    private sealed record CompiledFlow(string Name, int From, int To, RuleScopeCollection Spread, RuleScope SpreadScope, int SpreadField,
+        bool Downhill, int SpreadLevel, int OwnLevel)
+    {
+        /// <summary>The flow's line in the step's ledger (<see cref="ledgerNames"/>); flows of the same name share it.</summary>
+        public int Slot { get; init; }
+    }
     /// <summary><paramref name="Used"/>: the inputs the rule mentions; only these are read per element (a tree rule touches thousands).</summary>
-    private sealed record CompiledRule(WorldRule Source, RuleScope Scope, string[] Inputs, bool[] Used, Expression Condition, CompiledEffect[] Effects);
+    private sealed record CompiledRule(WorldRule Source, RuleScope Scope, string[] Inputs, bool[] Used, Expression Condition, CompiledEffect[] Effects)
+    {
+        /// <summary>The scope fields the rule reads, by index: a scope has hundreds (summaries), a rule reads a few.</summary>
+        public int[] Reads { get; } = Enumerable.Range(0, Scope.Fields.Length).Where(i => Used[i]).ToArray();
+        /// <summary>The readers of <see cref="Reads"/>, in the same order.</summary>
+        public Func<GameWorld, int, double>[] Readers { get; } = Enumerable.Range(0, Scope.Fields.Length).Where(i => Used[i]).Select(i => Scope.Fields[i].Read).ToArray();
+    }
 
     private readonly CompiledRule[] compiled;
     private readonly Dictionary<string, double[]> values = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, double> flowTotals = new(StringComparer.Ordinal);
+    /// <summary>The flow ledger: what each named flow has moved so far, in its source's unit.</summary>
+    internal IReadOnlyDictionary<string, double> FlowTotals => flowTotals;
     internal List<WorldRule> Rules { get; }
     internal List<RuleFieldDefinition> Fields { get; }
     internal string LastError { get; private set; }
 
-    internal sealed record RoadWeatherPreview(double Moisture, double RainIntensity, double Rate, double Before, double After);
     internal sealed record InfluenceContribution(string Name, double Change);
     internal sealed record InfluencePreview(string Target, double Before, double After, InfluenceContribution[] Contributions);
     internal IReadOnlyList<InfluencePreview> PreviewInfluences(GameWorld world, string ruleId, int id, double years)
     {
         var rule = compiled.Single(r => r.Source.Id == ruleId);
         if (rule.Source.Effects.Any(e => e.Influence == null)) throw new InvalidDataException("A próba vizuális hatásokhoz használható.");
+        previewing = true;
+        try { return PreviewInfluences(world, rule, id, years); }
+        finally { previewing = false; }
+    }
+    private List<InfluencePreview> PreviewInfluences(GameWorld world, CompiledRule rule, int id, double years)
+    {
         var inputs = new double[rule.Inputs.Length];
-        for (int i = 0; i < rule.Scope.Fields.Length; i++) if (rule.Used[i]) inputs[i] = rule.Scope.Fields[i].Read(world, id);
+        foreach (int i in rule.Reads) inputs[i] = rule.Scope.Fields[i].Read(world, id);
         for (int i = rule.Scope.Fields.Length; i < inputs.Length; i++) inputs[i] = ReadCustom(world, rule.Inputs[i], id);
         var rows = new List<InfluencePreview>();
         for (int e = 0; e < rule.Effects.Length; e++) {
@@ -110,10 +148,26 @@ internal sealed class RuleEngine
                 if (rule.Source.Enabled && trigger != 0) break;
                 continue;
             }
+            if (effect.Flow != null) {
+                // A flow is previewed on its source: what it would hold after giving the amount (an inflow from outside: the amount).
+                double amount = Math.Max(0, effect.Value.Evaluate(years, world.ReadRuleValue("world.time"), inputs, out string flowError));
+                if (flowError != null) throw new InvalidDataException(flowError);
+                var flowParts = new List<InfluenceContribution>();
+                for (int p = 0; p < (effect.Parts?.Length ?? 0); p++) {
+                    double change = effect.Parts[p].Evaluate(years, world.ReadRuleValue("world.time"), inputs, out flowError);
+                    if (flowError != null) throw new InvalidDataException(flowError);
+                    flowParts.Add(new(rule.Source.Effects[e].Influence.Terms[p].Name, rule.Source.Enabled ? change : 0));
+                }
+                if (!rule.Source.Enabled) amount = 0;
+                if (effect.Field >= 0) {
+                    double held = inputs[effect.Field], min = effect.Field < rule.Scope.Fields.Length ? Math.Max(0, rule.Scope.Fields[effect.Field].Min) : 0;
+                    rows.Add(new(effect.Source.Target, held, held - Math.Min(amount, Math.Max(0, held - min)), flowParts.ToArray()));
+                } else rows.Add(new(effect.Source.To, 0, amount, flowParts.ToArray()));
+                continue;
+            }
             double before = inputs[effect.Field];
             double value = effect.Value.Evaluate(years, world.ReadRuleValue("world.time"), inputs, out string error);
             if (error != null) throw new InvalidDataException(error);
-            if (rule.Source.UseLegacyRoadOverride && years > 0) value = -world.AdjustRoadWeatherRate(id, -value / years, years, world.ReadRuleValue("world.time")) * years;
             var field = GameWorld.RuleObjects.Find(rule.Scope.Entity)?.Fields.FirstOrDefault(f => f.Name == effect.Source.Target);
             double after = rule.Source.Enabled ? Math.Clamp(effect.Source.Mode == "set" ? value : before + value, field?.Min ?? -1e12, field?.Max ?? 1e12) : before;
             inputs[effect.Field] = after;
@@ -130,21 +184,7 @@ internal sealed class RuleEngine
         }
         return rows;
     }
-    /// <summary>Read-only explanation using the very same compiled effect and compatibility binding as Run.</summary>
-    internal RoadWeatherPreview PreviewRoadWeather(GameWorld world, string ruleId, int tile, double years)
-    {
-        var rule = compiled.Single(r => r.Source.Id == ruleId && r.Source.Scope == "road");
-        var inputs = rule.Scope.Fields.Select(f => f.Read(world, tile)).ToArray();
-        double before = world.Map.GetRoadCondition(tile);
-        double time = world.ReadRuleValue("world.time");
-        double delta = rule.Effects[0].Value.Evaluate(years, time, inputs, out string error);
-        if (error != null) throw new InvalidDataException(error);
-        if ((rule.Source.UseLegacyRoadOverride || rule.Source.RoadWeather?.UseLegacyOverride == true) && years > 0)
-            delta = -world.AdjustRoadWeatherRate(tile, -delta / years, years, time) * years;
-        if (!rule.Source.Enabled) delta = 0;
-        return new(world.Map.GetRuleMoisture(tile), (float)Math.Clamp(world.Environment.RainRate / 20, 0, 1),
-            years > 0 ? -delta / years : 0, before, Math.Clamp(before + delta, 0, 1));
-    }
+
 
     /// <summary>The names a rule's formulas may use on a scope: fields, custom fields, step, time, world values, stocks, tuning.</summary>
     internal static IReadOnlyList<FormulaName> Names(string scope, IEnumerable<RuleFieldDefinition> fields, IEnumerable<string> stocks)
@@ -160,7 +200,11 @@ internal sealed class RuleEngine
             if (names[i].Operation == BehaviorOperation.Input)
                 names[i] = names[i] with { Help = s.Fields.FirstOrDefault(f => f.Name == names[i].Name)?.Help
                     ?? fields.FirstOrDefault(f => f.Name == names[i].Name)?.Description ?? "" };
-        foreach (var spec in GameTuning.Specs) names.Add(new("hangolás." + spec.Id, BehaviorOperation.NamedValue, "tuning." + spec.Id, $"{spec.Name} ({spec.Unit})."));
+        // Every field of the world and every stock by its code name, as the editor's pickers offer them.
+        var world = GameWorld.RuleObjects.Find("world");
+        foreach (string key in GameWorld.RuleWorldFields)
+            names.Add(new(key, BehaviorOperation.NamedValue, key, world?.Fields.FirstOrDefault(f => "world." + f.Name == key)?.Help ?? ""));
+        foreach (string id in stocks ?? Enumerable.Empty<string>()) names.Add(new("stock." + id, BehaviorOperation.NamedValue, "stock." + id, "Saját készlet."));
         foreach (var spec in GameTuning.Specs) names.Add(new("tuning." + spec.Id, BehaviorOperation.NamedValue, "tuning." + spec.Id, $"{spec.Name} ({spec.Unit})."));
         return names;
     }
@@ -175,9 +219,44 @@ internal sealed class RuleEngine
     internal static IReadOnlySet<string> NamedKeys(IEnumerable<string> stockKeys) =>
         new HashSet<string>(GameWorld.RuleWorldFields.Concat(stockKeys).Concat(GameTuning.Specs.Select(s => "tuning." + s.Id)), StringComparer.Ordinal);
 
+    private readonly Func<string, double> readNamed;
+    // A named value as it stood when the step began: the same for every element and rule of the step. Each key the
+    // formulas use gets a slot when they are compiled, so an evaluation reads an array instead of looking the name up.
+    private readonly Dictionary<string, int> namedSlots = new(StringComparer.Ordinal);
+    private double[] namedValues = new double[8]; private int[] namedStamps = new int[8]; private int namedStep = 1;
+    private int NamedSlot(string key)
+    {
+        if (namedSlots.TryGetValue(key, out int slot)) return slot;
+        namedSlots[key] = slot = namedSlots.Count;
+        if (slot == namedValues.Length) { Array.Resize(ref namedValues, slot * 2); Array.Resize(ref namedStamps, slot * 2); }
+        return slot;
+    }
+    private double ReadNamed(int slot, string key)
+    {
+        // A preview between the ticks of a step reads the world as it is and leaves the step's values alone.
+        if (previewing) return readNamed(key);
+        if (namedStamps[slot] != namedStep) { namedValues[slot] = readNamed(key); namedStamps[slot] = namedStep; }
+        return namedValues[slot];
+    }
+    private bool previewing;
+    private double ReadNamed(string key) => ReadNamed(NamedSlot(key), key);
+    private Func<double> BindNamed(string key) { int slot = NamedSlot(key); return () => ReadNamed(slot, key); }
+
+    // The flow ledger during a step: one line per flow name, added up in a plain array and written back to
+    // flowTotals when the step ends. New names are added in the order they first moved, as the dictionary always had them.
+    private readonly List<string> ledgerNames = new();
+    private double[] ledger = Array.Empty<double>(); private bool[] ledgerKnown = Array.Empty<bool>();
+    private readonly List<int> ledgerAdded = new();
+    private int LedgerSlot(string name)
+    {
+        int slot = ledgerNames.IndexOf(name);
+        if (slot < 0) { slot = ledgerNames.Count; ledgerNames.Add(name); }
+        return slot;
+    }
+
     internal RuleEngine(List<WorldRule> rules, List<RuleFieldDefinition> fields, IEnumerable<string> stockIds, Func<string, double> readValue)
     {
-        foreach (var rule in rules) Upgrade(rule);
+        readNamed = readValue;
         Rules = rules; Fields = fields;
         if (rules.Count > 256 || fields.Count > 64) throw new InvalidDataException("Legfeljebb 256 szabály és 64 saját mező lehet.");
         var fieldNames = new HashSet<string>(StringComparer.Ordinal);
@@ -203,7 +282,7 @@ internal sealed class RuleEngine
                 var hook = Hook(id, scope, inputs);
                 try {
                     var graph = RuleFormula.Compile(text, new BehaviorGraph { Id = id, Name = rule.Name, Hook = id, Kind = hook.Kind }, names);
-                    return new(new CompiledBehaviorModel(new BehaviorModel { Graphs = { graph } }, new[] { hook }, named, readValue), id, hook.Kind);
+                    return new(new CompiledBehaviorModel(new BehaviorModel { Graphs = { graph } }, new[] { hook }, named, ReadNamed, BindNamed), id, hook.Kind);
                 } catch (Exception e) when (e is FormatException or InvalidDataException) {
                     throw new InvalidDataException($"{rule.Name} › {part}: {e.Message}", e);
                 }
@@ -215,6 +294,33 @@ internal sealed class RuleEngine
                     var action = Array.Find(scope.Actions, a => a.Name == e.Target) ?? throw new InvalidDataException($"{rule.Name}: a(z) {scope.Name} hatókörben nincs ilyen művelet: {e.Target}.");
                     return new CompiledEffect(e, string.IsNullOrWhiteSpace(e.Formula) ? null : Compile(e.Formula, $"{i + 1}. hatás"), -1, action);
                 }
+                if (e.Mode == "flow") {
+                    int Writable(string name)
+                    {
+                        int f = Array.IndexOf(inputs, name);
+                        if (f < 0 || f < scope.Fields.Length && scope.Fields[f].Write == null)
+                            throw new InvalidDataException($"{rule.Name}: a(z) {name} nem írható készlet ebben a hatókörben.");
+                        return f;
+                    }
+                    int from = e.Target.Length == 0 ? -1 : Writable(e.Target);
+                    int dot = e.To.IndexOf('.');
+                    var spread = dot > 0 ? Array.Find(scope.Collections, c => c.Name == e.To[..dot]) : null;
+                    CompiledFlow flow;
+                    if (spread != null) {
+                        var into = Scope(spread.Target);
+                        int intoField = Array.FindIndex(into.Fields, f => f.Name == e.To[(dot + 1)..] && f.Write != null);
+                        if (intoField < 0) throw new InvalidDataException($"{rule.Name}: a(z) {e.To} nem írható készlet.");
+                        bool downhill = e.Spread == "downhill";
+                        int level = downhill ? Array.FindIndex(into.Fields, f => f.Name == e.Level) : -1;
+                        int own = downhill ? Array.FindIndex(scope.Fields, f => f.Name == e.Level) : -1;
+                        if (downhill && (level < 0 || own < 0)) throw new InvalidDataException($"{rule.Name}: a lejtés szerinti áramláshoz adj meg szintet ({e.Level}).");
+                        flow = new(e.FlowName, from, -1, spread, into, intoField, downhill, level, own);
+                    } else flow = new(e.FlowName, from, e.To.Length == 0 ? -1 : Writable(e.To), null, null, -1, false, -1, -1);
+                    flow = flow with { Slot = LedgerSlot(e.FlowName.Length > 0 ? e.FlowName : "áramlás") };
+                    var flowParts = rule.Effects.ElementAtOrDefault(i)?.Influence is { } fi
+                        ? fi.Terms.Select(t => Compile(new RuleInfluence { PerYear = fi.PerYear, Terms = new() { t } }.Compile(), "kapcsolat")).ToArray() : null;
+                    return new CompiledEffect(e, Compile(e.Formula, $"{i + 1}. áramlás"), from, null, flowParts, flow);
+                }
                 int field = Array.IndexOf(inputs, e.Target);
                 bool writable = field >= 0 && (field >= scope.Fields.Length || scope.Fields[field].Write != null);
                 if (!writable) throw new InvalidDataException($"{rule.Name}: a(z) {e.Target} nem írható mező ebben a hatókörben.");
@@ -222,10 +328,11 @@ internal sealed class RuleEngine
                 var parts = influence?.Terms.Select(t => Compile(new RuleInfluence { PerYear = influence.PerYear, Terms = new() { t } }.Compile(), "kapcsolat")).ToArray();
                 return new CompiledEffect(e, Compile(e.Formula, $"{i + 1}. hatás"), field, null, parts);
             }).ToArray();
-            string text = rule.Condition + " " + string.Join(" ", sourceEffects.Select(e => e.Target + " " + e.Formula));
+            string text = rule.Condition + " " + string.Join(" ", sourceEffects.Select(e => e.Target + " " + e.To + " " + e.Level + " " + e.Formula));
             list.Add(new(rule, scope, inputs, inputs.Select(n => text.Contains(n, StringComparison.Ordinal)).ToArray(), condition, effects));
         }
         compiled = list.ToArray();
+        ledger = new double[ledgerNames.Count]; ledgerKnown = new bool[ledgerNames.Count];
     }
 
     /// <summary>Custom field values survive a rule book change for fields kept with the same name and scope.</summary>
@@ -254,33 +361,119 @@ internal sealed class RuleEngine
         return id >= 0 && id < v.Length ? v[id] : double.NaN;
     }
 
-    /// <summary>One step of <paramref name="years"/>; returns true when an action changed the network (routes need a refresh).</summary>
+    /// <summary>One whole step of <paramref name="years"/>; returns true when an action changed the network (routes need a refresh).</summary>
     internal bool Run(GameWorld world, double years, double time)
     {
-        LastError = null;
+        Begin(world, years, time);
         bool changed = false;
-        foreach (var rule in compiled) {
+        while (StepPending) changed |= Continue(world, 256);
+        return changed;
+    }
+
+    // ── A step spread over world ticks ───────────────────────────────────
+    private IEnumerator<int> execution;
+    internal bool NetworkChanged { get; private set; }
+    private bool stepPending; private double stepYears, stepTime; private int stepRule, stepElement;
+    /// <summary>A step has begun and not all of its work is done yet.</summary>
+    internal bool StepPending => stepPending;
+
+    /// <summary>Starts a step of <paramref name="years"/>; <see cref="Continue"/> does the work. The previous step must be finished.</summary>
+    internal void Begin(GameWorld world, double years, double time)
+    {
+        if (stepPending) throw new InvalidOperationException("Az előző szabálylépés még fut.");
+        execution?.Dispose(); execution = null; NetworkChanged = false;
+        LastError = null; namedStep++;
+        stepPending = true; stepYears = years; stepTime = time; stepRule = stepElement = 0;
+    }
+
+    /// <summary>
+    /// Continues the step with at most <paramref name="budget"/> preparation/element work units, in its own order.
+    /// Every scope can suspend. Returns true when an action
+    /// changed the network. Nothing happens when no step is pending.
+    /// </summary>
+    internal bool Continue(GameWorld world, int budget)
+    {
+        if (budget <= 0) throw new ArgumentOutOfRangeException(nameof(budget));
+        if (!stepPending) return false;
+        execution ??= RunRulesWork(world, stepYears, stepTime).GetEnumerator();
+        NetworkChanged = false;
+        for (int i = 0; i < budget; i++) if (!AdvanceWorkUnit()) { execution.Dispose(); execution = null; break; }
+        PublishLedger();
+        return NetworkChanged;
+    }
+
+    internal IEnumerable<int> ContinueWork(GameWorld world)
+    {
+        if (!stepPending) yield break;
+        execution ??= RunRulesWork(world, stepYears, stepTime).GetEnumerator();
+        NetworkChanged = false;
+        while (AdvanceWorkUnit()) { PublishLedger(); yield return 1; }
+        execution.Dispose(); execution = null;
+        PublishLedger();
+    }
+
+    private bool AdvanceWorkUnit()
+    {
+        if (Profile == null) return execution.MoveNext();
+        string id = stepRule < compiled.Length ? compiled[stepRule].Source.Id : null;
+        long started = System.Diagnostics.Stopwatch.GetTimestamp();
+        bool more = execution.MoveNext();
+        if (id != null) Profile[id] = Profile.GetValueOrDefault(id) + System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        return more;
+    }
+
+    private IEnumerable<int> PrepareValuesWork(GameWorld world, RuleFieldDefinition field)
+    {
+        int size = Scope(field.Scope).Size(world);
+        if (values.TryGetValue(field.Name, out var previous) && previous.Length == size) yield break;
+        var array = new double[size];
+        for (int first = 0; first < size; first += 1024) {
+            Array.Fill(array, field.Initial, first, Math.Min(1024, size - first));
+            yield return 1;
+        }
+        values[field.Name] = array;
+    }
+
+    private void PublishLedger()
+    {
+        for (int k = 0; k < ledger.Length; k++) if (ledgerKnown[k]) flowTotals[ledgerNames[k]] = ledger[k];
+        ledgerAdded.Clear();
+    }
+
+    private IEnumerable<int> RunRulesWork(GameWorld world, double years, double time)
+    {
+        for (int k = 0; k < ledger.Length; k++) ledgerKnown[k] = flowTotals.TryGetValue(ledgerNames[k], out ledger[k]);
+        for (; stepRule < compiled.Length; stepRule++, stepElement = 0) {
+            var rule = compiled[stepRule];
             if (!rule.Source.Enabled) continue;
             var scope = rule.Scope;
-            var custom = rule.Inputs.Skip(scope.Fields.Length).Select(n => Values(world, Fields.Find(f => f.Name == n))).ToArray();
+            if (scope.PrepareElements != null) foreach (int work in scope.PrepareElements(world)) yield return work;
+            var elements = scope.PreparedElements?.Invoke(world) ?? scope.Elements(world);
             var customDefs = rule.Inputs.Skip(scope.Fields.Length).Select(n => Fields.Find(f => f.Name == n)).ToArray();
+            var custom = new double[customDefs.Length][];
+            for (int c = 0; c < custom.Length; c++) {
+                foreach (int unit in PrepareValuesWork(world, customDefs[c])) yield return unit;
+                custom[c] = values[customDefs[c].Name];
+            }
             var inputs = new double[rule.Inputs.Length];
-            foreach (int id in scope.Elements(world)) {
-                for (int i = 0; i < scope.Fields.Length; i++) if (rule.Used[i]) inputs[i] = scope.Fields[i].Read(world, id);
+            int[] reads = rule.Reads; var readers = rule.Readers; var effects = rule.Effects;
+            for (; stepElement < elements.Length; stepElement++) {
+                yield return 1;
+                int id = elements[stepElement];
+                for (int r = 0; r < reads.Length; r++) inputs[reads[r]] = readers[r](world, id);
                 for (int i = 0; i < custom.Length; i++) inputs[scope.Fields.Length + i] = custom[i][id];
                 string error = null;
                 if (rule.Condition != null && rule.Condition.Evaluate(years, time, inputs, out error) == 0) { if (error != null) LastError = error; continue; }
                 if (error != null) { LastError = error; continue; }
-                foreach (var effect in rule.Effects) {
+                foreach (var effect in effects) {
                     double value = effect.Value == null ? 1 : effect.Value.Evaluate(years, time, inputs, out error);
                     if (error != null) { LastError = $"{rule.Source.Name}: {error}"; break; }
-                    if ((rule.Source.UseLegacyRoadOverride || rule.Source.RoadWeather?.UseLegacyOverride == true) && years > 0)
-                        value = -world.AdjustRoadWeatherRate(id, -value / years, years, time) * years;
                     if (effect.Action != null) {
                         if (value == 0) continue;
-                        changed |= effect.Action.Apply(world, id);
+                        NetworkChanged |= effect.Action.Apply(world, id);
                         break; // the element may be gone; its later effects do not run
                     }
+                    if (effect.Flow != null) { Move(world, scope, id, inputs, custom, customDefs, effect.Flow, value); continue; }
                     double next = effect.Source.Mode == "add" ? inputs[effect.Field] + value : value;
                     if (effect.Field < scope.Fields.Length) {
                         scope.Fields[effect.Field].Write(world, id, next);
@@ -293,11 +486,100 @@ internal sealed class RuleEngine
                 }
             }
         }
-        return changed;
+        stepPending = false;
     }
 
-    internal RuleBookCheckpoint Capture() => IsDefault(Rules, Fields) ? null
-        : new(Clone(Rules), CloneFields(Fields), values.ToDictionary(p => p.Key, p => (double[])p.Value.Clone(), StringComparer.Ordinal));
+    /// <summary>The step under way, for a checkpoint; null when none is.</summary>
+    internal RuleStepCheckpoint CaptureStep() => !stepPending ? null : new(stepYears, stepTime, stepRule, stepElement,
+        namedSlots.OrderBy(p => p.Value).Where(p => namedStamps[p.Value] == namedStep).ToDictionary(p => p.Key, p => namedValues[p.Value], StringComparer.Ordinal));
+
+    /// <summary>Takes up a step saved by <see cref="CaptureStep"/>: it continues where it stood, with the named values it had read.</summary>
+    internal void RestoreStep(GameWorld world, RuleStepCheckpoint saved)
+    {
+        if (saved == null) return;
+        CheckpointGuard.Require(double.IsFinite(saved.Years) && saved.Years >= 0 && double.IsFinite(saved.Time) && saved.Rule >= 0
+            && saved.Rule <= compiled.Length && saved.Element >= 0 && saved.Named != null && saved.Named.Values.All(double.IsFinite), "rule step");
+        stepPending = false;
+        Begin(world, saved.Years, saved.Time);
+        stepRule = saved.Rule; stepElement = saved.Element;
+        foreach (var (key, value) in saved.Named) {
+            CheckpointGuard.Require(namedSlots.ContainsKey(key), "rule step value");
+            int slot = NamedSlot(key); namedValues[slot] = value; namedStamps[slot] = namedStep;
+        }
+    }
+
+    /// <summary>When set, the milliseconds each rule took are added up here, by rule ID (benchmarks).</summary>
+    internal Dictionary<string, double> Profile { get; set; }
+
+    /// <summary>
+    /// Moves up to <paramref name="amount"/> along a flow: never more than the source holds above its minimum, nor more than
+    /// the receivers have room for. What leaves one stock arrives in the other, so a closed model conserves its quantity.
+    /// </summary>
+    private void Move(GameWorld world, RuleScope scope, int id, double[] inputs, double[][] custom, RuleFieldDefinition[] customDefs, CompiledFlow flow, double amount)
+    {
+        if (!(amount > 0)) return;
+        var stock = new Stocks(world, scope, id, inputs, custom, customDefs);
+        if (flow.From >= 0) amount = Math.Min(amount, Math.Max(0, stock.Read(flow.From) - Math.Max(0, stock.Min(flow.From))));
+        double moved = 0;
+        if (flow.Spread != null) {
+            var members = flow.Spread.Members(world, id);
+            var into = flow.SpreadScope.Fields[flow.SpreadField];
+            double self = flow.Downhill ? scope.Fields[flow.OwnLevel].Read(world, id) : 0, total = 0;
+            Span<double> weights = members.Length <= 16 ? stackalloc double[members.Length] : new double[members.Length];
+            for (int m = 0; m < members.Length; m++) {
+                weights[m] = flow.Downhill ? Math.Max(0, self - flow.SpreadScope.Fields[flow.SpreadLevel].Read(world, members[m])) : 1;
+                total += weights[m];
+            }
+            if (total <= 0) return;
+            for (int m = 0; m < members.Length; m++) {
+                if (weights[m] <= 0) continue;
+                double before = into.Read(world, members[m]);
+                double share = Math.Min(amount * weights[m] / total, Math.Max(0, into.Max - before));
+                into.Write(world, members[m], before + share);
+                moved += into.Read(world, members[m]) - before;
+            }
+        } else if (flow.To >= 0) {
+            double before = stock.Read(flow.To);
+            stock.Write(flow.To, before + Math.Min(amount, Math.Max(0, stock.Max(flow.To) - before)));
+            moved = stock.Read(flow.To) - before;
+        } else moved = amount;
+        if (moved <= 0) return;
+        if (flow.From >= 0) stock.Write(flow.From, stock.Read(flow.From) - moved);
+        if (!ledgerKnown[flow.Slot]) { ledgerKnown[flow.Slot] = true; ledgerAdded.Add(flow.Slot); }
+        ledger[flow.Slot] += moved;
+    }
+
+    /// <summary>The stocks of one element a flow moves between: its scope fields, then its custom fields.</summary>
+    private readonly ref struct Stocks
+    {
+        private readonly GameWorld world; private readonly RuleScope scope; private readonly int id;
+        private readonly double[] inputs; private readonly double[][] custom; private readonly RuleFieldDefinition[] customDefs;
+        internal Stocks(GameWorld world, RuleScope scope, int id, double[] inputs, double[][] custom, RuleFieldDefinition[] customDefs)
+        { this.world = world; this.scope = scope; this.id = id; this.inputs = inputs; this.custom = custom; this.customDefs = customDefs; }
+        private int Own => scope.Fields.Length;
+        internal double Read(int i) => i < Own ? scope.Fields[i].Read(world, id) : custom[i - Own][id];
+        internal double Min(int i) => i < Own ? scope.Fields[i].Min : customDefs[i - Own].Min;
+        internal double Max(int i) => i < Own ? scope.Fields[i].Max : customDefs[i - Own].Max;
+        internal void Write(int i, double value)
+        {
+            if (i < Own) { scope.Fields[i].Write(world, id, value); inputs[i] = scope.Fields[i].Read(world, id); return; }
+            value = Math.Clamp(value, customDefs[i - Own].Min, customDefs[i - Own].Max);
+            custom[i - Own][id] = value; inputs[i] = value;
+        }
+    }
+
+    /// <summary>Starter rules the author deleted; saved with the rules so they stay deleted.</summary>
+    internal List<string> RemovedStarters { get; init; } = new();
+    // The starter book is left out of a checkpoint only while its flow ledger is empty: the ledger must survive a save.
+    internal RuleBookCheckpoint Capture() => IsDefault(Rules, Fields, RemovedStarters) && flowTotals.Count == 0 ? null
+        : new(Clone(Rules), CloneFields(Fields), values.ToDictionary(p => p.Key, p => (double[])p.Value.Clone(), StringComparer.Ordinal),
+            RemovedStarters.ToList(), flowTotals.Count == 0 ? null : new(flowTotals, StringComparer.Ordinal));
+
+    internal void RestoreFlows(Dictionary<string, double> saved)
+    {
+        if (saved == null) return;
+        foreach (var (name, total) in saved) { CheckpointGuard.Require(double.IsFinite(total), "flow ledger"); flowTotals[name] = total; }
+    }
 
     internal void Restore(Dictionary<string, double[]> saved)
     {

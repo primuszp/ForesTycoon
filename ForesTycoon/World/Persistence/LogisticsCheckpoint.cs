@@ -17,7 +17,9 @@ namespace ForesTycoon
                 t.HomeRequested, t.Target?.Id ?? -1, t.CargoValue, t.FuelCharged, Capture(t.Upkeep))).ToArray(), nextTruckId,
             Stacks.Select(s => new StackCheckpoint(s.Id, s.Tile, s.Volume, s.Value)).ToArray(), nextStackId, Income, RunningCosts);
 
-        internal void Restore(LogisticsCheckpoint s)
+        internal void Restore(LogisticsCheckpoint s) => SimulationWork.Complete(RestoreWork(s));
+
+        internal IEnumerable<int> RestoreWork(LogisticsCheckpoint s)
         {
             CheckpointGuard.Require(s != null && s.Sites != null && s.Mills != null && s.Status != null, "logistics system");
             var used = new HashSet<int>(); var sites = new List<HarvestSite>(); var mills = new List<Sawmill>();
@@ -30,31 +32,31 @@ namespace ForesTycoon
                 stacks.Add(stack);
             }
             foreach (var st in s.Stacks ?? Array.Empty<StackCheckpoint>())
-            {
+            { yield return 1;
                 CheckpointGuard.Require(st != null && st.Id > 0 && st.Id < nextStack, "timber stack");
                 AddStack(new TimberStack { Id = st.Id, Tile = st.Tile, Volume = st.Volume, Value = st.Value }, "timber stack");
             }
             foreach (var site in s.Sites)
-            {
+            { yield return 1;
                 CheckpointGuard.Require(site != null && site.Tiles != null && site.Tiles.Length > 0, "harvest site");
-                foreach (int id in site.Tiles) CheckpointGuard.Require(terrain.IsValidTileId(id) && used.Add(id), "harvest tile");
+                foreach (int id in site.Tiles) { yield return 1; CheckpointGuard.Require(terrain.IsValidTileId(id) && used.Add(id), "harvest tile"); }
                 CheckpointGuard.NonNegative(site.InitialVolume, "harvest volume");
                 sites.Add(new HarvestSite { Tiles = (int[])site.Tiles.Clone(), InitialVolume = site.InitialVolume });
                 // Older saves kept felled wood as piles and a landing stock: they become stacks.
                 foreach (var pile in site.Piles ?? Array.Empty<PileCheckpoint>())
-                    if (pile != null && pile.Volume > 0 && !stackTiles.Contains(pile.Tile))
-                        AddStack(new TimberStack { Id = nextStack++, Tile = pile.Tile, Volume = pile.Volume, Value = pile.Volume * TimberPrice(ForestSpecies.Spruce) }, "log pile");
+                    { yield return 1; if (pile != null && pile.Volume > 0 && !stackTiles.Contains(pile.Tile))
+                        AddStack(new TimberStack { Id = nextStack++, Tile = pile.Tile, Volume = pile.Volume, Value = pile.Volume * TimberPrice(ForestSpecies.Spruce) }, "log pile"); }
                 if (site.LandingStock > 0 && site.Landing >= 0 && !stackTiles.Contains(site.Landing))
                     AddStack(new TimberStack { Id = nextStack++, Tile = site.Landing, Volume = site.LandingStock,
                         Value = site.LandingStock * TimberPrice(ForestSpecies.Spruce) }, "landing stock");
             }
             var footprints = new HashSet<int>(); var destinations = new HashSet<int>();
             foreach (var m in s.Mills)
-            {
+            { yield return 1;
                 CheckpointGuard.Require(m != null && terrain.IsValidTileId(m.TileId) && destinations.Add(m.TileId) &&
                     m.Footprint != null && m.Footprint.Length == 4 && Array.IndexOf(m.Footprint, m.TileId) >= 0, "sawmill footprint");
-                foreach (int id in m.Footprint) CheckpointGuard.Require(terrain.IsValidTileId(id) && terrain.IsBuildingTile(id) &&
-                    footprints.Add(id) && !used.Contains(id), "sawmill tile");
+                foreach (int id in m.Footprint) { yield return 1; CheckpointGuard.Require(terrain.IsValidTileId(id) && terrain.IsBuildingTile(id) &&
+                    footprints.Add(id) && !used.Contains(id), "sawmill tile"); }
                 m.Position.Validate(); CheckpointGuard.NonNegative(m.Received, "mill received");
                 CheckpointGuard.NonNegative(m.Stock, "mill stock"); CheckpointGuard.NonNegative(m.Processed, "mill processed");
                 CheckpointGuard.Require(Math.Abs(m.Received - m.Stock - m.Processed) <= Math.Max(1, m.Received) * 1e-5, "mill mass balance");
@@ -63,18 +65,18 @@ namespace ForesTycoon
             }
             var depots = new List<Depot>();
             foreach (var d in s.Depots ?? Array.Empty<DepotCheckpoint>())
-            {
+            { yield return 1;
                 CheckpointGuard.Require(d != null && terrain.IsValidTileId(d.TileId) && d.Footprint != null && d.Footprint.Length == 4 &&
                     Array.IndexOf(d.Footprint, d.TileId) >= 0, "depot footprint");
-                foreach (int id in d.Footprint) CheckpointGuard.Require(terrain.IsValidTileId(id) && terrain.IsBuildingTile(id) &&
-                    footprints.Add(id) && !used.Contains(id), "depot tile");
+                foreach (int id in d.Footprint) { yield return 1; CheckpointGuard.Require(terrain.IsValidTileId(id) && terrain.IsBuildingTile(id) &&
+                    footprints.Add(id) && !used.Contains(id), "depot tile"); }
                 d.Position.Validate();
                 depots.Add(new Depot { TileId = d.TileId, Footprint = (int[])d.Footprint.Clone(), Position = d.Position.Vector });
             }
             TimberStack Stack(int id) => id < 0 ? null : stackIds.TryGetValue(id, out var st) ? st : throw new System.IO.InvalidDataException("Invalid world checkpoint: stack reference.");
             var trucks = new List<FleetTruck>(); var truckIds = new HashSet<int>(); var pending = new List<(FleetTruck, int)>();
             foreach (var t in s.Trucks ?? Array.Empty<TruckCheckpoint>())
-            {
+            { yield return 1;
                 CheckpointGuard.Require(t != null && t.Id > 0 && t.Id < s.NextTruckId && truckIds.Add(t.Id) && (uint)t.Home < (uint)depots.Count &&
                     Enum.IsDefined(t.Phase) && (t.Phase == TruckPhase.Parked) == (t.Vehicle < 0) &&
                     (t.Phase == TruckPhase.Parked || (t.Source >= 0 && terrain.IsValidTileId(t.Destination))), "fleet truck");
@@ -88,7 +90,7 @@ namespace ForesTycoon
             CheckpointGuard.Require(s.NextTruckId >= 1 && s.NextMachineId >= 1, "fleet ids");
             var machines = new List<ForestMachine>(); var ids = new HashSet<int>();
             foreach (var m in s.Machines ?? Array.Empty<ForestMachineCheckpoint>())
-            {
+            { yield return 1;
                 CheckpointGuard.Require(m != null && ids.Add(m.Id) && m.Id > 0 && m.Id < s.NextMachineId && Enum.IsDefined(m.Kind) &&
                     Enum.IsDefined(m.State) && Enum.IsDefined(m.Goal) && m.Site >= -1 && m.Site < sites.Count && m.Home >= -1 && m.Home < depots.Count &&
                     m.Path != null && m.Path.Length > 0 && Array.TrueForAll(m.Path, terrain.IsValidTileId), "forest machine");

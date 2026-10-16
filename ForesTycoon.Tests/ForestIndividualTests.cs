@@ -105,7 +105,7 @@ public class ForestIndividualTests
     }
 
     [Fact]
-    public void ReplantingCreatesNewIdsAndRetainsTheActualCutStemUntilDecay()
+    public void ReplantingCreatesNewIdsAndRetainsTheCutStemForTheRules()
     {
         var forest = Create(); var (tile, patch) = First(forest);
         ulong id = patch.Trees[0].Id;
@@ -114,8 +114,8 @@ public class ForestIndividualTests
         Assert.Equal(ForestryActionResult.Planted, forest.Plant(tile, ForestSpecies.Birch));
         Assert.NotEqual(id, patch.Trees[0].Id);
         Assert.NotEmpty(patch.Stumps);
-        forest.Update(ForestTreeStump.LifetimeYears * 12 + 1);
-        Assert.Empty(patch.Stumps);
+        forest.Update(73);
+        Assert.NotEmpty(patch.Stumps);
     }
 
     [Fact]

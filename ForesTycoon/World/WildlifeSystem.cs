@@ -27,13 +27,15 @@ namespace ForesTycoon
         private readonly List<int> forageTiles = new();
         private ulong revision = ulong.MaxValue, surfaceRevision = ulong.MaxValue;
         internal void Update(double seconds, TerrainMap terrain, ForestSystem forest, EnvironmentSystem environment)
+            => SimulationWork.Complete(UpdateWork(seconds, terrain, forest, environment));
+        internal IEnumerable<int> UpdateWork(double seconds, TerrainMap terrain, ForestSystem forest, EnvironmentSystem environment)
         {
             if (!double.IsFinite(seconds) || seconds < 0) throw new ArgumentOutOfRangeException(nameof(seconds));
             if (revision != forest.Revision || surfaceRevision != terrain.SurfaceVersion)
             {
                 // Existing animals only need to know whether any habitat remains. Ranked spawn
                 // positions are needed when populating an empty world, not at every forest month.
-                terrain.CollectWildlifeSpots(forest, spots, stopAfterFirst: Animals.Count > 0 && revision != ulong.MaxValue);
+                foreach (int unit in terrain.CollectWildlifeSpotsWork(forest, spots, stopAfterFirst: Animals.Count > 0 && revision != ulong.MaxValue)) yield return unit;
                 if (spots.Count == 0) Animals.Clear();
                 if (revision == ulong.MaxValue || Animals.Count == 0)
                     foreach (var spot in spots) Animals.Add(new Animal { Id = spot.TileId, TileId = spot.TileId,
@@ -42,11 +44,12 @@ namespace ForesTycoon
                 revision = forest.Revision; surfaceRevision = terrain.SurfaceVersion;
             }
             float dt = (float)seconds;
-            foreach (int id in forageTiles) forage[id] = Math.Max(0, forage[id] - dt * 0.005f);
+            foreach (int id in forageTiles) { forage[id] = Math.Max(0, forage[id] - dt * 0.005f); yield return 1; }
             var habitat = (IForestHabitat)terrain;
-            Span<int> adjacent = stackalloc int[4];
+            int[] adjacent = new int[4];
             foreach (var animal in Animals)
             {
+                yield return 1;
                 animal.PreviousPosition = animal.Position; animal.PreviousYaw = animal.Yaw;
                 animal.PreviousWalkTime = animal.WalkTime; animal.PreviousAge = animal.Age;
                 animal.Age += seconds;

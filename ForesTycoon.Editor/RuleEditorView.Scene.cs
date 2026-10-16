@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading.Tasks;
 using ForesTycoon.Rules;
 using ImGuiNET;
 using Vec2 = System.Numerics.Vector2;
@@ -13,6 +14,8 @@ internal sealed partial class RuleEditorView
     private string scenePath = WorldLoader.OpeningScenePath()
         ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ForesTycoon", "scenes", "opening.json");
     private string scenePathEdit;
+
+    private Task<string> sceneSaveTask;
 
     private bool EditingGameScene => WorldLoader.OpeningScenePath() is string game && Path.GetFullPath(scenePath) == Path.GetFullPath(game);
 
@@ -61,18 +64,30 @@ internal sealed partial class RuleEditorView
 
     private void SaveScene(GameWorld world)
     {
+        if (sceneSaveTask != null) return;
         var project = CollectProject(world); project.Algorithms = null;
-        using var check = WorldLoader.CreateProject(project);
-        RuleProject.WriteAtomic(scenePath, project.ToJson());
-        statusFrame = -1000;
-        message = "Jelenet és szabályok mentve: " + Path.GetFullPath(scenePath);
+        string destination = Path.GetFullPath(scenePath);
+        object species = ForestSpeciesBook.CaptureContext();
+        sceneSaveTask = Task.Run(() => ForestSpeciesBook.WithContext(species, () => {
+            using var check = WorldLoader.CreateProject(project);
+            RuleProject.WriteAtomic(destination, project.ToJson()); return destination;
+        }));
+        message = "A jelenet ellenőrzése és mentése folyamatban…";
+    }
+
+    private void RefreshSceneSave()
+    {
+        if (sceneSaveTask?.IsCompleted != true) return;
+        try { message = "Jelenet és szabályok mentve: " + sceneSaveTask.GetAwaiter().GetResult(); statusFrame = -1000; }
+        catch (Exception error) { message = "A jelenet nem menthető: " + error.Message; }
+        finally { sceneSaveTask = null; }
     }
 
     private void OpenScene(GameWorld world, string path)
     {
         var project = RuleProject.FromJson(File.ReadAllText(path));
         if (project.World == null) throw new InvalidDataException("A fájl nem tartalmaz jelenetet.");
-        world.StartScenario(project.World, project);
+        world.RequestScenario(project.World, project);
         LoadProject(world, project);
         scenePath = path;
         appliedScenario = ScenarioKey(); scenarioBuilt = true;

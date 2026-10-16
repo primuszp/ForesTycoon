@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace ForesTycoon.Ecology
 {
@@ -9,7 +10,7 @@ namespace ForesTycoon.Ecology
         internal EnvironmentSystem Environment { get; }
         internal EcologicalProcessRuntime Runtime { get; }
 
-        internal ForestEnvironmentCoordinator(ForestSystem forest, EnvironmentSystem environment, bool prepareMonthlyGrowth = true)
+        internal ForestEnvironmentCoordinator(ForestSystem forest, EnvironmentSystem environment, bool prepareMonthlyGrowth = true, bool deferInitialization = false)
         {
             ArgumentNullException.ThrowIfNull(forest);
             Environment = environment ?? throw new ArgumentNullException(nameof(environment));
@@ -19,10 +20,11 @@ namespace ForesTycoon.Ecology
                     new Vegetation(forest), new Finalization(environment)
                 }, "forest.state", "environment.state", "environment.monthBudget");
             forest.Environment = environment;
-            forest.RefreshEnvironmentRates();
+            if (!deferInitialization) forest.RefreshEnvironmentRates();
         }
 
         internal void Update(double seconds) => Runtime.Update(seconds);
+        internal IEnumerable<int> UpdateWork(double seconds) => Runtime.UpdateWork(seconds);
 
         private sealed class Preparation(ForestSystem forest, bool enabled) : IEcologicalProcess
         {
@@ -30,6 +32,7 @@ namespace ForesTycoon.Ecology
                 new[] { "forest.state", "environment.state" }, new[] { "forest.prediction" });
             public EcologicalProcessDescriptor Descriptor => description;
             public void Advance(in EcologicalStep step) { if (enabled) forest.PrepareNextMonthStep(); }
+            public IEnumerable<int> AdvanceWork(EcologicalStep step) => enabled ? forest.PrepareNextMonthWork() : Array.Empty<int>();
         }
 
         private sealed class Water(EnvironmentSystem environment) : IEcologicalProcess
@@ -38,6 +41,7 @@ namespace ForesTycoon.Ecology
                 new[] { "forest.state", "environment.state" }, new[] { "environment.state", "environment.monthBudget" });
             public EcologicalProcessDescriptor Descriptor => description;
             public void Advance(in EcologicalStep step) => environment.AdvanceStep(step.DeltaSeconds);
+            public IEnumerable<int> AdvanceWork(EcologicalStep step) => environment.AdvanceStepWork(step.DeltaSeconds);
         }
 
         private sealed class Vegetation(ForestSystem forest) : IEcologicalProcess
@@ -48,6 +52,7 @@ namespace ForesTycoon.Ecology
             public EcologicalBoundary Boundary => EcologicalBoundary.ForestMonth;
             public double SecondsUntilBoundary => forest.SecondsUntilMonth;
             public void Advance(in EcologicalStep step) => forest.Update(step.DeltaSeconds);
+            public IEnumerable<int> AdvanceWork(EcologicalStep step) => forest.UpdateWork(step.DeltaSeconds);
         }
 
         private sealed class Finalization(EnvironmentSystem environment) : IEcologicalProcess

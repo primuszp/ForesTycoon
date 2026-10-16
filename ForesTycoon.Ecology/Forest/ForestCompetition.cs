@@ -26,9 +26,10 @@ namespace ForesTycoon.Ecology
         private readonly Dictionary<int, int[]> neighbours = new();
         private readonly HashSet<int> snapshotTiles = new();
         internal void Clear() { cells.Clear(); neighbours.Clear(); snapshotTiles.Clear(); }
-        internal void BeginSnapshot()
+        internal void BeginSnapshot() => SimulationWork.Complete(BeginSnapshotWork());
+        internal IEnumerable<int> BeginSnapshotWork()
         {
-            foreach (var cell in cells.Values) cell.Count = 0;
+            foreach (var cell in cells.Values) { cell.Count = 0; yield return 1; }
         }
         internal void SnapshotPatch(IForestHabitat habitat, ForestTreeStore store, int id, double year)
         {
@@ -36,25 +37,31 @@ namespace ForesTycoon.Ecology
             Neighbours(habitat, id);
         }
         internal void Snapshot(IForestHabitat habitat, ForestTreeStore store, double year)
+            => SimulationWork.Complete(SnapshotWork(habitat, store, year));
+        internal IEnumerable<int> SnapshotWork(IForestHabitat habitat, ForestTreeStore store, double year)
         {
-            BeginSnapshot();
+            foreach (int unit in BeginSnapshotWork()) yield return unit;
             foreach (var entry in store.Patches)
             {
                 SnapshotPatch(habitat, store, entry.Key, year);
+                yield return 1;
             }
         }
 
         // Local edits only need the samples read by the affected trees. Capture all of those
         // dependencies before changing rates, including removed patches and second-ring neighbours.
         internal void SnapshotAffected(IForestHabitat habitat, ForestTreeStore store, double year, HashSet<int> affected)
+            => SimulationWork.Complete(SnapshotAffectedWork(habitat, store, year, affected));
+        internal IEnumerable<int> SnapshotAffectedWork(IForestHabitat habitat, ForestTreeStore store, double year, HashSet<int> affected)
         {
             snapshotTiles.Clear();
             foreach (int id in affected)
             {
+                yield return 1;
                 if (!store.TryGet(id, out var patch) || patch.Count == 0) continue;
                 foreach (int dependency in Neighbours(habitat, id)) snapshotTiles.Add(dependency);
             }
-            foreach (int id in snapshotTiles) SnapshotTile(habitat, store, id, year);
+            foreach (int id in snapshotTiles) { SnapshotTile(habitat, store, id, year); yield return 1; }
         }
 
         private void SnapshotTile(IForestHabitat habitat, ForestTreeStore store, int id, double year)

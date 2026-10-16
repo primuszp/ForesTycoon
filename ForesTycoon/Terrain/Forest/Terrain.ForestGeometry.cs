@@ -51,10 +51,12 @@ namespace ForesTycoon
             }
         }
 
-        private void DisposeForestGeometry()
+
+
+        private IEnumerable<int> DisposeForestGeometryWork()
         {
-            DisposeIndividualForest();
-            DisposePlantations();
+            foreach (int unit in DisposeIndividualForestWork()) yield return unit;
+            foreach (int unit in DisposePlantationsWork()) yield return unit;
             forestMaterial.Dispose();
         }
     }

@@ -4,6 +4,101 @@
 
 The engine is organized around one rule: simulation state is deterministic and independent from the window and renderer.
 
+## Egyenletes szimulációs munkavégzés (2026-10-16)
+
+Motoralapelv: minden növekvő szimulációs munka folytatható, determinisztikusan
+szétosztott végrehajtást kapjon. Ez a gráfszabályokra, natív motorprimitívekre,
+erdőhónapra, környezetre, logisztikára és útkeresésre egyaránt vonatkozik.
+Az időérzékeny, korlátos mozgáslépés továbbra is minden fix tickben futhat.
+Az előkészítés és publikálás sem rejthet korlátlan teljesvilág-ciklust; lejáró
+határidő vagy projektcsere nem indokol korlátlan „fejezd be most” végrehajtást.
+
+A szeletek determinisztikus munkaegységeken alapuljanak, menthető folyamatállapottal,
+stabil objektumazonosítókkal és megőrzött függőségi sorrenddel. A milliszekundumos
+profilozás ellenőrzésre szolgál; nem teheti gépsebességtől függővé a visszajátszást.
+A szétosztás nem dobhat el szimulációs időt és nem változtathatja meg észrevétlenül
+a szabály jelentését vagy a fizika időlépését.
+
+A folyamatos szimuláció ezt most `GameWorld.ContinueUpdate` munkafolyamatként
+valósítja meg: globális dinamika, ökológia, logisztika, szabálykönyv, vadak és
+regisztrált rendszerek. A raszterek, havi erdőmunka, objektumlista-előkészítés,
+egyedhatások, flotta, automatikus útkeresés és útvonalgeometria külön
+felfüggesztési pontokat kaptak. Egy részlet legfeljebb 64 munkaegység; a host
+képkockánként több részletet futtathat az időkeretében.
+
+A logikai tick csak az egész munkafolyamat végén lép tovább. Közben más
+szimulációs rendszer és világmódosító parancs nem előzheti meg a függő munkát;
+így a fa- és tönktömbök indexei nem tolódhatnak el egy másik tick miatt.
+Nincs „nem stabil objektum: fusson egészben” kivétel és esedékességhez vagy
+projektcseréhez kötött korlátlan befejezés. A renderelés közben olvashatja a
+világot, de nem módosíthatja. A gráfos előnézet a függő tick alatt várakozik.
+
+A mentési kérés (`AtTickBoundary`) a következő kész ticknél készít pillanatképet;
+nem próbál C# iteratorállapotot menteni és nem fejezi be azonnal a számítást.
+A tick alatt érkező parancs a következő tick sorszámát kapja. A szabálycsere
+utáni függő erdőráta-frissítést külön checkpointmező őrzi. A direkt `Save` és
+`CaptureCheckpoint` a félkész tick pillanatképezését visszautasítja; az interaktív
+mentési felületek a lépéshatárra ütemeznek.
+
+`FixedStepClock.AdvanceWork` megőrzi az időhátralékot, és szüneteltetéskor is
+befejezheti a már megkezdett tick munkaszeleteit. A különböző gépsebesség csak
+a képkockák közti elosztást változtatja; a műveletek sorrendjét és a fix időlépést
+nem. A szinkron `Update`/`SimulationWork.Complete` adapterek a fej nélküli
+teszteléshez, visszajátszáshoz és CLI-eszközökhöz maradtak meg;
+a játék és az Editor szimulációs gombjai a folytatható hostot használják.
+
+Minden `IWorldSystem` kötelezően megvalósítja az `UpdateWork` metódust;
+nincs automatikus, egész `Update`-et egy munkának tekintő alapadapter. A
+faanyagkönyvelés O(1), az effektkészlet elemenként szüneteltethető.
+A pályagenerálás és a nagy szerkesztések külön folytatható munkafolyamatot
+kaptak. A részleteket a következő szakasz írja le; a fájlkiírás és a teljes
+rajzolási képkocka továbbra sem kap ettől kemény valós idejű garanciát.
+
+### Pályagenerálás és nagy szerkesztések
+
+A játék és az Editor `RequestRegenerate` / `RequestScenario` kérést ad;
+a `ContinueCommands` ugyanabból a 4 ms-os képkockakeretből folytatja az
+előtérben végzett munkát, mint a szimulációt. Szüneteltetett világban is halad.
+A generálás nem futtat szimulációs tickeket: egy külön jelölt világon dolgozik,
+és csak elkészült állapotot publikál. A régi világ addig látható marad.
+
+A rács/topológia, zajminták, folyóakkumuláció, magasságkaszkád,
+hidrológiai BFS/Dijkstra, talaj, erdőegyedek és kezdeti ráták kis egységekben
+épülnek fel. A magasságtervező újrahasználja a saját munkatárait, a topológia
+lapos tömböket használ a cellánkénti átmeneti listák helyett. A rögzített
+kiindulójelenet visszaállítása is folytatható. A jelenet beolvasása,
+szabályfordítás és a fa tisztán CPU-s geometria-előállítása izolált
+háttérmunkán történik; az élő világot és a GL-t csak a tulajdonos szál kezeli.
+A fajparaméterek háttérmunkánként külön kontextust kapnak. A lombkorona egyetlen
+cellájának lekérdezése nem frissíthet teljes rasztert és nem módosít
+szimulációs gyorsítótárat; a teljes publikálás explicit munkafázis.
+
+A nagy ecset, magasságfestés, út/útjavítás/nyom, területi és egyedi ültetés,
+kitermelési kijelölés és járműrendelés útkeresése folytatható.
+A parancs a sor elején marad a teljes befejezéséig. Új parancs és tick nem
+előzheti meg; a napló egyetlen felhasználói műveletet tárol, nem szeleteket.
+A közben érkező bemenet megmarad. Generáláskor az új bemenet a publikált
+világra kerül, megszakításkor a régi világ parancssorában marad.
+
+A mentési határ most a teljes tick **és a teljes megkezdett parancscsomag /
+pályapublikálás** határa. Az `AtTickBoundary` ide ütemez; közvetlen félkész
+checkpoint továbbra sem engedélyezett. A mentés nem üríti ki korlátlanul a
+munkasort. A még el nem kezdett bemenetet a checkpoint külön megőrzi.
+A `.2026-10-16.2` futtató a `.2026-10-16.1` teljes célállapotát is importálja,
+régi történeti naplóvéget azonban nem értelmez át az új futtatóval.
+
+A GPU-geometria és az anyagtextúrák előkészítése, a környezeti színraszter
+frissítése és a lecserélt pálya gyorsítótárainak
+felszabadítása is részletekben halad. Útépítés nem indíthat teljes
+szinkron erdő-újraépítést a rajzolásból: az elavult, útra lógó részlet
+ideiglenesen rejtett, amíg a cseréje elkészül. A szinkron erdőépítési kapcsoló
+csak explicit diagnosztikai/fixture célra maradt meg, az első játék-képkocka
+sem kapcsolja be.
+
+A kezdeti korlátokat és a még beégetett játékszabályokat az
+[audit](rule-runtime-audit.md), a méréseket az
+[engine-performance.md](engine-performance.md) sorolja fel.
+
 The current raster/ecosystem plan and local terrain-edit semantics are documented in
 [ecosystem-simulation-design.md](ecosystem-simulation-design.md). Terrain edits preserve unmodified
 trees and environmental water stores; terrain/grid resource caches use per-chunk surface revisions.
@@ -49,7 +144,7 @@ This separation keeps input responsive, makes commands replayable, and lets simu
 ## Performance policy
 
 - Simulation uses fixed ticks and never scales gameplay by render FPS.
-- Per-tick systems iterate indexed collections without LINQ or temporary allocations.
+- Recurring work uses bounded resumable units. Prefer indexed/reused collections; iterator state allocations are measured rather than assumed to be free.
 - Terrain topology caches expose `ReadOnlySpan<T>` or caller-provided `Span<T>` buffers.
 - Rendering may interpolate but must not mutate authoritative state.
 - Large map work should be chunk-dirty and incremental; avoid full terrain/hydrology rebuilds for local edits.

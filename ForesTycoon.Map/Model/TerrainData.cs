@@ -22,11 +22,12 @@ namespace ForesTycoon.Map
 
         public Node[] Nodes { get; private set; }
         public Tile[] Tiles { get; private set; }
-        private Node[][] nodeNeighbours;
-        private Tile[][] nodeTiles;
-        private Tile[][] adjacentTiles;
+        private Node[] nodeNeighbours;
+        private byte[] neighbourCounts, nodeTileCounts, adjacentCounts;
+        private Tile[] nodeTiles;
+        private Tile[] adjacentTiles;
 
-        public TerrainData(TerrainSettings settings)
+        public TerrainData(TerrainSettings settings, bool deferInitialization = false)
         {
             Settings = settings;
             NodeCols = settings.NodeColumns;
@@ -37,18 +38,24 @@ namespace ForesTycoon.Map
             OffsetX = settings.OffsetX;
             OffsetY = settings.OffsetY;
 
-            BuildNodes();
-            BuildTiles();
-            BuildTopologyCache();
+            if (!deferInitialization) SimulationWork.Complete(InitializeWork());
         }
 
-        private void BuildNodes()
+        internal IEnumerable<int> InitializeWork()
+        {
+            foreach (int unit in BuildNodesWork()) yield return unit;
+            foreach (int unit in BuildTilesWork()) yield return unit;
+            foreach (int unit in BuildTopologyCacheWork()) yield return unit;
+        }
+
+        private IEnumerable<int> BuildNodesWork()
         {
             Nodes = new Node[NodeCols * NodeRows];
             for (int u = 0; u < NodeCols; u++)
             {
                 for (int v = 0; v < NodeRows; v++)
                 {
+                    yield return 1;
                     Node node = new Node(u * NodeRows + v)
                     {
                         U = u,
@@ -63,13 +70,14 @@ namespace ForesTycoon.Map
             }
         }
 
-        private void BuildTiles()
+        private IEnumerable<int> BuildTilesWork()
         {
             Tiles = new Tile[(NodeCols - 1) * (NodeRows - 1)];
             for (int u = 0; u < NodeCols - 1; u++)
             {
                 for (int v = 0; v < NodeRows - 1; v++)
                 {
+                    yield return 1;
                     Node n = GetNode(u + 0, v + 1);
                     Node s = GetNode(u + 1, v + 0);
                     Node e = GetNode(u + 1, v + 1);
@@ -81,42 +89,44 @@ namespace ForesTycoon.Map
             }
         }
 
-        private void BuildTopologyCache()
+        private IEnumerable<int> BuildTopologyCacheWork()
         {
-            nodeNeighbours = new Node[Nodes.Length][];
-            nodeTiles = new Tile[Nodes.Length][];
-            adjacentTiles = new Tile[Tiles.Length][];
+            nodeNeighbours = new Node[Nodes.Length * 4]; neighbourCounts = new byte[Nodes.Length];
+            nodeTiles = new Tile[Nodes.Length * 4]; nodeTileCounts = new byte[Nodes.Length];
+            adjacentTiles = new Tile[Tiles.Length * 4]; adjacentCounts = new byte[Tiles.Length];
 
             for (int i = 0; i < Nodes.Length; i++)
             {
+                yield return 1;
                 Node node = Nodes[i];
-                List<Node> neighbours = new List<Node>(4);
-                if (CheckNode(node.U, node.V - 1)) neighbours.Add(GetNode(node.U, node.V - 1));
-                if (CheckNode(node.U + 1, node.V)) neighbours.Add(GetNode(node.U + 1, node.V));
-                if (CheckNode(node.U, node.V + 1)) neighbours.Add(GetNode(node.U, node.V + 1));
-                if (CheckNode(node.U - 1, node.V)) neighbours.Add(GetNode(node.U - 1, node.V));
-                nodeNeighbours[i] = neighbours.ToArray();
+                int count = 0;
+                if (CheckNode(node.U, node.V - 1)) nodeNeighbours[i * 4 + count++] = GetNode(node.U, node.V - 1);
+                if (CheckNode(node.U + 1, node.V)) nodeNeighbours[i * 4 + count++] = GetNode(node.U + 1, node.V);
+                if (CheckNode(node.U, node.V + 1)) nodeNeighbours[i * 4 + count++] = GetNode(node.U, node.V + 1);
+                if (CheckNode(node.U - 1, node.V)) nodeNeighbours[i * 4 + count++] = GetNode(node.U - 1, node.V);
+                neighbourCounts[i] = (byte)count;
 
-                List<Tile> touchingTiles = new List<Tile>(4);
-                if (CheckTile(node.U - 1, node.V - 1)) touchingTiles.Add(GetTile(node.U - 1, node.V - 1));
-                if (CheckTile(node.U - 1, node.V - 0)) touchingTiles.Add(GetTile(node.U - 1, node.V - 0));
-                if (CheckTile(node.U - 0, node.V - 1)) touchingTiles.Add(GetTile(node.U - 0, node.V - 1));
-                if (CheckTile(node.U - 0, node.V - 0)) touchingTiles.Add(GetTile(node.U - 0, node.V - 0));
-                nodeTiles[i] = touchingTiles.ToArray();
+                count = 0;
+                if (CheckTile(node.U - 1, node.V - 1)) nodeTiles[i * 4 + count++] = GetTile(node.U - 1, node.V - 1);
+                if (CheckTile(node.U - 1, node.V - 0)) nodeTiles[i * 4 + count++] = GetTile(node.U - 1, node.V - 0);
+                if (CheckTile(node.U - 0, node.V - 1)) nodeTiles[i * 4 + count++] = GetTile(node.U - 0, node.V - 1);
+                if (CheckTile(node.U - 0, node.V - 0)) nodeTiles[i * 4 + count++] = GetTile(node.U - 0, node.V - 0);
+                nodeTileCounts[i] = (byte)count;
             }
 
             for (int i = 0; i < Tiles.Length; i++)
             {
+                yield return 1;
                 Tile tile = Tiles[i];
                 int tilesPerColumn = NodeRows - 1;
                 int u = tile.Id / tilesPerColumn;
                 int v = tile.Id % tilesPerColumn;
-                List<Tile> neighbours = new List<Tile>(4);
-                if (CheckTile(u - 1, v)) neighbours.Add(GetTile(u - 1, v));
-                if (CheckTile(u + 1, v)) neighbours.Add(GetTile(u + 1, v));
-                if (CheckTile(u, v - 1)) neighbours.Add(GetTile(u, v - 1));
-                if (CheckTile(u, v + 1)) neighbours.Add(GetTile(u, v + 1));
-                adjacentTiles[i] = neighbours.ToArray();
+                int count = 0;
+                if (CheckTile(u - 1, v)) adjacentTiles[i * 4 + count++] = GetTile(u - 1, v);
+                if (CheckTile(u + 1, v)) adjacentTiles[i * 4 + count++] = GetTile(u + 1, v);
+                if (CheckTile(u, v - 1)) adjacentTiles[i * 4 + count++] = GetTile(u, v - 1);
+                if (CheckTile(u, v + 1)) adjacentTiles[i * 4 + count++] = GetTile(u, v + 1);
+                adjacentCounts[i] = (byte)count;
             }
         }
 
@@ -131,30 +141,30 @@ namespace ForesTycoon.Map
         public bool CheckTile(int u, int v) =>
             u >= 0 && u < NodeCols - 1 && v >= 0 && v < NodeRows - 1;
 
-        public ReadOnlySpan<Node> GetNeighbours(Node node) => nodeNeighbours[node.Id];
+        public ReadOnlySpan<Node> GetNeighbours(Node node) => nodeNeighbours.AsSpan(node.Id * 4, neighbourCounts[node.Id]);
 
         public int GetNeighbours(Node node, Span<Node> buffer)
         {
-            Node[] cached = nodeNeighbours[node.Id];
-            cached.AsSpan().CopyTo(buffer);
+            var cached = GetNeighbours(node);
+            cached.CopyTo(buffer);
             return cached.Length;
         }
 
-        public ReadOnlySpan<Tile> GetTilesByNode(Node node) => nodeTiles[node.Id];
+        public ReadOnlySpan<Tile> GetTilesByNode(Node node) => nodeTiles.AsSpan(node.Id * 4, nodeTileCounts[node.Id]);
 
         public int GetTilesByNode(Node node, Span<Tile> buffer)
         {
-            Tile[] cached = nodeTiles[node.Id];
-            cached.AsSpan().CopyTo(buffer);
+            var cached = GetTilesByNode(node);
+            cached.CopyTo(buffer);
             return cached.Length;
         }
 
-        public ReadOnlySpan<Tile> GetAdjacentTiles(Tile tile) => adjacentTiles[tile.Id];
+        public ReadOnlySpan<Tile> GetAdjacentTiles(Tile tile) => adjacentTiles.AsSpan(tile.Id * 4, adjacentCounts[tile.Id]);
 
         public int GetAdjacentTiles(Tile tile, Span<Tile> buffer)
         {
-            Tile[] cached = adjacentTiles[tile.Id];
-            cached.AsSpan().CopyTo(buffer);
+            var cached = GetAdjacentTiles(tile);
+            cached.CopyTo(buffer);
             return cached.Length;
         }
 
@@ -173,7 +183,7 @@ namespace ForesTycoon.Map
         public int GetSharedTiles(Node a, Node b, Span<Tile> buffer)
         {
             int count = 0;
-            Tile[] cached = nodeTiles[a.Id];
+            var cached = GetTilesByNode(a);
             for (int i = 0; i < cached.Length; i++)
             {
                 Tile tile = cached[i];

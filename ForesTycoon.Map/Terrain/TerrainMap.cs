@@ -35,6 +35,7 @@ namespace ForesTycoon.Map
         internal event Action EditsFlushed;
         /// <summary>Raised after the set of road-flipped diagonal tiles was recomputed.</summary>
         internal event Action RoadDiagonalsChanged;
+        internal event Action<int> RoadDiagonalPrepared;
 
         private Node[] nodes => data.Nodes;
         private Tile[] tiles => data.Tiles;
@@ -46,12 +47,16 @@ namespace ForesTycoon.Map
         public TerrainMap() : this(TerrainSettings.Default) { }
 
         public TerrainMap(TerrainSettings settings, Func<int, int, int> initialHeight = null)
+            : this(settings, new TerrainData(settings), initialHeight, false) { }
+
+        private TerrainMap(TerrainSettings settings, TerrainData preparedData, Func<int, int, int> initialHeight, bool deferred)
         {
             this.settings = settings ?? throw new ArgumentNullException(nameof(settings));
-            data = new TerrainData(settings);
+            data = preparedData;
             hydro = new Hydrology(data, settings);
-            chunkIndex = new TerrainChunkIndex(data);
+            chunkIndex = new TerrainChunkIndex(data, deferInitialization: deferred);
 
+            if (deferred) return;
             if (initialHeight == null) GenerateTerrain();
             else
             {
@@ -59,6 +64,16 @@ namespace ForesTycoon.Map
                     node.W = Math.Clamp(initialHeight(node.U, node.V), 0, settings.MaxHeight);
                 ApplyNodeChanges(new List<Node>(nodes));
             }
+        }
+
+        internal static IEnumerable<int> CreateWork(TerrainSettings settings, WorkResult<TerrainMap> result)
+        {
+            var grid = new TerrainData(settings, deferInitialization: true);
+            foreach (int unit in grid.InitializeWork()) yield return unit;
+            var map = new TerrainMap(settings, grid, null, true);
+            foreach (int unit in map.chunkIndex.BuildWork()) yield return unit;
+            foreach (int unit in map.GenerateTerrainWork()) yield return unit;
+            result.Value = map;
         }
 
         // ── Read-only model surface ─────────────────────────────────────────────────
@@ -88,11 +103,14 @@ namespace ForesTycoon.Map
         internal bool ShouldDrawStandingWater(Tile tile) => hydro.ShouldDrawStandingWater(tile);
         internal bool IsValidTileId(int tileId) => tileId >= 0 && tileId < tiles.Length;
 
-        private void GenerateTerrain()
+        private void GenerateTerrain() => SimulationWork.Complete(GenerateTerrainWork());
+
+        private IEnumerable<int> GenerateTerrainWork()
         {
             int maxHeight = settings.MaxHeight;
-            new TerrainGenerator(settings.Seed)
-                .Generate(nodeCols, nodeRows, maxHeight, out int[,] targetW, out bool[,] isRiver);
+            var generated = new WorkResult<(int[,] Heights, bool[,] Rivers)>();
+            foreach (int unit in new TerrainGenerator(settings.Seed).GenerateWork(nodeCols, nodeRows, maxHeight, generated)) yield return unit;
+            var (targetW, isRiver) = generated.Value;
 
             // ── ElevationManager – szomszéd-meredekség szabály ────────────────
             suppressHydrologyRebuild = true;
@@ -103,12 +121,13 @@ namespace ForesTycoon.Map
                     for (int u = 0; u < nodeCols; u++)
                         for (int v = 0; v < nodeRows; v++)
                         {
+                            yield return 1;
                             Node node = GetNode(u, v);
-                            if (node.W < targetW[u, v]) RaiseOrLower(node, +1);
+                            if (node.W < targetW[u, v]) foreach (int unit in RaiseOrLowerWork(node, +1)) yield return unit;
                         }
                 // No renderer or ecosystem observes construction. Derive tile geometry
                 // once from the completed height grid instead of after every raise.
-                ApplyNodeChanges(new List<Node>(nodes));
+                foreach (int unit in ApplyNodeChangesWork(new List<Node>(nodes))) yield return unit;
             }
             finally
             {
@@ -120,38 +139,41 @@ namespace ForesTycoon.Map
             hydro.RiverNodeIds.Clear();
             for (int u = 0; u < nodeCols; u++)
                 for (int v = 0; v < nodeRows; v++)
-                    if (isRiver[u, v])
-                        hydro.RiverNodeIds.Add(GetNode(u, v).Id);
+                { if (isRiver[u, v]) hydro.RiverNodeIds.Add(GetNode(u, v).Id); yield return 1; }
 
-            RebuildHydrology();
+            foreach (int unit in RebuildHydrologyWork()) yield return unit;
         }
 
-        private void RebuildHydrology()
+        private void RebuildHydrology() => SimulationWork.Complete(RebuildHydrologyWork());
+
+        private IEnumerable<int> RebuildHydrologyWork()
         {
             var previousWater = new bool[tiles.Length];
             for (int id = 0; id < tiles.Length; id++)
-                previousWater[id] = ShouldDrawStandingWater(tiles[id]);
+            { previousWater[id] = ShouldDrawStandingWater(tiles[id]); yield return 1; }
             // A hidrológia node.zPos-t használ; mielőtt fut, MINDEN node zPos-át a friss
             // magasságból állítjuk be, hogy se betöltéskor, se szerkesztés után ne a régi
             // (stale) érték alapján higgyen vizet a magas terepre.
             foreach (Node node in data.Nodes)
-                node.zPos = node.W * tileSizeM;
+            { node.zPos = node.W * tileSizeM; yield return 1; }
 
-            hydro.Rebuild();
+            foreach (int unit in hydro.RebuildWork()) yield return unit;
             for (int id = 0; id < tiles.Length; id++)
-                if (previousWater[id] != ShouldDrawStandingWater(tiles[id]))
-                    chunkIndex.MarkTileDirty(id, ChunkDirtyFlags.Water);
+            { if (previousWater[id] != ShouldDrawStandingWater(tiles[id])) chunkIndex.MarkTileDirty(id, ChunkDirtyFlags.Water); yield return 1; }
             InvalidateSurface();
         }
 
         /// <summary>Re-derives everything that depends on node heights after they changed.</summary>
-        private void ApplyNodeChanges(List<Node> changed)
+        private void ApplyNodeChanges(List<Node> changed) => SimulationWork.Complete(ApplyNodeChangesWork(changed));
+
+        private IEnumerable<int> ApplyNodeChangesWork(List<Node> changed)
         {
             InvalidateSurface();
             Tile[] nodeTiles = new Tile[4];
             float[] nodeWaterDepth = hydro.NodeWaterDepth;
             foreach (Node node in changed)
             {
+                yield return 1;
                 node.zPos = node.W * tileSizeM;
 
                 // Ha a terep emelkedett, a víz nem lebeghet a magasban; ha süllyedt, marad szárazon (majd folyik bele)
@@ -173,11 +195,15 @@ namespace ForesTycoon.Map
                 }
             }
 
-            NodesChanged?.Invoke(changed);
+            if (NodesChanged != null) for (int offset = 0; offset < changed.Count; offset += 16)
+            {
+                NodesChanged.Invoke(changed.GetRange(offset, Math.Min(16, changed.Count - offset)));
+                yield return 1;
+            }
             if (!suppressHydrologyRebuild)
             {
                 EditsFlushed?.Invoke();
-                RebuildHydrology();
+                foreach (int unit in RebuildHydrologyWork()) yield return unit;
             }
         }
 

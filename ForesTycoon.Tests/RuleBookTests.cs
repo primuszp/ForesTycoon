@@ -20,11 +20,11 @@ public sealed class RuleBookTests
     private static void Run(GameWorld world, double seconds) { for (int i = 0; i < seconds * 30; i++) world.Update(1d / 30); }
 
     [Fact]
-    public void TrailAgeingIsABuiltInDataRuleThatMatchesTheFormerCode()
+    public void TrailAgeingIsAStarterDataRuleThatMatchesTheFormerCode()
     {
         using var world = World();
         var rule = Assert.Single(world.RuleProjectDocument.Rules, r => r.Id == "trail.age");
-        Assert.True(rule.BuiltIn); Assert.Equal("trail", rule.Scope);
+        Assert.Equal("trail.age", rule.Template); Assert.Equal("trail", rule.Scope);
         int tile = MarkTrail(world)[0];
         world.Map.SetSkidTrailState(tile, 0.8f, 0);
         Run(world, 10);
@@ -60,7 +60,7 @@ public sealed class RuleBookTests
         var project = world.RuleProjectDocument; project.Algorithms = null;
         project.Fields.Add(new RuleFieldDefinition { Name = "saját.nedves_idő", Scope = "tile", Unit = "erdőév", Min = 0, Max = 100 });
         project.Rules.Add(new WorldRule { Id = "nedves", Name = "Nedves idő számlálása", Scope = "tile",
-            Condition = "gyökérzónavíz > 0", Effects = { new() { Target = "saját.nedves_idő", Mode = "add", Formula = "lépés" } } });
+            Condition = "rootWater > 0", Effects = { new() { Target = "saját.nedves_idő", Mode = "add", Formula = "lépés" } } });
         world.QueueRuleProject(project); world.ExecutePendingCommands();
         int tile = MarkTrail(world)[0];
         Run(world, 3);
@@ -82,11 +82,11 @@ public sealed class RuleBookTests
     {
         using var world = World();
         RuleProject With(WorldRule rule) { var p = world.RuleProjectDocument; p.Algorithms = null; p.Rules.Add(rule); return p; }
-        var readOnly = With(new WorldRule { Id = "x", Name = "Csak olvasható", Scope = "tile", Effects = { new() { Target = "gyökérzónavíz", Formula = "1" } } });
+        var readOnly = With(new WorldRule { Id = "x", Name = "Csak olvasható", Scope = "tile", Effects = { new() { Target = "vízellátottság", Formula = "1" } } });
         Assert.Contains("Csak olvasható", Assert.Throws<InvalidDataException>(() => world.QueueRuleProject(readOnly)).Message);
-        var action = With(new WorldRule { Id = "y", Name = "Ismeretlen művelet", Scope = "tile", Effects = { new() { Target = "nyom.megszüntetése", Mode = "action" } } });
+        var action = With(new WorldRule { Id = "y", Name = "Ismeretlen művelet", Scope = "tile", Effects = { new() { Target = "missing.action", Mode = "action" } } });
         Assert.Throws<InvalidDataException>(() => world.QueueRuleProject(action));
-        var formula = With(new WorldRule { Id = "z", Name = "Hibás képlet", Scope = "trail", Effects = { new() { Target = "nyom.kopás", Formula = "nincs_ilyen + 1" } } });
+        var formula = With(new WorldRule { Id = "z", Name = "Hibás képlet", Scope = "trail", Effects = { new() { Target = "wear", Formula = "nincs_ilyen + 1" } } });
         Assert.Contains("Hibás képlet", Assert.Throws<InvalidDataException>(() => world.QueueRuleProject(formula)).Message);
     }
 }

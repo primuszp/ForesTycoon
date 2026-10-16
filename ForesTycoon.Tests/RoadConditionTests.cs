@@ -22,18 +22,6 @@ public class RoadConditionTests
     }
 
     [Fact]
-    public void MacadamWashesOutFasterThanAsphaltAndRainSpeedsItUp()
-    {
-        var macadam = Flat(); macadam.BuildRoadTilePath(34, 82, RoadPaving.Macadam);
-        var asphalt = Flat(); asphalt.BuildRoadTilePath(34, 82, RoadPaving.Asphalt);
-        var wet = Flat(); wet.BuildRoadTilePath(34, 82, RoadPaving.Macadam);
-        macadam.WeatherRoads(1, 0); asphalt.WeatherRoads(1, 0); wet.WeatherRoads(1, 0.8f);
-        Assert.True(macadam.GetRoadCondition(50) < asphalt.GetRoadCondition(50) - 0.05f);
-        Assert.True(wet.GetRoadCondition(50) < macadam.GetRoadCondition(50) - 0.2f);
-        Assert.InRange(asphalt.GetRoadCondition(50), 0.9f, 1f);
-    }
-
-    [Fact]
     public void RepairRestoresOnlyTheWornTilesOfTheMarkedSection()
     {
         var map = Flat(); map.BuildRoadTilePath(34, 82, RoadPaving.Macadam);

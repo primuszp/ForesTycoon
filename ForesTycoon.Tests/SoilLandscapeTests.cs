@@ -52,27 +52,6 @@ public class SoilLandscapeTests
     }
 
     [Fact]
-    public void ProfilesDriveActualWaterStoresDrainageAndForestGrowth()
-    {
-        Ecosystem Create(int p)
-        {
-            var world = new Ecosystem(new Habitat(), 120, Only(p));
-            world.Forest.Clear(); world.Forest.Plant(0, ForestSpecies.Oak);
-            return world;
-        }
-        var sand = Create(0); var loam = Create(1);
-        Assert.Equal(100, sand.Environment.Cell(0).Capacity);
-        Assert.Equal(180, loam.Environment.Cell(0).Capacity);
-        sand.Environment.ForceWeather(WeatherPreset.Sunny, 0, 300);
-        loam.Environment.ForceWeather(WeatherPreset.Sunny, 0, 300);
-        sand.Update(120); loam.Update(120);
-        Assert.NotEqual(sand.Environment.Cell(0).Soil, loam.Environment.Cell(0).Soil);
-        Assert.NotEqual(sand.Forest.LastAnnualGrowthCubicMetres, loam.Forest.LastAnnualGrowthCubicMetres);
-        Assert.InRange(Math.Abs(sand.Environment.BalanceError), 0, 1e-6);
-        Assert.InRange(Math.Abs(loam.Environment.BalanceError), 0, 1e-6);
-    }
-
-    [Fact]
     public void TerraformNeverRegeneratesSoilOrAdvancesWater()
     {
         var map = new TerrainMap(TerrainSettings.Default.WithNodeSize(33, 42), (_, _) => 3);

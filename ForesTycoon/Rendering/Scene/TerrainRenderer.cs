@@ -12,13 +12,13 @@ namespace ForesTycoon
         private bool disposed;
         internal void VerifyAccess() { ObjectDisposedException.ThrowIf(disposed, this); owner.VerifyAccess(); }
         private readonly Terrain terrain;
-        private bool openingForestPrepared;
         internal bool MapGeometryPrepared { get; private set; }
         internal System.Collections.Generic.IEnumerable<float> PrepareMapGeometry()
         {
             VerifyAccess();
+            foreach (int unit in surfaces.PrepareWork()) yield return 0;
             foreach (float progress in terrain.PrepareMapGeometry(forest, graphics)) yield return progress;
-            openingForestPrepared = MapGeometryPrepared = true;
+            MapGeometryPrepared = true;
         }
         private readonly VehicleSystem vehicles;
         private readonly WorldEffectSystem effects;
@@ -30,9 +30,9 @@ namespace ForesTycoon
         private readonly EnvironmentSystem environment;
         private readonly SurfaceVisualRenderer surfaces;
         private readonly ForestryLogistics logistics;
-        private readonly WorldContentRenderer content=new WorldContentRenderer();
-        private readonly ForestMachineRenderer machines=new ForestMachineRenderer();
-        internal int FishCount=>content.FishCount;
+        private readonly WorldContentRenderer content = new WorldContentRenderer();
+        private readonly ForestMachineRenderer machines = new ForestMachineRenderer();
+        internal int FishCount => content.FishCount;
         internal int WeatherParticleCount => precipitation.Metrics.Particles;
         internal int WeatherCloudSteps => clouds.Metrics.CloudSteps;
         internal long WeatherCpuPayloadBytes => precipitation.Metrics.CpuPayloadBytes + clouds.Metrics.CpuPayloadBytes + forestWeather.Metrics.CpuPayloadBytes;
@@ -55,11 +55,11 @@ namespace ForesTycoon
         private readonly WeatherRenderer precipitation = new WeatherRenderer();
         private readonly TerrainWeatherSurface weatherSurface;
 
-        public TerrainRenderer(Terrain terrain, VehicleSystem vehicles, WorldEffectSystem effects, ForestSystem forest, GraphicsSettings graphics = null,EnvironmentSystem environment=null, WildlifeSystem wildlifeSystem=null,ForestryLogistics logistics=null)
+        public TerrainRenderer(Terrain terrain, VehicleSystem vehicles, WorldEffectSystem effects, ForestSystem forest, GraphicsSettings graphics = null, EnvironmentSystem environment = null, WildlifeSystem wildlifeSystem = null, ForestryLogistics logistics = null)
         {
-            this.environment=environment;
+            this.environment = environment;
             if (environment != null) FloodDepth = environment.SurfaceDepth;
-            this.logistics=logistics;
+            this.logistics = logistics;
             ownsWildlife = wildlifeSystem == null;
             wildlifeSimulation = wildlifeSystem ?? new WildlifeSystem();
             wildlife = new WildlifeRenderer(wildlifeSimulation);
@@ -71,7 +71,7 @@ namespace ForesTycoon
             weatherSurface = new TerrainWeatherSurface(terrain, forest);
             try
             {
-                surfaces = new SurfaceVisualRenderer(this.graphics, weather,environment,terrain);
+                surfaces = new SurfaceVisualRenderer(this.graphics, weather, environment, terrain);
                 // Geometry is requested by visible chunks at draw time; construction never warms a whole map.
                 terrain.StreamGeometry = true;
                 RegisterPasses();
@@ -82,18 +82,13 @@ namespace ForesTycoon
         public void Draw(RenderContext context)
         {
             VerifyAccess();
-            precipitation.BeginFrame(); clouds.BeginFrame(); forestWeather.BeginFrame(graphics); MarkerRenderedCount=0;
+            precipitation.BeginFrame(); clouds.BeginFrame(); forestWeather.BeginFrame(graphics); MarkerRenderedCount = 0;
             RenderPipeline.PassProbe?.Invoke("frame-preparation", true);
             try
             {
-                if (ownsWildlife) { wildlifeSimulation.Update(Math.Max(0, context.SimulationTimeSeconds-wildlifeTime), terrain.Map, forest, environment); wildlifeTime=context.SimulationTimeSeconds; }
+                if (ownsWildlife) { wildlifeSimulation.Update(Math.Max(0, context.SimulationTimeSeconds - wildlifeTime), terrain.Map, forest, environment); wildlifeTime = context.SimulationTimeSeconds; }
                 terrain.UpdateVisibleTiles(context);
-                if (!openingForestPrepared)
-                {
-                    terrain.PrepareOpeningForest(forest, graphics, context);
-                    openingForestPrepared = true;
-                }
-                if(environment!=null && graphics.AutomaticWeather)weather.Update(environment,graphics,context.SimulationTimeSeconds);
+                if (environment != null && graphics.AutomaticWeather) weather.Update(environment, graphics, context.SimulationTimeSeconds);
                 else weather.Update(context.SimulationTimeSeconds, graphics);
                 // Time of day and season: the light follows the calendar.
                 if (Daylight.Override is { } fixedLight)
@@ -136,7 +131,7 @@ namespace ForesTycoon
                         terrain.UpdateVisibleTiles(shadowContext);
                         terrain.DrawTerrainBase();
                         terrain.DrawTrees(forest, shadowContext, graphics);
-                        content.DrawMills(terrain,logistics,graphics);
+                        content.DrawMills(terrain, logistics, graphics);
                         wildlife.Draw(terrain, forest, graphics, context);
                         VehicleRenderer.Draw(vehicles, terrain, context.InterpolationAlpha);
                     });
@@ -146,7 +141,7 @@ namespace ForesTycoon
                 RenderPipeline.PassProbe?.Invoke("clouds", true);
                 try
                 {
-                    if(graphics.Enhanced && graphics.Weather && graphics.Clouds) clouds.Draw(weatherSurface, weather, graphics);
+                    if (graphics.Enhanced && graphics.Weather && graphics.Clouds) clouds.Draw(weatherSurface, weather, graphics);
                 }
                 finally { RenderPipeline.PassProbe?.Invoke("clouds", false); }
                 pipeline.Render(context);
@@ -158,14 +153,15 @@ namespace ForesTycoon
         {
             pipeline.Add(RenderLayer.TerrainBase, "terrain-base", _ => DrawSurface(SurfaceKind.Ground, terrain.DrawTerrainBase));
             pipeline.Add(RenderLayer.TerrainSkirts, "terrain-skirts", _ => DrawSurface(SurfaceKind.Skirt, terrain.DrawSkirts));
-            pipeline.Add(RenderLayer.Fish,"fish", context=>content.DrawFish(terrain,graphics,context));
+            pipeline.Add(RenderLayer.Fish, "fish", context => content.DrawFish(terrain, graphics, context));
             pipeline.Add(RenderLayer.WaterSurface, "water-surface", context => DrawSurface(SurfaceKind.Water, () => terrain.DrawWater(context)));
             pipeline.Add(RenderLayer.WaterWalls, "water-walls", context => DrawSurface(SurfaceKind.Water, () => terrain.DrawWaterWalls(context)));
             pipeline.Add(RenderLayer.RiverFallback, "river-fallback", context => DrawSurface(SurfaceKind.Water, () => terrain.DrawRivers(context)));
             pipeline.Add(RenderLayer.RiverFallback, "flood-water", context => DrawSurface(SurfaceKind.Water, () => terrain.DrawFloodWater(context, FloodDepth)));
             pipeline.Add(RenderLayer.Foundations, "road-foundations", _ => DrawSurface(SurfaceKind.Road, terrain.DrawRoadFoundations));
             pipeline.Add(RenderLayer.DecalBegin, "decal-state-begin", _ => BeginDecals());
-            pipeline.Add(RenderLayer.Grid, "terrain-grid", context => {
+            pipeline.Add(RenderLayer.Grid, "terrain-grid", context =>
+            {
                 bool winter = environment != null && (int)Math.Floor(environment.Time / environment.ForestYearSeconds * 4 + 1e-9) % 4 == 3;
                 if (!graphics.Enhanced || graphics.ShowGrid)
                     DrawSurface(SurfaceKind.Plain, () => terrain.DrawTerrainDecals(context, winter || weather.SnowCover > .05f));
@@ -177,15 +173,16 @@ namespace ForesTycoon
                 surfaces.Kind = SurfaceKind.Plain;
                 if (context.ShowTileHighlight) terrain.DrawHoveredTile();
             });
-            pipeline.Add(RenderLayer.ForestryPreview, "forestry-preview", _ => DrawSurface(SurfaceKind.Plain,()=> {
+            pipeline.Add(RenderLayer.ForestryPreview, "forestry-preview", _ => DrawSurface(SurfaceKind.Plain, () =>
+            {
                 terrain.DrawManagementOverlay();
-                terrain.DrawPlantations(forest,graphics);
-                terrain.DrawHarvestSites(logistics);terrain.DrawStackSites(logistics);terrain.DrawForestryPreview();
-                content.DrawBuildingPreview(terrain,forest,logistics,graphics.SawmillPreview);
+                terrain.DrawPlantations(forest, graphics);
+                terrain.DrawHarvestSites(logistics); terrain.DrawStackSites(logistics); terrain.DrawForestryPreview();
+                content.DrawBuildingPreview(terrain, forest, logistics, graphics.SawmillPreview);
             }));
             pipeline.Add(RenderLayer.DecalEnd, "decal-state-end", _ => EndDecals());
             pipeline.Add(RenderLayer.Props, "props", context => terrain.DrawTrees(forest, context, graphics));
-            pipeline.Add(RenderLayer.Buildings,"buildings", _=>content.DrawMills(terrain,logistics,graphics));
+            pipeline.Add(RenderLayer.Buildings, "buildings", _ => content.DrawMills(terrain, logistics, graphics));
             pipeline.Add(RenderLayer.Wildlife, "wildlife", context => wildlife.Draw(terrain, forest, graphics, context));
             pipeline.Add(RenderLayer.Vehicles, "vehicles", context =>
                 DrawSurface(SurfaceKind.Vehicle, () => VehicleRenderer.Draw(vehicles, terrain, context.InterpolationAlpha)));
@@ -199,7 +196,7 @@ namespace ForesTycoon
             {
                 if (graphics.Enhanced && graphics.Weather)
                 {
-                    forestWeather.Draw(terrain, forest, weather, graphics, context,environment);
+                    forestWeather.Draw(terrain, forest, weather, graphics, context, environment);
                     precipitation.Draw(weatherSurface, weather, context, graphics);
                 }
             });

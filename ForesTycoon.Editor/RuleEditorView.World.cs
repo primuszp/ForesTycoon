@@ -13,7 +13,7 @@ namespace ForesTycoon.Editor;
 
 internal enum WorldTab { Map, Types, Missions, Rules, Trial }
 internal enum MapLayer { Soil, Elevation, Water, GroundWater, Forest, Tracks, Trafficability }
-internal enum TypeTab { Soil, Species, Surfaces, Parameters }
+internal enum TypeTab { Soil, Species, Surfaces, Vehicles, Parameters }
 
 /// <summary>
 /// The world editor: one world, built from a generated and painted map, its types (soil) and its rules (readable
@@ -75,8 +75,8 @@ internal sealed partial class RuleEditorView
         try {
             scenario.Validate();
             var project = CollectProject(world); project.Algorithms = null;
-            world.StartScenario(scenario, project); appliedScenario = ScenarioKey(); statusFrame = -1000;
-            message = what + " A tesztvilág újraépült a pályából.";
+            world.RequestScenario(scenario, project); appliedScenario = ScenarioKey(); statusFrame = -1000;
+            message = what + " A tesztvilág újraépítése folyamatban.";
         } catch (Exception e) when (e is System.IO.InvalidDataException or ArgumentException or InvalidOperationException) { message = e.Message; }
     }
 
@@ -129,7 +129,9 @@ internal sealed partial class RuleEditorView
 
     private string SceneDocumentKey(GameWorld world) { var p = CollectProject(world); p.Algorithms = null; p.Authoring = null; return p.ToJson(); }
 
-    private void SaveAll(GameWorld world)
+    private void SaveAll(GameWorld world) => world.AtTickBoundary(() => Try(() => SaveAllAtBoundary(world)));
+
+    private void SaveAllAtBoundary(GameWorld world)
     {
         SaveProjectDraft(world);
         if (scenario == null) return;
@@ -219,11 +221,11 @@ internal sealed partial class RuleEditorView
         EditorStyle.Section("Szimuláció");
         if (ImGui.Button(behaviors.IsPaused ? "Indítás" : "Szünet")) behaviors.TogglePause();
         ImGui.SameLine();
-        void Advance(double hours) { world.ExecutePendingCommands(); world.Update(hours * world.SecondsPerEnvironmentHour); }
+        void Advance(double hours) => behaviors.RequestTime(hours * world.SecondsPerEnvironmentHour);
         if (ImGui.Button("1 óra előre")) Advance(1);
         ImGui.SameLine(); if (ImGui.Button("1 nap előre")) Advance(24);
         if (ImGui.IsItemHovered()) ImGui.SetTooltip($"{24 * world.SecondsPerEnvironmentHour:0} játékmásodperc; nagy pályán néhány másodpercig tart.");
-        EditorStyle.Text(HudTheme.Muted, (behaviors.IsPaused ? "Áll" : "Fut") + $" · forrásból eddig {world.Environment.SpringReceived / 1000 * world.TileArea:0} m³");
+        EditorStyle.Text(HudTheme.Muted, (behaviors.IsPaused ? "Áll" : "Fut") + $" · forrásból eddig {world.RuleBook.FlowTotals.GetValueOrDefault("forrásvíz") / 1000 * world.TileArea:0} m³");
         EditorStyle.Section("Méret");
         ImGui.BeginDisabled(captured);
         int sizeIndex = Array.IndexOf(MapSizes, scenario.Size);
@@ -490,22 +492,37 @@ internal sealed partial class RuleEditorView
     }
 
     // ── Types ────────────────────────────────────────────────────────────
+    /// <summary>Rules whose numbers are a vehicle's technical data: they get the Vehicles tab, not the general parameters.</summary>
+    private static bool IsVehicleRule(string rule) =>
+        rule.StartsWith("vehicle.", StringComparison.Ordinal) || rule.StartsWith("machine.", StringComparison.Ordinal) || rule.StartsWith("upkeep.", StringComparison.Ordinal);
+
     private void TypesTab(GameWorld world)
     {
         foreach (var (tab, label, help) in new[] {
             (TypeTab.Soil, "Talajtípusok", "Amit a térkép fest: víztartás, termékenység, teherbírás."),
             (TypeTab.Species, "Fafajok", "Növekedés, termőhely, méret és faanyagár."),
             (TypeTab.Surfaces, "Burkolatok", "Utak és nyomok: költség, kopás, romlás, menetellenállás."),
-            (TypeTab.Parameters, "Játékparaméterek", "Gazdaság, gépek és egyéb alapértékek. A kapcsolatokat a Szabályokban építed.") }) {
+            (TypeTab.Vehicles, "Járművek", "Rönkszállító, processzor és forwarder műszaki adatai, fogyasztása és karbantartása."),
+            (TypeTab.Parameters, "Játékparaméterek", "Gazdaság, utak és egyéb alapértékek. A kapcsolatokat a Szabályokban építed.") }) {
             if (tab != TypeTab.Soil) ImGui.SameLine(0, 6);
             if (ViewTab(label, typeTab == tab, help)) typeTab = tab;
         }
         ImGui.Separator();
         if (typeTab == TypeTab.Species) { SpeciesTab(world); return; }
         if (typeTab == TypeTab.Surfaces) { SurfacesTab(world); return; }
+        if (typeTab == TypeTab.Vehicles) {
+            ImGui.BeginChild("vehicles", Vec2.Zero);
+            ImGui.PushTextWrapPos(0);
+            EditorStyle.Text(HudTheme.Muted, "A járművek műszaki adatai: tömeg, teljesítmény, vonóerő, menetellenállás, fogyasztás, kapacitás, sebesség és karbantartás. "
+                + "A szabályok járművenként is olvassák őket (Rönkszállító, Erdészeti gép objektum).");
+            ImGui.PopTextWrapPos();
+            currentRules.DrawTuning(world, IsVehicleRule);
+            if (currentRules.UnappliedTuning(world) > 0 && ImGui.Button("Járműadatok alkalmazása")) Try(() => ApplyProject(world, false));
+            ImGui.EndChild(); return;
+        }
         if (typeTab == TypeTab.Parameters) {
             ImGui.BeginChild("parameters", Vec2.Zero);
-            currentRules.DrawTuning(world);
+            currentRules.DrawTuning(world, rule => !IsVehicleRule(rule));
             if (currentRules.UnappliedTuning(world) > 0 && ImGui.Button("Paraméterek alkalmazása")) Try(() => ApplyProject(world, false));
             ImGui.EndChild(); return;
         }

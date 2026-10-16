@@ -10,6 +10,8 @@ namespace ForesTycoon
     sealed partial class Viewport
     {
         private IEnumerator<float> mapPreparation;
+        private IEnumerator<int> worldCreation;
+        private readonly WorkResult<GameWorld> createdWorld = new();
         private bool loadingPresented;
         private float loadingProgress;
         private readonly string sceneProject;
@@ -23,7 +25,14 @@ namespace ForesTycoon
             {
                 if (world == null)
                 {
-                    world = WorldLoader.CreateStart(sceneProject);
+                    worldCreation ??= WorldLoader.CreateStartWork(createdWorld, sceneProject).GetEnumerator();
+                    long creationStarted = Stopwatch.GetTimestamp();
+                    int slices = 0;
+                    while (slices++ < 4096 && Stopwatch.GetElapsedTime(creationStarted).TotalMilliseconds < 4) {
+                        if (worldCreation.MoveNext()) continue;
+                        worldCreation.Dispose(); worldCreation = null; world = createdWorld.Value; break;
+                    }
+                    if (world == null) { DrawLoadingScreen(); return; }
                     if (resumeWorld != null) {
                         using var input = System.IO.File.OpenRead(resumeWorld); world.Load(input, allowAlgorithmMigration: true);
                         var project = RuleProject.FromJson(System.IO.File.ReadAllText(RuleProject.DefaultPath));
@@ -48,7 +57,7 @@ namespace ForesTycoon
                     }
                     loadingProgress = mapPreparation.Current;
                 }
-                while (Stopwatch.GetElapsedTime(started).TotalMilliseconds < 12);
+                while (Stopwatch.GetElapsedTime(started).TotalMilliseconds < 4);
             }
             else
             {
@@ -56,6 +65,11 @@ namespace ForesTycoon
                 loadingPresented = true;
             }
 
+            DrawLoadingScreen();
+        }
+
+        private void DrawLoadingScreen()
+        {
             RenderDevice.SetViewport(FramebufferWidth, FramebufferHeight);
             RenderDevice.Clear(new Vector4(.045f, .075f, .055f, 1));
             float scale = DpiScale;

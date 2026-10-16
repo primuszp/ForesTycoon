@@ -32,13 +32,36 @@ namespace ForesTycoon
         internal bool ContainsTile(int id){foreach(var site in Sites)if(Array.IndexOf(site.Tiles,id)>=0)return true;return false;}
         internal int Designate(ReadOnlySpan<int> ids)
         {
-            var selected=new List<int>();float volume=0;
-            foreach(int id in ids)if(!ContainsTile(id)&&forest.AvailableTimber(id)>0){selected.Add(id);volume+=forest.AvailableTimber(id);}
-            if(selected.Count>0)Sites.Add(new HarvestSite{Tiles=selected.ToArray(),InitialVolume=volume});
-            Status=selected.Count>0?$"Kitermelés kijelölve: {selected.Count} csempe, {volume:F1} m³.":"Nincs új kitermelhető erdő a kijelölésben.";
-            if(selected.Count>0&&MachinesEnabled)Status+=" Kösd nyommal az úthálózathoz, jelölj ki mellé sarangot, és küldd ki a processzort.";
-            return selected.Count;
+            var result = new WorkResult<int>(); SimulationWork.Complete(DesignateWork(ids.ToArray(), result)); return result.Value;
         }
+        internal IEnumerable<int> DesignateWork(int[] ids, WorkResult<int> result)
+        {
+            var occupied = new HashSet<int>();
+            foreach (var site in Sites) foreach (int id in site.Tiles) { occupied.Add(id); yield return 1; }
+            var selected = new List<int>(); float volume = 0;
+            foreach (int id in ids) {
+                yield return 1;
+                float timber = forest.AvailableTimber(id);
+                if (!occupied.Contains(id) && timber > 0) { selected.Add(id); volume += timber; }
+            }
+            if (selected.Count > 0) Sites.Add(new HarvestSite { Tiles = selected.ToArray(), InitialVolume = volume });
+            Status = selected.Count > 0 ? $"Kitermelés kijelölve: {selected.Count} csempe, {volume:F1} m³." : "Nincs új kitermelhető erdő a kijelölésben.";
+            if (selected.Count > 0 && MachinesEnabled) Status += " Kösd nyommal az úthálózathoz, jelölj ki mellé sarangot, és küldd ki a processzort.";
+            result.Value = selected.Count;
+        }
+        internal IEnumerable<int> RemainingWork(WorkResult<float> result)
+        {
+            float sum = 0;
+            foreach (var site in Sites) {
+                float volume = 0;
+                foreach (int id in site.Tiles) { volume += forest.AvailableTimber(id); yield return 1; }
+                sum += volume;
+            }
+            foreach (var stack in Stacks) { sum += stack.Volume; yield return 1; }
+            foreach (var machine in Machines) { sum += machine.Cargo + machine.LogTransferVolume; yield return 1; }
+            result.Value = sum;
+        }
+
         internal bool PlaceMill(int id)
         {
             if(!terrain.TryGetSawmillFootprint(id,out var footprint,out var position)){Status="A malomhoz 2×2 sík, száraz, üres csempe szükséges.";return false;}
@@ -88,13 +111,14 @@ namespace ForesTycoon
             foreach(var mill in Mills)if(mill.TileId==vehicle.SawmillTileId){mill.Received+=amount;mill.Stock+=amount;return;}
             throw new InvalidOperationException("Missing sawmill destination.");
         }
-        internal void Update(double seconds){
-            foreach(var mill in Mills){float cut=Math.Min(mill.Stock,(float)seconds*0.25f);
+        internal void Update(double seconds) => SimulationWork.Complete(UpdateWork(seconds));
+        internal IEnumerable<int> UpdateWork(double seconds){
+            foreach(var mill in Mills){yield return 1;float cut=Math.Min(mill.Stock,(float)seconds*0.25f);
                 if (Behaviors != null) cut = Math.Min(mill.Stock, (float)Behaviors.Evaluate(new("mill.process", "mill", (ulong)mill.TileId,
                     cut, seconds, forest.ForestYear, mill.Processed, mill.Stock)));
                 mill.Stock-=cut;mill.Processed+=cut;}
-            if(MachinesEnabled)UpdateMachines(seconds);
-            if(Vehicles!=null)UpdateTrucks(seconds);
+            if(MachinesEnabled) foreach(int unit in UpdateMachinesWork(seconds)) yield return unit;
+            if(Vehicles!=null) foreach(int unit in UpdateTrucksWork(seconds)) yield return unit;
         }
         internal bool RouteConnected(Vehicle vehicle)
         {

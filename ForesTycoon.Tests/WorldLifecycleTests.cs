@@ -161,6 +161,7 @@ public class WorldLifecycleTests
     private sealed class FailingSystem : IWorldSystem
     {
         public void Update(double seconds) => throw new IOException("Injected subsystem failure.");
+        public IEnumerable<int> UpdateWork(double seconds) { Update(seconds); yield return 1; }
         public void Clear() { }
     }
 

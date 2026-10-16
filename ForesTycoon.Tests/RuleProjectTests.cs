@@ -44,10 +44,10 @@ public class RuleProjectTests
         var project = GameWorld.DefaultRuleProject();
         var growth = project.Behaviors.Graphs.Single(g => g.Hook == "forest.growth");
         growth.Nodes[0].Operation = BehaviorOperation.Constant; growth.Nodes[0].Value = 0;
-        world.QueueRuleProject(project); world.ExecutePendingCommands();
+        world.QueueRuleProject(project); world.ExecutePendingCommands(); world.Update(1d / 30);
         Assert.Equal(default, world.CaptureCheckpoint().Ecology.Forest.Trees.Patches.SelectMany(p => p.Trees).Single(t => t.Id == target.Id).AnnualGrowth);
         project.Behaviors.Graphs.Add(new() { Id = "individual", Hook = "forest.growth", Kind = "tree", ObjectId = target.Id });
-        world.QueueRuleProject(project); world.ExecutePendingCommands();
+        world.QueueRuleProject(project); world.ExecutePendingCommands(); world.Update(1d / 30);
         Assert.True(world.CaptureCheckpoint().Ecology.Forest.Trees.Patches.SelectMany(p => p.Trees).Single(t => t.Id == target.Id).AnnualGrowth.Height > 0);
     }
     [Fact]

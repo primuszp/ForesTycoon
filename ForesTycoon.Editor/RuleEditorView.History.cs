@@ -26,7 +26,7 @@ internal sealed partial class RuleEditorView
         try { map = new RuleProject { World = scenario }.ToJson(); } finally { scenario.InitialState = initial; }
         var tuning = currentRules.TuningOverrides(world);
         return new(map, JsonSerializer.Serialize(new SortedDictionary<string, double>(tuning, StringComparer.Ordinal)), null,
-            JsonSerializer.Serialize(new { Rules = RuleBookRules(world), Fields = RuleBookFields(world) }));
+            JsonSerializer.Serialize(new { Rules = RuleBookRules(world), Fields = RuleBookFields(world), RemovedStarters = RemovedStarters(world) }));
     }
 
     private void ClearHistory() { history.Clear(); historyIndex = -1; }
@@ -71,7 +71,7 @@ internal sealed partial class RuleEditorView
         scenario = map; seedEdit = scenario.Seed;
         currentRules.SetTuning(JsonSerializer.Deserialize<Dictionary<string, double>>(to.Tuning));
         var book = JsonSerializer.Deserialize<RuleBookState>(to.Rules);
-        if (book?.Rules != null) { ruleBook = book.Rules; ruleFields = book.Fields ?? new(); ruleBookError = null; }
+        if (book?.Rules != null) { ruleBook = book.Rules; ruleFields = book.Fields ?? new(); removedStarters = book.RemovedStarters ?? new(); ruleBookError = null; }
         historyIndex = index; statusFrame = -1000;
         if (rebuild) ApplyScenario(world, verb + ": " + summary + ".");
         else { Try(() => ApplyProject(world, false)); message = verb + ": " + summary + "."; }
@@ -84,7 +84,7 @@ internal sealed partial class RuleEditorView
         return p.ToJson();
     }
 
-    private sealed record RuleBookState(List<WorldRule> Rules, List<RuleFieldDefinition> Fields);
+    private sealed record RuleBookState(List<WorldRule> Rules, List<RuleFieldDefinition> Fields, List<string> RemovedStarters = null);
     internal WorldScenario EditedScenario => scenario;
     internal void SetTuningForTest(string key, double value)
     {

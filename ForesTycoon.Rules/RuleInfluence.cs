@@ -10,6 +10,8 @@ namespace ForesTycoon.Rules;
 public sealed class RuleInfluence
 {
     public bool PerYear { get; set; } = true;
+    /// <summary>The strength is per hour of the environment's clock (rain, evaporation and other water rates are hourly).</summary>
+    public bool PerHour { get; set; }
     public List<InfluenceTerm> Terms { get; set; } = new();
     internal static string Number(double v) => v.ToString("0.###############################", CultureInfo.InvariantCulture);
     internal static string Field(string name)
@@ -22,7 +24,8 @@ public sealed class RuleInfluence
     public string Compile()
     {
         if (Terms == null || Terms.Count > 16 || Terms.Any(t => t == null)) throw new InvalidDataException("Egy hatáshoz legfeljebb 16 összetevő adható.");
-        return "(" + (Terms.Count == 0 ? "0" : string.Join(" + ", Terms.Select(t => t.Compile()))) + ")" + (PerYear ? " * deltaYears" : "");
+        return "(" + (Terms.Count == 0 ? "0" : string.Join(" + ", Terms.Select(t => t.Compile()))) + ")"
+            + (PerHour ? " * deltaYears * world.hoursPerYear" : PerYear ? " * deltaYears" : "");
     }
 }
 
@@ -34,27 +37,16 @@ public sealed class InfluenceTerm
     public double Amount { get; set; } = .1;
     public string AmountField { get; set; } = "";
     public List<InfluenceFactor> Factors { get; set; } = new();
-    public string WhenField { get; set; } = "";
-    public string Comparison { get; set; } = "greater";
-    public double Threshold { get; set; } = .5;
     public List<InfluenceCondition> Conditions { get; set; } = new();
-
-    public void UpgradeConditions()
-    {
-        if (string.IsNullOrEmpty(WhenField) || Conditions == null) return;
-        Conditions.Insert(0, new() { Field = WhenField, Comparison = Comparison, Value = Threshold });
-        WhenField = "";
-    }
 
     internal string Compile()
     {
-        RuleInfluence.Finite(Amount); RuleInfluence.Finite(Threshold);
-        if (Amount < 0 || Name == null || AmountField == null || WhenField == null || Comparison is not ("greater" or "less")
+        RuleInfluence.Finite(Amount);
+        if (Amount < 0 || Name == null || AmountField == null
             || Factors == null || Factors.Count > 8 || Factors.Any(f => f == null)
             || Conditions == null || Conditions.Count > 8 || Conditions.Any(c => c == null)) throw new InvalidDataException("Hibás hatásösszetevő.");
         string amount = AmountField.Length == 0 ? RuleInfluence.Number(Amount) : RuleInfluence.Field(AmountField);
         string value = (Decrease ? "-" : "") + "(" + amount + string.Concat(Factors.Select(f => " * " + f.Compile())) + ")";
-        if (WhenField.Length > 0) value = $"ha({RuleInfluence.Field(WhenField)} {(Comparison == "less" ? "<" : ">")} {RuleInfluence.Number(Threshold)}; {value}; 0)";
         foreach (var condition in Conditions) value = $"ha({condition.Compile()}; {value}; 0)";
         return Enabled ? value : "0";
     }

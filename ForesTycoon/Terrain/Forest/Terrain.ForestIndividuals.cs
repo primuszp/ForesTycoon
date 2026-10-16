@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
 using OpenTK.Mathematics;
 
 namespace ForesTycoon
@@ -26,6 +27,7 @@ namespace ForesTycoon
             internal double AnchorYear;
             internal double NextStageYear;
             internal bool Initialized;
+            internal bool SuppressDrawing;
             internal bool LightShapeDirty;
             internal long LastUsed;
             internal long GpuBytes => Wood.GpuPayloadBytes + Crowns.GpuPayloadBytes + Floor.GpuPayloadBytes + State.LongLength * 16;
@@ -219,24 +221,7 @@ namespace ForesTycoon
             TrimStaticCache();
         }
 
-        // Restore the complete opening diorama at the camera's actual detail level.
-        // Only its visible chunks are prepared; the rest of the map still streams.
-        internal void PrepareOpeningForest(ForestSystem forest, GraphicsSettings graphics, RenderContext context)
-        {
-            bool synchronous = SynchronousForestBuilds;
-            try
-            {
-                SynchronousForestBuilds = true;
-                generatedForestLod = ForestLodPolicy.Select(context.PixelsPerWorldUnit, null);
-                foreach (var chunk in visibleChunks)
-                {
-                    GetIndividualForestChunk(chunk, forest, graphics, generatedForestLod.Value, false, out _);
-                    displayedForestLods[chunk] = generatedForestLod.Value;
-                }
-                TrimForestCache();
-            }
-            finally { SynchronousForestBuilds = synchronous; }
-        }
+
 
         // Native regression diagnostic: all current LODs must share a morphology epoch and GPU clock.
         internal int CheckForestLodConsistency(ForestSystem forest, GraphicsSettings graphics)
@@ -303,8 +288,8 @@ namespace ForesTycoon
                 // including floor geometry and stumps. Other edits keep their priority background rebuild.
                 bool edited = geometry.Initialized && geometry.Generation == forest.IndividualTrees.Generation
                     && (geometry.TerrainVersion != chunk.PropVersion || (geometry.EditRevision != forest.EditRevision && topologyChanged));
-                bool immediate = SynchronousForestBuilds || roadClearedVegetation || (!StreamGeometry && !deferIfStale && (!geometry.Initialized
-                    || geometry.Generation != forest.IndividualTrees.Generation));
+                geometry.SuppressDrawing |= roadClearedVegetation;
+                bool immediate = SynchronousForestBuilds;
                 if (!immediate)
                 {
                     if (!preload && pendingForestBuild?.Preload == true) CancelForestBuild();
@@ -625,7 +610,9 @@ namespace ForesTycoon
                         var season = ForestSeasonRenderState.Create(spec);
                         geometry.Trees.Add(new(id, i, tree.Id, size, spec.ShapeKey, site,
                             season.Tint, season.Bounds));
-                        var mesh = DendroTreeGenerator.GenerateSeasonal(spec, lod);
+                        var generated = new WorkResult<DendroTreeGenerator.Mesh>();
+                        foreach (bool unit in GenerateTreeMeshWork(spec, lod, true, generated)) yield return unit;
+                        var mesh = generated.Value;
                         AppendAt(individualWood, mesh.Trunk, origin);
                         Repeat(individualWoodGrowth, mesh.Trunk.Length, new(origin, new Vector3(radial, radial, vertical), slot));
                         AppendAt(individualWood, mesh.Branches, origin);
@@ -645,7 +632,9 @@ namespace ForesTycoon
                     {
                         var stem = IndividualStem(tile, dead.Tree, dead.DeathYear);
                         var deadSpec = TreeShapeSpec.From(dead.Tree, dead.DeathYear, TreeSite.Open, stem.Yaw, dead: true);
-                        var mesh = DendroTreeGenerator.Generate(deadSpec, ForestLod.Near);
+                        var generated = new WorkResult<DendroTreeGenerator.Mesh>();
+                        foreach (bool unit in GenerateTreeMeshWork(deadSpec, ForestLod.Near, false, generated)) yield return unit;
+                        var mesh = generated.Value;
                         var deadWood = new List<Vertex>(mesh.Trunk.Length + mesh.Branches.Length);
                         AppendAt(deadWood, mesh.Trunk, new(stem.X, stem.Y, stem.BaseZ));
                         AppendAt(deadWood, mesh.Branches, new(stem.X, stem.Y, stem.BaseZ));
@@ -664,7 +653,7 @@ namespace ForesTycoon
                     geometry.NextStageYear = Math.Min(geometry.NextStageYear, geometry.AnchorYear + 1.0 / 12);
                     TreeInstance stem = IndividualStem(tile, stump.Felled, stump.FelledYear);
                     Vertex[] wood = DynamicPrimitiveBatch.BuildGeometry(PrimitiveTopology.Quads,
-                        () => DrawStump(stem, stump.Decay(geometry.AnchorYear)));
+                        () => DrawStump(stem, (float)stump.DecayProgress));
                     individualWood.AddRange(wood);
                     Repeat(individualWoodGrowth, wood.Length, new(Vector3.Zero, Vector3.Zero));
                         yield return true;
@@ -683,6 +672,19 @@ namespace ForesTycoon
                 foreach (var vertex in source)
                     target.Add(new Vertex(vertex.Position + origin, vertex.Normal, vertex.Color));
             }
+        }
+
+        private IEnumerable<bool> GenerateTreeMeshWork(TreeShapeSpec spec, ForestLod lod, bool seasonal, WorkResult<DendroTreeGenerator.Mesh> result)
+        {
+            if (SynchronousForestBuilds) {
+                result.Value = seasonal ? DendroTreeGenerator.GenerateSeasonal(spec, lod) : DendroTreeGenerator.Generate(spec, lod);
+                yield break;
+            }
+            object species = ForestSpeciesBook.CaptureContext();
+            var mesh = Task.Run(() => ForestSpeciesBook.WithContext(species, () => seasonal
+                ? DendroTreeGenerator.GenerateSeasonal(spec, lod) : DendroTreeGenerator.Generate(spec, lod)));
+            while (!mesh.IsCompleted) yield return false;
+            result.Value = mesh.GetAwaiter().GetResult();
         }
 
         private void DrawIndividualTrees(ForestSystem forest, RenderContext context, GraphicsSettings graphics)
@@ -708,7 +710,7 @@ namespace ForesTycoon
                     for (int c = 0; c < visibleChunks.Count; c++)
                     {
                         var geometry = individualForestChunks[(visibleChunks[c], chunkLods[c])];
-                        if (geometry.Initialized && geometry.Generation == forest.IndividualTrees.Generation) geometry.Floor.DrawArray();
+                        if (geometry.Initialized && !geometry.SuppressDrawing && geometry.Generation == forest.IndividualTrees.Generation) geometry.Floor.DrawArray();
                     }
             }
             if (graphics.HideTrees) { if (!shadow) TrimForestCache(); return; }
@@ -716,7 +718,7 @@ namespace ForesTycoon
             for (int c = 0; c < visibleChunks.Count; c++)
             {
                 var geometry = individualForestChunks[(visibleChunks[c], chunkLods[c])];
-                if (geometry.Initialized && geometry.Generation == forest.IndividualTrees.Generation) geometry.Wood.DrawArray();
+                if (geometry.Initialized && !geometry.SuppressDrawing && geometry.Generation == forest.IndividualTrees.Generation) geometry.Wood.DrawArray();
             }
             forestMaterial.Use();
             // The texture represents the whole foliage mass. Rendering only the front
@@ -727,17 +729,19 @@ namespace ForesTycoon
                 for (int c = 0; c < visibleChunks.Count; c++)
                 {
                     var geometry = individualForestChunks[(visibleChunks[c], chunkLods[c])];
-                    if (geometry.Initialized && geometry.Generation == forest.IndividualTrees.Generation) geometry.Crowns.DrawArray(false);
+                    if (geometry.Initialized && !geometry.SuppressDrawing && geometry.Generation == forest.IndividualTrees.Generation) geometry.Crowns.DrawArray(false);
                 }
             }
             forestMaterial.Use();
             if (!shadow) TrimForestCache();
         }
 
-        private void DisposeIndividualForest()
+
+
+        private IEnumerable<int> DisposeIndividualForestWork()
         {
             CancelForestBuild();
-            foreach (var chunk in individualForestChunks.Values) chunk.Dispose();
+            foreach (var chunk in individualForestChunks.Values) { chunk.Dispose(); yield return 1; }
             individualForestChunks.Clear();
             forestLodSnapshots.Clear();
             displayedForestLods.Clear();

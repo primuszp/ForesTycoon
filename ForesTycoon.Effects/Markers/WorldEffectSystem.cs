@@ -45,17 +45,19 @@ namespace ForesTycoon.Effects
             else { active[(start + count) % MaxActiveEffects] = effect; count++; }
         }
 
-        public void Update(double deltaSeconds)
+        public void Update(double deltaSeconds) => SimulationWork.Complete(UpdateWork(deltaSeconds));
+        public IEnumerable<int> UpdateWork(double deltaSeconds)
         {
             if (!double.IsFinite(deltaSeconds) || deltaSeconds < 0)
                 throw new ArgumentOutOfRangeException(nameof(deltaSeconds));
             int survivors = 0;
             for (int i = 0; i < count; i++)
             {
+                yield return 1;
                 WorldEffect updated = At(i).Advance(deltaSeconds);
                 if (!updated.IsExpired) active[(start + survivors++) % MaxActiveEffects] = updated;
             }
-            for (int i = survivors; i < count; i++) active[(start + i) % MaxActiveEffects] = default;
+            for (int i = survivors; i < count; i++) { active[(start + i) % MaxActiveEffects] = default; yield return 1; }
             count = survivors;
         }
 

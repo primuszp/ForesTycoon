@@ -51,6 +51,7 @@ namespace ForesTycoon.Ecology
         EcologicalBoundary Boundary => EcologicalBoundary.None;
         double SecondsUntilBoundary => double.PositiveInfinity;
         void Advance(in EcologicalStep step);
+        IEnumerable<int> AdvanceWork(EcologicalStep step) { Advance(step); yield return 1; }
     }
 
     /// <summary>Stable, multi-rate process execution without per-step allocations or render dependencies.</summary>
@@ -58,6 +59,7 @@ namespace ForesTycoon.Ecology
     {
         private readonly IEcologicalProcess[] processes;
         private readonly double[] boundaries;
+        private readonly bool hasWorkProcesses;
         private double remainder;
         private bool running, faulted;
         internal double StepSeconds { get; }
@@ -102,6 +104,7 @@ namespace ForesTycoon.Ecology
                 ordered.Insert(index, process);
             }
             this.processes = ordered.ToArray();
+            hasWorkProcesses = Array.Exists(this.processes, p => p.GetType().GetMethod("AdvanceWork") != null);
             boundaries = new double[processes.Length];
             ValidateFields(initialFields ?? Array.Empty<string>());
         }
@@ -127,13 +130,57 @@ namespace ForesTycoon.Ecology
 
         internal void Update(double seconds)
         {
+            if (hasWorkProcesses) { SimulationWork.Complete(UpdateWork(seconds)); return; }
+            ValidateAdvance(seconds);
+            remainder += seconds;
+            running = true;
+            try {
+                while (remainder + 1e-10 >= StepSeconds) {
+                    remainder -= StepSeconds;
+                    double remaining = StepSeconds;
+                    while (remaining > 1e-10) {
+                        var step = NextInterval(remaining);
+                        foreach (var process in processes) process.Advance(step);
+                        TimeSeconds += step.DeltaSeconds; remaining -= step.DeltaSeconds;
+                    }
+                    CompletedSteps++;
+                }
+            }
+            catch { faulted = true; throw; }
+            finally { running = false; }
+        }
+
+        private void ValidateAdvance(double seconds)
+        {
             if (!double.IsFinite(seconds) || seconds < 0 || !double.IsFinite(remainder + seconds))
                 throw new ArgumentOutOfRangeException(nameof(seconds));
             if (running) throw new InvalidOperationException("Ecological process execution cannot be nested.");
             if (faulted) throw new InvalidOperationException("The ecological runtime failed; restore a validated world before continuing.");
-            if (seconds == 0) return;
+        }
+
+        private EcologicalStep NextInterval(double remaining)
+        {
+            double dt = remaining;
+            for (int i = 0; i < processes.Length; i++) {
+                double until = processes[i].SecondsUntilBoundary;
+                if (double.IsNaN(until) || until <= 0) throw new InvalidOperationException($"Process '{processes[i].Descriptor.Id}' has a non-positive calendar boundary.");
+                if (double.IsFinite(until) && processes[i].Boundary == EcologicalBoundary.None)
+                    throw new InvalidOperationException("A finite calendar boundary needs an explicit boundary type.");
+                boundaries[i] = until; dt = Math.Min(dt, until);
+            }
+            if (dt <= 1e-10) throw new InvalidOperationException("Calendar boundary cannot make numerical progress.");
+            var flags = dt == remaining ? EcologicalBoundary.EnvironmentStep : EcologicalBoundary.None;
+            for (int i = 0; i < processes.Length; i++) if (boundaries[i] == dt) flags |= processes[i].Boundary;
+            return new(CompletedSteps, TimeSeconds, dt, flags);
+        }
+
+        internal IEnumerable<int> UpdateWork(double seconds)
+        {
+            ValidateAdvance(seconds);
+            if (seconds == 0) yield break;
             remainder += seconds;
             running = true;
+            bool completed = false;
             try
             {
                 // Preserve the established game's fixed-step tolerance and fractional remainder.
@@ -143,31 +190,17 @@ namespace ForesTycoon.Ecology
                     double remaining = StepSeconds;
                     while (remaining > 1e-10)
                     {
-                        double dt = remaining;
-                        for (int i = 0; i < processes.Length; i++)
-                        {
-                            double until = processes[i].SecondsUntilBoundary;
-                            if (double.IsNaN(until) || until <= 0)
-                                throw new InvalidOperationException($"Process '{processes[i].Descriptor.Id}' has a non-positive calendar boundary.");
-                            if (double.IsFinite(until) && processes[i].Boundary == EcologicalBoundary.None)
-                                throw new InvalidOperationException("A finite calendar boundary needs an explicit boundary type.");
-                            boundaries[i] = until;
-                            dt = Math.Min(dt, until);
-                        }
-                        if (dt <= 1e-10) throw new InvalidOperationException("Calendar boundary cannot make numerical progress.");
-                        var flags = dt == remaining ? EcologicalBoundary.EnvironmentStep : EcologicalBoundary.None;
-                        for (int i = 0; i < processes.Length; i++)
-                            if (boundaries[i] == dt) flags |= processes[i].Boundary;
-                        var step = new EcologicalStep(CompletedSteps, TimeSeconds, dt, flags);
-                        foreach (var process in processes) process.Advance(step);
-                        TimeSeconds += dt;
-                        remaining -= dt;
+                        var step = NextInterval(remaining);
+                        foreach (var process in processes)
+                            foreach (int work in process.AdvanceWork(step)) yield return work;
+                        TimeSeconds += step.DeltaSeconds;
+                        remaining -= step.DeltaSeconds;
                     }
                     CompletedSteps++;
                 }
+                completed = true;
             }
-            catch { faulted = true; throw; }
-            finally { running = false; }
+            finally { if (!completed) faulted = true; running = false; }
         }
     }
 }

@@ -56,6 +56,7 @@ public class WorldSystemCollectionTests
         }
 
         public void Update(double fixedDeltaSeconds) => events.Add(name);
+        public IEnumerable<int> UpdateWork(double seconds) { Update(seconds); yield return 1; }
         public void Clear() => events.Add($"{name}:clear");
     }
 }

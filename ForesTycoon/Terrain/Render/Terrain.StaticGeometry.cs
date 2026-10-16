@@ -129,9 +129,11 @@ namespace ForesTycoon
             }
             return true;
         }
-        private void DisposeStaticTerrain()
+
+
+        private IEnumerable<int> DisposeStaticTerrainWork()
         {
-            foreach (var geometry in staticTerrain.Values) geometry.Dispose();
+            foreach (var geometry in staticTerrain.Values) { geometry.Dispose(); yield return 1; }
             staticTerrain.Clear();
             StaticGpuPayloadBytes = StaticCpuPayloadBytes = StaticBudgetExcessBytes = 0;
         }

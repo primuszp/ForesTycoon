@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace ForesTycoon.Ecology
 {
@@ -89,6 +90,19 @@ namespace ForesTycoon.Ecology
                     !double.IsFinite(surface[id] + delta[id]) || surface[id] + delta[id] < 0)
                     throw new InvalidOperationException("Surface water changed below its scheduled outgoing flux.");
             for (int id = 0; id < surface.Length; id++) surface[id] += delta[id];
+            active = false;
+        }
+
+        internal IEnumerable<int> CommitWork(double[] surface)
+        {
+            if (!active || surface.Length != delta.Length) throw new InvalidOperationException("Invalid surface flux commit.");
+            for (int id = 0; id < surface.Length; id++) {
+                if (!double.IsFinite(surface[id]) || surface[id] < 0 ||
+                    !double.IsFinite(surface[id] + delta[id]) || surface[id] + delta[id] < 0)
+                    throw new InvalidOperationException("Surface water changed below its scheduled outgoing flux.");
+                yield return 1;
+            }
+            for (int id = 0; id < surface.Length; id++) { surface[id] += delta[id]; yield return 1; }
             active = false;
         }
 

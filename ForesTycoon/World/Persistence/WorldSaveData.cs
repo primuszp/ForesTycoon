@@ -75,7 +75,7 @@ namespace ForesTycoon
         public const int CurrentVersion = 17;
         // Bump whenever native simulation semantics change. Editable graphs and tuning
         // are stored separately in the checkpoint/journal; this identifies their runtime.
-        public const string CurrentRuntimeRulesVersion = "forestycoon-simulation/2026-10-10.6";
+        public const string CurrentRuntimeRulesVersion = "forestycoon-simulation/2026-10-16.2";
         public string RuntimeRulesVersion { get; init; } = CurrentRuntimeRulesVersion;
         public WorldSaveData() { }
         // Missing JSON must not silently inherit today's runtime identifier.
@@ -108,7 +108,10 @@ namespace ForesTycoon
                 || (Version == 13 && RuntimeRulesVersion is "forestycoon-simulation/2026-10-10.2" or "forestycoon-simulation/2026-10-10.3")
                 || (Version == 14 && RuntimeRulesVersion == "forestycoon-simulation/2026-10-10.4")
                 || (Version == 15 && RuntimeRulesVersion == "forestycoon-simulation/2026-10-10.5");
-            if (Version >= 12 && !migratedRuntime && !string.Equals(RuntimeRulesVersion, CurrentRuntimeRulesVersion, StringComparison.Ordinal))
+            // Pre-cooperative worlds can import a complete state; their historical tail must not be replayed under new ordering.
+            bool previousSnapshot = Version is 16 or 17 && RuntimeRulesVersion is "forestycoon-simulation/2026-10-10.6" or "forestycoon-simulation/2026-10-16.1"
+                && Checkpoint != null && Checkpoint.Tick == Tick;
+            if (Version >= 12 && !migratedRuntime && !previousSnapshot && !string.Equals(RuntimeRulesVersion, CurrentRuntimeRulesVersion, StringComparison.Ordinal))
                 throw new NotSupportedException($"Simulation rules runtime '{RuntimeRulesVersion ?? "missing"}' is not supported; expected '{CurrentRuntimeRulesVersion}'.");
             if (!EnvironmentSystem.IsValidForestYearSeconds(ReplayForestYearSeconds))
                 throw new InvalidOperationException("Save forest year duration must be between 120 and 1200 seconds.");

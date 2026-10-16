@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using OpenTK.Mathematics;
 namespace ForesTycoon
 {
@@ -14,6 +15,7 @@ namespace ForesTycoon
         public Vector4 Atmosphere => backend.Atmosphere;
         public bool ShadowsReady => backend.ShadowsReady;
         public bool Active => backend.Active;
+        internal IEnumerable<int> PrepareWork() => backend.PrepareWork();
         internal void BeginFrame() => backend.BeginFrame();
         internal void RenderShadows(Terrain terrain, Action draw) => backend.RenderShadows(terrain, draw);
         public void Use(float outlineWidth = 0) => backend.Use(outlineWidth);

@@ -27,13 +27,13 @@ namespace ForesTycoon.Ecology
     /// <summary>Persistent categorical soil raster, generated once. Terrain edits never regenerate it.</summary>
     internal sealed class SoilLandscape
     {
-        internal RasterField<byte> Profiles { get; }
+        internal RasterField<byte> Profiles { get; private set; }
         internal SoilLandscapeDefinition Definition { get; }
         internal ReadOnlySpan<byte> ProfileIndices => Profiles.Values;
         internal RasterGrid Grid => Profiles.Grid;
         internal SoilProfile Profile(int id) => Definition.Catalog[Profiles[id]];
 
-        internal SoilLandscape(IForestHabitat habitat, SoilLandscapeDefinition definition)
+        internal SoilLandscape(IForestHabitat habitat, SoilLandscapeDefinition definition, bool deferInitialization = false)
         {
             ArgumentNullException.ThrowIfNull(habitat);
             Definition = definition ?? throw new ArgumentNullException(nameof(definition));
@@ -42,26 +42,33 @@ namespace ForesTycoon.Ecology
                 throw new ArgumentException("Soil raster requires a complete column-major tile grid.");
             var geometry = habitat.GetForestTileGeometry(0);
             var grid = new RasterGrid(dimensions.Columns, dimensions.Rows, geometry.Width, geometry.Height);
-            var profileIndices = new byte[habitat.TileCount];
-            for (int id = 0; definition.GeneratorVersion != 0 && id < profileIndices.Length; id++)
+            pendingGrid = grid;
+            if (!deferInitialization) SimulationWork.Complete(InitializeWork(habitat));
+        }
+
+        private RasterGrid pendingGrid;
+        internal IEnumerable<int> InitializeWork(IForestHabitat habitat)
+        {
+            var indices = new byte[habitat.TileCount];
+            for (int id = 0; Definition.GeneratorVersion != 0 && id < indices.Length; id++)
             {
+                yield return 1;
                 double moisture = habitat.GetMoisture(id);
                 if (!double.IsFinite(moisture) || moisture < 0 || moisture > 1)
                     throw new ArgumentException("Initial habitat moisture must be between 0 and 1.");
-                double texture = Texture(habitat.Seed, id / grid.Rows, id % grid.Rows);
+                double texture = Texture(habitat.Seed, id / pendingGrid.Rows, id % pendingGrid.Rows);
                 double best = double.PositiveInfinity;
-                for (int p = 0; p < definition.Catalog.Profiles.Length; p++)
+                for (int p = 0; p < Definition.Catalog.Profiles.Length; p++)
                 {
-                    var profile = definition.Catalog[p];
+                    var profile = Definition.Catalog[p];
                     double m = moisture - profile.PreferredMoisture, t = texture - profile.PreferredTexture;
                     double score = m * m + t * t;
-                    if (score < best) { best = score; profileIndices[id] = (byte)p; }
+                    if (score < best) { best = score; indices[id] = (byte)p; }
                 }
             }
-            foreach (var (id, profile) in definition.Overrides)
-                if (id < profileIndices.Length) profileIndices[id] = profile;
-            Profiles = new RasterField<byte>(grid,
-                new("soil.profile", "Talajtípus", "profile-id", "soil.landscape", true), profileIndices);
+            foreach (var (id, profile) in Definition.Overrides)
+            { if (id < indices.Length) indices[id] = profile; yield return 1; }
+            Profiles = new RasterField<byte>(pendingGrid, new("soil.profile", "Talajtípus", "profile-id", "soil.landscape", true), indices);
         }
 
         private static double Texture(int seed, int column, int row)

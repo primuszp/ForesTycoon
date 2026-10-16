@@ -74,8 +74,10 @@ namespace ForesTycoon.Rules
         public bool HasGraphs => document.Graphs.Count > 0;
         public string LastError { get; private set; }
         public void ClearError() => LastError = null;
+        /// <param name="bindValue">Optional: resolves a named value's key once, to a reader used for every evaluation
+        /// instead of <paramref name="readValue"/> (which is still required to validate the names).</param>
         public CompiledBehaviorModel(BehaviorModel source, IEnumerable<BehaviorHook> available,
-            IReadOnlySet<string> namedValues = null, Func<string, double> readValue = null)
+            IReadOnlySet<string> namedValues = null, Func<string, double> readValue = null, Func<string, Func<double>> bindValue = null)
         {
             ArgumentNullException.ThrowIfNull(source);
             document = source.Clone();
@@ -89,11 +91,17 @@ namespace ForesTycoon.Rules
                 if (graph == null || string.IsNullOrWhiteSpace(graph.Id) || !ids.Add(graph.Id) || string.IsNullOrWhiteSpace(graph.Name)
                     || !hooks.TryGetValue((graph.Hook, graph.Kind), out var hook)) throw new InvalidDataException("Hibás gráfazonosító vagy nem támogatott világkötés.");
                 if (!hook.SupportsObjects && graph.ObjectId.HasValue) throw new InvalidDataException("Ez a paraméter a teljes világra vonatkozik.");
-                if (!programs.TryAdd((graph.Hook, graph.Kind, graph.ObjectId), new Program(graph, hook, namedValues, readValue)))
+                if (!programs.TryAdd((graph.Hook, graph.Kind, graph.ObjectId), new Program(graph, hook, namedValues, readValue, bindValue)))
                     throw new InvalidDataException("Egy eseményhez és célhoz csak egy viselkedés köthető.");
                 if (graph.Nodes.Find(n => n.Id == graph.Output)?.Operation != BehaviorOperation.Native) overriding.Add((graph.Hook, graph.Kind));
             }
         }
+        /// <summary>
+        /// The evaluator of one world-wide graph, looked up once: for callers that evaluate it for thousands of elements.
+        /// It throws <see cref="ArithmeticException"/> where <see cref="Evaluate"/> records the error; null when no graph is bound.
+        /// </summary>
+        public Func<BehaviorInputs, double[], double> Evaluator(string hook, string kind) =>
+            programs.TryGetValue((hook, kind, null), out var program) ? (input, extras) => program.Evaluate(input, extras) : null;
         public double Evaluate(string hook, string kind, ulong id, in BehaviorInputs inputs, double[] extras = null)
         {
             if (!programs.TryGetValue((hook, kind, id), out var program) && !programs.TryGetValue((hook, kind, null), out program)) return inputs.Native;
@@ -113,7 +121,10 @@ namespace ForesTycoon.Rules
             private readonly int output;
             private readonly BehaviorHook hook;
             private readonly Func<string, double> readValue;
-            internal Program(BehaviorGraph graph, BehaviorHook hook, IReadOnlySet<string> namedValues, Func<string, double> readValue)
+            /// <summary>The reader of each named-value node, resolved once (null for other nodes).</summary>
+            private readonly Func<double>[] named;
+            internal Program(BehaviorGraph graph, BehaviorHook hook, IReadOnlySet<string> namedValues, Func<string, double> readValue,
+                Func<string, Func<double>> bindValue = null)
             {
                 this.hook = hook;
                 this.readValue = readValue;
@@ -144,6 +155,8 @@ namespace ForesTycoon.Rules
                 Visit(graph.Output);
                 nodes = ordered.ToArray(); values = new double[nodes.Length]; evaluated = new bool[nodes.Length]; a = new int[nodes.Length]; b = new int[nodes.Length]; c = new int[nodes.Length];
                 inputIndex = nodes.Select(n => n.Operation == BehaviorOperation.Input ? Array.IndexOf(hook.Inputs, n.Key) : -1).ToArray();
+                named = nodes.Select(n => n.Operation != BehaviorOperation.NamedValue ? null
+                    : bindValue?.Invoke(n.Key) ?? (() => readValue(n.Key))).ToArray();
                 var indices = nodes.Select((n, i) => (n.Id, i)).ToDictionary(p => p.Id, p => p.i);
                 for (int i = 0; i < nodes.Length; i++) {
                     int count = BehaviorModel.Inputs(nodes[i].Operation);
@@ -153,9 +166,78 @@ namespace ForesTycoon.Rules
             }
             internal double Evaluate(in BehaviorInputs input, double[] extraValues = null)
             {
+                // Tiered: a graph is interpreted until it proves hot, then compiled once (loading a project stays quick).
+                if (fast == null && !compileTried && ++evaluations >= CompileAfter) { compileTried = true; fast = Compile(); }
+                if (fast != null) return Math.Clamp(fast(input, extraValues), hook.Min, hook.Max);
                 extras = extraValues;
                 Array.Clear(evaluated);
                 return Math.Clamp(EvaluateNode(output, input), hook.Min, hook.Max);
+            }
+
+            // ── The graph compiled to a delegate ──────────────────────────────
+            // Rules run on every element of a scope (thousands of tiles), so a hot graph is compiled once into a .NET
+            // expression instead of being walked node by node. The semantics stay the interpreter's: only the selected
+            // branch of a choice runs, a division by zero and a non-finite node fail with the same message. A graph whose
+            // shared nodes would expand too far stays interpreted.
+            private Func<BehaviorInputs, double[], double> fast;
+            private int evaluations; private bool compileTried;
+            private const int CompileAfter = 256, MaximumCompiledSize = 4096;
+            private static double Finite(double value, string name) =>
+                double.IsFinite(value) ? value : throw new ArithmeticException("Nem véges eredmény: " + name);
+            private static double Input(double[] extras, int index, string name) =>
+                extras != null && index >= 0 && index < extras.Length ? extras[index] : throw new ArithmeticException("Hiányzó bemenet: " + name);
+            private static double Divide(double left, double right) => right == 0 ? throw new ArithmeticException("Nullával osztás.") : left / right;
+
+            private Func<BehaviorInputs, double[], double> Compile()
+            {
+                var size = new int[nodes.Length];
+                for (int i = 0; i < nodes.Length; i++) {
+                    int count = BehaviorModel.Inputs(nodes[i].Operation);
+                    long total = 1 + (count > 0 ? size[a[i]] : 0) + (count > 1 ? size[b[i]] : 0) + (count > 2 ? size[c[i]] : 0);
+                    size[i] = (int)Math.Min(total, MaximumCompiledSize + 1);
+                }
+                if (size[output] > MaximumCompiledSize) return null;
+                var input = System.Linq.Expressions.Expression.Parameter(typeof(BehaviorInputs), "input");
+                var extrasParameter = System.Linq.Expressions.Expression.Parameter(typeof(double[]), "extras");
+                var self = typeof(Program);
+                System.Linq.Expressions.Expression Node(int i)
+                {
+                    var n = nodes[i];
+                    System.Linq.Expressions.Expression Field(string name) => System.Linq.Expressions.Expression.Property(input, name);
+                    System.Linq.Expressions.Expression Constant(double v) => System.Linq.Expressions.Expression.Constant(v);
+                    System.Linq.Expressions.Expression Call(string method, params System.Linq.Expressions.Expression[] args) =>
+                        System.Linq.Expressions.Expression.Call(typeof(Math).GetMethod(method, args.Select(x => x.Type).ToArray()), args);
+                    System.Linq.Expressions.Expression Bool(System.Linq.Expressions.Expression test) =>
+                        System.Linq.Expressions.Expression.Condition(test, Constant(1), Constant(0));
+                    var left = n.Operation is BehaviorOperation.Select ? null : BehaviorModel.Inputs(n.Operation) > 0 ? Node(a[i]) : null;
+                    var right = n.Operation is BehaviorOperation.Select ? null : BehaviorModel.Inputs(n.Operation) > 1 ? Node(b[i]) : null;
+                    System.Linq.Expressions.Expression value = n.Operation switch {
+                        BehaviorOperation.Constant => Constant(n.Value), BehaviorOperation.Native => Field(nameof(BehaviorInputs.Native)),
+                        BehaviorOperation.Delta => Field(nameof(BehaviorInputs.Delta)), BehaviorOperation.Time => Field(nameof(BehaviorInputs.Time)),
+                        BehaviorOperation.State => Field(nameof(BehaviorInputs.State)), BehaviorOperation.Amount => Field(nameof(BehaviorInputs.Amount)),
+                        BehaviorOperation.Capacity => Field(nameof(BehaviorInputs.Capacity)), BehaviorOperation.Available => Field(nameof(BehaviorInputs.Available)),
+                        BehaviorOperation.From => Field(nameof(BehaviorInputs.From)), BehaviorOperation.To => Field(nameof(BehaviorInputs.To)),
+                        BehaviorOperation.Surface => Field(nameof(BehaviorInputs.Surface)),
+                        BehaviorOperation.NamedValue => System.Linq.Expressions.Expression.Invoke(System.Linq.Expressions.Expression.Constant(named[i])),
+                        BehaviorOperation.Input => System.Linq.Expressions.Expression.Call(self.GetMethod(nameof(Input), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static),
+                            extrasParameter, System.Linq.Expressions.Expression.Constant(inputIndex[i]), System.Linq.Expressions.Expression.Constant(n.Key)),
+                        BehaviorOperation.Exp => Call(nameof(Math.Exp), left), BehaviorOperation.Power => Call(nameof(Math.Pow), left, right),
+                        BehaviorOperation.Add => System.Linq.Expressions.Expression.Add(left, right), BehaviorOperation.Subtract => System.Linq.Expressions.Expression.Subtract(left, right),
+                        BehaviorOperation.Multiply => System.Linq.Expressions.Expression.Multiply(left, right),
+                        BehaviorOperation.Divide => System.Linq.Expressions.Expression.Call(self.GetMethod(nameof(Divide), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static), left, right),
+                        BehaviorOperation.Minimum => Call(nameof(Math.Min), left, right), BehaviorOperation.Maximum => Call(nameof(Math.Max), left, right),
+                        BehaviorOperation.Greater => Bool(System.Linq.Expressions.Expression.GreaterThan(left, right)),
+                        BehaviorOperation.Less => Bool(System.Linq.Expressions.Expression.LessThan(left, right)),
+                        // Only the selected branch runs, as in the interpreter.
+                        BehaviorOperation.Select => System.Linq.Expressions.Expression.Condition(
+                            System.Linq.Expressions.Expression.NotEqual(Node(a[i]), Constant(0)), Node(b[i]), Node(c[i])),
+                        BehaviorOperation.Absolute => Call(nameof(Math.Abs), left), BehaviorOperation.Negate => System.Linq.Expressions.Expression.Negate(left),
+                        _ => throw new InvalidDataException("Ismeretlen művelet.")
+                    };
+                    return System.Linq.Expressions.Expression.Call(self.GetMethod(nameof(Finite), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static),
+                        value, System.Linq.Expressions.Expression.Constant(n.Name));
+                }
+                return System.Linq.Expressions.Expression.Lambda<Func<BehaviorInputs, double[], double>>(Node(output), input, extrasParameter).Compile();
             }
             private double EvaluateNode(int i, in BehaviorInputs input)
             {
@@ -170,7 +252,7 @@ namespace ForesTycoon.Rules
                         BehaviorOperation.Delta => input.Delta, BehaviorOperation.Time => input.Time, BehaviorOperation.State => input.State, BehaviorOperation.Amount => input.Amount,
                         BehaviorOperation.Capacity => input.Capacity, BehaviorOperation.Available => input.Available,
                         BehaviorOperation.From => input.From, BehaviorOperation.To => input.To, BehaviorOperation.Surface => input.Surface,
-                        BehaviorOperation.NamedValue => readValue(nodes[i].Key),
+                        BehaviorOperation.NamedValue => named[i](),
                         BehaviorOperation.Input => extras != null && inputIndex[i] < extras.Length ? extras[inputIndex[i]] : throw new ArithmeticException("Hiányzó bemenet: " + nodes[i].Key),
                         BehaviorOperation.Exp => Math.Exp(left), BehaviorOperation.Power => Math.Pow(left, right),
                         BehaviorOperation.Add => left + right, BehaviorOperation.Subtract => left - right, BehaviorOperation.Multiply => left * right,

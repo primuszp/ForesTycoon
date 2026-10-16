@@ -33,12 +33,13 @@ namespace ForesTycoon.Ecology
         private float totalBiomass;
         private float totalHealth;
 
-        public ForestSystem(IForestHabitat habitat, double secondsPerYear = DefaultSecondsPerYear)
+        public ForestSystem(IForestHabitat habitat, double secondsPerYear = DefaultSecondsPerYear, bool deferInitialization = false)
         {
             if (secondsPerYear <= 0.0 || !double.IsFinite(secondsPerYear))
                 throw new ArgumentOutOfRangeException(nameof(secondsPerYear));
             this.secondsPerYear = secondsPerYear;
-            Reset(habitat);
+            this.habitat = habitat;
+            if (!deferInitialization) Reset(habitat);
         }
 
         public int Count => standCount;
@@ -96,12 +97,22 @@ namespace ForesTycoon.Ecology
         }
 
         public ForestryActionResult Plant(int tileId, ForestSpecies species)
-            => PlantCore(tileId, species, 0, false);
+        {
+            var result = new WorkResult<ForestryActionResult>();
+            SimulationWork.Complete(PlantWork(tileId, species, result)); return result.Value;
+        }
+        internal IEnumerable<int> PlantWork(int tileId, ForestSpecies species, WorkResult<ForestryActionResult> result)
+        {
+            result.Value = PlantCore(tileId, species, 0, true, deferRevision: true);
+            if (result.Value != ForestryActionResult.Planted) yield break;
+            foreach (int unit in FinishPlantingAreaWork(plantations[tileId].AreaId)) yield return unit;
+            CompletePlantingRevision(tileId);
+        }
 
         internal ForestryActionResult PlantInArea(int tileId, ForestSpecies species, int areaId)
             => PlantCore(tileId, species, areaId, true);
 
-        private ForestryActionResult PlantCore(int tileId, ForestSpecies species, int areaId, bool deferStatistics)
+        private ForestryActionResult PlantCore(int tileId, ForestSpecies species, int areaId, bool deferStatistics, bool deferRevision = false)
         {
             if (!Enum.IsDefined(species) || species == ForestSpecies.None)
                 throw new ArgumentOutOfRangeException(nameof(species));
@@ -123,10 +134,15 @@ namespace ForesTycoon.Ecology
             PlantationRevision++;
             stands[tileId] = IndividualStand(tileId, ForestYear);
             if (!deferStatistics) FinishPlantingArea(areaId);
+            if (!deferRevision) CompletePlantingRevision(tileId);
+            return ForestryActionResult.Planted;
+        }
+
+        private void CompletePlantingRevision(int tileId)
+        {
             ulong before = Revision;
             Revision++; EditRevision++;
             monthlyPreparation.InvalidateLocalTile(habitat, before, Revision, (month + 1) / 12.0, tileId);
-            return ForestryActionResult.Planted;
         }
 
         public ForestryActionResult Harvest(int tileId, out ForestHarvest harvest) =>
@@ -140,23 +156,28 @@ namespace ForesTycoon.Ecology
         }
 
         /// <summary>Removes living trees, stumps and depots when terrain becomes unavailable.</summary>
-        public void RefreshHabitat()
+        public void RefreshHabitat() => SimulationWork.Complete(RefreshHabitatWork());
+
+        internal IEnumerable<int> RefreshHabitatWork()
         {
             bool changed = false;
             for (int tileId = 0; tileId < stands.Length; tileId++)
             {
+                yield return 1;
                 if (habitat.CanSupportForest(tileId) || !IndividualTrees.TryGet(tileId, out _)) continue;
                 IndividualTrees.RemoveTile(tileId);
                 MarkResourceArea(tileId);
                 stands[tileId] = default;
                 changed = true;
             }
-            if (!changed) { RefreshEnvironmentRates(); return; }
-            RefreshChangedResourceRates(ForestYear, currentConditions: true);
+            if (!changed) { foreach (int unit in RefreshEnvironmentRatesWork()) yield return unit; yield break; }
+            foreach (int unit in RefreshChangedResourceRatesWork(ForestYear, currentConditions: true)) yield return unit;
             Revision++; EditRevision++;
         }
 
-        public void Reset(IForestHabitat newHabitat)
+        public void Reset(IForestHabitat newHabitat) => SimulationWork.Complete(ResetWork(newHabitat));
+
+        internal IEnumerable<int> ResetWork(IForestHabitat newHabitat)
         {
             habitat = newHabitat ?? throw new ArgumentNullException(nameof(newHabitat));
             if (stands.Length != habitat.TileCount)
@@ -174,13 +195,15 @@ namespace ForesTycoon.Ecology
             seedCandidateCount = 0;
             accumulatedSeconds = 0.0;
             month = 0;
-            GenerateInitialForest();
-            InitializeIndividuals();
-            RecalculateStatistics();
+            foreach (int unit in GenerateInitialForestWork()) yield return unit;
+            foreach (int unit in InitializeIndividualsWork()) yield return unit;
+            foreach (int unit in RecalculateStatisticsWork()) yield return unit;
             Revision++; EditRevision++;
         }
 
-        public void Update(double fixedDeltaSeconds)
+        public void Update(double fixedDeltaSeconds) => SimulationWork.Complete(UpdateWork(fixedDeltaSeconds));
+
+        public IEnumerable<int> UpdateWork(double fixedDeltaSeconds)
         {
             if (fixedDeltaSeconds < 0.0 || !double.IsFinite(fixedDeltaSeconds))
                 throw new ArgumentOutOfRangeException(nameof(fixedDeltaSeconds));
@@ -190,7 +213,8 @@ namespace ForesTycoon.Ecology
             while (accumulatedSeconds >= secondsPerMonth)
             {
                 accumulatedSeconds -= secondsPerMonth;
-                StepMonth();
+                month++;
+                foreach (int work in StepIndividualMonthWork()) yield return work;
             }
         }
 
@@ -213,16 +237,19 @@ namespace ForesTycoon.Ecology
         /// A world-editor map's forest: painted tiles get a natural mature stand of the chosen species, or none.
         /// Generated maps rebuild individuals from stands; captured scenes preserve every unpainted patch.
         /// </summary>
-        internal void PaintInitialForest(IReadOnlyDictionary<int, ForestSpecies> paint, bool preserveUnpainted = false)
+        internal void PaintInitialForest(IReadOnlyDictionary<int, ForestSpecies> paint, bool preserveUnpainted = false) => SimulationWork.Complete(PaintInitialForestWork(paint, preserveUnpainted));
+
+        internal IEnumerable<int> PaintInitialForestWork(IReadOnlyDictionary<int, ForestSpecies> paint, bool preserveUnpainted = false)
         {
-            if (paint == null || paint.Count == 0) return;
+            if (paint == null || paint.Count == 0) yield break;
             if (preserveUnpainted) {
                 var tiles = new List<int>(paint.Keys);
-                ClearTerrainTiles(tiles.ToArray());
+                foreach (int unit in ClearTerrainTilesWork(tiles.ToArray())) yield return unit;
             }
-            else for (int id = 0; id < stands.Length; id++) stands[id] = IndividualStand(id, ForestYear);
+            else for (int id = 0; id < stands.Length; id++) { stands[id] = IndividualStand(id, ForestYear); yield return 1; }
             foreach (var (tileId, species) in paint)
             {
+                yield return 1;
                 if ((uint)tileId >= (uint)stands.Length) continue;
                 if (species == ForestSpecies.None || !habitat.CanSupportForest(tileId)) { stands[tileId] = default; continue; }
                 float moisture = habitat.GetMoisture(tileId), elevation = habitat.GetNormalizedElevation(tileId);
@@ -234,28 +261,30 @@ namespace ForesTycoon.Ecology
             }
             if (preserveUnpainted) {
                 monthlyPreparation.Clear();
-                competition.Snapshot(habitat, IndividualTrees, ForestYear);
+                foreach (int unit in competition.SnapshotWork(habitat, IndividualTrees, ForestYear)) yield return unit;
                 foreach (int id in paint.Keys)
                     if (IndividualTrees.TryGet(id, out var patch)) {
-                        UpdateIndividualRates(id, patch, ForestYear, updateHealth: false);
+                        foreach (int unit in UpdateIndividualRatesWork(id, patch, ForestYear, updateHealth: false)) yield return unit;
                         stands[id] = IndividualStand(id, ForestYear);
                     }
             }
-            else InitializeIndividuals();
-            RecalculateStatistics();
+            else foreach (int unit in InitializeIndividualsWork()) yield return unit;
+            foreach (int unit in RecalculateStatisticsWork()) yield return unit;
             Revision++; EditRevision++;
         }
 
-        private void GenerateInitialForest()
+
+
+        private IEnumerable<int> GenerateInitialForestWork()
         {
             if(habitat.ForestPattern != ForestPattern.Natural && habitat.TileGrid.Columns > 0)
             {
-                var generated=LargeForestGenerator.Create(habitat,habitat.TileGrid.Columns,habitat.TileGrid.Rows,habitat.ForestPattern);
-                generated.CopyTo(stands,0);
-                return;
+                foreach (int unit in LargeForestGenerator.CreateWork(habitat,habitat.TileGrid.Columns,habitat.TileGrid.Rows,habitat.ForestPattern, stands)) yield return unit;
+                yield break;
             }
             for (int tileId = 0; tileId < stands.Length; tileId++)
             {
+                yield return 1;
                 if (!habitat.CanSupportForest(tileId)) continue;
 
                 float moisture = habitat.GetMoisture(tileId);
@@ -278,12 +307,6 @@ namespace ForesTycoon.Ecology
                 float biomass = InitialBiomass(profile, age, health);
                 stands[tileId] = new ForestStand(species, age, biomass, health);
             }
-        }
-
-        private void StepMonth()
-        {
-            month++;
-            StepIndividualMonth();
         }
 
         private void ClearSeedCandidates()
@@ -372,11 +395,14 @@ namespace ForesTycoon.Ecology
             totalHealth += stand.Health;
         }
 
-        private void RecalculateStatistics()
+        private void RecalculateStatistics() => SimulationWork.Complete(RecalculateStatisticsWork());
+
+        private IEnumerable<int> RecalculateStatisticsWork()
         {
             ClearStatistics();
             for (int i = 0; i < stands.Length; i++)
             {
+                yield return 1;
                 ForestStand stand = stands[i];
                 if (stand.IsEmpty) continue;
                 AddToStatistics(stand);

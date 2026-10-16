@@ -33,5 +33,12 @@ namespace ForesTycoon.Engine
             for (int i = systems.Count - 1; i >= 0; i--)
                 systems[i].Clear();
         }
+
+        internal IEnumerable<int> UpdateWork(double seconds)
+        {
+            if (!double.IsFinite(seconds) || seconds < 0) throw new ArgumentOutOfRangeException(nameof(seconds));
+            for (int i = 0; i < systems.Count; i++)
+                foreach (int unit in systems[i].UpdateWork(seconds)) yield return unit;
+        }
     }
 }

@@ -53,7 +53,7 @@ namespace ForesTycoon.Map
         private readonly TerrainData data;
         private readonly TerrainChunk[] chunks;
 
-        public TerrainChunkIndex(TerrainData data, int chunkSize = DefaultChunkSize)
+        public TerrainChunkIndex(TerrainData data, int chunkSize = DefaultChunkSize, bool deferInitialization = false)
         {
             this.data = data ?? throw new ArgumentNullException(nameof(data));
             if (chunkSize <= 0) throw new ArgumentOutOfRangeException(nameof(chunkSize));
@@ -61,7 +61,7 @@ namespace ForesTycoon.Map
             ChunkColumns = (data.Settings.TileColumns + chunkSize - 1) / chunkSize;
             ChunkRows = (data.Settings.TileRows + chunkSize - 1) / chunkSize;
             chunks = new TerrainChunk[ChunkColumns * ChunkRows];
-            Build();
+            if (!deferInitialization) SimulationWork.Complete(BuildWork());
         }
 
         public int ChunkSize { get; }
@@ -89,12 +89,13 @@ namespace ForesTycoon.Map
                         GetByTile(data.GetTile(u + du, v + dv).Id).MarkDirty(flags);
         }
 
-        private void Build()
+        internal IEnumerable<int> BuildWork()
         {
             int tileRows = data.Settings.TileRows;
             for (int cx = 0; cx < ChunkColumns; cx++)
                 for (int cy = 0; cy < ChunkRows; cy++)
                 {
+                    yield return 1;
                     int startU = cx * ChunkSize, startV = cy * ChunkSize;
                     int endU = Math.Min(startU + ChunkSize, data.Settings.TileColumns);
                     int endV = Math.Min(startV + ChunkSize, data.Settings.TileRows);

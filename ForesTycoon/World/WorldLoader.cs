@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace ForesTycoon;
 
@@ -35,6 +37,33 @@ internal static partial class WorldLoader
         sceneProject ??= OpeningScenePath();
         return sceneProject == null ? CreateOpening(enableRendering)
             : CreateProject(RuleProject.FromJson(System.IO.File.ReadAllText(sceneProject)), enableRendering);
+    }
+
+    internal static IEnumerable<int> CreateStartWork(WorkResult<GameWorld> result, string sceneProject = null, bool enableRendering = true)
+    {
+        sceneProject ??= OpeningScenePath();
+        RuleProject project = null;
+        if (sceneProject != null) {
+            string path = sceneProject;
+            var reading = Task.Run(() => RuleProject.FromJson(System.IO.File.ReadAllText(path)));
+            while (!reading.IsCompleted) yield return 64;
+            project = reading.GetAwaiter().GetResult();
+        }
+        // Fixed 16x16 bootstrap only. Every operation that scales with the requested map uses the work pipeline.
+        var world = new GameWorld(TerrainSettings.Default.WithNodeSize(17, 42), enableRendering: false);
+        bool transferred = false;
+        try {
+            if (enableRendering) world.AttachRendering();
+            if (project?.World != null) world.RequestScenario(project.World, project);
+            else world.RequestRegenerate(TerrainSettings.Default);
+            while (world.GenerationPending) { world.ContinueGeneration(16); yield return 16; }
+            if (world.GenerationError != null) throw new System.IO.InvalidDataException(world.GenerationError);
+            if (project != null && project.World == null) {
+                world.QueueRuleProject(project);
+                do { world.ContinueCommands(16); yield return 16; } while (world.CommandPending);
+            }
+            result.Value = world; transferred = true;
+        } finally { if (!transferred) world.Dispose(); }
     }
 
     internal static GameWorld CreateProject(RuleProject project, bool enableRendering = false)

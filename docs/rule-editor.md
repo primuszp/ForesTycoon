@@ -94,6 +94,80 @@ középen a kapcsolatok gráfja, jobbra a kijelölt hatás beállításai. Az á
 hangolási számok a **Típusok → Játékparaméterek** alatt találhatók; nincs külön
 Képletek, Objektumok, Ok-okozati térkép vagy Gazdaság szabályszerkesztő lap.
 
+**A szabálykönyv minden szabálya a projekt saját szabálya.** Az ide már átvezetett
+folyamatokhoz a játék csak kezdő mintákat ad (vízáramlások, útromlás, nyomok, tönkök, aszálykár). Egy új
+projekt ezekkel indul; ugyanúgy szerkeszthetők, kikapcsolhatók, másolhatók és **törölhetők**,
+mint bármely más szabály. A törölt mintát a projekt megjegyzi (`removedStarters`), így betöltéskor
+nem kerül vissza. Az **+ Új szabály** üres szabályt vagy egy mintából készült szabályt ad
+(egy törölt minta így tehető vissza). A mintából készült szabály a **Visszaállítás a mintára**
+gombbal állítható vissza. A hiányzó, még nem törölt minták hozzáadódnak.
+A játék több más folyamata még natív kódból vagy külön felülírási pontból fut;
+a teljes gráfos lefedettség és a szétosztott végrehajtás hiányait a
+[2026-10-16-i audit](rule-runtime-audit.md) részletezi.
+
+**A szabálysémában feltárt mezők elérhetők.** Egy szabály forrásként olvashatja
+a hatókör objektumának és a hozzá kapcsolt objektumoknak (például a csempének) minden mezőjét,
+a hatókör saját mezőit (`saját.…`), a világ mezőit (**Világ · Eső**, `world.rain`), a
+rendszermodell készleteit (`stock.…`) és a játékparamétereket. Célként minden állapotmező
+írható: a csempe felszíni, gyökérzóna- és mélyvize (a vízmérleg könyveli a változást), a fa
+magassága és átmérője (innen nő tovább), az egészség, a stresszévek, az út állapota, a nyom és
+a tönk állapota, valamint minden saját mező. Csak olvashatók maradnak a játék által minden
+lépésben újraszámolt értékek (például a fa fénye és vize, a vízellátottság, a lombborítás, az
+időjárás); ezeket egy szabály úgysem tudná tartósan megváltoztatni. A választók mindezt a
+kódból felderített sémából listázzák: új mező vagy objektum a kód bővítésével magától megjelenik.
+
+**Sok objektum egyszerre: összesítések.** Egy objektum gyűjteményeit (a csempén álló fák és
+tönkök, a négy szomszéd csempe) a szabály összesítve olvassa: **darabszám**, valamint minden
+számmezőből **átlagos**, **legkisebb**, **legnagyobb** és **összes** érték. Például
+`tile.trees.avg.height` (**Csempe › Fák a csempén: átlagos magasság**) egy fa szabályában az
+állomány átlagmagassága, `neighbours.avg.rootWater` egy csempe szabályában a szomszédok átlagos
+gyökérzóna-vize. A választó ezeket külön csoportban kínálja. A kódban egy
+`[RuleCollection]` jelölésű `IEnumerable<…>` tulajdonság elég ahhoz, hogy egy új gyűjtemény
+összes összesítése megjelenjen.
+
+**Áramlások: készletek és folyamok.** A szimuláció rendszerdinamikai modell: a készletek
+(például a csempe felszíni, gyökérzóna- és mélyvize, a fa mérete, saját mezők) között
+**áramlások** visznek át mennyiséget. Egy célnál a **Hogyan hasson a célra?** alatt az
+**Áramoltat egyik készletből a másikba** választásával a hatás áramlás lesz:
+
+- **Honnan?** egy írható készlet (a sajátja vagy egy kapcsolt objektumé, például egy fa
+  szabályában a **Csempe · Gyökérzóna vize**), vagy *kívülről* (beáramlás, például eső).
+- **Hová?** egy másik készlet, a *rendszeren kívülre* (elnyelő, például párolgás), vagy egy
+  gyűjtemény tagjaiba (**Szomszéd csempék › Felszíni víz**), **egyenlően** vagy **lejtés
+  szerint** (a **Vízszint** szerint alacsonyabb szomszédok kapnak, annál többet, minél lejjebb vannak).
+- Az erősséget ugyanúgy a kapcsolatok és görbék adják, mint bármely hatásnál (évente vagy lépésenként).
+- A forrásból legfeljebb annyi fogy, amennyi van, a célba legfeljebb annyi kerül, amennyi elfér;
+  ami az egyikből elfogy, a másikba kerül, így a zárt modell megőrzi a mennyiséget. A vízkészletek
+  írását a vízmérleg könyveli.
+- Minden áramlásnak neve van; a játék összegzi, mennyit vitt át (a panel mutatja), és a mentés megőrzi.
+
+**A vízháztartás áramlásokkal.** A csempe vízkészletei (lombkorona-víz, felszíni víz, hó,
+gyökérzóna- és mélyvíz) csak a projekt induló szabályainak áramlásain keresztül változnak; a
+natív vízlépés már nem mozgat vizet. Átállított szabályok (`ForesTycoon.Rules/WaterRules.cs`):
+
+| Szabály | Áramlások |
+| --- | --- |
+| `water.precipitation` Csapadék és források | kívülről → lombkorona (borítás × telítetlenség), → felszín (a többi eső), → hó (hóesés), → felszín (forrás) |
+| `water.snowmelt` Hóolvadás | hó → felszín, 0,5 mm/óra fagypont fölötti fokonként |
+| `water.infiltration` Beszivárgás | felszín → gyökérzóna a talaj beszivárgási képessége szerint (burkolva 0,5 mm/óra), telítettségig |
+| `water.evaporation` Párolgás | lombkorona, felszín → ki; gyökérzóna → ki: E × vízellátottság × 0,65 × (1 − borítás) |
+| `water.uptake` Fák vízfelvétele | gyökérzóna → ki: E × 0,8 × LAI × vízellátottság (burkolatlan csempén) |
+| `water.drainage` Mélybe szivárgás és alaplefolyás | gyökérzóna → mélyvíz a többletvíz és a drénezés szerint; mélyvíz → ki 0,15 mm/óra |
+| `water.runoff` Felszíni lefolyás | felszín → szomszédok felszíne lejtés szerint (vízszint); kifolyóknál felszín → ki |
+
+Az erősségek óránkéntiek (a környezet órája). Ezek a számok játékbeli értékek: a korábbi natív
+kód sorrendjét (eseményhatárokra bontott időlépés, cellánkénti egymásutániság) a szabálylépés nem
+követi, ezért az eredmény nem bitre azonos vele. A vízmérleg zárt marad: minden kívülről érkező
+és kilépő áramlást a szabálycsere könyvel; ezt a `WaterRulesTests` ellenőrzi. Natív kódban marad a
+szél általi hóátrendezés (`water.snowdrift`) és a növekedési vízválasz (`water.stress`, képletként
+felülírható), mert az utóbbi egy fogyasztó által kért származtatott érték, nem készlet.
+
+**Járművek.** A **Típusok › Járművek** lapon szerkeszthetők a rönkszállító, a processzor és a
+forwarder műszaki adatai (tömeg, teljesítmény, vonóerő, menetellenállás, fogyasztás,
+kapacitás, sebesség) és a karbantartás számai. A szabályok járművenként is olvassák őket:
+a **Rönkszállító** objektum műszaki adatai, az **Erdészeti gép** objektum típusa, állapota,
+rakománya és (írható) kopása.
+
 A szerkesztő mindent magyarul, a tervező szavaival mutat: objektum (**Út**, **Közelítőnyom**,
 **Tönk**, **Fa**) és tulajdonság (**Állapot**, **Vályúmélység**, **Lebomlás**). A kódbeli név
 (`road.condition`) csak a buborékban, másodlagos jelzésként látszik. A nevek és súgók a
@@ -103,7 +177,7 @@ választós mezőnél `objektum.mező.érték`); ha egy új mezőnek még nincs 
 1. **Mely objektumokon fusson?** Válaszd ki, például **Út** vagy **Fa**. Mellette látszik,
    hány ilyen objektum van most a tesztvilágban.
 2. A **+ Forrás, cél vagy művelet hozzáadása** alatt a **Cél vagy művelet** választóval
-   jelöld ki, mit változtasson a szabály, például **Állapot**. Csak írható tulajdonság lehet cél.
+   jelöld ki, mit változtasson a szabály, például **Állapot**. Bármely állapotmező vagy saját mező lehet cél.
 3. A **Forrás (azonnal bekötve)** választó a kiválasztott forrást rögtön bekötik:
    *új kapcsolatként* a kijelölt célra, vagy *szorzóként* a kijelölt kapcsolathoz.
    Bekötetlen, elvesző forrásdoboz nincs.
@@ -129,8 +203,12 @@ kijelölt kapcsolat mondata világos, és a jobb oldali panel tetején is látsz
   **+ 1 erdőév / év**, paraméternél a mostani értékkel), alatta a feltételek és szorzók száma.
 - *Cél* doboz: az objektum, a tulajdonság, a hatás módja és a tartomány
   (**Út · Állapot · változtatja / év · 0–1**).
-- Folytonos vonal: szorzó (zöld növel, borostyán csökkent). **Szaggatott, „ha” jelű kék vonal:
-  feltétel** – a kapcsolat csak akkor hat, ha teljesül; az erősségét nem skálázza.
+- Folytonos vonal: szorzó (zöld növel, borostyán csökkent). **Kék szaggatott vonal, kék
+  csatlakozó: feltétel** – a kapcsolat csak akkor hat, ha teljesül; az erősségét nem skálázza.
+- Minden vonalnak saját csatlakozója van: egy kapcsolat dobozán forrásonként egy bemenet,
+  a célon kapcsolatonként egy. A vonalak sötét kontúrral futnak, így a kereszteződésben is
+  követhetők. Ha egérrel egy doboz fölé állsz, a hozzá tartozó vonalak kiemelődnek, a többi
+  elhalványul; húzás közben a célba vehető doboz kerete kigyullad.
 
 **A jobb oldali panel.**
 
@@ -176,16 +254,11 @@ bekapcsolt szabály ugyanazt a mezőt írja, a sor (!) jelet kap: a lista szerin
 szabály a korábbi eredményét látja, felülírásnál pedig a korábbit eltünteti. Ugyanez a
 figyelmeztetés a szabály mondatai alatt is megjelenik; rákattintva az áttekintés nyílik meg.
 
-Régi projekt egyedi `road.weather` felülírása megmarad. Ilyenkor látható jelzés
-figyelmeztet, hogy a korábbi képlet is hat, és a **Csak az itt összeállított hatások
-fussanak** gombbal kikapcsolható. Nem törlődik a régi projektadat.
-
 A gráf és az oldalsó panel közös `RuleEffect.Influence` adatot szerkeszt.
 A `RuleInfluence` fordító ebből állítja elő a meglévő `RuleEngine` által futtatott
 kifejezést. A mentett adatnak nincs külön, elcsúszható képletmásolata.
-A régi `RoadWeatherCard` csak kompatibilitási beolvasásra és az induló minta
-előállítására szolgál; külön paraméterkártya már nincs. A natív útromlási ciklus
-nem fut a gráf mellett.
+Az útromlás közvetlenül a `RoadWeatherRule` kezdő gráfjából származik. Nincs külön
+paraméterkártya, útromlási képletcsatlakozás vagy natív időjárási számítás a gráf mellett.
 
 ### Még át nem alakított szabályok
 
@@ -221,14 +294,12 @@ beépítettre** a játék eredeti számítását állítja vissza. Jobb oldalt p
 Pálya fülön kiválasztott csempe bemeneteivel, és a járhatóságnál a képlet eredménye az
 egész térképen.
 
-A kódból már teljesen áthozott szabályok, képletként: **földút járhatósága**, és a teljes
-vízháztartás: **beszivárgás**, **talajpárolgás**, **gyökérvíz-felvétel**, **mélybe
-szivárgás**, **alaplefolyás**, **hóolvadás**, **növekedési vízválasz**. A képlet pontosan azt
-számolja, amit eddig a kód; ezt teszt ellenőrzi. Ezek a szabályok saját bemeneteket kapnak a
-csempétől: `talaj.beszivárgás`, `talaj.telítettség`, `talaj.vízkapacitás`,
-`talaj.hervadáspont`, `talaj.drénezés`, `lombborítás`, `burkolt`, `óra`,
-`faj.szárazságérzékenység`. Függvény még: `exp(x)`, `hatvány(alap; kitevő)`. A többi
-szabálynál a `beépített` a kódban futó számítás, amit a képlet felülírhat vagy szorozhat.
+Képletként szerkeszthető: **földút járhatósága** és **növekedési vízválasz** (bemenete a
+`vízellátottság`, a `pangóvíz` és a `faj.szárazságérzékenység`). A vízháztartás többi része
+(beszivárgás, párolgás, vízfelvétel, mélybe szivárgás, alaplefolyás, hóolvadás) már nem képlet,
+hanem áramlásszabály (lásd fent); a megszűnt vízkötések nem részei a projekt formátumának.
+Függvény még: `exp(x)`, `hatvány(alap; kitevő)`. A többi szabálynál a `beépített` a kódban futó
+számítás, amit a képlet felülírhat vagy szorozhat.
 
 ## Próba
 
@@ -284,8 +355,7 @@ A tönkök alapértelmezett szabálya a nedvesség és az átmérő alapján hal
 ### Tönkök és műveletek a gráfban
 
 A tönkszabály alapértelmezésben két lépésből áll: `Tile → Moisture` és `Stump → Diameter` módosítja a `Decay progress` éves növekedését,
-majd a teljes lebomlás kiváltja a `Remove` műveletet. A régi, életkor-küszöböt használó szabályok
-átvezetése megtartja a megadott időtartamot. Más, kézzel írt összetett régi képleteket nem írunk felül automatikusan.
+majd a teljes lebomlás kiváltja a `Remove` műveletet. A lebomlás a mentett állapotból és a projekt szabályaiból fut; külön életkor-alapú tartalék számítás nincs.
 
 A hatás módja lehet **Állítsa erre az értékre** vagy **Változtassa az értéket**. Utóbbival és éves ütemmel
 felhalmozódó lebomlás építhető, például a `Tile → Moisture` görbéjéből. A lebomlási állapot a tönkkel együtt mentődik.
@@ -297,7 +367,7 @@ az automatikusan felderített sémából származik; az eredeti angol mezőazono
 
 ### Kipróbálható példa: nedvesség és tönkátmérő
 
-A nedvesség–átmérő szabály a játék alapértelmezett tönklebomlása. A **Tönkök lebomlása** szabálynál az **Alapértelmezett szabály visszaállítása** gomb
+A nedvesség–átmérő szabály a játék alapértelmezett tönklebomlása. A **Tönkök lebomlása** szabálynál a **Visszaállítás a mintára** gomb
 visszaállítja ezeket a szerkeszthető kapcsolatokat. A módosítás visszavonható.
 
 - A `Decay progress` cél változást kap, éves ütemmel. Az alaperősség 1/6 teljes lebomlás / erdőév.
@@ -320,7 +390,7 @@ a `stump-decay-example.world.json` kezdeti tesztvilágot, a `stump-decay-compari
 A gráf forrásdobozai külön megmutatják az irányt: a `Moisture` **+ Gyorsítja**, a `Diameter` **− Lassítja**
 jelölést és eltérő nyílszínt kap. A jelölést az aktuális görbe határozza meg, így szerkesztés után is a tényleges irányt követi.
 Az összetett, irányt váltó görbe tartományfüggő jelölést kap. A két forrás szorzói továbbra is ugyanazt az éves ütemet módosítják.
-A korábban mentett, kifejezetten megadott egyedi szabályokat a játék nem írja felül; a régi életkor-küszöb szerkeszthető alakra történő átvezetése megőrzi a korábbi időtartamot.
+A mentett, egyedileg szerkesztett szabályokat a játék nem cseréli le kezdő mintákra.
 
 ### Nyom regenerációja és benövése
 
@@ -343,11 +413,43 @@ A választék: **kisebb, mint / legfeljebb / nagyobb, mint / legalább**. A hat�
 csúszkával állított érték, projektparaméter vagy másik tulajdonság. A gráf a feltételek bemeneteit is megmutatja.
 Másik kiváltó okhoz külön kapcsolat adható ugyanahhoz a művelethez.
 
-A korábbi beépített nyomszabály automatikusan átkerül a gráfos alakra, változatlan alapműködéssel.
-Az eltérő kézzel írt régi képletek az angol mezőnevekre átvezetve megmaradnak; a program nem találgatja azok új jelentését.
-Az **Alapértelmezett szabály visszaállítása** gomb a teljes nyomszabályt visszaállítja a közös alapgráfra.
+A nyomszabály közvetlenül a projekt gráfos adataiból fut. A mezők a kódban felderített angol neveket használják; nincs korábbi mezőneveket átíró vagy képleteket átalakító betöltési lépés.
+A **Visszaállítás a mintára** gomb a teljes nyomszabályt visszaállítja a kezdő mintára.
 Az előnézet nem módosítja a nyomot; a tesztvilág és a játék a mentett gráf hatásait futtatja.
 
 A művelet feltételei külön lenyitható összefoglaló sorokban jelennek meg. A kapcsolat súlya és iránya
 szintén lenyitható, így az eltűnés feltételei kerülnek előtérbe. Új kiváltó kapcsolat kezdetben inaktív:
 összeállítás után a **Kapcsolat aktív** jelölővel indítható el.
+
+### A korábbi szabályalakok kivezetése – 2026-10-16
+
+Az útromlási kártya, a régi `road.weather` formula-kötés, a nyom- és tönkszabályok
+átvezetése, az egyfeltételes régi hatásalak és a korábbi mezőnév-álnevek kezelése megszűnt.
+Csak a jelenlegi szabályadatok, feltétellisták és kódból felderített mezőnevek futnak.
+A nyitójelenet és a helyi induló projekt, a bennük lévő tömörített állapotokkal együtt,
+már ebből a formátumból áll. A vízállapot csak a használt készletek és származtatott állapot rastereit tárolja.
+A korábbi alakú, még át nem tisztított projekt- és mentésfájlokhoz nincs automatikus szabályátvezetés.
+
+### Folytatható tesztvilág és mentési határ – 2026-10-16
+
+A játék és a tesztvilág a teljes szimuláció nagy munkáit képkockák között
+folytatja: a szabályok mellett a környezetet, az erdőhónapot és a logisztikát is.
+Egy tick műveleteinek sorrendje megmarad, csak a vezérlést adja vissza közben.
+A szabálylista fa-, tönk-, út- és gépszabályai is megállhatnak munkaszelet végén.
+
+Az **Egy tick**, **1 óra előre** és **1 nap előre** gomb munkát kér az ütemezőtől;
+nem futtatja végig szinkron módon a teljes kért időt. Amíg egy tick tart, a
+gráfos előnézet várakozik. A mentési kérés a következő kész ticknél teljesül;
+a motor nem sietteti korlátlan befejezéssel. A szünet a folyamatban lévő tick
+után állítja meg a további lépéseket. Nagy terhelésnél az időhátralék megmarad.
+
+A szabályprojekt cseréje után szükséges teljes erdőráta-frissítés is szeletelt;
+a még el nem indult frissítést a mentés megőrzi. Az új futtató azonosítója
+`forestycoon-simulation/2026-10-16.2`. Az előző `.6` és `.2026-10-16.1` futtató teljes, cél-ticknél
+készült checkpointja betölthető; régi futtatóhoz tartozó puszta parancsnaplót
+vagy történeti naplóvéget nem játszunk vissza új műveleti sorrenddel.
+
+A pályát módosító nagy műveletek és a tesztvilág újraépítése is folytatható.
+Közben a szerkesztő a munkafázist mutatja; a világ cseréje előtt a pályaépítés
+megszakítható. A jelenet ellenőrzése/mentése háttérben készül. A mentési kérés
+félkész ecset vagy útépítés esetén is a teljes művelet végéig várakozik.

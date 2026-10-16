@@ -106,21 +106,23 @@ internal sealed partial class RuleEditorView
             throw new InvalidDataException("Hibás útkopási csomópont.");
         static bool InvalidNodes(BehaviorGraph graph) => graph.Nodes == null || graph.Nodes.Count > 256
             || graph.Nodes.Any(n => n == null || n.Id == null || n.Name == null || !Enum.IsDefined(n.Operation) || !float.IsFinite(n.X) || !float.IsFinite(n.Y));
-        if (project.Behaviors.Graphs.Any(g => g == null || g.Id == null || g.Name == null || InvalidNodes(g)
-            || !WorldBehaviorPolicy.Hooks.Any(h => h.Id == g.Hook && h.Kind == g.Kind))
+        if (project.Behaviors.Graphs.Any(g => g == null || g.Id == null || g.Name == null || InvalidNodes(g))
             || project.Dynamics.Stocks.Any(s => s == null || s.Id == null || s.Name == null || s.Unit == null)
             || project.Dynamics.Flows.Any(f => f == null || f.Id == null || f.Name == null || f.From == null || f.To == null
                 || f.Rate == null || InvalidNodes(f.Rate) || f.Rate.Hook != "flow." + f.Id || f.Rate.Kind != "dynamics")
             || project.Behaviors.Controllers.Any(c => c == null || c.Name == null || c.States == null || c.Kind is not ("forwarder" or "processor" or "truck")
                 || c.States.Any(s => s == null || s.Name == null || !Enum.IsDefined(s.Action) || s.Transitions == null || !float.IsFinite(s.X) || !float.IsFinite(s.Y))))
             throw new InvalidDataException("Hibás szerkesztési objektum vagy nem támogatott kötés.");
+        foreach (var graph in project.Behaviors.Graphs)
+            if (!WorldBehaviorPolicy.Hooks.Any(h => h.Id == graph.Hook && h.Kind == graph.Kind))
+                throw new InvalidDataException($"Nem támogatott kötés: {graph.Hook} ({graph.Kind}). Gráf: {graph.Name} [{graph.Id}].");
         // Missing ports, expression cycles and incomplete outputs can be reopened and repaired.
         // The runtime compiler still rejects them at publish/apply time.
     }
     internal RuleProject CollectProject(GameWorld world) => new() { Name = projectName,
         Road = (draft ?? currentRules.RoadTrafficModel ?? world.RuleDocument).Clone(),
         Tuning = currentRules.TuningOverrides(world), Behaviors = behaviors.Document, Dynamics = dynamicsEditor.Document,
-        Algorithms = algorithms.Reference, Rules = RuleEngine.Clone(RuleBookRules(world)), Fields = RuleEngine.CloneFields(RuleBookFields(world)),
+        Algorithms = algorithms.Reference, Rules = RuleEngine.Clone(RuleBookRules(world)), RemovedStarters = RemovedStarters(world).ToList(), Fields = RuleEngine.CloneFields(RuleBookFields(world)),
         Authoring = JsonSerializer.Deserialize<RuleAuthoring>(JsonSerializer.Serialize(authoring)),
         World = scenario == null ? world.RuleProjectDocument.World : RuleProject.FromJson(new RuleProject { World = scenario }.ToJson()).World };
     private double PreviewValue(GameWorld world, string key)

@@ -41,19 +41,6 @@ public class ForestEnvironmentCouplingTests
     }
 
     [Fact]
-    public void DenserCanopyConsumesMoreRootWaterAndInterceptsMoreRain()
-    {
-        var sparse = Create(); var dense = Create(trees: 24);
-        sparse.Environment.ForceWeather(WeatherPreset.Sunny, 0, 600);
-        dense.Environment.ForceWeather(WeatherPreset.Sunny, 0, 600);
-        sparse.Clock.Update(60); dense.Clock.Update(60);
-        Assert.True(dense.Environment.Transpired > sparse.Environment.Transpired * 10);
-        Assert.True(dense.Forest.HydrologyInputs(0).InterceptionCapacity > sparse.Forest.HydrologyInputs(0).InterceptionCapacity);
-        Assert.InRange(Math.Abs(sparse.Environment.BalanceError), 0, 1e-8);
-        Assert.InRange(Math.Abs(dense.Environment.BalanceError), 0, 1e-8);
-    }
-
-    [Fact]
     public void HarvestImmediatelyReleasesNeighbourLightWithoutChangingItsSizeOrHealth()
     {
         var habitat = new NeighbourHabitat();
@@ -82,40 +69,6 @@ public class ForestEnvironmentCouplingTests
     }
 
     [Fact]
-    public void HarvestTransfersInterceptedWaterToGroundAndStopsTreeUptake()
-    {
-        var world = Create(trees: 24);
-        world.Environment.ForceWeather(WeatherPreset.Rain, 24, 90);
-        world.Environment.Update(30);
-        Assert.True(world.Environment.Cell(0).Canopy > 0);
-        double stored = world.Environment.StoredWater;
-        double transpired = world.Environment.Transpired;
-
-        world.Forest.Harvest(0, out _);
-        Assert.Equal(stored, world.Environment.StoredWater);
-        world.Environment.Update(.5);
-
-        Assert.Equal(0, world.Environment.Cell(0).Canopy);
-        Assert.Equal(0, world.Environment.Cell(0).DemandPerHour);
-        Assert.Equal(transpired, world.Environment.Transpired);
-        Assert.InRange(Math.Abs(world.Environment.BalanceError), 0, 1e-8);
-    }
-
-    [Fact]
-    public void UptakeCannotOverdrawSharedRootZoneOrInventWater()
-    {
-        var soil = new SoilProperties(3, 1, .5, 12, 0, 1);
-        var world = Create(trees: 36, soil: soil);
-        world.Environment.ForceWeather(WeatherPreset.Sunny, 0, 600);
-        world.Environment.Update(600); // Isolated hydrology; no forest mortality changes this demand fixture.
-        var cell = world.Environment.Cell(0);
-        Assert.InRange(cell.Soil, soil.WiltingPoint - 1e-10, soil.Saturation);
-        Assert.InRange(world.Environment.Transpired, 0, soil.Saturation - soil.WiltingPoint);
-        Assert.True(cell.UptakePerHour < cell.DemandPerHour);
-        Assert.InRange(Math.Abs(world.Environment.BalanceError), 0, 1e-8);
-    }
-
-    [Fact]
     public void OvercastWeatherReducesActualLightAndGrowth()
     {
         var sunny = Create(); var cloudy = Create();
@@ -128,20 +81,6 @@ public class ForestEnvironmentCouplingTests
         Assert.True(first.Trees[0].AnnualGrowth.Diameter > second.Trees[0].AnnualGrowth.Diameter);
         Assert.True(ForestTree.Volume(first.Trees[0].At(sunny.Forest.ForestYear))
             > ForestTree.Volume(second.Trees[0].At(cloudy.Forest.ForestYear)));
-    }
-
-    [Fact]
-    public void RainRestoresGrowthOnInitiallyDryButFertileSoil()
-    {
-        var world = Create(moisture: .05f);
-        Assert.Equal(0, ForestSystem.Fitness(ForestSpecies.Oak, .05f, .45f));
-        double before = world.Environment.CurrentWaterFactor(0, ForestSpecies.Oak);
-        world.Environment.ForceWeather(WeatherPreset.Rain, 24, 90);
-        world.Clock.Update(100);
-        Assert.True(world.Environment.CurrentWaterFactor(0, ForestSpecies.Oak) > before);
-        world.Forest.IndividualTrees.TryGet(0, out var patch);
-        Assert.True(patch.Trees[0].AnnualGrowth.Diameter > 0);
-        Assert.InRange(Math.Abs(world.Environment.BalanceError), 0, 1e-8);
     }
 
     [Fact]

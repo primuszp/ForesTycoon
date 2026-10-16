@@ -95,10 +95,12 @@ namespace ForesTycoon.Editor
                     (() => editor.ShowWorld(WorldTab.Rules, tile: forestTile), "world-rules"),
                     (() => editor.ShowMissions(), "world-missions"),
                     (() => editor.ShowRuleBook(), "world-rulebook"),
+                    (() => editor.ShowWorldTypes(TypeTab.Vehicles), "world-vehicles"),
                     (() => editor.ShowWorldTypes(TypeTab.Parameters), "world-parameters"),
                     (() => editor.ShowRuleBook(world.RuleProjectDocument.Rules.FindIndex(r => r.Id == "tree.drought")), "world-rulebook-curve"),
                     (() => editor.ShowRuleBook(world.RuleProjectDocument.Rules.FindIndex(r => r.Id == "road.weather")), "world-rule-influences"),
                     (() => editor.ShowRuleBook(world.RuleProjectDocument.Rules.FindIndex(r => r.Id == "forest.stumps")), "world-stump-influences"),
+                    (() => editor.ShowRuleBook(world.RuleProjectDocument.Rules.FindIndex(r => r.Id == "water.spread")), "world-flow"),
                     (() => editor.ShowRuleOverview(), "world-rule-overview"),
                     (() => { editor.ShowWorld(WorldTab.Trial); editor.ShowWorldTrial(rainTrial); }, "world-trial") }) {
                     screen.Show();
@@ -238,7 +240,7 @@ namespace ForesTycoon.Editor
                 }
                 // A reviewable example project, a real four-stump sandbox, and the graph's measured comparison.
                 var stumpProject = GameWorld.DefaultRuleProject();
-                RuleEngine.AddMissingBuiltIns(stumpProject.Rules);
+                RuleEngine.AddMissingStarters(stumpProject.Rules, stumpProject.RemovedStarters);
                 stumpProject.Name = "Tönklebomlás – nedvesség és átmérő példa";
                 stumpProject.World = null; stumpProject.Algorithms = null;
                 string stumpProjectPath = Path.Combine(output, "stump-decay-example.project.json");
@@ -271,10 +273,10 @@ namespace ForesTycoon.Editor
                     FramebufferCapture.SavePng(Path.Combine(output, "stump-decay-example.png"), width, height);
                 }
                 // Two rules writing the same field: the overview flags it and the rule shows the run order.
-                var sharedProject = GameWorld.DefaultRuleProject(); RuleEngine.AddMissingBuiltIns(sharedProject.Rules);
+                var sharedProject = GameWorld.DefaultRuleProject(); RuleEngine.AddMissingStarters(sharedProject.Rules, sharedProject.RemovedStarters);
                 sharedProject.World = null; sharedProject.Algorithms = null;
                 var copy = RuleEngine.Clone(new() { sharedProject.Rules.Single(r => r.Id == "road.weather") })[0];
-                copy.Id = "road.weather-copy"; copy.Name = "Útromlás – próbamásolat"; copy.BuiltIn = false; copy.Enabled = true; copy.UseLegacyRoadOverride = false;
+                copy.Id = "road.weather-copy"; copy.Name = "Útromlás – próbamásolat"; copy.Enabled = true;
                 sharedProject.Rules.Add(copy);
                 Require(RuleEditorView.FieldUses(sharedProject.Rules).Single(u => u.Key == "road.condition").Shared, "Overview did not flag two rules writing road condition.");
                 string sharedPath = Path.Combine(output, "shared-writer.project.json");
@@ -478,6 +480,21 @@ namespace ForesTycoon.Editor
                 ui.Render(); GL.Finish();
                 Require(world.RuleProjectDocument.ToJson() == activeBeforeDraft, "Opening an incomplete draft changed the active project.");
                 Require(GL.GetError() == ErrorCode.NoError, "Incomplete draft editor OpenGL error.");
+                // The actual startup file is distinct from the opening scene and can outlive changes to the model.
+                if (File.Exists(RuleProject.DefaultPath)) {
+                    string startupFile = File.ReadAllText(RuleProject.DefaultPath);
+                    string activeBeforeStartup = world.RuleProjectDocument.ToJson();
+                    var startupEditor = new RuleEditorView(RuleProject.DefaultPath);
+                    for (int frame = 0; frame < 3; frame++) {
+                        ui.Update(width, height, width, height, Vec2.One, 1f / 60);
+                        ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 900)); startupEditor.Draw(world, ref open);
+                        GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit); ui.Render(); GL.Finish();
+                    }
+                    Require(File.ReadAllText(RuleProject.DefaultPath) == startupFile, "Opening the startup project changed its file.");
+                    Require(world.RuleProjectDocument.ToJson() == activeBeforeStartup, "Opening the startup project changed the running world.");
+                    Require(GL.GetError() == ErrorCode.NoError, "Startup project editor OpenGL error.");
+                    FramebufferCapture.SavePng(Path.Combine(output, "startup-project.png"), width, height);
+                }
                 // Run both native runtimes from one checkpoint: changed stock flow must produce a measured difference without touching this world.
                 string comparisonFolder = Path.Combine(output, "workshop-comparison"); Directory.CreateDirectory(comparisonFolder);
                 string comparisonSave = Path.Combine(comparisonFolder, "world.json");

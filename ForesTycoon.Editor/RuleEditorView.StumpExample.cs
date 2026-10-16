@@ -15,11 +15,10 @@ internal sealed partial class RuleEditorView
         var rules = RuleBookRules(world);
         int index = rules.FindIndex(r => r.Id == ruleId);
         if (index < 0) return;
-        var example = RuleEngine.BuiltIn().Find(r => r.Id == ruleId);
+        var example = RuleEngine.StarterRules().Find(r => r.Id == rules[index].Template);
         if (example == null) return;
         rules[index].Effects = example.Effects; rules[index].Description = example.Description;
         rules[index].Condition = ""; rules[index].Enabled = true; rules[index].Scope = example.Scope;
-        rules[index].UseLegacyRoadOverride = example.UseLegacyRoadOverride;
         ShowRuleBook(index); selectedInfluence = selectedTerm = 0;
         stumpTrial = null; stumpTrialError = null;
         ApplyRuleBook(world, "Alapértelmezett szabály visszaállítva.");

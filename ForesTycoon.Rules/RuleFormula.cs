@@ -59,12 +59,6 @@ public static class RuleFormula
         ["trail.trafficability"] = ("átnedvesedés", "talaj.teherbírás"),
         ["road.weather"] = ("útállapot", "csapadék"),
         ["water.stress"] = ("vízellátottság", "pangóvíz"),
-        ["water.snowmelt"] = ("hőmérséklet", "hókészlet"),
-        ["water.infiltration"] = ("gyökérzónavíz", "felszíni_víz"),
-        ["water.evaporation"] = ("gyökérzónavíz", "párolgási_igény"),
-        ["water.uptake"] = ("gyökérzónavíz", "vízigény"),
-        ["water.drainage"] = ("gyökérzónavíz", "többletvíz"),
-        ["water.baseflow"] = ("mélyvíz", "lépés_órái"),
     };
 
     private static string InputHelp(string name) => name switch {

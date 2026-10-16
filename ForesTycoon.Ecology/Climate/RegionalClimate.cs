@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using System.Text.Json;
 
@@ -55,10 +56,10 @@ namespace ForesTycoon.Ecology
         internal ClimateDefinition Definition { get; }
         internal bool Uniform => Definition.GeneratorVersion == 0;
         internal RasterGrid Grid { get; }
-        internal RasterField<double> RainMultipliers { get; }
-        internal RasterField<double> TemperatureAnomalies { get; }
+        internal RasterField<double> RainMultipliers { get; private set; }
+        internal RasterField<double> TemperatureAnomalies { get; private set; }
 
-        internal RegionalClimate(IForestHabitat habitat, ClimateDefinition definition)
+        internal RegionalClimate(IForestHabitat habitat, ClimateDefinition definition, bool deferInitialization = false)
         {
             this.habitat = habitat ?? throw new ArgumentNullException(nameof(habitat));
             Definition = definition ?? throw new ArgumentNullException(nameof(definition));
@@ -72,27 +73,35 @@ namespace ForesTycoon.Ecology
             }
             var geometry = habitat.GetForestTileGeometry(0);
             Grid = new(dimensions.Columns, dimensions.Rows, geometry.Width, geometry.Height);
-            if (!Uniform)
-                for (int id = 0; id < habitat.TileCount; id++)
-                {
-                    int x = id / Grid.Rows, y = id % Grid.Rows;
-                    double wetness = Pattern(habitat.Seed, x, y, 0x7261696eu);
-                    temperature[id] = Pattern(habitat.Seed, x, y, 0x74656d70u) * definition.TemperatureContrast;
-                    humidity[id] = wetness * definition.HumidityContrast;
-                    rain[id] = 1 + wetness * definition.RainContrast;
-                }
-            TemperatureAnomalies = new(Grid, new("climate.temperature-anomaly", "Regionális hőmérséklet-eltérés", "°C", "climate", false), temperature);
-            RainMultipliers = new(Grid, new("climate.rain-multiplier", "Regionális csapadékszorzó", "ratio", "climate", false), rain);
+            if (!deferInitialization) SimulationWork.Complete(InitializeWork());
         }
 
         internal ClimateCell Cell(int id, WeatherForcing forcing)
         {
             if ((uint)id >= (uint)rain.Length) throw new ArgumentOutOfRangeException(nameof(id));
             if (Uniform) return new(forcing, 1);
-            return new(forcing with {
+            return new(forcing with
+            {
                 Temperature = forcing.Temperature + temperature[id] - habitat.GetNormalizedElevation(id) * Definition.ElevationCooling,
                 Humidity = Math.Clamp(forcing.Humidity + humidity[id], 0, 1)
             }, rain[id]);
+        }
+
+        internal IEnumerable<int> InitializeWork()
+        {
+            if (!Uniform)
+                for (int id = 0; id < habitat.TileCount; id++)
+                {
+                    yield return 1;
+                    int x = id / Grid.Rows, y = id % Grid.Rows;
+                    double wetness = Pattern(habitat.Seed, x, y, 0x7261696eu);
+                    temperature[id] = Pattern(habitat.Seed, x, y, 0x74656d70u) * Definition.TemperatureContrast;
+                    humidity[id] = wetness * Definition.HumidityContrast;
+                    rain[id] = 1 + wetness * Definition.RainContrast;
+                }
+            if (Grid == null) yield break;
+            RainMultipliers = new(Grid, new("climate.rain-multiplier", "Regionális csapadékszorzó", "ratio", "climate", false), rain);
+            TemperatureAnomalies = new(Grid, new("climate.temperature-anomaly", "Regionális hőmérséklet-eltérés", "°C", "climate", false), temperature);
         }
 
         private double Pattern(int seed, int column, int row, uint channel)

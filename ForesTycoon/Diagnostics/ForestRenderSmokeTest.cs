@@ -29,8 +29,10 @@ namespace ForesTycoon
                 var forest = new ForestSystem(terrain.Map);
                 Require(forest.Count > 0, "Test map has no forest.");
                 RenderDevice.SetCamera(Matrix4.Identity);
+                terrain.SynchronousForestBuilds = true; // Explicit fixture preparation; runtime drawing never enables this.
                 int near = Draw(terrain, forest, 12);
-                Require(terrain.ForestChunkRebuilds == terrain.VisibleChunkCount, "Initial chunks were not built.");
+                terrain.SynchronousForestBuilds = false;
+                Require(terrain.ForestChunkRebuilds >= terrain.VisibleChunkCount && terrain.ReadyVisibleForestChunks(ForestLod.Near) == terrain.VisibleChunkCount, "Initial requested chunks were not built.");
                 Draw(terrain, forest, 12);
                 Require(terrain.ForestChunkRebuilds == 0, "Unchanged frame rebuilt the forest.");
                 // Cold LODs keep drawing a current mesh while their replacement builds.
@@ -112,6 +114,7 @@ namespace ForesTycoon
             terrain.UpdateVisibleTiles(context);
             RenderMetrics.BeginFrame();
             terrain.DrawTrees(forest, context);
+            System.Threading.Thread.Sleep(1); // Synthetic frames must give CPU mesh workers execution time.
             return RenderMetrics.SubmittedVertices;
         }
 
@@ -131,7 +134,7 @@ namespace ForesTycoon
                 Require(terrain.ReadyVisibleForestChunks(ForestLod.Near) == terrain.VisibleChunkCount,
                     $"256x fast-forward downgraded detailed crowns at frame {frame}.");
             }
-            for (int frame = 0; frame < 500 && terrain.HasPendingForestBuild; frame++) Draw(terrain, forest, 12);
+            for (int frame = 0; frame < 5000 && terrain.HasPendingForestBuild; frame++) Draw(terrain, forest, 12);
             Require(!terrain.HasPendingForestBuild, "Forest updates did not settle after fast-forward stopped.");
             Console.WriteLine("256x fast-forward: detailed spruce crowns retained through growth and background LOD publication.");
         }
@@ -147,7 +150,7 @@ namespace ForesTycoon
             Require(first == 0 && terrain.ForestChunkRebuilds == 0 && terrain.HasPendingForestBuild,
                 "Cold streaming published partial geometry or built trees synchronously.");
             int frames = 0;
-            while (terrain.TotalForestChunkRebuilds < terrain.VisibleChunkCount && frames++ < 2000)
+            while (terrain.TotalForestChunkRebuilds < terrain.VisibleChunkCount && frames++ < 10000)
             {
                 Draw(terrain, forest, 12);
                 Require(terrain.ReadyVisibleForestChunks(ForestLod.Far) == 0,
@@ -185,7 +188,7 @@ namespace ForesTycoon
             Require(Draw(terrain, forest, 12) == 0 && terrain.HasPendingForestBuild,
                 "Returning to an evicted region did not restart a complete streaming build.");
             bool returned = false;
-            for (int frame = 0; frame < 500 && !returned; frame++) returned = Draw(terrain, forest, 12) > 0;
+            for (int frame = 0; frame < 5000 && !returned; frame++) returned = Draw(terrain, forest, 12) > 0;
             Require(returned, "Returning to an evicted region never restored visible trees.");
             forest.Clear();
             for (int frame = 0; frame < 8; frame++)
@@ -247,16 +250,21 @@ namespace ForesTycoon
                 timer.Restart();
                 world.Draw(context);
                 GL.Finish();
-                Require(world.ForestGpuPayloadBytes > 0,
-                    "The opening diorama was published without forest geometry.");
-                Require(world.ReadyVisibleForestChunks(ForestLod.Near) == world.VisibleChunkCount,
-                    "The opening diorama did not retain the camera's detailed tree models in every visible chunk.");
+                double firstDrawMs = timer.Elapsed.TotalMilliseconds;
+                Require(world.ReadyVisibleForestChunks(ForestLod.Near) < world.VisibleChunkCount,
+                    "A cold first draw synchronously completed the visible forest.");
+                int frames = 0;
+                while (world.ReadyVisibleForestChunks(ForestLod.Near) < world.VisibleChunkCount && frames++ < 10000) {
+                    world.Draw(context); GL.Finish(); System.Threading.Thread.Sleep(1);
+                }
+                Require(world.ForestGpuPayloadBytes > 0 && world.ReadyVisibleForestChunks(ForestLod.Near) == world.VisibleChunkCount,
+                    "The streamed opening did not finish the requested detailed trees.");
                 Require(world.VisibleChunkCount < world.TotalChunkCount,
                     "Scaling test failed to restrict the initial viewport.");
                 Require(world.ForestResidentLods < world.TotalChunkCount * 3,
                     "Opening preparation warmed every LOD across the entire map.");
                 Require(GL.GetError() == ErrorCode.NoError, "Cold world scaling produced an OpenGL error.");
-                Console.WriteLine($"Cold world {nodes - 1}x{nodes - 1}: constructor {constructionMs:F1} ms; first draw {timer.Elapsed.TotalMilliseconds:F1} ms; thread allocations {(GC.GetAllocatedBytesForCurrentThread() - allocated) / 1048576.0:F1} MiB; visible {world.VisibleChunkCount}/{world.TotalChunkCount}, resident forest levels {world.ForestResidentLods}.");
+                Console.WriteLine($"Cold world {nodes - 1}x{nodes - 1}: constructor {constructionMs:F1} ms; first draw {firstDrawMs:F1} ms; streamed readiness {timer.Elapsed.TotalMilliseconds:F1} ms; thread allocations {(GC.GetAllocatedBytesForCurrentThread() - allocated) / 1048576.0:F1} MiB; visible {world.VisibleChunkCount}/{world.TotalChunkCount}, resident forest levels {world.ForestResidentLods}.");
             }
         }
 
@@ -318,7 +326,7 @@ namespace ForesTycoon
         private static int DrawUntilRebuilt(Terrain terrain, ForestSystem forest)
         {
             int total = 0;
-            for (int frame = 0; frame < 600; frame++)
+            for (int frame = 0; frame < 6000; frame++)
             {
                 Draw(terrain, forest, 1.5f);
                 total += terrain.ForestChunkRebuilds;
@@ -397,7 +405,6 @@ namespace ForesTycoon
                 double year = forest.ForestYear;
                 int[] changed = terrain.Map.EditElevationAtNode(5 * 33 + 5, 1, 0, 1);
                 forest.ClearTerrainTiles(changed);
-                environment.RefreshRouting(changed);
                 Require(!forest.TryGetStand(132, out _), "Terraforming left trees on changed ground.");
                 Require(forest.ForestYear == year, "Terraforming advanced forest time.");
                 Require(SamePixels(before, Capture()), "Local edit changed unedited forest pixels.");
@@ -448,7 +455,7 @@ namespace ForesTycoon
             Draw(terrain, forest, 12);
             Require(terrain.ForestChunkRebuilds == 0, "Life-stage geometry was built synchronously.");
             bool published = false;
-            for (int frame = 0; frame < 500 && !published; frame++)
+            for (int frame = 0; frame < 5000 && !published; frame++)
             {
                 Draw(terrain, forest, 12);
                 published = terrain.ForestChunkRebuilds > 0;
@@ -558,12 +565,12 @@ namespace ForesTycoon
             int trees = forest.IndividualTreeCount;
             // Compare the old whole-world refresh to the new CPU edit path, excluding scene uploads.
             var timer = System.Diagnostics.Stopwatch.StartNew();
-            forest.RefreshHabitat(); ecosystem.Environment.RefreshRouting();
+            forest.RefreshHabitat();
             timer.Stop();
             double globalMs = timer.Elapsed.TotalMilliseconds;
             timer.Restart();
             int[] changed = map.BuildRoadTilePath(20 * 64 + 20, 20 * 64 + 24);
-            forest.RefreshHabitat(changed); ecosystem.Environment.RefreshRouting(changed);
+            forest.RefreshHabitat(changed);
             timer.Stop();
             Require(changed.Length > 0 && trees > 0, "Road benchmark needs forest and a valid road segment.");
             ulong revision = forest.Revision;

@@ -15,9 +15,9 @@ public sealed class RuleObjectModelTests
         Assert.Equal(new[] { "Világobjektum", "Jármű", "Rönkszállító" }, schema.Lineage("truck").Select(e => e.Name));
         var tree = schema.Find("tree");
         Assert.False(tree.Abstract); Assert.True(schema.Find("plant").Abstract);
-        // Inherited first, own last; only the plant's health is writable.
+        // Inherited first, own last: health and stress, and the tree.s size (state), are writable; light and water are computed.
         Assert.Equal("plant", tree.Fields.Single(f => f.Name == "health").DeclaredBy);
-        Assert.Equal(new[] { "health", "stressYears" }, tree.Fields.Where(f => f.Writable).Select(f => f.Name));
+        Assert.Equal(new[] { "health", "height", "diameter", "stressYears" }, tree.Fields.Where(f => f.Writable).Select(f => f.Name));
         Assert.Equal("tile", Assert.Single(tree.Relations).Target);
         // Concrete kinds become scopes; relation fields are readable as "relation.field".
         var scope = RuleEngine.Scope("tree");
@@ -64,7 +64,8 @@ public sealed class RuleObjectModelTests
         project.Rules.Add(new WorldRule { Id = "curve-test", Name = "Curve test", Scope = "tree",
             Effects = { new() { Target = "health", Mode = "set", Formula = formula } } });
         world.QueueRuleProject(project); world.ExecutePendingCommands();
-        Run(world, 0.6);
+        // A rule step begins after half a second and is spread over the ticks of the next half (GameWorld.WeatherRoads).
+        Run(world, 1.2);
         Assert.Null(world.RuleBook.LastError);
         var scope = RuleEngine.Scope("tree");
         Assert.Equal(curve.Evaluate(0.3), scope.Fields.Single(f => f.Name == "health").Read(world, scope.Elements(world)[0]), 5);
@@ -93,7 +94,7 @@ public sealed class RuleObjectModelTests
     {
         using var world = World();
         var rule = Assert.Single(world.RuleProjectDocument.Rules, r => r.Id == "forest.stumps");
-        Assert.True(rule.BuiltIn && rule.Enabled); Assert.Equal("stump", rule.Scope);
+        Assert.True(rule.Template == "forest.stumps" && rule.Enabled); Assert.Equal("stump", rule.Scope);
         Assert.True(world.DiagnosticFellForestBlock(out _));
         var stumps = RuleEngine.Scope("stump");
         int felled = stumps.Elements(world).Length;
