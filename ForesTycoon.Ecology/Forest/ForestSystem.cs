@@ -19,11 +19,6 @@ namespace ForesTycoon.Ecology
         internal ForesTycoon.Rules.EcologyResponseProgram ResponseRules { get; set; }
         private ForesTycoon.Rules.EcologyResponseProgram Responses => ResponseRules ?? ForesTycoon.Rules.EcologyResponseProgram.Default;
         private ForestStand[] stands = Array.Empty<ForestStand>();
-        // Empty tiles that border a seeding stand. Rebuilt every month so that the
-        // regeneration pass never has to probe the whole map through the habitat interface.
-        private bool[] seedCandidate = Array.Empty<bool>();
-        private int[] seedCandidateTiles = Array.Empty<int>();
-        private int seedCandidateCount;
         private double secondsPerYear;
         internal IForestEnvironment Environment { get; set; }
         internal void UseEnvironmentTempo(double forestYearSeconds = EcologyTime.SecondsPerForestYear) => secondsPerYear = forestYearSeconds;
@@ -88,7 +83,7 @@ namespace ForesTycoon.Ecology
 
         /// <summary>
         /// Canopy pressure from the four neighbouring tiles, 0 (open field) to 1 (closed canopy).
-        /// Used by natural regeneration; individual growth uses metric crown/root competition.
+        /// Used by natural regeneration; individual growth uses metric crown competition.
         /// </summary>
         public float GetCrowding(int tileId)
         {
@@ -96,7 +91,7 @@ namespace ForesTycoon.Ecology
 
             Span<int> neighbours = stackalloc int[MaximumNeighbours];
             int neighbourCount = habitat.GetAdjacentTileIds(tileId, neighbours);
-            return Crowding(neighbours, neighbourCount);
+            return Crowding(neighbours, neighbourCount, habitat.GetMoisture(tileId));
         }
 
         public ForestryActionResult Plant(int tileId, ForestSpecies species)
@@ -186,16 +181,12 @@ namespace ForesTycoon.Ecology
             if (stands.Length != habitat.TileCount)
             {
                 stands = new ForestStand[habitat.TileCount];
-                seedCandidate = new bool[habitat.TileCount];
-                seedCandidateTiles = new int[habitat.TileCount];
             }
             else
             {
                 Array.Clear(stands);
-                Array.Clear(seedCandidate);
             }
 
-            seedCandidateCount = 0;
             accumulatedSeconds = 0.0;
             month = 0;
             foreach (int unit in GenerateInitialForestWork()) yield return unit;
@@ -228,8 +219,6 @@ namespace ForesTycoon.Ecology
             IndividualTrees.Clear();
             ClearPlantations(); competition.Clear(); changedResourceTiles.Clear();
             Array.Clear(stands);
-            Array.Clear(seedCandidate);
-            seedCandidateCount = 0;
             accumulatedSeconds = 0.0;
             month = 0;
             ClearStatistics();
@@ -312,74 +301,13 @@ namespace ForesTycoon.Ecology
             }
         }
 
-        private void ClearSeedCandidates()
+        private float Crowding(ReadOnlySpan<int> neighbours, int neighbourCount, double moisture)
         {
-            for (int i = 0; i < seedCandidateCount; i++) seedCandidate[seedCandidateTiles[i]] = false;
-            seedCandidateCount = 0;
-        }
-
-        private void MarkSeedCandidates(int tileId)
-        {
-            Span<int> neighbours = stackalloc int[MaximumNeighbours];
-            int neighbourCount = habitat.GetAdjacentTileIds(tileId, neighbours);
-            for (int i = 0; i < neighbourCount; i++)
-            {
-                int neighbourId = neighbours[i];
-                if (seedCandidate[neighbourId] || !stands[neighbourId].IsEmpty) continue;
-                seedCandidate[neighbourId] = true;
-                seedCandidateTiles[seedCandidateCount++] = neighbourId;
-            }
-        }
-
-        private static bool IsSeedSource(ForestStand stand) =>
-            !stand.IsEmpty && stand.Maturity >= 1f && stand.Health >= 0.45f;
-
-        private ForestStand TryRegenerate(int tileId)
-        {
-            if (!habitat.CanSupportForest(tileId)) return default;
-
-            Span<int> neighbours = stackalloc int[MaximumNeighbours];
-            int neighbourCount = habitat.GetAdjacentTileIds(tileId, neighbours);
-            float crowding = Crowding(neighbours, neighbourCount);
-
-            // The best-adapted seed source wins the gap rather than whichever neighbour
-            // happens to sit at the lowest tile index.
-            ForestSpecies seedSpecies = ForestSpecies.None;
-            float bestScore = 0f;
-            int matureNeighbours = 0;
-            for (int i = 0; i < neighbourCount; i++)
-            {
-                ForestStand neighbour = stands[neighbours[i]];
-                if (!IsSeedSource(neighbour)) continue;
-                matureNeighbours++;
-
-                ForestSpeciesProfile candidate = ForestSpeciesProfile.For(neighbour.Species);
-                float shadeFit = 1f - crowding * (1f - candidate.ShadeTolerance);
-                float score = Suitability(neighbour.Species, tileId) * neighbour.Health * Math.Max(0f, shadeFit);
-                if (score <= bestScore) continue;
-                bestScore = score;
-                seedSpecies = neighbour.Species;
-            }
-
-            if (matureNeighbours == 0 || seedSpecies == ForestSpecies.None) return default;
-            float annualChance = Math.Min(0.30f, matureNeighbours * 0.055f);
-            float monthlyChance = annualChance / MonthsPerYear;
-            if (UnitFloat(Hash(habitat.Seed, tileId, month)) >= monthlyChance) return default;
-
-            float suitability = Suitability(seedSpecies, tileId);
-            if (suitability < 0.18f || (Environment?.GrowthFactor(tileId,seedSpecies)??1)<0.3) return default;
-            ForestSpeciesProfile profile = ForestSpeciesProfile.For(seedSpecies);
-            return new ForestStand(seedSpecies, YearsPerStep, profile.MaximumBiomass * 0.015f, 0.55f + suitability * 0.35f);
-        }
-
-        private float Crowding(ReadOnlySpan<int> neighbours, int neighbourCount)
-        {
-            if (neighbourCount == 0) return 0f;
-
             float neighbourBiomass = 0f;
             for (int i = 0; i < neighbourCount; i++) neighbourBiomass += stands[neighbours[i]].Biomass;
-            return Math.Clamp(
-                neighbourBiomass / (neighbourCount * ForestSpeciesProfile.ReferenceCanopyBiomass), 0f, 1f);
+            return (float)Responses.Regeneration("forest.seedCrowding", new() {
+                Moisture = moisture, NeighborBiomass = neighbourCount == 0 ? 0 : neighbourBiomass / neighbourCount
+            });
         }
 
         private void ClearStatistics()

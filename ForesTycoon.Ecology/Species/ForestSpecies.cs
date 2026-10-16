@@ -49,9 +49,6 @@ namespace ForesTycoon.Ecology
         float WoodDensity,
         TreeCrownShape CrownShape)
     {
-        /// <summary>Biomass a fully stocked neighbouring tile is assumed to carry; used to normalise crowding.</summary>
-        public const float ReferenceCanopyBiomass = 1.2f;
-
         public static ForestSpeciesProfile For(ForestSpecies species) =>
             ForestSpeciesBook.TryProfile(species, out var edited) ? edited : Builtin(species);
 

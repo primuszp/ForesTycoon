@@ -529,3 +529,15 @@ Vizsgált fa, Szomszéd fa, Fapár, Verseny, Környezet, Erőforrások, Fafaj.
 A motor a gráfokat fapáronként is megszakítható munkában futtatja;
 a régi párhuzamos képletek és a külön gyökérverseny megszűnt.
 [Részletek és ellenőrzések](tree-competition-rules.md).
+
+
+## Természetes erdőmegújulás – 2026-10-16
+
+A magadás, a magadó fafaj kiválasztása, a lombterhelés válasza, a csírázás,
+valamint az új csemeték száma, kezdő életkora és egészsége hét szerkeszthető
+válaszgráf a közös Szabályok listában. Előbb objektumot, majd mezőt választasz;
+a feltételeket és hatásokat a közös csomópontokkal építed össze. A futó játék
+ugyanezeket a projektgráfokat értékeli ki, nincs külön újulatszerkesztő.
+A csempe- és szomszédvizsgálat, valamint az új fák erőforrás-frissítése szeletelt.
+A terjedési tér most a négy közvetlen szomszéd; a kezdő fajméret-inicializáló
+még közös motorkód. [Részletek és határok](natural-regeneration-rules.md).

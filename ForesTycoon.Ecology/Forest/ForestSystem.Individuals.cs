@@ -206,11 +206,9 @@ namespace ForesTycoon.Ecology
             long closed = ProfileMonthlyWork ? Stopwatch.GetTimestamp() : 0;
             if (!monthlyPreparation.PublishSnapshot(Revision, year, ref competition))
                 foreach (int work in competition.SnapshotWork(habitat, IndividualTrees, year)) yield return work;
-            ClearSeedCandidates();
-            for (int id = 0; id < stands.Length; id++) {
-                if (IsSeedSource(stands[id])) MarkSeedCandidates(id);
-                yield return 1;
-            }
+            // Immutable source stands prevent newborns and later mortality from changing this month's seed supply.
+            var seedSources = new ForestStand[stands.Length];
+            for (int id = 0; id < stands.Length; id++) { seedSources[id] = stands[id]; yield return 1; }
             long seeded = ProfileMonthlyWork ? Stopwatch.GetTimestamp() : 0;
             foreach (var entry in IndividualTrees.Patches)
                 foreach (int work in UpdateIndividualRatesWork(entry.Key, entry.Value, year, monthlyBoundary: true)) yield return work;
@@ -218,14 +216,7 @@ namespace ForesTycoon.Ecology
             foreach (var entry in IndividualTrees.Patches)
                 foreach (int unit in RefreshGrowthWork(entry.Key, entry.Value, year)) yield return unit;
             long grown = ProfileMonthlyWork ? Stopwatch.GetTimestamp() : 0;
-            for (int i = 0; i < seedCandidateCount; i++)
-            {
-                yield return 1;
-                int id = seedCandidateTiles[i];
-                if (!stands[id].IsEmpty) continue;
-                ForestStand seedling = TryRegenerate(id);
-                if (!seedling.IsEmpty) { CreateIndividuals(id, seedling, year); MarkResourceArea(id); }
-            }
+            foreach (int work in RegenerateWork(seedSources, year)) yield return work;
             foreach (int work in RefreshChangedResourceRatesWork(year, currentConditions: false)) yield return work;
             foreach (var entry in IndividualTrees.Patches) { stands[entry.Key] = IndividualStand(entry.Key, year); yield return 1; }
             foreach (int work in RecalculateStatisticsWork()) yield return work;

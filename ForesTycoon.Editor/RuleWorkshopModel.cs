@@ -61,7 +61,7 @@ internal static class RuleWorkshopModel
         return new SystemModelAnalysis(catalog, vocabulary, processes, stocks);
     }
 
-    internal static string KindName(string kind) => kind switch { "competitionPair" => "Fapár", "competition" => "Összegzett verseny", "resource" => "Fa erőforrásválasza", "site" => "Termőhely és vízválasz", "tree" => "Fa", "truck" => "Teherautó", "forwarder" => "Forwarder",
+    internal static string KindName(string kind) => kind switch { "regeneration" => "Természetes erdőmegújulás", "competitionPair" => "Fapár", "competition" => "Összegzett verseny", "resource" => "Fa erőforrásválasza", "site" => "Termőhely és vízválasz", "tree" => "Fa", "truck" => "Teherautó", "forwarder" => "Forwarder",
         "processor" => "Processzor", "road" => "Út", "tile" => "Csempe", "mill" => "Malom", "world" => "Világ", "wildlife" => "Vad", "depot" => "Telephely", "stack" => "Rakat", _ => kind };
     internal static string FieldName(string field) => SystemVocabulary.Default.Find(field)?.Name ?? SystemVocabulary.Default.Observed(field)?.Name ?? field switch {
         "world.water" => "Tárolt víz", "world.temperature" => "Hőmérséklet", "forest.totalVolume" => "Élő faállomány térfogata",

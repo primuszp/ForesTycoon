@@ -17,14 +17,15 @@ public sealed class EcologyResponseProgram
         new("water.waterlogging", "Pangóvíz követése", "site", "0–1", 0, 1, "", "", "Szeletelt környezeti lépés, csempénként", false,
             new[] { "tile.rawWaterlogging", "tile.waterlogging", "step.seconds" })
     };
-    public static readonly BehaviorHook[] Hooks = SiteHooks.Concat(ForestCompetitionRules.Hooks).ToArray();
-    public static bool IsPureKind(string kind) => kind is "site" or "competitionPair" or "competition" or "resource";
+    public static readonly BehaviorHook[] Hooks = SiteHooks.Concat(ForestCompetitionRules.Hooks).Concat(ForestRegenerationRules.Hooks).ToArray();
+    public static bool IsPureKind(string kind) => kind is "site" or "competitionPair" or "competition" or "resource" or "regeneration";
     public static bool AllowedOperation(BehaviorOperation op) => op is BehaviorOperation.Constant or BehaviorOperation.Input
         or BehaviorOperation.Add or BehaviorOperation.Subtract or BehaviorOperation.Multiply or BehaviorOperation.Divide
         or BehaviorOperation.Minimum or BehaviorOperation.Maximum or BehaviorOperation.Greater or BehaviorOperation.Less
         or BehaviorOperation.Select or BehaviorOperation.Absolute or BehaviorOperation.Negate or BehaviorOperation.Exp or BehaviorOperation.Power;
     public static BehaviorGraph DefaultGraph(BehaviorHook hook)
     {
+        if (hook.Kind == "regeneration") return ForestRegenerationRules.DefaultGraph(hook);
         if (hook.Kind != "site") return ForestCompetitionRules.DefaultGraph(hook);
         string expression = hook.Id switch {
             "forest.site" => "tile.fertility * (0.45 + 0.55 * korlát(1 - abs(tile.elevation - species.preferredElevation) / max(species.elevationTolerance; 0.000001); 0; 1))",
@@ -109,4 +110,33 @@ public sealed class EcologyResponseProgram
         v[4] = LightResponse(light, water, space, shadeTolerance); return Evaluate(9);
     }
 
+    public double Regeneration(string hook, in ForestRegenerationInputs query)
+    {
+        int index = -1;
+        for (int i = 0; i < Hooks.Length; i++)
+            if (Hooks[i].Id == hook && Hooks[i].Kind == "regeneration") { index = i; break; }
+        if (index < 0) throw new ArgumentException("Unknown regeneration response.", nameof(hook));
+        var v = inputs[index];
+        if (hook == "forest.seedCrowding") { v[0] = query.NeighborBiomass; v[1] = query.Moisture; return Evaluate(index); }
+        v[0] = query.Maturity;
+        v[1] = query.Health;
+        v[2] = query.Biomass;
+        v[3] = query.Moisture;
+        v[4] = query.Suitability;
+        v[5] = query.Water;
+        v[6] = query.Crowding;
+        v[7] = query.ShadeTolerance;
+        v[8] = query.MaximumBiomass;
+        v[9] = query.Supply;
+        v[10] = query.Years;
+        v[11] = query.Random;
+        v[12] = query.NeighborBiomass;
+        v[13] = query.Distance;
+        v[14] = query.Age;
+        v[15] = query.MatureAge;
+        v[16] = query.Fertility;
+        v[17] = query.Elevation;
+        v[18] = query.Radiation;
+        return Evaluate(index);
+    }
 }

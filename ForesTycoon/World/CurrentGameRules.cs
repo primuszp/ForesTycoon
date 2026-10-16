@@ -176,9 +176,9 @@ namespace ForesTycoon
                     "ForesTycoon.Rules/TreeVitalityRules.cs", "Defaults",
                     "forest.resources|forest.fitness|forest.species|forest.health|forest.stress|calendar.time",
                     vitality.Id == "forest.mortality" ? "forest.trees|forest.deadwood" : vitality.Id, vitality.Description, execution: GameRuleExecution.EditableGraph);
-            Add("forest.regeneration", "Természetes újulat", "Erdő", "Üres cella és magszóró szomszédok", "Erdőhónap", forest, "TryRegenerate",
+            Add("forest.regeneration", "Természetes újulat", "Erdő", "Üres cella és magszóró szomszédok", "Erdőhónap", "ForesTycoon.Rules/ForestRegenerationRules.cs", "DefaultGraph",
                 "forest.trees|forest.species|forest.fitness|world.seed|calendar.time|road.network|buildings.footprint", "forest.trees",
-                "Alkalmas üres cellákon a szomszédos magadó állományok és determinisztikus sorsolás alapján jelenik meg újulat.");
+                "A projekt gráfjai adják a magadó képességet, a megtelepedő faj pontszámát, a csírázást és az újulat kezdő állapotát. Szeletelt szomszédvizsgálat és determinisztikus sorsolás.", execution: GameRuleExecution.EditableGraph);
             Add("forest.canopy", "Lombborítás és vízigény visszacsatolása", "Erdő", "Térképcella", "Erdőrevízió-változás",
                 "ForesTycoon.Ecology/Forest/ForestHydrology.cs", "HydrologyInputs", "forest.trees|forest.health|forest.species", "forest.canopy",
                 "Koronafelület és egészség összegéből lombborítás, interceptiós kapacitás és LAI. A kivágás megváltoztatja a következő vízlépés igényét és esőfelfogását.", "borítás = 1 - exp(-koronafelület / cellaterület); LAI legfeljebb 6");

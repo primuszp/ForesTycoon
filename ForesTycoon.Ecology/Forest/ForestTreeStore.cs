@@ -42,7 +42,7 @@ namespace ForesTycoon.Ecology
             TreeCount = 0;
         }
 
-        internal void Create(int tileId, ForestStand stand, double year, int worldSeed, bool planted = false)
+        internal void Create(int tileId, ForestStand stand, double year, int worldSeed, bool planted = false, int? authoredCount = null)
         {
             if (stand.IsEmpty) return;
             if (!patches.TryGetValue(tileId, out Patch patch))
@@ -56,8 +56,8 @@ namespace ForesTycoon.Ecology
             if (planted && patch.Trees.Length < PlantedTreesPerTile) Array.Resize(ref patch.Trees, PlantedTreesPerTile);
             int capacity = ForestTreeGrowth.Capacity(stand.Species);
             float stock = Math.Clamp(stand.Biomass / ForestSpeciesProfile.For(stand.Species).MaximumBiomass, 0, 1);
-            int count = Math.Clamp((int)MathF.Round((1 + (capacity - 1) * stand.Maturity) * (0.4f + 0.6f * stock)), 1, capacity);
-            int lattice = (int)MathF.Ceiling(MathF.Sqrt(capacity));
+            int count = authoredCount.HasValue ? Math.Clamp(authoredCount.Value, 1, 128) : Math.Clamp((int)MathF.Round((1 + (capacity - 1) * stand.Maturity) * (0.4f + 0.6f * stock)), 1, capacity);
+            int lattice = (int)MathF.Ceiling(MathF.Sqrt(Math.Max(capacity, count)));
             if (planted) { count = PlantedTreesPerTile; lattice = PlantingRows; }
             if (patch.Trees.Length < count) Array.Resize(ref patch.Trees, count); // shrub tiles hold more than 16 stems
             Span<int> cells = stackalloc int[lattice * lattice];

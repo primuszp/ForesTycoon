@@ -173,3 +173,18 @@ a fény-/térszámítás a közös gráffuttató számértékeiből készül. A 
 logisztika, grafika és minden más lenyomat egyezik. A szállított jelenet
 saját küldetéseit és szerkesztett pályáját megőriztük; nincs régi
 versenyszabályt vagy előkészítési értéket átvezető betöltési ág.
+
+
+## Tizenötödik lépés: természetes erdőmegújulási gráfok – 2026-10-16
+
+A projekt hét szerkeszthető gráfot kapott: magadó képesség, fajkiválasztás,
+lombterhelési válasz, csírázás, csemeteszám, kezdő életkor és kezdő egészség.
+A natív újulati feltételek, esélyképlet és biomassza-alapú csemeteszám
+az újulat futási útvonalán megszűnt. Közös havi forráspillanatkép és szeletelt
+csempe-/szomszédvizsgálat akadályozza meg a hónapon belüli továbbterjedést.
+A futtató `forestycoon-simulation/2026-10-16.8`.
+
+Külön mappába újrarögzített referencia alapján csak a `Behaviors` lenyomat
+változott. Minden más kezdeti lenyomat, a saját pálya és a küldetések megmaradtak.
+A referencia mentés az új gráfokat tartalmazza; nincs régi újulatszabályt
+átalakító betöltési kód.

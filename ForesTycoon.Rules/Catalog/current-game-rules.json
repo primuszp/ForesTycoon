@@ -2199,8 +2199,8 @@
       "module": "Erd\u0151",
       "scope": "\u00DCres cella \u00E9s magsz\u00F3r\u00F3 szomsz\u00E9dok",
       "schedule": "Erd\u0151h\u00F3nap",
-      "execution": "NativeCode",
-      "description": "Alkalmas \u00FCres cell\u00E1kon a szomsz\u00E9dos magad\u00F3 \u00E1llom\u00E1nyok \u00E9s determinisztikus sorsol\u00E1s alapj\u00E1n jelenik meg \u00FAjulat.",
+      "execution": "EditableGraph",
+      "description": "A projekt gr\u00E1fjai adj\u00E1k a magad\u00F3 k\u00E9pess\u00E9get, a megteleped\u0151 faj pontsz\u00E1m\u00E1t, a cs\u00EDr\u00E1z\u00E1st \u00E9s az \u00FAjulat kezd\u0151 \u00E1llapot\u00E1t. Szeletelt szomsz\u00E9dvizsg\u00E1lat \u00E9s determinisztikus sorsol\u00E1s.",
       "formula": "",
       "notes": "",
       "reads": [
@@ -2217,8 +2217,8 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon.Ecology/Forest/ForestSystem.cs",
-          "symbol": "TryRegenerate"
+          "file": "ForesTycoon.Rules/ForestRegenerationRules.cs",
+          "symbol": "DefaultGraph"
         }
       ],
       "parameters": [],
