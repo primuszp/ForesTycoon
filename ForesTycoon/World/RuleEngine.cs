@@ -115,6 +115,10 @@ internal sealed class RuleEngine
     /// <summary><paramref name="Used"/>: the inputs the rule mentions; only these are read per element (a tree rule touches thousands).</summary>
     private sealed record CompiledRule(WorldRule Source, RuleScope Scope, string[] Inputs, bool[] Used, Expression Condition, CompiledEffect[] Effects)
     {
+        // A rule engine runs one non-reentrant step. Refill these buffers; never allocate them per growth patch.
+        public double[] InputValues { get; } = new double[Inputs.Length];
+        public RuleFieldDefinition[] CustomDefinitions { get; init; } = Array.Empty<RuleFieldDefinition>();
+        public double[][] CustomValues { get; } = new double[Inputs.Length - Scope.Fields.Length][];
         /// <summary>The scope fields the rule reads, by index: a scope has hundreds (summaries), a rule reads a few.</summary>
         public int[] Reads { get; } = Enumerable.Range(0, Scope.Fields.Length).Where(i => Used[i]).ToArray();
         /// <summary>The readers of <see cref="Reads"/>, in the same order.</summary>
@@ -263,7 +267,7 @@ internal sealed class RuleEngine
     // flowTotals when the step ends. New names are added in the order they first moved, as the dictionary always had them.
     private readonly List<string> ledgerNames = new();
     private double[] ledger = Array.Empty<double>(); private bool[] ledgerKnown = Array.Empty<bool>();
-    private readonly List<int> ledgerAdded = new();
+    private bool ledgerDirty;
     private int LedgerSlot(string name)
     {
         int slot = ledgerNames.IndexOf(name);
@@ -353,7 +357,9 @@ internal sealed class RuleEngine
                 return new CompiledEffect(e, e.Computation != null ? CompileGraph(e.Computation) : Compile(e.Formula, $"{i + 1}. hatás"), field, null, parts);
             }).ToArray();
             string text = System.Text.Json.JsonSerializer.Serialize(rule.ConditionGraph) + " " + System.Text.Json.JsonSerializer.Serialize(rule.Effects.Select(e => e.Computation)) + " " + rule.Condition + " " + string.Join(" ", sourceEffects.Select(e => e.Target + " " + e.To + " " + e.Level + " " + e.Formula));
-            list.Add(new(rule, scope, inputs, inputs.Select(n => text.Contains(n, StringComparison.Ordinal)).ToArray(), condition, effects));
+            list.Add(new(rule, scope, inputs, inputs.Select(n => text.Contains(n, StringComparison.Ordinal)).ToArray(), condition, effects) {
+                CustomDefinitions = inputs.Skip(scope.Fields.Length).Select(n => fields.Find(f => f.Name == n)).ToArray()
+            });
         }
         compiled = list.ToArray();
         ledger = new double[ledgerNames.Count]; ledgerKnown = new bool[ledgerNames.Count];
@@ -475,8 +481,9 @@ internal sealed class RuleEngine
 
     private void PublishLedger()
     {
+        if (!ledgerDirty) return;
         for (int k = 0; k < ledger.Length; k++) if (ledgerKnown[k]) flowTotals[ledgerNames[k]] = ledger[k];
-        ledgerAdded.Clear();
+        ledgerDirty = false;
     }
 
     private IEnumerable<int> RunRulesWork(GameWorld world, double years, double time)
@@ -484,18 +491,21 @@ internal sealed class RuleEngine
         for (int k = 0; k < ledger.Length; k++) ledgerKnown[k] = flowTotals.TryGetValue(ledgerNames[k], out ledger[k]);
         for (; stepRule < compiled.Length; stepRule++, stepElement = 0) {
             var rule = compiled[stepRule];
-            yield return 1; // Even disabled or differently scheduled rules consume a bounded work unit.
-            if (!rule.Source.Enabled || rule.Source.Schedule != stepSchedule) continue;
+            // The metadata scan is bounded by the 256-rule book limit. A growth patch must not
+            // suspend once for every unrelated water/month/passage rule in the same book.
+            if (rule.Source.Schedule != stepSchedule) continue;
+            yield return 1;
+            if (!rule.Source.Enabled) continue;
             var scope = rule.Scope;
             if (stepSchedule is not ("passage" or "growth") && scope.PrepareElements != null) foreach (int work in scope.PrepareElements(world)) yield return work;
             var elements = stepSchedule == "passage" ? new[] { eventElement } : scope.PreparedElements?.Invoke(world) ?? scope.Elements(world);
-            var customDefs = rule.Inputs.Skip(scope.Fields.Length).Select(n => Fields.Find(f => f.Name == n)).ToArray();
-            var custom = new double[customDefs.Length][];
+            var customDefs = rule.CustomDefinitions;
+            var custom = rule.CustomValues;
             for (int c = 0; c < custom.Length; c++) {
                 foreach (int unit in PrepareValuesWork(world, customDefs[c])) yield return unit;
                 custom[c] = values[customDefs[c].Name];
             }
-            var inputs = new double[rule.Inputs.Length];
+            var inputs = rule.InputValues;
             int[] reads = rule.Reads; var readers = rule.Readers; var effects = rule.Effects;
             for (; stepElement < elements.Length; stepElement++) {
                 yield return 1;
@@ -598,8 +608,9 @@ internal sealed class RuleEngine
         } else moved = amount;
         if (moved <= 0) return;
         if (flow.From >= 0) stock.Write(flow.From, stock.Read(flow.From) - moved);
-        if (!ledgerKnown[flow.Slot]) { ledgerKnown[flow.Slot] = true; ledgerAdded.Add(flow.Slot); }
+        ledgerKnown[flow.Slot] = true;
         ledger[flow.Slot] += moved;
+        ledgerDirty = true;
     }
 
     /// <summary>The stocks of one element a flow moves between: its scope fields, then its custom fields.</summary>

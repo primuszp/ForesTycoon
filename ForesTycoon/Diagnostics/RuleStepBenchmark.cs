@@ -26,6 +26,33 @@ namespace ForesTycoon
             }
         }
 
+        internal static void RunMonthProfile()
+        {
+            foreach (int size in new[] { 64, 128 }) {
+                using var world = new GameWorld(TerrainSettings.Default.WithNodeSize(size + 1, 42).WithForestPattern(ForestPattern.LargeMixed),
+                    forestYearSeconds: 120, enableRendering: false);
+                world.Environment.ForceWeather(WeatherPreset.Rain, 30, 600);
+                world.Forest.ProfileMonthlyWork = true;
+                world.RuleBook.Profile = new(StringComparer.Ordinal);
+                var ticks = new List<double>();
+                long allocated = GC.GetAllocatedBytesForCurrentThread();
+                for (int tick = 0; tick < 310; tick++) {
+                    long started = System.Diagnostics.Stopwatch.GetTimestamp();
+                    world.Update(1d / 30);
+                    ticks.Add(System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+                }
+                allocated = GC.GetAllocatedBytesForCurrentThread() - allocated;
+                var p = world.Forest.LastMonthProfile;
+                string state = System.Text.Json.JsonSerializer.Serialize(world.CaptureCheckpoint());
+                string hash = Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(state)));
+                Console.WriteLine($"{size}x{size}, {world.ForestTreeCount} trees: month close {p.CloseStandsMs:F3}; snapshot/seeds {p.SnapshotAndSeedsMs:F3}; "
+                    + $"growth/mortality {p.GrowthAndMortalityMs:F3}; regeneration/publish {p.RegenerationAndPublishMs:F3} ms; "
+                    + $"max tick {ticks.Max():F3} ms; {world.Forest.LastMonthlyPreparedTrees} prepared trees; allocated {allocated} B; state {hash}");
+                foreach (var rule in world.RuleBook.Profile.OrderByDescending(p => p.Value).Take(12))
+                    Console.WriteLine($"  rule {rule.Key}: {rule.Value:F3} ms (all 310 ticks)");
+            }
+        }
+
         private static void RunCase(int size, WeatherPreset preset)
         {
             var settings = TerrainSettings.Default.WithNodeSize(size + 1, 42).WithForestPattern(ForestPattern.LargeMixed);

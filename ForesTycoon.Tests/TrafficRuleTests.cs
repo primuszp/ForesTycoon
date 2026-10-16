@@ -115,9 +115,15 @@ public sealed class TrafficRuleTests
         bool saved = false; using var stream = new MemoryStream(); world.AtTickBoundary(() => { world.Save(stream); saved = true; });
         Assert.Throws<InvalidOperationException>(() => world.CaptureCheckpoint());
         var next = world.RuleProjectDocument; next.Rules.Single(r => r.Id == "traffic.wear").Enabled = false; world.QueueRuleProject(next);
-        int slices = 0;
-        while (world.CommandPending) { Assert.False(saved); world.ContinueCommands(7); Assert.True(++slices < 50000); }
-        Assert.True(saved); Assert.True(slices > 300); Assert.True(world.Map.GetSkidTrailWear(id) > .99f);
+        int slices = 0, completed = 0;
+        while (world.CommandPending) {
+            Assert.False(saved); int done = world.ContinueCommands(7);
+            Assert.InRange(done, 0, 7); completed += done;
+            Assert.True(++slices < 50000);
+        }
+        // Only relevant rules consume units now; verify the real budget and deferred boundary,
+        // rather than requiring one suspension for every unrelated rule in the book.
+        Assert.Equal(300, completed); Assert.True(saved); Assert.True(slices > 1); Assert.True(world.Map.GetSkidTrailWear(id) > .99f);
         // New commands join the next batch, after the completed old-rule events.
         world.ExecutePendingCommands(); Pass(world, id);
         stream.Position = 0; using var restored = World(); restored.Load(stream); restored.ExecutePendingCommands(); Pass(restored, id);
@@ -149,7 +155,7 @@ public sealed class TrafficRuleTests
         using var world = World(); int id = Network(world, true)[0];
         string initial = State(world); using var saved = new MemoryStream(); world.Save(saved);
         world.QueuePassage(new(id, TrafficVehicleKind.Forwarder, 1, 20000, 1));
-        Assert.Equal(0, world.ContinueCommands(3)); Assert.True(world.CommandPending); Assert.True(world.PendingTrafficPassages > 0);
+        Assert.Equal(0, world.ContinueCommands(1)); Assert.True(world.CommandPending); Assert.True(world.PendingTrafficPassages > 0);
         saved.Position = 0; world.Load(saved);
         Assert.Equal(0, world.PendingTrafficPassages); Assert.False(world.BoundaryPending); Assert.False(world.RuleBook.StepPending);
         Assert.Equal(initial, State(world));

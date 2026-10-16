@@ -24,6 +24,24 @@ public sealed class RuleFlowTests
     }
 
     [Fact]
+    public void PartialStepPublishesItsActualTransfersAndKeepsTheLedgerWhenLaterUnitsDoNotMoveWater()
+    {
+        using var world = World(); const int tile = 5;
+        var surface = Field("tile", "surfaceWater"); surface.Write(world, tile, 10);
+        Flow(world, tile, "surfaceWater", "deepWater", 4);
+        world.RuleBook.Begin(world, .01, 0);
+        bool sawTransferBeforeCompletion = false;
+        while (world.RuleBook.StepPending) {
+            world.RuleBook.Continue(world, 1);
+            double moved = 10 - surface.Read(world, tile);
+            Assert.Equal(moved, world.RuleBook.FlowTotals.GetValueOrDefault("próba"));
+            sawTransferBeforeCompletion |= moved > 0 && world.RuleBook.StepPending;
+        }
+        Assert.True(sawTransferBeforeCompletion);
+        Assert.Equal(4, world.RuleBook.FlowTotals["próba"]);
+    }
+
+    [Fact]
     public void AFlowMovesBetweenStocksAndTheLedgerAndWaterBalanceAgree()
     {
         using var world = World();

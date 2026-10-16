@@ -19,6 +19,32 @@ public sealed class RuleStepTests
         JsonSerializer.Serialize(world.CaptureCheckpoint()) + " " + RuleStepBenchmark.Fingerprint(world) + " " + JsonSerializer.Serialize(world.RuleBook.FlowTotals);
 
     [Fact]
+    public void ReusedRuleInputsKeepPerElementCustomStateAcrossASuspendedStepAndRestore()
+    {
+        using var world = World(); using var restored = World();
+        var project = world.RuleProjectDocument;
+        foreach (var rule in project.Rules) rule.Enabled = false;
+        project.Fields.Add(new() { Name = "saját.memory", Scope = "tile", Initial = 3, Min = 0, Max = 1000 });
+        project.Rules.Add(new() { Id = "buffer-state", Name = "Custom state", Scope = "tile", Condition = "index < 2",
+            Effects = { new() { Target = "saját.memory", Mode = "add", Formula = "saját.memory + index" } } });
+        world.QueueRuleProject(project); world.ExecutePendingCommands();
+        world.RuleBook.Run(world, 0, 0);
+        Assert.Equal(6, world.RuleBook.ReadCustom(world, "saját.memory", 0));
+        Assert.Equal(7, world.RuleBook.ReadCustom(world, "saját.memory", 1));
+        world.RuleBook.Begin(world, 0, 0);
+        while (world.RuleBook.ReadCustom(world, "saját.memory", 0) == 6) world.RuleBook.Continue(world, 1);
+        Assert.True(world.RuleBook.StepPending);
+        Assert.Equal(7, world.RuleBook.ReadCustom(world, "saját.memory", 1));
+        using var save = new MemoryStream(); world.Save(save); save.Position = 0; restored.Load(save);
+        while (world.RuleBook.StepPending) world.RuleBook.Continue(world, 1);
+        while (restored.RuleBook.StepPending) restored.RuleBook.Continue(restored, 7);
+        Assert.Equal(12, world.RuleBook.ReadCustom(world, "saját.memory", 0));
+        Assert.Equal(15, world.RuleBook.ReadCustom(world, "saját.memory", 1));
+        Assert.Equal(3, world.RuleBook.ReadCustom(world, "saját.memory", 2));
+        Assert.Equal(State(world), State(restored));
+    }
+
+    [Fact]
     public void DirectTileReadersGiveExactlyTheViewsValues()
     {
         using var world = Raining();

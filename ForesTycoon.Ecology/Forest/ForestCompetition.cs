@@ -22,6 +22,31 @@ namespace ForesTycoon.Ecology
         {
             internal Sample[] Trees = Array.Empty<Sample>();
             internal int Count;
+            internal float MinX, MaxX, MinY, MaxY;
+            internal readonly ForesTycoon.Rules.GraphInputRange[] Bounds = new ForesTycoon.Rules.GraphInputRange[5];
+            internal void ResetBounds()
+            {
+                MinX = MinY = float.PositiveInfinity; MaxX = MaxY = float.NegativeInfinity;
+                for (int i = 0; i < 4; i++) Bounds[i] = new(double.PositiveInfinity, double.NegativeInfinity);
+                // Species profiles can change independently of a geometry snapshot; unknown is always safe.
+                Bounds[4] = ForesTycoon.Rules.GraphInputRange.Unknown;
+            }
+            internal void Include(in Sample tree)
+            {
+                MinX = Math.Min(MinX, tree.X); MaxX = Math.Max(MaxX, tree.X);
+                MinY = Math.Min(MinY, tree.Y); MaxY = Math.Max(MaxY, tree.Y);
+                Add(0, tree.Size.Height); Add(1, tree.Size.CrownRadius); Add(2, tree.Size.Diameter); Add(3, tree.Health);
+            }
+            private void Add(int i, double value) => Bounds[i] = new(Math.Min(Bounds[i].Min, value), Math.Max(Bounds[i].Max, value));
+            internal (double Min, double Max) DistanceSquared(float x, float y)
+            {
+                // Keep the same float subtraction, multiplication and addition as the actual pair query.
+                float dx = x < MinX ? MinX - x : x > MaxX ? MaxX - x : 0;
+                float dy = y < MinY ? MinY - y : y > MaxY ? MaxY - y : 0;
+                float farX = Math.Max(Math.Abs(MinX - x), Math.Abs(MaxX - x));
+                float farY = Math.Max(Math.Abs(MinY - y), Math.Abs(MaxY - y));
+                return (Math.Max(0, MathF.BitDecrement(dx * dx + dy * dy)), MathF.BitIncrement(farX * farX + farY * farY));
+            }
         }
         private readonly Dictionary<int, Cell> cells = new();
         private readonly Dictionary<int, int[]> neighbours = new();
@@ -80,6 +105,7 @@ namespace ForesTycoon.Ecology
             if (cell.Trees.Length < patch.Trees.Length) cell.Trees = new Sample[patch.Trees.Length];
             var geometry = habitat.GetForestTileGeometry(id);
             cell.Count = patch.Count;
+            cell.ResetBounds();
             for (int i = 0; i < cell.Count; i++)
             {
                 yield return 1;
@@ -87,6 +113,7 @@ namespace ForesTycoon.Ecology
                 var sample = new Sample(tree.Id, geometry.X + tree.U * geometry.Width,
                     geometry.Y + tree.V * geometry.Height, tree.At(year), tree.Health, tree.Species);
                 cell.Trees[i] = sample;
+                cell.Include(sample);
 
             }
         }
@@ -125,6 +152,11 @@ namespace ForesTycoon.Ecology
             foreach (int id in ids) {
                 yield return 1;
                 if (!cells.TryGetValue(id, out var cell)) continue;
+                if (cell.Count > 0 && rules.CanBoundPairs) {
+                    var distance = cell.DistanceSquared(x, y);
+                    if (!rules.PairMayContribute(size.Height, size.CrownRadius, size.Diameter, tree.Health, tolerance,
+                        cell.Bounds, distance.Min, distance.Max)) continue;
+                }
                 for (int i = 0; i < cell.Count; i++) {
                     yield return 1;
                     var other = cell.Trees[i];

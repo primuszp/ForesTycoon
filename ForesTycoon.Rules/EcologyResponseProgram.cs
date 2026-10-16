@@ -50,6 +50,9 @@ public sealed class EcologyResponseProgram
         return new(model);
     }
     private readonly Func<BehaviorInputs, double[], double>[] evaluate;
+    private readonly GraphZeroGate shadeGate, crowdingGate;
+    private readonly GraphInputRange[] pairBounds = new GraphInputRange[ForestCompetitionRules.PairInputs.Length];
+    public bool CanBoundPairs => shadeGate != null && crowdingGate != null;
     private readonly double[][] inputs = Hooks.Select(h => new double[h.Inputs.Length]).ToArray();
     public string LastError { get; private set; }
     public EcologyResponseProgram(BehaviorModel source)
@@ -61,6 +64,9 @@ public sealed class EcologyResponseProgram
                 throw new InvalidDataException("Az ökológiai gráf csak a felkínált objektummezőket olvashatja; nincs beépített számítás vagy másik világállapot.");
         var program = new CompiledBehaviorModel(new() { Graphs = graphs }, Hooks);
         evaluate = Hooks.Select(h => program.Evaluator(h.Id, h.Kind) ?? throw new InvalidDataException("Hiányzó ökológiai gráf: " + h.Id)).ToArray();
+        shadeGate = GraphZeroGate.TryCreate(graphs.Single(g => g.Hook == "forest.shading"), ForestCompetitionRules.PairInputs);
+        crowdingGate = GraphZeroGate.TryCreate(graphs.Single(g => g.Hook == "forest.crowding"), ForestCompetitionRules.PairInputs);
+        if (shadeGate?.SameCondition(crowdingGate) == true) crowdingGate = shadeGate;
     }
     private double Evaluate(int index, double[] values = null)
     {
@@ -95,6 +101,18 @@ public sealed class EcologyResponseProgram
         v[5] = otherHeight; v[6] = otherCrown; v[7] = otherDiameter; v[8] = otherHealth; v[9] = otherShadeTolerance;
         v[10] = Math.Sqrt(distanceSquared); v[11] = distanceSquared;
         return (Evaluate(4), Evaluate(5, v));
+    }
+    public bool PairMayContribute(double height, double crown, double diameter, double health, double shadeTolerance,
+        ReadOnlySpan<GraphInputRange> neighbor, double minimumDistanceSquared, double maximumDistanceSquared)
+    {
+        if (!CanBoundPairs) return true;
+        var v = pairBounds;
+        v[0] = GraphInputRange.Exact(height); v[1] = GraphInputRange.Exact(crown); v[2] = GraphInputRange.Exact(diameter);
+        v[3] = GraphInputRange.Exact(health); v[4] = GraphInputRange.Exact(shadeTolerance);
+        for (int i = 0; i < 5; i++) v[5 + i] = neighbor[i];
+        v[10] = new(Math.Sqrt(minimumDistanceSquared), Math.Sqrt(maximumDistanceSquared));
+        v[11] = new(minimumDistanceSquared, maximumDistanceSquared);
+        return shadeGate.MayBeNonZero(v) || !ReferenceEquals(shadeGate, crowdingGate) && crowdingGate.MayBeNonZero(v);
     }
     public (double Light, double Space) Competition(double shade, double crownLoad, double radiation, double water)
     {

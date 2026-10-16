@@ -33,6 +33,7 @@ namespace ForesTycoon.Ecology
                     Trees = (Sample[])c.Trees.Clone(),
                     Count = c.Trees.Length
                 };
+                cell.ResetBounds();
                 foreach (var tree in cell.Trees)
                 {
                     yield return 1;
@@ -41,6 +42,7 @@ namespace ForesTycoon.Ecology
                     CheckpointGuard.Require(Enum.IsDefined(tree.Species), "competition species");
                     CheckpointGuard.NonNegative(tree.Size.Diameter, "competition diameter");
                     CheckpointGuard.NonNegative(tree.Size.Height, "competition height"); CheckpointGuard.NonNegative(tree.Size.CrownRadius, "competition crown");
+                    cell.Include(tree);
 
                 }
                 cells.Add(c.Tile, cell);

@@ -412,3 +412,102 @@ editorablak füsttesztje sikeres (`artifacts/foundation-editor-smoke.txt`).
 A Release editor- és játékfordítás 0 hibát és 0 figyelmeztetést adott.
 A CI a tesztek előtt a `python tools/update-rule-audit.py --check` paranccsal
 a generált leltár frissességét is ellenőrzi.
+
+
+## Hónaphatári számítás gyorsítása, 2026-10-16
+
+A `--month-work-benchmark` a tényleges GameWorldöt méri, a havi egészség-,
+stressz-, elhalás- és növekedési gráfokkal. A korábbi külön erdő-fixture ezek
+nélkül nem jelzi a játék teljes havi költségét. A profil 310 fix ticken,
+esővel, 120 s/erdőév mellett, egy hónaphatárt fog át. A havi profilozás és
+szabályonkénti időmérés be van kapcsolva; ezért a számok a diagnosztikai
+ráfordítást is tartalmazzák.
+
+A 128×128-as pályán a változás előtt a havi növekedés/életciklus 550,216 ms,
+az újulat és az egészségváltozás utáni erőforrás-frissítés 1974,525 ms volt.
+A domináns rész a szomszédos fapárok újbóli gráfos kiértékelése.
+
+### Megvalósítás és szemantikai határ
+
+- A `GraphZeroGate` az aktuális gráf **feltételes, nulla egyéb ágából** képez
+  konzervatív tartományvizsgálatot. Nem ismer fafajt, koronahatótávot vagy
+  beégetett árnyékolási képletet. Csak akkor hagy ki egy szomszédcsoportot,
+  ha mindkét párhatásról bizonyított, hogy minden tagjára nulla.
+- A csempe pillanatképe a tényleges minták befoglaló pozícióit és méret-/egészség-
+  tartományait is tárolja gyorsítótárként. Az összegek és szorzatok tartományai
+  kifelé kerekítettek; a távolságkorlát ugyanazt a float aritmetikát követi,
+  mint a párvizsgálat, szintén konzervatív kerekítéssel.
+- Nem támogatott feltétel, ismeretlen bemenet, nem véges köztes tartomány vagy
+  túlcsordulás esetén az eredeti teljes gráf fut. A nem kiválasztott ág hibáját
+  továbbra sem értékeljük ki. A két gráf azonos feltételét csak egyszer vizsgáljuk.
+- Egy egyedi gráf továbbra is hathat távoli szomszédra. Nincs natív koronatávolság-
+  levágás, és a megmaradó hozzájárulások összeadási sorrendje sem változott.
+- A korlátok származtatott adatok: mentéskor nem kerülnek új checkpointmezőbe,
+  betöltéskor a megőrzött mintákból, mintánként szeletelten újraépülnek.
+- A RuleEngine szabályonként újrahasználja a bemeneti és sajátmező-referenciatömböt.
+  Minden használt bemenetet és saját mezőt újraolvas az aktuális elemről;
+  ezek a tömbök nem helyettesítik a mentendő állapotot. Egy motoron nem lehet
+  egymásba ágyazott szabálylépést futtatni.
+- Az átadási összesítő csak tényleges átadás után írja újra a nyilvános
+  összesítőt. A pusztán növekedést végző szeletek ugyanazokat a vízadatokat
+  nem másolják át újra. A részleges lépés minden megtörtént átadását
+  a következő felfüggesztési ponton azonnal közzéteszi.
+- Növekedési facsoportonként az eltérő időzítésű szabályok nem fogyasztanak
+  külön munkaszeletet. Az egyszerű metaadat-bejárást a szabálykönyv 256 tételes
+  korlátja határolja; a tényleges elem- és fapármunka továbbra is szeletelt.
+  A checkpoint szabályindexe az eredeti listában marad.
+
+Nem változott a szabályok sorrendje, képlete, órája vagy a mentési formátum.
+A teljes checkpoint SHA-256 lenyomata a régi és új végrehajtásban bitre azonos:
+
+- 64×64: `75F17BD1B78F6378FB7EB81AB5E6055E7927495166D9F3AE90EFA87D70FB7EF4`
+- 128×128: `A3E82249533AF4FAAEE694E44E6CAEFFC91BFD95B0A28CBD7831AE06558ED79A`
+
+### Előtte / utána
+
+Ugyanazon az i7-8700 gépen, Release, GPU és rajzolás nélkül. Egy-egy helyi
+futás eredménye, nem általános hardverfüggetlen időgarancia.
+
+| Méret | Hónaphatári teljes tick, előtte → utána | Csökkenés | Allokáció a 310 tick alatt, előtte → utána |
+| --- | ---: | ---: | ---: |
+| 64×64, 15 797 fa | 835,391 → 619,342 ms | 25,9% | 60 148 608 → 45 358 064 B |
+| 128×128, 65 086 fa | 2616,309 → 1727,391 ms | 34,0% | 240 354 584 → 182 418 560 B |
+
+Ezek **egészben mért logikai tickek**, a játék továbbra is munkaszeletekben
+futtatja őket. A 128-as havi életciklus-rész 328,245 ms-ra, a regeneráció/
+erőforrás-frissítés 1350,542 ms-ra csökkent.
+
+Az alaptempós `--rule-host-benchmark` 4 ms-os CPU-kerettel, virtuális 60 Hz-es
+időbeérkezéssel 120 szimulációs másodpercet futtatott:
+
+| Méret | Korábbi → új legnagyobb hátralék | Új host CPU p95 / p99 / max |
+| --- | ---: | ---: |
+| 64×64 | 3,2833 → 2,5167 szimuláció-s | 4,021 / 4,068 / 22,556 ms |
+| 128×128 | 10,1500 → 7,0500 szimuláció-s | 4,034 / 4,047 / 13,384 ms |
+
+A p99 keret lényegében változatlan. A legrosszabb minták nem javultak.
+A mérés nem választja szét a JIT, a GC és az operációs rendszer ütemezésének
+költségét; a képkocka-kiugrások megszűnését ebből nem állítjuk. A mérés végén mindkét méretnél egy ticknél kisebb idő maradt,
+extra ledolgozó képkocka és eldobott idő nélkül. A hónaphatári késleltetés
+csökkent, de a 7,05 s-os csúcshátralék továbbra is fennmaradó motorkorlát.
+
+Nyers helyi eredmények: `artifacts/month-work-before.txt`,
+`artifacts/month-work-final-profile.txt`, `artifacts/month-work-final-host.txt`.
+A reprodukáló parancsok: `--month-work-benchmark` és `--rule-host-benchmark`.
+
+Ellenőrzés: `GraphZeroGateTests` (véletlen tartományok sarkai és belső pontjai,
+kerekítés, túlcsordulás és bizonytalan feltételek), `ForestCompetitionTraversalTests`
+(független teljes párbejárás, checkpointból újraépített korlátok, helyi törlés,
+float határértékek), `ForestCompetitionGraphTests` (távoli egyedi hatások,
+mentés és naplós visszajátszás), `RuleStepTests` (újrahasznált bemeneti tömb,
+elemenkénti saját állapot és megszakított lépés visszatöltése), `RuleFlowTests`
+(részleges lépés közben is azonnali és megmaradó átadási összesítő), teljes tesztcsomag.
+
+
+A módosítás utáni teljes Release futás **1903/1903** teszttel sikeres
+(`artifacts/month-work-final-tests.txt`), a célzott átadási, forgalmi,
+szeletelési és korlátbizonyítási csomag **38/38** teszttel átment
+(`artifacts/month-work-final-targeted.txt`). A leltár frissességellenőrzése
+is sikeres. A forgalmi tesztek a tényleges munkakeretet és a félkész esemény
+eldobását ellenőrzik; nem követelik meg az elhagyott, más időzítésű szabályok
+miatti mesterséges felfüggesztéseket.
