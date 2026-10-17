@@ -39,6 +39,32 @@ public sealed class SceneStructureTests
     }
 
     [Fact]
+    public void AuthoredOrderFinishesAtSaveBoundaryAndResumesWithExactSlicedSimulation()
+    {
+        var project = Scene(out _, out _);
+        for (int tile = 0; tile < 32 * 32; tile++) project.World.ForestPaint[tile] = "";
+        using var world = WorldLoader.CreateProject(project);
+        var machine = world.Logistics.Machines.Single(m => m.Kind == ForestMachineKind.Forwarder);
+        int[] stacks = Enumerable.Range(0, world.Map.Tiles.Count).Where(t => world.Logistics.CanPlaceStack(t)
+            && world.Logistics.PreviewMachinePath(machine.Tile, t, machine) != null).Take(2).ToArray();
+        Assert.Equal(2, stacks.Length);
+        foreach (int tile in stacks) world.QueueStackSite(tile, false);
+        world.ExecutePendingCommands();
+        world.QueueSendVehicle(machine.Id, stacks[0], stacks[1], false);
+        world.ContinueCommands(1);
+        using var save = new MemoryStream(); world.AtTickBoundary(() => world.Save(save));
+        while (world.CommandPending) world.ContinueCommands(1);
+        Assert.NotNull(machine.Source); Assert.Equal(stacks[1], machine.Destination);
+        save.Position = 0;
+        using var restored = WorldLoader.CreateProject(project); restored.Load(save);
+        Assert.Equal(JsonSerializer.Serialize(world.CaptureCheckpoint()), JsonSerializer.Serialize(restored.CaptureCheckpoint()));
+        for (int tick = 0; tick < 30; tick++) {
+            world.Update(1d / 30); while (!restored.ContinueUpdate(1d / 30, 3)) { }
+        }
+        Assert.Equal(JsonSerializer.Serialize(world.CaptureCheckpoint()), JsonSerializer.Serialize(restored.CaptureCheckpoint()));
+    }
+
+    [Fact]
     public void AuthoredDepotFleetAppliesDuringGenerationAndPendingCommandSurvivesSave()
     {
         var project = Scene(out int depot, out _);

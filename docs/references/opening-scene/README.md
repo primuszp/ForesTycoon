@@ -259,3 +259,11 @@ változatlan. A friss rögzítésben kizárólag a `Behaviors` lenyomat változo
 A jelenet külső szerkesztéseit megtartottuk. A futtató verziója változatlan,
 mert a korábbi projektekhez hozzáadott alapgráfok az eddigi viselkedést adják.
 [Részletes hatókör és mérés](../../logistics-rules.md).
+
+
+## Huszonkettedik lépés: munkára küldési engedélyek – 2026-10-17
+
+Három új tiszta `orders.allow` gráf; az alapértelmezett döntések változatlanok.
+A friss rögzítésben kizárólag a `Behaviors` lenyomat változott. A külső
+jelenetszerkesztéseket megtartottuk. Az új alapgráfok az eddigi döntést adják,
+a futtató verziója változatlan. [Hatókör](../../logistics-rules.md).

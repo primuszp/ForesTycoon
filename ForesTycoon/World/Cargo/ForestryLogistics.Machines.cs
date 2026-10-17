@@ -186,10 +186,12 @@ namespace ForesTycoon
             foreach (int unit in FindPathWork(null, machine.Tile, t => t == stack.Tile, path, agent: machine)) yield return unit;
             if (path.Value == null) { Status = "A processzor nem jut el ehhez a saranghoz."; yield break; }
             foreach (int unit in FindPathWork(null, stack.Tile, t => ContainsTile(t) && forest.AvailableTimber(t) > .001f, path, agent: machine)) yield return unit;
-            if (path.Value == null)
-            { Status = "A sarangtól nem érhető el kijelölt fa: jelölj ki kitermelést, és kösd nyommal a saranghoz."; yield break; }
+            bool hasTimber = path.Value != null;
+            string rejection = MachineOrderRejection(machine, stack, hasTimber: hasTimber);
+            yield return 1;
+            if (rejection != null) { Status = rejection; yield break; }
             Release(machine);
-            machine.Target = stack; machine.HasWork = true;
+            machine.Target = stack; machine.HasWork = hasTimber;
             Restart(machine);
             Status = $"A processzor a #{stack.Id} saranghoz indult, onnan termel.";
             result.Value = true;
@@ -213,6 +215,9 @@ namespace ForesTycoon
             if (path.Value == null) { Status = "A forwarder nem talál utat a forrás saranghoz."; yield break; }
             foreach (int unit in ForwarderPathWork(machine, path.Value[^1], destination, path)) yield return unit;
             if (path.Value == null) { Status = "A forrás sarangtól nem vezet út a célig."; yield break; }
+            string rejection = MachineOrderRejection(machine, source, mill);
+            yield return 1;
+            if (rejection != null) { Status = rejection; yield break; }
             Release(machine);
             machine.Source = source; machine.Destination = destination;
             Restart(machine);

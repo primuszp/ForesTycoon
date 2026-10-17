@@ -100,17 +100,15 @@
       ]
     },
     {
-      "status": "pending",
+      "status": "graph",
       "ids": [
         "fleet.orders"
       ],
-      "editor": "A munkaválasztás és hazatérés már közös gráf; a munkára küldési parancs engedélyezése még kódban.",
-      "remaining": "Következő: a munkára küldési parancsok engedélyezési feltételei.",
+      "editor": "Processzor, forwarder és teherautó munkára küldési engedélye közös gráfon; előnézet és parancs ugyanazt használja.",
+      "remaining": "Az útvonal, az eltérő forrás és cél, a teherautó biztonságos állapota és a rakomány megőrzése motorfeladat.",
       "tests": [
-        "ForesTycoon.Tests/VehicleDynamicsTests.cs",
-        "ForesTycoon.Tests/VehicleUpkeepTests.cs",
-        "ForesTycoon.Tests/ForwarderLoadingTests.cs",
-        "ForesTycoon.Tests/FleetWorkTests.cs"
+        "ForesTycoon.Tests/OrderGraphTests.cs",
+        "ForesTycoon.Tests/LogisticsGraphTests.cs"
       ]
     },
     {

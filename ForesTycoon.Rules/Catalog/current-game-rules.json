@@ -3270,8 +3270,8 @@
       "module": "Faanyag \u00E9s logisztika",
       "scope": "Flottaj\u00E1rm\u0171 / c\u00E9l",
       "schedule": "J\u00E1t\u00E9kosparancs \u00E9s \u00E1llapotv\u00E1lt\u00E1s",
-      "execution": "NativeCode",
-      "description": "Forr\u00E1s \u00E9s c\u00E9l kijel\u00F6l\u00E9se, megk\u00F6zel\u00EDt\u00E9s, munka \u00E9s hazat\u00E9r\u00E9s. A teheraut\u00F3 \u00FCresen t\u00E1vozik a forr\u00E1st\u00F3l, a g\u00E9p el\u0151bb leadja a rakom\u00E1nyt.",
+      "execution": "EditableGraph",
+      "description": "Forr\u00E1s \u00E9s c\u00E9l kijel\u00F6l\u00E9se, megk\u00F6zel\u00EDt\u00E9s, munka \u00E9s hazat\u00E9r\u00E9s. A teheraut\u00F3 \u00FCresen t\u00E1vozik a forr\u00E1st\u00F3l, a g\u00E9p el\u0151bb leadja a rakom\u00E1nyt. A munk\u00E1ra k\u00FCld\u00E9si enged\u00E9ly k\u00F6z\u00F6s gr\u00E1f; az \u00FAt \u00E9s a rakom\u00E1ny biztons\u00E1g\u00E1t a motor \u0151rzi.",
       "formula": "",
       "notes": "",
       "reads": [

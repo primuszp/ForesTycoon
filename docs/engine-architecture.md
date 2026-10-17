@@ -583,3 +583,26 @@ projektgráfból futnak. A beszállítókeresés, útvonal-másolás és nagy se
 gépi mozgás is szeletelt; minden érintett csempe külön áthaladást kap. A natív
 párhuzamos döntések és az erdőből közvetlen teherautóra kitermelő kerülőág
 törölve. [Szerkesztés, motorhatár, mentés és mérések](logistics-rules.md).
+
+
+## Motor és szerkeszthető játékszabály határa – 2026-10-17
+
+A teljes szabályszerkeszthetőség nem a motor algoritmusainak gráfba másolását
+jelenti. A gráf döntést vagy kért hatást ad; a motor végzi el az érvényes,
+készletbiztos állapotváltoztatást, determinisztikus, szeletelt sorrendben.
+
+| Terület | Motorfeladat | Szerkeszthető játékszabály |
+| --- | --- | --- |
+| Terepszerkesztés | Ecset/geometria, magasságmódosítás, érintett csempék és függő állapotok frissítése, munkaszeletek | Ha a játékmód igényli: engedélyezés, költség, jutalom vagy következmény |
+| Pályagenerálás | Seedelt mintavétel, rácsbejárás, domborzati és vízhálózati algoritmus | A még átvezetendő eloszlási profilok és válaszfüggvények |
+| Útvonal | Tényleges összeköttetés és járhatóság, keresőalgoritmus, útvonalbejárás | Már gráfos: szakasz engedélyezése és költsége |
+| Munkára küldés | Létező sarang/cél, tényleges út, eltérő forrás és cél, teherautó biztonságos állapota | Most gráfos: a megbízás elfogadása a mért gép-, forrás- és céladatok alapján |
+| Készletek és pénz | Tényleges átadás, megmaradás, kapacitás, egyszeri könyvelés | Mennyiségkérés, ráták; a költség- és bevételi döntések egy része még átvezetendő |
+| Mentés és visszajátszás | Parancshatárok, logikai idő, rendezés, véletlenmagok, állapot és napló | A projekt gráfjai és adatai a mentés részei |
+
+A szabályleltárban szereplő `forest.fell`, `road.build`, `road.repair` stb.
+nyitott státusza a bennük maradt játékbeli feltételeket és gazdasági
+összefüggéseket jelöli. Nem cél a fakészlet-levonás, az útfestés vagy a
+terepgeometria algoritmusának felépíttetése a felhasználóval.
+A geometriai terepszerkesztés (`terrain.edit`) ezért továbbra is motor,
+nem hiányzó gráf. A generálási profilok külön, részleges tételek.

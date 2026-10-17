@@ -5,6 +5,7 @@ namespace ForesTycoon;
 [RuleEntity("logisticsProcessor", Abstract = true, Display = "Processzor válasza")]
 internal interface ILogisticsProcessorQuery
 {
+    [RuleRelation("A tervezett megbízás adatai", Display = "Megbízás")] ILogisticsOrder Order { get; }
     [RuleRelation("A szabály futásakor mért bemenet", Display = "Időlépés")] ILogisticsStep Step { get; }
     [RuleRelation("A szabály futásakor mért bemenet", Display = "Gép / jármű")] ILogisticsMachine Machine { get; }
     [RuleRelation("A szabály futásakor mért bemenet", Display = "Forrás")] ILogisticsSource Source { get; }
@@ -16,6 +17,7 @@ internal interface ILogisticsProcessorQuery
 [RuleEntity("logisticsForwarder", Abstract = true, Display = "Forwarder válasza")]
 internal interface ILogisticsForwarderQuery
 {
+    [RuleRelation("A tervezett megbízás adatai", Display = "Megbízás")] ILogisticsOrder Order { get; }
     [RuleRelation("A szabály futásakor mért bemenet", Display = "Időlépés")] ILogisticsStep Step { get; }
     [RuleRelation("A szabály futásakor mért bemenet", Display = "Gép / jármű")] ILogisticsMachine Machine { get; }
     [RuleRelation("A szabály futásakor mért bemenet", Display = "Forrás")] ILogisticsSource Source { get; }
@@ -27,6 +29,7 @@ internal interface ILogisticsForwarderQuery
 [RuleEntity("logisticsTruck", Abstract = true, Display = "Teherautó válasza")]
 internal interface ILogisticsTruckQuery
 {
+    [RuleRelation("A tervezett megbízás adatai", Display = "Megbízás")] ILogisticsOrder Order { get; }
     [RuleRelation("A szabály futásakor mért bemenet", Display = "Időlépés")] ILogisticsStep Step { get; }
     [RuleRelation("A szabály futásakor mért bemenet", Display = "Gép / jármű")] ILogisticsMachine Machine { get; }
     [RuleRelation("A szabály futásakor mért bemenet", Display = "Forrás")] ILogisticsSource Source { get; }
@@ -125,4 +128,11 @@ internal interface ILogisticsSite
 internal interface ILogisticsDepot
 {
     [RuleField("Már meglévő telephelyek száma az új építése előtt.", Display = "Meglévő telephelyek", Unit = "db")] double Count { get; }
+}
+
+[RuleEntity("logisticsOrderInput", Abstract = true, Display = "Megbízás")]
+internal interface ILogisticsOrder
+{
+    [RuleField("1, ha a fogadó sarangtól kijelölt, kitermelhető fa érhető el.", Display = "Elérhető kijelölt fa", Unit = "0–1")] double HasTimber { get; }
+    [RuleField("1 malom cél esetén, 0 sarang vagy új lerakó esetén.", Display = "A cél malom", Unit = "0–1")] double DestinationIsMill { get; }
 }

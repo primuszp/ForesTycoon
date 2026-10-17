@@ -200,3 +200,59 @@ kezelése, épületátfedés tiltása, 3072 gép őrzött szeletelt létrehozás
 pontos állapotegyezése, szerkesztett induló flotta jelenetgeneráláskor,
 megkezdett építés mentési határa és visszatöltés. A teljes csomag napló-
 visszajátszási tesztjei is átmentek.
+
+
+## Munkára küldés engedélyezése – 2026-10-17
+
+Három `orders.allow` gráf van a processzor, forwarder és teherautó közös
+szerkesztőjében. A 0 elutasítja az új megbízást, az 1 engedélyezi a motor
+által végrehajthatónak talált út és cél esetén. A grafikon kikapcsolásakor
+megadott fix eredmény ugyanezt jelenti. Elutasításkor a régi megbízás,
+a markolóban tartott rönk és a rakomány is megmarad. A hazahívás nem tiltható
+le ezzel a gráffal.
+
+A Gép objektumnál a fajta, rakomány, kapacitás, kopás és hazahívási állapot
+érhető el. A megbízási rakomány a forwardernél a markolóban tartott rönköt
+is tartalmazza. A szállítóknál a Forrás / Forrás készlete a most kiválasztott
+sarang készlete, nem a korábbi megbízás forrásáé. A Megbízás objektumban:
+
+- processzor: Elérhető kijelölt fa (`order.hasTimber`);
+- forwarder és teherautó: A cél malom (`order.destinationIsMill`).
+
+A processzor alapgráfja az elérhető kijelölt fát követeli meg. Ezt a feltételt
+nem ismétli meg natív elutasítás: átírható például előzetes munkakiosztás
+engedélyezésére. Ilyenkor a gép nem kap hamis `HasWork` állapotot.
+A két szállító alapgráfja engedélyez; a felhasználó összekötheti például a
+kopási görbét, a minimális forráskészletet és a malomcélt egy engedéllyé.
+Az egyedi gép-ID-re kötött gráf a típusszintű döntést helyettesíti.
+
+Az előnézet és a parancs ugyanazt az engedélykiértékelőt hívja, a parancs
+az aktuális adatokkal újraellenőriz. A keresések és a járműgeometria a
+szeletelt motorútvonalon futnak. A szabály nem hoz létre hiányzó fizikai utat,
+nem engedi a forrás és cél azonosságát, és nem rendeli újra az úton lévő
+teherautót. Az állapotmódosítás csak az engedély után kezdődik.
+
+Release mikrobenchmark (`--orders-rule-benchmark`, külön futtatva,
+renderelés nélkül), hosszú teherautó-megbízás forrás–cél útkereséssel,
+telephelyi megközelítéssel és a szeletelt járműgeometriával:
+
+| Pálya | Teljes parancs | 64 egységes szeletek száma | Szelet p95 / p99 / maximum |
+| --- | ---: | ---: | --- |
+| 128×128 | 22,698 ms | 14 | 0,625 / 0,625 / 0,625 ms |
+| 256×256 | 4,432 ms | 28 | 0,406 / 0,850 / 0,850 ms |
+
+Mindkét eset logisztikai és járműállapota pontosan azonos az egyben és a
+szeletelten végrehajtott parancs után. Az első eset hideg kódot is érint;
+a két teljes idő nem skálázási összehasonlítás. Egy-egy parancs mérése,
+a kevés mintás p99 a maximumot jelenti, nem általános képkockaidő-garancia.
+A havi szimulációs torlódás külön nyitott feladat marad.
+
+
+Ellenőrzés: Release build 0 figyelmeztetéssel, 0 hibával; 1947/1947 teljes
+teszt; mindkét editor-füstteszt (köztük napló-visszajátszás); audit és diff
+ellenőrzés rendben. Új regressziók: mindhárom gépfajta tiltása a korábbi
+megbízás és rakomány megőrzésével; előnézet–végrehajtás közös döntése;
+felülírható kijelölt-fa feltétel; valódi forráskészlet, cél és kopás, valamint
+a markolóban tartott rakomány; hiányzó út és azonos forrás/cél motorvédelme;
+mindhárom elfogadott parancs pontos szeletelt állapotegyezése; megkezdett
+parancs mentési határa, visszatöltése és eltérő szeletméretű folytatása.

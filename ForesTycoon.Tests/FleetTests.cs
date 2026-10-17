@@ -34,6 +34,7 @@ public partial class FleetTests
         var logistics = new ForestryLogistics(map, forest);
         var vehicles = new VehicleSystem(new TimberCargoSystem(), route => VehicleRoadRoute.Create(map, route))
         { SourceLoader = logistics.Load, DestinationReceiver = logistics.Deliver, RouteValidator = logistics.RouteConnected };
+        vehicles.RoadRouteWorkFactory = (path, result) => VehicleRoadRoute.CreateWork(map, path, result);
         logistics.Vehicles = vehicles;
         Assert.True(logistics.PlaceMill(Mill), logistics.Status);
         Assert.True(logistics.PlaceDepot(Depot), logistics.Status);

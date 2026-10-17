@@ -136,6 +136,7 @@ namespace ForesTycoon
 
         internal IEnumerable<int> AssignTruckWork(FleetTruck truck, TimberStack source, int destination, WorkResult<bool> result)
         {
+            if (destination == source.Tile) { Status = "A cél nem lehet maga a forrás sarang."; yield break; }
             if (truck.Phase != TruckPhase.Parked) { Status = "A rönkszállító épp úton van: előbb hívd haza."; yield break; }
             bool mill = MillAt(destination) != null;
             if (!mill && StackAt(destination) == null && !CanPlaceStack(destination)) { Status = "Ide nem rakható le a fa."; yield break; }
@@ -148,6 +149,9 @@ namespace ForesTycoon
             if (dock >= 0) foreach (int unit in TruckPathWork(truck, dock, route[0], approachResult)) yield return unit;
             int[] approach = approachResult.Value.Path;
             if (dock != route[0] && approach.Length < 2) { Status = "A telephelyről nem vezet út a sarangig."; yield break; }
+            string rejection = TruckOrderRejection(truck, source, mill);
+            yield return 1;
+            if (rejection != null) { Status = rejection; yield break; }
             truck.Source = source; truck.Destination = destination; truck.Target = mill ? null : StackAt(destination); truck.HomeRequested = false;
             if (truck.Target == null && !mill) { truck.Target = new TimberStack { Id = nextStackId++, Tile = destination }; Stacks.Add(truck.Target); }
             if (approach.Length >= 2) {
