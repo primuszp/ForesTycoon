@@ -30,12 +30,15 @@ namespace ForesTycoon.Ecology
         private ulong nextId = 1;
         private ulong topologyRevision;
         internal ulong Generation { get; private set; }
+        internal ulong StorageEpoch { get; private set; }
+        internal ulong TopologyVersion => topologyRevision;
         internal int TreeCount { get; private set; }
         internal int StateSize => checked((int)nextId);
         internal bool TryGet(int tileId, out Patch patch) => patches.TryGetValue(tileId, out patch);
 
         internal void Clear()
         {
+            StorageEpoch++;
             patches.Clear();
             slots.Clear(); slotOf.Clear(); freeSlots.Clear();
             Generation++;
@@ -117,6 +120,7 @@ namespace ForesTycoon.Ecology
         internal void RemoveTile(int id)
         {
             if (!patches.Remove(id, out var patch)) return;
+            StorageEpoch++;
             int slot = slotOf[id]; slotOf.Remove(id); slots[slot] = -1; freeSlots.Push(slot);
             TreeCount -= patch.Count;
         }

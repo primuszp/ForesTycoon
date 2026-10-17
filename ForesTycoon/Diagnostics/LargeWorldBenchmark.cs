@@ -94,7 +94,7 @@ namespace ForesTycoon
             // Default year = 900 seconds, month = 75 seconds. Measure the first boundary at t=75.
             for (int tick = 0; tick < 65 * 30; tick++) world.Update(tickSeconds);
             for (int frame = -warmupFrames + 1; frame < 0; frame++) Draw(frame, false);
-            var simulation = new SimulationFrameRunner(maximumTicksPerFrame: 2048, maximumWorkMilliseconds: 4);
+            var simulation = SimulationFrameRunner.Interactive();
             simulation.Clock.Reset(world.SimulationTick);
             var samples = new Sample[measuredFrames];
             for (int frame = 0; frame < samples.Length; frame++) {

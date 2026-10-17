@@ -30,6 +30,18 @@ public class ForestMonthlyPreparationTests
         return (forest, water, new ForestEnvironmentCoordinator(forest, water, prepared));
     }
 
+    [Fact]
+    public void CheapSnapshotsFinishEarlyWhilePairQueriesRemainSpreadAcrossTheMonth()
+    {
+        var prepared = Create(true, year: 1200, side: 64);
+        prepared.Clock.Update(10);
+        var progress = prepared.Forest.Capture().Preparation;
+        Assert.NotEmpty(progress.Patches);
+        Assert.InRange(progress.Cursor, progress.Patches.Length + 1, progress.Patches.Length * 2 - 1);
+        Assert.Equal(0, prepared.Forest.LastPreparationSnapshotPatches);
+        Assert.True(prepared.Forest.LastPreparationResourcePatches > 0);
+    }
+
     [Theory]
     [InlineData(1200)]
     [InlineData(13)]

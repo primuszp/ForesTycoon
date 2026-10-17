@@ -17,6 +17,12 @@ sealed partial class GameWorld
         var record = command.ToRecord(worldTick);
         switch (record.Kind)
         {
+            case WorldCommandKind.SetBehaviors:
+                foreach (int unit in ApplyBehaviorsWork(record.RuleJson)) yield return unit;
+                break;
+            case WorldCommandKind.PlaceSawmill:
+                if (Logistics != null) foreach (int unit in Logistics.PlaceMillWork(record.A, new WorkResult<bool>())) yield return unit;
+                break;
             case WorldCommandKind.PlaceDepot:
                 if (Logistics != null) foreach (int unit in Logistics.PlaceDepotWork(record.A, new WorkResult<bool>())) yield return unit;
                 break;

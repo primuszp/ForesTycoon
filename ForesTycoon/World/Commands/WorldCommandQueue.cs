@@ -49,7 +49,7 @@ namespace ForesTycoon
             try {
                 while (batchRemaining > 0 && units < budget) {
                     active ??= execute(pending.Peek()).GetEnumerator();
-                    if (ForesTycoon.Engine.SimulationWork.MoveNext(active)) { units += Math.Max(1, active.Current); continue; }
+                    if (ForesTycoon.Engine.SimulationWork.MoveNext(active, budget - units)) { units += Math.Max(1, active.Current); continue; }
                     active.Dispose(); active = null;
                     pending.Dequeue(); batchRemaining--; completed++; units++;
                 }

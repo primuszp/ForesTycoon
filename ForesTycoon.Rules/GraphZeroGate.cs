@@ -19,6 +19,7 @@ public sealed class GraphZeroGate
     private readonly GraphInputRange[] values;
 
     private GraphZeroGate(Instruction[] instructions) { this.instructions = instructions; values = new GraphInputRange[instructions.Length]; }
+    internal GraphZeroGate CreateQueryWorker() => new(instructions);
     internal bool SameCondition(GraphZeroGate other) => other != null && instructions.AsSpan().SequenceEqual(other.instructions);
 
     public static GraphZeroGate TryCreate(BehaviorGraph graph, IReadOnlyList<string> inputs)

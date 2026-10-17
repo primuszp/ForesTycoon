@@ -129,7 +129,7 @@ namespace ForesTycoon.Ecology
             nextPlantationId = s.NextPlantationId; PlantationRevision = s.PlantationRevision;
             plantations.Clear(); foreach (var p in planted) { yield return 1; plantations.Add(p.Key, p.Value); }
             foreach (int unit in competition.RestoreWork(s.Competition, stands.Length)) yield return unit;
-            foreach (int unit in monthlyPreparation.RestoreWork(s.Preparation, IndividualTrees, stands.Length)) yield return unit; changedResourceTiles.Clear();
+            foreach (int unit in monthlyPreparation.RestoreWork(s.Preparation, IndividualTrees, stands.Length)) yield return unit; changedResourceTiles.Clear(); changedResourceSources.Clear();
             foreach (int unit in RecalculateStatisticsWork()) yield return unit;
         }
     }

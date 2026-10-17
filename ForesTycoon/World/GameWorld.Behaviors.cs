@@ -12,12 +12,13 @@ namespace ForesTycoon
         internal CompiledBehaviorControllers Controllers { get; }
         internal EcologyResponseProgram Responses { get; }
         internal VehicleRuleProgram VehicleResponses { get; }
-        internal WorldBehaviorPolicy(BehaviorModel document, IReadOnlySet<string> keys = null, Func<string, double> read = null)
+        internal WorldBehaviorPolicy(BehaviorModel document, IReadOnlySet<string> keys = null, Func<string, double> read = null, bool prepareExecutables = true)
         {
             document = document.Clone();
             foreach (var hook in EcologyResponseProgram.Hooks.Concat(VehicleResponseRules.Hooks).Concat(LogisticsRules.Hooks))
                 if (!document.Graphs.Any(g => g.Hook == hook.Id && g.Kind == hook.Kind && g.ObjectId == null)) document.Graphs.Add(DefaultGraph(hook));
-            model = new(document, Hooks, keys, read); Controllers = new(document); Responses = new(document); VehicleResponses = new(document);
+            model = new(document, Hooks, keys, read); if (prepareExecutables) model.Prepare();
+            Controllers = model.Controllers; Responses = new(document, model, prepareExecutables); VehicleResponses = new(document, model);
         }
 
         internal static BehaviorGraph DefaultGraph(BehaviorHook hook) => LogisticsRules.IsKind(hook.Kind) ? LogisticsRules.DefaultGraph(hook) : hook.Kind == "vehicleResponse" ? VehicleResponseRules.DefaultGraph(hook) : EcologyResponseProgram.IsPureKind(hook.Kind) ? EcologyResponseProgram.DefaultGraph(hook) : new() {
@@ -68,10 +69,13 @@ namespace ForesTycoon
         }
         internal static string[] RuleObjectKinds => WorldBehaviorPolicy.Hooks.Where(h => h.SupportsObjects).Select(h => LogisticsRules.IsKind(h.Kind) ? h.Kind[9..].ToLowerInvariant() : h.Kind).Concat(RuleEngine.Scopes.Select(s => s.Id)).Concat(new[] { "wildlife", "depot", "stack" }).Distinct().ToArray();
         internal void QueueBehaviors(BehaviorModel model) => Enqueue(new SetBehaviorsCommand(model.ToJson()));
-        void IWorldCommandTarget.ExecuteBehaviors(string json) => ApplyBehaviors(BehaviorModel.FromJson(json));
-        private void ApplyBehaviors(BehaviorModel model)
+        void IWorldCommandTarget.ExecuteBehaviors(string json) => SimulationWork.Complete(ApplyBehaviorsWork(json));
+        private IEnumerable<int> ApplyBehaviorsWork(string json)
         {
-            var replacement = new WorldBehaviorPolicy(model, DynamicsRuntime.Keys(dynamics.Document, RuleWorldFields), ruleValues.ReadRule);
+            var keys = DynamicsRuntime.Keys(dynamics.Document, RuleWorldFields);
+            var preparing = System.Threading.Tasks.Task.Run(() => new WorldBehaviorPolicy(BehaviorModel.FromJson(json), keys, ruleValues.ReadRule));
+            while (!preparing.IsCompleted) yield return 1;
+            var replacement = preparing.GetAwaiter().GetResult();
             replacement.Controllers.PreserveUnchanged(behaviorPolicy.Controllers);
             if (ResponseSignature(behaviorPolicy.Document) != ResponseSignature(replacement.Document)) {
                 pendingForestRateRefresh = true; Environment.InvalidateVegetation();
@@ -79,6 +83,7 @@ namespace ForesTycoon
             behaviorPolicy = replacement;
             BindBehaviors();
             ApplyTuning(Tuning);
+            yield return 1;
         }
         private void BindBehaviors()
         {

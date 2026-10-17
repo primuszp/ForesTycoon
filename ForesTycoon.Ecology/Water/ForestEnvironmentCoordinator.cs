@@ -62,6 +62,8 @@ namespace ForesTycoon.Ecology
             public EcologicalProcessDescriptor Descriptor => description;
             public void Advance(in EcologicalStep step)
             { if (step.EndsAt(EcologicalBoundary.ForestMonth)) environment.FinishForestMonth(); }
+            public IEnumerable<int> AdvanceWork(EcologicalStep step) => step.EndsAt(EcologicalBoundary.ForestMonth)
+                ? environment.FinishForestMonthWork() : Array.Empty<int>();
         }
     }
 }

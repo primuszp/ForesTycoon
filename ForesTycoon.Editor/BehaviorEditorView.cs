@@ -65,7 +65,7 @@ namespace ForesTycoon.Editor
         private float sampleNative = 1, sampleState, sampleAmount, sampleDelta = .5f, sampleTime;
         private float sampleCapacity = 25, sampleAvailable = 100, sampleFrom, sampleTo = 1, sampleSurface = 1;
         private readonly SimulationFrameRunner sandboxRunner = CreateSandboxRunner();
-        private static SimulationFrameRunner CreateSandboxRunner() { var runner = new SimulationFrameRunner(maximumTicksPerFrame: 2048, maximumWorkMilliseconds: 4); runner.Clock.IsPaused = true; return runner; }
+        private static SimulationFrameRunner CreateSandboxRunner() { var runner = SimulationFrameRunner.Interactive(); runner.Clock.IsPaused = true; return runner; }
         private FixedStepClock clock => sandboxRunner.Clock;
         private TerrainMap sandboxMap;
         internal void Advance(GameWorld world, double elapsed)

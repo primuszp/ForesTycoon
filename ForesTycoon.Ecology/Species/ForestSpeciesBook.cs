@@ -81,6 +81,9 @@ namespace ForesTycoon.Ecology
                         MatureHeight = e.MatureHeight ?? t.MatureHeight, MaxHeight = e.MaxHeight ?? t.MaxHeight, Capacity = e.Capacity ?? t.Capacity };
                 prices[(int)s] = e.TimberPrice;
             }
+            var previous = ActiveBook;
+            if (previous != null && profiles.AsSpan().SequenceEqual(previous.Profiles)
+                && traits.AsSpan().SequenceEqual(previous.Traits) && prices.AsSpan().SequenceEqual(previous.Prices)) return;
             InstallBook(new Book(profiles, traits, prices));
         }
     }

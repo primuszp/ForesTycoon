@@ -65,14 +65,14 @@ public sealed class VehicleRuleProgram
     private readonly Func<BehaviorInputs, double[], double>[] evaluate;
     private readonly double[][] inputs = VehicleResponseRules.Hooks.Select(h => new double[h.Inputs.Length]).ToArray();
     public string LastError { get; private set; }
-    public VehicleRuleProgram(BehaviorModel source)
+    public VehicleRuleProgram(BehaviorModel source, CompiledBehaviorModel sharedProgram = null)
     {
         var model = new BehaviorModel { Graphs = source.Graphs.Where(g => g.Kind == "vehicleResponse").ToList() };
         foreach (var hook in VehicleResponseRules.Hooks)
             if (!model.Graphs.Any(g => g.Hook == hook.Id)) model.Graphs.Add(VehicleResponseRules.DefaultGraph(hook));
         if (model.Graphs.Any(g => g.Nodes.Any(n => !EcologyResponseProgram.AllowedOperation(n.Operation))))
             throw new System.IO.InvalidDataException("A járműválasz csak mért bemenetekből és közös gráfműveletekből számolhat.");
-        var program = new CompiledBehaviorModel(model, VehicleResponseRules.Hooks);
+        var program = sharedProgram ?? new CompiledBehaviorModel(model, VehicleResponseRules.Hooks);
         evaluate = VehicleResponseRules.Hooks.Select(h => program.Evaluator(h.Id, h.Kind)).ToArray();
     }
     public double Evaluate(VehicleResponse response, ReadOnlySpan<double> values)

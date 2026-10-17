@@ -16,7 +16,10 @@ internal sealed record RuleScopeField(string Name, string Help, Func<GameWorld, 
     public Func<GameWorld, int, double> ViewRead { get; init; }
     /// <summary>False when an optional relation does not exist for this event's subject.</summary>
     public Func<GameWorld, int, bool> Available { get; init; }
+    public bool LocalRead { get; init; }
+    public RuleStockPlan LocalStock { get; init; }
 }
+internal sealed record RuleStockPlan(Func<GameWorld, int, double> Capacity, Func<double, double, double, double> Normalize);
 /// <summary>A named action of a scope; returns true when it changed the world's structure (routes must be refreshed).</summary>
 internal sealed record RuleScopeAction(string Name, string Help, Func<GameWorld, int, bool> Apply);
 /// <summary>An entity set a rule runs on: its elements, fields and actions. Custom fields are kept per element ID.</summary>
@@ -29,6 +32,7 @@ internal sealed record RuleScope(string Id, string Name, string Element, Func<Ga
     public Func<GameWorld, int> StateSize { get; init; }
     public Func<GameWorld, IEnumerable<int>> PrepareElements { get; init; }
     public Func<GameWorld, int[]> PreparedElements { get; init; }
+    public Action<GameWorld> Release { get; init; }
     /// <summary>Collections whose members are elements of a scope, so flows can be shared out among them.</summary>
     public RuleScopeCollection[] Collections { get; init; } = Array.Empty<RuleScopeCollection>();
 
@@ -48,7 +52,7 @@ internal sealed record RuleStepCheckpoint(double Years, double Time, int Rule, i
 /// A step or passage may suspend between bounded work units (<see cref="Begin"/>, <see cref="Continue"/>).
 /// The pending logical tick or command retains ownership; other simulation work cannot overtake it.
 /// </summary>
-internal sealed class RuleEngine
+internal sealed partial class RuleEngine
 {
     // ── Scopes: the building blocks a rule can address ──────────────────
     // Every concrete kind of the object model (RuleEntities.cs) with its view; no scope is written by hand.
@@ -93,12 +97,13 @@ internal sealed class RuleEngine
     {
         private readonly Func<BehaviorInputs, double[], double> evaluate;
         private readonly string hook, kind;
-        internal Expression(CompiledBehaviorModel model, string hook, string kind) { evaluate = model.Evaluator(hook, kind); this.hook = hook; this.kind = kind; }
+        internal string[] NamedKeys { get; }
+        internal Expression(CompiledBehaviorModel model, string hook, string kind, bool prepare = true) { NamedKeys = model.NamedKeys; if (prepare) model.Prepare(); evaluate = model.Evaluator(hook, kind); this.hook = hook; this.kind = kind; }
         internal double Evaluate(double years, double time, double[] inputs, out string error)
         {
             error = null;
             try { return evaluate(new BehaviorInputs(0, years, time, 0, 0), inputs); }
-            catch (ArithmeticException e) { error = $"{hook} / {kind} #0: {e.Message} A beépített eredmény maradt érvényben."; return 0; }
+            catch (ArithmeticException e) { error = $"{hook} / {kind} #0: {e.Message} A hibás szabályrész kimaradt; javítsd a kijelzett gráfot."; return 0; }
         }
     }
     private sealed record CompiledEffect(RuleEffect Source, Expression Value, int Field, RuleScopeAction Action, Expression[] Parts = null, CompiledFlow Flow = null);
@@ -254,9 +259,16 @@ internal sealed class RuleEngine
     }
     private double ReadNamed(int slot, string key)
     {
+        if (parallelFlowEvaluation) {
+            if (System.Threading.Volatile.Read(ref namedStamps[slot]) == namedStep) return namedValues[slot];
+            lock (namedReadLock) {
+                if (namedStamps[slot] != namedStep) { namedValues[slot] = readNamed(key); System.Threading.Volatile.Write(ref namedStamps[slot], namedStep); }
+                return namedValues[slot];
+            }
+        }
         // A preview between the ticks of a step reads the world as it is and leaves the step's values alone.
         if (previewing) return readNamed(key);
-        if (namedStamps[slot] != namedStep) { namedValues[slot] = readNamed(key); namedStamps[slot] = namedStep; }
+        if (namedStamps[slot] != namedStep) { namedValues[slot] = readNamed(key); System.Threading.Volatile.Write(ref namedStamps[slot], namedStep); }
         return namedValues[slot];
     }
     private bool previewing;
@@ -267,6 +279,8 @@ internal sealed class RuleEngine
     // flowTotals when the step ends. New names are added in the order they first moved, as the dictionary always had them.
     private readonly List<string> ledgerNames = new();
     private double[] ledger = Array.Empty<double>(); private bool[] ledgerKnown = Array.Empty<bool>();
+    private bool[] dirtyLedger = Array.Empty<bool>();
+    private readonly List<int> dirtyLedgerSlots = new(64);
     private bool ledgerDirty;
     private int LedgerSlot(string name)
     {
@@ -275,7 +289,7 @@ internal sealed class RuleEngine
         return slot;
     }
 
-    internal RuleEngine(List<WorldRule> rules, List<RuleFieldDefinition> fields, IEnumerable<string> stockIds, Func<string, double> readValue)
+    internal RuleEngine(List<WorldRule> rules, List<RuleFieldDefinition> fields, IEnumerable<string> stockIds, Func<string, double> readValue, bool prepareExecutables = true)
     {
         readNamed = readValue;
         Rules = rules; Fields = fields;
@@ -303,7 +317,7 @@ internal sealed class RuleEngine
                 var hook = Hook(id, scope, inputs);
                 try {
                     var graph = RuleFormula.Compile(text, new BehaviorGraph { Id = id, Name = rule.Name, Hook = id, Kind = hook.Kind }, names);
-                    return new(new CompiledBehaviorModel(new BehaviorModel { Graphs = { graph } }, new[] { hook }, named, ReadNamed, BindNamed), id, hook.Kind);
+                    return new(new CompiledBehaviorModel(new BehaviorModel { Graphs = { graph } }, new[] { hook }, named, ReadNamed, BindNamed), id, hook.Kind, prepareExecutables && part != "kapcsolat");
                 } catch (Exception e) when (e is FormatException or InvalidDataException) {
                     throw new InvalidDataException($"{rule.Name} › {part}: {e.Message}", e);
                 }
@@ -312,7 +326,7 @@ internal sealed class RuleEngine
                 var graph = new BehaviorModel { Graphs = { source } }.Clone().Graphs[0];
                 string id = "rule.graph." + counter++; var hook = Hook(id, scope, inputs);
                 graph.Id = graph.Hook = id; graph.Kind = hook.Kind; graph.ObjectId = null;
-                return new(new CompiledBehaviorModel(new BehaviorModel { Graphs = { graph } }, new[] { hook }, named, ReadNamed, BindNamed), id, hook.Kind);
+                return new(new CompiledBehaviorModel(new BehaviorModel { Graphs = { graph } }, new[] { hook }, named, ReadNamed, BindNamed), id, hook.Kind, prepareExecutables);
             }
             var condition = rule.ConditionGraph != null ? CompileGraph(rule.ConditionGraph)
                 : string.IsNullOrWhiteSpace(rule.Condition) ? null : Compile(rule.Condition, "feltétel");
@@ -362,7 +376,7 @@ internal sealed class RuleEngine
             });
         }
         compiled = list.ToArray();
-        ledger = new double[ledgerNames.Count]; ledgerKnown = new bool[ledgerNames.Count];
+        ledger = new double[ledgerNames.Count]; ledgerKnown = new bool[ledgerNames.Count]; dirtyLedger = new bool[ledgerNames.Count];
     }
 
     /// <summary>Custom field values survive a rule book change for fields kept with the same name and scope.</summary>
@@ -401,6 +415,11 @@ internal sealed class RuleEngine
     }
 
     /// <summary>One whole step of <paramref name="years"/>; returns true when an action changed the network (routes need a refresh).</summary>
+    private bool NeedsPotentialEvaporation => compiled.Any(r => r.Source.Enabled && r.Source.Schedule == "step" && r.Scope.Id == "tile"
+        && r.Reads.Any(i => r.Inputs[i] == "potentialEvaporation"));
+    private static bool ReadsTileClimate(CompiledRule rule) => rule.Scope.Id == "tile"
+        && rule.Reads.Any(i => rule.Inputs[i] is "rain" or "snowfall" or "temperature" or "potentialEvaporation");
+
     internal bool Run(GameWorld world, double years, double time, string schedule = "step")
     {
         ForesTycoon.Engine.SimulationWork.RequireSynchronousContext();
@@ -440,7 +459,10 @@ internal sealed class RuleEngine
         if (!stepPending) return false;
         execution ??= RunRulesWork(world, stepYears, stepTime).GetEnumerator();
         NetworkChanged = false;
-        for (int i = 0; i < budget; i++) if (!AdvanceWorkUnit()) { execution.Dispose(); execution = null; break; }
+        for (int i = 0; i < budget; i++) {
+            bool pending = AdvanceWorkUnit(); PublishLedger();
+            if (!pending) { execution.Dispose(); execution = null; break; }
+        }
         PublishLedger();
         return NetworkChanged;
     }
@@ -450,7 +472,17 @@ internal sealed class RuleEngine
         if (!stepPending) yield break;
         execution ??= RunRulesWork(world, stepYears, stepTime).GetEnumerator();
         NetworkChanged = false;
-        while (AdvanceWorkUnit()) { PublishLedger(); yield return 1; }
+        // A bounded batch amortizes nested iterator dispatch without a synchronous finish path.
+        // Publish at every inner unit as well: first-use ledger order must not depend on the batch size.
+        bool pending = true;
+        while (pending) {
+            int completed = 0;
+            while (completed < Math.Min(8, SimulationWork.MaximumUnits) && (pending = AdvanceWorkUnit())) {
+                PublishLedger(); completed++;
+            }
+            PublishLedger();
+            if (completed > 0) yield return completed;
+        }
         execution.Dispose(); execution = null;
         PublishLedger();
     }
@@ -482,12 +514,16 @@ internal sealed class RuleEngine
     private void PublishLedger()
     {
         if (!ledgerDirty) return;
-        for (int k = 0; k < ledger.Length; k++) if (ledgerKnown[k]) flowTotals[ledgerNames[k]] = ledger[k];
-        ledgerDirty = false;
+        // Only touched entries need publication. Sorting retains the original first-use key order.
+        dirtyLedgerSlots.Sort();
+        foreach (int slot in dirtyLedgerSlots) { flowTotals[ledgerNames[slot]] = ledger[slot]; dirtyLedger[slot] = false; }
+        dirtyLedgerSlots.Clear(); ledgerDirty = false;
     }
 
     private IEnumerable<int> RunRulesWork(GameWorld world, double years, double time)
     {
+        bool climatePrepared = false;
+        HashSet<RuleScope> preparedScopes = stepSchedule is "passage" or "growth" ? null : new();
         for (int k = 0; k < ledger.Length; k++) ledgerKnown[k] = flowTotals.TryGetValue(ledgerNames[k], out ledger[k]);
         for (; stepRule < compiled.Length; stepRule++, stepElement = 0) {
             var rule = compiled[stepRule];
@@ -497,8 +533,18 @@ internal sealed class RuleEngine
             yield return 1;
             if (!rule.Source.Enabled) continue;
             var scope = rule.Scope;
-            if (stepSchedule is not ("passage" or "growth") && scope.PrepareElements != null) foreach (int work in scope.PrepareElements(world)) yield return work;
+            if (stepSchedule is not ("passage" or "growth") && scope.PrepareElements != null && preparedScopes.Add(scope)) foreach (int work in scope.PrepareElements(world)) yield return work;
             var elements = stepSchedule == "passage" ? new[] { eventElement } : scope.PreparedElements?.Invoke(world) ?? scope.Elements(world);
+            if (!climatePrepared && stepSchedule == "step" && stepElement < elements.Length && ReadsTileClimate(rule)) {
+                // Prime the first row in its original read order, preserving which query error is reported first.
+                foreach (var read in rule.Readers) read(world, elements[stepElement]);
+                foreach (int unit in world.Environment.PrepareRuleClimateWork(NeedsPotentialEvaporation)) yield return unit;
+                climatePrepared = true;
+            }
+            if (PlanLocalFlows && elements.Length >= 4096 && world.Environment.VegetationInputsCurrent && CanPlanLocalFlows(rule)) {
+                foreach (int unit in RunLocalFlowsWork(world, rule, elements, years, time)) yield return unit;
+                continue;
+            }
             var customDefs = rule.CustomDefinitions;
             var custom = rule.CustomValues;
             for (int c = 0; c < custom.Length; c++) {
@@ -522,6 +568,7 @@ internal sealed class RuleEngine
                     if (effect.Action != null) {
                         if (value == 0) continue;
                         NetworkChanged |= effect.Action.Apply(world, id);
+                        preparedScopes?.Clear();
                         break; // the element may be gone; its later effects do not run
                     }
                     if (effect.Flow != null) { Move(world, scope, id, inputs, custom, customDefs, effect.Flow, value); continue; }
@@ -553,13 +600,17 @@ internal sealed class RuleEngine
     }
 
     /// <summary>The step under way, for a checkpoint; null when none is.</summary>
-    internal RuleStepCheckpoint CaptureStep() => !stepPending ? null : new(stepYears, stepTime, stepRule, stepElement,
-        namedSlots.OrderBy(p => p.Value).Where(p => namedStamps[p.Value] == namedStep).ToDictionary(p => p.Key, p => namedValues[p.Value], StringComparer.Ordinal));
+    internal RuleStepCheckpoint CaptureStep()
+    {
+        lock (namedReadLock) return !stepPending ? null : new(stepYears, stepTime, stepRule, stepElement,
+            namedSlots.OrderBy(p => p.Value).Where(p => namedStamps[p.Value] == namedStep).ToDictionary(p => p.Key, p => namedValues[p.Value], StringComparer.Ordinal));
+    }
 
     /// <summary>Takes up a step saved by <see cref="CaptureStep"/>: it continues where it stood, with the named values it had read.</summary>
     internal void RestoreStep(GameWorld world, RuleStepCheckpoint saved)
     {
         if (saved == null) return;
+        if (flowQueries.Pending) throw new InvalidOperationException("Join query jobs before restoring an existing rule engine.");
         CheckpointGuard.Require(double.IsFinite(saved.Years) && saved.Years >= 0 && double.IsFinite(saved.Time) && saved.Rule >= 0
             && saved.Rule <= compiled.Length && saved.Element >= 0 && saved.Named != null && saved.Named.Values.All(double.IsFinite), "rule step");
         stepPending = false;
@@ -580,8 +631,12 @@ internal sealed class RuleEngine
     /// </summary>
     private void Move(GameWorld world, RuleScope scope, int id, double[] inputs, double[][] custom, RuleFieldDefinition[] customDefs, CompiledFlow flow, double amount)
     {
-        if (!(amount > 0)) return;
         var stock = new Stocks(world, scope, id, inputs, custom, customDefs);
+        RecordFlow(flow.Slot, Transfer(world, scope, id, ref stock, flow, amount));
+    }
+    private static double Transfer(GameWorld world, RuleScope scope, int id, ref Stocks stock, CompiledFlow flow, double amount)
+    {
+        if (!(amount > 0)) return 0;
         if (flow.From >= 0) amount = Math.Min(amount, Math.Max(0, stock.Read(flow.From) - Math.Max(0, stock.Min(flow.From))));
         double moved = 0;
         if (flow.Spread != null) {
@@ -593,7 +648,7 @@ internal sealed class RuleEngine
                 weights[m] = flow.Downhill ? Math.Max(0, self - flow.SpreadScope.Fields[flow.SpreadLevel].Read(world, members[m])) : 1;
                 total += weights[m];
             }
-            if (total <= 0) return;
+            if (total <= 0) return 0;
             for (int m = 0; m < members.Length; m++) {
                 if (weights[m] <= 0) continue;
                 double before = into.Read(world, members[m]);
@@ -606,11 +661,15 @@ internal sealed class RuleEngine
             stock.Write(flow.To, before + Math.Min(amount, Math.Max(0, stock.Max(flow.To) - before)));
             moved = stock.Read(flow.To) - before;
         } else moved = amount;
-        if (moved <= 0) return;
+        if (moved <= 0) return 0;
         if (flow.From >= 0) stock.Write(flow.From, stock.Read(flow.From) - moved);
-        ledgerKnown[flow.Slot] = true;
-        ledger[flow.Slot] += moved;
-        ledgerDirty = true;
+        return moved;
+    }
+    private void RecordFlow(int slot, double moved)
+    {
+        if (!(moved > 0)) return;
+        ledgerKnown[slot] = true; ledger[slot] += moved; ledgerDirty = true;
+        if (!dirtyLedger[slot]) { dirtyLedger[slot] = true; dirtyLedgerSlots.Add(slot); }
     }
 
     /// <summary>The stocks of one element a flow moves between: its scope fields, then its custom fields.</summary>
@@ -618,14 +677,22 @@ internal sealed class RuleEngine
     {
         private readonly GameWorld world; private readonly RuleScope scope; private readonly int id;
         private readonly double[] inputs; private readonly double[][] custom; private readonly RuleFieldDefinition[] customDefs;
+        private readonly LocalFlowPlan local;
         internal Stocks(GameWorld world, RuleScope scope, int id, double[] inputs, double[][] custom, RuleFieldDefinition[] customDefs)
-        { this.world = world; this.scope = scope; this.id = id; this.inputs = inputs; this.custom = custom; this.customDefs = customDefs; }
+        { this.world = world; this.scope = scope; this.id = id; this.inputs = inputs; this.custom = custom; this.customDefs = customDefs; local = null; }
+        internal Stocks(RuleScope scope, LocalFlowPlan local)
+        { world = null; this.scope = scope; id = 0; inputs = local.Inputs; custom = null; customDefs = null; this.local = local; }
         private int Own => scope.Fields.Length;
-        internal double Read(int i) => i < Own ? scope.Fields[i].Read(world, id) : custom[i - Own][scope.StateIndex(world, id)];
+        internal double Read(int i) => local != null ? inputs[i] : i < Own ? scope.Fields[i].Read(world, id) : custom[i - Own][scope.StateIndex(world, id)];
         internal double Min(int i) => i < Own ? scope.Fields[i].Min : customDefs[i - Own].Min;
         internal double Max(int i) => i < Own ? scope.Fields[i].Max : customDefs[i - Own].Max;
         internal void Write(int i, double value)
         {
+            if (local != null) {
+                var field = scope.Fields[i];
+                inputs[i] = field.LocalStock.Normalize(inputs[i], Math.Clamp(value, field.Min, field.Max), local.Capacities[i]);
+                local.Operations.Add(new(false, i, value)); return;
+            }
             if (i < Own) { scope.Fields[i].Write(world, id, value); inputs[i] = scope.Fields[i].Read(world, id); return; }
             value = Math.Clamp(value, customDefs[i - Own].Min, customDefs[i - Own].Max);
             custom[i - Own][scope.StateIndex(world, id)] = value; inputs[i] = value;

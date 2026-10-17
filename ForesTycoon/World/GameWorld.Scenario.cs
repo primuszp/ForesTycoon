@@ -144,13 +144,13 @@ namespace ForesTycoon
                 foreach (int unit in RoadCommandWork(road.From, road.To, false, surface)) yield return unit;
                 if (RoadCount == before && !map.IsRoadTile(road.From)) SceneProblems.Add($"Az út #{road.From} → #{road.To} nem épülhetett meg (víz vagy meredek).");
             }
-            IEnumerable<int> Place(int tile, string what, Func<int, bool> place)
-            {
+            foreach (int tile in scenario.Sawmills) {
                 if (map.TryGetSawmillFootprint(tile, out var footprint, out _))
                     foreach (int unit in forest.PaintInitialForestWork(footprint.ToDictionary(t => t, _ => ForestSpecies.None), preserveUnpainted: true)) yield return unit;
-                if (Logistics == null || !place(tile)) SceneProblems.Add($"{what} #{tile}: {Logistics?.Status ?? "nincs logisztika."}");
+                var placed = new WorkResult<bool>();
+                if (Logistics != null) foreach (int unit in Logistics.PlaceMillWork(tile, placed)) yield return unit;
+                if (!placed.Value) SceneProblems.Add($"Fűrészmalom #{tile}: {Logistics?.Status ?? "nincs logisztika."}");
             }
-            foreach (int tile in scenario.Sawmills) foreach (int unit in Place(tile, "Fűrészmalom", t => Logistics.PlaceMill(t))) yield return unit;
             foreach (int tile in scenario.Depots) {
                 if (map.TryGetSawmillFootprint(tile, out var footprint, out _))
                     foreach (int unit in forest.PaintInitialForestWork(footprint.ToDictionary(t => t, _ => ForestSpecies.None), preserveUnpainted: true)) yield return unit;

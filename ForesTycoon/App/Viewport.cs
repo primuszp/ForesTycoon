@@ -75,8 +75,7 @@ namespace ForesTycoon
         private DioramaPostProcess postProcess;
         protected override ImGuiController UiController => imgui;
         private readonly FrameClock frameClock = new FrameClock();
-        private readonly SimulationFrameRunner simulation = new SimulationFrameRunner(
-            ticksPerSecond: 30.0, maximumTicksPerFrame: 2048, maximumWorkMilliseconds: 4);
+        private readonly SimulationFrameRunner simulation = SimulationFrameRunner.Interactive();
         private FixedStepClock simulationClock => simulation.Clock;
         /// <summary>
         /// Simulated seconds per real second at "1×". The game's 1× is a slow, thoughtful calendar (a year an hour) while

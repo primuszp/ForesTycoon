@@ -20,13 +20,7 @@ namespace ForesTycoon.Engine
             return system;
         }
 
-        public void Update(double fixedDeltaSeconds)
-        {
-            if (!double.IsFinite(fixedDeltaSeconds) || fixedDeltaSeconds < 0.0)
-                throw new ArgumentOutOfRangeException(nameof(fixedDeltaSeconds));
-            for (int i = 0; i < systems.Count; i++)
-                systems[i].Update(fixedDeltaSeconds);
-        }
+        public void Update(double fixedDeltaSeconds) => SimulationWork.Complete(UpdateWork(fixedDeltaSeconds));
 
         public void Clear()
         {

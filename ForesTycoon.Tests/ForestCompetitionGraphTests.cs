@@ -44,7 +44,7 @@ public class ForestCompetitionGraphTests
         var rules = EcologyResponseProgram.FromModel(project.Behaviors);
         neighbor.Trees[0] = neighbor.Trees[0] with { Dimensions = new(.3f, 99, .1f) }; // Snapshot must stay immutable.
         var loads = new WorkResult<ForestCompetitionLoads>(); int units = 0;
-        foreach (int unit in competition.EvaluateLoadsWork(habitat, own.Trees[0], 0, loads, rules)) { units++; Assert.Equal(1, unit); }
+        foreach (int unit in competition.EvaluateLoadsWork(habitat, own.Trees[0], 0, loads, rules)) { units += unit; Assert.InRange(unit, 1, 32); }
         Assert.True(units >= 4);
         Assert.Equal(20, loads.Value.Shade); Assert.Equal(.5, loads.Value.CrownLoad);
         var result = ForestCompetition.Resolve(loads.Value, .7f, .8f, rules);

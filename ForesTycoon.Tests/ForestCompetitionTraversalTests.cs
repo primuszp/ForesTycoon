@@ -48,10 +48,68 @@ public class ForestCompetitionTraversalTests
         foreach (var entry in store.Patches)
         foreach (var tree in entry.Value.Trees.Take(entry.Value.Count)) {
             var result = new WorkResult<ForestCompetitionLoads>(); int slices = 0;
-            foreach (int unit in competition.EvaluateLoadsWork(habitat, tree, .8, result)) { Assert.Equal(1, unit); slices++; }
+            foreach (int unit in competition.EvaluateLoadsWork(habitat, tree, .8, result)) { Assert.InRange(unit, 1, 32); slices += unit; }
             Assert.True(slices >= Neighbours(habitat, tree.TileId).Count); // Even proven-zero cells yield a bounded work unit.
             Assert.Equal(competition.Evaluate(habitat, tree, .8, .7f, .6f), ForestCompetition.Resolve(result.Value, .7f, .6f));
         }
+    }
+
+    [Fact]
+    public void HealthCacheMatchesUncachedGraphsAcrossEditsAndSnapshotReuse()
+    {
+        var habitat = new Habitat(); var store = Create(habitat);
+        var cached = new ForestCompetition(); var reference = new ForestCompetition { CacheHealthQueries = false };
+        for (int round = 0; round < 5; round++) {
+            if (round == 3) store.RemoveTile(12);
+            foreach (var entry in store.Patches)
+                for (int i = 0; i < entry.Value.Count; i++) {
+                    var tree = entry.Value.Trees[i];
+                    entry.Value.Trees[i] = tree with { Health = round == 0 ? 0 : (i % 5 + 1) / 5f,
+                        U = round == 2 ? tree.U * .9f : tree.U };
+                }
+            if (round % 2 == 0) { cached.Snapshot(habitat, store, .8); reference.Snapshot(habitat, store, .8); }
+            else {
+                var affected = Enumerable.Range(0, habitat.TileCount).ToHashSet();
+                cached.SnapshotAffected(habitat, store, .8, affected); reference.SnapshotAffected(habitat, store, .8, affected);
+            }
+            foreach (var entry in store.Patches)
+                foreach (var tree in entry.Value.Trees.Take(entry.Value.Count)) {
+                    var a = new WorkResult<ForestCompetitionLoads>(); var b = new WorkResult<ForestCompetitionLoads>();
+                    SimulationWork.Complete(cached.EvaluateLoadsWork(habitat, tree, .8, a));
+                    SimulationWork.Complete(reference.EvaluateLoadsWork(habitat, tree, .8, b));
+                    Assert.Equal(b.Value, a.Value);
+                    // Also exercise the cache hit without another snapshot.
+                    SimulationWork.Complete(cached.EvaluateLoadsWork(habitat, tree, .8, a));
+                    Assert.Equal(b.Value, a.Value);
+                }
+        }
+    }
+
+    [Fact]
+    public void ParallelSnapshotQueriesMatchOrderedQueriesAndJoinInterruptedBatches()
+    {
+        var habitat = new Habitat(); var store = Create(habitat);
+        var actual = new ForestCompetition(); var reference = new ForestCompetition { CacheHealthQueries = false };
+        actual.Snapshot(habitat, store, .8); reference.Snapshot(habitat, store, .8);
+        var rules = ForesTycoon.Rules.EcologyResponseProgram.Default;
+        var queries = store.Patches.SelectMany(p => p.Value.Trees.Take(p.Value.Count))
+            .Select(t => new ForestCompetition.Query(t, .8, new())).ToArray();
+        for (int pass = 0; pass < 2; pass++) {
+            SimulationWork.Complete(actual.EvaluateBatchWork(habitat, queries, rules));
+            Assert.False(actual.BackgroundPending);
+            foreach (var query in queries) {
+                var result = new WorkResult<ForestCompetitionLoads>();
+                SimulationWork.Complete(reference.EvaluateLoadsWork(habitat, query.Tree, .8, result, rules));
+                Assert.Equal(result.Value, query.Result.Value);
+            }
+        }
+        if (System.Environment.ProcessorCount <= 2) return;
+        using (var interrupted = actual.EvaluateBatchWork(habitat, queries, rules).GetEnumerator()) {
+            while (!actual.BackgroundPending) Assert.True(interrupted.MoveNext());
+        }
+        SimulationWork.Complete(actual.FinishQueriesWork());
+        Assert.False(actual.BackgroundPending);
+        actual.Snapshot(habitat, store, .9);
     }
 
     [Theory]

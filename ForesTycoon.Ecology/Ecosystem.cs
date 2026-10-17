@@ -17,6 +17,7 @@ namespace ForesTycoon.Ecology
     {
         private ForestEnvironmentCoordinator coordinator;
 
+        internal Dictionary<string, double> WorkProfile { get => coordinator.Runtime.WorkProfile; set => coordinator.Runtime.WorkProfile = value; }
         internal ForestSystem Forest { get; private set; }
         internal EnvironmentSystem Environment { get; private set; }
         internal SoilLandscape Soils { get; private set; }

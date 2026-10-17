@@ -642,3 +642,40 @@ Ellenőrzés: a végső grafikus startup/lezárási füstteszt sikeres; Release
 fordítás 0 hibával, 0 figyelmeztetéssel; 1949/1949 teljes teszt; mindkét
 editor-füstteszt, szabályaudit és diff-ellenőrzés rendben. A szimulációs
 szabályok és a mentési formátum nem változtak.
+
+## Nagypályás szabályfuttatás – 2026-10-17
+
+A játék és az editor tesztvilága a közös `SimulationFrameRunner.Interactive`
+ütemezést használja. Alapból 4 ms jut egy képkocka szimulációjára. Két fix
+lépésnyi hátralék felett a keret fokozatosan, további 0,1 másodperc hátralék
+alatt legfeljebb 12 ms-ra nő. Ez véges felzárkózási keret: nincs korlátlan
+havi lezárás, tick-kihagyás vagy eldobott játékidő. A keret a host
+ütemezését befolyásolja; a gráfok eredménye nem függ a mért futásidőtől.
+
+Az ökológiai folyamatoknak kötelező szeletelt belépési pontjuk van.
+A szinkron eszközök ugyanazt a munkafolyamatot fogyasztják el; megszűnt
+a külön szinkron ökológiai ütemező és a metódusfelülírást vizsgáló választás.
+A havi előkészítés rögzített munkasúlyokkal előre hozza az olcsó
+pillanatképkészítést, és a hónap nagyobb részére osztja el a drágább
+szomszédsági lekérdezéseket. A víz- és fényhatások a lezárt havi
+integrálokból származnak.
+
+A tiszta lekérdezések korlátos háttércsomagokban futhatnak, külön
+munkapufferrel. Az eredmények és hibák az eredeti objektumsorrendben
+kerülnek a világba. A saját csempét érintő áramlások előkészítője ugyanazt
+az átadási műveletet és készletkorlátozást használja, mint a soros futás;
+a csempék közötti áramlások sorrendje megmarad. A mentett kurzor csak
+a már publikált sort számolja, a függő lekérdezéseket felszabadítás előtt
+meg kell várni. A gyorsítótárak nem mentett játékállapotok.
+
+A mérésnél külön jelölendő a szünet nélküli, virtuális képkockás stresszpróba
+és a valóban 60 Hz-re ütemezett próba. Utóbbiban a háttérlekérdezések a
+képkockák között is dolgozhatnak. Mindkét mérésnél jelenteni kell a
+munkahátralékot is; a rövid munkaszeletek önmagukban nem bizonyítják,
+hogy a szimuláció tartja a játékidőt. Részletek és review-megállapítások:
+[engine-editor-review-2026-10-17.md](engine-editor-review-2026-10-17.md).
+
+Végső ellenőrzés: 1969/1969 teszt, editor-füstteszt, független ablakok
+életciklus-próbája és grafikus indulás/felszabadítás rendben. A 256×256-os
+mérés végére elfogyott a hátralék, de a havi határ körüli 3,2333 másodperces
+átmeneti szimulációs késés nyitott P1 tétel marad a review-ban.

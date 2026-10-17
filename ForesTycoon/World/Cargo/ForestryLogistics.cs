@@ -66,11 +66,26 @@ namespace ForesTycoon
 
         internal bool PlaceMill(int id)
         {
-            if(!terrain.TryGetSawmillFootprint(id,out var footprint,out var position)){Status="A malomhoz 2×2 sík, száraz, üres csempe szükséges.";return false;}
-            foreach(int tile in footprint){if(forest.TryGetStand(tile,out _)||ContainsTile(tile)){Status="A malom helyét erdő vagy kitermelés foglalja.";return false;}foreach(var mill in Mills)if(Array.IndexOf(mill.Footprint,tile)>=0){Status="Itt már áll egy malom.";return false;}}
-            Mills.Add(new Sawmill{TileId=id,Footprint=footprint,Position=position});
+            var result = new WorkResult<bool>(); SimulationWork.Complete(PlaceMillWork(id, result)); return result.Value;
+        }
+        internal IEnumerable<int> PlaceMillWork(int id, WorkResult<bool> result)
+        {
+            result.Value = false;
+            if (!terrain.TryGetSawmillFootprint(id, out var footprint, out var position)) {
+                Status = "A malomhoz 2×2 sík, száraz, üres csempe szükséges."; yield break;
+            }
+            foreach (int tile in footprint) {
+                yield return 1;
+                if (forest.TryGetStand(tile, out _) || ContainsTile(tile)) { Status = "A malom helyét erdő vagy kitermelés foglalja."; yield break; }
+                foreach (var mill in Mills) {
+                    yield return 1;
+                    if (Array.IndexOf(mill.Footprint, tile) >= 0) { Status = "Itt már áll egy malom."; yield break; }
+                }
+            }
+            Mills.Add(new Sawmill { TileId = id, Footprint = footprint, Position = position });
             terrain.SetBuildingFootprint(footprint);
-            Status="Fűrészmalom elhelyezve. Kösd úttal a kijelölt erdő mellé, majd indíts teherautót.";return true;
+            Status = "Fűrészmalom elhelyezve. Kösd úttal a kijelölt erdő mellé, majd indíts teherautót.";
+            result.Value = true;
         }
         internal float Load(Vehicle vehicle,float requested)
         {

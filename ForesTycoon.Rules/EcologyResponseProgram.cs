@@ -44,7 +44,7 @@ public sealed class EcologyResponseProgram
             hook.Inputs.Select(f => new FormulaName(f, BehaviorOperation.Input, f)).ToArray());
     }
     [ThreadStatic] private static EcologyResponseProgram defaults;
-    public static EcologyResponseProgram Default => defaults ??= new(new() { Graphs = Hooks.Select(DefaultGraph).ToList() });
+    public static EcologyResponseProgram Default => defaults ??= new(new BehaviorModel { Graphs = Hooks.Select(DefaultGraph).ToList() });
     /// <summary>Compiles only the pure query graphs; unrelated world/stock bindings need no world during generation.</summary>
     public static EcologyResponseProgram FromModel(BehaviorModel source)
     {
@@ -55,22 +55,44 @@ public sealed class EcologyResponseProgram
     }
     private readonly Func<BehaviorInputs, double[], double>[] evaluate;
     private readonly GraphZeroGate shadeGate, crowdingGate;
+    private readonly GraphHealthPlan healthPlan;
+    // Prepared delegates keep values in call-local variables. Workers share the executable program;
+    // their input arrays, interval scratch and error state remain separate.
+    private readonly bool executablesPrepared;
+    public EcologyResponseProgram CreateQueryWorker() => executablesPrepared ? new(this) : throw new InvalidOperationException("Prepare query executables before sharing them.");
+    private EcologyResponseProgram(EcologyResponseProgram owner)
+    {
+        executablesPrepared = true;
+        evaluate = owner.evaluate; healthPlan = owner.healthPlan; PairRevision = owner.PairRevision;
+        shadeGate = owner.shadeGate?.CreateQueryWorker();
+        crowdingGate = ReferenceEquals(owner.shadeGate, owner.crowdingGate) ? shadeGate : owner.crowdingGate?.CreateQueryWorker();
+    }
+    public void ClearQueryError() => LastError = null;
+    public void PublishQueryError(string error) => LastError ??= error;
+    public bool CanPrepareHealthPairs => healthPlan != null;
+    public bool PreparedShadeUsesHealth => healthPlan?.HealthInput >= 0;
+    public string PairRevision { get; }
     private readonly GraphInputRange[] pairBounds = new GraphInputRange[ForestCompetitionRules.PairInputs.Length];
     public bool CanBoundPairs => shadeGate != null && crowdingGate != null;
     private readonly double[][] inputs = Hooks.Select(h => new double[h.Inputs.Length]).ToArray();
     public string LastError { get; private set; }
-    public EcologyResponseProgram(BehaviorModel source)
+    public EcologyResponseProgram(BehaviorModel source, CompiledBehaviorModel sharedProgram = null, bool prepareExecutables = true)
     {
         var graphs = source.Graphs.Where(g => Hooks.Any(h => h.Id == g.Hook && h.Kind == g.Kind)).ToList();
         if (graphs.Count != Hooks.Length) throw new InvalidDataException("Minden ökológiai válaszgráf szükséges. A hatás kikapcsolásához köss állandót a kimenetre.");
         foreach (var g in graphs)
             if (g.Nodes.Any(n => !AllowedOperation(n.Operation)))
                 throw new InvalidDataException("Az ökológiai gráf csak a felkínált objektummezőket olvashatja; nincs beépített számítás vagy másik világállapot.");
-        var program = new CompiledBehaviorModel(new() { Graphs = graphs }, Hooks);
+        var program = sharedProgram ?? new CompiledBehaviorModel(new() { Graphs = graphs }, Hooks);
+        if (prepareExecutables) program.Prepare();
+        executablesPrepared = prepareExecutables && program.CanSharePreparedEvaluators;
         evaluate = Hooks.Select(h => program.Evaluator(h.Id, h.Kind) ?? throw new InvalidDataException("Hiányzó ökológiai gráf: " + h.Id)).ToArray();
         shadeGate = GraphZeroGate.TryCreate(graphs.Single(g => g.Hook == "forest.shading"), ForestCompetitionRules.PairInputs);
         crowdingGate = GraphZeroGate.TryCreate(graphs.Single(g => g.Hook == "forest.crowding"), ForestCompetitionRules.PairInputs);
         if (shadeGate?.SameCondition(crowdingGate) == true) crowdingGate = shadeGate;
+        var shading = graphs.Single(g => g.Hook == "forest.shading"); var crowding = graphs.Single(g => g.Hook == "forest.crowding");
+        if (prepareExecutables && !GraphHealthPlan.ReadsHealth(crowding)) healthPlan = GraphHealthPlan.TryCreate(shading, Hooks[4]);
+        PairRevision = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(new BehaviorModel { Graphs = new() { shading, crowding } }.ToJson())));
     }
     private double Evaluate(int index, double[] values = null)
     {
@@ -114,14 +136,34 @@ public sealed class EcologyResponseProgram
         v[10] = Math.Sqrt(distanceSquared); v[11] = distanceSquared;
         return (Evaluate(4), Evaluate(5, v));
     }
+    public bool TryPrepareHealthPair(double[] v, out double coefficient, out double shade, out double crowding)
+    {
+        coefficient = shade = crowding = 0;
+        if (!CanPrepareHealthPairs) return false;
+        try {
+            coefficient = healthPlan.Prepare(v);
+            shade = healthPlan.Evaluate(coefficient, v[3], v[8]);
+            crowding = evaluate[5](default, v);
+            return double.IsFinite(shade) && double.IsFinite(crowding);
+        } catch (ArithmeticException) { return false; }
+    }
+    public double PreparedShade(double coefficient, double health, double otherHealth)
+    {
+        try { return healthPlan.Evaluate(coefficient, health, otherHealth); }
+        catch (ArithmeticException error) {
+            LastError ??= Hooks[4].Name + ": " + error.Message + " A hibás válasz 0; javítsd a kijelzett gráfot.";
+            return 0;
+        }
+    }
     public bool PairMayContribute(double height, double crown, double diameter, double health, double shadeTolerance,
-        ReadOnlySpan<GraphInputRange> neighbor, double minimumDistanceSquared, double maximumDistanceSquared)
+        ReadOnlySpan<GraphInputRange> neighbor, double minimumDistanceSquared, double maximumDistanceSquared, bool ignoreHealth = false)
     {
         if (!CanBoundPairs) return true;
         var v = pairBounds;
         v[0] = GraphInputRange.Exact(height); v[1] = GraphInputRange.Exact(crown); v[2] = GraphInputRange.Exact(diameter);
         v[3] = GraphInputRange.Exact(health); v[4] = GraphInputRange.Exact(shadeTolerance);
         for (int i = 0; i < 5; i++) v[5 + i] = neighbor[i];
+        if (ignoreHealth) { v[3] = GraphInputRange.Unknown; v[8] = GraphInputRange.Unknown; }
         v[10] = new(Math.Sqrt(minimumDistanceSquared), Math.Sqrt(maximumDistanceSquared));
         v[11] = new(minimumDistanceSquared, maximumDistanceSquared);
         return shadeGate.MayBeNonZero(v) || !ReferenceEquals(shadeGate, crowdingGate) && crowdingGate.MayBeNonZero(v);

@@ -42,16 +42,16 @@ sealed partial class GameWorld
     internal static RuleProject DefaultRuleProject() => new() { Behaviors = WorldBehaviorPolicy.DefaultDocument(), Algorithms = AlgorithmBuild.CurrentReference };
     internal static void ValidateRuleProject(RuleProject project)
     {
-        _ = PrepareRuleProject(project, _ => 0);
+        _ = PrepareRuleProject(project, _ => 0, prepareExecutables: false);
     }
     internal static RuleProject NormalizeRuleProject(RuleProject project)
     {
-        var prepared = PrepareRuleProject(project, _ => 0);
+        var prepared = PrepareRuleProject(project, _ => 0, prepareExecutables: false);
         prepared.Document.Tuning = prepared.Tuning.ToOverrides();
         return prepared.Document;
     }
     private static (RuleProject Document, GameTuning Tuning, DynamicsRuntime Dynamics, WorldBehaviorPolicy Policy, RuleEngine Engine)
-        PrepareRuleProject(RuleProject project, Func<string, double> readWorld, Func<string, double> readRule = null)
+        PrepareRuleProject(RuleProject project, Func<string, double> readWorld, Func<string, double> readRule = null, bool prepareExecutables = true)
     {
         ArgumentNullException.ThrowIfNull(project);
         var copy = project.Clone();
@@ -68,11 +68,11 @@ sealed partial class GameWorld
         foreach (var hook in WorldBehaviorPolicy.Hooks)
             if (!copy.Behaviors.Graphs.Any(g => g != null && g.Hook == hook.Id && g.Kind == hook.Kind && !g.ObjectId.HasValue))
                 copy.Behaviors.Graphs.Add(WorldBehaviorPolicy.DefaultGraph(hook));
-        var policy = new WorldBehaviorPolicy(copy.Behaviors, DynamicsRuntime.Keys(copy.Dynamics, RuleWorldFields), runtime.Read);
+        var policy = new WorldBehaviorPolicy(copy.Behaviors, DynamicsRuntime.Keys(copy.Dynamics, RuleWorldFields), runtime.Read, prepareExecutables);
         // Every rule is the project's own; starter rules seed what the project has not seen yet, deleted ones stay deleted.
         copy.Rules ??= new(); copy.Fields ??= new(); copy.RemovedStarters ??= new();
         RuleEngine.AddMissingStarters(copy.Rules, copy.RemovedStarters);
-        var engine = new RuleEngine(copy.Rules, copy.Fields, copy.Dynamics.Stocks.Select(s => s.Id), readRule ?? (_ => 0)) { RemovedStarters = copy.RemovedStarters };
+        var engine = new RuleEngine(copy.Rules, copy.Fields, copy.Dynamics.Stocks.Select(s => s.Id), readRule ?? (_ => 0), prepareExecutables) { RemovedStarters = copy.RemovedStarters };
         return (copy, tuning, runtime, policy, engine);
     }
     internal void QueueRuleProject(RuleProject project)
@@ -101,7 +101,9 @@ sealed partial class GameWorld
         // A rules-only project keeps the running scene (its map and missions); a project with a world replaces it.
         ruleProjectWorld = next.Document.World ?? ruleProjectWorld;
         // Species numbers are world content the rules read; a project change installs them for the whole process.
+        var previousSpecies = ForestSpeciesBook.CaptureContext();
         ForestSpeciesBook.Apply(SpeciesEdits(next.Document.World));
+        refresh |= !ReferenceEquals(previousSpecies, ForestSpeciesBook.CaptureContext());
         // Springs are part of the hydrology the rules run: a project change moves, adds or stops them at once.
         Environment.Springs = next.Document.World?.Springs;
         algorithmGraphs = next.Document.Algorithms ?? AlgorithmBuild.CurrentReference;

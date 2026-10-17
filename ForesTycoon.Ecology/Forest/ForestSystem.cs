@@ -224,7 +224,7 @@ namespace ForesTycoon.Ecology
             monthlyPreparation.Clear();
             currentYearGrowth = lastYearGrowth = 0;
             IndividualTrees.Clear();
-            ClearPlantations(); competition.Clear(); changedResourceTiles.Clear();
+            ClearPlantations(); competition.Clear(); changedResourceTiles.Clear(); changedResourceSources.Clear();
             Array.Clear(stands);
             accumulatedSeconds = 0.0;
             month = 0;

@@ -26,20 +26,47 @@ namespace ForesTycoon.Ecology
         internal double PeakRain { get; private set; }
         internal double EventRain { get; private set; }
         internal double TotalRain { get; private set; }
-        internal double RainRate => RateAt(Time);
-        internal EcologyResponseProgram ResponseRules { get; set; }
+        internal double RainRate => Query(WeatherQuery.RainRate);
+        private EcologyResponseProgram responseRules;
+        internal EcologyResponseProgram ResponseRules {
+            get => responseRules;
+            set { responseRules = value; InvalidateQueries(); }
+        }
         private EcologyResponseProgram Responses => ResponseRules ?? EcologyResponseProgram.Default;
-        private double Ramp => Math.Clamp(Responses.Environment(EnvironmentResponse.Ramp,
-            [EventEnd - EventStart, timeScale]), 0.000000001, Math.Max(0.000000001, (EventEnd - EventStart) / 2));
+        private double Ramp => Query(WeatherQuery.Ramp);
         internal double ExpectedEventRain => PeakRain * (EventEnd - EventStart - Ramp) * HoursPerSecond;
         internal int Season => (int)Math.Floor(Time / ForestYearSeconds * 4 + 1e-9) % 4;
-        internal double Temperature => Responses.Environment(EnvironmentResponse.Temperature,
-            [Math.Sin(2 * Math.PI * (Time / ForestYearSeconds - .125)), (int)Preset,
-                Time / ForestYearSeconds - Math.Floor(Time / ForestYearSeconds), Season]);
-        internal double Humidity => Responses.Environment(EnvironmentResponse.Humidity, [(int)Preset]);
-        internal double Wind => Responses.Environment(EnvironmentResponse.Wind, [(int)Preset, RainRate, PeakRain]);
-        internal double Radiation => Responses.Environment(EnvironmentResponse.Radiation, [Cloud]);
-        internal double Cloud => Responses.Environment(EnvironmentResponse.Cloud, [(int)Preset, Time - EventStart, timeScale, previousCloud]);
+        internal double Temperature => Query(WeatherQuery.Temperature);
+        internal double Humidity => Query(WeatherQuery.Humidity);
+        internal double Wind => Query(WeatherQuery.Wind);
+        internal double Radiation => Query(WeatherQuery.Radiation);
+        internal double Cloud => Query(WeatherQuery.Cloud);
+
+        private enum WeatherQuery { RainRate, Ramp, Temperature, Humidity, Wind, Radiation, Cloud }
+        private readonly double[] queryValues = new double[7];
+        private readonly bool[] queryKnown = new bool[7];
+        private void InvalidateQueries() => Array.Clear(queryKnown);
+        private double Query(WeatherQuery query)
+        {
+            // Every tile sees the same weather state. Do not re-run these global project graphs per tile.
+            // Mutations invalidate once, rather than comparing the whole weather state on each tile read.
+            int index = (int)query;
+            if (queryKnown[index]) return queryValues[index];
+            double value = query switch {
+                WeatherQuery.RainRate => RateAt(Time),
+                WeatherQuery.Ramp => Math.Clamp(Responses.Environment(EnvironmentResponse.Ramp,
+                    [EventEnd - EventStart, timeScale]), 0.000000001, Math.Max(0.000000001, (EventEnd - EventStart) / 2)),
+                WeatherQuery.Temperature => Responses.Environment(EnvironmentResponse.Temperature,
+                    [Math.Sin(2 * Math.PI * (Time / ForestYearSeconds - .125)), (int)Preset,
+                        Time / ForestYearSeconds - Math.Floor(Time / ForestYearSeconds), Season]),
+                WeatherQuery.Humidity => Responses.Environment(EnvironmentResponse.Humidity, [(int)Preset]),
+                WeatherQuery.Wind => Responses.Environment(EnvironmentResponse.Wind, [(int)Preset, RainRate, PeakRain]),
+                WeatherQuery.Radiation => Responses.Environment(EnvironmentResponse.Radiation, [Cloud]),
+                WeatherQuery.Cloud => Responses.Environment(EnvironmentResponse.Cloud, [(int)Preset, Time - EventStart, timeScale, previousCloud]),
+                _ => throw new ArgumentOutOfRangeException(nameof(query))
+            };
+            queryValues[index] = value; queryKnown[index] = true; return value;
+        }
 
         internal WeatherSystem(int seed, double forestYearSeconds = EnvironmentSystem.SecondsPerForestYear, EcologyResponseProgram responseRules = null)
         {
@@ -66,6 +93,7 @@ namespace ForesTycoon.Ecology
         {
             previousCloud = Cloud;
             Preset = preset; EventStart = Time; EventEnd = Time + duration; PeakRain = peak; EventRain = 0;
+            InvalidateQueries();
         }
 
         internal void ForceWeather(WeatherPreset preset, int peak = -1, int duration = -1)
@@ -104,6 +132,7 @@ namespace ForesTycoon.Ecology
             var forcing = new WeatherForcing(Radiation, Temperature, Humidity, Wind);
             double rain = (RateAt(Time) + RateAt(Time + dt)) * 0.5 * dt * HoursPerSecond;
             Time += dt; TotalRain += rain; EventRain += rain;
+            InvalidateQueries();
             return new(dt, rain, forcing, Preset == WeatherPreset.Snow);
         }
     }

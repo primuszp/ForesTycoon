@@ -51,17 +51,17 @@ namespace ForesTycoon.Ecology
         EcologicalBoundary Boundary => EcologicalBoundary.None;
         double SecondsUntilBoundary => double.PositiveInfinity;
         void Advance(in EcologicalStep step);
-        IEnumerable<int> AdvanceWork(EcologicalStep step) { Advance(step); yield return 1; }
+        IEnumerable<int> AdvanceWork(EcologicalStep step);
     }
 
-    /// <summary>Stable, multi-rate process execution without per-step allocations or render dependencies.</summary>
+    /// <summary>Stable, multi-rate execution through one resumable scheduler, independent of rendering.</summary>
     internal sealed class EcologicalProcessRuntime
     {
         private readonly IEcologicalProcess[] processes;
         private readonly double[] boundaries;
-        private readonly bool hasWorkProcesses;
         private double remainder;
         private bool running, faulted;
+        internal Dictionary<string, double> WorkProfile { get; set; }
         internal double StepSeconds { get; }
         internal ulong CompletedSteps { get; private set; }
         internal double TimeSeconds { get; private set; }
@@ -104,7 +104,6 @@ namespace ForesTycoon.Ecology
                 ordered.Insert(index, process);
             }
             this.processes = ordered.ToArray();
-            hasWorkProcesses = Array.Exists(this.processes, p => p.GetType().GetMethod("AdvanceWork") != null);
             boundaries = new double[processes.Length];
             ValidateFields(initialFields ?? Array.Empty<string>());
         }
@@ -128,27 +127,7 @@ namespace ForesTycoon.Ecology
             }
         }
 
-        internal void Update(double seconds)
-        {
-            if (hasWorkProcesses) { SimulationWork.Complete(UpdateWork(seconds)); return; }
-            ValidateAdvance(seconds);
-            remainder += seconds;
-            running = true;
-            try {
-                while (remainder + 1e-10 >= StepSeconds) {
-                    remainder -= StepSeconds;
-                    double remaining = StepSeconds;
-                    while (remaining > 1e-10) {
-                        var step = NextInterval(remaining);
-                        foreach (var process in processes) process.Advance(step);
-                        TimeSeconds += step.DeltaSeconds; remaining -= step.DeltaSeconds;
-                    }
-                    CompletedSteps++;
-                }
-            }
-            catch { faulted = true; throw; }
-            finally { running = false; }
-        }
+        internal void Update(double seconds) => SimulationWork.Complete(UpdateWork(seconds));
 
         private void ValidateAdvance(double seconds)
         {
@@ -191,8 +170,12 @@ namespace ForesTycoon.Ecology
                     while (remaining > 1e-10)
                     {
                         var step = NextInterval(remaining);
-                        foreach (var process in processes)
+                        foreach (var process in processes) {
+                            long started = WorkProfile != null ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;
                             foreach (int work in process.AdvanceWork(step)) yield return work;
+                            if (WorkProfile != null) WorkProfile[process.Descriptor.Id] = WorkProfile.GetValueOrDefault(process.Descriptor.Id)
+                                + System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+                        }
                         TimeSeconds += step.DeltaSeconds;
                         remaining -= step.DeltaSeconds;
                     }

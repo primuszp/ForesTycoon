@@ -116,12 +116,15 @@ namespace ForesTycoon.Ecology
             {
                 localClimate[id] = Climate.Cell(id, new WeatherForcing(weather.Radiation, weather.Temperature, weather.Humidity, weather.Wind));
                 localClimateStamp[id] = localClimateEpoch;
+                if (localClimateErrors != null) localClimateErrors[id] = null;
             }
+            Responses.PublishQueryError(localClimateErrors?[id]);
             return localClimate[id];
         }
         private ClimateCell[] localClimate; private ulong[] localClimateStamp; private ulong localClimateEpoch = 1;
         /// <summary>Forgets the kept local weather: the next reading of every tile computes it again.</summary>
         internal void RefreshLocalClimate() => localClimateEpoch++;
+        internal bool VegetationInputsCurrent => forest == null || vegetationRevision == forest.Revision;
         internal void InvalidateVegetation() => vegetationRevision = ulong.MaxValue;
         internal ForestHydrologyInputs HydrologyInputs(int id)
         {
@@ -143,12 +146,19 @@ namespace ForesTycoon.Ecology
             if ((uint)id >= (uint)CellCount || !double.IsFinite(millimetres)) return;
             var target = store switch { WaterStore.Surface => surface, WaterStore.Soil => soil, WaterStore.Canopy => canopy, WaterStore.Snow => snow, _ => deep };
             // The root zone holds at most its saturation, the crowns their interception capacity.
-            double cap = store switch { WaterStore.Soil => soils[id].Saturation, WaterStore.Canopy => HydrologyInputs(id).InterceptionCapacity, _ => double.PositiveInfinity };
-            double value = Math.Max(0, Math.Min(millimetres, cap));
+            double cap = WaterCapacity(id, store);
+            double value = NormalizeWater(target[id], millimetres, cap);
             ruleExchanged += value - target[id];
             target[id] = value;
             WriteRevision++;
         }
+
+        internal double WaterCapacity(int id, WaterStore store) => store switch {
+            WaterStore.Soil => soils[id].Saturation, WaterStore.Canopy => HydrologyInputs(id).InterceptionCapacity,
+            _ => double.PositiveInfinity
+        };
+        internal static double NormalizeWater(double current, double requested, double capacity) =>
+            double.IsFinite(requested) ? Math.Max(0, Math.Min(requested, capacity)) : current;
 
         double IForestEnvironment.Radiation => Radiation;
         double IForestEnvironment.PeriodRadiation => PeriodRadiation;
@@ -331,9 +341,12 @@ namespace ForesTycoon.Ecology
         internal double CurrentWaterFactor(int id, ForestSpecies species) => (uint)id < (uint)CellCount
             ? Responses.WaterFactor(soils[id].Availability(soil[id]), wet[id], ForestSpeciesTraits.For(species).DrySensitivity) : 1;
 
-        internal void FinishForestMonth()
+        internal void FinishForestMonth() => SimulationWork.Complete(FinishForestMonthWork());
+        internal IEnumerable<int> FinishForestMonthWork()
         {
-            Array.Clear(wetIntegral);
+            for (int first = 0; first < wetIntegral.Length; first += 1024) {
+                Array.Clear(wetIntegral, first, Math.Min(1024, wetIntegral.Length - first)); yield return 1;
+            }
             monthSeconds = radiationIntegral = 0;
         }
 

@@ -210,6 +210,7 @@ namespace ForesTycoon
         public ulong SimulationTick => worldTick;
         internal ulong LastLoadReplayedTicks { get; private set; }
         internal bool ProfileUpdates { get; set; }
+        internal Dictionary<string, double> EcologyWorkProfile { get => ecosystem.WorkProfile; set => ecosystem.WorkProfile = value; }
         internal WorldUpdateProfile LastUpdateProfile { get; private set; }
         /// <summary>With <see cref="ProfileUpdates"/>: what the rule step of the last update cost (null when none ran).</summary>
         internal double? LastRuleStepMilliseconds { get; private set; }
@@ -248,7 +249,7 @@ namespace ForesTycoon
             long phaseStarted = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
             try {
                 while (LastUpdateWorkUnits < budget) {
-                    bool more = SimulationWork.MoveNext(updateWork);
+                    bool more = SimulationWork.MoveNext(updateWork, budget - LastUpdateWorkUnits);
                     if (ProfileUpdates && measuredPhase != workPhase) {
                         workCpu[measuredPhase] += Stopwatch.GetElapsedTime(phaseStarted).TotalMilliseconds;
                         measuredPhase = workPhase; phaseStarted = Stopwatch.GetTimestamp();
@@ -615,6 +616,7 @@ namespace ForesTycoon
             Expenses = candidate.Expenses;
             roadWeatherSeconds = candidate.roadWeatherSeconds;
             pendingForestRateRefresh = candidate.pendingForestRateRefresh;
+            ClearRuleViews();
             BindRoadRules();
             ApplyTuning(candidate.Tuning);
             foreach (var vehicle in vehicles.Vehicles) { vehicle.RoadState = vehicles.RoadState; vehicle.Passage = vehicles.Passage; }
@@ -673,9 +675,13 @@ namespace ForesTycoon
             updateWork?.Dispose(); updateWork = null; tickBoundaryActions.Clear();
             generationWork?.Dispose(); generationWork = null; commands.Clear();
             backgroundJobs.Dispose();
+            if (forest != null) foreach (int unit in forest.FinishBackgroundWork()) yield return unit;
+            if (ecosystem != null) foreach (int unit in Environment.FinishQueryWork()) yield return unit;
+            if (ruleEngine != null) foreach (int unit in ruleEngine.FinishQueryWork()) yield return unit;
             terrainRenderer?.Dispose(); terrainRenderer = null;
             if (terrain != null) foreach (int unit in terrain.DisposeWork()) yield return unit;
             terrain = null;
+            ClearRuleViews(); yield return 1;
             disposed = true;
         }
     }

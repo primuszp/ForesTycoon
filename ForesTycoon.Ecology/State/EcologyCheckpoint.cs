@@ -119,6 +119,7 @@ namespace ForesTycoon.Ecology
             CheckpointGuard.Unit(s.PreviousCloud, "cloud transition");
             random = s.Random; Time = s.Time; EventStart = s.EventStart; EventEnd = s.EventEnd;
             Preset = s.Preset; PeakRain = s.PeakRain; EventRain = s.EventRain; TotalRain = s.TotalRain; previousCloud = s.PreviousCloud;
+            InvalidateQueries();
         }
     }
 }

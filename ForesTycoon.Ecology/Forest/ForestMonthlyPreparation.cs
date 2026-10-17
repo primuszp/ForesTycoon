@@ -29,6 +29,10 @@ namespace ForesTycoon.Ecology
         internal int LastStepResourcePatches { get; private set; }
         internal bool Ready => cursor == patches.Count * 2 && snapshotRepairs.Count == 0 && resourceRepairs.Count == 0;
 
+        internal IEnumerable<int> ReserveLikeWork(ForestCompetition source) => competition.ReserveLikeWork(source);
+
+        internal IEnumerable<int> FinishQueriesWork() => competition.FinishQueriesWork();
+
         internal void Clear()
         {
             competition.Clear(); patches.Clear(); prepared.Clear();
@@ -89,7 +93,13 @@ namespace ForesTycoon.Ecology
                 ClearRepairs(); published = false;
             }
             LastStepSnapshotPatches = LastStepResourcePatches = 0;
-            int remaining = patches.Count * 2 - cursor + snapshotRepairs.Count + resourceRepairs.Count;
+            // A snapshot copies trees; a resource patch scans neighbouring candidates and runs authored graphs.
+            // Equal patch counts delayed the costly phase until halfway through the month, causing a sustained burst.
+            // Fixed scheduling weights are deterministic and affect only preparation timing, never the query result.
+            const int resourceWeight = 32;
+            int snapshots = Math.Max(0, patches.Count - cursor) + snapshotRepairs.Count;
+            int resources = patches.Count * 2 - Math.Max(cursor, patches.Count) + resourceRepairs.Count;
+            long remaining = snapshots + (long)resources * resourceWeight;
             int steps = Math.Max(1, (int)Math.Ceiling(secondsUntilMonth / EcologyTime.StepSeconds));
             int work = (int)Math.Ceiling((double)remaining / steps);
             for (int i = 0; i < work; i++)
@@ -108,40 +118,45 @@ namespace ForesTycoon.Ecology
                     LastStepSnapshotPatches++;
                     continue;
                 }
-                int id;
-                if (cursor < patches.Count * 2) id = patches[cursor++ - patches.Count].Key;
-                else if (resourceRepairs.TryDequeue(out id)) resourcePending.Remove(id);
-                else break;
-                LastStepResourcePatches++;
-                if (!store.TryGet(id, out var patch) || patch.Count == 0)
-                {
-                    if (prepared.TryGetValue(id, out var removed)) removed.Count = 0;
-                    continue;
-                }
-                if (!prepared.TryGetValue(id, out var result))
-                    prepared.Add(id, result = new());
-                if (result.Loads.Length < patch.Count)
-                {
-                    result.Loads = new ForestCompetitionLoads[patch.Trees.Length];
-                    result.Ids = new ulong[patch.Trees.Length];
-                    result.Geometry = new ForestBoundaryGeometry[patch.Trees.Length];
-                }
-                result.Count = patch.Count;
-                float age = 0, health = 0, volume = 0;
-                for (int treeIndex = 0; treeIndex < patch.Count; treeIndex++)
-                {
+                var queries = new List<ForestCompetition.Query>();
+                var outputs = new List<(PreparedPatch Patch, int Index, WorkResult<ForestCompetitionLoads> Loads)>();
+                int batchSteps = 0;
+                for (; batchSteps < Math.Min(32, Math.Max(1, (work - i + resourceWeight - 1) / resourceWeight)); batchSteps++) {
+                    int id;
+                    if (cursor < patches.Count * 2) id = patches[cursor++ - patches.Count].Key;
+                    else if (resourceRepairs.TryDequeue(out id)) resourcePending.Remove(id);
+                    else break;
+                    LastStepResourcePatches++;
                     yield return 1;
-                    var source = patch.Trees[treeIndex];
-                    var tree = source.Settle(year);
-                    var loads = new WorkResult<ForestCompetitionLoads>();
-                    foreach (int unit in competition.EvaluateLoadsWork(habitat, tree, year, loads, rules)) yield return unit;
-                    result.Loads[treeIndex] = loads.Value;
-                    result.Ids[treeIndex] = tree.Id;
-                    float treeVolume = ForestTree.Volume(tree.Dimensions);
-                    result.Geometry[treeIndex] = new(tree.Dimensions, Math.Max(0, treeVolume - ForestTree.Volume(source.Dimensions)));
-                    age += tree.Age(year); health += tree.Health; volume += treeVolume;
+                    if (!store.TryGet(id, out var patch) || patch.Count == 0) {
+                        if (prepared.TryGetValue(id, out var removed)) removed.Count = 0;
+                        continue;
+                    }
+                    if (!prepared.TryGetValue(id, out var result)) prepared.Add(id, result = new());
+                    if (result.Loads.Length < patch.Count) {
+                        result.Loads = new ForestCompetitionLoads[patch.Trees.Length];
+                        result.Ids = new ulong[patch.Trees.Length];
+                        result.Geometry = new ForestBoundaryGeometry[patch.Trees.Length];
+                    }
+                    result.Count = patch.Count;
+                    float age = 0, health = 0, volume = 0;
+                    for (int treeIndex = 0; treeIndex < patch.Count; treeIndex++) {
+                        yield return 1;
+                        var source = patch.Trees[treeIndex]; var tree = source.Settle(year);
+                        var loads = new WorkResult<ForestCompetitionLoads>();
+                        queries.Add(new(tree, year, loads)); outputs.Add((result, treeIndex, loads));
+                        result.Ids[treeIndex] = tree.Id;
+                        float treeVolume = ForestTree.Volume(tree.Dimensions);
+                        result.Geometry[treeIndex] = new(tree.Dimensions, Math.Max(0, treeVolume - ForestTree.Volume(source.Dimensions)));
+                        age += tree.Age(year); health += tree.Health; volume += treeVolume;
+                    }
+                    result.Stand = new(patch.Trees[0].Species, age / patch.Count, volume / 100, health / patch.Count);
                 }
-                result.Stand = new(patch.Trees[0].Species, age / patch.Count, volume / 100, health / patch.Count);
+                if (batchSteps == 0) break;
+                i += batchSteps * resourceWeight - 1;
+                foreach (int unit in competition.EvaluateBatchWork(habitat, queries, rules ?? ForesTycoon.Rules.EcologyResponseProgram.Default)) yield return unit;
+                foreach (var output in outputs) { output.Patch.Loads[output.Index] = output.Loads.Value; yield return 1; }
+
             }
         }
 

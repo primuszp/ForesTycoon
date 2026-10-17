@@ -295,8 +295,8 @@ sealed partial class GameWorld
             if (World.Environment == null || Id < 0 || Id >= World.Environment.CellCount) return;
             World.Environment.SetWater(Id, store, value); Invalidate();
         }
-        public double ExcessWater => Read(t => Math.Max(0, t.RootWater - t.soil.FieldCapacity));
-        public double WaterSupply => Read(t => Math.Clamp(t.RootWater <= t.soil.WiltingPoint ? 0 : t.soil.Availability(t.RootWater), 0, 1));
+        public double ExcessWater => Excess(World, Id);
+        public double WaterSupply => Supply(World, Id);
         public double Waterlogging => Inside ? World.Environment.Waterlogging(Id) : 0;
         public double Infiltration => Read(t => t.soil.InfiltrationPerHour);
         public double Saturation => Read(t => t.soil.Saturation);
@@ -314,22 +314,15 @@ sealed partial class GameWorld
         private Ecology.ClimateCell Climate => World.Environment.LocalClimate(Id);
         public double Rain => Inside ? World.Environment.LiquidRainRate * Climate.RainMultiplier : 0;
         public double Snowfall => Inside ? World.Environment.SnowfallRate * Climate.RainMultiplier : 0;
-        public double PotentialEvaporation => Inside ? Climate.Forcing.Evaporation(World.Environment.ResponseRules ?? ForesTycoon.Rules.EcologyResponseProgram.Default) : 0;
+        public double PotentialEvaporation => Inside ? World.Environment.PotentialEvaporation(Id) : 0;
         public double Temperature => Inside ? Climate.Forcing.Temperature : 0;
         public double LeafAreaIndex => Inside ? World.Environment.HydrologyInputs(Id).LeafAreaIndex : 0;
         public double InterceptionCapacity => Inside ? World.Environment.HydrologyInputs(Id).InterceptionCapacity : 0;
         public bool Sealed => World.Map.IsValidTileId(Id) && ((Ecology.IForestHabitat)World.Map).IsImpervious(Id);
         public bool Outlet => World.Map.IsValidTileId(Id) && ((Ecology.IForestHabitat)World.Map).IsWaterOutlet(Id);
         public double SpringRate => Inside ? World.Environment.SpringRate(Id) : 0;
-        public double CanopyFill => InterceptionCapacity > 0 ? Math.Clamp(CanopyWater / InterceptionCapacity, 0, 1) : 1;
-        public double Drop
-        {
-            get {
-                double level = WaterLevel, drop = 0;
-                foreach (var n in Neighbours) drop += Math.Max(0, level - n.WaterLevel);
-                return drop * 1000;
-            }
-        }
+        public double CanopyFill => Fill(World, Id);
+        public double Drop => WaterDrop(World, Id);
         public double Elevation => World.Map.IsValidTileId(Id) ? ((Ecology.IForestHabitat)World.Map).GetGroundHeight(Id) : 0;
         public double WaterLevel => Elevation + SurfaceWater / 1000;
 
@@ -343,6 +336,27 @@ sealed partial class GameWorld
         private static double Interception(GameWorld w, int id) => Within(w, id) ? w.Environment.HydrologyInputs(id).InterceptionCapacity : 0;
         private static double Height(GameWorld w, int id) => w.Map.IsValidTileId(id) ? ((Ecology.IForestHabitat)w.Map).GetGroundHeight(id) : 0;
         private static double Level(GameWorld w, int id) => Height(w, id) + Store(w, id, Ecology.EnvironmentSystem.WaterStore.Surface) / 1000;
+        private static double Excess(GameWorld w, int id) => Within(w, id)
+            ? Math.Max(0, Store(w, id, Ecology.EnvironmentSystem.WaterStore.Soil) - SoilAt(w, id).FieldCapacity) : 0;
+        private static double Supply(GameWorld w, int id)
+        {
+            if (!Within(w, id)) return 0;
+            var soil = SoilAt(w, id); double root = Store(w, id, Ecology.EnvironmentSystem.WaterStore.Soil);
+            return Math.Clamp(root <= soil.WiltingPoint ? 0 : soil.Availability(root), 0, 1);
+        }
+        private static double Fill(GameWorld w, int id)
+        {
+            double capacity = Interception(w, id);
+            return capacity > 0 ? Math.Clamp(Store(w, id, Ecology.EnvironmentSystem.WaterStore.Canopy) / capacity, 0, 1) : 1;
+        }
+        private static double WaterDrop(GameWorld w, int id)
+        {
+            double level = Level(w, id), drop = 0;
+            Span<int> ids = stackalloc int[4];
+            int count = w.Map.IsValidTileId(id) ? w.Map.GetTileNeighbours(id, ids) : 0;
+            for (int i = 0; i < count; i++) drop += Math.Max(0, level - Level(w, ids[i]));
+            return drop * 1000;
+        }
         private static double Flag(bool value) => value ? 1 : 0;
 
         /// <summary>A reader of the property named <paramref name="property"/> that skips the view; null when it has none.</summary>
@@ -354,12 +368,8 @@ sealed partial class GameWorld
             nameof(DeepWater) => (w, id) => Store(w, id, Ecology.EnvironmentSystem.WaterStore.Deep),
             nameof(CanopyWater) => (w, id) => Store(w, id, Ecology.EnvironmentSystem.WaterStore.Canopy),
             nameof(Snow) => (w, id) => Store(w, id, Ecology.EnvironmentSystem.WaterStore.Snow),
-            nameof(ExcessWater) => (w, id) => Within(w, id) ? Math.Max(0, Store(w, id, Ecology.EnvironmentSystem.WaterStore.Soil) - SoilAt(w, id).FieldCapacity) : 0,
-            nameof(WaterSupply) => (w, id) => {
-                if (!Within(w, id)) return 0;
-                var soil = SoilAt(w, id); double root = Store(w, id, Ecology.EnvironmentSystem.WaterStore.Soil);
-                return Math.Clamp(root <= soil.WiltingPoint ? 0 : soil.Availability(root), 0, 1);
-            },
+            nameof(ExcessWater) => Excess,
+            nameof(WaterSupply) => Supply,
             nameof(Waterlogging) => (w, id) => Within(w, id) ? w.Environment.Waterlogging(id) : 0,
             nameof(Infiltration) => (w, id) => Within(w, id) ? SoilAt(w, id).InfiltrationPerHour : 0,
             nameof(Saturation) => (w, id) => Within(w, id) ? SoilAt(w, id).Saturation : 0,
@@ -370,19 +380,12 @@ sealed partial class GameWorld
             nameof(Paved) => (w, id) => Within(w, id) && (w.Map.IsRoadTile(id) || w.Map.IsBuildingTile(id)) ? 1 : 0,
             nameof(Rain) => (w, id) => Within(w, id) ? w.Environment.LiquidRainRate * w.Environment.LocalClimate(id).RainMultiplier : 0,
             nameof(Snowfall) => (w, id) => Within(w, id) ? w.Environment.SnowfallRate * w.Environment.LocalClimate(id).RainMultiplier : 0,
-            nameof(PotentialEvaporation) => (w, id) => Within(w, id) ? w.Environment.LocalClimate(id).Forcing.Evaporation(w.Environment.ResponseRules ?? ForesTycoon.Rules.EcologyResponseProgram.Default) : 0,
+            nameof(PotentialEvaporation) => (w, id) => Within(w, id) ? w.Environment.PotentialEvaporation(id) : 0,
             nameof(Temperature) => (w, id) => Within(w, id) ? w.Environment.LocalClimate(id).Forcing.Temperature : 0,
             nameof(LeafAreaIndex) => (w, id) => Within(w, id) ? w.Environment.HydrologyInputs(id).LeafAreaIndex : 0,
             nameof(InterceptionCapacity) => Interception,
-            nameof(CanopyFill) => (w, id) => Interception(w, id) > 0
-                ? Math.Clamp(Store(w, id, Ecology.EnvironmentSystem.WaterStore.Canopy) / Interception(w, id), 0, 1) : 1,
-            nameof(Drop) => (w, id) => {
-                double level = Level(w, id), drop = 0;
-                Span<int> ids = stackalloc int[4];
-                int count = w.Map.IsValidTileId(id) ? w.Map.GetTileNeighbours(id, ids) : 0;
-                for (int i = 0; i < count; i++) drop += Math.Max(0, level - Level(w, ids[i]));
-                return drop * 1000;
-            },
+            nameof(CanopyFill) => Fill,
+            nameof(Drop) => WaterDrop,
             nameof(Sealed) => (w, id) => Flag(w.Map.IsValidTileId(id) && ((Ecology.IForestHabitat)w.Map).IsImpervious(id)),
             nameof(Outlet) => (w, id) => Flag(w.Map.IsValidTileId(id) && ((Ecology.IForestHabitat)w.Map).IsWaterOutlet(id)),
             nameof(SpringRate) => (w, id) => Within(w, id) ? w.Environment.SpringRate(id) : 0,
@@ -392,15 +395,17 @@ sealed partial class GameWorld
         };
 
         /// <summary>A writer of the water store named <paramref name="property"/> that skips the view; null for other fields.</summary>
-        internal static Action<GameWorld, int, double> DirectWrite(string property)
-        {
-            Ecology.EnvironmentSystem.WaterStore? store = property switch {
+        private static Ecology.EnvironmentSystem.WaterStore? StockStore(string property) => property switch {
                 nameof(RootWater) => Ecology.EnvironmentSystem.WaterStore.Soil, nameof(SurfaceWater) => Ecology.EnvironmentSystem.WaterStore.Surface,
                 nameof(DeepWater) => Ecology.EnvironmentSystem.WaterStore.Deep, nameof(CanopyWater) => Ecology.EnvironmentSystem.WaterStore.Canopy,
                 nameof(Snow) => Ecology.EnvironmentSystem.WaterStore.Snow, _ => null };
-            if (store is not { } s) return null;
+        internal static Action<GameWorld, int, double> DirectWrite(string property)
+        {
+            if (StockStore(property) is not { } s) return null;
             return (w, id, value) => { if (Within(w, id)) w.Environment.SetWater(id, s, value); };
         }
+        internal static RuleStockPlan DirectStock(string property) => StockStore(property) is { } store
+            ? new((w, id) => w.Environment.WaterCapacity(id, store), Ecology.EnvironmentSystem.NormalizeWater) : null;
 
         /// <summary>The members of a collection without binding the view: <see cref="Neighbours"/> by tile ID, in the same order.</summary>
         internal static Func<GameWorld, int, int[]> DirectMembers(string property) => property != nameof(Neighbours) ? null : (w, id) => {
@@ -523,8 +528,18 @@ sealed partial class GameWorld
         public bool Remove() => World.Map.RemoveSkidTrail(Id);
     }
 
+    private sealed class TopologyCache
+    {
+        private ForestTreeStore store;
+        private ulong storage, version;
+        internal bool Matches(ForestTreeStore current) => ReferenceEquals(store, current)
+            && storage == current.StorageEpoch && version == current.TopologyVersion;
+        internal void Remember(ForestTreeStore current) { store = current; storage = current.StorageEpoch; version = current.TopologyVersion; }
+    }
+
     private sealed class TreeView : RuleView, ITree
     {
+        private readonly TopologyCache topology = new();
         internal (int Tile, int Index)[] Trees = Array.Empty<(int, int)>();
         private readonly TileView tile = new();
         private ref ForestTree Tree
@@ -584,16 +599,11 @@ sealed partial class GameWorld
         public double ShadeTolerance => ForestSpeciesProfile.For(Tree.Species).ShadeTolerance;
 
         /// <summary>A fixed visiting order: tiles ascending, trees in reverse store order (safe deletion).</summary>
-        internal override int[] Elements()
-        {
-            var list = new List<(int, int)>(World.forest.IndividualTreeCount);
-            foreach (var (id, patch) in World.forest.IndividualTrees.Patches.OrderBy(p => p.Key))
-                for (int i = patch.Count - 1; i >= 0; i--) list.Add((id, i));
-            Trees = list.ToArray(); tile.Invalidate();
-            return Enumerable.Range(0, Trees.Length).ToArray();
-        }
+        internal override int[] Elements() { SimulationWork.Complete(PrepareElementsWork()); return PreparedElements; }
         internal override IEnumerable<int> PrepareElementsWork()
         {
+            var store = World.forest.IndividualTrees;
+            if (PreparedElements != null && topology.Matches(store)) { yield return 1; yield break; }
             Trees = new (int, int)[World.forest.IndividualTreeCount];
             PreparedElements = new int[Trees.Length]; int n = 0;
             for (int id = 0; id < World.Map.Tiles.Count; id++) {
@@ -603,7 +613,7 @@ sealed partial class GameWorld
                     Trees[n] = (id, i); PreparedElements[n] = n; n++; yield return 1;
                 }
             }
-            tile.Invalidate();
+            tile.Invalidate(); topology.Remember(store);
         }
         internal override int Size() => Trees.Length;
     }
@@ -624,6 +634,7 @@ sealed partial class GameWorld
 
     private sealed class DeadTreeView : RuleView, IDeadTree
     {
+        private readonly TopologyCache topology = new();
         private (int Tile, int Index)[] trees = System.Array.Empty<(int, int)>();
         private readonly TileView tile = new();
         private ForestDeadTree Tree { get { var (t, i) = trees[Id]; World.forest.IndividualTrees.TryGet(t, out var patch); return patch.DeadTrees[i]; } }
@@ -636,6 +647,8 @@ sealed partial class GameWorld
         internal override int[] Elements() { SimulationWork.Complete(PrepareElementsWork()); return PreparedElements; }
         internal override IEnumerable<int> PrepareElementsWork()
         {
+            var store = World.forest.IndividualTrees;
+            if (PreparedElements != null && topology.Matches(store)) { yield return 1; yield break; }
             int count = 0;
             for (int t = 0; t < World.Map.Tiles.Count; t++) {
                 if (World.forest.IndividualTrees.TryGet(t, out var p)) count += p.DeadTrees?.Count ?? 0;
@@ -649,12 +662,13 @@ sealed partial class GameWorld
                     trees[n] = (t, i); PreparedElements[n] = n; n++; yield return 1;
                 }
             }
-            tile.Invalidate();
+            tile.Invalidate(); topology.Remember(store);
         }
     }
 
     private sealed class StumpView : RuleView, IStump
     {
+        private readonly TopologyCache topology = new();
         internal (int Tile, int Index)[] Stumps = Array.Empty<(int, int)>();
         private readonly TileView tile = new();
         private ForestTreeStump Stump { get { var (t, i) = Stumps[Id]; World.forest.IndividualTrees.TryGet(t, out var p); return p.Stumps[i]; } }
@@ -675,16 +689,11 @@ sealed partial class GameWorld
         }
 
         /// <summary>Tiles ascending, stumps of a tile last to first: removing one never moves a stump still to be visited.</summary>
-        internal override int[] Elements()
-        {
-            var list = new List<(int, int)>();
-            foreach (var (id, patch) in World.forest.IndividualTrees.Patches.OrderBy(p => p.Key))
-                if (patch.Stumps != null) for (int i = patch.Stumps.Count - 1; i >= 0; i--) list.Add((id, i));
-            Stumps = list.ToArray(); tile.Invalidate();
-            return Enumerable.Range(0, Stumps.Length).ToArray();
-        }
+        internal override int[] Elements() { SimulationWork.Complete(PrepareElementsWork()); return PreparedElements; }
         internal override IEnumerable<int> PrepareElementsWork()
         {
+            var store = World.forest.IndividualTrees;
+            if (PreparedElements != null && topology.Matches(store)) { yield return 1; yield break; }
             var list = new List<(int, int)>();
             for (int id = 0; id < World.Map.Tiles.Count; id++) {
                 yield return 1;
@@ -693,6 +702,7 @@ sealed partial class GameWorld
             }
             Stumps = list.ToArray(); tile.Invalidate();
             PreparedElements = Enumerable.Range(0, Stumps.Length).ToArray();
+            topology.Remember(store);
         }
         internal override int Size() => Stumps.Length;
     }
@@ -739,10 +749,10 @@ sealed partial class GameWorld
     private sealed record BoundView(GameWorld World, RuleView View);
 
     // Views hold per-world element snapshots; each world gets its own instance of every view.
-    private static readonly ConditionalWeakTable<GameWorld, Dictionary<Type, RuleView>> Views = new();
+    private readonly Dictionary<Type, RuleView> ruleViews = new();
     private static RuleView View(GameWorld world, Type type)
     {
-        var views = Views.GetValue(world, _ => new());
+        var views = world.ruleViews;
         lock (views) {
             if (!views.TryGetValue(type, out var view)) {
                 views[type] = view = (RuleView)Activator.CreateInstance(type, nonPublic: true);
@@ -757,6 +767,12 @@ sealed partial class GameWorld
     internal static RuleSchema RuleObjects => ruleObjects.Value;
 
     /// <summary>Rule scopes of the game: every concrete kind of the object model with the view that implements it.</summary>
+    private void ClearRuleViews()
+    {
+        foreach (var scope in RuleEngine.Scopes) scope.Release?.Invoke(this);
+        ruleViews.Clear();
+    }
+
     internal static RuleScope[] DiscoveredScopes() => DiscoverScopes(RuleObjects, typeof(GameWorld).Assembly.GetTypes());
 
     /// <summary>
@@ -797,9 +813,11 @@ sealed partial class GameWorld
             var get = Getter(f.Property); var set = f.Writable ? Setter(f.Property) : null;
             var directGet = Direct<Func<GameWorld, int, double>>("DirectRead", f.Property.Name);
             var directSet = set == null ? null : Direct<Action<GameWorld, int, double>>("DirectWrite", f.Property.Name);
+            var stock = (RuleStockPlan)viewType.GetMethod("DirectStock", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)?.Invoke(null, new object[] { f.Property.Name });
             fields.Add(new(f.Name, $"{f.Display}: {Help(f)}", directGet ?? ((w, id) => get(Bound(w, id))), set == null ? null
                 : directSet != null ? (w, id, v) => directSet(w, id, Math.Clamp(v, f.Min, f.Max)) : (w, id, v) => set(Bound(w, id), Math.Clamp(v, f.Min, f.Max))) {
-                Min = f.Min, Max = f.Max, ViewRead = directGet == null ? null : (w, id) => get(Bound(w, id)) });
+                Min = f.Min, Max = f.Max, LocalStock = stock,
+                LocalRead = viewType == typeof(TileView) && directGet != null && f.Property.Name != nameof(TileView.Drop), ViewRead = directGet == null ? null : (w, id) => get(Bound(w, id)) });
         }
         // Summaries of the object's own collections (“trees.avg.height”), then the attached objects' fields and summaries.
         foreach (var s in entity.Summaries) {
@@ -807,17 +825,17 @@ sealed partial class GameWorld
             fields.Add(new(s.Name, $"{s.Display}: {Help(s)}", (w, id) => get(Bound(w, id))));
         }
         foreach (var r in entity.Relations) {
-            var target = schema.Find(r.Target); var follow = r.Property.GetMethod;
+            var target = schema.Find(r.Target); var follow = ObjectGetter(r.Property);
             foreach (var f in target.Fields) {
                 // A writable field of an attached object is writable through the relation: a tree may take its tile's water.
                 var get = Getter(f.Property); var set = f.Writable ? Setter(f.Property) : null;
-                fields.Add(new(r.Name + "." + f.Name, $"{r.Display} › {f.Display}: {Help(f)}", (w, id) => get(follow.Invoke(Bound(w, id), null)),
-                    set == null ? null : (w, id, v) => set(follow.Invoke(Bound(w, id), null), Math.Clamp(v, f.Min, f.Max))) {
+                fields.Add(new(r.Name + "." + f.Name, $"{r.Display} › {f.Display}: {Help(f)}", (w, id) => get(follow(Bound(w, id))),
+                    set == null ? null : (w, id, v) => set(follow(Bound(w, id)), Math.Clamp(v, f.Min, f.Max))) {
                         Min = f.Min, Max = f.Max, Available = (w, id) => Bound(w, id).HasRelation(r.Name) });
             }
             foreach (var s in target.Summaries) {
                 var get = Summary(s);
-                fields.Add(new(r.Name + "." + s.Name, $"{r.Display} › {s.Display}: {Help(s)}", (w, id) => get(follow.Invoke(Bound(w, id), null))));
+                fields.Add(new(r.Name + "." + s.Name, $"{r.Display} › {s.Display}: {Help(s)}", (w, id) => get(follow(Bound(w, id)))));
             }
         }
         var actions = entity.Actions.Select(a => new RuleScopeAction(a.Name, a.Help, (w, id) => (bool)a.Method.Invoke(Bound(w, id), null))).ToArray();
@@ -828,7 +846,11 @@ sealed partial class GameWorld
                 ?? ((w, id) => ((IEnumerable<object>)items.Invoke(Bound(w, id), null)).Select(m => (int)((RuleView)m).Index).ToArray()));
         }).ToArray();
         return new(entity.Id, entity.Name, entity.Element, w => View(w, viewType).Elements(), w => View(w, viewType).Size(), fields.ToArray(), actions) {
-            PrepareElements = w => View(w, viewType).PrepareElementsWork(), PreparedElements = w => View(w, viewType).PreparedElements,
+            PrepareElements = w => Bound(w, 0).PrepareElementsWork(), PreparedElements = w => Bound(w, 0).PreparedElements,
+            Release = w => {
+                var cached = last;
+                if (cached?.World == w) System.Threading.Interlocked.CompareExchange(ref last, null, cached);
+            },
             Entity = entity.Id, Collections = collections,
             StateIndex = entity.Id == "tree" ? (w, id) => checked((int)((TreeView)Bound(w, id)).TreeId) : (_, id) => id,
             StateSize = entity.Id == "tree" ? w => w.forest.IndividualTrees.StateSize : null };
@@ -864,6 +886,13 @@ sealed partial class GameWorld
         if (p.PropertyType == typeof(bool)) value = Expression.Condition(value, Expression.Constant(1d), Expression.Constant(0d));
         else if (p.PropertyType.IsEnum) value = Expression.Convert(value, Enum.GetUnderlyingType(p.PropertyType));
         return Expression.Lambda<Func<object, double>>(Expression.Convert(value, typeof(double)), o).Compile();
+    }
+
+    private static Func<object, object> ObjectGetter(System.Reflection.PropertyInfo property)
+    {
+        var source = Expression.Parameter(typeof(object));
+        return Expression.Lambda<Func<object, object>>(Expression.Convert(
+            Expression.Property(Expression.Convert(source, property.DeclaringType), property), typeof(object)), source).Compile();
     }
 
     private static Action<object, double> Setter(System.Reflection.PropertyInfo p)

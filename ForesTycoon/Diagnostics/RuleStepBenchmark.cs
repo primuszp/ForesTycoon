@@ -15,14 +15,23 @@ namespace ForesTycoon
                 foreach (var weather in new[] { WeatherPreset.Rain, WeatherPreset.Snow }) RunCase(size, weather);
         }
 
-        internal static void RunHosts()
+        internal static void RunHosts(params int[] sizes)
         {
-            foreach (int size in new[] { 64, 128 }) {
+            foreach (int size in sizes.Length == 0 ? new[] { 64, 128, 256 } : sizes) {
                 using var world = new GameWorld(TerrainSettings.Default.WithNodeSize(size + 1, 42).WithForestPattern(ForestPattern.LargeMixed),
                     forestYearSeconds: 900, enableRendering: false);
                 world.Environment.ForceWeather(WeatherPreset.Rain, 30, 600);
-                Console.WriteLine($"Normal tempo: {size}x{size}, {world.ForestTreeCount} trees, 900 s/year; 120 simulated seconds including a month boundary");
-                MeasureHost(world, size, WeatherPreset.Rain, 7200);
+                bool restored = System.Environment.GetEnvironmentVariable("FORESTYCOON_RESTORED_HOST") == "1";
+                if (restored) {
+                    using var saved = new System.IO.MemoryStream(); world.Save(saved); saved.Position = 0; world.Load(saved);
+                }
+                if (System.Environment.GetEnvironmentVariable("FORESTYCOON_SERIAL_FLOWS") == "1") world.RuleBook.PlanLocalFlows = false;
+                bool profile = System.Environment.GetEnvironmentVariable("FORESTYCOON_PROFILE_HOST") == "1";
+                int seconds = profile ? 30 : 240;
+                if (int.TryParse(System.Environment.GetEnvironmentVariable("FORESTYCOON_HOST_SECONDS"), out int requested) && requested is >= 1 and <= 900) seconds = requested;
+                if (profile) { world.ProfileUpdates = true; world.EcologyWorkProfile = new(StringComparer.Ordinal); world.RuleBook.Profile = new(StringComparer.Ordinal); }
+                Console.WriteLine($"Normal tempo: {size}x{size}, {world.ForestTreeCount} trees, 900 s/year; {seconds} simulated seconds; restored {restored}");
+                MeasureHost(world, size, WeatherPreset.Rain, seconds * 60);
             }
         }
 
@@ -87,27 +96,51 @@ namespace ForesTycoon
 
         private static void MeasureHost(GameWorld world, int size, WeatherPreset preset, int frameCount = 900)
         {
-            var runner = new ForesTycoon.Engine.SimulationFrameRunner(maximumWorkMilliseconds: 4);
+            var runner = ForesTycoon.Engine.SimulationFrameRunner.Interactive();
             runner.Clock.Reset(world.SimulationTick);
-            var frames = new List<double>(); double peakDebt = 0;
+            var frames = new List<double>(); double peakDebt = 0, warmPeakDebt = 0;
+            bool paced = System.Environment.GetEnvironmentVariable("FORESTYCOON_PACED_HOST") == "1";
+            var pacing = System.Diagnostics.Stopwatch.StartNew();
+            double maximumBudget = 0;
+            double environment = 0, logistics = 0, wildlife = 0, other = 0;
+            bool Advance(double dt) {
+                bool done = world.ContinueUpdate(dt);
+                if (done && world.ProfileUpdates) {
+                    var p = world.LastUpdateProfile; environment += p.EnvironmentForestMs; logistics += p.LogisticsMs;
+                    wildlife += p.WildlifeMs; other += p.OtherSystemsMs;
+                }
+                return done;
+            }
             // Virtual 60 Hz arrival rate; no GPU or sleeps. Both normal and accelerated forest years are measured.
             for (int frame = 0; frame < frameCount; frame++) {
+                // Background query jobs also run between render frames. A tight virtual host is a conservative
+                // stress test; paced mode gives workers the same wall time as a real 60 Hz interactive host.
+                if (paced) while (pacing.Elapsed.TotalSeconds < frame / 60d) System.Threading.Thread.Sleep(1);
                 long start = System.Diagnostics.Stopwatch.GetTimestamp();
-                runner.AdvanceWork(1d / 60, () => world.ContinueCommands(), dt => world.ContinueUpdate(dt), () => world.ForegroundPending);
+                runner.AdvanceWork(1d / 60, () => world.ContinueCommands(), Advance, () => world.ForegroundPending);
                 frames.Add(System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds);
+                maximumBudget = Math.Max(maximumBudget, runner.FrameWorkMilliseconds);
                 peakDebt = Math.Max(peakDebt, runner.Clock.PendingSimulationSeconds);
+                if (frame >= 1800) warmPeakDebt = Math.Max(warmPeakDebt, runner.Clock.PendingSimulationSeconds);
+                if (frameCount >= 7200 && (frame + 1) % 1800 == 0)
+                    Console.WriteLine($"  frame {frame + 1}: logical tick {world.SimulationTick}; debt {runner.Clock.PendingSimulationSeconds:F4} s");
             }
             double debt = runner.Clock.PendingSimulationSeconds;
             int recovery = 0;
             while (runner.Clock.WorkInProgress || runner.Clock.PendingSimulationSeconds >= runner.Clock.StepSeconds) {
                 if (++recovery > 100000) throw new InvalidOperationException("Simulation debt did not clear.");
-                runner.AdvanceWork(0, () => world.ContinueCommands(), dt => world.ContinueUpdate(dt), () => world.ForegroundPending);
+                runner.AdvanceWork(0, () => world.ContinueCommands(), Advance, () => world.ForegroundPending);
             }
             frames.Sort();
             double P(double q) => frames[Math.Min(frames.Count - 1, (int)(frames.Count * q))];
-            Console.WriteLine($"{size}x{size} {preset} host 4ms/60Hz: CPU frame p95/p99/max {P(.95):F3}/{P(.99):F3}/{frames[^1]:F3} ms; "
-                + $"debt peak/end {peakDebt:F4}/{debt:F4} simulation-s; {recovery} recovery frames without new time; "
+            Console.WriteLine($"{size}x{size} {preset} host 4–12ms/60Hz, paced {paced}, budget peak {maximumBudget:F3} ms: CPU frame p95/p99/max {P(.95):F3}/{P(.99):F3}/{frames[^1]:F3} ms; "
+                + $"debt peak/warm-peak/end {peakDebt:F4}/{warmPeakDebt:F4}/{debt:F4} simulation-s; {recovery} recovery frames without new time; "
                 + $"dropped {runner.Clock.DroppedSimulationSeconds:F4} s; final debt {runner.Clock.PendingSimulationSeconds:F4} s");
+            if (world.ProfileUpdates) {
+                Console.WriteLine($"  profile environment/forest {environment:F3}, logistics/rules {logistics:F3}, wildlife {wildlife:F3}, other {other:F3} ms");
+                foreach (var rule in world.RuleBook.Profile.OrderByDescending(p => p.Value)) Console.WriteLine($"  rule {rule.Key}: {rule.Value:F3} ms");
+                foreach (var phase in world.EcologyWorkProfile) Console.WriteLine($"  ecology {phase.Key}: {phase.Value:F3} ms (elapsed, includes worker waits)");
+            }
             if (runner.Clock.DroppedSimulationSeconds != 0) throw new InvalidOperationException("Host discarded simulation time.");
         }
 

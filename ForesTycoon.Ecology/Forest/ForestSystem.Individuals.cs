@@ -15,6 +15,11 @@ namespace ForesTycoon.Ecology
         internal ForestMonthProfile LastMonthProfile { get; private set; }
         internal int LastPreparationSnapshotPatches => monthlyPreparation.LastStepSnapshotPatches;
         internal int LastPreparationResourcePatches => monthlyPreparation.LastStepResourcePatches;
+        internal IEnumerable<int> FinishBackgroundWork()
+        {
+            foreach (int unit in competition.FinishQueriesWork()) yield return unit;
+            foreach (int unit in monthlyPreparation.FinishQueriesWork()) yield return unit;
+        }
         private void CompleteLocalEditRevision()
         {
             ulong before = Revision;
@@ -25,6 +30,7 @@ namespace ForesTycoon.Ecology
         internal IEnumerable<int> PrepareNextMonthWork() => Environment == null ? Array.Empty<int>()
             : monthlyPreparation.AdvanceWork(habitat, IndividualTrees, Revision, (month + 1) / 12.0, SecondsUntilMonth, Responses);
         private readonly HashSet<int> changedResourceTiles = new();
+        private readonly HashSet<int> changedResourceSources = new();
         internal double ForestYear => month / 12.0 + accumulatedSeconds / secondsPerYear;
         internal int IndividualTreeCount => IndividualTrees.TreeCount;
         private double currentYearGrowth, lastYearGrowth;
@@ -73,12 +79,13 @@ namespace ForesTycoon.Ecology
             monthlyPreparation.Clear();
             currentYearGrowth = lastYearGrowth = 0;
             IndividualTrees.Clear();
-            ClearPlantations(); competition.Clear(); changedResourceTiles.Clear();
+            ClearPlantations(); competition.Clear(); changedResourceTiles.Clear(); changedResourceSources.Clear();
             for (int id = 0; id < stands.Length; id++)
                 { foreach (int unit in IndividualTrees.CreateWork(id, stands[id], ForestYear, habitat.Seed, responses: Responses)) yield return unit; yield return 1; }
             for (int id = 0; id < stands.Length; id++) { stands[id] = IndividualStand(id, ForestYear); yield return 1; }
             foreach (int unit in competition.SnapshotWork(habitat, IndividualTrees, ForestYear)) yield return unit;
             foreach (var entry in IndividualTrees.Patches) foreach (int unit in UpdateIndividualRatesWork(entry.Key, entry.Value, ForestYear)) yield return unit;
+            foreach (int unit in monthlyPreparation.ReserveLikeWork(competition)) yield return unit;
         }
 
         private ForestStand IndividualStand(int id, double year)
@@ -156,6 +163,7 @@ namespace ForesTycoon.Ecology
 
         private void MarkResourceArea(int tileId)
         {
+            if (!changedResourceSources.Add(tileId)) return;
             changedResourceTiles.Add(tileId);
             Span<int> first = stackalloc int[4], second = stackalloc int[4];
             int count = habitat.GetAdjacentTileIds(tileId, first);
@@ -183,7 +191,7 @@ namespace ForesTycoon.Ecology
             foreach (int unit in RecalculateStatisticsWork()) yield return unit;
             Revision++;
             foreach (int unit in monthlyPreparation.InvalidateLocalWork(habitat, before, Revision, (month + 1) / 12.0, changedResourceTiles)) yield return unit;
-            changedResourceTiles.Clear();
+            changedResourceTiles.Clear(); changedResourceSources.Clear();
         }
         private IEnumerable<int> StepIndividualMonthWork()
         {

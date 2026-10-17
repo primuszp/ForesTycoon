@@ -7,6 +7,7 @@ public class SystemDynamicsTests
     {
         public EcologicalProcessDescriptor Descriptor { get; } = new(id, phase, reads!, writes!);
         public void Advance(in EcologicalStep step) => action?.Invoke(step);
+        public IEnumerable<int> AdvanceWork(EcologicalStep step) { Advance(step); yield return 1; }
     }
 
     private sealed class Calendar : IEcologicalProcess
@@ -16,6 +17,7 @@ public class SystemDynamicsTests
         public double SecondsUntilBoundary { get; private set; } = .75;
         public void Advance(in EcologicalStep step) => SecondsUntilBoundary = step.EndsAt(Boundary)
             ? .75 : SecondsUntilBoundary - step.DeltaSeconds;
+        public IEnumerable<int> AdvanceWork(EcologicalStep step) { Advance(step); yield return 1; }
     }
 
     [Fact]
@@ -114,6 +116,7 @@ public class SystemDynamicsTests
         internal double BalanceError;
         public EcologicalProcessDescriptor Descriptor { get; } = new("reservoir", EcologicalPhase.Environment);
         internal Reservoir() => Water = Network.AddStock("water", 0);
+        public IEnumerable<int> AdvanceWork(EcologicalStep step) { Advance(step); yield return 1; }
         public void Advance(in EcologicalStep step)
         {
             double water = Network.Quantity(Water);
@@ -141,13 +144,23 @@ public class SystemDynamicsTests
     }
 
     [Fact]
-    public void WarmRuntimeAndNetworkDoNotAllocatePerStep()
+    public void WarmSlicedRuntimeAllocationsAreBounded()
     {
         var process = new Reservoir();
         var runtime = new EcologicalProcessRuntime(.5, new IEcologicalProcess[] { process });
         for (int i = 0; i < 100; i++) runtime.Update(.5);
         long before = GC.GetAllocatedBytesForCurrentThread();
         for (int i = 0; i < 1000; i++) runtime.Update(.5);
+        Assert.InRange(GC.GetAllocatedBytesForCurrentThread() - before, 0, 256000);
+    }
+
+    [Fact]
+    public void WarmStockNetworkCommitDoesNotAllocate()
+    {
+        var network = new StockFlowNetwork("mm"); var stock = network.AddStock("water", 0);
+        for (int i = 0; i < 100; i++) { network.BeginStep(.5); network.Inflow(stock, 1); network.Commit(); }
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 1000; i++) { network.BeginStep(.5); network.Inflow(stock, 1); network.Commit(); }
         Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
     }
 

@@ -76,6 +76,11 @@ namespace ForesTycoon.Rules
         public bool Overrides(string hook, string kind) => overriding.Contains((hook, kind));
         public BehaviorModel Document => document.Clone();
         public bool HasGraphs => document.Graphs.Count > 0;
+        public string[] NamedKeys => programs.Values.SelectMany(p => p.NamedKeys).Distinct(StringComparer.Ordinal).ToArray();
+        public bool CanSharePreparedEvaluators => programs.Values.All(p => p.Prepared);
+        public CompiledBehaviorControllers Controllers { get; }
+        /// <summary>Prepare delegates during project loading without reading any world values.</summary>
+        public void Prepare() { foreach (var program in programs.Values) program.Prepare(); }
         public string LastError { get; private set; }
         public void ClearError() => LastError = null;
         /// <param name="bindValue">Optional: resolves a named value's key once, to a reader used for every evaluation
@@ -87,7 +92,7 @@ namespace ForesTycoon.Rules
             document = source.Clone();
             if (document.Schema != "forest-behaviors" || document.Version is not (1 or 2 or 3) || document.Graphs == null || document.Graphs.Count > 512)
                 throw new InvalidDataException("Ismeretlen vagy túl nagy viselkedésmodell.");
-            _ = new CompiledBehaviorControllers(document);
+            Controllers = new CompiledBehaviorControllers(document);
             var hooks = available.ToDictionary(h => (h.Id, h.Kind));
             var ids = new HashSet<string>(StringComparer.Ordinal);
             foreach (var graph in document.Graphs)
@@ -122,6 +127,8 @@ namespace ForesTycoon.Rules
         }
         private sealed class Program
         {
+            internal bool Prepared => disabled || fast != null;
+            internal IEnumerable<string> NamedKeys => nodes.Where(n => n.Operation == BehaviorOperation.NamedValue).Select(n => n.Key);
             internal double ErrorValue => Math.Max(0, hook.Min);
             private readonly bool disabled;
             private readonly double disabledValue;
@@ -185,6 +192,12 @@ namespace ForesTycoon.Rules
                 }
                 output = indices[graph.Output];
             }
+            internal void Prepare()
+            {
+                if (disabled || compileTried) return;
+                compileTried = true; fast = Compile();
+                if (fast != null) System.Runtime.CompilerServices.RuntimeHelpers.PrepareDelegate(fast);
+            }
             internal double Evaluate(in BehaviorInputs input, double[] extraValues = null)
             {
                 if (disabled) return disabledValue;
@@ -199,11 +212,11 @@ namespace ForesTycoon.Rules
             // ── The graph compiled to a delegate ──────────────────────────────
             // Rules run on every element of a scope (thousands of tiles), so a hot graph is compiled once into a .NET
             // expression instead of being walked node by node. The semantics stay the interpreter's: only the selected
-            // branch of a choice runs, a division by zero and a non-finite node fail with the same message. A graph whose
-            // shared nodes would expand too far stays interpreted.
+            // branch of a choice runs, a division by zero and a non-finite node fail with the same message. Shared
+            // operations are emitted once; immutable input reads and single-use subtrees are inlined.
             private Func<BehaviorInputs, double[], double> fast;
             private int evaluations; private bool compileTried;
-            private const int CompileAfter = 256, MaximumCompiledSize = 4096;
+            private const int CompileAfter = 256;
             private static double Finite(double value, string name) =>
                 double.IsFinite(value) ? value : throw new ArithmeticException("Nem véges eredmény: " + name);
             private static double Input(double[] extras, int index, string name) =>
@@ -212,55 +225,160 @@ namespace ForesTycoon.Rules
 
             private Func<BehaviorInputs, double[], double> Compile()
             {
-                var size = new int[nodes.Length];
+                // Fold only proven constant subgraphs, using the interpreter itself. Invalid constant
+                // branches stay lazy runtime errors; preparation never reads inputs or world values.
+                var constants = new double?[nodes.Length];
+                var selected = new int[nodes.Length]; Array.Fill(selected, -1);
+                Array.Clear(evaluated);
                 for (int i = 0; i < nodes.Length; i++) {
                     int count = BehaviorModel.Inputs(nodes[i].Operation);
-                    long total = 1 + (count > 0 ? size[a[i]] : 0) + (count > 1 ? size[b[i]] : 0) + (count > 2 ? size[c[i]] : 0);
-                    size[i] = (int)Math.Min(total, MaximumCompiledSize + 1);
+                    bool constant = nodes[i].Operation == BehaviorOperation.Constant;
+                    if (nodes[i].Operation == BehaviorOperation.Select && constants[a[i]].HasValue) {
+                        selected[i] = constants[a[i]].Value != 0 ? b[i] : c[i];
+                        constant = constants[selected[i]].HasValue;
+                    } else if (count > 0) constant = constants[a[i]].HasValue
+                        && (count < 2 || constants[b[i]].HasValue) && (count < 3 || constants[c[i]].HasValue);
+                    if (constant) {
+                        try { constants[i] = EvaluateNode(i, default); }
+                        catch (ArithmeticException) { } // Preserve the original node and its error, if selected at runtime.
+                    }
                 }
-                if (size[output] > MaximumCompiledSize) return null;
+                if (constants[output].HasValue) { double value = constants[output].Value; return (_, _) => value; }
+                var alive = new bool[nodes.Length]; var incoming = new int[nodes.Length];
+                void Mark(int index) {
+                    if (alive[index]) return;
+                    alive[index] = true;
+                    if (constants[index].HasValue) return;
+                    void Edge(int child) { incoming[child]++; Mark(child); }
+                    if (selected[index] >= 0) { Edge(selected[index]); return; }
+                    int count = BehaviorModel.Inputs(nodes[index].Operation);
+                    if (count > 0) Edge(a[index]); if (count > 1) Edge(b[index]); if (count > 2) Edge(c[index]);
+                }
+                Mark(output);
+                var inline = new bool[nodes.Length];
+                for (int i = 0; i < nodes.Length; i++) {
+                    int count = BehaviorModel.Inputs(nodes[i].Operation);
+                    bool immutableInput = count == 0 && nodes[i].Operation != BehaviorOperation.NamedValue;
+                    inline[i] = constants[i].HasValue || immutableInput || incoming[i] <= 1 &&
+                        (selected[i] >= 0 ? inline[selected[i]] : (count < 1 || inline[a[i]]) && (count < 2 || inline[b[i]]) && (count < 3 || inline[c[i]]));
+                }
                 var input = System.Linq.Expressions.Expression.Parameter(typeof(BehaviorInputs), "input");
                 var extrasParameter = System.Linq.Expressions.Expression.Parameter(typeof(double[]), "extras");
                 var self = typeof(Program);
-                System.Linq.Expressions.Expression Node(int i)
-                {
-                    var n = nodes[i];
-                    System.Linq.Expressions.Expression Field(string name) => System.Linq.Expressions.Expression.Property(input, name);
-                    System.Linq.Expressions.Expression Constant(double v) => System.Linq.Expressions.Expression.Constant(v);
-                    System.Linq.Expressions.Expression Call(string method, params System.Linq.Expressions.Expression[] args) =>
-                        System.Linq.Expressions.Expression.Call(typeof(Math).GetMethod(method, args.Select(x => x.Type).ToArray()), args);
-                    System.Linq.Expressions.Expression Bool(System.Linq.Expressions.Expression test) =>
-                        System.Linq.Expressions.Expression.Condition(test, Constant(1), Constant(0));
-                    var left = n.Operation is BehaviorOperation.Select ? null : BehaviorModel.Inputs(n.Operation) > 0 ? Node(a[i]) : null;
-                    var right = n.Operation is BehaviorOperation.Select ? null : BehaviorModel.Inputs(n.Operation) > 1 ? Node(b[i]) : null;
-                    System.Linq.Expressions.Expression value = n.Operation switch {
-                        BehaviorOperation.Constant => Constant(n.Value), BehaviorOperation.Native => Field(nameof(BehaviorInputs.Native)),
-                        BehaviorOperation.Delta => Field(nameof(BehaviorInputs.Delta)), BehaviorOperation.Time => Field(nameof(BehaviorInputs.Time)),
-                        BehaviorOperation.State => Field(nameof(BehaviorInputs.State)), BehaviorOperation.Amount => Field(nameof(BehaviorInputs.Amount)),
-                        BehaviorOperation.Capacity => Field(nameof(BehaviorInputs.Capacity)), BehaviorOperation.Available => Field(nameof(BehaviorInputs.Available)),
-                        BehaviorOperation.From => Field(nameof(BehaviorInputs.From)), BehaviorOperation.To => Field(nameof(BehaviorInputs.To)),
-                        BehaviorOperation.Surface => Field(nameof(BehaviorInputs.Surface)),
-                        BehaviorOperation.NamedValue => System.Linq.Expressions.Expression.Invoke(System.Linq.Expressions.Expression.Constant(named[i])),
-                        BehaviorOperation.Input => System.Linq.Expressions.Expression.Call(self.GetMethod(nameof(Input), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static),
-                            extrasParameter, System.Linq.Expressions.Expression.Constant(inputIndex[i]), System.Linq.Expressions.Expression.Constant(n.Key)),
-                        BehaviorOperation.Exp => Call(nameof(Math.Exp), left), BehaviorOperation.Power => Call(nameof(Math.Pow), left, right),
-                        BehaviorOperation.Add => System.Linq.Expressions.Expression.Add(left, right), BehaviorOperation.Subtract => System.Linq.Expressions.Expression.Subtract(left, right),
-                        BehaviorOperation.Multiply => System.Linq.Expressions.Expression.Multiply(left, right),
-                        BehaviorOperation.Divide => System.Linq.Expressions.Expression.Call(self.GetMethod(nameof(Divide), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static), left, right),
-                        BehaviorOperation.Minimum => Call(nameof(Math.Min), left, right), BehaviorOperation.Maximum => Call(nameof(Math.Max), left, right),
-                        BehaviorOperation.Greater => Bool(System.Linq.Expressions.Expression.GreaterThan(left, right)),
-                        BehaviorOperation.Less => Bool(System.Linq.Expressions.Expression.LessThan(left, right)),
-                        // Only the selected branch runs, as in the interpreter.
-                        BehaviorOperation.Select => System.Linq.Expressions.Expression.Condition(
-                            System.Linq.Expressions.Expression.NotEqual(Node(a[i]), Constant(0)), Node(b[i]), Node(c[i])),
-                        BehaviorOperation.Absolute => Call(nameof(Math.Abs), left), BehaviorOperation.Negate => System.Linq.Expressions.Expression.Negate(left),
-                        _ => throw new InvalidDataException("Ismeretlen művelet.")
-                    };
-                    return System.Linq.Expressions.Expression.Call(self.GetMethod(nameof(Finite), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static),
-                        value, System.Linq.Expressions.Expression.Constant(n.Name));
+                var result = System.Linq.Expressions.Expression.Label(typeof(double), "result");
+                var labels = nodes.Select((_, i) => System.Linq.Expressions.Expression.Label("node" + i)).ToArray();
+                var returns = nodes.Select((_, i) => System.Linq.Expressions.Expression.Label("return" + i)).ToArray();
+                var outputs = nodes.Select((_, i) => System.Linq.Expressions.Expression.Variable(typeof(double), "value" + i)).ToArray();
+                var ready = nodes.Select((_, i) => System.Linq.Expressions.Expression.Variable(typeof(bool), "ready" + i)).ToArray();
+                var continuation = nodes.Select((_, i) => System.Linq.Expressions.Expression.Variable(typeof(int), "caller" + i)).ToArray();
+                var sites = nodes.Select(_ => new List<System.Linq.Expressions.LabelTarget>()).ToArray();
+                var code = new List<System.Linq.Expressions.Expression> { System.Linq.Expressions.Expression.Goto(labels[output]) };
+                System.Linq.Expressions.Expression Value(int index) => constants[index].HasValue
+                    ? System.Linq.Expressions.Expression.Constant(constants[index].Value) : outputs[index];
+                System.Linq.Expressions.Expression Field(string name) => System.Linq.Expressions.Expression.Property(input, name);
+                System.Linq.Expressions.Expression Constant(double v) => System.Linq.Expressions.Expression.Constant(v);
+                System.Linq.Expressions.Expression Call(string method, params System.Linq.Expressions.Expression[] args) =>
+                    System.Linq.Expressions.Expression.Call(typeof(Math).GetMethod(method, args.Select(x => x.Type).ToArray()), args);
+                System.Linq.Expressions.Expression Bool(System.Linq.Expressions.Expression test) =>
+                    System.Linq.Expressions.Expression.Condition(test, Constant(1), Constant(0));
+                System.Linq.Expressions.Expression Operation(int index, System.Linq.Expressions.Expression left, System.Linq.Expressions.Expression right) {
+                    var n = nodes[index];
+                    return n.Operation switch {
+                            BehaviorOperation.Constant => Constant(n.Value), BehaviorOperation.Native => Field(nameof(BehaviorInputs.Native)),
+                            BehaviorOperation.Delta => Field(nameof(BehaviorInputs.Delta)), BehaviorOperation.Time => Field(nameof(BehaviorInputs.Time)),
+                            BehaviorOperation.State => Field(nameof(BehaviorInputs.State)), BehaviorOperation.Amount => Field(nameof(BehaviorInputs.Amount)),
+                            BehaviorOperation.Capacity => Field(nameof(BehaviorInputs.Capacity)), BehaviorOperation.Available => Field(nameof(BehaviorInputs.Available)),
+                            BehaviorOperation.From => Field(nameof(BehaviorInputs.From)), BehaviorOperation.To => Field(nameof(BehaviorInputs.To)),
+                            BehaviorOperation.Surface => Field(nameof(BehaviorInputs.Surface)),
+                            BehaviorOperation.NamedValue => System.Linq.Expressions.Expression.Invoke(System.Linq.Expressions.Expression.Constant(named[index])),
+                            BehaviorOperation.Input => System.Linq.Expressions.Expression.Call(self.GetMethod(nameof(Input), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static),
+                                extrasParameter, System.Linq.Expressions.Expression.Constant(inputIndex[index]), System.Linq.Expressions.Expression.Constant(n.Key)),
+                            BehaviorOperation.Exp => Call(nameof(Math.Exp), left), BehaviorOperation.Power => Call(nameof(Math.Pow), left, right),
+                            BehaviorOperation.Add => System.Linq.Expressions.Expression.Add(left, right), BehaviorOperation.Subtract => System.Linq.Expressions.Expression.Subtract(left, right),
+                            BehaviorOperation.Multiply => System.Linq.Expressions.Expression.Multiply(left, right),
+                            BehaviorOperation.Divide => System.Linq.Expressions.Expression.Call(self.GetMethod(nameof(Divide), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static), left, right),
+                            BehaviorOperation.Minimum => Call(nameof(Math.Min), left, right), BehaviorOperation.Maximum => Call(nameof(Math.Max), left, right),
+                            BehaviorOperation.Greater => Bool(System.Linq.Expressions.Expression.GreaterThan(left, right)),
+                            BehaviorOperation.Less => Bool(System.Linq.Expressions.Expression.LessThan(left, right)),
+                            BehaviorOperation.Absolute => Call(nameof(Math.Abs), left), BehaviorOperation.Negate => System.Linq.Expressions.Expression.Negate(left),
+                            _ => throw new InvalidDataException("Ismeretlen művelet.")
+                        };
                 }
-                return System.Linq.Expressions.Expression.Lambda<Func<BehaviorInputs, double[], double>>(Node(output), input, extrasParameter).Compile();
+                System.Linq.Expressions.Expression Checked(System.Linq.Expressions.Expression value, int index) => System.Linq.Expressions.Expression.Call(
+                    self.GetMethod(nameof(Finite), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static), value,
+                    System.Linq.Expressions.Expression.Constant(nodes[index].Name));
+                System.Linq.Expressions.Expression Inline(int index) {
+                    if (constants[index].HasValue) return Constant(constants[index].Value);
+                    if (selected[index] >= 0) return Inline(selected[index]);
+                    int count = BehaviorModel.Inputs(nodes[index].Operation);
+                    var left = count > 0 ? Inline(a[index]) : null;
+                    if (nodes[index].Operation == BehaviorOperation.Select) return Checked(System.Linq.Expressions.Expression.Condition(
+                        System.Linq.Expressions.Expression.NotEqual(left, Constant(0)), Inline(b[index]), Inline(c[index])), index);
+                    return Checked(Operation(index, left, count > 1 ? Inline(b[index]) : null), index);
+                }
+                if (inline[output]) return System.Linq.Expressions.Expression.Lambda<Func<BehaviorInputs, double[], double>>(
+                    Inline(output), input, extrasParameter).Compile();
+                void Require(int child) {
+                    if (constants[child].HasValue) return;
+                    if (inline[child]) { code.Add(System.Linq.Expressions.Expression.Assign(outputs[child], Inline(child))); return; }
+                    var resume = System.Linq.Expressions.Expression.Label("resume" + child + "_" + sites[child].Count);
+                    if (incoming[child] > 1) code.Add(System.Linq.Expressions.Expression.Assign(continuation[child], System.Linq.Expressions.Expression.Constant(sites[child].Count)));
+                    sites[child].Add(resume);
+                    code.Add(System.Linq.Expressions.Expression.Goto(labels[child])); code.Add(System.Linq.Expressions.Expression.Label(resume));
+                }
+                for (int i = 0; i < nodes.Length; i++) {
+                    if (!alive[i] || constants[i].HasValue || inline[i]) continue;
+                    var n = nodes[i];
+                    code.Add(System.Linq.Expressions.Expression.Label(labels[i]));
+                    if (incoming[i] > 1) code.Add(System.Linq.Expressions.Expression.IfThen(ready[i], System.Linq.Expressions.Expression.Goto(returns[i])));
+                    System.Linq.Expressions.Expression value;
+                    if (constants[i].HasValue) value = Constant(constants[i].Value);
+                    else if (selected[i] >= 0) { Require(selected[i]); value = Value(selected[i]); }
+                    else if (n.Operation == BehaviorOperation.Select) {
+                        Require(a[i]);
+                        var yes = System.Linq.Expressions.Expression.Label("yes" + i);
+                        var no = System.Linq.Expressions.Expression.Label("no" + i);
+                        var joined = System.Linq.Expressions.Expression.Label("joined" + i);
+                        code.Add(System.Linq.Expressions.Expression.IfThenElse(System.Linq.Expressions.Expression.NotEqual(Value(a[i]), Constant(0)),
+                            System.Linq.Expressions.Expression.Goto(yes), System.Linq.Expressions.Expression.Goto(no)));
+                        code.Add(System.Linq.Expressions.Expression.Label(yes)); Require(b[i]);
+                        code.Add(System.Linq.Expressions.Expression.Assign(outputs[i], Value(b[i])));
+                        code.Add(System.Linq.Expressions.Expression.Goto(joined));
+                        code.Add(System.Linq.Expressions.Expression.Label(no)); Require(c[i]);
+                        code.Add(System.Linq.Expressions.Expression.Assign(outputs[i], Value(c[i])));
+                        code.Add(System.Linq.Expressions.Expression.Label(joined)); value = outputs[i];
+                    } else {
+                        int count = BehaviorModel.Inputs(n.Operation);
+                        if (count > 0) Require(a[i]); if (count > 1) Require(b[i]);
+                        var left = count > 0 ? Value(a[i]) : null; var right = count > 1 ? Value(b[i]) : null;
+                        value = Operation(i, left, right);
+                    }
+                    code.Add(System.Linq.Expressions.Expression.Assign(outputs[i], System.Linq.Expressions.Expression.Call(
+                        self.GetMethod(nameof(Finite), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static), value,
+                        System.Linq.Expressions.Expression.Constant(n.Name))));
+                    if (incoming[i] > 1) code.Add(System.Linq.Expressions.Expression.Assign(ready[i], System.Linq.Expressions.Expression.Constant(true)));
+                    code.Add(System.Linq.Expressions.Expression.Goto(returns[i]));
+                }
+                // Each node body exists once. Local continuations preserve lazy, ordered DAG evaluation without
+                // recursive delegate calls, expression-tree expansion, or per-evaluation allocations.
+                for (int i = 0; i < nodes.Length; i++) {
+                    if (!alive[i] || constants[i].HasValue || inline[i]) continue;
+                    code.Add(System.Linq.Expressions.Expression.Label(returns[i]));
+                    if (i == output) code.Add(System.Linq.Expressions.Expression.Goto(result, outputs[i]));
+                    else if (sites[i].Count == 1) code.Add(System.Linq.Expressions.Expression.Goto(sites[i][0]));
+                    else code.Add(System.Linq.Expressions.Expression.Switch(continuation[i],
+                        System.Linq.Expressions.Expression.Throw(System.Linq.Expressions.Expression.New(typeof(InvalidOperationException))),
+                        sites[i].Select((site, index) => System.Linq.Expressions.Expression.SwitchCase(System.Linq.Expressions.Expression.Goto(site),
+                            System.Linq.Expressions.Expression.Constant(index))).ToArray()));
+                }
+                code.Add(System.Linq.Expressions.Expression.Label(result, Constant(0)));
+                var variables = outputs.Where((_, i) => alive[i] && !constants[i].HasValue)
+                    .Concat(ready.Where((_, i) => alive[i] && incoming[i] > 1 && !constants[i].HasValue && !inline[i]))
+                    .Concat(continuation.Where((_, i) => alive[i] && incoming[i] > 1 && !constants[i].HasValue && !inline[i]));
+                return System.Linq.Expressions.Expression.Lambda<Func<BehaviorInputs, double[], double>>(
+                    System.Linq.Expressions.Expression.Block(variables, code), input, extrasParameter).Compile();
             }
+
             private double EvaluateNode(int i, in BehaviorInputs input)
             {
                     if (evaluated[i]) return values[i];

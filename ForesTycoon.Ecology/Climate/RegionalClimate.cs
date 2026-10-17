@@ -79,14 +79,15 @@ namespace ForesTycoon.Ecology
 
         internal EcologyResponseProgram ResponseRules { get; set; }
         private EcologyResponseProgram Responses => ResponseRules ?? EcologyResponseProgram.Default;
-        internal ClimateCell Cell(int id, WeatherForcing forcing)
+        internal ClimateCell Cell(int id, WeatherForcing forcing, EcologyResponseProgram rules = null)
         {
             if ((uint)id >= (uint)rain.Length) throw new ArgumentOutOfRangeException(nameof(id));
+            rules ??= Responses;
             return new(forcing with
             {
-                Temperature = Responses.Environment(EnvironmentResponse.LocalTemperature, [forcing.Temperature, temperature[id], habitat.GetNormalizedElevation(id), Definition.ElevationCooling]),
-                Humidity = Responses.Environment(EnvironmentResponse.LocalHumidity, [forcing.Humidity, humidity[id]])
-            }, Responses.Environment(EnvironmentResponse.LocalRain, [rain[id]]));
+                Temperature = rules.Environment(EnvironmentResponse.LocalTemperature, [forcing.Temperature, temperature[id], habitat.GetNormalizedElevation(id), Definition.ElevationCooling]),
+                Humidity = rules.Environment(EnvironmentResponse.LocalHumidity, [forcing.Humidity, humidity[id]])
+            }, rules.Environment(EnvironmentResponse.LocalRain, [rain[id]]));
         }
 
         internal IEnumerable<int> InitializeWork()
