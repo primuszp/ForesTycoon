@@ -11,8 +11,8 @@ public class RuleProjectTests
         var project = GameWorld.DefaultRuleProject();
         project.Dynamics.Stocks.Add(new() { Id = "speed", Initial = 1, Maximum = 10 });
         project.Dynamics.Flows.Add(DynamicsRuntimeTests.Flow("increase", "", "speed", 1));
-        var graph = project.Behaviors.Graphs.Single(g => g.Hook == "machine.pace" && g.Kind == "forwarder");
-        graph.Nodes[0].Operation = BehaviorOperation.NamedValue; graph.Nodes[0].Key = "stock.speed";
+        var graph = project.Behaviors.Graphs.Single(g => g.Hook == "machine.pace" && g.Kind == "logisticsForwarder");
+        graph.Nodes = new() { new() { Id = "speed", Name = "Tempó", Operation = BehaviorOperation.NamedValue, Key = "stock.speed" } }; graph.Output = "speed";
         return project;
     }
     [Fact]
@@ -34,7 +34,7 @@ public class RuleProjectTests
         Assert.Equal(before, world.RuleProjectDocument.ToJson()); Assert.Equal(1, world.ExecutePendingCommands());
         world.Update(1); Assert.Equal(2, world.DynamicsValues["speed"]);
         var active = new WorldBehaviorPolicy(world.BehaviorDocument, DynamicsRuntime.Keys(project.Dynamics, GameWorld.RuleWorldFields), world.ReadRuleValue);
-        Assert.Equal(2, active.Evaluate(new("machine.pace", "forwarder", 1, 0)));
+        Assert.Equal(2, active.Evaluate(new("machine.pace", "logisticsForwarder", 1, 0)));
     }
     [Fact]
     public void AnObjectConditionOverridesTheDefaultGrowthThroughTheSameRuleBook()

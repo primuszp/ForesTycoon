@@ -7,7 +7,7 @@ namespace ForesTycoon.Rules;
 /// <summary>Meaning of a host query result. Field reads and links between authored graphs are derived from their actual connected nodes.</summary>
 public sealed record ResponseRuleDescription(string Result, string Consumers, double SuggestedOffValue, string FixedMeaning, string[] OutputKeys)
 {
-    public static ResponseRuleDescription For(string hook) => hook switch {
+    public static ResponseRuleDescription For(string hook) => LogisticsRules.Hooks.Any(h => h.Id == hook) ? LogisticsRules.Description(hook) : hook switch {
         "vehicle.mass" => D("Jármű és rakomány össztömege", "Gyorsulás, menetellenállás és áthaladási kopás", 16000, "Minden teherautó ezt a tömeget kapja, a rakománytól függetlenül.", "vehicleResponse:vehicle.mass"),
         "vehicle.rolling" => D("Gördülési tényező", "Menetellenállás", 0, "A gördülési tényező fix; 0 esetén nincs gördülési ellenállás.", "vehicleResponse:vehicle.rolling"),
         "vehicle.resistance" => D("Előjeles menetellenállási erő", "A jármű fizikai integrátora", 0, "A fix érték az ellenállás; a negatív érték lejtőirányú gyorsító hatás."),
@@ -90,6 +90,6 @@ public sealed record ResponseRuleDescription(string Result, string Consumers, do
         }
         Visit(graph.Output); return nodes;
     }
-    public static string[] ConnectedInputs(BehaviorGraph graph) => ConnectedNodes(graph).Where(n => n.Operation == BehaviorOperation.Input).Select(n => n.Key).Distinct().ToArray();
+    public static string[] ConnectedInputs(BehaviorGraph graph) => ConnectedNodes(graph).Where(n => n.Operation is BehaviorOperation.Input or BehaviorOperation.NamedValue).Select(n => n.Key).Distinct().ToArray();
     public string[] GraphConsumers(IEnumerable<BehaviorGraph> graphs) => graphs.Where(g => !g.Disabled && ConnectedInputs(g).Any(input => OutputKeys.Contains(g.Kind + ":" + input))).Select(g => g.Name).Distinct().ToArray();
 }

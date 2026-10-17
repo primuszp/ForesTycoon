@@ -586,8 +586,8 @@ namespace ForesTycoon.Editor
                 foreach (var hook in WorldBehaviorPolicy.Hooks.Where(h => h.Id == rule.Id
                     || h.Id.StartsWith("tuning.") && GameTuning.Spec(h.Id[7..])?.Rule == rule.Id
                     || h.Id.StartsWith("route.") && rule.Id is "route.find" or "route.policy"
-                    || (h.Id.StartsWith("loading.") || h.Id == "unloading.amount") && (rule.Id == "loading.policy" || rule.Id == "machine.logTransfer" && h.Kind == "forwarder" || rule.Id == "vehicle.transfer" && h.Kind == "truck")
-                    || h.Id == "machine.pace" && rule.Id == (h.Kind == "forwarder" ? "machine.forwarder" : "machine.processor")))
+                    || (h.Id.StartsWith("loading.") || h.Id == "unloading.amount") && (rule.Id == "loading.policy" || rule.Id == "machine.logTransfer" && h.Kind == "logisticsForwarder" || rule.Id == "vehicle.transfer" && h.Kind == "logisticsTruck")
+                    || h.Id == "machine.pace" && rule.Id == (h.Kind == "logisticsForwarder" ? "machine.forwarder" : "machine.processor")))
                     if (ImGui.Button("Viselkedésgráf: " + hook.Name + "##" + hook.Id + hook.Kind)) editBehavior(hook);
             ImGui.PushTextWrapPos(); EditorStyle.Text(HudTheme.Parchment, rule.Description); ImGui.PopTextWrapPos();
             if (rule.Execution == GameRuleExecution.EditableGraph)

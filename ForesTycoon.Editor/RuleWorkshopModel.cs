@@ -27,8 +27,9 @@ internal static class RuleWorkshopModel
     internal static bool HookBelongsTo(BehaviorHook h, GameRuleDefinition rule) => h.Id == rule.Id
         || h.Id.StartsWith("tuning.") && GameTuning.Spec(h.Id[7..])?.Rule == rule.Id
         || h.Id.StartsWith("route.") && rule.Id is "route.find" or "route.policy"
-        || (h.Id.StartsWith("loading.") || h.Id == "unloading.amount") && (rule.Id == "loading.policy" || rule.Id == "machine.logTransfer" && h.Kind == "forwarder" || rule.Id == "vehicle.transfer" && h.Kind == "truck")
-        || h.Id == "machine.pace" && rule.Id == (h.Kind == "forwarder" ? "machine.forwarder" : "machine.processor");
+        || (h.Id.StartsWith("loading.") || h.Id == "unloading.amount") && (rule.Id == "loading.policy" || rule.Id == "machine.logTransfer" && h.Kind == "logisticsForwarder" || rule.Id == "vehicle.transfer" && h.Kind == "logisticsTruck")
+        || h.Id.StartsWith("machine.") && rule.Id == (h.Kind == "logisticsForwarder" ? "machine.forwarder" : "machine.processor")
+        || h.Id == "truck.return" && rule.Id == "fleet.orders";
 
     /// <summary>
     /// The game's system model with this project's own stocks, flows and the formulas that read model quantities, so a
@@ -61,7 +62,7 @@ internal static class RuleWorkshopModel
         return new SystemModelAnalysis(catalog, vocabulary, processes, stocks);
     }
 
-    internal static string KindName(string kind) => kind switch { "vehicleResponse" => "Járműválasz", "environment" => "Környezeti válasz", "initialTree" => "Fa kezdő mérete", "regeneration" => "Természetes erdőmegújulás", "competitionPair" => "Fapár", "competition" => "Összegzett verseny", "resource" => "Fa erőforrásválasza", "site" => "Termőhely és vízválasz", "tree" => "Fa", "truck" => "Teherautó", "forwarder" => "Forwarder",
+    internal static string KindName(string kind) => LogisticsRules.IsKind(kind) ? KindName(kind[9..].ToLowerInvariant()) : kind switch { "vehicleResponse" => "Járműválasz", "environment" => "Környezeti válasz", "initialTree" => "Fa kezdő mérete", "regeneration" => "Természetes erdőmegújulás", "competitionPair" => "Fapár", "competition" => "Összegzett verseny", "resource" => "Fa erőforrásválasza", "site" => "Termőhely és vízválasz", "tree" => "Fa", "truck" => "Teherautó", "forwarder" => "Forwarder",
         "processor" => "Processzor", "road" => "Út", "tile" => "Csempe", "mill" => "Malom", "world" => "Világ", "wildlife" => "Vad", "depot" => "Telephely", "stack" => "Rakat", _ => kind };
     internal static string FieldName(string field) => SystemVocabulary.Default.Find(field)?.Name ?? SystemVocabulary.Default.Observed(field)?.Name ?? field switch {
         "world.water" => "Tárolt víz", "world.temperature" => "Hőmérséklet", "forest.totalVolume" => "Élő faállomány térfogata",

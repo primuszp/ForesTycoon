@@ -14,14 +14,14 @@ public class BehaviorModelTests
     [Fact]
     public void ObjectBindingOverridesTypeAndUnboundTypesKeepNativeBehavior()
     {
-        var type = Constant("machine.pace", "forwarder", 2);
-        var one = Constant("machine.pace", "forwarder", 3, 7);
+        var type = Constant("machine.pace", "logisticsForwarder", 2);
+        var one = Constant("machine.pace", "logisticsForwarder", 3, 7);
         var runtime = Compile(type, one);
-        Assert.Equal(3, runtime.Evaluate("machine.pace", "forwarder", 7, new(1, 0, 0, 0, 0)));
-        Assert.Equal(2, runtime.Evaluate("machine.pace", "forwarder", 8, new(1, 0, 0, 0, 0)));
-        Assert.Equal(1, runtime.Evaluate("machine.pace", "processor", 7, new(1, 0, 0, 0, 0)));
+        Assert.Equal(3, runtime.Evaluate("machine.pace", "logisticsForwarder", 7, new(1, 0, 0, 0, 0)));
+        Assert.Equal(2, runtime.Evaluate("machine.pace", "logisticsForwarder", 8, new(1, 0, 0, 0, 0)));
+        Assert.Equal(1, runtime.Evaluate("machine.pace", "logisticsProcessor", 7, new(1, 0, 0, 0, 0)));
         one.Nodes[0].Value = 9;
-        Assert.Equal(3, runtime.Evaluate("machine.pace", "forwarder", 7, new(1, 0, 0, 0, 0)));
+        Assert.Equal(3, runtime.Evaluate("machine.pace", "logisticsForwarder", 7, new(1, 0, 0, 0, 0)));
     }
     [Fact]
     public void ConditionalGraphUsesLiveInputsAndOutputBounds()
@@ -41,20 +41,20 @@ public class BehaviorModelTests
     [Fact]
     public void InvalidGraphsAndAmbiguousBindingsAreRejected()
     {
-        var graph = Constant("mill.process", "mill", 1);
-        Assert.Throws<InvalidDataException>(() => Compile(graph, Constant("mill.process", "mill", 2)));
+        var graph = Constant("mill.process", "logisticsMill", 1);
+        Assert.Throws<InvalidDataException>(() => Compile(graph, Constant("mill.process", "logisticsMill", 2)));
         graph.Nodes[0].Operation = BehaviorOperation.Add; graph.Nodes[0].A = "value"; graph.Nodes[0].B = "value";
         Assert.Throws<InvalidDataException>(() => Compile(graph));
         graph.Nodes[0].A = "missing";
         Assert.Throws<InvalidDataException>(() => Compile(graph));
         Assert.Throws<InvalidDataException>(() => Compile(Constant("not.implemented", "tree", 1)));
-        Assert.Throws<InvalidDataException>(() => Compile(Constant("mill.process", "mill", double.NaN)));
+        Assert.Throws<InvalidDataException>(() => Compile(Constant("mill.process", "logisticsMill", double.NaN)));
         Assert.Throws<InvalidDataException>(() => Compile(Constant("tuning.DieselPrice", "world", 1, 7)));
     }
     [Fact]
     public void RuntimeArithmeticFailureKeepsNativeResultAndReportsObject()
     {
-        var graph = Constant("mill.process", "mill", 0);
+        var graph = Constant("tuning.DieselPrice", "world", 0);
         graph.Nodes.Add(new() { Id = "divide", Name = "Divide", Operation = BehaviorOperation.Divide, A = "value", B = "value" });
         graph.Output = "divide"; var runtime = Compile(graph);
         Assert.Equal(.25, runtime.Evaluate(graph.Hook, graph.Kind, 12, new(.25, 1, 0, 0, 2)));
@@ -63,7 +63,7 @@ public class BehaviorModelTests
     [Fact]
     public void UnselectedAndDisconnectedExpressionsDoNotRun()
     {
-        var graph = Constant("mill.process", "mill", 0);
+        var graph = Constant("tuning.DieselPrice", "world", 0);
         graph.Nodes.AddRange(new BehaviorNode[] {
             new() { Id = "bad", Name = "Divide by zero", Operation = BehaviorOperation.Divide, A = "value", B = "value" },
             new() { Id = "native", Name = "Native", Operation = BehaviorOperation.Native },
@@ -80,7 +80,7 @@ public class BehaviorModelTests
         var map = new TerrainMap(TerrainSettings.Default.WithNodeSize(9, 42), (_, _) => 4);
         var logistics = new ForestryLogistics(map, new ForestSystem(map));
         logistics.Mills.Add(new() { TileId = 1, Stock = 10 }); logistics.Mills.Add(new() { TileId = 2, Stock = 10 });
-        logistics.Behaviors = new WorldBehaviorPolicy(new() { Graphs = new() { Constant("mill.process", "mill", 100, 1) }});
+        logistics.Behaviors = new WorldBehaviorPolicy(new() { Graphs = new() { Constant("mill.process", "logisticsMill", 100, 1) }});
         logistics.Update(1);
         Assert.Equal(10, logistics.Mills[0].Processed); Assert.Equal(0, logistics.Mills[0].Stock);
         Assert.Equal(.25f, logistics.Mills[1].Processed); Assert.Equal(9.75f, logistics.Mills[1].Stock);
@@ -89,12 +89,12 @@ public class BehaviorModelTests
     public void StoppedMachineDoesNotChangeAnotherMachinesTimeStep()
     {
         var map = new TerrainMap(TerrainSettings.Default.WithNodeSize(9, 42), (_, _) => 4);
-        var logistics = new ForestryLogistics(map, new ForestSystem(map)) { MachinesEnabled = true };
+        var logistics = new ForestryLogistics(map, new ForestSystem(map));
         for (int i = 1; i <= 2; i++) logistics.Machines.Add(new() {
             Id = i, Kind = ForestMachineKind.Forwarder, Path = new[] { 0 }, State = ForestMachineState.Loading,
             Source = new TimberStack { Volume = 10, Value = 100 }, Upkeep = new VehicleUpkeep((uint)i)
         });
-        logistics.Behaviors = new WorldBehaviorPolicy(new() { Graphs = new() { Constant("machine.pace", "forwarder", 0, 1) }});
+        logistics.Behaviors = new WorldBehaviorPolicy(new() { Graphs = new() { Constant("machine.pace", "logisticsForwarder", 0, 1) }});
         logistics.Update(1.0 / 30);
         Assert.Equal(0, logistics.Machines[0].WorkTime);
         Assert.InRange(logistics.Machines[1].WorkTime, .03, .034);

@@ -4,29 +4,29 @@ namespace ForesTycoon
 {
     internal sealed partial class ForestryLogistics
     {
-        private float RouteCost(string kind, int id, float cargo, float capacity, int from, int to, float native)
+        private float RouteCost(string kind, int id, float cargo, float capacity, int from, int to, float unused)
         {
-            if (Behaviors == null) return native;
             double surface = terrain.IsRoadTile(to) ? terrain.GetRoadPaving(to) == RoadPaving.Asphalt ? 1 : 2 : terrain.IsSkidTrail(to) ? 3 : 0;
             double damage = terrain.IsRoadTile(to) ? 1 - terrain.GetRoadCondition(to) : terrain.GetSkidTrailWear(to);
-            var query = new BehaviorQuery("route.allow", kind, (ulong)id, 1, Time: forest.ForestYear,
-                State: damage, Amount: cargo, Capacity: capacity, From: from, To: to, Surface: surface);
-            if (Behaviors.Evaluate(query) < .5) return float.PositiveInfinity;
-            return (float)Behaviors.Evaluate(query with { Hook = "route.cost", Native = native });
+            var inputs = new LogisticsInputs(MachineCargo: cargo, MachineCapacity: capacity, RouteDamage: damage, RouteSurface: surface, RouteFrom: from, RouteTo: to);
+            if (rules.Evaluate(Behaviors, "route.allow", kind, (ulong)id, inputs) < .5) return float.PositiveInfinity;
+            float cost = (float)rules.Evaluate(Behaviors, "route.cost", kind, (ulong)id, inputs);
+            return float.IsFinite(cost) && cost > 0 ? cost : float.PositiveInfinity;
         }
         private int[] TruckPath(FleetTruck truck, int from, int to, out float cost) => terrain.FindNetworkPath(from, to, out cost,
-            Behaviors == null ? null : (a, b, native) => RouteCost("truck", truck?.Id ?? -1, truck?.Vehicle?.CargoAmount ?? 0, truck?.Vehicle?.CargoCapacity ?? 25, a, b, native));
+            (a, b, unused) => RouteCost("truck", truck?.Id ?? -1, truck?.Vehicle?.CargoAmount ?? 0, truck?.Vehicle?.CargoCapacity ?? 25, a, b, unused));
         private System.Collections.Generic.IEnumerable<int> TruckPathWork(FleetTruck truck, int from, int to, WorkResult<(int[] Path, float Cost)> result)
-            => terrain.FindNetworkPathWork(from, to, result, Behaviors == null ? null
-                : (a, b, native) => RouteCost("truck", truck?.Id ?? -1, truck?.Vehicle?.CargoAmount ?? 0, truck?.Vehicle?.CargoCapacity ?? 25, a, b, native));
-        private double TruckRule(Vehicle vehicle, string hook, double native, double dt)
+            => terrain.FindNetworkPathWork(from, to, result,
+                (a, b, unused) => RouteCost("truck", truck?.Id ?? -1, truck?.Vehicle?.CargoAmount ?? 0, truck?.Vehicle?.CargoCapacity ?? 25, a, b, unused));
+        private double TruckRule(Vehicle vehicle, string hook, double dt, double requested, double loaded)
         {
             var truck = TruckOf(vehicle);
             if (truck?.HomeRequested == true && hook == "loading.depart" && vehicle.CargoAmount > 0) return 1;
-            if (truck == null || Behaviors == null) return native;
-            return Behaviors.Evaluate(new(hook, "truck", (ulong)truck.Id, native, dt, forest.ForestYear,
-                hook == "loading.depart" ? vehicle.CargoFill : vehicle.TransportState == VehicleTransportState.Unloading ? 1 : 0,
-                vehicle.CargoAmount, vehicle.CargoCapacity, truck.Source?.Volume ?? 0));
+            return rules.Evaluate(Behaviors, hook, "truck", (ulong)(truck?.Id ?? vehicle.Id), new(
+                StepSeconds: dt, MachineKind: 2, MachineCargo: vehicle.CargoAmount, MachineCapacity: vehicle.CargoCapacity,
+                MachineWear: truck?.Upkeep.Wear ?? 0, MachineHomeRequested: truck?.HomeRequested == true ? 1 : 0,
+                SourceStock: truck?.Source?.Volume ?? 0, TransferRequested: requested, TransferLoaded: loaded,
+                TransferUnloading: vehicle.TransportState == VehicleTransportState.Unloading ? 1 : 0));
         }
         private static int TruckState(FleetTruck truck) => truck.Vehicle?.RouteBlocked == true ? 8 : truck.Phase switch {
             TruckPhase.Parked => 0, TruckPhase.ToWork => 1, TruckPhase.ToHome => 6,

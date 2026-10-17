@@ -609,3 +609,11 @@ fogyasztásgörbe ugyanazzal a képlet nélküli szerkesztővel összeállíthat
 A mezők a kódból felderített Jármű/Járműadatok/Útfelület/Útvonal/Időlépés
 objektumokon jelennek meg. Ez az 5/a csomag; a gépi munkafázisok és a
 rakodás teljes átvezetése még következik. [Részletek](vehicle-response-rules.md).
+
+
+## Logisztikai válaszok – 2026-10-17
+
+A processzor, forwarder, teherautó és malom 33 döntése a közös pipás
+Szabályok listán és folyamatábrán szerkeszthető. Külön gépre/malomra is
+készíthető felülírás; törlése visszatér a típusszabályhoz. A kikapcsolás
+választott fix eredmény. [Példa és pontos működés](logistics-rules.md).

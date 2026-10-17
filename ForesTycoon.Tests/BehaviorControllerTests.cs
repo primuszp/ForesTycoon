@@ -94,7 +94,7 @@ public class BehaviorControllerTests
     public void WaitingMidGrapplePreservesWoodAndFuelThenResumesLoading()
     {
         var map = new TerrainMap(TerrainSettings.Default.WithNodeSize(9, 42), (_, _) => 4);
-        var logistics = new ForestryLogistics(map, new ForestSystem(map)) { MachinesEnabled = true };
+        var logistics = new ForestryLogistics(map, new ForestSystem(map));
         var machine = new ForestMachine { Id = 1, Kind = ForestMachineKind.Forwarder, Path = new[] { 0 }, State = ForestMachineState.Loading,
             Source = new() { Volume = 10, Value = 100 }, Upkeep = new(1) };
         logistics.Machines.Add(machine);
@@ -113,7 +113,7 @@ public class BehaviorControllerTests
     public void WaitingDoesNotPreventRepair()
     {
         var map = new TerrainMap(TerrainSettings.Default.WithNodeSize(9, 42), (_, _) => 4);
-        var logistics = new ForestryLogistics(map, new ForestSystem(map)) { MachinesEnabled = true, Controllers = Compile(BehaviorController.TimedPause("forwarder")) };
+        var logistics = new ForestryLogistics(map, new ForestSystem(map)) { Controllers = Compile(BehaviorController.TimedPause("forwarder")) };
         var machine = new ForestMachine { Id = 1, Kind = ForestMachineKind.Forwarder, Path = new[] { 0 }, State = ForestMachineState.Loading,
             Source = new() { Volume = 10 }, Upkeep = new(1) { Broken = true, RepairLeft = .5f } };
         logistics.Machines.Add(machine); logistics.Update(1);

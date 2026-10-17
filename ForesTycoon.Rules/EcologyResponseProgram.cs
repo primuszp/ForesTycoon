@@ -20,13 +20,14 @@ public sealed class EcologyResponseProgram
     public static readonly BehaviorHook[] Hooks = SiteHooks.Concat(ForestCompetitionRules.Hooks).Concat(ForestRegenerationRules.Hooks).Concat(TreeInitialSizeRules.Hooks).Concat(EnvironmentRules.Hooks).ToArray();
     private static readonly int EnvironmentIndex = Hooks.Length - EnvironmentRules.Hooks.Length;
     private static readonly int InitialSizeIndex = Array.FindIndex(Hooks, h => h.Id == "forest.initialHeight" && h.Kind == "initialTree");
-    public static bool IsPureKind(string kind) => kind is "site" or "competitionPair" or "competition" or "resource" or "regeneration" or "initialTree" or "environment" or "vehicleResponse";
+    public static bool IsPureKind(string kind) => LogisticsRules.IsKind(kind) || kind is "site" or "competitionPair" or "competition" or "resource" or "regeneration" or "initialTree" or "environment" or "vehicleResponse";
     public static bool AllowedOperation(BehaviorOperation op) => op is BehaviorOperation.Constant or BehaviorOperation.Input
         or BehaviorOperation.Add or BehaviorOperation.Subtract or BehaviorOperation.Multiply or BehaviorOperation.Divide
         or BehaviorOperation.Minimum or BehaviorOperation.Maximum or BehaviorOperation.Greater or BehaviorOperation.Less
         or BehaviorOperation.Select or BehaviorOperation.Absolute or BehaviorOperation.Negate or BehaviorOperation.Exp or BehaviorOperation.Power or BehaviorOperation.Curve;
     public static BehaviorGraph DefaultGraph(BehaviorHook hook)
     {
+        if (LogisticsRules.IsKind(hook.Kind)) return LogisticsRules.DefaultGraph(hook);
         if (hook.Kind == "vehicleResponse") return VehicleResponseRules.DefaultGraph(hook);
         if (hook.Kind == "environment") return EnvironmentRules.DefaultGraph(hook);
         if (hook.Kind == "initialTree") return TreeInitialSizeRules.DefaultGraph(hook);

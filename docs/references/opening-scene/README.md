@@ -242,3 +242,11 @@ A futtató `forestycoon-simulation/2026-10-16.12`. A frissen rögzített világo
 A jelenet saját szerkesztései megmaradtak. A fizikai integrátor és könyvelés
 motor marad, a régi párhuzamos válaszszámítások törölve.
 [Részletek, az 5/a és 5/b határa](../../vehicle-response-rules.md).
+
+
+## Huszadik lépés: rakodás, gépi döntések és malom – 2026-10-17
+
+33 közös gráf váltja ki a korábbi részleges logisztikai folyamatkapcsolatokat
+és natív döntéseket. A futtató `forestycoon-simulation/2026-10-17.1`.
+Friss rögzítéssel összevetve csak a `Behaviors` lenyomat változott. A jelenet
+saját szerkesztései megmaradtak. [Részletes hatókör](../../logistics-rules.md).

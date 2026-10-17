@@ -111,12 +111,18 @@ namespace ForesTycoon.Rules
             if (!programs.TryGetValue((hook, kind, id), out var program) && !programs.TryGetValue((hook, kind, null), out program)) return inputs.Native;
             try { return program.Evaluate(inputs, extras); }
             catch (ArithmeticException e) {
+                if (LogisticsRules.IsKind(kind)) {
+                    double safe = hook == "route.cost" ? 0 : program.ErrorValue;
+                    LastError = $"{hook} / {kind} #{id}: {e.Message} Biztonsági fix eredmény: {safe}. Útvonalhibánál a szakasz tiltott.";
+                    return safe;
+                }
                 LastError = $"{hook} / {kind} #{id}: {e.Message} A beépített eredmény maradt érvényben.";
                 return inputs.Native;
             }
         }
         private sealed class Program
         {
+            internal double ErrorValue => Math.Max(0, hook.Min);
             private readonly bool disabled;
             private readonly double disabledValue;
             private readonly BehaviorNode[] nodes;
@@ -147,6 +153,8 @@ namespace ForesTycoon.Rules
                     if (n == null || string.IsNullOrWhiteSpace(n.Id) || string.IsNullOrWhiteSpace(n.Name) || !Enum.IsDefined(n.Operation)
                         || !double.IsFinite(n.Value) || !float.IsFinite(n.X) || !float.IsFinite(n.Y) || !byId.TryAdd(n.Id, n))
                         throw new InvalidDataException("Érvénytelen vagy ismétlődő csomópont.");
+                if (LogisticsRules.IsKind(hook.Kind) && graph.Nodes.Any(n => !LogisticsRules.AllowedOperation(n.Operation)))
+                    throw new InvalidDataException("A logisztikai szabály csak mért bemenetekből és gráfműveletekből számolhat.");
                 foreach (var n in graph.Nodes.Where(n => n.Operation == BehaviorOperation.Input))
                     if (hook.Inputs == null || Array.IndexOf(hook.Inputs, n.Key) < 0)
                         throw new InvalidDataException("Ennek a szabálynak nincs ilyen bemenete: " + n.Key);

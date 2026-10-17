@@ -5,7 +5,7 @@ namespace ForesTycoon.Tests;
 public class TransportRuleTests
 {
     private static BehaviorGraph Value(string hook, string kind, double value, ulong? id = null) => new() {
-        Id = Guid.NewGuid().ToString("N"), Hook = hook, Kind = kind, ObjectId = id, Output = "value",
+        Id = Guid.NewGuid().ToString("N"), Hook = hook, Kind = LogisticsRules.Kind(kind), ObjectId = id, Output = "value",
         Nodes = new() { new() { Id = "value", Name = "Érték", Operation = BehaviorOperation.Constant, Value = value } }
     };
     private static (TerrainMap Map, ForestryLogistics Logistics) Routes()
@@ -33,7 +33,7 @@ public class TransportRuleTests
         var (map, logistics) = Routes(); var machine = new ForestMachine { Id = 7, Kind = kind };
         var graph = Value("route.cost", kind == ForestMachineKind.Forwarder ? "forwarder" : "processor", 50);
         graph.Nodes.AddRange(new BehaviorNode[] {
-            new() { Id = "surface", Name = "Burkolat", Operation = BehaviorOperation.Surface },
+            new() { Id = "surface", Name = "Burkolat", Operation = BehaviorOperation.Input, Key = "route.surface" },
             new() { Id = "two", Name = "Makadám", Operation = BehaviorOperation.Constant, Value = 2 },
             new() { Id = "trail", Name = "Nyom", Operation = BehaviorOperation.Greater, A = "surface", B = "two" },
             new() { Id = "cheap", Name = "Közút költsége", Operation = BehaviorOperation.Constant, Value = .1 },
@@ -45,7 +45,7 @@ public class TransportRuleTests
         for (int i = 1; i < route.Length; i++) Assert.True(map.AreNetworkNeighbours(route[i - 1], route[i]));
     }
     [Fact]
-    public void AllowGraphCanForbidButCannotCreateConnectionsAndArithmeticErrorsFallBack()
+    public void AllowGraphCanForbidButCannotCreateConnectionsAndArithmeticErrorsFailClosed()
     {
         var (map, logistics) = Routes();
         logistics.Behaviors = new WorldBehaviorPolicy(new() { Graphs = new() { Value("route.allow", "truck", 0, 7) } });
@@ -54,7 +54,7 @@ public class TransportRuleTests
         var invalid = Value("route.cost", "truck", 0);
         invalid.Nodes.Add(new() { Id = "bad", Name = "Hibás osztás", Operation = BehaviorOperation.Divide, A = "value", B = "value" }); invalid.Output = "bad";
         var policy = new WorldBehaviorPolicy(new() { Graphs = new() { invalid } }); logistics.Behaviors = policy;
-        Assert.Contains(66, logistics.PreviewTruckRoute(35, 41, new() { Id = 7 })); Assert.NotNull(policy.LastError);
+        Assert.Null(logistics.PreviewTruckRoute(35, 41, new() { Id = 7 })); Assert.NotNull(policy.LastError);
         Assert.Null(logistics.PreviewTruckRoute(0, 255, new() { Id = 7 }));
         Assert.Throws<InvalidOperationException>(() => map.FindNetworkPath(34, 42, out _, (_, _, _) => -1));
     }
@@ -63,12 +63,12 @@ public class TransportRuleTests
     {
         var graph = Value("loading.depart", "truck", 0);
         graph.Nodes = new() {
-            new() { Id = "cargo", Name = "Rakomány", Operation = BehaviorOperation.Amount },
-            new() { Id = "capacity", Name = "Kapacitás", Operation = BehaviorOperation.Capacity },
+            new() { Id = "cargo", Name = "Rakomány", Operation = BehaviorOperation.Input, Key = "machine.cargo" },
+            new() { Id = "capacity", Name = "Kapacitás", Operation = BehaviorOperation.Input, Key = "machine.capacity" },
             new() { Id = "ratio", Name = "Arány", Operation = BehaviorOperation.Divide, A = "cargo", B = "capacity" }
         }; graph.Output = "ratio";
         var policy = new WorldBehaviorPolicy(new() { Graphs = new() { graph } });
-        Assert.Equal(.5, policy.Evaluate(new("loading.depart", "truck", 1, 0, Amount: 10, Capacity: 20)));
+        Assert.Equal(.5, policy.Evaluate(new("loading.depart", "logisticsTruck", 1, 0, Extras: LogisticsRules.Hooks.Single(h => h.Id == "loading.depart" && h.Kind == "logisticsTruck").Inputs.Select(k => k == "machine.cargo" ? 10d : k == "machine.capacity" ? 20d : 0d).ToArray())));
         graph.Hook = "tuning.DieselPrice"; graph.Kind = "world";
         Assert.Throws<InvalidDataException>(() => new WorldBehaviorPolicy(new() { Graphs = new() { graph } }));
     }

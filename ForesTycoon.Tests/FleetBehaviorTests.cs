@@ -6,7 +6,7 @@ namespace ForesTycoon.Tests;
 public partial class FleetTests
 {
     private static BehaviorGraph TransportConstant(string hook, string kind, double value, ulong? id = null) => new() {
-        Id = Guid.NewGuid().ToString("N"), Hook = hook, Kind = kind, ObjectId = id, Output = "value",
+        Id = Guid.NewGuid().ToString("N"), Hook = hook, Kind = LogisticsRules.Kind(kind), ObjectId = id, Output = "value",
         Nodes = new() { new() { Id = "value", Name = "Érték", Operation = BehaviorOperation.Constant, Value = value } }
     };
     private static void SetTransportModel(Scene scene, BehaviorModel model)

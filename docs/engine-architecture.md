@@ -574,3 +574,12 @@ várakozva megszakította; a változatlan forrás újrafuttatása
 `MSBUILDDISABLENODEREUSE=1` mellett sikeres (2,85 perc).
 Nyers naplók: `artifacts/machine-tuning-tests.txt`,
 `artifacts/machine-tuning-full-tests-retry.txt`.
+
+
+## Gráfos logisztika – 2026-10-17
+
+Az 5/b rakodási, gépi munkaválasztási, mozgási és malomdöntései 33 közös
+projektgráfból futnak. A beszállítókeresés, útvonal-másolás és nagy sebességű
+gépi mozgás is szeletelt; minden érintett csempe külön áthaladást kap. A natív
+párhuzamos döntések és az erdőből közvetlen teherautóra kitermelő kerülőág
+törölve. [Szerkesztés, motorhatár, mentés és mérések](logistics-rules.md).

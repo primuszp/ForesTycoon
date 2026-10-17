@@ -32,7 +32,7 @@ internal sealed partial class RuleEditorView
         }
         var model = behaviors.Document;
         foreach (var g in model.Graphs.Where(g => EcologyResponseProgram.IsPureKind(g.Kind)))
-            RuleCardEntry("behavior:" + g.Id, g.Name, "Értéket számol", commonSelection == "behavior:" + g.Id, !g.Disabled,
+            RuleCardEntry("behavior:" + g.Id, g.Name + (g.ObjectId.HasValue ? " · #" + g.ObjectId : ""), "Értéket számol", commonSelection == "behavior:" + g.Id, !g.Disabled,
                 () => ShowCommonRule("behavior:" + g.Id), enabled => RequestResponseAvailability(g, enabled),
                 g.Disabled ? "Fix eredményt ad. Kattintás: az összefüggés visszakapcsolása." : "Kikapcsoláskor te választod ki a helyettesítő eredményt.");
         if (ImGui.Selectable("Szabálytár és sablonok", commonSelection == "library")) ShowCommonRule("library");

@@ -466,7 +466,7 @@ namespace ForesTycoon
 
         void IWorldCommandTarget.ExecuteSpawnVehicle()
         {
-            Logistics.Dispatch(vehicles);
+            Logistics.Status = "A rönkszállítót a Járművek ablakból küldd: forrás sarang, majd cél.";
         }
 
         void IWorldCommandTarget.ExecutePlantForest(int tileId, ForestSpecies species) =>
@@ -650,7 +650,7 @@ namespace ForesTycoon
         }
         private void InitializeLogistics()
         {
-            Logistics=new ForestryLogistics(map,forest){MachinesEnabled=true};
+            Logistics=new ForestryLogistics(map,forest);
             vehicles.SourceLoader = Logistics.Load;
             vehicles.DestinationReceiver = Logistics.Deliver;
             vehicles.RouteValidator = Logistics.RouteConnected;

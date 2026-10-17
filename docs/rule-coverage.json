@@ -50,9 +50,7 @@
     {
       "status": "extension",
       "ids": [
-        "machine.controller",
-        "route.policy",
-        "loading.policy"
+        "machine.controller"
       ],
       "editor": "Szabályok → Gépek munkaciklusai / Folyamatkapcsolatok.",
       "remaining": "Szerkeszthető vezérlő vagy eredménykapcsolat; a natív alapfolyamat átvezetése még hiányzik.",
@@ -104,17 +102,11 @@
     {
       "status": "pending",
       "ids": [
-        "vehicle.transfer",
         "fleet.depot",
-        "fleet.orders",
-        "machine.processor",
-        "machine.forwarder",
-        "machine.logTransfer",
-        "machine.movement",
-        "mill.process"
+        "fleet.orders"
       ],
-      "editor": "Részleges folyamatkapcsolatok / munkaciklusok; Típusok paraméterei.",
-      "remaining": "5/b: rakodás, munkafázisok, gépi út- és munkaválasztás, malom és megrendelési feltételek; a meglévő részleges folyamatkapcsolatok teljes átvezetése.",
+      "editor": "A munkaválasztás és hazatérés már közös gráf; az építés és megrendelés feltételei még kódban.",
+      "remaining": "6. csomag: telephely építhetősége, induló flotta összetétele és játékosparancsok engedélyezése. Nem párhuzamos rakodási modell.",
       "tests": [
         "ForesTycoon.Tests/VehicleDynamicsTests.cs",
         "ForesTycoon.Tests/VehicleUpkeepTests.cs",
@@ -497,6 +489,26 @@
       "remaining": "A szimulációs szabályok lezárása után vizsgálandó.",
       "tests": [
         "ForesTycoon.Tests/CurrentGameRulesTests.cs"
+      ]
+    },
+    {
+      "status": "graph",
+      "ids": [
+        "vehicle.transfer",
+        "machine.processor",
+        "machine.forwarder",
+        "machine.logTransfer",
+        "machine.movement",
+        "mill.process",
+        "route.policy",
+        "loading.policy"
+      ],
+      "editor": "Szabályok: processzor, forwarder, teherautó és malom közös válaszgráfjai.",
+      "remaining": "A projekt számolja a döntéseket; állapotléptetés, útgeometria, kapacitás és térfogat-érték megőrzése motorfeladat.",
+      "tests": [
+        "ForesTycoon.Tests/LogisticsGraphTests.cs",
+        "ForesTycoon.Tests/FleetWorkTests.cs",
+        "ForesTycoon.Tests/FleetBehaviorTests.cs"
       ]
     }
   ],

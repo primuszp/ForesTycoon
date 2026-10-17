@@ -31,7 +31,7 @@ public partial class FleetTests
         }
         else map.BuildRoadTilePath(34, 210, RoadPaving.Macadam);
         map.MarkSkidTrailPath(130, 135);
-        var logistics = new ForestryLogistics(map, forest) { MachinesEnabled = true };
+        var logistics = new ForestryLogistics(map, forest);
         var vehicles = new VehicleSystem(new TimberCargoSystem(), route => VehicleRoadRoute.Create(map, route))
         { SourceLoader = logistics.Load, DestinationReceiver = logistics.Deliver, RouteValidator = logistics.RouteConnected };
         logistics.Vehicles = vehicles;

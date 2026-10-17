@@ -83,10 +83,10 @@ namespace ForesTycoon
             TransportState = VehicleTransportState.Unloading;
             Hold();
         }
-        internal bool AdvanceTransfer(double delta)
+        internal bool AdvanceTransfer(double delta, double duration)
         {
             Hold();
-            TransferProgress = Math.Min(1, TransferProgress + (float)(delta / 3.0));
+            TransferProgress = Math.Min(1, TransferProgress + (float)(delta / duration));
             return TransferProgress >= 1;
         }
 

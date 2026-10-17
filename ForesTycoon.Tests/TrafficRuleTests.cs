@@ -170,7 +170,7 @@ public sealed class TrafficRuleTests
         using var world = World(); var ids = Network(world, true); world.Map.SetSkidTrailState(ids[1], .5f, 1);
         var machine = new ForestMachine { Id = 1, Kind = (ForestMachineKind)kind, Path = ids, PathPosition = .499,
             State = ForestMachineState.Driving, Goal = ForestMachineState.Parked };
-        world.Logistics.Machines.Add(machine); world.Logistics.MachinesEnabled = true;
+        world.Logistics.Machines.Add(machine);
         int slices = 0; while (!world.ContinueUpdate(1d / 30, 1)) Assert.True(++slices < 50000);
         Assert.True(machine.PathPosition > .5); Assert.Equal(.52f, world.Map.GetSkidTrailWear(ids[1]), 6);
         Assert.Equal(0, world.Map.GetSkidTrailIdle(ids[1])); Assert.Equal(0, world.PendingTrafficPassages);

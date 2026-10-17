@@ -268,7 +268,7 @@ internal sealed partial class RuleEditorView
                 if (ImGui.Button("Teljes algoritmusgráf")) { algorithms.SelectSource(source); view = View.Algorithms; workshopPhase = WorkshopPhase.Edit; workshopTool = WorkshopTool.Algorithms; }
                 ImGui.Separator();
             }
-            foreach (var hook in WorldBehaviorPolicy.Hooks.Where(h => h.Kind == kinds[objectKind])) {
+            foreach (var hook in WorldBehaviorPolicy.Hooks.Where(h => h.Kind == kinds[objectKind] || LogisticsRules.IsKind(h.Kind) && h.Kind[9..].ToLowerInvariant() == kinds[objectKind])) {
                 var effective = rules.Graphs.Find(g => g.Hook == hook.Id && g.Kind == hook.Kind && g.ObjectId == objectId)
                     ?? rules.Graphs.Find(g => g.Hook == hook.Id && g.Kind == hook.Kind && g.ObjectId == null);
                 ImGui.PushID(hook.Id); ImGui.TextWrapped(hook.Name + " · " + hook.Schedule);

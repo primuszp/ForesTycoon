@@ -170,7 +170,7 @@ namespace ForesTycoon
             truck.FuelCharged = used;
         }
 
-        private System.Collections.Generic.IEnumerable<int> UpdateTrucksWork(double seconds)
+        private System.Collections.Generic.IEnumerable<int> UpdateTrucksWork(double seconds, Dictionary<int, List<SupplyEdge>> supply)
         {
             foreach (var truck in Trucks)
             {
@@ -213,7 +213,10 @@ namespace ForesTycoon
                     case TruckPhase.Working:
                     {
                         var v = truck.Vehicle;
-                        bool done = truck.HomeRequested || (truck.Source.Volume <= 0.01f && !BeingFed(truck.Source));
+                        var fed = new WorkResult<bool>();
+                        foreach (int unit in BeingFedWork(truck.Source, fed, supply)) yield return unit;
+                        bool done = truck.HomeRequested || rules.Evaluate(Behaviors, "truck.return", "truck", (ulong)truck.Id,
+                            new(StepSeconds: seconds, MachineKind: 2, MachineCargo: v.CargoAmount, MachineCapacity: v.CargoCapacity, MachineWear: truck.Upkeep.Wear, SourceStock: truck.Source.Volume, SourceFed: fed.Value ? 1 : 0)) >= .5;
                         // Leave only empty and standing at the source, so no timber is carried off.
                         if (done && v.CargoAmount <= 0.0001f && v.TransportState is VehicleTransportState.Loading or VehicleTransportState.Waiting)
                             foreach (int unit in ReturnWork(truck, v.Route[0])) yield return unit;

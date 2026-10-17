@@ -70,10 +70,10 @@ namespace ForesTycoon
                 "machine.controllerState|machine.state", "Szerkeszthető állapotok, sorrendezett ÉS-feltételek, időzítő és egyszeri események. Műveletek: automatikus munka, várakozás, hazatérés; forwardernél és teherautónál külön felrakodás, lerakodás, haladás és részrakománnyal indulás. A szállítási ciklussablon ezeket szerkeszthető állapotokra bontja. Mentett időzítő és eseményállapot; fizikai átadás csak a megfelelő helyen.", execution: GameRuleExecution.EditableController);
             Add("route.policy", "Útvonalköltség és szakaszengedély gráfjai", "Járművek", "Flottatípus / egyedi flotta-ID", "Minden új útkeresés",
                 "ForesTycoon/World/Cargo/ForestryLogistics.Behaviors.cs", "RouteCost", "rules.behaviors|road.condition|road.network|trail.network|trail.wear|machine.cargo|vehicle.cargo", "vehicle.route",
-                "A route.allow kizárhat egy járható szakaszt; a route.cost pozitív súlyt ad. Bemenet a kiinduló és célcsempe, burkolat, sérültség, rakomány és kapacitás. A gráf szerinti Dijkstra-költség a dokkpár kiválasztását is befolyásolja. A már folyamatban lévő út nem cserélődik le menet közben.", execution: GameRuleExecution.EditableExpressions);
+                "A route.allow kizárhat egy járható szakaszt; a route.cost pozitív súlyt ad. Bemenet a kiinduló és célcsempe, burkolat, sérültség, rakomány és kapacitás. A gráf szerinti Dijkstra-költség a dokkpár kiválasztását is befolyásolja. A már folyamatban lévő út nem cserélődik le menet közben.", execution: GameRuleExecution.EditableGraph);
             Add("loading.policy", "Rakodási mennyiség, időzítés és indulás gráfjai", "Faanyag és logisztika", "Forwarder / processzor / teherautó típusa vagy egyedi flotta-ID", "Rakodási al-lépés / rönkciklus",
                 "ForesTycoon/World/Cargo/ForwarderLoading.cs", "ForwarderLoading", "rules.behaviors|timber.stacks|machine.cargo|vehicle.cargo|machine.controllerState",
-                "machine.cargo|machine.grapple|machine.work|vehicle.cargo|vehicle.transportState|timber.stacks", "Szerkeszthető fel- és lerakott mennyiség, részrakománnyal indulás, forwarder rönkciklus-idő, megfogás és elengedés. A ciklus időzítése rögzítve és mentve; az animáció ugyanazt követi. A készlet-, kapacitás- és rönkkorlát, valamint a térfogat–érték megőrzése kötelező.", execution: GameRuleExecution.EditableExpressions);
+                "machine.cargo|machine.grapple|machine.work|vehicle.cargo|vehicle.transportState|timber.stacks", "Szerkeszthető fel- és lerakott mennyiség, részrakománnyal indulás, forwarder rönkciklus-idő, megfogás és elengedés. A ciklus időzítése rögzítve és mentve; az animáció ugyanazt követi. A készlet-, kapacitás- és rönkkorlát, valamint a térfogat–érték megőrzése kötelező.", execution: GameRuleExecution.EditableGraph);
 
             Add("terrain.generate", "Terep és vízmedencék", "Terep", "Node-rács / térképcella", "Új világ", "ForesTycoon.Map/Generation/TerrainGenerator.cs", "TerrainGenerator",
                 "world.seed|terrain.settings", "terrain.height|terrain.moisture|terrain.water", "Seedből induló domborzat és hidrológia. A térképi nedvesség nem azonos az ökológiai gyökérzónavíz-készlettel.");
@@ -235,7 +235,7 @@ namespace ForesTycoon
                 "vehicle.speed|vehicle.resistance|vehicle.mass", "vehicle.fuel", "A dinamika által ténylegesen kifejtett teljesítmény és alapjárat alapján számolt liter. Lejtőn fékezés nem termel negatív fogyasztást.", "liter = motorteljesítmény_kW × órák × fajlagos fogyasztás + alapjárati l/h × órák", execution: GameRuleExecution.EditableGraph);
             Add("vehicle.transfer", "Rakodási és szállítási állapotgép", "Járművek", "Teherautó / forrás / cél", "Járműidő",
                 "ForesTycoon/World/Vehicles/VehicleSystem.cs", "Update", "vehicle.route|timber.stacks|vehicle.cargo|vehicle.broken", "vehicle.cargo|vehicle.transportState|timber.stacks|mill.stock",
-                "Rakodás, fuvar, lerakodás, visszaút, várakozás. Hiányzó készletnél vár; megszakadt útvonalnál megőrzi a rakományt és megáll.");
+                "Rakodás, fuvar, lerakodás, visszaút, várakozás. Hiányzó készletnél vár; megszakadt útvonalnál megőrzi a rakományt és megáll.", execution: GameRuleExecution.EditableGraph);
 
             var wear = Add("upkeep.wear", "Gép- és járműkopás, meghibásodás", "Fenntartás", "Flottajármű", "Munka / mozgás", upkeep, "Operate",
                 "machine.work|vehicle.cargo|trail.network|vehicle.speed|vehicle.wear|vehicle.time", "vehicle.wear|vehicle.broken",
@@ -256,19 +256,19 @@ namespace ForesTycoon
                 "commands|fleet.state|vehicle.route|timber.stacks|harvest.sites|mill.stock", "fleet.state|vehicle.route|machine.work", "Forrás és cél kijelölése, megközelítés, munka és hazatérés. A teherautó üresen távozik a forrástól, a gép előbb leadja a rakományt.");
             var processor = Add("machine.processor", "Processzor: vágás és kihordás", "Faanyag és logisztika", "Kitermelési cella / sarang", "1/30 jármű-s al-lépés", machine, "UpdateProcessor",
                 "harvest.sites|forest.volume|timber.localDepot|timber.stacks|machine.pace|machine.work|vehicle.broken|vehicle.time", "machine.work|machine.cargo|timber.localDepot|timber.stacks|machine.fuel",
-                "Kivágás, rönkfelvétel és sarangra hordás állapotgépe; kopás szerinti tempóval, rakománykapacitással és műveleti üzemanyag-rátákkal.");
+                "Kivágás, rönkfelvétel és sarangra hordás állapotgépe; kopás szerinti tempóval, rakománykapacitással és műveleti üzemanyag-rátákkal.", execution: GameRuleExecution.EditableGraph);
             var forwarder = Add("machine.forwarder", "Forwarder: sarangok közötti közelítés", "Faanyag és logisztika", "Gép / sarangpár", "1/30 jármű-s al-lépés", machine, "UpdateForwarder",
-                "timber.stacks|machine.pace|vehicle.route|vehicle.broken|vehicle.time", "machine.cargo|timber.stacks|machine.position|machine.fuel", "Úton vagy nyomon állva, rönkönként rakodik. A markoló megfogáskor kiveszi, elengedéskor átadja a térfogatot és értéket; az alap ciklus 8 másodperc. A rakomány alulról épül és felülről fogy.");
+                "timber.stacks|machine.pace|vehicle.route|vehicle.broken|vehicle.time", "machine.cargo|timber.stacks|machine.position|machine.fuel", "Úton vagy nyomon állva, rönkönként rakodik. A markoló megfogáskor kiveszi, elengedéskor átadja a térfogatot és értéket; az alap ciklus 8 másodperc. A rakomány alulról épül és felülről fogy.", execution: GameRuleExecution.EditableGraph);
             var loading = Add("machine.logTransfer", "Rönk és érték átadása a markolóval", "Faanyag és logisztika", "Forwarder / sarang / markoló", "Rakodási al-lépés", "ForesTycoon/World/Cargo/ForwarderLoading.cs", "Step",
                 "machine.cargo|timber.stacks|machine.pace|vehicle.time|machine.work", "machine.cargo|machine.grapple|timber.stacks|timber.cargoValue|machine.work",
                 "A ciklus elején rögzül a hangolt rakodási rátából számolt idő. Megfogáskor a forrásból a markolóba, elengedéskor a célba kerül a térfogat és érték. A folyamatban levő ciklust és a markoló tartalmát a mentés megőrzi.",
-                "ciklusidő = rönktérfogat / rakodási ráta; fázis = munkaidő / ciklusidő");
+                "ciklusidő = rönktérfogat / rakodási ráta; fázis = munkaidő / ciklusidő", execution: GameRuleExecution.EditableGraph);
             Param(loading, "Rönktérfogat", ForwarderLoading.LogVolume, "m³");
             Param(loading, "Megfogás fázisa", ForwarderLoading.Grip, "1");
             Param(loading, "Elengedés fázisa", ForwarderLoading.Release, "1");
             Add("machine.movement", "Erdészeti gépek mozgása és nyomterhelése", "Faanyag és logisztika", "Gép / útvonal", "1/30 jármű-s al-lépés", machine, "Advance",
                 "vehicle.route|road.network|trail.network|trail.wear|machine.pace|machine.cargo|machine.work", "machine.position|trail.wear|machine.fuel",
-                "Eltérő üres/rakott sebesség, útvonaljárhatóság ellenőrzése, nyomvályú és művelethez tartozó fogyasztás. A gépek külön kinematikával futnak, a teherautó fizikai modelljét nem használják.");
+                "Eltérő üres/rakott sebesség, útvonaljárhatóság ellenőrzése, nyomvályú és művelethez tartozó fogyasztás. A gépek külön kinematikával futnak, a teherautó fizikai modelljét nem használják.", execution: GameRuleExecution.EditableGraph);
             Add("timber.stack", "Sarang térfogat- és értékmérlege", "Faanyag és logisztika", "Sarang", "Rakodás / lerakodás", stacks, "Take",
                 "machine.cargo|vehicle.cargo|timber.stacks", "timber.stacks|timber.cargoValue", "A kivett mennyiség arányában együtt mozog az érték. Üres sarang nullázódik; foglalt vagy nem üres sarang nem törölhető.", "átadott érték = készletérték × kivett térfogat / készlettérfogat");
             Add("timber.deliver", "Átadás és faanyag eladása", "Faanyag és logisztika", "Teherautó / sarang vagy malom", "Lerakodás", stacks, "Receive",
@@ -276,7 +276,7 @@ namespace ForesTycoon
             Add("mill.place", "Fűrészmalom elhelyezése", "Faanyag és logisztika", "2×2 cella", "Játékosparancs", logistics, "PlaceMill",
                 "commands|terrain.height|terrain.water|forest.trees|harvest.sites|buildings.footprint", "buildings.footprint|mill.stock", "Sík, száraz, üres, erdő és kitermelés nélküli telek; út és erdő később nem építhető a lábnyomára. Jelenleg nincs malomépítési költség.");
             Add("mill.process", "Fűrészmalom feldolgozása", "Faanyag és logisztika", "Malom", "Járműidő", logistics, "Processed",
-                "mill.stock|vehicle.time", "mill.stock|mill.processed", "A készletből korlátozott ütemben feldolgozott mennyiség lesz; jelenleg nincs új terméklánc vagy feldolgozási bevétel.", "feldolgozás = min(készlet, 0,25 × jármű-s) m³");
+                "mill.stock|vehicle.time", "mill.stock|mill.processed", "A készletből korlátozott ütemben feldolgozott mennyiség lesz; jelenleg nincs új terméklánc vagy feldolgozási bevétel.", "feldolgozás = min(készlet, 0,25 × jármű-s) m³", execution: GameRuleExecution.EditableGraph);
             var diesel = Add("economy.fuel", "Üzemanyag-költség", "Gazdaság", "Flottajármű / vállalat", "Gépmunka vagy teherautó elszámolás", stacks, "Burn",
                 "vehicle.fuel|machine.fuel|economy.fuelFactor", "economy.runningCosts", "A tényleges fogyasztás és a kopási szorzó alapján költséget számol; a modellnek jelenleg nincs külön üzemanyagkészlete.", "költség += liter × dízelár");
             Add("economy.balance", "Bevétel, kiadás és eredmény", "Gazdaság", "Vállalat", "Műveleti elszámolás",
@@ -340,7 +340,7 @@ namespace ForesTycoon
             foreach (var rule in catalog.Rules.Where(r => r.Id is "machine.forwarder" or "machine.processor" or "vehicle.transfer" or "fleet.orders"))
                 rule.Reads = rule.Reads.Append("machine.controllerState").ToArray();
             catalog.Gaps.AddRange(new[] {
-                "A teljes natív állapotgépek még C#-ban futnak. A Viselkedések nézet a felsorolt folyamatkimeneteket és minden hangolási paramétert szerkeszti gráfként; tetszőleges eseménysorrend, új állapotmező és saját játékosparancs még nem hozható létre.",
+                "A logisztikai döntések mért bemenetekből, a közös Szabályok gráfjaiból futnak. A fizikai átadás, útgeometria és készletkönyvelés motorfeladat; új játékosparancs és tetszőleges fizikai munkafázis még nem hozható létre.",
                 "A talaj-, klíma- és fafajparaméterek egyelőre csak tájékoztató adatok: a világ létrehozásakor rögzülnek, a szerkesztőből nem hangolhatók.",
                 "Talajtömörödés, erózió és útkialakítás miatti részletes vízelvezető műtárgyak nincsenek külön folyamatként megvalósítva.",
                 "A vadak nem rágják a csemetéket; kártevő-, fertőzés- és tűzterjedési rendszer még nincs.",

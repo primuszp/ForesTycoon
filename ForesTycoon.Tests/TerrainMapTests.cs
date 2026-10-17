@@ -129,7 +129,9 @@ public class TerrainMapTests
         var references = assembly.GetReferencedAssemblies().Select(a => a.Name!)
             .Where(n => !n.StartsWith("System") && n != "netstandard" && n != "mscorlib").OrderBy(n => n);
         Assert.Contains("ForesTycoon.Ecology", references);
-        Assert.All(references, n => Assert.Contains(n, new[] { "ForesTycoon.Ecology", "ForesTycoon.Engine", "OpenTK.Mathematics" }));
+        Assert.All(references, n => Assert.Contains(n, new[] { "ForesTycoon.Ecology", "ForesTycoon.Engine", "ForesTycoon.Rules", "OpenTK.Mathematics" }));
+        Assert.All(typeof(ForesTycoon.Rules.BehaviorModel).Assembly.GetReferencedAssemblies(),
+            dependency => Assert.True(dependency.Name!.StartsWith("System") || dependency.Name is "netstandard" or "mscorlib"));
         Assert.All(assembly.GetTypes().Where(t => !t.FullName!.Contains('<')),
             t => Assert.StartsWith("ForesTycoon.Map", t.Namespace));
     }

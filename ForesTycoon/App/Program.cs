@@ -6,6 +6,7 @@ namespace ForesTycoon
     {
         static void Main(string[] args)
         {
+            if (args.Length == 1 && args[0] == "--logistics-rule-benchmark") { LogisticsRuleBenchmark.Run(); return; }
             if (args.Length == 1 && args[0] == "--vehicle-response-benchmark") { VehicleResponseBenchmark.Run(); return; }
             if (args.Length == 1 && args[0] == "--regeneration-benchmark") { RuleStepBenchmark.Run(64, 256); return; }
             if (args.Length == 1 && args[0] == "--competition-benchmark") { RuleStepBenchmark.Run(64, 256); return; }
@@ -81,7 +82,7 @@ namespace ForesTycoon
             AppDomain.CurrentDomain.UnhandledException += (_, args) =>
                 Console.Error.WriteLine(args.ExceptionObject?.ToString() ?? "Unknown fatal error");
 
-            if (Array.Exists(args, argument => argument == "--logistics-smoke-test")) { ForestryLogisticsSmokeTest.Run(); return; }
+            if (Array.Exists(args, argument => argument == "--logistics-smoke-test")) { ForestMachineSmokeTest.Run(); return; }
             if (Array.Exists(args, argument => argument == "--environment-smoke-test")) { EnvironmentSmokeTest.Run(); return; }
             if (Array.Exists(args, argument => argument == "--flood-render-smoke-test")) { FloodRenderSmokeTest.Run(); return; }
             if (Array.Exists(args, argument => argument == "--soil-raster-smoke-test")) { SoilRasterSmokeTest.Run(); return; }

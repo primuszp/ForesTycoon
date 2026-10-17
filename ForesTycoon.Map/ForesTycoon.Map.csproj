@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="../ForesTycoon.Engine/ForesTycoon.Engine.csproj" />
     <ProjectReference Include="../ForesTycoon.Ecology/ForesTycoon.Ecology.csproj" />
+    <ProjectReference Include="../ForesTycoon.Rules/ForesTycoon.Rules.csproj" />
     <PackageReference Include="OpenTK.Mathematics" Version="4.9.4" />
   </ItemGroup>
 

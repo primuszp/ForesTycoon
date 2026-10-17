@@ -41,14 +41,14 @@ public sealed class FullRuleEditorTests
     public void TemplatesReplaceOnlyTheChosenBindingAndNeverShareActiveMutableNodes()
     {
         var model = new BehaviorModel { Graphs = new() {
-            new() { Id = "type", Hook = "machine.pace", Kind = "forwarder" }, new() { Id = "local", Hook = "machine.pace", Kind = "forwarder", ObjectId = 42 } } };
+            new() { Id = "type", Hook = "machine.pace", Kind = "logisticsForwarder", Output = "value", Nodes = new() { new() { Id = "value", Name = "Tempó", Operation = BehaviorOperation.Constant, Value = 2 } } }, new() { Id = "local", Hook = "machine.pace", Kind = "logisticsForwarder", Output = "value", Nodes = new() { new() { Id = "value", Name = "Tempó", Operation = BehaviorOperation.Constant, Value = 2 } }, ObjectId = 42 } } };
         var template = AuthoringOperations.Template(model.Graphs[0]); template.Graph!.Nodes[0].Name = "Copied";
         Assert.NotEqual("Copied", model.Graphs[0].Nodes[0].Name);
         AuthoringOperations.Instantiate(model, template, 42);
         Assert.Equal(2, model.Graphs.Count); Assert.Contains(model.Graphs, g => g.Id == "type");
         var instance = model.Graphs.Single(g => g.ObjectId == 42); Assert.NotEqual(template.Graph.Id, instance.Id);
         instance.Nodes[0].Name = "User edited"; Assert.Equal("Copied", template.Graph.Nodes[0].Name);
-        Assert.Equal(2, new CompiledBehaviorModel(model, WorldBehaviorPolicy.Hooks).Evaluate("machine.pace", "forwarder", 42, new(2, 0, 0, 0, 0)));
+        Assert.Equal(2, new CompiledBehaviorModel(model, WorldBehaviorPolicy.Hooks).Evaluate("machine.pace", "logisticsForwarder", 42, new(2, 0, 0, 0, 0)));
     }
     [Fact]
     public void ExternalAgentEditsAreDetectedAndArchivedVersionsRemainImmutable()

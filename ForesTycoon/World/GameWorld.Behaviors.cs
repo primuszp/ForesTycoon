@@ -6,12 +6,7 @@ namespace ForesTycoon
 {
     internal sealed class WorldBehaviorPolicy : IBehaviorPolicy
     {
-        internal static readonly BehaviorHook[] Hooks = new BehaviorHook[] {
-            new("machine.pace", "Forwarder munkatempó", "forwarder", "munka-s", 0, 10, "Kopás (0–1)", "Rakomány (m³)", "Gép al-lépés"),
-            new("machine.pace", "Processzor munkatempó", "processor", "munka-s", 0, 10, "Kopás (0–1)", "Rakomány (m³)", "Gép al-lépés"),
-            new("mill.process", "Malom feldolgozása", "mill", "m³", 0, 1e6, "Már feldolgozott mennyiség (m³)", "Készlet (m³)", "Logisztikai lépés"),
-
-        }.Concat(EcologyResponseProgram.Hooks).Concat(VehicleResponseRules.Hooks).Concat(TransportHooks()).Concat(GameTuning.Specs.Select(s => new BehaviorHook("tuning." + s.Id, s.Name, "world", s.Unit, s.Min, s.Max,
+        internal static readonly BehaviorHook[] Hooks = EcologyResponseProgram.Hooks.Concat(VehicleResponseRules.Hooks).Concat(LogisticsRules.Hooks).Concat(GameTuning.Specs.Select(s => new BehaviorHook("tuning." + s.Id, s.Name, "world", s.Unit, s.Min, s.Max,
             "Nem használt", "Nem használt", "Paraméter lekérdezése; járműspecifikáció alkalmazáskor", false))).ToArray();
         private readonly CompiledBehaviorModel model;
         internal CompiledBehaviorControllers Controllers { get; }
@@ -20,12 +15,12 @@ namespace ForesTycoon
         internal WorldBehaviorPolicy(BehaviorModel document, IReadOnlySet<string> keys = null, Func<string, double> read = null)
         {
             document = document.Clone();
-            foreach (var hook in EcologyResponseProgram.Hooks.Concat(VehicleResponseRules.Hooks))
-                if (!document.Graphs.Any(g => g.Hook == hook.Id && g.Kind == hook.Kind)) document.Graphs.Add(DefaultGraph(hook));
+            foreach (var hook in EcologyResponseProgram.Hooks.Concat(VehicleResponseRules.Hooks).Concat(LogisticsRules.Hooks))
+                if (!document.Graphs.Any(g => g.Hook == hook.Id && g.Kind == hook.Kind && g.ObjectId == null)) document.Graphs.Add(DefaultGraph(hook));
             model = new(document, Hooks, keys, read); Controllers = new(document); Responses = new(document); VehicleResponses = new(document);
         }
 
-        internal static BehaviorGraph DefaultGraph(BehaviorHook hook) => hook.Kind == "vehicleResponse" ? VehicleResponseRules.DefaultGraph(hook) : EcologyResponseProgram.IsPureKind(hook.Kind) ? EcologyResponseProgram.DefaultGraph(hook) : new() {
+        internal static BehaviorGraph DefaultGraph(BehaviorHook hook) => LogisticsRules.IsKind(hook.Kind) ? LogisticsRules.DefaultGraph(hook) : hook.Kind == "vehicleResponse" ? VehicleResponseRules.DefaultGraph(hook) : EcologyResponseProgram.IsPureKind(hook.Kind) ? EcologyResponseProgram.DefaultGraph(hook) : new() {
             Id = "default." + hook.Kind + "." + hook.Id, Name = hook.Name, Hook = hook.Id, Kind = hook.Kind
         };
         internal static BehaviorModel DefaultDocument() => new() { Graphs = Hooks.Select(DefaultGraph).ToList() };
@@ -35,22 +30,7 @@ namespace ForesTycoon
         public bool Overrides(string hook, string kind) => model.Overrides(hook, kind);
         public double Evaluate(in BehaviorQuery query) => model.Evaluate(query.Hook, query.Kind, query.Id,
             new(query.Native, query.Delta, query.Time, query.State, query.Amount, query.Capacity, query.Available, query.From, query.To, query.Surface), query.Extras);
-        private static IEnumerable<BehaviorHook> TransportHooks()
-        {
-            foreach (string kind in new[] { "forwarder", "processor", "truck" }) {
-                yield return new("route.cost", kind + " útvonalköltség", kind, "költség/szakasz", .001, 1e6, "Célcsempe sérültsége (0–1)", "Rakomány (m³)", "Útkeresés; From/To: csempe-ID, Surface: terep=0, aszfalt=1, makadám=2, nyom=3");
-                yield return new("route.allow", kind + " útvonalszakasz engedélyezése", kind, "0 tiltás; ≥0,5 engedély", 0, 1, "Célcsempe sérültsége (0–1)", "Rakomány (m³)", "Útkeresés; a hálózati járhatóságot nem írhatja felül");
-            }
-            foreach (string kind in new[] { "forwarder", "truck" }) {
-                yield return new("loading.amount", kind + " felrakott mennyiség", kind, "m³", 0, 1e6, "Rakodási fázis (0 fel, 1 le)", "Rakomány (m³)", "Forwarder: megfogás; teherautó: al-lépés; Capacity és Available: m³");
-                yield return new("unloading.amount", kind + " lerakott mennyiség", kind, "m³", 0, 1e6, "Rakodási fázis (0 fel, 1 le)", "Rakomány (m³)", "Forwarder: megfogás; teherautó: al-lépés; készletkorláttal");
-                yield return new("loading.depart", kind + " rakodás befejezése", kind, "≥0,5 indulás", 0, 1, "Telítettség (0–1)", "Rakomány (m³)", "Forwarder: lezárt rönkciklus; teherautó: rakodási al-lépés; üresen nem indul");
-            }
-            yield return new("loading.cycleSeconds", "Forwarder rönkciklus ideje", "forwarder", "munka-s", .1, 3600, "Rakodási fázis (0 fel, 1 le)", "Rakomány (m³)", "Ciklus kezdetén rögzítve és mentve");
-            yield return new("unloading.amount", "Processzor lerakott mennyisége", "processor", "m³", 0, 1e6, "Lerakodás (1)", "Rakomány (m³)", "Gép al-lépés; legfeljebb a tényleges rakomány");
-            yield return new("loading.gripPhase", "Forwarder megfogási pillanat", "forwarder", "ciklusarány", .01, .98, "Rakodási fázis (0 fel, 1 le)", "Rakomány (m³)", "Ciklus kezdetén rögzítve; az animáció is követi");
-            yield return new("loading.releasePhase", "Forwarder elengedési pillanat", "forwarder", "ciklusarány", .02, .99, "Rakodási fázis (0 fel, 1 le)", "Rakomány (m³)", "Legalább 0,01-dal a megfogás után; ciklus kezdetén rögzítve");
-        }
+
     }
     sealed partial class GameWorld
     {
@@ -60,6 +40,7 @@ namespace ForesTycoon
         internal BehaviorControllerSnapshot[] BehaviorStates => behaviorPolicy.Controllers.Capture();
         internal IEnumerable<(ulong Id, string Label)> BehaviorTargets(string kind)
         {
+            if (LogisticsRules.IsKind(kind)) kind = kind[9..].ToLowerInvariant();
             if (kind == "world") { yield return (0, "Teljes játékvilág"); }
             else if (kind == "tree") {
                 foreach (var entry in forest.IndividualTrees.Patches)
@@ -85,7 +66,7 @@ namespace ForesTycoon
                     if (kind == "tile" || kind == "road" && map.IsRoadTile(i)) yield return ((ulong)i, $"{kind} #{i}");
             }
         }
-        internal static string[] RuleObjectKinds => WorldBehaviorPolicy.Hooks.Where(h => h.SupportsObjects).Select(h => h.Kind).Concat(RuleEngine.Scopes.Select(s => s.Id)).Concat(new[] { "wildlife", "depot", "stack" }).Distinct().ToArray();
+        internal static string[] RuleObjectKinds => WorldBehaviorPolicy.Hooks.Where(h => h.SupportsObjects).Select(h => LogisticsRules.IsKind(h.Kind) ? h.Kind[9..].ToLowerInvariant() : h.Kind).Concat(RuleEngine.Scopes.Select(s => s.Id)).Concat(new[] { "wildlife", "depot", "stack" }).Distinct().ToArray();
         internal void QueueBehaviors(BehaviorModel model) => Enqueue(new SetBehaviorsCommand(model.ToJson()));
         void IWorldCommandTarget.ExecuteBehaviors(string json) => ApplyBehaviors(BehaviorModel.FromJson(json));
         private void ApplyBehaviors(BehaviorModel model)

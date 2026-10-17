@@ -1,0 +1,147 @@
+# Logisztikai döntések a közös gráfos szerkesztőben
+
+2026-10-17 – 5/b: rakodás, gépi munkaválasztás, mozgás és malom.
+
+A játék 33 projektgráfból számolja ezeket a döntéseket: 10 processzor-,
+15 forwarder-, 7 teherautó- és 1 malomválasz. Ugyanabban a Szabályok listában,
+pipával, közös folyamatábrával, objektum → mező választással, görbével,
+számbevitellel és csúszkával szerkeszthetők. Egyedi flotta-ID vagy malom-ID
+felülírhatja a típusszabályt; eltávolítása a típusszabályhoz tér vissza.
+
+## Mit állíthatsz össze?
+
+- **Processzor:** munkatempó; kitermelt térfogat; a vágás folytatása;
+  mikor induljon a saranghoz; lerakási mennyiség; haladási sebesség;
+  munkafogyasztás; áthaladási tömeg; útvonalköltség és szakaszengedély.
+- **Forwarder:** munkatempó, sebesség, fogyasztás és áthaladási tömeg;
+  fel- és lerakott mennyiség; rönkciklus időtartama, megfogás és elengedés;
+  részrakománnyal indulás; mikor induljon a forrásért, a célhoz vagy haza;
+  útvonalköltség és szakaszengedély.
+- **Teherautó:** fel- és lerakott mennyiség; indulás a rakodásból, akár
+  részrakománnyal; megbízás befejezése; útvonalköltség és szakaszengedély.
+  A központi fakészletes bemutató jármű rakodási ideje is külön gráf,
+  nincs külön beégetett hárommásodperces számítás.
+- **Malom:** a lépésben feldolgozott térfogat a készletből és az eltelt időből.
+  Alapérték: 0,25 m³/jármű-s. Az értékesítési bevétel továbbra is az érkezéskor
+  keletkezik; a feldolgozás nem hoz létre második bevételt.
+
+Például a **Forwarder haladási sebessége** gráfon válaszd a
+**Gép / jármű → Rakomány** bemenetet, kapcsold egy közös **Görbe** csomópontra,
+és állítsd a pontokat 0 m³ → 2 csempe/munka-s és 20 m³ → 0 értékre. A görbe
+kimenetét kapcsold a szabály eredményére. A tényleges gép ezután több fával
+lassabban halad. Nem szükséges képletet írni. Az angol kulcs `machine.cargo`;
+a megjelenítési nevet, súgót és egységet a játék típusaiból deríti fel az editor.
+A világ saját készletei és megfigyelhető mennyiségei is beköthetők forrásként.
+
+A felhasználói adatok forrása `LogisticsResponseSchema.cs`; a tiszta
+alapgráfoké `LogisticsRules.cs`. A képletszöveg ezekben csak a fejlesztői
+alapgráf előállítására szolgál: a mentett csomópontokat futtatja a játék.
+A négy lekérdezési típus (`logisticsProcessor`, `logisticsForwarder`,
+`logisticsTruck`, `logisticsMill`) nem új fizikai objektumokat jelent.
+A vezérlési állapotgráf továbbra is ugyanarra a tényleges flotta-ID-ra kötődik.
+
+## Kikapcsolás és kötelező motorfeladatok
+
+Kikapcsoláskor választott fix eredmény helyettesíti a gráfot. Például 0
+kitermelt térfogat leállítja a kitermelést, 0 indulási döntés az automatikus vezérlésben várakoztatja a
+teherautót akkor is, ha tele van. A tempó 0 értéke a munkát állítja meg,
+a fenntartási óra tovább jár. A kártya összecsukható magyarázata jelzi,
+mikor fut, mit olvas, mire hat, ki használja és mit jelent a fix érték.
+
+A gráf nem teremthet fát, nem lépheti túl a készletet és a kapacitást, nem
+másolhatja le a rakomány értékét, és nem hozhat létre hiányzó útkapcsolatot.
+A felvétel/átadás, a mozgási állapot léptetése és az útkeresés végrehajtása
+motorfeladat. A munkaciklus állapotgráfjának közvetlen indulási utasítása elsőbbséget kap
+a válaszgráfhoz képest. A hazahívás a már megfogott rönköt biztonságosan átadja,
+majd leadatja a rakományt. Új fizikai munkafázist vagy új játékosparancsot
+ezekkel a válaszgráfokkal még nem lehet létrehozni.
+
+A folyamatban levő rönkciklus ideje, megfogási és elengedési pontja mentett
+érték. A gráf cseréje a következő ciklus időzítésére hat; a megfogott fa nem
+vész el. Hibás aritmetika nem indít régi natív szabályt: biztonsági fix értéket
+ad, az útvonalköltség hibája tiltja a szakaszt. A hiba látható marad.
+
+## Szeletelés, mentés és tisztítás
+
+Gépenként, teherautónként, malmonként, útkeresési csúcsonként és a kész útvonal
+másolásakor elemenként megszakítható a munka. A nagy sebességű gép mozgása
+szakaszonként megszakítható, minden érintett csempe áthaladási eseményt kap;
+a gép nem ugorhat át köztes megszakadt útkapcsolatot. A további beszállítást
+kereső vizsgálat egy szeletelve felépített beszállítói indexen jár. Ciklusbiztos,
+iteratív keresése nem vágja el a hosszú láncokat négy szint után, és a még
+markolóban lévő fát is érkező készletként veszi figyelembe. Minden csúcs és
+beszállító után visszaenged a hostnak.
+A telítettségi, készlet- és útvonal-döntéseket a gráf hozza, az időkeretet a
+motor a már meglévő determinisztikus munkaegységekkel tartja.
+
+A mentési formátum maradt 17; a futtató azonosítója
+`forestycoon-simulation/2026-10-17.1`. Teljes tickhatáron mentünk; részleges
+iterator nincs sorosítva. A visszatöltés újra felépíti a közös szabály- és
+paraméterkapcsolatot. A gráfcsere nem kér teljes erdei rátafrissítést.
+A függő projektparancs mentése, a naplóból visszajátszás és a teljes/szeletelt
+folytatás külön regressziós próbát kapott.
+
+Törölve a korábbi natív tempó-, mennyiség-, sebesség-, fogyasztás-, tömeg-,
+malom- és munkaválasztási számítások, valamint a `MachinesEnabled` kapcsoló és
+a közvetlen erdő → teherautó kitermelési kerülőág. A régi logisztikai smoke
+ugyanazt a gépesített láncot ellenőrzi, mint a gépi smoke; nincs külön modell.
+A korábbi natív eredményt olvasó logisztikai kötések nem támogatottak az új
+futtatóban. A szállított jelenet és a meglévő helyi projekt csak ilyen
+alapcsomópontokat tartalmazott; ezeket egyszeri adatátírással cseréltük ki,
+futtatási migrációs ág nélkül. A helyi projekt eredetije:
+`artifacts/logistics-project-backup/project.before-logistics.json`.
+A jelenet és a helyi világ egyedi szerkesztései megmaradtak.
+
+A nyitójelenet referencia-állapotában csak a `Behaviors` lenyomat változott.
+A **telephely építhetősége, induló flotta összetétele és a játékosparancsok
+engedélyezési feltételei** a 6. csomagban maradnak; ezeket a leltár továbbra is
+hiányként jelzi. A vezérlési állapotgráf már szerkeszthető, a fizikai
+végrehajtó állapotai továbbra is kötöttek.
+
+## Ellenőrzés és mérés
+
+A `LogisticsGraphTests`, `FleetBehaviorTests`, `FleetWorkTests`,
+`TransportRuleTests` és `LogisticsProjectTests` ellenőrzik a tényleges
+kitermelést, rakodást, görbés sebességet, várakozást, hazahívást,
+a megfogott fa értékét, a mentett időzítést, az egyedi kötéseket,
+a forrásnevek felderítését, a naplót és a szeletelt folytatást.
+
+`--logistics-rule-benchmark`, Release, 128×128 sík pálya, 220 tick,
+első 3 bemelegítés; aktív forwarderek, külön forrásokkal. A mért szakaszba
+a megfogás és az elengedés is beleesik, az átadás megtörténtét a mérőprogram
+külön ellenőrzi:
+
+| Gép | Teljes lépés p95 / p99 / max (ms) | 64 egységes szelet p95 / p99 / max (ms) |
+| --- | ---: | ---: |
+| 1 000 | 5,157 / 5,888 / 7,179 | 0,295 / 0,324 / 3,270 |
+| 10 000 | 14,244 / 15,053 / 18,712 | 0,080 / 0,110 / 0,439 |
+
+A két futás teljes logisztikai checkpointja azonos. Ez célzott rakodási
+terhelés, nem 10 000 egyidejű útkeresés vagy teljes erdővilág. A ritka maximum
+és a JIT/GC miatt az értékek nem jelentenek merev időgaranciát. Nyers napló:
+`artifacts/logistics-benchmark.txt`.
+
+A külön `--rule-host-benchmark` normál erdővilág-próbája 900 s/év tempón,
+120 szimulációs másodpercet futtatott, hónaphatárral, 4 ms/60 Hz hostkerettel:
+
+| Pálya / fák | CPU p95 / p99 / max (ms) | Hátralék csúcs / vég (szimuláció-s) |
+| --- | ---: | ---: |
+| 64² / 15 795 | 4,038 / 4,110 / 13,004 | 2,6167 / 0,0333 |
+| 128² / 65 086 | 4,063 / 4,083 / 14,568 | 7,2667 / 0,0333 |
+
+Nem volt eldobott idő vagy új idő nélküli ledolgozó képkocka. A korábbról
+ismert havi kapacitáskorlát megmaradt; a közel 7 másodperces csúcshátralékot
+ez a logisztikai átvezetés nem oldja meg. Nyers napló:
+`artifacts/logistics-host-benchmark.txt`.
+
+Végső ellenőrzés: **1935/1935** teszt sikeres
+(`artifacts/logistics-full-tests-release.txt`); a beágyazott és önálló editor
+füsttesztje is sikeres (`artifacts/logistics-smoke-release.txt`). A Release
+fordítás 0 hiba / 0 figyelmeztetés; a leltár és a diff ellenőrzése sikeres.
+A térképréteg kifejezetten a grafika nélküli Rules modulra támaszkodik az
+alap útvonalköltséghez; az architektúrapróba továbbra is tiltja a grafikai és
+UI-függőségeket, és a Rules modul saját függőségeit is ellenőrzi.
+A végső bemenetpróbák a rönkciklus tényleges munkaidejét, az áthaladási tömeg
+időlépését és a hazatérési döntés tényleges kopásértékét is ellenőrzik.
+A két flottaeset egymás után fut egy folyamatban; a JIT/GC miatt a ritka
+maximumokból nem következik a nagyobb flotta jobb általános teljesítménye.

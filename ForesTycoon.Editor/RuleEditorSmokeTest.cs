@@ -113,6 +113,9 @@ namespace ForesTycoon.Editor
                     (() => editor.ShowCommonRule("behavior:" + world.BehaviorDocument.Graphs.First(g => g.Hook == "forest.initialDiameter").Id), "initial-size-diameter-graph"),
                     (() => editor.ShowCommonRule("behavior:" + world.BehaviorDocument.Graphs.First(g => g.Hook == "forest.initialCrown").Id), "initial-size-crown-graph"),
                     (() => editor.ShowCommonRule("behavior:" + world.BehaviorDocument.Graphs.First(g => g.Hook == "weather.eventType").Id), "environment-weather-graph"),
+                    (() => editor.ShowCommonRule("behavior:" + world.BehaviorDocument.Graphs.First(g => g.Hook == "machine.fetch").Id), "forwarder-fetch-graph"),
+                    (() => editor.ShowCommonRule("behavior:" + world.BehaviorDocument.Graphs.First(g => g.Hook == "machine.felling").Id), "processor-felling-graph"),
+                    (() => editor.ShowCommonRule("behavior:" + world.BehaviorDocument.Graphs.First(g => g.Hook == "mill.process").Id), "mill-processing-graph"),
                     (() => editor.ShowCommonRule("behavior:" + world.BehaviorDocument.Graphs.First(g => g.Hook == "vehicle.mass").Id), "vehicle-mass-graph"),
                     (() => editor.ShowCommonRule("behavior:" + world.BehaviorDocument.Graphs.First(g => g.Hook == "vehicle.fuel").Id), "vehicle-fuel-graph"),
                     (() => editor.ShowCommonRule("behavior:" + world.BehaviorDocument.Graphs.First(g => g.Hook == "upkeep.breakdown").Id), "vehicle-breakdown-graph"),
@@ -422,17 +425,25 @@ namespace ForesTycoon.Editor
                 using var tunedSave = new MemoryStream(); world.Save(tunedSave); tunedSave.Position = 0; restored.Load(tunedSave);
                 Require(restored.Tuning.ToJson() == world.Tuning.ToJson(), "Save lost the tuning.");
                 var behaviorView = new BehaviorEditorView();
-                var starter = new BehaviorModel { Graphs = new() { new() { Id = "starter-pace", Hook = "machine.pace", Kind = "forwarder" } } };
+                var overrides = WorldBehaviorPolicy.DefaultDocument();
+                var millType = overrides.Graphs.Single(g => g.Hook == "mill.process");
+                var millLocal = new BehaviorModel { Graphs = new() { millType } }.Clone().Graphs[0];
+                millLocal.Id = "local-mill"; millLocal.ObjectId = 7; overrides.Graphs.Add(millLocal);
+                behaviorView.Load(overrides); behaviorView.RestoreDefault(millType.Hook, millType.Kind, 7);
+                Require(behaviorView.Document.Graphs.Count(g => g.Hook == "mill.process") == 1, "Removing object override duplicated its type graph.");
+                _ = new WorldBehaviorPolicy(behaviorView.Document);
+                var starter = new BehaviorModel { Graphs = new() { WorldBehaviorPolicy.DefaultGraph(LogisticsRules.Hooks.Single(h => h.Id == "machine.pace" && h.Kind == "logisticsForwarder")) } };
                 behaviorView.Load(starter); behaviorView.AddOutputMultiplier();
                 var multiplied = behaviorView.Document;
-                Require(multiplied.Graphs[0].Nodes.Count == 3 && starter.Graphs[0].Nodes.Count == 1, "Starter multiplier did not create an independent connected graph.");
-                Require(new CompiledBehaviorModel(multiplied, WorldBehaviorPolicy.Hooks).Evaluate("machine.pace", "forwarder", 1, new(2, 1, 0, 0, 0)) == 2, "Starter multiplier changed the default result.");
+                Require(multiplied.Graphs[0].Nodes.Count == starter.Graphs[0].Nodes.Count + 2, "Starter multiplier did not create an independent connected graph.");
+                Require(new CompiledBehaviorModel(multiplied, WorldBehaviorPolicy.Hooks).Evaluate("machine.pace", "logisticsForwarder", 1, new(), LogisticsRules.Hooks.Single(h => h.Id == "machine.pace" && h.Kind == "logisticsForwarder").Inputs.Select(k => k == "step.seconds" ? 1d : k == "machine.pace" ? 2d : 0d).ToArray()) == 2, "Starter multiplier changed the default result.");
                 multiplied.Graphs[0].Nodes.Single(n => n.Operation == BehaviorOperation.Constant).Value = 1.1;
-                Require(Math.Abs(new CompiledBehaviorModel(multiplied, WorldBehaviorPolicy.Hooks).Evaluate("machine.pace", "forwarder", 1, new(2, 1, 0, 0, 0)) - 2.2) < 1e-10, "Editing starter scale did not change the real graph output.");
+                Require(Math.Abs(new CompiledBehaviorModel(multiplied, WorldBehaviorPolicy.Hooks).Evaluate("machine.pace", "logisticsForwarder", 1, new(), LogisticsRules.Hooks.Single(h => h.Id == "machine.pace" && h.Kind == "logisticsForwarder").Inputs.Select(k => k == "step.seconds" ? 1d : k == "machine.pace" ? 2d : 0d).ToArray()) - 2.2) < 1e-10, "Editing starter scale did not change the real graph output.");
                 var behavior = new ForesTycoon.Rules.BehaviorModel();
-                behavior.Graphs.Add(new() { Id = "mill-example", Name = "Malom feldolgozása", Hook = "mill.process", Kind = "mill" });
+                behavior.Graphs.Add(WorldBehaviorPolicy.DefaultGraph(LogisticsRules.Hooks.Single(h => h.Id == "mill.process")));
+                string millOutput = behavior.Graphs[0].Output;
                 behavior.Graphs[0].Nodes.Add(new() { Id = "scale", Name = "Termelési szorzó", Operation = BehaviorOperation.Constant, Value = 2, X = 30, Y = 190 });
-                behavior.Graphs[0].Nodes.Add(new() { Id = "result", Name = "Feldolgozott térfogat", Operation = BehaviorOperation.Multiply, A = "native", B = "scale", X = 300, Y = 120 });
+                behavior.Graphs[0].Nodes.Add(new() { Id = "result", Name = "Feldolgozott térfogat", Operation = BehaviorOperation.Multiply, A = millOutput, B = "scale", X = 300, Y = 120 });
                 behavior.Graphs[0].Output = "result";
                 behaviorView.Load(behavior);
                 for (int frame = 0; frame < 3; frame++) {
@@ -465,9 +476,10 @@ namespace ForesTycoon.Editor
                 }
                 Require(GL.GetError() == ErrorCode.NoError, "Truck controller editor OpenGL error.");
                 FramebufferCapture.SavePng(Path.Combine(output, "truck-controller.png"), width, height);
-                var route = new BehaviorGraph { Id = "route-example", Hook = "route.cost", Kind = "truck", Name = "Sérült utak büntetése" };
-                route.Nodes.Add(new() { Id = "damage", Name = "Útsérültség", Operation = BehaviorOperation.State, X = 30, Y = 190 });
-                route.Nodes.Add(new() { Id = "cost", Name = "Költség + sérültség", Operation = BehaviorOperation.Add, A = "native", B = "damage", X = 300, Y = 120 }); route.Output = "cost";
+                var route = WorldBehaviorPolicy.DefaultGraph(LogisticsRules.Hooks.Single(h => h.Id == "route.cost" && h.Kind == "logisticsTruck"));
+                string routeOutput = route.Output;
+                route.Nodes.Add(new() { Id = "damage", Name = "Útsérültség", Operation = BehaviorOperation.Input, Key = "route.damage", X = 30, Y = 190 });
+                route.Nodes.Add(new() { Id = "cost", Name = "Költség + sérültség", Operation = BehaviorOperation.Add, A = routeOutput, B = "damage", X = 300, Y = 120 }); route.Output = "cost";
                 transport.Graphs.Add(route); File.WriteAllText(Path.Combine(output, "transport-behaviors.json"), transport.ToJson());
                 behaviorView.Load(transport);
                 for (int frame = 0; frame < 3; frame++) {

@@ -114,7 +114,6 @@ public class TransportNetworkTests
         var logistics = new ForestryLogistics(map, new ForestSystem(map, new ForestStand[256]));
         var machine = new ForestMachine { Path = new[] { 50, 51 }, State = ForestMachineState.Driving, Goal = ForestMachineState.Parked };
         logistics.Machines.Add(machine);
-        logistics.MachinesEnabled = true;
         logistics.Update(1);
         Assert.Equal(0, machine.PathPosition);
         map.BuildRoadTilePath(50, 51);

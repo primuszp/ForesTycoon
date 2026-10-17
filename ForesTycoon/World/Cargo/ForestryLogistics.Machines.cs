@@ -41,6 +41,21 @@ namespace ForesTycoon
         internal double LogTransferValue, LogCycleDuration;
         internal double LogGripPhase = ForwarderLoading.Grip, LogReleasePhase = ForwarderLoading.Release;
         internal IBehaviorPolicy Behaviors;
+        internal readonly LogisticsRuleEvaluator Rules = new();
+        internal bool SourceFed;
+        internal LogisticsInputs RuleInputs(double dt = 0, double availableTimber = 0, bool reachable = false) => new(
+            StepSeconds: dt, MachineKind: (int)Kind, MachineState: (int)State, MachineCargo: Cargo, MachineCapacity: Capacity,
+            MachineWear: Upkeep.Wear, MachinePace: Upkeep.Pace(Tuning), MachineHomeRequested: HomeRequested ? 1 : 0,
+            SourceStock: Source?.Volume ?? 0, SourceFed: SourceFed ? 1 : 0, SourceAvailableTimber: availableTimber, SourceReachable: reachable ? 1 : 0,
+            SpecFellingRate: Tuning[Tune.FellingRate], SpecUnloadRate: Tuning[Kind == ForestMachineKind.Harvester ? Tune.ProcessorUnloadRate : Tune.ForwarderUnloadRate],
+            SpecLoadRate: Tuning[Tune.ForwarderLoadRate], SpecSpeed: Tuning[Kind == ForestMachineKind.Harvester ? Tune.HarvesterSpeed : Tune.ForwarderSpeed],
+            SpecLoadedSpeed: Tuning[Kind == ForestMachineKind.Harvester ? Tune.HarvesterSpeed : Tune.ForwarderLoadedSpeed],
+            SpecFuelDriving: Tuning[Tune.FuelDriving], SpecFuelLoaded: Tuning[Tune.FuelDrivingLoaded], SpecFuelCrane: Tuning[Tune.FuelCrane], SpecFuelFelling: Tuning[Tune.FuelFelling],
+            SpecEmptyMass: Tuning[Kind == ForestMachineKind.Harvester ? Tune.ProcessorMass : Tune.ForwarderMass], SpecTimberDensity: Tuning[Tune.TimberDensity],
+            LogVolume: ForwarderLoading.LogVolume, LogLastVolume: Math.Min(ForwarderLoading.LogVolume, Cargo - Math.Max(0, (ForwarderLoading.Count(Cargo) - 1) * ForwarderLoading.LogVolume)),
+            TransferUnloading: State == ForestMachineState.Unloading ? 1 : 0);
+        internal double Rule(string hook, double dt = 0, double availableTimber = 0, bool reachable = false) =>
+            Rules.Evaluate(Behaviors, hook, Kind == ForestMachineKind.Harvester ? "processor" : "forwarder", (ulong)Id, RuleInputs(dt, availableTimber, reachable));
         internal BehaviorAction Control;
         /// <summary>Diesel burnt so far, litres.</summary>
         internal double FuelUsed;
@@ -80,8 +95,6 @@ namespace ForesTycoon
             set => tuning = value ?? GameTuning.Default;
         }
         private int nextMachineId = 1;
-        /// <summary>When set, timber reaches the mills only through the machines and stacks (no direct loading from the forest).</summary>
-        internal bool MachinesEnabled;
 
         // Where machines may drive: the network, their felling, stack sites, depot and mill yards.
         private bool Passable(HarvestSite site, int tile) =>
@@ -134,8 +147,9 @@ namespace ForesTycoon
                 {
                     var path = new List<int>();
                     for (int t = tile; t >= 0; t = previous[t]) { path.Add(t); yield return 1; }
-                    path.Reverse();
-                    result.Value = path.ToArray(); yield break;
+                    var ordered = new int[path.Count];
+                    for (int i = 0; i < ordered.Length; i++) { yield return 1; ordered[i] = path[path.Count - 1 - i]; }
+                    result.Value = ordered; yield break;
                 }
                 int count = terrain.GetTileNeighbours(tile, next);
                 for (int i = 0; i < count; i++)
@@ -227,19 +241,57 @@ namespace ForesTycoon
         }
 
         /// <summary>Is wood still on its way to this stack (a processor, forwarder or truck will bring more)?</summary>
-        internal bool BeingFed(TimberStack stack, int depth = 0)
+        private readonly record struct SupplyEdge(ForestMachine Machine = null, FleetTruck Truck = null);
+        private IEnumerable<int> BuildSupplyIndexWork(Dictionary<int, List<SupplyEdge>> index)
         {
-            if (depth > 4) return false;
-            foreach (var m in Machines)
-            {
-                if (m.Kind == ForestMachineKind.Harvester && m.Target == stack && (m.Cargo > 0 || m.HasWork)) return true;
-                if (m.Kind == ForestMachineKind.Forwarder && m.Destination == stack.Tile && m.Source != null &&
-                    (m.Cargo > 0 || m.Source.Volume > 0.01f || BeingFed(m.Source, depth + 1))) return true;
+            void Add(int tile, SupplyEdge edge) {
+                if (!index.TryGetValue(tile, out var list)) index.Add(tile, list = new());
+                list.Add(edge);
             }
-            foreach (var t in Trucks)
-                if (t.Target == stack && t.Source != null &&
-                    ((t.Vehicle?.CargoAmount ?? 0) > 0 || t.Source.Volume > 0.01f || BeingFed(t.Source, depth + 1))) return true;
-            return false;
+            foreach (var machine in Machines) {
+                yield return 1;
+                int tile = machine.Kind == ForestMachineKind.Harvester ? machine.Target?.Tile ?? -1 : machine.Source != null ? machine.Destination : -1;
+                if (tile >= 0) Add(tile, new(Machine: machine));
+            }
+            foreach (var truck in Trucks) {
+                yield return 1;
+                if (truck.Target != null && truck.Source != null) Add(truck.Target.Tile, new(Truck: truck));
+            }
+        }
+        internal bool BeingFed(TimberStack stack)
+        {
+            var index = new Dictionary<int, List<SupplyEdge>>(); SimulationWork.Complete(BuildSupplyIndexWork(index));
+            var result = new WorkResult<bool>(); SimulationWork.Complete(BeingFedWork(stack, result, index)); return result.Value;
+        }
+        private IEnumerable<int> BeingFedWork(TimberStack stack, WorkResult<bool> result, Dictionary<int, List<SupplyEdge>> index)
+        {
+            result.Value = false;
+            if (stack == null) yield break;
+            var pending = new Queue<TimberStack>(); var visited = new HashSet<TimberStack> { stack }; pending.Enqueue(stack);
+            while (pending.Count > 0) {
+                yield return 1;
+                var current = pending.Dequeue();
+                if (!index.TryGetValue(current.Tile, out var suppliers)) continue;
+                foreach (var edge in suppliers) {
+                    yield return 1;
+                    TimberStack source;
+                    if (edge.Machine is { } machine) {
+                        if (machine.Kind == ForestMachineKind.Harvester) {
+                            if (machine.Target == current && (machine.Cargo > 0 || machine.HasWork)) { result.Value = true; yield break; }
+                            continue;
+                        }
+                        if (machine.Destination != current.Tile || machine.Source == null) continue;
+                        source = machine.Source;
+                        if (machine.Cargo > 0 || machine.LogTransferVolume > 0 || source.Volume > .01f) { result.Value = true; yield break; }
+                    } else {
+                        var truck = edge.Truck;
+                        if (truck.Target != current || truck.Source == null) continue;
+                        source = truck.Source;
+                        if ((truck.Vehicle?.CargoAmount ?? 0) > 0 || source.Volume > .01f) { result.Value = true; yield break; }
+                    }
+                    if (visited.Add(source)) pending.Enqueue(source);
+                }
+            }
         }
 
         /// <summary>Calls a machine back to its depot: it puts down what it carries, then drives home.</summary>
@@ -262,7 +314,7 @@ namespace ForesTycoon
             else machine.State = ForestMachineState.Parked;
         }
 
-        private System.Collections.Generic.IEnumerable<int> UpdateMachinesWork(double seconds)
+        private System.Collections.Generic.IEnumerable<int> UpdateMachinesWork(double seconds, Dictionary<int, List<SupplyEdge>> supply)
         {
             // Drawing interpolates across the whole tick (all substeps); a new path resets the start to 0.
             foreach (var machine in Machines) { machine.PreviousPathPosition = machine.PathPosition; yield return 1; }
@@ -297,14 +349,11 @@ namespace ForesTycoon
                         continue;
                     }
                     if (wait) continue;
-                    double pace = machine.Upkeep.Pace(Tuning) * dt;
-                    if (Behaviors != null) pace = Behaviors.Evaluate(new("machine.pace",
-                        machine.Kind == ForestMachineKind.Harvester ? "processor" : "forwarder", (ulong)machine.Id,
-                        pace, dt, forest.ForestYear, machine.Upkeep.Wear, machine.Cargo));
-                    if (machine.State == ForestMachineState.Driving) { Advance(machine, pace); continue; }
+                    double pace = machine.Rule("machine.pace", dt);
+                    if (machine.State == ForestMachineState.Driving) { foreach (int unit in AdvanceWork(machine, pace)) yield return unit; continue; }
                     if (!machine.Working) continue;
                     if (machine.Kind == ForestMachineKind.Harvester) { foreach (int unit in UpdateProcessorWork(machine, pace)) yield return unit; }
-                    else { foreach (int unit in UpdateForwarderWork(machine, pace)) yield return unit; }
+                    else { foreach (int unit in UpdateForwarderWork(machine, pace, supply)) yield return unit; }
                 }
             }
         }
@@ -316,24 +365,28 @@ namespace ForesTycoon
             machine.State = path.Length > 1 ? ForestMachineState.Driving : goal;
         }
 
-        private void Advance(ForestMachine machine, double dt)
+        private IEnumerable<int> AdvanceWork(ForestMachine machine, double dt)
         {
-            int segment = Math.Min((int)Math.Floor(machine.PathPosition), machine.Path.Length - 2);
-            if (segment >= 0 && ((!Passable(machine.Site, machine.Path[segment + 1]) && machine.Path[segment + 1] != machine.Destination) || !CanDriveBetween(machine.Path[segment], machine.Path[segment + 1])))
-            {
-                Status = "Az útvonal megszakadt. Állítsd helyre az úthálózatot a gép továbbhaladásához.";
-                return;
-            }
-            float speed = Tuning.F(machine.Kind == ForestMachineKind.Harvester ? Tune.HarvesterSpeed
-                : machine.Cargo > 0.5f ? Tune.ForwarderLoadedSpeed : Tune.ForwarderSpeed);
-            Fuel(machine, Tuning[machine.Cargo > 0.5f ? Tune.FuelDrivingLoaded : Tune.FuelDriving] * dt);
-            int before = machine.Tile;
-            machine.PathPosition = Math.Min(machine.Path.Length - 1, machine.PathPosition + speed * dt);
-            int after = machine.Tile;
-            // Each tile entered is one pass: a loaded machine cuts the deepest ruts.
-            if (after != before) Passage?.Invoke(new(after,
-                machine.Kind == ForestMachineKind.Harvester ? TrafficVehicleKind.Processor : TrafficVehicleKind.Forwarder,
-                machine.Id, Tuning[machine.Kind == ForestMachineKind.Harvester ? Tune.ProcessorMass : Tune.ForwarderMass] + machine.Cargo * Tuning[Tune.TimberDensity], machine.CargoFill));
+            float speed = (float)machine.Rule("machine.speed", dt);
+            double remaining = speed * dt; bool charged = false;
+            do {
+                yield return 1;
+                int segment = Math.Min((int)Math.Floor(machine.PathPosition), machine.Path.Length - 2);
+                if (segment >= 0 && ((!Passable(machine.Site, machine.Path[segment + 1]) && machine.Path[segment + 1] != machine.Destination)
+                    || !CanDriveBetween(machine.Path[segment], machine.Path[segment + 1]))) {
+                    Status = "Az útvonal megszakadt. Állítsd helyre az úthálózatot a gép továbbhaladásához.";
+                    yield break;
+                }
+                if (!charged) { Fuel(machine, machine.Rule("machine.fuel", dt)); charged = true; }
+                if (machine.Arrived || remaining <= 0) break;
+                double distance = Math.Min(remaining, segment + 1 - machine.PathPosition);
+                int before = machine.Tile;
+                machine.PathPosition += distance; remaining -= distance;
+                int after = machine.Tile;
+                if (after != before) Passage?.Invoke(new(after,
+                    machine.Kind == ForestMachineKind.Harvester ? TrafficVehicleKind.Processor : TrafficVehicleKind.Forwarder,
+                    machine.Id, machine.Rule("machine.mass", dt), machine.CargoFill));
+            } while (remaining > 1e-9 && !machine.Arrived);
             if (machine.Arrived) { machine.State = machine.Goal; machine.WorkTime = 0; }
         }
 
@@ -347,16 +400,14 @@ namespace ForesTycoon
             (machine.Kind == ForestMachineKind.Harvester ? "A processzor #" : "A forwarder #") + machine.Id;
 
         // Puts part of the load down at the tile it stands on.
-        private bool UnloadStep(ForestMachine machine, float rate, int destination, double dt)
+        private bool UnloadStep(ForestMachine machine, int destination, double dt)
         {
             machine.WorkTime += dt;
-            float amount = Math.Min((float)(rate * dt), machine.Cargo);
-            if (Behaviors != null) amount = Math.Min(machine.Cargo, (float)Behaviors.Evaluate(new("unloading.amount", "processor", (ulong)machine.Id,
-                amount, dt, forest.ForestYear, 1, machine.Cargo, machine.Capacity, machine.Cargo)));
+            float amount = Math.Min(machine.Cargo, (float)machine.Rule("unloading.amount", dt));
             double value = machine.Cargo > 0 ? machine.CargoValue * amount / machine.Cargo : 0;
             machine.Cargo -= amount; machine.CargoValue -= value;
             Receive(destination, amount, value);
-            Fuel(machine, Tuning[Tune.FuelCrane] * dt);
+            Fuel(machine, machine.Rule("machine.fuel", dt));
             if (machine.Cargo > 0.0001f) return false;
             machine.Cargo = 0; machine.CargoValue = 0;
             return true;
@@ -371,22 +422,22 @@ namespace ForesTycoon
                 if (forest.TryGetStand(tile, out var stand)) machine.UnitPrice = TimberPrice(stand.Species);
                 double price = machine.UnitPrice > 0 ? machine.UnitPrice : TimberPrice(ForestSpecies.None);
                 var extracted = new WorkResult<float>();
-                foreach (int unit in forest.ExtractTimberWork(tile, Math.Min((float)(Tuning[Tune.FellingRate] * dt), machine.Capacity - machine.Cargo), extracted)) yield return unit;
+                foreach (int unit in forest.ExtractTimberWork(tile, Math.Min((float)machine.Rule("machine.felling", dt, forest.AvailableTimber(tile)), Math.Max(0, machine.Capacity - machine.Cargo)), extracted)) yield return unit;
                 float cut = extracted.Value;
                 machine.Cargo += cut; machine.CargoValue += cut * price;
-                Fuel(machine, Tuning[Tune.FuelFelling] * dt);
-                if (machine.Cargo < machine.Capacity - 0.001f && forest.AvailableTimber(tile) > 0.001f && !machine.HomeRequested) yield break;
+                Fuel(machine, machine.Rule("machine.fuel", dt));
+                if (!machine.HomeRequested && machine.Rule("machine.continueFelling", dt, forest.AvailableTimber(tile)) >= .5) yield break;
             }
             else if (machine.State == ForestMachineState.Unloading)
             {
-                if (!UnloadStep(machine, Tuning.F(Tune.ProcessorUnloadRate), machine.Tile, dt)) yield break;
+                if (!UnloadStep(machine, machine.Tile, dt)) yield break;
             }
             // Decide: a full grapple (or nothing more to fell, or called home) goes to the stack; empty, it fells on or goes home.
             var timberResult = new WorkResult<int[]>();
             if (!machine.HomeRequested) foreach (int unit in FindPathWork(null, machine.Tile, t => ContainsTile(t) && forest.AvailableTimber(t) > .001f, timberResult, agent: machine)) yield return unit;
             int[] timber = timberResult.Value;
             machine.HasWork = timber != null;
-            if (machine.Cargo > 0.001f && (timber == null || machine.Cargo >= machine.Capacity - 0.001f))
+            if (machine.Cargo > 0.001f && (machine.HomeRequested || machine.Rule("machine.deliver", dt, reachable: timber != null) >= .5))
             {
                 var stackResult = new WorkResult<int[]>();
                 foreach (int unit in FindPathWork(null, machine.Tile, t => t == machine.Target.Tile, stackResult, agent: machine)) yield return unit;
@@ -396,27 +447,29 @@ namespace ForesTycoon
                 machine.State = ForestMachineState.Parked;
                 yield break;
             }
+            if (timber == null && machine.Cargo > .001f) { machine.State = ForestMachineState.Parked; yield break; }
             if (timber == null) { foreach (int unit in GoHomeWork(machine)) yield return unit; yield break; }
+            if (machine.Cargo >= machine.Capacity - .001f) { machine.State = ForestMachineState.Parked; yield break; }
             Drive(machine, timber, ForestMachineState.Felling);
         }
 
-        private IEnumerable<int> UpdateForwarderWork(ForestMachine machine, double dt)
+        private IEnumerable<int> UpdateForwarderWork(ForestMachine machine, double dt, Dictionary<int, List<SupplyEdge>> supply)
         {
             var source = machine.Source;
             if (machine.State == ForestMachineState.Loading)
             {
                 bool done = ForwarderLoading.Step(machine, dt, (amount, value) => Receive(machine.Destination, amount, value));
-                Fuel(machine, Tuning[Tune.FuelCrane] * dt);
+                Fuel(machine, machine.Rule("machine.fuel", dt));
                 if (!done) yield break;
             }
             else if (machine.State == ForestMachineState.Unloading)
             {
                 bool done = ForwarderLoading.Step(machine, dt, (amount, value) => Receive(machine.Destination, amount, value));
-                Fuel(machine, Tuning[Tune.FuelCrane] * dt);
+                Fuel(machine, machine.Rule("machine.fuel", dt));
                 if (!done) yield break;
             }
             // Decide: loaded → to the destination; empty → fetch a worthwhile load, the rest once nothing more comes, or go home.
-            if (machine.Cargo > 0.01f)
+            if (machine.Cargo > 0.0001f && (machine.HomeRequested || machine.Rule("machine.deliver", dt) >= .5))
             {
                 var result = new WorkResult<int[]>();
                 foreach (int unit in ForwarderPathWork(machine, machine.Tile, machine.Destination, result)) yield return unit;
@@ -425,8 +478,10 @@ namespace ForesTycoon
                 yield break;
             }
             if (machine.HomeRequested) { foreach (int unit in GoHomeWork(machine)) yield return unit; yield break; }
-            bool fed = BeingFed(source);
-            if (source.Volume >= machine.Capacity * 0.5f || (source.Volume > 0.01f && !fed))
+            var fedResult = new WorkResult<bool>();
+            foreach (int unit in BeingFedWork(source, fedResult, supply)) yield return unit;
+            machine.SourceFed = fedResult.Value;
+            if (machine.Cargo < machine.Capacity - .0001f && source.Volume > .0001f && machine.Rule("machine.fetch", dt) >= .5)
             {
                 var result = new WorkResult<int[]>();
                 foreach (int unit in ForwarderPathWork(machine, machine.Tile, source.Tile, result)) yield return unit;
@@ -434,7 +489,7 @@ namespace ForesTycoon
                 if (back != null) Drive(machine, back, ForestMachineState.Loading); else machine.State = ForestMachineState.Parked;
                 yield break;
             }
-            if (!fed) { foreach (int unit in GoHomeWork(machine)) yield return unit; }
+            if (machine.Cargo <= .0001f && machine.Rule("machine.return", dt) >= .5) { foreach (int unit in GoHomeWork(machine)) yield return unit; }
             else machine.State = ForestMachineState.Parked;
         }
     }

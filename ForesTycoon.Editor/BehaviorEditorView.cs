@@ -25,10 +25,10 @@ namespace ForesTycoon.Editor
         internal void SelectGraph(string id) { selectedController = null; selectedGraph = id; selectedNode = model.Graphs.Find(g => g.Id == id)?.Output; }
         internal void RestoreDefault(string hook, string kind, ulong? id) {
             Remember(); model.Graphs.RemoveAll(g => g.Hook == hook && g.Kind == kind && g.ObjectId == id);
-            if (EcologyResponseProgram.IsPureKind(kind)) {
+            if (EcologyResponseProgram.IsPureKind(kind) && !id.HasValue) {
                 var graph = EcologyResponseProgram.DefaultGraph(availableHooks.Single(h => h.Id == hook && h.Kind == kind));
                 model.Graphs.Add(graph); selectedGraph = graph.Id; selectedNode = graph.Output;
-            } else selectedGraph = null;
+            } else selectedGraph = model.Graphs.FirstOrDefault(g => g.Hook == hook && g.Kind == kind && !g.ObjectId.HasValue)?.Id;
         }
         internal void UseTemplate(RuleTemplate template, ulong? objectId) { Remember(); AuthoringOperations.Instantiate(model, template, objectId); if (template.Graph != null) SelectGraph(model.Graphs.Last().Id); else SelectControllerById(model.Controllers.Last().Id); }
         internal void Configure(BehaviorHook[] hooks, HashSet<string> keys, Func<string, double> read)
@@ -424,7 +424,7 @@ namespace ForesTycoon.Editor
             ImGui.Separator();
             if (ImGui.BeginCombo("Új csomópont", "Művelet választása")) {
                 foreach (var op in Enum.GetValues<BehaviorOperation>())
-                    if ((!EcologyResponseProgram.IsPureKind(hook.Kind) || EcologyResponseProgram.AllowedOperation(op)) && (hook.Kind != "world" || op is not (>= BehaviorOperation.Delta and <= BehaviorOperation.Amount or >= BehaviorOperation.Capacity and <= BehaviorOperation.Surface)))
+                    if ((!EcologyResponseProgram.IsPureKind(hook.Kind) || EcologyResponseProgram.AllowedOperation(op) || LogisticsRules.IsKind(hook.Kind) && LogisticsRules.AllowedOperation(op)) && (hook.Kind != "world" || op is not (>= BehaviorOperation.Delta and <= BehaviorOperation.Amount or >= BehaviorOperation.Capacity and <= BehaviorOperation.Surface)))
                     if (ImGui.Selectable(Names[(int)op])) {
                         Remember(); string id = Guid.NewGuid().ToString("N")[..8];
                         graph.Nodes.Add(new() { Id = id, Name = Names[(int)op], Operation = op, Value = 1,

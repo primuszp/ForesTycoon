@@ -15,7 +15,7 @@ namespace ForesTycoon.Map
 
         /// <summary>Relative travel cost of entering a tile: asphalt 1, macadam a little more, a skid trail much more.</summary>
         public float NetworkCost(int tileId) =>
-            IsRoadTile(tileId) ? (roads.GetPaving(tileId) == RoadPaving.Asphalt ? 1f : 1.15f) : 3.5f + 2f * GetSkidTrailWear(tileId);
+            ForesTycoon.Rules.LogisticsRules.NetworkCost(IsRoadTile(tileId) ? roads.GetPaving(tileId) == RoadPaving.Asphalt ? 1 : 2 : 3, GetSkidTrailWear(tileId));
 
         /// <summary>Visible arms, including the reciprocal road exits at trail junctions.</summary>
         public RoadEdge GetNetworkEdges(int tileId)
@@ -108,14 +108,14 @@ namespace ForesTycoon.Map
                 {
                     var path = new List<int>();
                     for (int t = end; t >= 0; t = previous[t]) { path.Add(t); yield return 1; }
-                    path.Reverse();
-                    result.Value = (path.ToArray(), c); yield break;
+                    var ordered = new int[path.Count];
+                    for (int i = 0; i < ordered.Length; i++) { yield return 1; ordered[i] = path[path.Count - 1 - i]; }
+                    result.Value = (ordered, c); yield break;
                 }
                 int count = GetNetworkNeighbours(tile, next);
                 for (int i = 0; i < count; i++)
                 {
-                    float step = NetworkCost(next[i]);
-                    if (edgeCost != null) step = edgeCost(tile, next[i], step);
+                    float step = edgeCost == null ? NetworkCost(next[i]) : edgeCost(tile, next[i], 1);
                     if (float.IsPositiveInfinity(step)) continue;
                     if (!float.IsFinite(step) || step <= 0) throw new InvalidOperationException("Route costs must be finite and positive, or positive infinity to forbid an edge.");
                     float nc = c + step;

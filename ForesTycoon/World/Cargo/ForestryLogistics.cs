@@ -17,6 +17,7 @@ namespace ForesTycoon
     }
     internal sealed partial class ForestryLogistics
     {
+        private readonly LogisticsRuleEvaluator rules = new();
         internal Action<TrafficPassage> Passage;
         internal IBehaviorPolicy Behaviors { get; set; }
         internal CompiledBehaviorControllers Controllers { get; set; }
@@ -47,7 +48,7 @@ namespace ForesTycoon
             }
             if (selected.Count > 0) Sites.Add(new HarvestSite { Tiles = selected.ToArray(), InitialVolume = volume });
             Status = selected.Count > 0 ? $"Kitermelés kijelölve: {selected.Count} csempe, {volume:F1} m³." : "Nincs új kitermelhető erdő a kijelölésben.";
-            if (selected.Count > 0 && MachinesEnabled) Status += " Kösd nyommal az úthálózathoz, jelölj ki mellé sarangot, és küldd ki a processzort.";
+            if (selected.Count > 0) Status += " Kösd nyommal az úthálózathoz, jelölj ki mellé sarangot, és küldd ki a processzort.";
             result.Value = selected.Count;
         }
         internal IEnumerable<int> RemainingWork(WorkResult<float> result)
@@ -71,22 +72,6 @@ namespace ForesTycoon
             terrain.SetBuildingFootprint(footprint);
             Status="Fűrészmalom elhelyezve. Kösd úttal a kijelölt erdő mellé, majd indíts teherautót.";return true;
         }
-        internal bool Dispatch(VehicleSystem vehicles)
-        {
-            // With the fleet, trucks are ordered from the vehicles window (stack → destination).
-            if(MachinesEnabled){Status="A rönkszállítót a Járművek ablakból küldd: forrás sarang, majd cél.";return false;}
-            foreach(var site in Sites) {
-                if(Volume(site)<0.001f)continue;
-                var origins=terrain.FindNetworkDocks(site.Tiles);
-                foreach(var mill in Mills)foreach(int start in origins)foreach(int end in terrain.FindNetworkDocks(mill.Footprint)) {
-                    int[] path=terrain.FindNetworkPath(start,end);
-                    if(path.Length<2)continue;
-                    vehicles.SpawnLogistics(path,site.Tiles,mill.TileId);
-                    Status="Teherautó indult: erdő → fűrészmalom → erdő.";return true;
-                }
-            }
-            Status="Nincs összekötött forrás és cél. Építs összefüggő utat az erdő és a malom mellé.";return false;
-        }
         internal float Load(Vehicle vehicle,float requested)
         {
             var truck=TruckOf(vehicle);
@@ -94,10 +79,7 @@ namespace ForesTycoon
                 if (truck.HomeRequested) return 0;
                 var (taken,value)=truck.Source.Take(requested);truck.CargoValue+=value;return taken;
             }
-            if(MachinesEnabled)return 0;
-            float loaded=0;
-            foreach(int tile in vehicle.SourceTiles){loaded+=forest.ExtractTimber(tile,requested-loaded);if(loaded>=requested-0.00001f)break;}
-            return loaded;
+            return 0;
         }
         internal void Deliver(Vehicle vehicle,float amount)
         {
@@ -114,12 +96,14 @@ namespace ForesTycoon
         }
         internal void Update(double seconds) => SimulationWork.Complete(UpdateWork(seconds));
         internal IEnumerable<int> UpdateWork(double seconds){
-            foreach(var mill in Mills){yield return 1;float cut=Math.Min(mill.Stock,(float)seconds*0.25f);
-                if (Behaviors != null) cut = Math.Min(mill.Stock, (float)Behaviors.Evaluate(new("mill.process", "mill", (ulong)mill.TileId,
-                    cut, seconds, forest.ForestYear, mill.Processed, mill.Stock)));
+            foreach(var mill in Mills){yield return 1;
+                float cut = Math.Min(mill.Stock, (float)rules.Evaluate(Behaviors, "mill.process", "mill", (ulong)mill.TileId,
+                    new(StepSeconds: seconds, MillStock: mill.Stock, MillProcessed: mill.Processed)));
                 mill.Stock-=cut;mill.Processed+=cut;}
-            if(MachinesEnabled) foreach(int unit in UpdateMachinesWork(seconds)) yield return unit;
-            if(Vehicles!=null) foreach(int unit in UpdateTrucksWork(seconds)) yield return unit;
+            var supply = new Dictionary<int, List<SupplyEdge>>();
+            foreach (int unit in BuildSupplyIndexWork(supply)) yield return unit;
+            foreach(int unit in UpdateMachinesWork(seconds, supply)) yield return unit;
+            if(Vehicles!=null) foreach(int unit in UpdateTrucksWork(seconds, supply)) yield return unit;
         }
         internal bool RouteConnected(Vehicle vehicle)
         {
