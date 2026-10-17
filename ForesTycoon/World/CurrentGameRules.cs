@@ -249,9 +249,9 @@ namespace ForesTycoon
             var service = Add("upkeep.service", "Telephelyi karbantartás", "Fenntartás", "Parkoló flottajármű", "Járműidő", upkeep, "Service",
                 "vehicle.wear|fleet.state|vehicle.time", "vehicle.wear|economy.runningCosts", "A telephelyen álló, nem meghibásodott gép és teherautó kopása idővel csökken, a javított kopásmennyiségért költséget számol.", execution: GameRuleExecution.EditableGraph);
 
-            Add("fleet.depot", "Telephely és induló flotta", "Faanyag és logisztika", "2×2 cella", "Játékosparancs", fleet, "PlaceDepot",
+            Add("fleet.depot", "Telephely és induló flotta", "Faanyag és logisztika", "2×2 cella", "Játékosparancs", fleet, "PlaceDepotWork",
                 "commands|terrain.height|terrain.water|road.network|forest.trees|harvest.sites|buildings.footprint", "buildings.footprint|fleet.state",
-                "Sík, száraz, üres, út melletti telephely. Az első egy processzort, forwardert és rönkszállítót ad. Jelenleg nincs telephelyépítési vagy járművásárlási költség.");
+                "Sík, száraz, üres, út melletti telephely. Az első egy processzort, forwardert és rönkszállítót ad. Jelenleg nincs telephelyépítési vagy járművásárlási költség. Az engedély és az induló darabszámok közös gráfokból futnak.", execution: GameRuleExecution.EditableGraph);
             Add("fleet.orders", "Munkára küldés és hazahívás", "Faanyag és logisztika", "Flottajármű / cél", "Játékosparancs és állapotváltás", fleet, "AssignTruck",
                 "commands|fleet.state|vehicle.route|timber.stacks|harvest.sites|mill.stock", "fleet.state|vehicle.route|machine.work", "Forrás és cél kijelölése, megközelítés, munka és hazatérés. A teherautó üresen távozik a forrástól, a gép előbb leadja a rakományt.");
             var processor = Add("machine.processor", "Processzor: vágás és kihordás", "Faanyag és logisztika", "Kitermelési cella / sarang", "1/30 jármű-s al-lépés", machine, "UpdateProcessor",

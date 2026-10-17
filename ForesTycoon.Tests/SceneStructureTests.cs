@@ -39,6 +39,29 @@ public sealed class SceneStructureTests
     }
 
     [Fact]
+    public void AuthoredDepotFleetAppliesDuringGenerationAndPendingCommandSurvivesSave()
+    {
+        var project = Scene(out int depot, out _);
+        foreach (var graph in project.Behaviors.Graphs.Where(g => g.Kind == "logisticsDepot")) {
+            graph.Disabled = true;
+            graph.DisabledValue = graph.Hook switch { "depot.allow" => 1, "depot.processors" => 4, "depot.forwarders" => 2, _ => 3 };
+        }
+        using var world = WorldLoader.CreateProject(project);
+        Assert.Empty(world.SceneProblems);
+        Assert.Equal(6, world.Logistics.Machines.Count); Assert.Equal(3, world.Logistics.Trucks.Count);
+        int next = Enumerable.Range(0, world.Map.Tiles.Count).First(t => world.Map.TryGetSawmillFootprint(t, out _, out _));
+        world.QueuePlaceDepot(next);
+        world.ContinueCommands(1); // Save must finish this begun construction at its command boundary.
+        using var save = new MemoryStream(); world.AtTickBoundary(() => world.Save(save));
+        while (world.CommandPending) world.ContinueCommands(1);
+        save.Position = 0;
+        using var restored = WorldLoader.CreateProject(project); restored.Load(save);
+        world.ExecutePendingCommands(); do { restored.ContinueCommands(1); } while (restored.CommandPending);
+        Assert.Equal(2, world.Logistics.Depots.Count); Assert.Equal(12, world.Logistics.Machines.Count);
+        Assert.Equal(JsonSerializer.Serialize(world.CaptureCheckpoint()), JsonSerializer.Serialize(restored.CaptureCheckpoint()));
+    }
+
+    [Fact]
     public void SceneBuildsRoadsMillAndDepotWithStartingFleetForFree()
     {
         var project = Scene(out int depot, out int mill);

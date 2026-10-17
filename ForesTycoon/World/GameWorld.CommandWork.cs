@@ -17,6 +17,9 @@ sealed partial class GameWorld
         var record = command.ToRecord(worldTick);
         switch (record.Kind)
         {
+            case WorldCommandKind.PlaceDepot:
+                if (Logistics != null) foreach (int unit in Logistics.PlaceDepotWork(record.A, new WorkResult<bool>())) yield return unit;
+                break;
             case WorldCommandKind.TrafficPassage:
                 RecordPassage(System.Text.Json.JsonSerializer.Deserialize<TrafficPassage>(record.RuleJson));
                 foreach (int unit in TrafficWork()) yield return unit;

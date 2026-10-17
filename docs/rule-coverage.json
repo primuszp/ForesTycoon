@@ -102,11 +102,10 @@
     {
       "status": "pending",
       "ids": [
-        "fleet.depot",
         "fleet.orders"
       ],
-      "editor": "A munkaválasztás és hazatérés már közös gráf; az építés és megrendelés feltételei még kódban.",
-      "remaining": "6. csomag: telephely építhetősége, induló flotta összetétele és játékosparancsok engedélyezése. Nem párhuzamos rakodási modell.",
+      "editor": "A munkaválasztás és hazatérés már közös gráf; a munkára küldési parancs engedélyezése még kódban.",
+      "remaining": "Következő: a munkára küldési parancsok engedélyezési feltételei.",
       "tests": [
         "ForesTycoon.Tests/VehicleDynamicsTests.cs",
         "ForesTycoon.Tests/VehicleUpkeepTests.cs",
@@ -509,6 +508,18 @@
         "ForesTycoon.Tests/LogisticsGraphTests.cs",
         "ForesTycoon.Tests/FleetWorkTests.cs",
         "ForesTycoon.Tests/FleetBehaviorTests.cs"
+      ]
+    },
+    {
+      "status": "graph",
+      "ids": [
+        "fleet.depot"
+      ],
+      "editor": "Négy közös gráf: építési engedély és induló gépdarabszámok.",
+      "remaining": "A száraz, sík épülethely és az átfedés ellenőrzése motorfeladat.",
+      "tests": [
+        "ForesTycoon.Tests/DepotGraphTests.cs",
+        "ForesTycoon.Tests/SceneStructureTests.cs"
       ]
     }
   ],

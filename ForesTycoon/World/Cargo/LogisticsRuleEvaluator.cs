@@ -38,11 +38,13 @@ internal readonly record struct LogisticsInputs(
     double RouteFrom = 0,
     double RouteTo = 0,
     double MillStock = 0,
-    double MillProcessed = 0)
+    double MillProcessed = 0,
+    double SiteForest = 0, double SiteHarvest = 0, double SiteRoadAccess = 0, double DepotCount = 0)
 {
     internal void Write(double[] buffer, string[] keys)
     {
         for (int i = 0; i < keys.Length; i++) buffer[i] = keys[i] switch {
+            "site.forest" => SiteForest, "site.harvest" => SiteHarvest, "site.roadAccess" => SiteRoadAccess, "depot.count" => DepotCount,
             "step.seconds" => StepSeconds,
             "machine.kind" => MachineKind,
             "machine.state" => MachineState,

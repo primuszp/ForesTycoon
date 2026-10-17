@@ -3237,8 +3237,8 @@
       "module": "Faanyag \u00E9s logisztika",
       "scope": "2\u00D72 cella",
       "schedule": "J\u00E1t\u00E9kosparancs",
-      "execution": "NativeCode",
-      "description": "S\u00EDk, sz\u00E1raz, \u00FCres, \u00FAt melletti telephely. Az els\u0151 egy processzort, forwardert \u00E9s r\u00F6nksz\u00E1ll\u00EDt\u00F3t ad. Jelenleg nincs telephely\u00E9p\u00EDt\u00E9si vagy j\u00E1rm\u0171v\u00E1s\u00E1rl\u00E1si k\u00F6lts\u00E9g.",
+      "execution": "EditableGraph",
+      "description": "S\u00EDk, sz\u00E1raz, \u00FCres, \u00FAt melletti telephely. Az els\u0151 egy processzort, forwardert \u00E9s r\u00F6nksz\u00E1ll\u00EDt\u00F3t ad. Jelenleg nincs telephely\u00E9p\u00EDt\u00E9si vagy j\u00E1rm\u0171v\u00E1s\u00E1rl\u00E1si k\u00F6lts\u00E9g. Az enged\u00E9ly \u00E9s az indul\u00F3 darabsz\u00E1mok k\u00F6z\u00F6s gr\u00E1fokb\u00F3l futnak.",
       "formula": "",
       "notes": "",
       "reads": [
@@ -3257,7 +3257,7 @@
       "sources": [
         {
           "file": "ForesTycoon/World/Cargo/ForestryLogistics.Fleet.cs",
-          "symbol": "PlaceDepot"
+          "symbol": "PlaceDepotWork"
         }
       ],
       "parameters": [],

@@ -250,3 +250,12 @@ motor marad, a régi párhuzamos válaszszámítások törölve.
 és natív döntéseket. A futtató `forestycoon-simulation/2026-10-17.1`.
 Friss rögzítéssel összevetve csak a `Behaviors` lenyomat változott. A jelenet
 saját szerkesztései megmaradtak. [Részletes hatókör](../../logistics-rules.md).
+
+
+## Huszonegyedik lépés: telephely és induló flotta – 2026-10-17
+
+Négy új, tisztán gráfos telephelyszabály; az alapértelmezett induló flotta
+változatlan. A friss rögzítésben kizárólag a `Behaviors` lenyomat változott.
+A jelenet külső szerkesztéseit megtartottuk. A futtató verziója változatlan,
+mert a korábbi projektekhez hozzáadott alapgráfok az eddigi viselkedést adják.
+[Részletes hatókör és mérés](../../logistics-rules.md).

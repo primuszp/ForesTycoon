@@ -107,3 +107,22 @@ internal interface ILogisticsMill
     [RuleField("Feldolgozatlan készlet: a szabály futásakor rögzített bemenet.", Display = "Feldolgozatlan készlet", Unit = "m³")] double Stock { get; }
     [RuleField("Feldolgozott mennyiség: a szabály futásakor rögzített bemenet.", Display = "Feldolgozott mennyiség", Unit = "m³")] double Processed { get; }
 }
+
+[RuleEntity("logisticsDepot", Abstract = true, Display = "Telephely építése")]
+internal interface ILogisticsDepotQuery
+{
+    [RuleRelation("A tervezett épülethely állapota", Display = "Épülethely")] ILogisticsSite Site { get; }
+    [RuleRelation("Építés előtti állapot", Display = "Telephelyek")] ILogisticsDepot Depot { get; }
+}
+[RuleEntity("logisticsSiteInput", Abstract = true, Display = "Épülethely")]
+internal interface ILogisticsSite
+{
+    [RuleField("1, ha erdő áll a helyén; engedélyezett építéskor eltávolítjuk.", Display = "Erdő van a helyén", Unit = "0–1")] double Forest { get; }
+    [RuleField("1, ha kitermelésre kijelölt területet érint.", Display = "Kitermelés érintett", Unit = "0–1")] double Harvest { get; }
+    [RuleField("1, ha a tervezett telephelynek van közvetlen útkapcsolata.", Display = "Útkapcsolat", Unit = "0–1")] double RoadAccess { get; }
+}
+[RuleEntity("logisticsDepotInput", Abstract = true, Display = "Telephelyek")]
+internal interface ILogisticsDepot
+{
+    [RuleField("Már meglévő telephelyek száma az új építése előtt.", Display = "Meglévő telephelyek", Unit = "db")] double Count { get; }
+}

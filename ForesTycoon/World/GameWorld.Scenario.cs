@@ -101,11 +101,12 @@ namespace ForesTycoon
         internal IEnumerable<int> InitializeProjectSceneWork(RuleProject project)
         {
             var scenario = project.World;
-            // Scene planting is already a site query. Install the same pure response program before painting,
-            // then journal the full project at its ordinary command boundary below.
-            var preparingResponses = Task.Run(() => ForesTycoon.Rules.EcologyResponseProgram.FromModel(project.Behaviors));
-            while (!preparingResponses.IsCompleted) yield return 64;
-            forest.ResponseRules = Environment.ResponseRules = preparingResponses.GetAwaiter().GetResult();
+            // Painting and construction use the authored graphs before journal publication below.
+            var preparing = Task.Run(() => PrepareRuleProject(project, ReadWorldValue));
+            while (!preparing.IsCompleted) yield return 64;
+            var prepared = preparing.GetAwaiter().GetResult();
+            forest.ResponseRules = Environment.ResponseRules = prepared.Policy.Responses;
+            Logistics.Behaviors = prepared.Policy;
             // The painted map is the initial state: terrain (and so water) first, then the forest that grows on it.
             if (scenario != null) {
                 ForestSpeciesBook.Apply(SpeciesEdits(scenario));
@@ -150,7 +151,13 @@ namespace ForesTycoon
                 if (Logistics == null || !place(tile)) SceneProblems.Add($"{what} #{tile}: {Logistics?.Status ?? "nincs logisztika."}");
             }
             foreach (int tile in scenario.Sawmills) foreach (int unit in Place(tile, "Fűrészmalom", t => Logistics.PlaceMill(t))) yield return unit;
-            foreach (int tile in scenario.Depots) foreach (int unit in Place(tile, "Telephely", t => Logistics.PlaceDepot(t))) yield return unit;
+            foreach (int tile in scenario.Depots) {
+                if (map.TryGetSawmillFootprint(tile, out var footprint, out _))
+                    foreach (int unit in forest.PaintInitialForestWork(footprint.ToDictionary(t => t, _ => ForestSpecies.None), preserveUnpainted: true)) yield return unit;
+                var placed = new WorkResult<bool>();
+                if (Logistics != null) foreach (int unit in Logistics.PlaceDepotWork(tile, placed)) yield return unit;
+                if (!placed.Value) SceneProblems.Add($"Telephely #{tile}: {Logistics?.Status ?? "nincs logisztika."}");
+            }
             Expenses = expenses;
             if (Logistics != null) Logistics.Status = status;
         }

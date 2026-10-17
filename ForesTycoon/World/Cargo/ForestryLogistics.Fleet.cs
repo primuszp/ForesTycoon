@@ -58,33 +58,52 @@ namespace ForesTycoon
             }
         }
 
-        /// <summary>
-        /// Places a depot on a 2×2 flat, dry, empty spot beside a road. The first depot receives the starting fleet: a
-        /// processor, a forwarder and a log truck.
-        /// </summary>
+        /// <summary>Synchronous adapter for fixtures; interactive commands and scene generation consume the iterator.</summary>
         internal bool PlaceDepot(int id)
         {
-            if (!terrain.TryGetSawmillFootprint(id, out var footprint, out var position)) { Status = "A telephelyhez 2×2 sík, száraz, üres csempe kell."; return false; }
-            foreach (int tile in footprint)
-                if (forest.TryGetStand(tile, out _) || ContainsTile(tile) || terrain.IsBuildingTile(tile)) { Status = "A telephely helyét erdő, vágás vagy épület foglalja."; return false; }
-            if (terrain.FindRoadDocks(footprint).Count == 0) { Status = "A telephelyet út mellé kell építeni."; return false; }
+            var result = new WorkResult<bool>(); SimulationWork.Complete(PlaceDepotWork(id, result)); return result.Value;
+        }
+
+        internal IEnumerable<int> PlaceDepotWork(int id, WorkResult<bool> result)
+        {
+            if (!terrain.TryGetSawmillFootprint(id, out var footprint, out var position)) {
+                Status = "A telephelyhez 2×2 sík, száraz, szabad épülethely kell."; yield break;
+            }
+            bool trees = false, harvest = false;
+            foreach (int tile in footprint) { trees |= forest.TryGetStand(tile, out _); yield return 1; }
+            foreach (var site in Sites) {
+                foreach (int tile in site.Tiles) {
+                    harvest |= Array.IndexOf(footprint, tile) >= 0; yield return 1;
+                    if (harvest) break;
+                }
+                if (harvest) break;
+            }
+            var inputs = new LogisticsInputs(SiteForest: trees ? 1 : 0, SiteHarvest: harvest ? 1 : 0,
+                SiteRoadAccess: terrain.FindRoadDocks(footprint).Count > 0 ? 1 : 0, DepotCount: Depots.Count);
+            double Read(string hook) => rules.Evaluate(Behaviors, hook, "depot", (ulong)id, inputs);
+            if (Read("depot.allow") < .5) { Status = "A telephely építését a szabály nem engedélyezi (erdő, kitermelés vagy hiányzó útkapcsolat)."; yield break; }
+            int Count(string hook) { double value = Read(hook); return double.IsFinite(value) ? (int)Math.Clamp(Math.Floor(value), 0, 1024) : 0; }
+            int processors = Count("depot.processors"), forwarders = Count("depot.forwarders"), trucks = Count("depot.trucks");
+            yield return 1;
+            if (trees) foreach (int unit in forest.ClearTerrainTilesWork(footprint)) yield return unit;
             var depot = new Depot { TileId = id, Footprint = footprint, Position = position };
-            Depots.Add(depot);
-            terrain.SetBuildingFootprint(footprint);
-            if (Depots.Count == 1)
-            {
-                foreach (var kind in new[] { ForestMachineKind.Harvester, ForestMachineKind.Forwarder })
-                {
+            Depots.Add(depot); terrain.SetBuildingFootprint(footprint); yield return 1;
+            foreach (var kind in new[] { ForestMachineKind.Harvester, ForestMachineKind.Forwarder }) {
+                int count = kind == ForestMachineKind.Harvester ? processors : forwarders;
+                for (int i = 0; i < count; i++) {
                     int machineId = nextMachineId++;
                     Machines.Add(new ForestMachine { Id = machineId, Kind = kind, Home = depot, Path = new[] { depot.TileId },
                         Upkeep = new VehicleUpkeep((uint)machineId * 2654435761u), TuningSource = this });
+                    yield return 1;
                 }
+            }
+            for (int i = 0; i < trucks; i++) {
                 int truckId = nextTruckId++;
                 Trucks.Add(new FleetTruck { Id = truckId, Home = depot, Upkeep = new VehicleUpkeep((uint)truckId * 2246822519u + 1) });
-                Status = "Telephely kész: egy processzor, egy forwarder és egy rönkszállító várja a munkát.";
+                yield return 1;
             }
-            else Status = "Új telephely kész.";
-            return true;
+            Status = $"Telephely kész: {processors} processzor, {forwarders} forwarder, {trucks} rönkszállító.";
+            result.Value = true;
         }
 
         private int DepotDock(Depot depot) { var docks = terrain.FindRoadDocks(depot.Footprint); return docks.Count > 0 ? docks[0] : -1; }

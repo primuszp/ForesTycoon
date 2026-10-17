@@ -6,6 +6,7 @@ namespace ForesTycoon
     {
         static void Main(string[] args)
         {
+            if (args.Length == 1 && args[0] == "--depot-rule-benchmark") { DepotRuleBenchmark.Run(); return; }
             if (args.Length == 1 && args[0] == "--logistics-rule-benchmark") { LogisticsRuleBenchmark.Run(); return; }
             if (args.Length == 1 && args[0] == "--vehicle-response-benchmark") { VehicleResponseBenchmark.Run(); return; }
             if (args.Length == 1 && args[0] == "--regeneration-benchmark") { RuleStepBenchmark.Run(64, 256); return; }

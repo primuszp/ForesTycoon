@@ -6,13 +6,15 @@ namespace ForesTycoon.Rules;
 /// <summary>Editable logistics decisions; stock conservation and path topology are host invariants.</summary>
 public static class LogisticsRules
 {
-    public static readonly string[] InputKeys = ["step.seconds", "machine.kind", "machine.state", "machine.cargo", "machine.capacity", "machine.wear", "machine.pace", "machine.homeRequested", "source.stock", "source.fed", "source.availableTimber", "source.reachable", "spec.fellingRate", "spec.unloadRate", "spec.speed", "spec.loadedSpeed", "spec.fuelDriving", "spec.fuelLoaded", "spec.fuelCrane", "spec.fuelFelling", "spec.emptyMass", "spec.timberDensity", "spec.loadRate", "log.volume", "log.lastVolume", "transfer.unloading", "transfer.requested", "transfer.loaded", "route.damage", "route.surface", "route.from", "route.to", "mill.stock", "mill.processed"];
+    public static readonly string[] InputKeys = ["step.seconds", "machine.kind", "machine.state", "machine.cargo", "machine.capacity", "machine.wear", "machine.pace", "machine.homeRequested", "source.stock", "source.fed", "source.availableTimber", "source.reachable", "spec.fellingRate", "spec.unloadRate", "spec.speed", "spec.loadedSpeed", "spec.fuelDriving", "spec.fuelLoaded", "spec.fuelCrane", "spec.fuelFelling", "spec.emptyMass", "spec.timberDensity", "spec.loadRate", "log.volume", "log.lastVolume", "transfer.unloading", "transfer.requested", "transfer.loaded", "route.damage", "route.surface", "route.from", "route.to", "mill.stock", "mill.processed", "site.forest", "site.harvest", "site.roadAccess", "depot.count"];
     public static string Kind(string agent) => "logistics" + char.ToUpperInvariant(agent[0]) + agent[1..];
-    public static bool IsKind(string kind) => kind is "logisticsProcessor" or "logisticsForwarder" or "logisticsTruck" or "logisticsMill";
+    public static bool IsKind(string kind) => kind is "logisticsProcessor" or "logisticsForwarder" or "logisticsTruck" or "logisticsMill" or "logisticsDepot";
     private static BehaviorHook H(string id, string name, string kind, string unit, double min, double max, string state, string amount, string schedule) =>
         new(id, name, kind, unit, min, max, state, amount, schedule, true, InputKeys.Where(key => Available(id, kind, key)).ToArray());
     private static bool Available(string id, string kind, string key)
     {
+        if (kind == "logisticsDepot") return key.StartsWith("site.") || key == "depot.count";
+        if (key.StartsWith("site.") || key.StartsWith("depot.")) return false;
         if (id == "transfer.duration") return key is "step.seconds" or "machine.cargo" or "machine.capacity";
         if (id == "truck.return") return key is "step.seconds" or "machine.cargo" or "machine.capacity" or "machine.kind" or "machine.wear" or "machine.homeRequested" or "source.stock" or "source.fed";
         if (kind == "logisticsMill") return key.StartsWith("step.") || key.StartsWith("mill.");
@@ -28,6 +30,10 @@ public static class LogisticsRules
         return true;
     }
     public static readonly BehaviorHook[] Hooks = {
+        H("depot.allow", "Telephely építésének engedélyezése", "logisticsDepot", "0–1", 0, 1, "", "", "Építési parancskor, a hely vizsgálata után; 1 engedélyez, 0 elutasít"),
+        H("depot.processors", "Telephely induló processzorai", "logisticsDepot", "db", 0, 1024, "", "", "Építéskor egyszer; egész darabszám, gépenként szeletelt létrehozás"),
+        H("depot.forwarders", "Telephely induló forwarderei", "logisticsDepot", "db", 0, 1024, "", "", "Építéskor egyszer; egész darabszám, gépenként szeletelt létrehozás"),
+        H("depot.trucks", "Telephely induló teherautói", "logisticsDepot", "db", 0, 1024, "", "", "Építéskor egyszer; egész darabszám, gépenként szeletelt létrehozás"),
         H("route.cost", "Processzor útvonalköltsége", "logisticsProcessor", "költség/szakasz", 0.001, 1000000.0, "", "", "Útkeresés közben, szakaszonként; csak a járható hálózaton"),
         H("route.allow", "Processzor útvonalszakasz engedélyezése", "logisticsProcessor", "0–1", 0, 1, "", "", "Útkeresés közben; 0 tilt, 1 engedélyez egy ténylegesen járható szakaszt"),
         H("machine.pace", "Processzor munkatempója", "logisticsProcessor", "munka-s", 0, 10, "", "", "Szeletelt gépi al-lépésben, fenntartás után"),
@@ -77,6 +83,8 @@ public static class LogisticsRules
     public static ResponseRuleDescription Description(string id)
     {
         string result = id switch {
+            "depot.allow" => "Az új telephely építési engedélye",
+            "depot.processors" or "depot.forwarders" or "depot.trucks" => "Az új telephelyre létrehozott gépek száma",
             "machine.pace" => "A gép munkalépésének hossza", "machine.speed" => "Haladási sebesség", "machine.fuel" => "Munkalépés alapfogyasztása",
             "machine.mass" => "A gép és rakomány áthaladási tömege", "machine.felling" => "Kitermelésre kért térfogat", "machine.continueFelling" => "A helyi vágás folytatása",
             "machine.fetch" => "Elindulás a forrásért", "machine.deliver" => "Elindulás a célhoz", "machine.return" or "truck.return" => "A megbízás befejezése és hazatérés",
@@ -87,6 +95,8 @@ public static class LogisticsRules
         };
         double off = id is "machine.mass" or "route.cost" ? 1 : id is "loading.cycleSeconds" or "transfer.duration" ? 8 : id == "loading.gripPhase" ? .32 : id == "loading.releasePhase" ? .77 : 0;
         string meaning = id switch {
+            "depot.allow" => "0: új telephely nem építhető; a már létezők megmaradnak. Az 1 sem írja felül a száraz, sík, szabad épülethely követelményét.",
+            "depot.processors" or "depot.forwarders" or "depot.trucks" => "0: ebből a gépfajtából nem kap új gépet. A pozitív eredmény egészrésze számít, legfeljebb 1024. A meglévő flotta nem változik.",
             "route.allow" => "0 esetén nem használja ezt az útszakaszt; új kapcsolatot az 1 sem hoz létre.",
             "machine.continueFelling" or "machine.fetch" or "machine.deliver" or "machine.return" or "truck.return" or "loading.depart" => "0: nem kéri ezt a lépést; 1: kéri. A hazahívás és a készletbiztonság elsőbbséget kap.",
             "loading.cycleSeconds" or "loading.gripPhase" or "loading.releasePhase" => "A következő rönkciklustól használja a fix értéket; a már megfogott rönk ciklusa folytatódik.",
@@ -94,6 +104,8 @@ public static class LogisticsRules
             _ => "A játék a gráf helyett ezt a fix eredményt használja. A készlet, kapacitás és útvonal fizikai korlátai megmaradnak."
         };
         string consumer = id switch {
+            "depot.allow" => "Telephely építési parancs és jelenet létrehozása",
+            "depot.processors" or "depot.forwarders" or "depot.trucks" => "Az új telephely szeletelt flotta-létrehozása",
             "machine.pace" => "A gép haladásának, vágásának és rakodásának munkaideje",
             "machine.speed" => "Szeletelt útvonalbejárás",
             "machine.fuel" => "Kopási korrekció után a fogyasztásmérő és a működési költség",
@@ -115,6 +127,8 @@ public static class LogisticsRules
     public static BehaviorGraph DefaultGraph(BehaviorHook hook)
     {
         string formula = (hook.Id, hook.Kind) switch {
+            ("depot.allow", "logisticsDepot") => "ha(site.forest < 0.5; ha(site.harvest < 0.5; site.roadAccess; 0); 0)",
+            ("depot.processors" or "depot.forwarders" or "depot.trucks", "logisticsDepot") => "ha(depot.count < 0.5; 1; 0)",
             ("route.cost", "logisticsProcessor") => "1",
             ("route.allow", "logisticsProcessor") => "1",
             ("machine.pace", "logisticsProcessor") => "machine.pace * step.seconds",

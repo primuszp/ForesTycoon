@@ -145,3 +145,58 @@ A végső bemenetpróbák a rönkciklus tényleges munkaidejét, az áthaladási
 időlépését és a hazatérési döntés tényleges kopásértékét is ellenőrzik.
 A két flottaeset egymás után fut egy folyamatban; a JIT/GC miatt a ritka
 maximumokból nem következik a nagyobb flotta jobb általános teljesítménye.
+
+
+## Telephely és induló flotta – 2026-10-17
+
+A `logisticsDepot` négy új, közös gráfot ad: `depot.allow`,
+`depot.processors`, `depot.forwarders`, `depot.trucks`. A telephely szabályánál
+ugyanaz a forrás–számítás–eredmény felület jelenik meg. Az Épülethely
+objektum mezői: Erdő van a helyén (`site.forest`), Kitermelés érintett
+(`site.harvest`), Útkapcsolat (`site.roadAccess`). A Telephelyek objektum
+Meglévő telephelyek mezője `depot.count`: az új építése előtti darabszám.
+
+Alapértelmezésben erdő és kitermelési kijelölés nélküli, út melletti hely
+engedélyezett; csak az első telephely kap egy processzort, egy forwardert és
+egy teherautót. Ez most gráf, nincs mellette külön első-telephelyes kódág.
+Az egyedi kötés az építendő telephely csempeazonosítójával működik.
+A darabszám gráfok eredményének egészrésze számít, 0–1024 gép fajtánként.
+Kikapcsolt engedély 0-val elutasítja az új építést; kikapcsolt darabszám
+0-val nem ad abból új gépet. Egyik sem törli a meglévő flottát.
+
+A motor továbbra is száraz, sík, szabad 2×2 épülethelyet követel; épületre,
+útra vagy vízre engedélyező gráffal sem lehet építeni. Ha a szerkesztett gráf
+erdős helyet engedélyez, a motor szeletelten eltávolítja az ottani erdőt,
+bevétel nélkül. Elutasítás előtt nincs világmódosítás. A jelenetfestés
+korábbi szabálya megmarad: az alkotó által megadott épülethely alól előbb
+letakarítja a festett erdőt, majd ugyanazt az építési gráfot futtatja.
+
+A játékosparancs és a jelenetgenerálás egyaránt `PlaceDepotWork`-öt használ.
+A kitermelési kijelölések vizsgálata csempénként, a flotta létrehozása gépenként
+ad vissza vezérlést. Nincs korlátlan befejező ág. A szinkron adapter csak a
+szokásos, őrzött CLI/teszt út: szeletelt futásból nem hívható.
+A mentés a már megkezdett parancs befejezett határán készül; félkész flottát
+nem publikál. Azonos darabszámhoz azonos gépsorrend, ID és véletlenmag tartozik.
+
+Külön Release mérés (`--depot-rule-benchmark`, renderelés nélkül):
+
+| Pálya | Vizsgált kijelölt csempe | Új gép | Teljes parancs | 64 egységes szelet p95 / p99 / maximum |
+| --- | ---: | ---: | ---: | --- |
+| 128×128 | 15 872 | 3072 | 7,040 ms | 0,024 / 0,092 / 3,233 ms |
+| 256×256 | 64 512 | 3072 | 2,755 ms | 0,012 / 0,016 / 2,288 ms |
+
+Mindkét eset teljes logisztikai mentési állapota pontosan azonos a szinkron
+és a szeletelt futásban. Az első eset hideg kódot is érint; a két teljes
+idő nem skálázási összehasonlítás. Ez építési mikrobenchmark, nem teljes
+képkockaidő vagy a havi szimuláció kapacitásmérése. A korábbi havi torlódás
+külön feladat marad. Következő csomag: a munkára küldési parancsok
+engedélyezése; a gazdaság és a többi nyitott tétel az auditban szerepel.
+
+
+Ellenőrzés: Release fordítás 0 figyelmeztetéssel és 0 hibával; 1938/1938 teljes
+teszt; mindkét editor-füstteszt; szabályaudit és `git diff --check` rendben.
+Új regressziók: gráfos tiltás mellékhatás nélkül, egyedi kötés és törtszám
+kezelése, épületátfedés tiltása, 3072 gép őrzött szeletelt létrehozásának
+pontos állapotegyezése, szerkesztett induló flotta jelenetgeneráláskor,
+megkezdett építés mentési határa és visszatöltés. A teljes csomag napló-
+visszajátszási tesztjei is átmentek.
