@@ -77,7 +77,7 @@ namespace ForesTycoon
                 {
                     int machineId = nextMachineId++;
                     Machines.Add(new ForestMachine { Id = machineId, Kind = kind, Home = depot, Path = new[] { depot.TileId },
-                        Upkeep = new VehicleUpkeep((uint)machineId * 2654435761u), Tuning = Tuning });
+                        Upkeep = new VehicleUpkeep((uint)machineId * 2654435761u), TuningSource = this });
                 }
                 int truckId = nextTruckId++;
                 Trucks.Add(new FleetTruck { Id = truckId, Home = depot, Upkeep = new VehicleUpkeep((uint)truckId * 2246822519u + 1) });

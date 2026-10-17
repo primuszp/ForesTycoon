@@ -103,7 +103,7 @@ namespace ForesTycoon
                 CheckpointGuard.Require(m.LogTransferVolume <= ForwarderLoading.LogVolume + .001f && (m.LogTransferVolume == 0 || (m.Kind == ForestMachineKind.Forwarder && m.LogCycleDuration > 0 && m.State is ForestMachineState.Loading or ForestMachineState.Unloading)), "grapple state");
                 CheckpointGuard.NonNegative(m.CargoValue, "forest machine cargo value"); CheckpointGuard.NonNegative(m.FuelUsed, "forest machine fuel");
                 CheckpointGuard.Require(m.Cargo <= GameTuning.Spec(Tune.ForwarderCapacity).Max + 0.001f && m.Destination >= -1 && m.Destination < terrain.Tiles.Count, "forest machine cargo");
-                machines.Add(new ForestMachine { Id = m.Id, Kind = m.Kind, Site = m.Site < 0 ? null : sites[m.Site], Path = (int[])m.Path.Clone(),
+                machines.Add(new ForestMachine { Id = m.Id, Kind = m.Kind, TuningSource = this, Site = m.Site < 0 ? null : sites[m.Site], Path = (int[])m.Path.Clone(),
                     Home = m.Home < 0 ? null : depots[m.Home], HomeRequested = m.HomeRequested, Source = Stack(m.Source), Target = Stack(m.Target),
                     Destination = m.Destination, PathPosition = m.Position, PreviousPathPosition = m.PreviousPosition, State = m.State, Goal = m.Goal,
                     Cargo = m.Cargo, CargoValue = m.CargoValue, WorkTime = m.WorkTime, FuelUsed = m.FuelUsed, UnitPrice = Math.Max(0, m.UnitPrice),

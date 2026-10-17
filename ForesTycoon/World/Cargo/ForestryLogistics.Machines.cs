@@ -47,8 +47,10 @@ namespace ForesTycoon
         /// <summary>Processor: price of the wood it is felling (kept when the last standing tree of a tile is gone).</summary>
         internal double UnitPrice;
         internal VehicleUpkeep Upkeep = new(0);
-        /// <summary>The world's tuning (capacities); set by the logistics.</summary>
-        internal GameTuning Tuning = GameTuning.Default;
+        private GameTuning tuning = GameTuning.Default;
+        /// <summary>Owned machines read the published world parameters without a fleet-wide update.</summary>
+        internal ForestryLogistics TuningSource { get; set; }
+        internal GameTuning Tuning { get => TuningSource?.Tuning ?? tuning; set => tuning = value ?? GameTuning.Default; }
         internal int Tile => Path[Math.Clamp((int)Math.Round(PathPosition), 0, Path.Length - 1)];
         internal bool Arrived => PathPosition >= Path.Length - 1 - 1e-9;
         internal float Capacity => Tuning.F(Kind == ForestMachineKind.Forwarder ? Tune.ForwarderCapacity : Tune.ProcessorCapacity);
@@ -75,7 +77,7 @@ namespace ForesTycoon
         internal GameTuning Tuning
         {
             get => tuning;
-            set { tuning = value ?? GameTuning.Default; foreach (var machine in Machines) machine.Tuning = tuning; }
+            set => tuning = value ?? GameTuning.Default;
         }
         private int nextMachineId = 1;
         /// <summary>When set, timber reaches the mills only through the machines and stacks (no direct loading from the forest).</summary>

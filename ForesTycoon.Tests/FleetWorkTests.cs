@@ -5,6 +5,49 @@ namespace ForesTycoon.Tests;
 public partial class FleetTests
 {
     [Fact]
+    public void PublishedTuningIsReadByExistingAndRestoredMachinesWithoutResettingLogCycle()
+    {
+        var scene = Build();
+        var machine = Forwarder(scene);
+        Assert.Same(scene.Logistics, machine.TuningSource);
+        machine.State = ForestMachineState.Loading;
+        machine.Source = scene.Logistics.StackAt(ForestStack);
+        machine.Source.Volume = 10;
+        machine.Source.Value = 1000;
+        ForwarderLoading.Step(machine, 2.57, (_, _) => throw new Exception("Not unloading"));
+        Assert.True(machine.LogTransferVolume > 0);
+        double duration = machine.LogCycleDuration;
+        var checkpoint = scene.Logistics.Capture();
+
+        var changed = GameTuning.FromOverrides(new Dictionary<string, double> {
+            [nameof(Tune.ForwarderCapacity)] = 20,
+            [nameof(Tune.ForwarderLoadRate)] = 1
+        });
+        scene.Logistics.Tuning = changed;
+        Assert.Same(changed, machine.Tuning);
+        Assert.Equal(20, machine.Capacity);
+        Assert.Equal(duration, machine.LogCycleDuration);
+
+        var restored = Build();
+        restored.Logistics.Tuning = changed;
+        restored.Logistics.Restore(checkpoint);
+        var resumed = Forwarder(restored);
+        Assert.Same(restored.Logistics, resumed.TuningSource);
+        Assert.Same(changed, resumed.Tuning);
+        Assert.Equal(duration, resumed.LogCycleDuration);
+        for (int i = 0; i < 400; i++) {
+            ForwarderLoading.Step(machine, 1d / 30, (_, _) => throw new Exception("Not unloading"));
+            ForwarderLoading.Step(resumed, 1d / 30, (_, _) => throw new Exception("Not unloading"));
+        }
+        Assert.Equal(JsonSerializer.Serialize(scene.Logistics.Capture()), JsonSerializer.Serialize(restored.Logistics.Capture()));
+
+        scene.Logistics.Tuning = null;
+        Assert.Same(GameTuning.Default, machine.Tuning);
+        var standalone = new ForestMachine { Tuning = changed, Kind = ForestMachineKind.Forwarder };
+        Assert.Equal(20, standalone.Capacity);
+    }
+
+    [Fact]
     public void AuthoredWearIsSharedByWorkingMachinesAndTruckAndKeepsSlicedOrder()
     {
         var expected = Build(); var actual = Build();

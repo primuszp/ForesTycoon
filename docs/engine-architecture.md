@@ -548,3 +548,29 @@ a teljes és szeletelt járműállapot bitre azonos. Az 1000-es eset ritka maxim
 A külön 128²-es erdővilág hostpróbájának p99/max értéke 4,080/12,913 ms,
 csúcshátraléka 7,0667 szimuláció-s. A havi kapacitáskorlát megmaradt.
 [Részletes protokoll, korlátok és ellenőrzések](vehicle-response-rules.md).
+
+## Gépparaméterek publikálása – 2026-10-17
+
+Az 5/b előkészítéseként a `ForestryLogistics.Tuning` alkalmazása már nem
+járja végig a gépparkot. A telephelyen létrehozott és a mentésből visszaépített
+gépek a tulajdonos logisztika közös, változtathatatlan `GameTuning` példányát
+olvassák. A publikálás egy referenciacsere, a gépszámtól függetlenül. A
+visszakötés a már meglévő, gépenként megszakítható visszaépítésben történik.
+A különálló gép továbbra is saját paraméterpéldányt használhat.
+
+A váltás nem indítja újra a megkezdett rakodási ciklust: annak időtartama,
+megfogási/elengedési pontjai és a megfogott fa továbbra is a mentett állapot
+részei. Az új ciklusidőt a következő ciklus kezdetén számolja ki; például
+a kapacitás lekérdezése viszont azonnal az új paramétert adja. A regressziós
+próba megfogott rönkkel ment, paramétert vált, visszatölt, majd összehasonlítja
+a két folytatás teljes logisztikai checkpointját. Ez önmagában nem a rakodási
+szabályok gráfos átvezetése; a malom, rakodás és gépi döntések 5/b munkája
+még nyitott. Ehhez a változtatáshoz nem készült új időmérés, és nem módosul
+a mentés formátuma vagy a szabályok matematikája.
+
+Ellenőrzés: 31 célzott gépi/rakodási teszt és a teljes 1926 teszt sikeres.
+A teljes futás első kísérletét a tesztfigyelő az algoritmus-fordító kimenetére
+várakozva megszakította; a változatlan forrás újrafuttatása
+`MSBUILDDISABLENODEREUSE=1` mellett sikeres (2,85 perc).
+Nyers naplók: `artifacts/machine-tuning-tests.txt`,
+`artifacts/machine-tuning-full-tests-retry.txt`.
