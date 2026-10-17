@@ -606,3 +606,39 @@ nyitott státusza a bennük maradt játékbeli feltételeket és gazdasági
 terepgeometria algoritmusának felépíttetése a felhasználóval.
 A geometriai terepszerkesztés (`terrain.edit`) ezért továbbra is motor,
 nem hiányzó gráf. A generálási profilok külön, részleges tételek.
+
+
+## Grafikus indulás: régi világ felszabadítása – 2026-10-17
+
+A `WorldLoader.CreateStartWork` grafikus ágában a világ átvétele után a régi
+terep `DisposeWork` bejárása lefutott, majd a jelölt világ `using` lezárása
+ismét a szinkron `Terrain.Dispose` adaptert hívta. A szeletelt futás védelme
+ezt helyesen elutasította, ezért a játék a betöltőképernyőn kivételt dobott.
+A headless generálási tesztek és az editor közvetlen világ-létrehozása nem
+járt ezen a grafikus erőforrás-felszabadítási útvonalon.
+
+Most a teljes régi világ a közös `GameWorld.DisposeWork` útvonalon szabadul
+fel, beágyazott, szeletelt tereptakarítással. A `disposed` jelölés csak a
+felszabadítás befejezésekor áll be: a felszabadítás közbeni ablakbezárás sem
+hagyja félbehagyva a régi világ takarítását. A külső szinkron `Dispose`
+adapter megmarad, de a már lezárt világot nem fejezi be ismét.
+A szinkron befejezés tiltása változatlan.
+
+A világ létrehozása közben a betöltőképernyő mozgó aktivitásjelzőt és a
+`GenerationStage` aktuális szakasznevét mutatja. Ebben a szakaszban nincs
+megbízható összesített munkamennyiség, ezért nem állít százalékos készültséget.
+A későbbi, mért geometria-előkészítés továbbra is a tényleges haladásból
+rajzol százalékos sávot.
+
+Az új `--startup-smoke-test` rejtett OpenGL ablakban a tényleges
+`CreateStartWork(enableRendering: true)` belépési pontot és a szállított
+nyitójelenetet használja. A javítás előtt ugyanazzal a kivétellel elbukott;
+a javítás után a grafikus indulást és az átvétel utáni felszabadítás közbeni
+bezárást is ellenőrzi. Két headless regresszió a generált és a rögzített
+jelenet indulási állapotegyezését és szakaszjelentését vizsgálja.
+
+
+Ellenőrzés: a végső grafikus startup/lezárási füstteszt sikeres; Release
+fordítás 0 hibával, 0 figyelmeztetéssel; 1949/1949 teljes teszt; mindkét
+editor-füstteszt, szabályaudit és diff-ellenőrzés rendben. A szimulációs
+szabályok és a mentési formátum nem változtak.

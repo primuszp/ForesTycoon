@@ -663,13 +663,20 @@ namespace ForesTycoon
         public void Dispose()
         {
             if (disposed) return;
+            SimulationWork.Complete(DisposeWork());
+        }
+
+        private IEnumerable<int> DisposeWork()
+        {
+            if (disposed) yield break;
             terrainRenderer?.VerifyAccess();
-            disposed = true;
             updateWork?.Dispose(); updateWork = null; tickBoundaryActions.Clear();
             generationWork?.Dispose(); generationWork = null; commands.Clear();
             backgroundJobs.Dispose();
-            terrainRenderer?.Dispose();
-            terrain?.Dispose();
+            terrainRenderer?.Dispose(); terrainRenderer = null;
+            if (terrain != null) foreach (int unit in terrain.DisposeWork()) yield return unit;
+            terrain = null;
+            disposed = true;
         }
     }
 }

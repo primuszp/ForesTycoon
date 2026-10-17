@@ -39,9 +39,10 @@ internal static partial class WorldLoader
             : CreateProject(RuleProject.FromJson(System.IO.File.ReadAllText(sceneProject)), enableRendering);
     }
 
-    internal static IEnumerable<int> CreateStartWork(WorkResult<GameWorld> result, string sceneProject = null, bool enableRendering = true)
+    internal static IEnumerable<int> CreateStartWork(WorkResult<GameWorld> result, string sceneProject = null, bool enableRendering = true, Action<string> reportStage = null)
     {
         sceneProject ??= OpeningScenePath();
+        reportStage?.Invoke("Jelenet beolvasása");
         RuleProject project = null;
         if (sceneProject != null) {
             string path = sceneProject;
@@ -56,7 +57,7 @@ internal static partial class WorldLoader
             if (enableRendering) world.AttachRendering();
             if (project?.World != null) world.RequestScenario(project.World, project);
             else world.RequestRegenerate(TerrainSettings.Default);
-            while (world.GenerationPending) { world.ContinueGeneration(16); yield return 16; }
+            while (world.GenerationPending) { world.ContinueGeneration(16); reportStage?.Invoke(world.GenerationStage); yield return 16; }
             if (world.GenerationError != null) throw new System.IO.InvalidDataException(world.GenerationError);
             if (project != null && project.World == null) {
                 world.QueueRuleProject(project);

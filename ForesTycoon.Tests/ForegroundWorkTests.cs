@@ -7,6 +7,35 @@ public class ForegroundWorkTests
 {
     private static GameWorld World() => new(TerrainSettings.Default.WithNodeSize(17, 42), enableRendering: false);
     private static string State(GameWorld world) => JsonSerializer.Serialize(world.CaptureCheckpoint());
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void StartupWorkPublishesExactSceneAndReportsTheActiveStages(bool captured)
+    {
+        using var source = World();
+        var project = GameWorld.DefaultRuleProject(); project.Algorithms = null;
+        project.World = captured ? WorldLoader.CaptureScenario(source) : GameWorld.DefaultScenario(42, 16);
+        string path = Path.Combine(Path.GetTempPath(), "forestycoon-startup-" + Guid.NewGuid().ToString("N") + ".json");
+        var result = new WorkResult<GameWorld>();
+        try {
+            File.WriteAllText(path, project.ToJson());
+            using var expected = WorldLoader.CreateProject(project);
+            var stages = new HashSet<string>(); int slices = 0;
+            using (var work = WorldLoader.CreateStartWork(result, path, enableRendering: false, reportStage: stage => stages.Add(stage)).GetEnumerator()) {
+                var timeout = System.Diagnostics.Stopwatch.StartNew();
+                while (work.MoveNext()) {
+                    if (++slices % 256 == 0) {
+                        Thread.Yield(); Assert.True(timeout.Elapsed < TimeSpan.FromSeconds(30));
+                    }
+                }
+            }
+            Assert.NotNull(result.Value); Assert.True(slices > 1);
+            Assert.Contains("Jelenet beolvasása", stages); Assert.True(stages.Count > 2);
+            Assert.Equal(State(expected), State(result.Value));
+        }
+        finally { result.Value?.Dispose(); File.Delete(path); }
+    }
     private static void FinishGeneration(GameWorld world, int budget)
     {
         int slices = 0; var timeout = System.Diagnostics.Stopwatch.StartNew();

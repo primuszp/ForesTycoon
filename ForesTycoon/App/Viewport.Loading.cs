@@ -14,6 +14,7 @@ namespace ForesTycoon
         private readonly WorkResult<GameWorld> createdWorld = new();
         private bool loadingPresented;
         private float loadingProgress;
+        private string loadingStage = "A táj létrehozása…";
         private readonly string sceneProject;
 
         private void RenderLoadingFrame()
@@ -25,7 +26,7 @@ namespace ForesTycoon
             {
                 if (world == null)
                 {
-                    worldCreation ??= WorldLoader.CreateStartWork(createdWorld, sceneProject).GetEnumerator();
+                    worldCreation ??= WorldLoader.CreateStartWork(createdWorld, sceneProject, reportStage: stage => { if (!string.IsNullOrEmpty(stage)) loadingStage = stage; }).GetEnumerator();
                     long creationStarted = Stopwatch.GetTimestamp();
                     int slices = 0;
                     while (slices++ < 4096 && Stopwatch.GetElapsedTime(creationStarted).TotalMilliseconds < 4) {
@@ -86,8 +87,19 @@ namespace ForesTycoon
                 ImGuiWindowFlags.NoSavedSettings | ImGuiWindowFlags.AlwaysAutoResize);
             ImGui.TextUnformatted("ForesTycoon");
             ImGui.Spacing();
-            ImGui.TextUnformatted(world == null ? "A táj létrehozása…" : "Erdők és pályaelemek előkészítése…");
-            ImGui.ProgressBar(loadingProgress, new NVec2(-1, 0));
+            ImGui.TextUnformatted(world == null ? loadingStage : "Erdők és pályaelemek előkészítése…");
+            if (world == null) {
+                // Generation has no meaningful total yet: show activity, not a fabricated percentage.
+                var start = ImGui.GetCursorScreenPos();
+                var size = new NVec2(Math.Max(1, ImGui.GetContentRegionAvail().X), ImGui.GetFrameHeight());
+                ImGui.InvisibleButton("##loading-activity", size);
+                var draw = ImGui.GetWindowDrawList();
+                draw.AddRectFilled(start, start + size, ImGui.GetColorU32(ImGuiCol.FrameBg), 3);
+                float block = size.X * .22f;
+                float x = (float)(.5 - .5 * Math.Cos(ImGui.GetTime() * 3)) * (size.X - block);
+                draw.AddRectFilled(start + new NVec2(x, 0), start + new NVec2(x + block, size.Y), ImGui.GetColorU32(ImGuiCol.PlotHistogram), 3);
+            }
+            else ImGui.ProgressBar(loadingProgress, new NVec2(-1, 0));
             ImGui.TextWrapped("A teljes pálya és a fák részletességi szintjei betöltődnek.");
             ImGui.End();
             imgui.Render();

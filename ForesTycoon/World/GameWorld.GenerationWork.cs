@@ -143,7 +143,7 @@ sealed partial class GameWorld
         generationInputs.Clear();
         Adopt(candidate, preserveBoundaryActions: true); generationCommitted = true;
         GenerationStage = "Régi pálya felszabadítása";
-        if (candidate.terrain != null) foreach (int unit in candidate.terrain.DisposeWork()) yield return 64;
+        foreach (int unit in candidate.DisposeWork()) yield return unit;
         LastRuleSample = "Még nem történt közúti áthaladás.";
         LastLoadReplayedTicks = 0;
     }
