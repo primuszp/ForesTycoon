@@ -144,8 +144,6 @@ namespace ForesTycoon.Map
             foreach (int unit in RebuildHydrologyWork()) yield return unit;
         }
 
-        private void RebuildHydrology() => SimulationWork.Complete(RebuildHydrologyWork());
-
         private IEnumerable<int> RebuildHydrologyWork()
         {
             var previousWater = new bool[tiles.Length];

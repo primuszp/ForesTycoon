@@ -47,12 +47,13 @@ namespace ForesTycoon
                 }
                 var terrain=new Terrain(TerrainSettings.Default.WithNodeSize(33,8127).WithForestPattern(ForestPattern.LargeMixed),(_,_)=>4);
                 try {
-                    var forest=new ForestSystem(terrain.Map);var settings=new GraphicsSettings{Weather=false,Fog=false};
-                    using var scene=new TerrainRenderer(terrain,new VehicleSystem(),new WorldEffectSystem(),forest,settings);
+                    using var simulation=new GameWorld(terrain.Map);
+                    var forest=simulation.Forest;var settings=new GraphicsSettings{Weather=false,Fog=false};
+                    using var scene=new TerrainRenderer(terrain,new VehicleSystem(),new WorldEffectSystem(),forest,settings, wildlifeSystem: simulation.Wildlife);
                     var spots=new System.Collections.Generic.List<WildlifeSpot>();terrain.Map.CollectWildlifeSpots(forest,spots);
                     VerifyHabitat();
                     if(spots.Count==0)throw new InvalidOperationException("No deer habitat found.");
-                    var animals=new WildlifeSystem();
+                    var animals=simulation.Wildlife;
                     animals.Update(0,terrain.Map,forest,null);
                     void VerifyHabitat()
                     {
@@ -104,7 +105,8 @@ namespace ForesTycoon
                         throw new InvalidOperationException("Forest month replaced existing wildlife.");
                     foreach(var spot in spots)forest.Harvest(spot.TileId,out _);
                     VerifyHabitat();
-                    forest.Clear();scene.Draw(new RenderContext(5,0,1,5,0,0,false,false,1,-45,-45,-100,-100,100,100,62.5f));
+                    forest.Clear();animals.Update(0,terrain.Map,forest,null);
+                    scene.Draw(new RenderContext(5,0,1,5,0,0,false,false,1,-45,-45,-100,-100,100,100,62.5f));
                     if(scene.WildlifeCount!=0)throw new InvalidOperationException("Deer remained after removing forest habitat.");
                     VerifyHabitat();
                     animals.Update(0,terrain.Map,forest,null);

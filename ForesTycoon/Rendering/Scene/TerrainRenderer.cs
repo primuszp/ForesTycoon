@@ -47,9 +47,6 @@ namespace ForesTycoon
         private readonly ForestWeatherRenderer forestWeather = new ForestWeatherRenderer();
         private readonly CloudRenderer clouds = new CloudRenderer();
         private readonly WildlifeRenderer wildlife;
-        private readonly WildlifeSystem wildlifeSimulation;
-        private readonly bool ownsWildlife;
-        private double wildlifeTime;
         internal int WildlifeCount => graphics.Wildlife ? wildlife.Count : 0;
         internal bool TryGetWildlifePosition(out OpenTK.Mathematics.Vector3 position) => wildlife.TryGetPosition(out position);
         private readonly WeatherRenderer precipitation = new WeatherRenderer();
@@ -60,9 +57,7 @@ namespace ForesTycoon
             this.environment = environment;
             if (environment != null) FloodDepth = environment.SurfaceDepth;
             this.logistics = logistics;
-            ownsWildlife = wildlifeSystem == null;
-            wildlifeSimulation = wildlifeSystem ?? new WildlifeSystem();
-            wildlife = new WildlifeRenderer(wildlifeSimulation);
+            wildlife = new WildlifeRenderer(wildlifeSystem ?? new WildlifeSystem());
             this.terrain = terrain ?? throw new ArgumentNullException(nameof(terrain));
             this.vehicles = vehicles ?? throw new ArgumentNullException(nameof(vehicles));
             this.effects = effects ?? throw new ArgumentNullException(nameof(effects));
@@ -86,7 +81,6 @@ namespace ForesTycoon
             RenderPipeline.PassProbe?.Invoke("frame-preparation", true);
             try
             {
-                if (ownsWildlife) { wildlifeSimulation.Update(Math.Max(0, context.SimulationTimeSeconds - wildlifeTime), terrain.Map, forest, environment); wildlifeTime = context.SimulationTimeSeconds; }
                 terrain.UpdateVisibleTiles(context);
                 if (environment != null && graphics.AutomaticWeather) weather.Update(environment, graphics, context.SimulationTimeSeconds);
                 else weather.Update(context.SimulationTimeSeconds, graphics);

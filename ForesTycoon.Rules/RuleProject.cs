@@ -10,8 +10,25 @@ namespace ForesTycoon.Rules;
 /// <summary>The single authoring and runtime contract shared by the game, editor and agents.</summary>
 public sealed class RuleProject
 {
+    private static readonly Lazy<string> ShippedDocument = new(() => {
+        using var stream = typeof(RuleProject).Assembly.GetManifestResourceStream("ForesTycoon.Rules.DefaultProject")
+            ?? throw new InvalidDataException("Hiányzó, az Editorban létrehozott alap-szabályprojekt.");
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
+    });
+    /// <summary>The authored Editor document, copied for each caller. Never synthesizes gameplay in the engine.</summary>
+    public static RuleProject CreateDefault() => FromJson(ShippedDocument.Value);
+    private static readonly Lazy<Dictionary<(string Hook, string Kind), BehaviorGraph>> ShippedGraphs = new(() =>
+        CreateDefault().Behaviors.Graphs.Where(g => !g.ObjectId.HasValue).ToDictionary(g => (g.Hook, g.Kind)));
+    /// <summary>A fresh authoring template from the Editor document, also used during legacy migration.</summary>
+    public static BehaviorGraph DefaultGraph(BehaviorHook hook)
+    {
+        if (!ShippedGraphs.Value.TryGetValue((hook.Id, hook.Kind), out var graph))
+            throw new InvalidDataException("Az Editor alap-szabályprojektjéből hiányzik a kötés: " + hook.Id + " / " + hook.Kind);
+        return new BehaviorModel { Graphs = new() { graph } }.Clone().Graphs[0];
+    }
     public string Schema { get; set; } = "forest-rule-project";
-    public int Version { get; set; } = 1;
+    public int Version { get; set; } = 4;
     public string Name { get; set; } = "ForesTycoon szabályrendszer";
     public Dictionary<string, double> Tuning { get; set; } = new();
     public BehaviorModel Behaviors { get; set; } = new();
@@ -21,7 +38,7 @@ public sealed class RuleProject
     public WorldScenario World { get; set; }
     /// <summary>The rule book: rules written as schedule + scope + condition + effects, run by the game in this order.</summary>
     public List<WorldRule> Rules { get; set; } = new();
-    /// <summary>Starter rules the author deleted. A project gets every starter rule it has not seen yet; these never come back.</summary>
+    /// <summary>Legacy migration data. Current projects execute exactly the authored rule book.</summary>
     public List<string> RemovedStarters { get; set; } = new();
     /// <summary>State variables the rules may add to a scope.</summary>
     public List<RuleFieldDefinition> Fields { get; set; } = new();

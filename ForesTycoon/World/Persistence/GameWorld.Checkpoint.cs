@@ -14,7 +14,7 @@ namespace ForesTycoon
             return new(2, worldTick, commandJournal.Count - commands.Count,
                 commands.Count, map.Capture(), ecosystem.Capture(), wildlife.Capture(), Logistics.Capture(), vehicles.Capture(),
                 timberCargo.Available, timberCargo.Delivered, effects.Capture(), lastForestryAction, lastForestryArea, Expenses,
-                Tuning.IsDefault ? null : Tuning.ToOverrides(), roadWeatherSeconds, BehaviorDocument, BehaviorStates,
+                Tuning.ToValues(), roadWeatherSeconds, BehaviorDocument, BehaviorStates,
                 dynamics.Document, dynamics.Capture(), ruleProjectName, AlgorithmSnapshot(), ruleEngine.Capture(), ruleEngine.CaptureStep(), pendingForestRateRefresh);
         }
 
@@ -62,11 +62,15 @@ namespace ForesTycoon
         {
             var runtime = new DynamicsRuntime(s.Dynamics ?? new DynamicsModel(), RuleWorldFields, ruleValues.ReadWorld);
             if (s.DynamicsValues != null) runtime.Restore(s.DynamicsValues);
-            var rules = s.RuleBook?.Rules ?? RuleEngine.StarterRules();
-            var removed = s.RuleBook?.RemovedStarters ?? new(); RuleEngine.AddMissingStarters(rules, removed);
+            var migration = new RuleProject { Version = s.RuleBook?.ProjectVersion ?? 2,
+                Rules = RuleEngine.Clone(s.RuleBook?.Rules ?? RuleEngine.StarterRules()),
+                Behaviors = (s.Behaviors ?? WorldBehaviorPolicy.DefaultDocument()).Clone() };
+            RuleProjectMigrations.UpgradeProject(migration);
+            var rules = migration.Rules;
+            var removed = s.RuleBook?.RemovedStarters ?? new();
             var engine = new RuleEngine(rules, s.RuleBook?.Fields ?? new(), runtime.Document.Stocks.Select(x => x.Id), ruleValues.ReadRule) { RemovedStarters = removed };
             engine.Restore(s.RuleBook?.Values); engine.RestoreFlows(s.RuleBook?.FlowTotals);
-            var policy = new WorldBehaviorPolicy(s.Behaviors ?? WorldBehaviorPolicy.DefaultDocument(), DynamicsRuntime.Keys(runtime.Document, RuleWorldFields), ruleValues.ReadRule);
+            var policy = new WorldBehaviorPolicy(migration.Behaviors, DynamicsRuntime.Keys(runtime.Document, RuleWorldFields), ruleValues.ReadRule);
             policy.Controllers.Restore(s.BehaviorStates ?? Array.Empty<BehaviorControllerSnapshot>());
             return (runtime, engine, policy);
         }

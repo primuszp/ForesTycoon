@@ -107,6 +107,7 @@ namespace ForesTycoon
             var prepared = preparing.GetAwaiter().GetResult();
             forest.ResponseRules = Environment.ResponseRules = prepared.Policy.Responses;
             Logistics.Behaviors = prepared.Policy;
+            Logistics.Gameplay = wildlife.Gameplay = map.Gameplay = prepared.Policy.Gameplay;
             // The painted map is the initial state: terrain (and so water) first, then the forest that grows on it.
             if (scenario != null) {
                 ForestSpeciesBook.Apply(SpeciesEdits(scenario));

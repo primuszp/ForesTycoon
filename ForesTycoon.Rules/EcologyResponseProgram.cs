@@ -20,37 +20,20 @@ public sealed class EcologyResponseProgram
     public static readonly BehaviorHook[] Hooks = SiteHooks.Concat(ForestCompetitionRules.Hooks).Concat(ForestRegenerationRules.Hooks).Concat(TreeInitialSizeRules.Hooks).Concat(EnvironmentRules.Hooks).ToArray();
     private static readonly int EnvironmentIndex = Hooks.Length - EnvironmentRules.Hooks.Length;
     private static readonly int InitialSizeIndex = Array.FindIndex(Hooks, h => h.Id == "forest.initialHeight" && h.Kind == "initialTree");
-    public static bool IsPureKind(string kind) => LogisticsRules.IsKind(kind) || kind is "site" or "competitionPair" or "competition" or "resource" or "regeneration" or "initialTree" or "environment" or "vehicleResponse";
+    public static bool IsPureKind(string kind) => LogisticsRules.IsKind(kind) || kind is "gameplay" or "site" or "competitionPair" or "competition" or "resource" or "regeneration" or "initialTree" or "environment" or "vehicleResponse";
     public static bool AllowedOperation(BehaviorOperation op) => op is BehaviorOperation.Constant or BehaviorOperation.Input
         or BehaviorOperation.Add or BehaviorOperation.Subtract or BehaviorOperation.Multiply or BehaviorOperation.Divide
         or BehaviorOperation.Minimum or BehaviorOperation.Maximum or BehaviorOperation.Greater or BehaviorOperation.Less
         or BehaviorOperation.Select or BehaviorOperation.Absolute or BehaviorOperation.Negate or BehaviorOperation.Exp or BehaviorOperation.Power or BehaviorOperation.Curve;
-    public static BehaviorGraph DefaultGraph(BehaviorHook hook)
-    {
-        if (LogisticsRules.IsKind(hook.Kind)) return LogisticsRules.DefaultGraph(hook);
-        if (hook.Kind == "vehicleResponse") return VehicleResponseRules.DefaultGraph(hook);
-        if (hook.Kind == "environment") return EnvironmentRules.DefaultGraph(hook);
-        if (hook.Kind == "initialTree") return TreeInitialSizeRules.DefaultGraph(hook);
-        if (hook.Kind == "regeneration") return ForestRegenerationRules.DefaultGraph(hook);
-        if (hook.Kind != "site") return ForestCompetitionRules.DefaultGraph(hook);
-        string expression = hook.Id switch {
-            "forest.site" => "tile.fertility * (0.45 + 0.55 * korlát(1 - abs(tile.elevation - species.preferredElevation) / max(species.elevationTolerance; 0.000001); 0; 1))",
-            "water.stress" => "hatvány(korlát(tile.waterSupply; 0; 1); species.drySensitivity) * (1 - tile.waterlogging * 0.65)",
-            "water.drought" => "tile.drought + (1 - tile.waterSupply - tile.drought) * (1 - exp(-step.seconds / 90))",
-            "water.waterlogging" => "tile.waterlogging + (tile.rawWaterlogging - tile.waterlogging) * (1 - exp(-step.seconds / 90))",
-            _ => throw new ArgumentException("Unknown ecology response.", nameof(hook))
-        };
-        return RuleFormula.Compile(expression, new() { Id = "default.site." + hook.Id, Name = hook.Name, Hook = hook.Id, Kind = hook.Kind },
-            hook.Inputs.Select(f => new FormulaName(f, BehaviorOperation.Input, f)).ToArray());
-    }
+    public static BehaviorGraph DefaultGraph(BehaviorHook hook) => RuleProject.DefaultGraph(hook);
     [ThreadStatic] private static EcologyResponseProgram defaults;
-    public static EcologyResponseProgram Default => defaults ??= new(new BehaviorModel { Graphs = Hooks.Select(DefaultGraph).ToList() });
+    public static EcologyResponseProgram Default => defaults ??= FromModel(RuleProject.CreateDefault().Behaviors);
     /// <summary>Compiles only the pure query graphs; unrelated world/stock bindings need no world during generation.</summary>
     public static EcologyResponseProgram FromModel(BehaviorModel source)
     {
-        var model = new BehaviorModel { Graphs = source.Graphs.Where(g => Hooks.Any(h => h.Id == g.Hook && h.Kind == g.Kind)).ToList() };
+        var model = new BehaviorModel { Graphs = source.Graphs.Where(g => g.Kind == "gameplay" || Hooks.Any(h => h.Id == g.Hook && h.Kind == g.Kind)).ToList() };
         foreach (var hook in Hooks)
-            if (!model.Graphs.Any(g => g.Hook == hook.Id && g.Kind == hook.Kind)) model.Graphs.Add(DefaultGraph(hook));
+            if (!model.Graphs.Any(g => g.Hook == hook.Id && g.Kind == hook.Kind)) model.Graphs.Add(RuleProject.DefaultGraph(hook));
         return new(model);
     }
     private readonly Func<BehaviorInputs, double[], double>[] evaluate;
@@ -62,6 +45,7 @@ public sealed class EcologyResponseProgram
     public EcologyResponseProgram CreateQueryWorker() => executablesPrepared ? new(this) : throw new InvalidOperationException("Prepare query executables before sharing them.");
     private EcologyResponseProgram(EcologyResponseProgram owner)
     {
+        Gameplay = owner.Gameplay;
         executablesPrepared = true;
         evaluate = owner.evaluate; healthPlan = owner.healthPlan; PairRevision = owner.PairRevision;
         shadeGate = owner.shadeGate?.CreateQueryWorker();
@@ -76,8 +60,10 @@ public sealed class EcologyResponseProgram
     public bool CanBoundPairs => shadeGate != null && crowdingGate != null;
     private readonly double[][] inputs = Hooks.Select(h => new double[h.Inputs.Length]).ToArray();
     public string LastError { get; private set; }
+    public GameplayProgram Gameplay { get; }
     public EcologyResponseProgram(BehaviorModel source, CompiledBehaviorModel sharedProgram = null, bool prepareExecutables = true)
     {
+        Gameplay = new(source, sharedProgram, prepareExecutables);
         var graphs = source.Graphs.Where(g => Hooks.Any(h => h.Id == g.Hook && h.Kind == g.Kind)).ToList();
         if (graphs.Count != Hooks.Length) throw new InvalidDataException("Minden ökológiai válaszgráf szükséges. A hatás kikapcsolásához köss állandót a kimenetre.");
         foreach (var g in graphs)

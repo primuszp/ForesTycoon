@@ -32,7 +32,7 @@ namespace ForesTycoon
         internal static bool Step(ForestMachine m, double dt, Action<float, double> receive)
         {
             bool unloading = m.State == ForestMachineState.Unloading;
-            if (!unloading && m.Control == BehaviorAction.DepartLoaded && m.Cargo > .0001f && m.WorkTime == 0 && m.LogTransferVolume == 0) return true;
+            if (!unloading && m.WorkTime == 0 && m.LogTransferVolume == 0 && m.Rule("loading.depart", dt) >= .5) return true;
             if (m.LogCycleDuration == 0) {
                 m.LogCycleDuration = m.Rule("loading.cycleSeconds", dt); m.WorkTime = 0;
                 m.LogGripPhase = m.Rule("loading.gripPhase", dt);
@@ -62,9 +62,8 @@ namespace ForesTycoon
             if (after < 1) return false;
             m.WorkTime = 0; m.LogCycleDuration = 0;
             if (unloading) return m.Cargo <= .0001f;
-            bool finished = m.HomeRequested || m.Cargo >= m.Capacity - .0001f || m.Source.Volume <= .0001f;
-            // Forced completion and stock/capacity constraints cannot strand a held log or suppress a home request.
-            return finished || m.Cargo > .0001f && (m.Control == BehaviorAction.DepartLoaded || m.Rule("loading.depart", dt) >= .5);
+            // Capacity and source exhaustion complete the bounded transfer primitive; discretionary departure is authored.
+            return m.Cargo >= m.Capacity - .0001f || m.Source.Volume <= .0001f || m.Rule("loading.depart", dt) >= .5;
         }
         internal static Vector3 Target(Vector3 pick, Vector3 drop, float phase, out float jaw)
         {

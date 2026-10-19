@@ -56,21 +56,6 @@ namespace ForesTycoon
             DynamicPrimitiveBatch.Vertex3(tile.N.xPos, tile.N.yPos, tile.N.zPos); DynamicPrimitiveBatch.Vertex3(tile.W.xPos, tile.W.yPos, tile.W.zPos);
         }
 
-        private void DrawTileDiagonal(Tile tile, TileSurface visual)
-        {
-            DynamicPrimitiveBatch.Color4(RoadFoundationLineColor);
-            if (UseTileDiagonalWE(tile, visual))
-            {
-                DynamicPrimitiveBatch.Vertex3(tile.W.xPos, tile.W.yPos, tile.W.zPos);
-                DynamicPrimitiveBatch.Vertex3(tile.E.xPos, tile.E.yPos, tile.E.zPos);
-            }
-            else
-            {
-                DynamicPrimitiveBatch.Vertex3(tile.N.xPos, tile.N.yPos, tile.N.zPos);
-                DynamicPrimitiveBatch.Vertex3(tile.S.xPos, tile.S.yPos, tile.S.zPos);
-            }
-        }
-
         internal void DrawSkirts()
         {
             const float BASE_Z      = -16.0f;

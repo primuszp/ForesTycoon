@@ -10,7 +10,6 @@ namespace ForesTycoon
         // Muted miniature materials: warm asphalt and earth shoulders in the forest palette.
         private static readonly Color RoadSurfaceColor = Color.FromArgb(98, 100, 98);
         private static readonly Color RoadShoulder     = Color.FromArgb(151, 143, 117);
-        private const float ShoulderFrac = 0.16f;  // padka szélessége a középpont felé
 
         // Húzás közbeni előnézet csempéi (remove = bontás, piros előnézet).
         private readonly List<TerrainMap.RoadPlanStep> previewTiles = new List<TerrainMap.RoadPlanStep>();

@@ -8,7 +8,6 @@ namespace ForesTycoon.Engine
     {
         private readonly List<IWorldSystem> systems = new List<IWorldSystem>();
 
-        public int Count => systems.Count;
 
         public T Add<T>(T system) where T : class, IWorldSystem
         {

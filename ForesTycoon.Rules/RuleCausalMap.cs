@@ -36,7 +36,7 @@ public sealed class RuleCausalMap
         var edges = new List<CausalEdge>();
         CausalNode Node(string entity, string field)
         {
-            var e = schema.Find(entity); var f = e?.Fields.FirstOrDefault(x => x.Name == field);
+            var e = schema.Find(entity); var f = e?.Fields.Concat(e.Summaries).FirstOrDefault(x => x.Name == field);
             if (f == null) return null;
             string key = entity + "." + field;
             if (!nodes.TryGetValue(key, out var n)) nodes[key] = n = new(key, entity, f);
@@ -62,9 +62,10 @@ public sealed class RuleCausalMap
         // Rule-book rules: every field a formula mentions influences the effect's target.
         for (int i = 0; i < rules.Count; i++) {
             var rule = rules[i]; var scope = schema.Find(rule.Scope);
-            if (scope == null || scope.Abstract) continue;
+            if (scope == null || scope.Abstract && scope.Type?.IsClass != true) continue;
             foreach (var effect in rule.EffectiveEffects().Where(x => x.Mode != "action")) {
-                var to = Node(scope.Id, effect.Target); if (to == null) continue;
+                var target = Local(scope, effect.Target, schema);
+                var to = target == null ? null : Resolve(target); if (to == null) continue;
                 RuleCurve.TryParse(effect.Formula, out var curve);
                 foreach (string name in Mentioned(scope, rule.Condition + " " + string.Join(" ", (rule.ConditionGraph?.Nodes ?? new()).Concat(effect.Computation?.Nodes ?? new()).Select(n => n.Key)) + " " + (effect.Influence?.Compile() ?? effect.Formula), schema)) {
                     var from = Resolve(name);
@@ -89,16 +90,19 @@ public sealed class RuleCausalMap
         var e = schema.Find(scope); int dot = key.IndexOf('.');
         if (e == null || dot < 0) return null;
         string entity = key[..dot], field = key[(dot + 1)..];
-        if (schema.Lineage(scope).Any(x => x.Id == entity) && e.Fields.Any(f => f.Name == field)) return field;
+        if (schema.Lineage(scope).Any(x => x.Id == entity) && e.Fields.Concat(e.Summaries).Any(f => f.Name == field)) return field;
+        if (entity == "world" && schema.Find("world") is { } world && world.Fields.Where(f => f.DeclaredBy == "world").Concat(world.Summaries).Any(f => f.Name == field)) return key;
         var relation = e.Relations.FirstOrDefault(r => r.Target == entity);
-        return relation != null && schema.Find(entity).Fields.Any(f => f.Name == field) ? relation.Name + "." + field : null;
+        return relation != null && schema.Find(entity).Fields.Concat(schema.Find(entity).Summaries).Any(f => f.Name == field) ? relation.Name + "." + field : null;
     }
 
     private static string Local(RuleEntitySchema scope, string name, RuleSchema schema)
     {
-        if (scope.Fields.Any(f => f.Name == name)) return scope.Id + "." + name;
+        if (scope.Fields.Concat(scope.Summaries).Any(f => f.Name == name)) return scope.Id + "." + name;
+        if (name.StartsWith("world.", StringComparison.Ordinal) && schema.Find("world") is { } world &&
+            world.Fields.Where(f => f.DeclaredBy == "world").Concat(world.Summaries).Any(f => f.Name == name[6..])) return name;
         foreach (var r in scope.Relations)
-            if (name.StartsWith(r.Name + ".", StringComparison.Ordinal) && schema.Find(r.Target)?.Fields.Any(f => f.Name == name[(r.Name.Length + 1)..]) == true)
+            if (name.StartsWith(r.Name + ".", StringComparison.Ordinal) && schema.Find(r.Target) is { } target && target.Fields.Concat(target.Summaries).Any(f => f.Name == name[(r.Name.Length + 1)..]))
                 return r.Target + "." + name[(r.Name.Length + 1)..];
         return null;
     }

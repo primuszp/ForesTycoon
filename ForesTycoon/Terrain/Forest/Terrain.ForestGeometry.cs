@@ -17,17 +17,6 @@ namespace ForesTycoon
             DrawIndividualTrees(forest, context, graphics);
         }
 
-        private static void AppendTreeCrown(List<Vertex> vertices, in TreeInstance tree, ForestLod lod)
-        {
-            TreeModel model = TreeModel.For(tree.Stand.Species);
-            float height = model.CrownHeight * tree.Scale * tree.CrownRise;
-            ForestCrownMesh.Append(vertices, tree.Stand.Species,
-                new Vector3(tree.X, tree.Y, tree.TrunkTop(model) - height * model.CrownDrop),
-                model.CrownRadius * tree.Scale * tree.CrownWidth, height, tree.Yaw, tree.Seed,
-                Color.FromArgb(SurfaceSpeciesCode(tree.Stand.Species), Weather(Tinted(model.CrownColor, tree.Tint), tree.Stand.Health)), lod,
-                ForestTreeAppearance.Stage(tree.Stand.Species, tree.Stand.AgeYears));
-        }
-
         private void DrawForestFloor(TreeInstance tree)
         {
             float radius = TreeModel.For(tree.Stand.Species).CrownRadius * tree.Scale * 1.35f;

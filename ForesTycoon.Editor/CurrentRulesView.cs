@@ -864,8 +864,5 @@ namespace ForesTycoon.Editor
             ImGui.Unindent(14);
             ImGui.Spacing();
         }
-
-        private void Try(Action action)
-        { try { action(); } catch (Exception e) when (e is IOException or System.Text.Json.JsonException or ArgumentException or InvalidOperationException or UnauthorizedAccessException or NotSupportedException) { Message = e.Message; } }
     }
 }

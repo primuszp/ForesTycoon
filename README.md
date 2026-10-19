@@ -79,7 +79,7 @@ C# and .NET 8, OpenTK 4.9.4, OpenGL 3.3 core, GLSL, and ImGui.NET. The fixed-ste
 dotnet run --project ForesTycoon.Editor -c Release
 ```
 
-The editor displays the game's rules, formulas, and catalog of relationships. Road-wear parameters and connections can be edited, tried in a separate test world, and saved as JSON. In the game, **F12 → Szabálymodell → Szabálymodell alkalmazása** loads the model. See the [editor guide](docs/rule-editor.md).
+The game runs the editor's [default rule project](ForesTycoon.Editor/GameRules/default.project.json). Its 29 object rules and 203 calculation graphs cover forest, water, transport, construction costs, timber sales, wildlife populations, and mission decisions. Version 4 projects keep deleted rules deleted; saves retain the complete rule book and all 51 tuning values. New animal classes are discovered with their fields, display names, and population controls. In the game, **F12 → Szabálymodell → Szabálymodell alkalmazása** loads the project. See the [editor guide and code-discovered object model](docs/rule-editor.md).
 
 ## Validation and documentation
 

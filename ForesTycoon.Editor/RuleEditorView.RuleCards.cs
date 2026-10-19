@@ -63,7 +63,7 @@ internal sealed partial class RuleEditorView
         var reads = authored.Concat(equationReads).Concat(uses.Where(u => u.Readers.Any(r => r.Rule == self)).Select(u => KeyDisplay(u.Key))).Distinct().ToArray();
         var targets = rule.Effects.SelectMany(e => e.Mode == "flow" ? new[] { e.Target, e.To } : new[] { e.Target }).Where(f => f.Length > 0).Select(f => FieldTitle(rule.Scope, f)).Distinct();
         var consumers = uses.Where(u => u.Writers.Any(w => w.Rule == self)).SelectMany(u => u.Readers.Where(r => r.Rule != self && r.Enabled).Select(r => r.Name)).Distinct().ToArray();
-        string when = rule.Schedule switch { "passage" => "Jármű áthaladásakor", "month" => "Minden erdőhónap végén", "growth" => "A fa növekedési rátájának frissítésekor", _ => "0,5 játékmásodpercenként, szeletelt feldolgozással" };
+        string when = rule.Schedule switch { "passage" => "Jármű áthaladásakor", "month" => "Minden erdőhónap végén", "growth" => "A fa növekedési rátájának frissítésekor", "wildlife" => "Minden állati lépésben; a lépés időegysége másodperc", "population" => "Állománykezeléskor, élőhelyfelmérés után; másodpercben", "birth" => "Létrehozáskor, csak az új egyedeken; egyszeri kezdőállapot", _ => "0,5 játékmásodpercenként, szeletelt feldolgozással" };
         Facts(rule.Name, "Állapotot változtat", when, reads, string.Join("; ", targets),
             consumers.Length > 0 ? string.Join("; ", consumers) : "Az érintett objektum állapotát használó folyamatok, a megjelenítés és a mentés.", rule.Enabled,
             "Kikapcsolva: nem hajtja végre a hatásait. A korábbi változtatásokat nem vonja vissza; más szabályok tovább hathatnak az objektumra.");
@@ -94,7 +94,7 @@ internal sealed partial class RuleEditorView
         var downstream = info.GraphConsumers(behaviors.Document.Graphs.Where(g => g.Id != graph.Id));
         string consumers = "Bekötött szabályok: " + (downstream.Length == 0 ? "nincs" : string.Join("; ", downstream)) + ". Játékbeli felhasználás: " + info.Consumers;
         string when = LogisticsRules.IsKind(graph.Kind) ? hook.Schedule : graph.Kind switch {
-            "environment" or "vehicleResponse" => hook.Schedule,
+            "gameplay" or "environment" or "vehicleResponse" => hook.Schedule,
             "initialTree" => "Új fa létrehozásakor: generálás, festés, ültetés vagy újulat",
             "regeneration" => "Az erdőhónap végén, az újulat megtelepedésénél",
             "competitionPair" => "A szomszédos fák versengésének frissítésekor, fapáronként",

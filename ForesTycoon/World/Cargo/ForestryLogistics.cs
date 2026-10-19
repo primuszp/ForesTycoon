@@ -20,6 +20,7 @@ namespace ForesTycoon
         private readonly LogisticsRuleEvaluator rules = new();
         internal Action<TrafficPassage> Passage;
         internal IBehaviorPolicy Behaviors { get; set; }
+        internal GameplayProgram Gameplay { get; set; } = GameplayProgram.Default;
         internal CompiledBehaviorControllers Controllers { get; set; }
         private readonly TerrainMap terrain;
         private readonly ForestSystem forest;
@@ -44,7 +45,8 @@ namespace ForesTycoon
             foreach (int id in ids) {
                 yield return 1;
                 float timber = forest.AvailableTimber(id);
-                if (!occupied.Contains(id) && timber > 0) { selected.Add(id); volume += timber; }
+                forest.TryGetStand(id, out var stand);
+                if (!occupied.Contains(id) && timber > 0 && Gameplay.Evaluate("forest.designateAllow", timber, stand.AgeYears, stand.Maturity) >= .5) { selected.Add(id); volume += timber; }
             }
             if (selected.Count > 0) Sites.Add(new HarvestSite { Tiles = selected.ToArray(), InitialVolume = volume });
             Status = selected.Count > 0 ? $"Kitermelés kijelölve: {selected.Count} csempe, {volume:F1} m³." : "Nincs új kitermelhető erdő a kijelölésben.";
@@ -71,6 +73,7 @@ namespace ForesTycoon
         internal IEnumerable<int> PlaceMillWork(int id, WorkResult<bool> result)
         {
             result.Value = false;
+            if (Gameplay.Evaluate("mill.placeAllow", Mills.Count) < .5) { Status = "A projekt szabálya nem engedélyezi a malom építését."; yield break; }
             if (!terrain.TryGetSawmillFootprint(id, out var footprint, out var position)) {
                 Status = "A malomhoz 2×2 sík, száraz, üres csempe szükséges."; yield break;
             }
@@ -91,7 +94,6 @@ namespace ForesTycoon
         {
             var truck=TruckOf(vehicle);
             if(truck!=null){
-                if (truck.HomeRequested) return 0;
                 var (taken,value)=truck.Source.Take(requested);truck.CargoValue+=value;return taken;
             }
             return 0;

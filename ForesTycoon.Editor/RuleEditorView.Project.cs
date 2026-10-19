@@ -30,8 +30,6 @@ internal sealed partial class RuleEditorView
     private RuleAuthoring authoring = new();
     private readonly ProjectFileGuard publishedGuard = new(), draftGuard = new();
     private string guardedPath;
-    private int graphTestTicks = 300;
-    private bool graphTestSavedWorld;
 
     private void EnsureProject(GameWorld world)
     {
@@ -49,7 +47,7 @@ internal sealed partial class RuleEditorView
             behaviors.ApplyProject = () => ApplyProject(world, false);
             behaviors.StoreGraphTemplate = graph => { RememberAuthoring(); authoring.Templates.Add(AuthoringOperations.Template(graph)); message = "A gráf másolata a szabálytárban van; új kötés még nem jött létre."; };
             behaviors.StoreControllerTemplate = controller => { RememberAuthoring(); authoring.Templates.Add(AuthoringOperations.Template(controller)); message = "A munkaciklus másolata a szabálytárban van."; };
-            currentRules.EditAlgorithm = source => { algorithms.SelectSource(source); view = View.Algorithms; workshopPhase = WorkshopPhase.Edit; workshopTool = WorkshopTool.Algorithms; };
+            currentRules.EditAlgorithm = algorithms.SelectSource;
             if (pendingProject == null && AlgorithmBuild.FindWorkspace() is string workspace) algorithms.ImportWorkspace(workspace);
         }
         algorithms.Refresh();
@@ -78,8 +76,7 @@ internal sealed partial class RuleEditorView
         projectLoadError = null;
         var tuning = GameTuning.FromOverrides(project.Tuning);
         pendingProject = project.Clone(); projectName = project.Name;
-        projectPathEdit = projectPath;
-        workshopVersions.Reset(); bindingSelectedFor = null; trialResult = null; publishedProjectRevision = null;
+        workshopVersions.Reset(); trialResult = null; publishedProjectRevision = null;
         authoring = project.Clone().Authoring ?? new();
         LoadRuleBook(project);
         scenario = project.World == null ? null : RuleProject.FromJson(new RuleProject { World = project.World }.ToJson()).World;
@@ -99,7 +96,7 @@ internal sealed partial class RuleEditorView
     }
     private static void ValidateDraft(RuleProject project)
     {
-        if (project == null || project.Schema != "forest-rule-project" || project.Version != 1 || project.Name == null
+        if (project == null || project.Schema != "forest-rule-project" || project.Version is not (1 or 2 or 3 or 4) || project.Name == null
             || project.Tuning == null
             || project.Behaviors?.Graphs == null || project.Behaviors.Graphs.Count > 512 || project.Behaviors.Controllers == null
             || project.Dynamics?.Stocks == null || project.Dynamics.Stocks.Count > 256 || project.Dynamics.Flows == null || project.Dynamics.Flows.Count > 512
@@ -195,100 +192,9 @@ internal sealed partial class RuleEditorView
         try { WorkshopDraftStore.Save(RecoveryStem(), CollectProject(world), algorithms.Document, algorithms.Workspace); }
         catch (Exception e) { Console.Error.WriteLine("A helyreállítási munkapéldány mentése nem sikerült: " + e.Message); }
     }
-    private void SimulateGraphs(GameWorld world)
-    {
-        if (world.ForegroundPending || world.BoundaryPending)
-            throw new InvalidOperationException("A próba a tesztvilág aktuális műveletének befejezése után indítható.");
-        var project = CollectProject(world); project.Algorithms = algorithms.Store(projectPath);
-        project = GameWorld.NormalizeRuleProject(project);
-        string folder = Path.Combine(AlgorithmBuild.CacheRoot, "editor-tests", Guid.NewGuid().ToString("N")); Directory.CreateDirectory(folder);
-        string save = Path.Combine(folder, "world.json");
-        if (graphTestSavedWorld) File.Copy(Path.GetFullPath(worldPath), save);
-        else {
-            using var stream = new MemoryStream(); world.Save(stream);
-            RuleProject.WriteAtomic(save, System.Text.Encoding.UTF8.GetString(stream.ToArray()));
-        }
-        int ticks = graphTestTicks;
-        using var input = File.OpenRead(save); var data = WorldSaveSerializer.Read(input);
-        var checkpoint = data.Checkpoint ?? throw new InvalidDataException("A próbához állapotpillanatképes mentés szükséges. Olvasd be a világot, majd mentsd újra.");
-        if (checkpoint.PendingCommands != 0) throw new InvalidDataException("A mentésben függő parancsok vannak. Olvasd be a tesztvilágba és léptesd a parancsokat a próba előtt.");
-        var baseline = new RuleProject { Name = checkpoint.RuleProjectName ?? "Mentés szabályai",
-            Tuning = checkpoint.Tuning ?? new(), Behaviors = checkpoint.Behaviors ?? WorldBehaviorPolicy.DefaultDocument(),
-            Dynamics = checkpoint.Dynamics ?? new(), Algorithms = checkpoint.Algorithms };
-        string revision = AuthoringRevision(world), source = graphTestSavedWorld ? Path.GetFullPath(worldPath) : $"Editor tesztvilága · tick {world.SimulationTick}";
-        trialCancellation = new(); var cancellation = trialCancellation.Token;
-        graphSimulation = Task.Run(() => RuleTrialRunner.Run(baseline, project, save, folder, revision, source, ticks, cancellation));
-        message = "Azonos mentésből fut az alap- és a szerkesztett változat; a játék szabályai nem változnak.";
-    }
-    private string objectSearch = "";
-    private int objectKind;
-    private ulong? objectId;
-    private string objectLabel;
-    private void ObjectsView(GameWorld world)
-    {
-        if (useLiveObjects && liveObjects == null) {
-            ImGui.TextWrapped("Nincs élő objektumkatalógus a játékból. Indítsd el a játékot, vagy válaszd külön az editor tesztvilágát.");
-            if (ImGui.Button("Az editor tesztvilágának objektumait használom")) useLiveObjects = false;
-            return;
-        }
-        var kinds = ObjectKinds();
-        objectKind = Math.Clamp(objectKind, 0, kinds.Length - 1);
-        if (ImGui.BeginCombo("Objektumtípus", RuleWorkshopModel.KindName(kinds[objectKind]))) {
-            for (int i = 0; i < kinds.Length; i++) if (ImGui.Selectable(RuleWorkshopModel.KindName(kinds[i]), objectKind == i)) { objectKind = i; objectId = null; }
-            ImGui.EndCombo();
-        }
-        ImGui.SameLine(); ImGui.SetNextItemWidth(350); ImGui.InputText("Keresés", ref objectSearch, 120);
-        ImGui.TextWrapped("Válassz játékobjektumot, majd folyamatot. Az egyedi szabály a típus szabályának másolatából indul, és annak helyére lép ennél az objektumnál.");
-        ImGui.BeginChild("objects-list", new System.Numerics.Vector2(420, 0), ImGuiChildFlags.Borders);
-        var targets = behaviors.ObjectSource(kinds[objectKind]);
-        foreach (var target in targets.Where(t => objectSearch.Length == 0 || (t.Label + " " + t.Id).Contains(objectSearch, StringComparison.OrdinalIgnoreCase)).Take(200))
-            if (ImGui.Selectable(target.Label + "##" + target.Id, objectId == target.Id)) { objectId = target.Id; objectLabel = target.Label; }
-        ImGui.TextWrapped("Legfeljebb 200 találat látható; az összes objektum kereshető név vagy azonosító szerint.");
-        ImGui.EndChild(); ImGui.SameLine();
-        ImGui.BeginChild("objects-rules", new System.Numerics.Vector2(0, 0), ImGuiChildFlags.Borders);
-        if (objectId.HasValue) {
-            ImGui.TextWrapped(objectLabel); ImGui.Separator(); var rules = behaviors.Document;
-            string kind = kinds[objectKind];
-            if (kind is "truck" or "forwarder" or "processor") {
-                var control = rules.Controllers.Find(c => c.Kind == kind && c.ObjectId == objectId) ?? rules.Controllers.Find(c => c.Kind == kind && c.ObjectId == null);
-                ImGui.TextWrapped("Munkaciklus: " + (control == null ? "Automatikus alapvezérlés" : control.Name + (control.ObjectId.HasValue ? " · egyedi kötés" : " · típusszabály")));
-                if (ImGui.Button(control?.ObjectId.HasValue == true ? "Egyedi munkaciklus szerkesztése" : "Egyedi munkaciklus létrehozása")) {
-                    behaviors.SelectObjectController(kind, objectId.Value); workshopTool = WorkshopTool.ObjectRule; workshopPhase = WorkshopPhase.Edit; objectRuleTitle = objectLabel + " munkaciklusa";
-                }
-                if (control?.ObjectId.HasValue == true && ImGui.Button("Vissza a típus munkaciklusához")) behaviors.RestoreController(kind, objectId);
-                ImGui.Separator();
-            }
-            var source = kinds[objectKind] switch {
-                "wildlife" => new RuleSource("ForesTycoon/World/WildlifeSystem.cs", "WildlifeSystem.Update"),
-                "depot" => new RuleSource("ForesTycoon/World/Cargo/ForestryLogistics.Fleet.cs", "ForestryLogistics.UpdateTrucks"),
-                "stack" => new RuleSource("ForesTycoon/World/Cargo/ForestryLogistics.Stacks.cs", "TimberStack.Take"), _ => null
-            };
-            if (source != null) {
-                ImGui.TextWrapped("A teljes eljárás gráfja szerkeszti az objektum állapotát. Egyedi viselkedéshez az ID-ra tett feltételt használd az eljárás megfelelő blokkjában: " + objectId);
-                if (ImGui.Button("Teljes algoritmusgráf")) { algorithms.SelectSource(source); view = View.Algorithms; workshopPhase = WorkshopPhase.Edit; workshopTool = WorkshopTool.Algorithms; }
-                ImGui.Separator();
-            }
-            foreach (var hook in WorldBehaviorPolicy.Hooks.Where(h => h.Kind == kinds[objectKind] || LogisticsRules.IsKind(h.Kind) && h.Kind[9..].ToLowerInvariant() == kinds[objectKind])) {
-                var effective = rules.Graphs.Find(g => g.Hook == hook.Id && g.Kind == hook.Kind && g.ObjectId == objectId)
-                    ?? rules.Graphs.Find(g => g.Hook == hook.Id && g.Kind == hook.Kind && g.ObjectId == null);
-                ImGui.PushID(hook.Id); ImGui.TextWrapped(hook.Name + " · " + hook.Schedule);
-                ImGui.TextWrapped(effective == null ? "Alapszabály" : effective.Name + (effective.ObjectId.HasValue ? " · egyedi kötés" : " · típusszintű kötés"));
-                if (ImGui.Button(!hook.SupportsObjects ? "Típusszintű gráf szerkesztése" : effective?.ObjectId.HasValue == true ? "Egyedi gráf szerkesztése" : "Egyedi felülírás létrehozása és szerkesztése")) {
-                    behaviors.SelectObjectHook(hook, objectId.Value); view = View.Behaviors; workshopPhase = WorkshopPhase.Edit;
-                    workshopTool = WorkshopTool.ObjectRule; objectRuleTitle = hook.Name; objectRuleScope = objectLabel;
-                }
-                if (effective?.ObjectId.HasValue == true && ImGui.Button("Vissza a típusszabályhoz")) behaviors.RestoreDefault(hook.Id, hook.Kind, objectId);
-                ImGui.Separator(); ImGui.PopID();
-            }
-        } else ImGui.TextWrapped("Az objektumlista a futó játékból vagy a betöltött játékmentésből származik. A típusszintű szabályok az újonnan létrejövő objektumokra is érvényesek.");
-        ImGui.EndChild();
-    }
-    private string[] ObjectKinds() => (useLiveObjects && liveObjects != null ? liveObjects.Objects.Select(o => o.Kind) : GameWorld.RuleObjectKinds).Concat(GameWorld.RuleObjectKinds).Distinct().ToArray();
     internal void ShowDynamics() {
         var flow = dynamicsEditor.Draft.Flows.FirstOrDefault(); var stock = dynamicsEditor.Draft.Stocks.FirstOrDefault();
         ShowCommonRule(flow != null ? "flow:" + flow.Id : stock != null ? "stock:" + stock.Id : "library");
     }
-    internal void ShowObjects() { view = View.Objects; workshopTool = WorkshopTool.Objects; workshopPhase = WorkshopPhase.Understand; }
-    internal void ShowAlgorithms() { view = View.Algorithms; workshopTool = WorkshopTool.Algorithms; workshopPhase = WorkshopPhase.Edit; }
-    internal void UseWorldFile(string file) { worldPath = Path.GetFullPath(file); useLiveObjects = false; graphTestSavedWorld = true; }
+    internal void UseWorldFile(string file) { worldPath = Path.GetFullPath(file); useLiveObjects = false; }
 }

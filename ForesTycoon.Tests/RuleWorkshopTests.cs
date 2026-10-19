@@ -56,7 +56,7 @@ public sealed class RuleWorkshopTests
             var bundle = new AlgorithmBundle(); bundle.Files.Add(AlgorithmBundle.Import("ForesTycoon/World/Test.cs", "class Fixture { int Value => 1; }"));
             string draft = WorkshopDraftStore.Save(published, incomplete, bundle, folder);
             var saved = RuleProject.FromJson(File.ReadAllText(draft));
-            Assert.Equal("unknown", saved.Rules.Single().Effects.Single().Target); Assert.Equal("draft", saved.Algorithms.Revision);
+            Assert.Equal("unknown", saved.Rules.Single(r => r.Id == "incomplete").Effects.Single().Target); Assert.Equal("draft", saved.Algorithms.Revision);
             string firstBundle = saved.Algorithms.BundlePath, firstContents = File.ReadAllText(firstBundle);
             bundle.Files[0].Nodes.First(n => n.Token && n.Text == "1").Text = "unresolvedName";
             // Reopening a draft must preserve its publication target and permit another incomplete edit.

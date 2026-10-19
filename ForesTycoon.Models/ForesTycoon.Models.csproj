@@ -9,16 +9,13 @@
     <RootNamespace>ForesTycoon.Models</RootNamespace>
     <AssemblyName>ForesTycoon.Models</AssemblyName>
     <RollForward>Major</RollForward>
-    <NoWarn>NU1701</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
-    <Using Include="ForesTycoon.Engine" />
     <Using Include="ForesTycoon.Rendering" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../ForesTycoon.Engine/ForesTycoon.Engine.csproj" />
     <ProjectReference Include="../ForesTycoon.Rendering/ForesTycoon.Rendering.csproj" />
   </ItemGroup>
 

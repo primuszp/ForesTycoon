@@ -24,7 +24,7 @@ internal sealed partial class RuleEditorView
         ImGui.PushStyleColor(ImGuiCol.Text, e.Abstract ? HudTheme.Muted : HudTheme.Parchment);
         bool open = ImGui.TreeNodeEx(e.Name + "##obj" + e.Id, flags);
         ImGui.PopStyleColor();
-        if (ImGui.IsItemClicked() && !ImGui.IsItemToggledOpen() && (abstractSelectable || !e.Abstract)) select(e.Id);
+        if (ImGui.IsItemClicked() && !ImGui.IsItemToggledOpen() && (abstractSelectable || !e.Abstract || RuleEngine.Scope(e.Id) != null)) select(e.Id);
         if (ImGui.IsItemHovered()) ImGui.SetTooltip($"{e.Help}\n{e.Fields.Length} mező · {e.Relations.Length} kapcsolat · {e.Actions.Length} művelet");
         if (!open) return;
         foreach (var c in children) ObjectNode(c, selected, select, abstractSelectable);

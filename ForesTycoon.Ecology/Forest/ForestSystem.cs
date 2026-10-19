@@ -9,6 +9,7 @@ namespace ForesTycoon.Ecology
     /// </summary>
     sealed partial class ForestSystem : IWorldSystem, IForestCanopy
     {
+        internal ForesTycoon.Rules.GameplayProgram Gameplay => Responses.Gameplay;
         internal const double DefaultSecondsPerYear = 30.0;
         private const int MonthsPerYear = 12;
         private const float YearsPerStep = 1f / MonthsPerYear;
@@ -127,11 +128,12 @@ namespace ForesTycoon.Ecology
 
             ForestSpeciesProfile profile = ForestSpeciesProfile.For(species);
             float suitability = Suitability(species, tileId);
+            if (Gameplay.Evaluate("forest.plantAllow", suitability, (int)species) < .5) { result.Value = ForestryActionResult.UnsuitableTerrain; yield break; }
             ForestStand planted = new ForestStand(
                 species,
                 YearsPerStep,
                 profile.MaximumBiomass * 0.015f,
-                0.50f + suitability * 0.40f);
+                (float)Gameplay.Evaluate("forest.plantHealth", suitability, (int)species));
             stands[tileId] = planted;
             foreach (int unit in IndividualTrees.CreateWork(tileId, planted, ForestYear, habitat.Seed, planted: true, responses: Responses)) yield return unit;
             if (areaId == 0) areaId = AllocatePlantationId();
@@ -253,8 +255,8 @@ namespace ForesTycoon.Ecology
                 if (species == ForestSpecies.None || !habitat.CanSupportForest(tileId)) { stands[tileId] = default; continue; }
                 float moisture = habitat.GetMoisture(tileId), elevation = habitat.GetNormalizedElevation(tileId);
                 ForestSpeciesProfile profile = ForestSpeciesProfile.For(species);
-                float age = 4f + UnitFloat(Hash(habitat.Seed, tileId, 1)) * profile.MatureAgeYears * 2.2f;
-                float health = Math.Clamp(0.72f + Suitability(species, tileId) * 0.28f, 0f, 1f);
+                float age = (float)Gameplay.Evaluate("forest.initialAge", 0, profile.MatureAgeYears, UnitFloat(Hash(habitat.Seed, tileId, 1)));
+                float health = (float)Gameplay.Evaluate("forest.initialHealth", 0, UnitFloat(Hash(habitat.Seed, tileId, 3)), Suitability(species, tileId));
                 stands[tileId] = new ForestStand(species, age, InitialBiomass(profile, age, health), health);
                 if (preserveUnpainted) foreach (int unit in IndividualTrees.CreateWork(tileId, stands[tileId], ForestYear, habitat.Seed, responses: Responses)) yield return unit;
             }
@@ -278,7 +280,7 @@ namespace ForesTycoon.Ecology
         {
             if(habitat.ForestPattern != ForestPattern.Natural && habitat.TileGrid.Columns > 0)
             {
-                foreach (int unit in LargeForestGenerator.CreateWork(habitat,habitat.TileGrid.Columns,habitat.TileGrid.Rows,habitat.ForestPattern, stands)) yield return unit;
+                foreach (int unit in LargeForestGenerator.CreateWork(habitat,habitat.TileGrid.Columns,habitat.TileGrid.Rows,habitat.ForestPattern, stands, Gameplay)) yield return unit;
                 yield break;
             }
             for (int tileId = 0; tileId < stands.Length; tileId++)
@@ -288,21 +290,18 @@ namespace ForesTycoon.Ecology
 
                 float moisture = habitat.GetMoisture(tileId);
                 float elevation = habitat.GetNormalizedElevation(tileId);
-                // Natural distribution stays selective; manual planting may use harsher land.
-                if (moisture < 0.35f || moisture > 0.95f || elevation <= 0.17f || elevation >= 0.83f)
-                    continue;
                 uint random = Hash(habitat.Seed, tileId, 0);
-                int density = moisture >= 0.70f ? 3 : 5;
-                if (random % (uint)density != 0) continue;
+                if (Gameplay.Evaluate("forest.initialAllow", 0, 0, UnitFloat(random), moisture, elevation, random % 3, random % 5) < .5) continue;
 
                 // Species must be drawn from an independent hash. Reusing the value the
                 // density filter just tested keeps only tiles where random % density == 0,
                 // which collapsed every mixture below to its first branch â€” the whole map
                 // came out as a single species.
-                ForestSpecies species = SelectSpecies(moisture, elevation, Hash(habitat.Seed, tileId, 2));
+                uint speciesDraw = Hash(habitat.Seed, tileId, 2);
+                ForestSpecies species = (ForestSpecies)(int)Gameplay.Evaluate("forest.initialSpecies", 0, 0, UnitFloat(speciesDraw), moisture, elevation, speciesDraw % 8, speciesDraw % 10);
                 ForestSpeciesProfile profile = ForestSpeciesProfile.For(species);
-                float age = 4f + UnitFloat(Hash(habitat.Seed, tileId, 1)) * profile.MatureAgeYears * 2.2f;
-                float health = Math.Clamp(0.72f + Suitability(species, tileId) * 0.28f, 0f, 1f);
+                float age = (float)Gameplay.Evaluate("forest.initialAge", 0, profile.MatureAgeYears, UnitFloat(Hash(habitat.Seed, tileId, 1)));
+                float health = (float)Gameplay.Evaluate("forest.initialHealth", 0, UnitFloat(Hash(habitat.Seed, tileId, 3)), Suitability(species, tileId));
                 float biomass = InitialBiomass(profile, age, health);
                 stands[tileId] = new ForestStand(species, age, biomass, health);
             }
@@ -347,51 +346,6 @@ namespace ForesTycoon.Ecology
             }
         }
 
-        private static ForestSpecies SelectSpecies(float moisture, float elevation, uint random)
-        {
-            // Montane and wet ground: spruce and fir belt, with beech and maple mixed in, larch on the
-            // highest ground and birch on the edges.
-            if (elevation > 0.68f || moisture > 0.78f)
-                return (random % 8u) switch
-                {
-                    0u => ForestSpecies.Birch,
-                    1u => ForestSpecies.Beech,
-                    2u => ForestSpecies.Fir,
-                    3u => ForestSpecies.Maple,
-                    4u => elevation > 0.8f ? ForestSpecies.Larch : ForestSpecies.Spruce,
-                    _ => ForestSpecies.Spruce
-                };
-
-            // Dry lowland: oak country (pedunculate, sessile and Turkey oak), with birch and pine on the
-            // poorest ground, hawthorn scrub, and a few spruce, which survive here but never thrive —
-            // Fitness keeps them small and sickly.
-            if (moisture < 0.52f)
-                return (random % 10u) switch
-                {
-                    0u => ForestSpecies.Birch,
-                    1u => ForestSpecies.Spruce,
-                    2u => ForestSpecies.Pine,
-                    3u => ForestSpecies.TurkeyOak,
-                    4u => ForestSpecies.SessileOak,
-                    5u => ForestSpecies.Hawthorn,
-                    _ => ForestSpecies.Oak
-                };
-
-            // Fresh mid-slope soils: mixed forest. Beech leads, with maple and ash on the richer soil,
-            // hazel in the understorey, and a share of spruce keeps conifers present outside the montane
-            // belt, the way managed mixed stands are.
-            return (random % 10u) switch
-            {
-                0u => ForestSpecies.Birch,
-                1u => ForestSpecies.Oak,
-                2u => ForestSpecies.Spruce,
-                3u => ForestSpecies.Maple,
-                4u => ForestSpecies.Ash,
-                5u => ForestSpecies.Hazel,
-                _ => ForestSpecies.Beech
-            };
-        }
-
         private float Suitability(ForestSpecies species, int tileId)
         {
             var profile = ForestSpeciesProfile.For(species);
@@ -399,10 +353,9 @@ namespace ForesTycoon.Ecology
                 habitat.GetSoilProperties(tileId).Fertility, profile.PreferredElevation, profile.ElevationTolerance);
         }
 
-        private static float InitialBiomass(ForestSpeciesProfile profile, float age, float health)
+        private float InitialBiomass(ForestSpeciesProfile profile, float age, float health)
         {
-            float normalizedAge = Math.Clamp(age / profile.MatureAgeYears, 0f, 1f);
-            return profile.MaximumBiomass * normalizedAge * normalizedAge * (0.45f + health * 0.55f);
+            return (float)Gameplay.Evaluate("forest.initialBiomass", profile.MaximumBiomass, age, profile.MatureAgeYears, health);
         }
 
 

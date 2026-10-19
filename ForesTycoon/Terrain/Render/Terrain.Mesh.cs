@@ -180,14 +180,5 @@ namespace ForesTycoon
         {
             return ((uint)color.A << 24) | ((uint)color.B << 16) | ((uint)color.G << 8) | (uint)color.R;
         }
-
-        /// <summary>Kettő szín lin. interpolációja t ∈ [0,1] alapján.</summary>
-        private uint LerpColor(Color a, Color b, float t)
-        {
-            int r = (int)(a.R + (b.R - a.R) * t);
-            int g = (int)(a.G + (b.G - a.G) * t);
-            int bl= (int)(a.B + (b.B - a.B) * t);
-            return ColorToUInt(Color.FromArgb(255, r, g, bl));
-        }
     }
 }

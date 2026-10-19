@@ -53,7 +53,7 @@ namespace ForesTycoon
                 if (value == null) return;
                 value.BehaviorPause = v => { var truck = TruckOf(v); return truck != null && TruckWait(truck); };
                 value.BehaviorRule = TruckRule;
-                value.BehaviorDepart = v => TruckOf(v)?.Control == BehaviorAction.DepartLoaded;
+                value.BehaviorDepart = null; // Departure is entirely evaluated by loading.depart, including controller requests.
                 value.SourceStock = v => TruckOf(v)?.Source?.Volume ?? 0;
             }
         }
@@ -162,8 +162,6 @@ namespace ForesTycoon
             Status = mill ? "A rönkszállító a sarangtól a malomba fuvaroz." : "A rönkszállító áthordja a sarangot.";
             result.Value = true;
         }
-
-        private void StartShuttle(FleetTruck truck, int[] route) => SimulationWork.Complete(StartShuttleWork(truck, route));
         private IEnumerable<int> StartShuttleWork(FleetTruck truck, int[] route)
         {
             ChargeTruckFuel(truck);
@@ -200,8 +198,11 @@ namespace ForesTycoon
                 yield return 1;
                 truck.Control = Controllers?.Step("truck", (ulong)truck.Id, new(seconds, truck.Vehicle?.CargoAmount ?? 0,
                     TruckState(truck), truck.Phase is TruckPhase.ToWork or TruckPhase.Working, truck.Upkeep.Broken)) ?? BehaviorAction.Autonomous;
-                if (truck.Control == BehaviorAction.ReturnHome) SendHome(truck);
+                if (rules.Evaluate(Behaviors, "control.home", "truck", (ulong)truck.Id, TruckInputs(truck, seconds)) >= .5) SendHome(truck);
                 bool wait = TruckWait(truck);
+                int upkeep = (int)rules.Evaluate(Behaviors, "control.upkeep", "truck", (ulong)truck.Id,
+                    TruckInputs(truck, seconds) with { DecisionAllow = wait ? 0 : 1 });
+                if (upkeep == 1) RunningCosts += truck.Upkeep.Service(seconds, Tuning);
                 if (truck.Vehicle != null)
                 {
                     ChargeTruckFuel(truck);
@@ -209,8 +210,7 @@ namespace ForesTycoon
                     var road = truck.Vehicle;
                     road.GetSegment(road.RoutePosition, out int from, out _, out _);
                     float strain = (float)Tuning.VehicleRules.Evaluate(ForesTycoon.Rules.VehicleResponse.Strain, [0, road.CargoFill, 0, terrain.IsSkidTrail(from) ? 1 : 0]);
-                    bool moving = road.CurrentSpeed > 0.01 || road.TransportState is VehicleTransportState.Loading or VehicleTransportState.Unloading;
-                    if (moving && !wait || truck.Upkeep.Broken)
+                    if (upkeep == 2)
                     {
                         bool running = truck.Upkeep.Operate(seconds, strain, out double repair, Tuning);
                         if (repair > 0) { RunningCosts += repair; Status = $"A rönkszállító #{truck.Id} megjavítva ({repair:N0} eFt)."; }
@@ -218,35 +218,37 @@ namespace ForesTycoon
                         road.Broken = !running;
                     }
                 }
-                else if (truck.Phase == TruckPhase.Parked) RunningCosts += truck.Upkeep.Service(seconds, Tuning);
                 // The road under it was removed: the truck is taken back to its yard.
                 if (truck.Vehicle != null && !Vehicles.Contains(truck.Vehicle)) { Park(truck); continue; }
                 if (wait) continue;
-                switch (truck.Phase)
+                var v = truck.Vehicle;
+                if (v == null) continue;
+                var fed = new WorkResult<bool>();
+                if (truck.Phase == TruckPhase.Working) foreach (int unit in BeingFedWork(truck.Source, fed, supply)) yield return unit;
+                var input = new LogisticsInputs(StepSeconds: seconds, MachineKind: 2, MachineState: (int)truck.Phase,
+                    MachineCargo: v.CargoAmount, MachineCapacity: v.CargoCapacity, MachineWear: truck.Upkeep.Wear,
+                    MachineHomeRequested: truck.HomeRequested ? 1 : 0, SourceStock: truck.Source?.Volume ?? 0, SourceFed: fed.Value ? 1 : 0,
+                    WorkflowArrived: v.TransitArrived ? 1 : 0,
+                    WorkflowAtSource: v.TransportState is VehicleTransportState.Loading or VehicleTransportState.Waiting ? 1 : 0);
+                input = input with { DecisionReturn = rules.Evaluate(Behaviors, "truck.return", "truck", (ulong)truck.Id, input) };
+                int operation = (int)rules.Evaluate(Behaviors, "truck.workflow", "truck", (ulong)truck.Id, input);
+                switch (operation)
                 {
-                    case TruckPhase.ToWork when truck.Vehicle.TransitArrived:
+                    case 1 when truck.Source != null && v.Transit && v.TransitArrived && v.CargoAmount <= .0001f:
                     {
                         var result = new WorkResult<int[]>();
-                        if (!truck.HomeRequested) foreach (int unit in TruckRouteWork(truck, truck.Source.Tile, truck.Destination, result)) yield return unit;
+                        foreach (int unit in TruckRouteWork(truck, truck.Source.Tile, truck.Destination, result)) yield return unit;
                         int[] route = result.Value;
                         if (route == null) { foreach (int unit in ReturnWork(truck, truck.Vehicle.Route[^1])) yield return unit; break; }
+                        if (route[0] != v.Route[^1]) break; // A new route must begin where the physical truck actually stands.
                         foreach (int unit in StartShuttleWork(truck, route)) yield return unit;
                         break;
                     }
-                    case TruckPhase.Working:
-                    {
-                        var v = truck.Vehicle;
-                        var fed = new WorkResult<bool>();
-                        foreach (int unit in BeingFedWork(truck.Source, fed, supply)) yield return unit;
-                        bool done = truck.HomeRequested || rules.Evaluate(Behaviors, "truck.return", "truck", (ulong)truck.Id,
-                            new(StepSeconds: seconds, MachineKind: 2, MachineCargo: v.CargoAmount, MachineCapacity: v.CargoCapacity, MachineWear: truck.Upkeep.Wear, SourceStock: truck.Source.Volume, SourceFed: fed.Value ? 1 : 0)) >= .5;
-                        // Leave only empty and standing at the source, so no timber is carried off.
-                        if (done && v.CargoAmount <= 0.0001f && v.TransportState is VehicleTransportState.Loading or VehicleTransportState.Waiting)
-                            foreach (int unit in ReturnWork(truck, v.Route[0])) yield return unit;
+                    case 2:
+                        foreach (int unit in ReturnWork(truck, truck.Phase == TruckPhase.Working ? v.Route[0] : v.Route[^1])) yield return unit;
                         break;
-                    }
-                    case TruckPhase.ToHome when truck.Vehicle.TransitArrived:
-                        Park(truck);
+                    case 3 when v.TransitArrived && v.CargoAmount <= .0001f && v.Route[^1] == DepotDock(truck.Home):
+                        Park(truck); // Releasing a physical vehicle cannot discard timber or teleport it.
                         break;
                 }
             }
@@ -254,6 +256,8 @@ namespace ForesTycoon
 
         private IEnumerable<int> ReturnWork(FleetTruck truck, int from)
         {
+            if (truck.Vehicle is { } loaded && (loaded.CargoAmount > .0001f || loaded.Transit && !loaded.TransitArrived ||
+                truck.Phase == TruckPhase.Working && loaded.TransportState is not (VehicleTransportState.Loading or VehicleTransportState.Waiting))) yield break;
             ChargeTruckFuel(truck);
             int dock = DepotDock(truck.Home);
             var result = new WorkResult<(int[] Path, float Cost)> { Value = (Array.Empty<int>(), float.PositiveInfinity) };

@@ -167,20 +167,6 @@ namespace ForesTycoon
         internal float NodeWaterZ(Node node, float t)
             => SampleWaterNode(node, t).SurfaceZ;
 
-        private float GetPolygonPointDepth(Tile tile, Vector3 point)
-        {
-            if (Math.Abs(point.X - tile.W.xPos) < 0.001f && Math.Abs(point.Y - tile.W.yPos) < 0.001f)
-                return Math.Max(MinimumWaterDepth, nodeWaterDepth[tile.W.Id]);
-            if (Math.Abs(point.X - tile.S.xPos) < 0.001f && Math.Abs(point.Y - tile.S.yPos) < 0.001f)
-                return Math.Max(MinimumWaterDepth, nodeWaterDepth[tile.S.Id]);
-            if (Math.Abs(point.X - tile.E.xPos) < 0.001f && Math.Abs(point.Y - tile.E.yPos) < 0.001f)
-                return Math.Max(MinimumWaterDepth, nodeWaterDepth[tile.E.Id]);
-            if (Math.Abs(point.X - tile.N.xPos) < 0.001f && Math.Abs(point.Y - tile.N.yPos) < 0.001f)
-                return Math.Max(MinimumWaterDepth, nodeWaterDepth[tile.N.Id]);
-
-            return MinimumWaterDepth;
-        }
-
         internal void DrawWater(RenderContext context)
         {
             if (nodeWaterDepth == null) return;

@@ -24,7 +24,9 @@ public class CurrentGameRulesTests
         }
         // The water balance is the project's flow rules; road traffic wear is a behaviour graph.
         Assert.Equal(new[] { "climate.regional", "fleet.depot", "fleet.orders", "forest.canopy", "forest.competition", "forest.deadwood", "forest.growth", "forest.health", "forest.initialSize", "forest.mortality", "forest.regeneration", "forest.site", "forest.stress", "loading.policy", "machine.forwarder", "machine.logTransfer", "machine.movement", "machine.processor", "mill.process", "route.policy", "traffic.wear", "trail.trafficability", "upkeep.effects", "upkeep.repair", "upkeep.service", "upkeep.wear", "vehicle.fuel", "vehicle.mass", "vehicle.motion", "vehicle.resistance", "vehicle.transfer", "water.drainage", "water.evaporation", "water.infiltration", "water.precipitation", "water.runoff", "water.snowdrift", "water.snowmelt", "water.stress", "water.uptake", "weather.evaporation", "weather.events" },
-            catalog.Rules.Where(r => r.Execution == GameRuleExecution.EditableGraph).Select(r => r.Id).OrderBy(id => id, StringComparer.Ordinal));
+            catalog.Rules.Where(r => r.Execution == GameRuleExecution.EditableGraph && !GameplayRules.CatalogHooks.ContainsKey(r.Id)).Select(r => r.Id).OrderBy(id => id, StringComparer.Ordinal));
+        foreach (string id in GameplayRules.CatalogHooks.Keys)
+            Assert.Equal(GameRuleExecution.EditableGraph, catalog.Rules.Single(r => r.Id == id).Execution);
         Assert.Equal("machine.controller", catalog.Rules.Single(r => r.Execution == GameRuleExecution.EditableController).Id);
         Assert.Contains(catalog.Rules, r => r.Id == "route.policy" && r.Execution == GameRuleExecution.EditableGraph);
         Assert.Contains(catalog.Rules, r => r.Id == "loading.policy" && r.Execution == GameRuleExecution.EditableGraph);

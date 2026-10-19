@@ -6,6 +6,21 @@ namespace ForesTycoon.Tests;
 public partial class FleetTests
 {
     [Fact]
+    public void AuthoredWorkflowChangesActualDispatchAndCannotDiscardCargo()
+    {
+        var scene = Build(); var machine = Forwarder(scene);
+        machine.Source = scene.Logistics.StackAt(ForestStack); machine.Destination = RoadStack;
+        machine.Cargo = 2; machine.CargoValue = 200; machine.Path = new[] { ForestStack }; machine.State = ForestMachineState.Parked;
+        SetTransportModel(scene, new() { Graphs = new() { TransportConstant("machine.workflow", "forwarder", 1) } });
+        Run(scene, 1d / 30); Assert.Equal(ForestMachineState.Parked, machine.State); Assert.Equal(2, machine.Cargo);
+        SetTransportModel(scene, new() { Graphs = new() { TransportConstant("machine.workflow", "forwarder", 2) } });
+        Run(scene, 1d / 30); Assert.True(machine.Working); Assert.Equal(2, machine.Cargo); Assert.Equal(200, machine.CargoValue);
+        SetTransportModel(scene, new() { Graphs = new() { TransportConstant("machine.workflow", "forwarder", 3) } });
+        Run(scene, 1d / 30); Assert.Equal(ForestMachineState.Driving, machine.State); Assert.Equal(ForestMachineState.Unloading, machine.Goal);
+        Assert.Equal(2, machine.Cargo);
+    }
+
+    [Fact]
     public void EveryLogisticsDecisionIsAPureGraphWithDiscoveredObjectAndFieldNames()
     {
         var model = WorldBehaviorPolicy.DefaultDocument();
@@ -148,7 +163,7 @@ public partial class FleetTests
     }
 
     [Fact]
-    public void FullTruckCanWaitForAuthoredDepartureAndHomeRequestStillDeliversItsCargo()
+    public void AuthoredDepartureCanOverrideHomePriorityWithoutLosingCargo()
     {
         var scene = Build(); var source = scene.Logistics.StackAt(RoadStack); source.Add(100, 10000);
         var truck = scene.Logistics.Trucks[0]; Assert.True(scene.Logistics.AssignTruck(truck, source, Mill));
@@ -157,6 +172,12 @@ public partial class FleetTests
         Assert.NotNull(truck.Vehicle); Assert.Equal(1, truck.Vehicle.CargoFill); Run(scene, 1);
         Assert.True(truck.Vehicle.TransportState is VehicleTransportState.Loading or VehicleTransportState.Waiting);
         scene.Logistics.SendHome(truck);
+        float stock = source.Volume;
+        Run(scene, 5);
+        Assert.Equal(stock, source.Volume); Assert.Equal(1, truck.Vehicle.CargoFill);
+        Assert.Equal(0, scene.Logistics.Mills.Single().Received);
+        Assert.True(truck.Vehicle.TransportState is VehicleTransportState.Loading or VehicleTransportState.Waiting);
+        SetTransportModel(scene, new() { Graphs = new() { TransportConstant("loading.depart", "truck", 1) } });
         Run(scene, 240);
         Assert.Equal(TruckPhase.Parked, truck.Phase); Assert.True(scene.Logistics.Mills.Single().Received > 0);
     }

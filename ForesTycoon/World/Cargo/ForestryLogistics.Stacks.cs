@@ -91,7 +91,7 @@ namespace ForesTycoon
             foreach (var mill in Mills)
                 if (Array.IndexOf(mill.Footprint, tile) >= 0 || mill.TileId == tile)
                 {
-                    mill.Received += volume; mill.Stock += volume; Income += value * Tuning[Tune.TimberPriceFactor];
+                    mill.Received += volume; mill.Stock += volume; Income += Gameplay.Evaluate("economy.sale", value, Tuning[Tune.TimberPriceFactor], volume);
                     return;
                 }
             var stack = StackAt(tile);
@@ -101,6 +101,6 @@ namespace ForesTycoon
 
         internal Sawmill MillAt(int tile) => Mills.Find(m => Array.IndexOf(m.Footprint, tile) >= 0);
 
-        private void Burn(double litres) { if (litres > 0) RunningCosts += litres * Tuning[Tune.DieselPrice]; }
+        private void Burn(double litres) { if (litres > 0) RunningCosts += Gameplay.Evaluate("economy.fuelCost", litres, Tuning[Tune.DieselPrice]); }
     }
 }

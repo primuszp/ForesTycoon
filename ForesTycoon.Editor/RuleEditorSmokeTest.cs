@@ -108,6 +108,10 @@ namespace ForesTycoon.Editor
                     (() => editor.ShowRuleBook(world.RuleProjectDocument.Rules.FindIndex(r => r.Id == "forest.deadwood")), "tree-deadwood-graph"),
                     (() => editor.ShowRuleBook(world.RuleProjectDocument.Rules.FindIndex(r => r.Id == "forest.growth")), "tree-growth-graph"),
                     (() => editor.ShowCommonRule("behavior:" + world.BehaviorDocument.Graphs.First(g => g.Hook == "water.stress").Id), "common-water-response"),
+                    (() => editor.ShowCommonRule("behavior:" + world.BehaviorDocument.Graphs.First(g => g.Hook == "forest.initialSpecies").Id), "gameplay-initial-species"),
+                    (() => editor.ShowCommonRule("behavior:" + world.BehaviorDocument.Graphs.First(g => g.Hook == "economy.sale").Id), "gameplay-sale"),
+                    (() => editor.ShowCommonRule("behavior:" + world.BehaviorDocument.Graphs.First(g => g.Hook == "mission.reached").Id), "gameplay-mission"),
+                    (() => editor.ShowCommonRule("behavior:" + world.BehaviorDocument.Graphs.First(g => g.Hook == "wildlife.destinationScore").Id), "gameplay-wildlife"),
                     (() => editor.ShowCommonRule("behavior:" + world.BehaviorDocument.Graphs.First(g => g.Hook == "forest.site").Id), "site-fitness-graph"),
                     (() => editor.ShowCommonRule("behavior:" + world.BehaviorDocument.Graphs.First(g => g.Hook == "forest.initialHeight").Id), "initial-size-height-graph"),
                     (() => editor.ShowCommonRule("behavior:" + world.BehaviorDocument.Graphs.First(g => g.Hook == "forest.initialDiameter").Id), "initial-size-diameter-graph"),
@@ -240,39 +244,18 @@ namespace ForesTycoon.Editor
                 Require(editor.EditedScenario.Missions.Count == missions + 1 && Math.Abs(world.Tuning[Tune.DieselPrice] - undoDiesel - 1) < 1e-9, "Redo did not replay the edits.");
                 editor.Undo(world); editor.Undo(world); world.ExecutePendingCommands(); Frames(12);
                 string workshopActive = world.RuleProjectDocument.ToJson();
-                foreach (var screen in new[] {
-                    ("forest.growth", WorkshopPhase.Understand, "workshop-growth"),
-                    ("forest.growth", WorkshopPhase.Edit, "workshop-growth-edit"),
-                    ("water.stress", WorkshopPhase.Understand, "workshop-water"),
-                    ("traffic.wear", WorkshopPhase.Edit, "workshop-road-edit"),
-                    ("machine.controller", WorkshopPhase.Edit, "workshop-controller"),
-                    ("forest.growth", WorkshopPhase.Trial, "workshop-trial"),
-                    ("forest.growth", WorkshopPhase.Apply, "workshop-apply") }) {
-                    editor.ShowWorkshopRule(screen.Item1, screen.Item2);
+                foreach (string ruleId in new[] { "forest.growth", "water.precipitation", "traffic.wear", "wildlife.initialize", "wildlife.populationTarget" }) {
+                    int ruleIndex = world.RuleProjectDocument.Rules.FindIndex(r => r.Id == ruleId);
+                    Require(ruleIndex >= 0, "Editor rule fixture is missing: " + ruleId);
+                    editor.ShowRuleBook(ruleIndex);
                     for (int frame = 0; frame < 2; frame++) {
                         ui.Update(width, height, width, height, Vec2.One, 1f / 60);
                         ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 900)); editor.Draw(world, ref open);
                         GL.Viewport(0, 0, width, height); GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit); ui.Render(); GL.Finish();
                     }
-                    Require(world.RuleProjectDocument.ToJson() == workshopActive, "Browsing workshop phases changed the running project.");
-                    Require(GL.GetError() == ErrorCode.NoError, "Workshop UI OpenGL error: " + screen.Item3);
-                    FramebufferCapture.SavePng(Path.Combine(output, screen.Item3 + ".png"), width, height);
-                }
-                foreach (var screen in new (Action Show, string Name)[] {
-                    (() => editor.ShowSystemModel(), "workshop-system"),
-                    (() => editor.ShowSystemTile(Enumerable.Range(0, world.Map.Tiles.Count).FirstOrDefault(id => world.DescribeTile(id).ContainsKey("forest.trees"))), "workshop-system-tile"),
-                    (() => editor.ShowSystemModel("trail.trafficability"), "workshop-system-surface"),
-                    (() => editor.ShowSystemModel("water.root"), "workshop-system-water"),
-                    (() => editor.ShowSystemLoopThrough("economy.result"), "workshop-system-economy-loop") }) {
-                    screen.Show();
-                    for (int frame = 0; frame < 3; frame++) {
-                        ui.Update(width, height, width, height, Vec2.One, 1f / 60);
-                        ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 900)); editor.Draw(world, ref open);
-                        GL.Viewport(0, 0, width, height); GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit); ui.Render(); GL.Finish();
-                    }
-                    Require(world.RuleProjectDocument.ToJson() == workshopActive, "Browsing the system model changed the running project.");
-                    Require(GL.GetError() == ErrorCode.NoError, "System model OpenGL error: " + screen.Name);
-                    FramebufferCapture.SavePng(Path.Combine(output, screen.Name + ".png"), width, height);
+                    Require(world.RuleProjectDocument.ToJson() == workshopActive, "Browsing rule cards changed the running project.");
+                    Require(GL.GetError() == ErrorCode.NoError, "Rule card UI OpenGL error: " + ruleId);
+                    FramebufferCapture.SavePng(Path.Combine(output, "rule-card-" + ruleId + ".png"), width, height);
                 }
                 File.WriteAllText(Path.Combine(output, "road-wear.json"), trafficProject.ToJson());
                 using (var trailWorld = new GameWorld(settings, enableRendering: false)) {
@@ -516,8 +499,8 @@ namespace ForesTycoon.Editor
                 foreach (var screen in new (Action Select, string Name)[] {
                     (() => projectEditor.ShowCommonRule("stock:wearMultiplier"), "common-stock"),
                     (() => projectEditor.ShowCommonRule("flow:increase"), "common-flow"),
-                    (projectEditor.ShowRuleLibrary, "workshop-library"), (projectEditor.ShowGuidedStart, "workshop-guided"),
-                    (() => projectEditor.ShowThematicStock("wearMultiplier", 3), "workshop-thematic-stock"), (projectEditor.ShowCreationDialog, "workshop-create") }) {
+                    (projectEditor.ShowRuleLibrary, "workshop-library"),
+                    (() => projectEditor.ShowThematicStock("wearMultiplier", 3), "workshop-thematic-stock") }) {
                     screen.Select();
                     for (int frame = 0; frame < 3; frame++) {
                         ui.Update(width, height, width, height, Vec2.One, 1f / 60);
@@ -527,15 +510,14 @@ namespace ForesTycoon.Editor
                     Require(GL.GetError() == ErrorCode.NoError, "Full workshop UI error: " + screen.Name);
                     FramebufferCapture.SavePng(Path.Combine(output, screen.Name + ".png"), width, height);
                 }
-                projectEditor.DismissAuthoringPopups();
-                projectEditor.ShowObjects();
+                projectEditor.ShowRuleBook(world.RuleProjectDocument.Rules.FindIndex(r => r.Id == "wildlife.body"));
                 for (int frame = 0; frame < 3; frame++) {
                     ui.Update(width, height, width, height, Vec2.One, 1f / 60);
                     ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 900)); projectEditor.Draw(world, ref open);
                     GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit); ui.Render(); GL.Finish();
                 }
-                Require(GL.GetError() == ErrorCode.NoError, "Object browser OpenGL error.");
-                FramebufferCapture.SavePng(Path.Combine(output, "objects.png"), width, height);
+                Require(GL.GetError() == ErrorCode.NoError, "Animal object fields OpenGL error.");
+                FramebufferCapture.SavePng(Path.Combine(output, "animal-fields.png"), width, height);
                 var algorithmView = new AlgorithmEditorView();
                 string workspace = ForesTycoon.RuleCompiler.AlgorithmBuild.FindWorkspace();
                 var algorithmBundle = new ForesTycoon.RuleCompiler.AlgorithmBundle();

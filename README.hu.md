@@ -79,7 +79,7 @@ C# és .NET 8, OpenTK 4.9.4, OpenGL 3.3 core, GLSL és ImGui.NET. A fix lépése
 dotnet run --project ForesTycoon.Editor -c Release
 ```
 
-Az editor a játék szabályait, képleteit és kapcsolatainak katalógusát mutatja. Az útkopási modell paraméterei és kapcsolatai szerkeszthetők, saját tesztvilágban kipróbálhatók és JSON-ként menthetők. A játékban **F12 → Szabálymodell → Szabálymodell alkalmazása** tölti be a modellt. [Editor használata](docs/rule-editor.md).
+Az editor [alap-szabályprojektjét](ForesTycoon.Editor/GameRules/default.project.json) a játék is futtatja. A 29 objektumszabály és 203 számítási gráf szerkeszthető: többek között az erdő, víz, szállítás, építési költségek, faeladás, vadállomány és küldetések döntései. A 4-es projektverzióból törölt szabály nem tér vissza betöltéskor; a mentés a teljes szabálykönyvet és mind az 51 hangolási értéket megőrzi. Új állatosztály mezői, megjelenítési neve és állományvezérlése automatikusan felismerhetők. A játékban **F12 → Szabálymodell → Szabálymodell alkalmazása** tölti be a projektet. [Editor használata és a kódból felismert objektummodell](docs/rule-editor.md).
 
 ## Ellenőrzés és dokumentáció
 

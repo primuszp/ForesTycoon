@@ -108,9 +108,6 @@ namespace ForesTycoon.Ecology
             return volume;
         }
 
-        private void UpdateIndividualRates(int id, ForestTreeStore.Patch patch, double year, bool monthlyBoundary = false, bool currentConditions = false)
-            => SimulationWork.Complete(UpdateIndividualRatesWork(id, patch, year, monthlyBoundary, currentConditions));
-
         private IEnumerable<int> UpdateIndividualRatesWork(int id, ForestTreeStore.Patch patch, double year, bool monthlyBoundary = false, bool currentConditions = false)
         {
             float radiation = Environment != null ? (float)(currentConditions ? Environment.Radiation : Environment.PeriodRadiation) : 1;
@@ -262,7 +259,14 @@ namespace ForesTycoon.Ecology
             bool felled = false;
             while (patch.Depot < requested && patch.Count > 0)
             {
-                FellIndividual(patch, 0);
+                int candidate = -1;
+                for (int i = 0; i < patch.Count; i++) {
+                    yield return 1;
+                    var tree = patch.Trees[i]; var size = tree.At(ForestYear);
+                    if (Gameplay.Evaluate("forest.fellAllow", tree.Age(ForestYear), size.Height, size.Diameter, (int)tree.Species) >= .5) { candidate = i; break; }
+                }
+                if (candidate < 0) break;
+                FellIndividual(patch, candidate);
                 yield return 1;
                 felled = true;
             }
@@ -284,6 +288,10 @@ namespace ForesTycoon.Ecology
             if ((uint)id >= (uint)stands.Length) return ForestryActionResult.InvalidTile;
             if (!IndividualTrees.TryGet(id, out var patch) || patch.Count == 0) return ForestryActionResult.NoForest;
             ForestStand stand = IndividualStand(id, ForestYear);
+            for (int i = 0; i < patch.Count; i++) {
+                var tree = patch.Trees[i]; var size = tree.At(ForestYear);
+                if (Gameplay.Evaluate("forest.fellAllow", tree.Age(ForestYear), size.Height, size.Diameter, (int)tree.Species) < .5) return ForestryActionResult.NoForest;
+            }
             float volume = AvailableTimber(id);
             while (patch.Count > 0) FellIndividual(patch, 0);
             // Immediate harvest transfers the depot directly to its caller.

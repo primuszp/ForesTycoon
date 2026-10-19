@@ -11,7 +11,7 @@ namespace ForesTycoon.Rules;
 /// </summary>
 public sealed class WorldRule
 {
-    public static readonly string[] Schedules = { "step", "passage", "month", "growth" };
+    public static readonly string[] Schedules = { "step", "passage", "month", "growth", "wildlife", "population", "birth" };
     public string Id { get; set; } = "szabaly";
     public string Name { get; set; } = "Új szabály";
     public string Description { get; set; } = "";

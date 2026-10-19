@@ -75,9 +75,6 @@ namespace ForesTycoon
             imgui.Render();
         }
 
-        private const ImGuiWindowFlags BarFlags = ImGuiWindowFlags.NoDecoration | ImGuiWindowFlags.NoMove
-            | ImGuiWindowFlags.NoSavedSettings | ImGuiWindowFlags.NoFocusOnAppearing | ImGuiWindowFlags.NoNav
-            | ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoBringToFrontOnFocus;
 
         private void DrawGameMenuPopup()
         {
@@ -281,33 +278,6 @@ namespace ForesTycoon
             }
             ImGui.PopItemWidth();
         }
-
-        private static GameIcon ToolIconFor(TerrainEditTool tool) => tool switch
-        {
-            TerrainEditTool.Raise => GameIcon.Raise,
-            TerrainEditTool.Lower => GameIcon.Lower,
-            TerrainEditTool.Road => GameIcon.Road,
-            TerrainEditTool.RoadRemove => GameIcon.RoadRemove,
-            TerrainEditTool.RoadRepair => GameIcon.RoadRepair,
-            TerrainEditTool.SkidTrail => GameIcon.SkidTrail,
-            TerrainEditTool.PlaceStack => GameIcon.Timber,
-            TerrainEditTool.RemoveStack => GameIcon.TimberRemove,
-            TerrainEditTool.SkidTrailRemove => GameIcon.SkidTrailRemove,
-            TerrainEditTool.PlantForest => GameIcon.Plant,
-            TerrainEditTool.HarvestForest => GameIcon.Harvest,
-            TerrainEditTool.PlaceSawmill => GameIcon.Sawmill,
-            TerrainEditTool.PlaceDepot => GameIcon.Depot,
-            TerrainEditTool.SendVehicle => GameIcon.Truck,
-            _ => GameIcon.Inspect
-        };
-
-        private static string SeasonName(double fraction) => fraction switch
-        {
-            < 0.25 => "tavasz",
-            < 0.50 => "nyár",
-            < 0.75 => "ősz",
-            _ => "tél"
-        };
 
         private static string WeatherName(WeatherPreset preset) => preset switch
         {
@@ -1029,13 +999,6 @@ namespace ForesTycoon
             return false;
         }
 
-        // ── Actions shared by toolbar, windows and hotkeys ───────────────────
-        private void SpawnTruck()
-        {
-            world.QueueSpawnVehicle();
-            ShowToast("Rönkszállító indítása kérve.", HudTheme.Info);
-        }
-
         private void FocusOnDeer()
         {
             if (!world.TryGetWildlifePosition(out var deer))
@@ -1066,25 +1029,6 @@ namespace ForesTycoon
             if (ImGui.MenuItem($"{tileCount} × {tileCount}", "", currentMapTiles == tileCount))
                 RegenerateTerrain(tileCount);
         }
-
-        private string ToolName(TerrainEditTool tool) => tool switch
-        {
-            TerrainEditTool.Raise => "Emelés",
-            TerrainEditTool.Lower => "Süllyesztés",
-            TerrainEditTool.Road => "Útépítés",
-            TerrainEditTool.RoadRemove => "Útbontás",
-            TerrainEditTool.RoadRepair => "Útjavítás",
-            TerrainEditTool.SkidTrail => "Közelítő nyom",
-            TerrainEditTool.PlaceStack => "Sarang helye",
-            TerrainEditTool.RemoveStack => "Sarang törlése",
-            TerrainEditTool.SkidTrailRemove => "Nyom törlése",
-            TerrainEditTool.PlantForest => $"Ültetés ({ForestSpeciesName(interaction.PlantingSpecies)})",
-            TerrainEditTool.HarvestForest => "Kitermelési terület",
-            TerrainEditTool.PlaceSawmill => "Fűrészmalom építése",
-            TerrainEditTool.PlaceDepot => "Telephely építése",
-            TerrainEditTool.SendVehicle => "Jármű küldése",
-            _ => "Vizsgálat"
-        };
 
         private static string ForestSpeciesName(ForestSpecies species) =>
             species == ForestSpecies.None ? "nincs" : ForestSpeciesTraits.For(species).Name.ToLowerInvariant();

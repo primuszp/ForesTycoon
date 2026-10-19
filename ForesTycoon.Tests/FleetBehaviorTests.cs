@@ -69,7 +69,7 @@ public partial class FleetTests
         for (int i = 0; i < 6000 && truck.Vehicle.CargoAmount == 0; i++) Run(s, 1.0 / 30);
         float cargo = truck.Vehicle.CargoAmount, remaining = source.Volume;
         var home = new BehaviorController { Id = "home", Kind = "truck" }; home.States[0].Action = BehaviorAction.ReturnHome;
-        SetTransportModel(s, new() { Controllers = new() { home }, Graphs = new() { TransportConstant("loading.depart", "truck", 0) } });
+        SetTransportModel(s, new() { Controllers = new() { home } });
         Run(s, 200);
         Assert.Equal(remaining, source.Volume); Assert.Equal(cargo, s.Logistics.Mills[0].Received, 4); Assert.Equal(TruckPhase.Parked, truck.Phase);
         Assert.Equal(900, source.Value + s.Logistics.Income, 3);

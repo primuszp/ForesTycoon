@@ -14,11 +14,14 @@ sealed partial class GameWorld
     internal IReadOnlyList<MissionGoal> Missions => (IReadOnlyList<MissionGoal>)ruleProjectWorld?.Missions ?? Array.Empty<MissionGoal>();
 
     /// <summary>A mission's value: the rule world fields and dynamics stocks, plus delivered timber.</summary>
-    internal double MissionValue(string metric) => metric == "world.deliveredTimber" ? DeliveredTimber : ReadRuleValue(metric);
+    internal double MissionValue(string metric) => ReadRuleValue(metric);
 
-    internal static readonly (string Key, string Name)[] MissionMetrics = {
-        ("world.balance", "Egyenleg (ezer Ft)"), ("world.income", "Bevétel (ezer Ft)"), ("world.deliveredTimber", "Leszállított faanyag (m³)"),
-        ("world.treeCount", "Fák száma"), ("world.roadCount", "Utak száma"), ("world.expenses", "Kiadás (ezer Ft)"), ("world.water", "Tárolt víz") };
+    private static readonly Lazy<(string Key, string Name)[]> missionMetrics = new(() => {
+        var world = RuleObjects.Find("world");
+        return world.Fields.Where(f => f.DeclaredBy == "world").Concat(world.Summaries)
+            .Select(f => ("world." + f.Name, f.Display + (f.Unit.Length == 0 ? "" : " (" + f.Unit + ")"))).ToArray();
+    });
+    internal static (string Key, string Name)[] MissionMetrics => missionMetrics.Value;
 
     internal IEnumerable<MissionProgress> MissionStatus(IReadOnlyList<MissionGoal> goals = null)
     {
@@ -27,8 +30,11 @@ sealed partial class GameWorld
             try { value = MissionValue(goal.Metric); }
             catch (ArithmeticException e) { value = double.NaN; error = e.Message; }
             if (error != null) { yield return new(goal, value, MissionState.Active, error); continue; }
-            var state = goal.Reached(value) ? MissionState.Reached
-                : goal.DeadlineYear > 0 && forest.ForestYear > goal.DeadlineYear ? MissionState.Failed : MissionState.Active;
+            double[] inputs = { value, goal.Target, goal.Comparison == "<=" ? 1 : 0, forest.ForestYear, goal.DeadlineYear };
+            double reached = behaviorPolicy.Gameplay.Evaluate("mission.reached", inputs);
+            double failed = behaviorPolicy.Gameplay.Evaluate("mission.failed", inputs);
+            var state = (MissionState)(int)behaviorPolicy.Gameplay.Evaluate("mission.state",
+                reached, failed, value, goal.Target, goal.Comparison == "<=" ? 1 : 0, forest.ForestYear, goal.DeadlineYear);
             yield return new(goal, value, state);
         }
     }

@@ -195,16 +195,19 @@ namespace ForesTycoon.Rendering.OpenGl
 
         public void DrawArray() => DrawArray(true);
 
-        public void DrawArray(bool useGeometryShader)
+        public void DrawArray(bool useGeometryShader) => DrawRange(0, vertexCount, useGeometryShader);
+
+        public void DrawRange(int first, int count, bool useGeometryShader)
         {
             ThrowIfDisposed();
-            if (vertexCount == 0) return;
+            if (first < 0 || count < 0 || first > vertexCount - count) throw new ArgumentOutOfRangeException(nameof(count));
+            if (count == 0) return;
 
             if (useGeometryShader) RenderDevice.UseGeometryShader();
             ApplyForestState();
             GL.BindVertexArray(VaoId);
-            GL.DrawArrays(mode, 0, vertexCount);
-            RenderMetrics.RecordDraw(vertexCount);
+            GL.DrawArrays(mode, first, count);
+            RenderMetrics.RecordDraw(count);
             GL.BindVertexArray(0);
         }
 

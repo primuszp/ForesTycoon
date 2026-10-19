@@ -75,7 +75,7 @@ namespace ForesTycoon
         public const int CurrentVersion = 17;
         // Bump whenever native simulation semantics change. Editable graphs and tuning
         // are stored separately in the checkpoint/journal; this identifies their runtime.
-        public const string CurrentRuntimeRulesVersion = "forestycoon-simulation/2026-10-17.1";
+        public const string CurrentRuntimeRulesVersion = "forestycoon-simulation/2026-10-19.3";
         public string RuntimeRulesVersion { get; init; } = CurrentRuntimeRulesVersion;
         public WorldSaveData() { }
         // Missing JSON must not silently inherit today's runtime identifier.
@@ -109,7 +109,7 @@ namespace ForesTycoon
                 || (Version == 14 && RuntimeRulesVersion == "forestycoon-simulation/2026-10-10.4")
                 || (Version == 15 && RuntimeRulesVersion == "forestycoon-simulation/2026-10-10.5");
             // Pre-cooperative worlds can import a complete state; their historical tail must not be replayed under new ordering.
-            bool previousSnapshot = Version is 16 or 17 && RuntimeRulesVersion is "forestycoon-simulation/2026-10-10.6" or "forestycoon-simulation/2026-10-16.1"
+            bool previousSnapshot = Version is 16 or 17 && RuntimeRulesVersion is "forestycoon-simulation/2026-10-10.6" or "forestycoon-simulation/2026-10-16.1" or "forestycoon-simulation/2026-10-17.1" or "forestycoon-simulation/2026-10-19.1" or "forestycoon-simulation/2026-10-19.2"
                 && Checkpoint != null && Checkpoint.Tick == Tick;
             if (Version >= 12 && !migratedRuntime && !previousSnapshot && !string.Equals(RuntimeRulesVersion, CurrentRuntimeRulesVersion, StringComparison.Ordinal))
                 throw new NotSupportedException($"Simulation rules runtime '{RuntimeRulesVersion ?? "missing"}' is not supported; expected '{CurrentRuntimeRulesVersion}'.");
@@ -128,8 +128,12 @@ namespace ForesTycoon
                 var dynamics = new DynamicsRuntime(Checkpoint.Dynamics ?? new DynamicsModel(), GameWorld.RuleWorldFields, _ => 0);
                 if (Checkpoint.DynamicsValues != null) dynamics.Restore(Checkpoint.DynamicsValues);
                 if (Version >= 17 && (Checkpoint.Dynamics == null || Checkpoint.DynamicsValues == null)) throw new InvalidOperationException("Save has no dynamics state.");
-                if (Checkpoint.Behaviors != null) _ = new WorldBehaviorPolicy(Checkpoint.Behaviors,
-                    DynamicsRuntime.Keys(dynamics.Document, GameWorld.RuleWorldFields), dynamics.Read);
+                if (Checkpoint.Behaviors != null) {
+                    var project = new RuleProject { Version = Checkpoint.RuleBook?.ProjectVersion ?? 2,
+                        Rules = RuleEngine.Clone(Checkpoint.RuleBook?.Rules ?? RuleEngine.StarterRules()), Behaviors = Checkpoint.Behaviors.Clone() };
+                    RuleProjectMigrations.UpgradeProject(project);
+                    _ = new WorldBehaviorPolicy(project.Behaviors, DynamicsRuntime.Keys(dynamics.Document, GameWorld.RuleWorldFields), dynamics.Read);
+                }
                 if (Version >= 15 && Checkpoint.BehaviorStates == null) throw new InvalidOperationException("Save has no controller state.");
                 CheckpointGuard.Require(Version >= 8 && Checkpoint.Version is 1 or 2 &&
                     (Version < 11 || Checkpoint.Version == 2), "world snapshot version");

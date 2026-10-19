@@ -64,8 +64,8 @@ internal static class RuleWorkshopModel
         return new SystemModelAnalysis(catalog, vocabulary, processes, stocks);
     }
 
-    internal static string KindName(string kind) => LogisticsRules.IsKind(kind) ? KindName(kind[9..].ToLowerInvariant()) : kind switch { "vehicleResponse" => "Járműválasz", "environment" => "Környezeti válasz", "initialTree" => "Fa kezdő mérete", "regeneration" => "Természetes erdőmegújulás", "competitionPair" => "Fapár", "competition" => "Összegzett verseny", "resource" => "Fa erőforrásválasza", "site" => "Termőhely és vízválasz", "tree" => "Fa", "truck" => "Teherautó", "forwarder" => "Forwarder",
-        "processor" => "Processzor", "road" => "Út", "tile" => "Csempe", "mill" => "Malom", "world" => "Világ", "wildlife" => "Vad", "depot" => "Telephely", "stack" => "Rakat", _ => kind };
+    internal static string KindName(string kind) => LogisticsRules.IsKind(kind) ? KindName(kind[9..].ToLowerInvariant()) : kind switch { "gameplay" => "Játékszabály", "vehicleResponse" => "Járműválasz", "environment" => "Környezeti válasz", "initialTree" => "Fa kezdő mérete", "regeneration" => "Természetes erdőmegújulás", "competitionPair" => "Fapár", "competition" => "Összegzett verseny", "resource" => "Fa erőforrásválasza", "site" => "Termőhely és vízválasz", "tree" => "Fa", "truck" => "Teherautó", "forwarder" => "Forwarder",
+        "processor" => "Processzor", "road" => "Út", "tile" => "Csempe", "mill" => "Malom", "world" => "Világ", "wildlife" => "Vad", "depot" => "Telephely", "stack" => "Rakat", _ => GameWorld.RuleObjects.Find(kind)?.Name ?? kind };
     internal static string FieldName(string field) => SystemVocabulary.Default.Find(field)?.Name ?? SystemVocabulary.Default.Observed(field)?.Name ?? field switch {
         "world.water" => "Tárolt víz", "world.temperature" => "Hőmérséklet", "forest.totalVolume" => "Élő faállomány térfogata",
         "forest.meanHeight" => "Átlagmagasság", "forest.meanDiameter" => "Átlagátmérő", "forest.meanHealth" => "Átlagos faegészség",

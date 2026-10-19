@@ -5,6 +5,7 @@
     <RollForward>Major</RollForward>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="../ForesTycoon.Editor/GameRules/default.project.json" LogicalName="ForesTycoon.Rules.DefaultProject" />
     <EmbeddedResource Include="Catalog\system-model.json" LogicalName="ForesTycoon.Rules.Catalog.system-model.json" />
   </ItemGroup>
 </Project>

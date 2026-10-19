@@ -10,7 +10,7 @@ public class ResponseRuleCardTests
     private static string State(GameWorld w) => JsonSerializer.Serialize(w.CaptureCheckpoint());
     [Fact]
     public void EveryResponseHasMeaningAndValidSuggestedOffValue() {
-        foreach (var hook in EcologyResponseProgram.Hooks) {
+        foreach (var hook in EcologyResponseProgram.Hooks.Concat(GameplayRules.Hooks)) {
             var info = ResponseRuleDescription.For(hook.Id);
             Assert.NotEmpty(info.Result); Assert.NotEmpty(info.Consumers); Assert.NotEmpty(info.FixedMeaning);
             Assert.InRange(info.SuggestedOffValue, hook.Min, hook.Max);

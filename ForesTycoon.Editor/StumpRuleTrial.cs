@@ -19,7 +19,13 @@ internal static class StumpRuleTrial
     {
         var world = new GameWorld(TerrainSettings.Default.WithNodeSize(17, 42), enableRendering: false);
         try {
-            if (!world.DiagnosticFellForestBlock(out _)) throw new InvalidDataException("Nincs kivágható fa a próbavilágban.");
+            // A controlled trial must not depend on the authored world's natural density or species mix.
+            var habitat = (IForestHabitat)world.Map;
+            var trialTiles = Enumerable.Range(0, world.Map.Tiles.Count).Where(habitat.CanSupportForest).Take(4).ToArray();
+            if (trialTiles.Length != 4) throw new InvalidDataException("Nincs négy erdősíthető cella a próbavilágban.");
+            world.Forest.Clear();
+            world.Forest.PaintInitialForest(trialTiles.ToDictionary(id => id, _ => ForestSpecies.Oak));
+            foreach (int tile in trialTiles) world.Forest.Harvest(tile, out _);
             using var stream = new MemoryStream(); world.Save(stream); stream.Position = 0;
             var data = WorldSaveSerializer.Read(stream);
             var patches = data.Checkpoint.Ecology.Forest.Trees.Patches;

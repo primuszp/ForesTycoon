@@ -88,6 +88,7 @@ namespace ForesTycoon
                 CheckStaticTerrainCache();
                 CheckScreenLineWidth();
                 CheckLocalRoadEdit();
+                CheckRoadForestContinuity();
                 CheckTerraformForestStability();
                 CheckDeferredForestBuild();
                 CheckFastForwardDetail();
@@ -578,6 +579,47 @@ namespace ForesTycoon
             forest.RefreshHabitat(Array.Empty<int>());
             Require(forest.Revision == revision, "Empty road edit refreshed the forest.");
             Console.WriteLine($"Road CPU edit ({trees} trees, {changed.Length} cells): old global refresh {globalMs:F1} ms, local build + refresh {timer.Elapsed.TotalMilliseconds:F1} ms; repeated placement no-op passed.");
+        }
+
+        private static void CheckRoadForestContinuity()
+        {
+            using var terrain = new Terrain(TerrainSettings.Default.WithNodeSize(17, 42), (_, _) => 4);
+            var stands = new ForestStand[256];
+            stands[34] = new(ForestSpecies.Oak, 40, .6f, 1);
+            stands[170] = new(ForestSpecies.Birch, 40, .6f, 1);
+            var forest = new ForestSystem(terrain.Map, stands);
+            var oldCamera = RenderDevice.ViewProjection;
+            try {
+                terrain.Map.TryGetTileCenter(170, out var center);
+                RenderDevice.SetCamera(Matrix4.CreateTranslation(-center) * Matrix4.CreateRotationX(-1f)
+                    * Matrix4.CreateOrthographic(12, 12, -100, 100));
+                terrain.SynchronousForestBuilds = true;
+                terrain.WarmIndividualForest(forest, new GraphicsSettings { Enhanced = false });
+                var before = Capture();
+                int coloured = 0;
+                for (int i = 0; i < before.Length; i += 4) if (before[i] + before[i + 1] + before[i + 2] > 0) coloured++;
+                Require(coloured > 20, "Neighbouring forest fixture was not visible.");
+                terrain.SynchronousForestBuilds = false; terrain.StreamGeometry = true;
+                int[] changed = terrain.Map.BuildRoadTilePath(34, 35);
+                forest.ClearTerrainTiles(changed);
+                Require(changed.Length > 0 && !forest.TryGetStand(34, out _) && forest.TryGetStand(170, out _),
+                    "Road did not clear only its own trees.");
+                Require(ReferenceEquals(terrain.Map.Chunks.GetByTile(34), terrain.Map.Chunks.GetByTile(170)),
+                    "Regression fixture must share one forest chunk.");
+                for (int frame = 0; frame < 8; frame++) {
+                    var after = Capture();
+                    for (int i = 0; i < before.Length; i++) Require(Math.Abs(before[i] - after[i]) <= 1,
+                        "Road construction hid or changed neighbouring trees during a deferred rebuild.");
+                }
+                Require(GL.GetError() == ErrorCode.NoError, "Road forest continuity GL error.");
+                Console.WriteLine("Road forest continuity: only road-tile ranges hidden; neighbouring tree pixels retained during deferred rebuild.");
+            }
+            finally { RenderDevice.SetCamera(oldCamera); }
+            byte[] Capture() {
+                RenderDevice.SetViewport(256, 256); RenderDevice.Clear(new Vector4(0, 0, 0, 1));
+                Draw(terrain, forest, 12); GL.Finish();
+                var pixels = new byte[256 * 256 * 4]; RenderDevice.ReadPixels(0, 0, 256, 256, pixels); return pixels;
+            }
         }
 
         private static void CheckPagedForestUpload()

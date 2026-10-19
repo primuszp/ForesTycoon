@@ -17,6 +17,7 @@ public sealed class RuleWorldCatalog
     public string ProjectName { get; set; } = "";
     public string Error { get; set; }
     public List<RuleWorldObject> Objects { get; set; } = new();
+    public RuleObjectModel ObjectModel { get; set; }
     public List<BehaviorHook> Hooks { get; set; } = new();
     public Dictionary<string, double> Fields { get; set; } = new();
     public Dictionary<string, double> Stocks { get; set; } = new();

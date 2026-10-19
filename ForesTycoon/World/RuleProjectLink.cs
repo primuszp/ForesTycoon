@@ -112,6 +112,7 @@ sealed partial class GameWorld
         Source = source, Tick = SimulationTick, Seed = map.Settings.Seed,
         AlgorithmRevision = algorithmGraphs?.Revision ?? "",
         ProjectRevision = RuleProjectDocument.ContentRevision(),
+        ObjectModel = RuleModel,
         PublishedUtc = DateTime.UtcNow.ToString("O"), ProjectName = ruleProjectName, Error = error ?? DynamicsError ?? BehaviorError,
         Objects = RuleObjectKinds
             .SelectMany(kind => BehaviorTargets(kind).Select(t => new RuleWorldObject(kind, t.Id, t.Label))).ToList(),

@@ -6,13 +6,22 @@ namespace ForesTycoon.Rules;
 /// <summary>Editable logistics decisions; stock conservation and path topology are host invariants.</summary>
 public static class LogisticsRules
 {
-    public static readonly string[] InputKeys = ["step.seconds", "machine.kind", "machine.state", "machine.cargo", "machine.capacity", "machine.wear", "machine.pace", "machine.homeRequested", "source.stock", "source.fed", "source.availableTimber", "source.reachable", "spec.fellingRate", "spec.unloadRate", "spec.speed", "spec.loadedSpeed", "spec.fuelDriving", "spec.fuelLoaded", "spec.fuelCrane", "spec.fuelFelling", "spec.emptyMass", "spec.timberDensity", "spec.loadRate", "log.volume", "log.lastVolume", "transfer.unloading", "transfer.requested", "transfer.loaded", "route.damage", "route.surface", "route.from", "route.to", "mill.stock", "mill.processed", "site.forest", "site.harvest", "site.roadAccess", "depot.count", "order.hasTimber", "order.destinationIsMill"];
+    public static readonly string[] InputKeys = ["step.seconds", "machine.kind", "machine.state", "machine.cargo", "machine.capacity", "machine.wear", "machine.pace", "machine.homeRequested", "source.stock", "source.fed", "source.availableTimber", "source.reachable", "spec.fellingRate", "spec.unloadRate", "spec.speed", "spec.loadedSpeed", "spec.fuelDriving", "spec.fuelLoaded", "spec.fuelCrane", "spec.fuelFelling", "spec.emptyMass", "spec.timberDensity", "spec.loadRate", "log.volume", "log.lastVolume", "transfer.unloading", "transfer.requested", "transfer.loaded", "route.damage", "route.surface", "route.from", "route.to", "mill.stock", "mill.processed", "site.forest", "site.harvest", "site.roadAccess", "depot.count", "order.hasTimber", "order.destinationIsMill", "workflow.stage", "workflow.arrived", "workflow.atSource", "decision.continue", "decision.deliver", "decision.fetch", "decision.return", "decision.allow", "machine.control", "machine.working", "machine.broken", "machine.hasVehicle", "machine.transit", "machine.transportState", "machine.speed", "transfer.held"];
     public static string Kind(string agent) => "logistics" + char.ToUpperInvariant(agent[0]) + agent[1..];
     public static bool IsKind(string kind) => kind is "logisticsProcessor" or "logisticsForwarder" or "logisticsTruck" or "logisticsMill" or "logisticsDepot";
     private static BehaviorHook H(string id, string name, string kind, string unit, double min, double max, string state, string amount, string schedule) =>
         new(id, name, kind, unit, min, max, state, amount, schedule, true, InputKeys.Where(key => Available(id, kind, key)).ToArray());
     private static bool Available(string id, string kind, string key)
     {
+        if (id == "supply.active") return key.StartsWith("machine.") || key is "source.stock" or "source.reachable" or "transfer.held";
+        if (key == "transfer.held") return false;
+        if (id is "control.allow" or "control.home") return key.StartsWith("machine.");
+        if (id == "control.upkeep") return key.StartsWith("machine.") || key == "decision.allow";
+        if (key == "decision.allow") return false;
+        if (id == "machine.workflow") return key is "machine.state" or "machine.cargo" or "machine.capacity" or "machine.homeRequested"
+            or "source.stock" or "source.reachable" or "workflow.stage" or "decision.continue" or "decision.deliver" or "decision.fetch" or "decision.return";
+        if (id == "truck.workflow") return key is "machine.state" or "machine.cargo" or "machine.homeRequested" or "workflow.arrived" or "workflow.atSource" or "decision.return";
+        if (key.StartsWith("workflow.") || key.StartsWith("decision.")) return false;
         if (id == "orders.allow") return key is "machine.kind" or "machine.cargo" or "machine.capacity" or "machine.wear" or "machine.homeRequested"
             || key == "source.stock" && kind != "logisticsProcessor"
             || key == "order.hasTimber" && kind == "logisticsProcessor"
@@ -25,7 +34,7 @@ public static class LogisticsRules
         if (kind == "logisticsMill") return key.StartsWith("step.") || key.StartsWith("mill.");
         if (id.StartsWith("route.")) return key.StartsWith("route.") || key is "machine.cargo" or "machine.capacity";
         if (key.StartsWith("mill.") || key.StartsWith("route.")) return false;
-        if (kind == "logisticsTruck") return key is "step.seconds" or "machine.cargo" or "machine.capacity" or "machine.kind" or "machine.wear" or "machine.homeRequested"
+        if (kind == "logisticsTruck") return key is "step.seconds" or "machine.cargo" or "machine.capacity" or "machine.kind" or "machine.wear" or "machine.homeRequested" or "machine.control"
             or "source.stock" or "transfer.requested" or "transfer.loaded" or "transfer.unloading" || id == "truck.return" && key == "source.fed";
         if (key is "transfer.requested" or "transfer.loaded") return false;
         if (key == "source.stock" && kind == "logisticsProcessor") return false;
@@ -35,6 +44,21 @@ public static class LogisticsRules
         return true;
     }
     public static readonly BehaviorHook[] Hooks = {
+        H("supply.active", "Processzor aktív utánpótlása", "logisticsProcessor", "0–1", 0, 1, "", "", "A szállítási függőségi háló bejárásakor"),
+        H("supply.active", "Forwarder aktív utánpótlása", "logisticsForwarder", "0–1", 0, 1, "", "", "A szállítási függőségi háló bejárásakor"),
+        H("supply.active", "Teherautó aktív utánpótlása", "logisticsTruck", "0–1", 0, 1, "", "", "A szállítási függőségi háló bejárásakor"),
+        H("control.allow", "Processzor vezérlési engedélye", "logisticsProcessor", "0–1", 0, 1, "", "", "Minden al-lépésben, a vezérlő és a gép mezőiből"),
+        H("control.allow", "Forwarder vezérlési engedélye", "logisticsForwarder", "0–1", 0, 1, "", "", "Minden al-lépésben, a vezérlő és a gép mezőiből"),
+        H("control.allow", "Teherautó vezérlési engedélye", "logisticsTruck", "0–1", 0, 1, "", "", "Mozgás és rakodás előtt"),
+        H("control.home", "Processzor hazahívási kérése", "logisticsProcessor", "0–1", 0, 1, "", "", "A vezérlő és az aktuális állapot alapján"),
+        H("control.home", "Forwarder hazahívási kérése", "logisticsForwarder", "0–1", 0, 1, "", "", "A vezérlő és az aktuális állapot alapján"),
+        H("control.home", "Teherautó hazahívási kérése", "logisticsTruck", "0–1", 0, 1, "", "", "A vezérlő és az aktuális állapot alapján"),
+        H("control.upkeep", "Processzor fenntartási módja", "logisticsProcessor", "mód", 0, 2, "", "", "0: nincs fenntartás, 1: szerviz, 2: üzemi kopás és javítás"),
+        H("control.upkeep", "Forwarder fenntartási módja", "logisticsForwarder", "mód", 0, 2, "", "", "0: nincs fenntartás, 1: szerviz, 2: üzemi kopás és javítás"),
+        H("control.upkeep", "Teherautó fenntartási módja", "logisticsTruck", "mód", 0, 2, "", "", "0: nincs fenntartás, 1: szerviz, 2: üzemi kopás és javítás"),
+        H("machine.workflow", "Processzor munkafázis választása", "logisticsProcessor", "művelet", 0, 5, "", "", "0: folytatás, 1: várakozás, 2: hazatérés, 3: lerakó, 4: munkahely, 5: munkakeresés"),
+        H("machine.workflow", "Forwarder munkafázis választása", "logisticsForwarder", "művelet", 0, 5, "", "", "0: folytatás, 1: várakozás, 2: hazatérés, 3: lerakó, 4: forrás, 5: munkakeresés"),
+        H("truck.workflow", "Teherautó munkafázis választása", "logisticsTruck", "művelet", 0, 3, "", "", "0: folytatás, 1: fuvar indítása, 2: hazatérés, 3: parkolás"),
         H("orders.allow", "Processzor munkára küldésének engedélyezése", "logisticsProcessor", "0–1", 0, 1, "", "", "Parancs ellenőrzésekor, útkeresés után, módosítás előtt; 1 engedélyez, 0 elutasít"),
         H("orders.allow", "Forwarder munkára küldésének engedélyezése", "logisticsForwarder", "0–1", 0, 1, "", "", "Parancs ellenőrzésekor, útkeresés után, módosítás előtt; 1 engedélyez, 0 elutasít"),
         H("orders.allow", "Teherautó munkára küldésének engedélyezése", "logisticsTruck", "0–1", 0, 1, "", "", "Parancs ellenőrzésekor, útkeresés után, módosítás előtt; 1 engedélyez, 0 elutasít"),
@@ -91,6 +115,9 @@ public static class LogisticsRules
     public static ResponseRuleDescription Description(string id)
     {
         string result = id switch {
+            "supply.active" => "A kapcsolt szállító várható utánpótlása",
+            "control.allow" => "Mozgás és munkavégzés engedélye", "control.home" => "Hazahívás kérése", "control.upkeep" => "Fenntartási művelet kiválasztása",
+            "machine.workflow" or "truck.workflow" => "A következő végrehajtandó motorművelet",
             "orders.allow" => "Az új munkamegbízás engedélye",
             "depot.allow" => "Az új telephely építési engedélye",
             "depot.processors" or "depot.forwarders" or "depot.trucks" => "Az új telephelyre létrehozott gépek száma",
@@ -104,6 +131,12 @@ public static class LogisticsRules
         };
         double off = id is "machine.mass" or "route.cost" ? 1 : id is "loading.cycleSeconds" or "transfer.duration" ? 8 : id == "loading.gripPhase" ? .32 : id == "loading.releasePhase" ? .77 : 0;
         string meaning = id switch {
+            "supply.active" => "1: ettől a szállítótól még várható utánpótlás; 0: a gráf nem tekinti aktív forrásnak. A készletküszöb és a vezérlő figyelembevétele szabadon szerkeszthető.",
+            "control.allow" => "0: várakozik; 1: végrehajthatja a munkát. A vezérlő műveleteinek jelentését ez a gráf kapcsolja a gép állapotához.",
+            "control.home" => "1: hazahívást kér; 0: nem kér. A rakomány megőrzése a végrehajtó feladata.",
+            "control.upkeep" => "0: nincs fenntartás, 1: szerviz, 2: üzemi kopás és helyszíni javítás. A feltételeket a projekt adja.",
+            "machine.workflow" => "0: jelenlegi művelet folytatása; 1: várakozás; 2: hazatérés; 3: indulás lerakni; 4: indulás dolgozni/felrakodni; 5: munkakeresés. Az elsőbbséget és feltételeket ez a gráf adja. Rakományt nem dobhat el.",
+            "truck.workflow" => "0: folytatás; 1: fuvar indítása; 2: hazatérés; 3: parkolás. Az elsőbbséget és feltételeket ez a gráf adja. Rakott vagy mozgó járművet nem tüntethet el.",
             "orders.allow" => "0: elutasítja az új megbízást, a meglévő munka és rakomány megmarad. 1: engedélyezi, ha az út és a cél ténylegesen használható. A hazahívást nem tiltja.",
             "depot.allow" => "0: új telephely nem építhető; a már létezők megmaradnak. Az 1 sem írja felül a száraz, sík, szabad épülethely követelményét.",
             "depot.processors" or "depot.forwarders" or "depot.trucks" => "0: ebből a gépfajtából nem kap új gépet. A pozitív eredmény egészrésze számít, legfeljebb 1024. A meglévő flotta nem változik.",
@@ -114,6 +147,10 @@ public static class LogisticsRules
             _ => "A játék a gráf helyett ezt a fix eredményt használja. A készlet, kapacitás és útvonal fizikai korlátai megmaradnak."
         };
         string consumer = id switch {
+            "supply.active" => "A ciklusokat kezelő ellátásiháló-bejáró és a source.fed bemenet",
+            "control.allow" or "control.home" or "control.upkeep" => "A közös gépi műveletvégrehajtó",
+            "machine.workflow" => "A szeletelt gépi műveletvégrehajtó és az útkeresés",
+            "truck.workflow" => "A teherautó fuvarindító, hazatérő és parkoló művelete",
             "orders.allow" => "A térképi célválasztás ellenőrzése és a szeletelt munkára küldési parancs",
             "depot.allow" => "Telephely építési parancs és jelenet létrehozása",
             "depot.processors" or "depot.forwarders" or "depot.trucks" => "Az új telephely szeletelt flotta-létrehozása",
@@ -135,49 +172,5 @@ public static class LogisticsRules
         };
         return new(result, consumer + ". Egyedi kötés a típusszintű gráfot helyettesíti.", off, meaning, Array.Empty<string>());
     }
-    public static BehaviorGraph DefaultGraph(BehaviorHook hook)
-    {
-        string formula = (hook.Id, hook.Kind) switch {
-            ("orders.allow", "logisticsProcessor") => "order.hasTimber",
-            ("orders.allow", "logisticsForwarder" or "logisticsTruck") => "1",
-            ("depot.allow", "logisticsDepot") => "ha(site.forest < 0.5; ha(site.harvest < 0.5; site.roadAccess; 0); 0)",
-            ("depot.processors" or "depot.forwarders" or "depot.trucks", "logisticsDepot") => "ha(depot.count < 0.5; 1; 0)",
-            ("route.cost", "logisticsProcessor") => "1",
-            ("route.allow", "logisticsProcessor") => "1",
-            ("machine.pace", "logisticsProcessor") => "machine.pace * step.seconds",
-            ("machine.speed", "logisticsProcessor") => "ha(machine.cargo > 0.5; spec.loadedSpeed; spec.speed)",
-            ("machine.fuel", "logisticsProcessor") => "ha(machine.state < 1.5; ha(machine.cargo > 0.5; spec.fuelLoaded; spec.fuelDriving); ha(machine.state < 2.5; spec.fuelFelling; spec.fuelCrane)) * step.seconds",
-            ("machine.mass", "logisticsProcessor") => "spec.emptyMass + max(0; machine.cargo) * spec.timberDensity",
-            ("route.cost", "logisticsForwarder") => "1",
-            ("route.allow", "logisticsForwarder") => "1",
-            ("machine.pace", "logisticsForwarder") => "machine.pace * step.seconds",
-            ("machine.speed", "logisticsForwarder") => "ha(machine.cargo > 0.5; spec.loadedSpeed; spec.speed)",
-            ("machine.fuel", "logisticsForwarder") => "ha(machine.state < 1.5; ha(machine.cargo > 0.5; spec.fuelLoaded; spec.fuelDriving); ha(machine.state < 2.5; spec.fuelFelling; spec.fuelCrane)) * step.seconds",
-            ("machine.mass", "logisticsForwarder") => "spec.emptyMass + max(0; machine.cargo) * spec.timberDensity",
-            ("loading.amount", "logisticsForwarder") => "min(log.volume; machine.capacity - machine.cargo)",
-            ("unloading.amount", "logisticsForwarder") => "log.lastVolume",
-            ("loading.depart", "logisticsForwarder") => "0",
-            ("route.cost", "logisticsTruck") => "ha(route.surface < 1.5; 1; ha(route.surface < 2.5; 1.15; 3.5 + 2 * route.damage))",
-            ("route.allow", "logisticsTruck") => "1",
-            ("loading.amount", "logisticsTruck") => "step.seconds * machine.capacity / 3",
-            ("unloading.amount", "logisticsTruck") => "step.seconds * machine.capacity / 3",
-            ("loading.depart", "logisticsTruck") => "ha(machine.cargo > machine.capacity - 0.001; 1; ha(transfer.loaded < 0.000001; ha(machine.cargo > 0; ha(transfer.requested > 0; 1; ha(source.stock < 0.000001; 1; 0)); 0); 0))",
-            ("loading.cycleSeconds", "logisticsForwarder") => "log.volume / ha(transfer.unloading > 0.5; spec.unloadRate; spec.loadRate)",
-            ("loading.gripPhase", "logisticsForwarder") => "0.32",
-            ("loading.releasePhase", "logisticsForwarder") => "0.77",
-            ("unloading.amount", "logisticsProcessor") => "min(machine.cargo; spec.unloadRate * step.seconds)",
-            ("machine.felling", "logisticsProcessor") => "min(spec.fellingRate * step.seconds; max(0; machine.capacity - machine.cargo))",
-            ("machine.continueFelling", "logisticsProcessor") => "ha(machine.cargo < machine.capacity - 0.001; ha(source.availableTimber > 0.001; 1; 0); 0)",
-            ("machine.deliver", "logisticsProcessor") => "ha(source.reachable < 0.5; 1; ha(machine.cargo > machine.capacity - 0.001; 1; 0))",
-            ("machine.fetch", "logisticsForwarder") => "ha(source.stock > machine.capacity * 0.5 - 0.0000001; 1; ha(source.stock > 0.01; ha(source.fed < 0.5; 1; 0); 0))",
-            ("machine.deliver", "logisticsForwarder") => "ha(machine.cargo > 0.0001; 1; 0)",
-            ("machine.return", "logisticsForwarder") => "ha(source.fed < 0.5; 1; 0)",
-            ("truck.return", "logisticsTruck") => "ha(source.stock < 0.010000001; ha(source.fed < 0.5; 1; 0); 0)",
-            ("mill.process", "logisticsMill") => "min(mill.stock; step.seconds * 0.25)",
-            ("transfer.duration", "logisticsTruck") => "3",
-            _ => throw new ArgumentException("Unknown logistics hook.", nameof(hook))
-        };
-        return RuleFormula.Compile(formula, new() { Id = "default." + hook.Kind + "." + hook.Id, Name = hook.Name, Hook = hook.Id, Kind = hook.Kind },
-            hook.Inputs.Select(k => new FormulaName(k, BehaviorOperation.Input, k)).ToArray());
-    }
+    public static BehaviorGraph DefaultGraph(BehaviorHook hook) => RuleProject.DefaultGraph(hook);
 }

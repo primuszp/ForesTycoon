@@ -135,6 +135,7 @@ namespace ForesTycoon
         internal System.Collections.Generic.IReadOnlyList<Vehicle> Vehicles => vehicles.Vehicles;
         public ForestStatistics ForestStatistics => forest.Statistics;
         internal ForestSystem Forest => forest;
+        internal WildlifeSystem Wildlife => wildlife;
         internal int ForestTreeCount => forest.IndividualTreeCount;
         internal float LastAnnualForestGrowth => forest.LastAnnualGrowthCubicMetres;
         public float TimberStockpile => Logistics.Remaining;
@@ -354,7 +355,7 @@ namespace ForesTycoon
         internal double Income => Logistics?.Income ?? 0;
         /// <summary>Everything spent: building, repairs, fuel, thousand forints.</summary>
         internal double Spending => Expenses + (Logistics?.RunningCosts ?? 0);
-        internal double Balance => Income - Spending;
+        internal double Balance => behaviorPolicy.Gameplay.Evaluate("economy.balance", Income, Expenses, Logistics?.RunningCosts ?? 0);
         internal void QueueSendHome(int vehicleId, bool truck) => Enqueue(new SendHomeCommand(vehicleId, truck));
         void IWorldCommandTarget.ExecutePlaceDepot(int tileId) { Logistics?.PlaceDepot(tileId); }
         void IWorldCommandTarget.ExecuteSendVehicle(int vehicleId, int tileId, int destination, bool truck)
@@ -428,7 +429,7 @@ namespace ForesTycoon
         /// <summary>The credit line gates new spending; the refusal is part of the deterministic command result.</summary>
         private bool Fundable()
         {
-            if (Economy.CanInvest(Balance, Tuning[Tune.CreditLimit])) return true;
+            if (behaviorPolicy.Gameplay.Evaluate("economy.invest", Balance, Tuning[Tune.CreditLimit]) >= .5) return true;
             if (Logistics != null) Logistics.Status = Economy.NoFunds;
             return false;
         }

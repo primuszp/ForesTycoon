@@ -18,7 +18,6 @@ internal sealed partial class RuleEditorView
     private int draggedPoint = -1;
     private (double X0, double X1, double Y0, double Y1)? draggedBounds;
     private string draggedCurve;
-    private readonly HashSet<string> formulaView = new(StringComparer.Ordinal);
 
     /// <summary>Draws the editor; returns true while it changed the curve, and sets <paramref name="finished"/> when an edit is complete.</summary>
     private bool CurveEditor(string id, RuleCurve curve, string scope, IReadOnlyList<string> inputs, ref bool finished, bool bindings = true)

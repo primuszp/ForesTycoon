@@ -70,7 +70,7 @@ internal static partial class WorldLoader
     internal static GameWorld CreateProject(RuleProject project, bool enableRendering = false)
     {
         ArgumentNullException.ThrowIfNull(project);
-        var copy = project.Clone();
+        var copy = GameWorld.NormalizeRuleProject(project);
         GameWorld.ValidateRuleProject(copy);
         var world = copy.World == null ? CreateOpening(false) : copy.World.InitialState != null ?
             new GameWorld(TerrainSettings.Default.WithNodeSize(17, 42), enableRendering: false) :

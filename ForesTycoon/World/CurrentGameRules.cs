@@ -111,8 +111,8 @@ namespace ForesTycoon
                 "A talajpárolgás és a növényzeti vízigény ugyanabból a helyi légköri kényszerből származik.",
                 "E = (0,12 + max(0,T) × 0,015) × sugárzás × (1 - 0,5 × pára) × (1 + 0,035 × szél)", execution: GameRuleExecution.EditableGraph);
 
-            // The water balance is the project's stock-and-flow rules (WaterRules): every flow is an editable graph.
-            const string waterRules = "ForesTycoon.Rules/WaterRules.cs";
+            // The water balance is authored in the Editor project: every flow is an editable graph.
+            const string waterRules = "ForesTycoon.Editor/GameRules/default.project.json";
             Add("water.precipitation", "Csapadék, hóesés és források", "Vízháztartás", "Térképcella", "Szabálylépés", waterRules, "water.precipitation",
                 "weather.rain|weather.snowfall|climate.rainMultiplier|forest.canopy|water.canopy", "water.canopy|water.surface|water.snow",
                 "Áramlások kívülről: az eső a koronák borításuk és telítettségük szerint a lombkoronára, a többi a felszínre hull; a hó a hótakaróba, a források vize a felszínre kerül.",
@@ -163,12 +163,12 @@ namespace ForesTycoon
             Add("forest.initial", "Induló erdő eloszlása", "Erdő", "Térképcella / egyed", "Új világ", forest, "GenerateInitialForest",
                 "world.seed|terrain.height|terrain.moisture|soil.profile|forest.species", "forest.trees", "Termőhelyből és seedből induló természetes vagy választott erdőminta; egyedi életkor, méret, hely és változatosság.");
             Add("forest.initialSize", "Fák kezdő méretgörbéi", "Erdő", "Új faegyed", "Minden fa létrehozásakor",
-                "ForesTycoon.Rules/TreeInitialSizeRules.cs", "DefaultGraph", "forest.species|forest.trees|world.seed", "forest.trees",
+                "ForesTycoon.Editor/GameRules/default.project.json", "forest.initialHeight", "forest.species|forest.trees|world.seed", "forest.trees",
                 "A projekt három gráfja adja az új fa magasságát, törzsátmérőjét és koronasugarát. Ugyanez fut a generálás, erdőfestés, ültetés és természetes újulat során, egyedenként szeletelve.", execution: GameRuleExecution.EditableGraph);
             Add("forest.site", "Termőhelyi alkalmasság", "Erdő", "Cella / fafaj", "Generálás, fajajánló, telepítés és rátafrissítés", "ForesTycoon.Rules/EcologyResponseProgram.cs", "Fitness",
                 "terrain.height|soil.fertility|forest.species", "forest.fitness", "Egy közös projektgráf adja a fafaj termőhelyi alkalmasságát minden hívónak. A nedvesség is beköthető; az alapgráf a termékenységet és a faj magasságigényét használja.", execution: GameRuleExecution.EditableGraph);
             Add("forest.competition", "Fény- és koronatér-versengés", "Erdő", "Faegyed és két szomszédsági gyűrű",
-                "Havi előkészítés / helyi beavatkozás", "ForesTycoon.Rules/ForestCompetitionRules.cs", "DefaultGraph",
+                "Havi előkészítés / helyi beavatkozás", "ForesTycoon.Editor/GameRules/default.project.json", "forest.shading",
                 "forest.trees|weather.forcing|water.growthFactor|forest.species", "forest.resources",
                 "A projekt fapáronkénti árnyékolás- és térterhelésgráfjai, majd összesítő fény-, tér-, fajválasz- és erőforráskorlát-gráfjai. A motor csak a közös geometriapillanatképet és a sorrendtartó, szeletelt összegzést adja. Nincs külön gyökérverseny-büntetés.", execution: GameRuleExecution.EditableGraph);
             Add("forest.growth", "Fák növekedése", "Erdő", "Faegyed", "Havi és helyi rátafrissítés",
@@ -179,7 +179,7 @@ namespace ForesTycoon
                     "ForesTycoon.Rules/TreeVitalityRules.cs", "Defaults",
                     "forest.resources|forest.fitness|forest.species|forest.health|forest.stress|calendar.time",
                     vitality.Id == "forest.mortality" ? "forest.trees|forest.deadwood" : vitality.Id, vitality.Description, execution: GameRuleExecution.EditableGraph);
-            Add("forest.regeneration", "Természetes újulat", "Erdő", "Üres cella és magszóró szomszédok", "Erdőhónap", "ForesTycoon.Rules/ForestRegenerationRules.cs", "DefaultGraph",
+            Add("forest.regeneration", "Természetes újulat", "Erdő", "Üres cella és magszóró szomszédok", "Erdőhónap", "ForesTycoon.Editor/GameRules/default.project.json", "forest.germination",
                 "forest.trees|forest.species|forest.fitness|world.seed|calendar.time|road.network|buildings.footprint", "forest.trees",
                 "A projekt gráfjai adják a magadó képességet, a megtelepedő faj pontszámát, a csírázást és az újulat kezdő állapotát. Szeletelt szomszédvizsgálat és determinisztikus sorsolás.", execution: GameRuleExecution.EditableGraph);
             Add("forest.canopy", "Lombborítás és vízigény visszacsatolása", "Erdő", "Térképcella", "Erdőrevízió-változás",
@@ -194,7 +194,7 @@ namespace ForesTycoon
                 "harvest.sites|forest.trees|machine.work", "forest.trees|forest.stumps|timber.localDepot",
                 "Egész fák kerülnek a helyi rönkdepóba. Részrakodás nem zsugorítja a megmaradt fákat; a fák térfogata és a tönk mérete megmarad.", "V = π × átmérő² / 4 × magasság × 0,45");
             Add("forest.stumps", "Tönkök lebomlása", "Erdészeti beavatkozás", "Kivágott fa helye", "Szabálylépés / megjelenítés",
-                "ForesTycoon.Rules/StumpDecayRule.cs", "Default", "forest.stumps|terrain.moisture|calendar.time", "forest.stumps",
+                "ForesTycoon.Editor/GameRules/default.project.json", "forest.stumps", "forest.stumps|terrain.moisture|calendar.time", "forest.stumps",
                 "A nedvesség gyorsítja, az átmérő lassítja a lebomlást. A szerkeszthető gráf teljes lebomláskor távolítja el a tönköt; a telepítést nem akadályozza.", "megszűnik, ha decayProgress ≥ 1", GameRuleExecution.EditableExpressions);
 
             var build = Add("road.build", "Útépítés és hálózat", "Utak és nyomok", "Útvonal cellái", "Játékosparancs", game, "ExecuteRoadPath",
@@ -213,7 +213,7 @@ namespace ForesTycoon
             var trail = Add("trail.build", "Közelítőnyom kijelölése", "Utak és nyomok", "Útvonal cellái", "Játékosparancs", game, "ExecuteSkidTrailPath",
                 "commands|terrain.water|buildings.footprint|road.network|economy.result", "trail.network|economy.expenses", "Csak a hitelkereten belüli egyenlegnél indul. Ideiglenes nyom száraz, épület nélküli talajon, az úthálózathoz csatlakozva; a növényzet nem teljes útépítésként kezelődik.");
             var age = Add("trail.age", "Nyom regenerációja és benövése", "Utak és nyomok", "Nyomcsempe", "Út-időjárási frissítés",
-                "ForesTycoon.Rules/TrailAgeRule.cs", "Default", "trail.wear|trail.idle|calendar.time", "trail.wear|trail.idle|trail.network",
+                "ForesTycoon.Editor/GameRules/default.project.json", "trail.age", "trail.wear|trail.idle|calendar.time", "trail.wear|trail.idle|trail.network",
                 "A gráfos szabály alapbeállítása: a vályú évente 0,4-et enyhül; a két szerkeszthető feltétel (elég használat nélküli idő és kis vályúmélység) együtt váltja ki a megszűnést. Az útvonalak újraellenőrződnek.",
                 "kopás = max(0; kopás − 0,4 × lépés); tétlenség += lépés; megszűnik, ha tétlenség ≥ benövés és kopás ≤ 0,001", GameRuleExecution.EditableExpressions);
             Add("route.find", "Hálózati útvonalkeresés", "Járművek", "Hálózat / forrás és cél", "Utasítás / hálózatváltozás",
@@ -327,6 +327,12 @@ namespace ForesTycoon
             Add("visual.roads", "Útburkolat, kátyú és nyomvályú", "Megjelenítés", "Út- vagy nyomcsempe", "Renderképkocka",
                 "ForesTycoon/Terrain/Render/Terrain.RoadRender.cs", "DrawRoadPotholes", "road.network|road.condition|trail.network|trail.wear|terrain.height|weather.forcing", "visual.roads",
                 "Burkolatfüggő felület, sérültség szerinti kátyúk, terephez illesztett nyomvályúk és csatlakozó lejárók. A látvány az út és nyom állapotát követi.", "", GameRuleExecution.Presentation);
+            foreach (var entry in GameplayRules.CatalogHooks) {
+                var rule = catalog.Rules.Single(r => r.Id == entry.Key);
+                rule.Execution = GameRuleExecution.EditableGraph;
+                rule.Sources.Add(new("ForesTycoon.Editor/GameRules/default.project.json", entry.Value[0]));
+                rule.Reads = rule.Reads.Append("rules.behaviors").Distinct().ToArray();
+            }
             // Every tunable number appears at its rule, editable in the editor and applied to the world as one journaled change.
             foreach (var spec in GameTuning.Specs)
             {
@@ -341,7 +347,7 @@ namespace ForesTycoon
                 rule.Reads = rule.Reads.Append("machine.controllerState").ToArray();
             catalog.Gaps.AddRange(new[] {
                 "A logisztikai döntések mért bemenetekből, a közös Szabályok gráfjaiból futnak. A fizikai átadás, útgeometria és készletkönyvelés motorfeladat; új játékosparancs és tetszőleges fizikai munkafázis még nem hozható létre.",
-                "A talaj-, klíma- és fafajparaméterek egyelőre csak tájékoztató adatok: a világ létrehozásakor rögzülnek, a szerkesztőből nem hangolhatók.",
+                "A talaj-, klíma- és fafajparaméterek a projekt szerkeszthető típusadatai; a rájuk épülő állapotváltozások a szabályokban adhatók meg.",
                 "Talajtömörödés, erózió és útkialakítás miatti részletes vízelvezető műtárgyak nincsenek külön folyamatként megvalósítva.",
                 "A vadak nem rágják a csemetéket; kártevő-, fertőzés- és tűzterjedési rendszer még nincs.",
                 "Gyérítés, ápolás és ezek pénzügyi költsége még nem külön játékosparancs; telepítés és kitermelés van.",

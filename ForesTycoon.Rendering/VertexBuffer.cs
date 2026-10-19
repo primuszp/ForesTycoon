@@ -38,6 +38,7 @@ namespace ForesTycoon.Rendering
         }
         public void DrawArray() { CheckOwner(); backend.DrawArray(true); }
         internal void DrawArray(bool useGeometryShader) { CheckOwner(); backend.DrawArray(useGeometryShader); }
+        internal void DrawRange(int first, int count, bool useGeometryShader = true) { CheckOwner(); backend.DrawRange(first, count, useGeometryShader); }
         public void DrawElements() { CheckOwner(); backend.DrawElements(); }
         internal void ReadVertices(Vertex[] destination) { CheckOwner(); backend.ReadVertices(destination); }
         private bool disposed;

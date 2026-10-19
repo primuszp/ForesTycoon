@@ -424,22 +424,6 @@ namespace ForesTycoon
             for(int i=0;i<count;i++) DrawLog(placement, ForwarderLoading.Slot(i, false));
         }
 
-        private bool TryStackModel(int size)
-        {
-            if (stacks[size] != null) return true;
-            if (!stackTried[size])
-            {
-                stackTried[size] = true;
-                string path = Path.Combine(AppContext.BaseDirectory, "Assets", "Licensed", StackSizes[size].File);
-                if (!File.Exists(path)) return false;
-                stacks[size] = AnimatedGlbModel.Load(path);
-                stackRenderers[size] = new AnimatedModelRenderer(stacks[size]);
-                stackPoses[size] = stacks[size].CreatePose();
-                stackPoses[size].Evaluate(null, 0);
-            }
-            return stacks[size] != null;
-        }
-
         /// <summary>A round log: an eight-sided bark mantle with light cut ends, from <paramref name="a"/> to <paramref name="b"/>.</summary>
         private static void RoundLog(Matrix4 frame, Vector3 a, Vector3 b, float radius, int seed)
         {

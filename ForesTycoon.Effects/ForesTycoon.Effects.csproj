@@ -10,7 +10,6 @@
     <RootNamespace>ForesTycoon.Effects</RootNamespace>
     <AssemblyName>ForesTycoon.Effects</AssemblyName>
     <RollForward>Major</RollForward>
-    <NoWarn>NU1701</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

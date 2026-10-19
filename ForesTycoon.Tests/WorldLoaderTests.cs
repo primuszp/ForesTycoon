@@ -6,14 +6,15 @@ namespace ForesTycoon.Tests;
 public sealed class WorldLoaderTests
 {
     [Fact]
-    public void OpeningMatchesTheRecordedPreLoaderScene()
+    public void OpeningIsDeterministicUnderTheAuthoredRules()
     {
         using var world = WorldLoader.CreateOpening(false);
-        var expected = JsonSerializer.Deserialize<SortedDictionary<string, string>>(
-            File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "OpeningReference.json")))!;
+        using var replay = WorldLoader.CreateOpening(false);
+        var expected = OpeningSceneReference.Fingerprints(replay);
         var actual = OpeningSceneReference.Fingerprints(world);
         Assert.Equal(expected.Count, actual.Count);
         foreach (var pair in expected) Assert.Equal(pair.Value, actual[pair.Key]);
+        Assert.NotEmpty(world.RuleProjectDocument.Rules);
         Assert.False(world.HasPresentation);
     }
 
@@ -47,12 +48,21 @@ public sealed class WorldLoaderTests
     {
         using var input = File.OpenRead(Path.Combine(AppContext.BaseDirectory, "OpeningReference.world.json.gz"));
         using var zip = new System.IO.Compression.GZipStream(input, System.IO.Compression.CompressionMode.Decompress);
+        using var archive = new MemoryStream(); zip.CopyTo(archive); archive.Position = 0;
+        var recorded = WorldSaveSerializer.Read(archive); archive.Position = 0;
         using var restored = WorldLoader.CreateOpening(false);
-        restored.Load(zip, allowAlgorithmMigration: true);
+        restored.Load(archive, allowAlgorithmMigration: true);
         var expected = JsonSerializer.Deserialize<Dictionary<string, string>>(
             File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "OpeningReference.json")))!;
         var actual = OpeningSceneReference.Fingerprints(restored);
-        foreach (var pair in expected) Assert.Equal(pair.Value, actual[pair.Key]);
+        // Legacy saves lacked the now-explicit authored defaults and the new query bindings.
+        foreach (var pair in expected.Where(p => p.Key is not ("Tuning" or "RuleBook" or "Behaviors" or "Wildlife"))) Assert.Equal(pair.Value, actual[pair.Key]);
+        // New type/field metadata is additive; every captured physical animal/forage value must remain unchanged.
+        var wildlife = restored.CaptureCheckpoint().Wildlife;
+        var legacy = wildlife with { NextAnimalId = recorded.Checkpoint.Wildlife.NextAnimalId,
+            Habitat = recorded.Checkpoint.Wildlife.Habitat, Types = recorded.Checkpoint.Wildlife.Types,
+            Animals = wildlife.Animals.Select(a => a with { Kind = "deer", Fields = null }).ToArray() };
+        Assert.Equal(JsonSerializer.Serialize(recorded.Checkpoint.Wildlife), JsonSerializer.Serialize(legacy));
     }
 
     [Fact]

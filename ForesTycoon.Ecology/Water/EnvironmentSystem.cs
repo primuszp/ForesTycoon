@@ -298,8 +298,6 @@ namespace ForesTycoon.Ecology
             foreach (int work in snowFlux.CommitWork(snow)) yield return work;
         }
 
-        private void Summarize() => SimulationWork.Complete(SummarizeWork());
-
         private IEnumerable<int> SummarizeWork()
         {
             double water = 0, root = 0, cover = 0;

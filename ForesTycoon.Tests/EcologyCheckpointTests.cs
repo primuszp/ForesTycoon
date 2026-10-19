@@ -100,10 +100,16 @@ public class EcologyCheckpointTests
     [Fact]
     public void WildlifeAndForageResumeFromTheirOwnClocksAndSeeds()
     {
-        var map = new TerrainMap(Settings); var forest = new ForestSystem(map);
-        var original = new WildlifeSystem(); original.Update(1.33, map, forest, null);
-        var clone = new WildlifeSystem(); clone.Restore(JsonSerializer.Deserialize<WildlifeCheckpoint>(Json(original.Capture()))!, map.Tiles.Count);
-        for (int i = 0; i < 100; i++) { original.Update(.1333, map, forest, null); clone.Update(.1333, map, forest, null); }
+        using var world = new GameWorld(Settings, enableRendering: false);
+        using var other = new GameWorld(Settings, enableRendering: false);
+        var original = world.Wildlife; var clone = other.Wildlife;
+        original.Animals.Add(new WildlifeSystem.Deer { Id = 1, TileId = 5, TargetTile = 5 }); original.NextAnimalId = 2;
+        var p = world.RuleProjectDocument; p.Rules.RemoveAll(r => r.Id == "wildlife.reconcile");
+        world.QueueRuleProject(p); world.ExecutePendingCommands(); other.QueueRuleProject(p); other.ExecutePendingCommands();
+        original.Update(1.33, world.Map, world.Forest, null);
+        clone.Restore(JsonSerializer.Deserialize<WildlifeCheckpoint>(Json(original.Capture()))!, other.Map.Tiles.Count);
+        for (int i = 0; i < 100; i++) { original.Update(.1333, world.Map, world.Forest, null); clone.Update(.1333, other.Map, other.Forest, null); }
+        Assert.NotEmpty(original.Animals); Assert.True(original.Animals[0].Age > 1.33);
         Assert.Equal(Json(original.Capture()), Json(clone.Capture()));
     }
 

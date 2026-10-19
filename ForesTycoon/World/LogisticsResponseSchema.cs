@@ -3,7 +3,7 @@ using ForesTycoon.Rules;
 namespace ForesTycoon;
 
 [RuleEntity("logisticsProcessor", Abstract = true, Display = "Processzor válasza")]
-internal interface ILogisticsProcessorQuery
+internal interface ILogisticsProcessorQuery : ILogisticsWorkflowQuery
 {
     [RuleRelation("A tervezett megbízás adatai", Display = "Megbízás")] ILogisticsOrder Order { get; }
     [RuleRelation("A szabály futásakor mért bemenet", Display = "Időlépés")] ILogisticsStep Step { get; }
@@ -15,7 +15,7 @@ internal interface ILogisticsProcessorQuery
     [RuleRelation("A szabály futásakor mért bemenet", Display = "Útvonal")] ILogisticsRoute Route { get; }
 }
 [RuleEntity("logisticsForwarder", Abstract = true, Display = "Forwarder válasza")]
-internal interface ILogisticsForwarderQuery
+internal interface ILogisticsForwarderQuery : ILogisticsWorkflowQuery
 {
     [RuleRelation("A tervezett megbízás adatai", Display = "Megbízás")] ILogisticsOrder Order { get; }
     [RuleRelation("A szabály futásakor mért bemenet", Display = "Időlépés")] ILogisticsStep Step { get; }
@@ -27,7 +27,7 @@ internal interface ILogisticsForwarderQuery
     [RuleRelation("A szabály futásakor mért bemenet", Display = "Útvonal")] ILogisticsRoute Route { get; }
 }
 [RuleEntity("logisticsTruck", Abstract = true, Display = "Teherautó válasza")]
-internal interface ILogisticsTruckQuery
+internal interface ILogisticsTruckQuery : ILogisticsWorkflowQuery
 {
     [RuleRelation("A tervezett megbízás adatai", Display = "Megbízás")] ILogisticsOrder Order { get; }
     [RuleRelation("A szabály futásakor mért bemenet", Display = "Időlépés")] ILogisticsStep Step { get; }
@@ -37,6 +37,28 @@ internal interface ILogisticsTruckQuery
     [RuleRelation("A szabály futásakor mért bemenet", Display = "Rönk")] ILogisticsLog Log { get; }
     [RuleRelation("A szabály futásakor mért bemenet", Display = "Rakodási lépés")] ILogisticsTransfer Transfer { get; }
     [RuleRelation("A szabály futásakor mért bemenet", Display = "Útvonal")] ILogisticsRoute Route { get; }
+}
+[RuleEntity("logisticsWorkflowQuery", Abstract = true, Display = "Munkafázis-választás")]
+internal interface ILogisticsWorkflowQuery
+{
+    [RuleRelation("A végrehajtó által mért geometriai és időzítési adatok", Display = "Munkafolyamat")] ILogisticsWorkflow Workflow { get; }
+    [RuleRelation("A projekt más döntési gráfjainak eredménye", Display = "Kapcsolt döntések")] ILogisticsDecisions Decision { get; }
+}
+[RuleEntity("logisticsWorkflowInput", Abstract = true, Display = "Munkafolyamat")]
+internal interface ILogisticsWorkflow
+{
+    [RuleField("0: helyi munkalépés után, 1: munkakeresés után.", Display = "Döntési pont")] double Stage { get; }
+    [RuleField("A jármű elérte az útvonal végét.", Display = "Megérkezett")] bool Arrived { get; }
+    [RuleField("A teherautó a forrásnál vár vagy rakodik.", Display = "Forrásnál áll")] bool AtSource { get; }
+}
+[RuleEntity("logisticsDecisionInput", Abstract = true, Display = "Kapcsolt döntések")]
+internal interface ILogisticsDecisions
+{
+    [RuleField("A projekt vezérlési engedélye.", Display = "Munkavégzés engedélye")] double Allow { get; }
+    [RuleField("A vágás folytatásának projektgráfja.", Display = "Vágás folytatása")] double Continue { get; }
+    [RuleField("A lerakás kérésének projektgráfja.", Display = "Lerakás kérése")] double Deliver { get; }
+    [RuleField("A forráshoz indulás projektgráfja.", Display = "Felrakodás kérése")] double Fetch { get; }
+    [RuleField("A megbízás befejezésének projektgráfja.", Display = "Hazatérés kérése")] double Return { get; }
 }
 [RuleEntity("logisticsMill", Abstract = true, Display = "Malom válasza")]
 internal interface ILogisticsMillQuery
@@ -52,6 +74,13 @@ internal interface ILogisticsStep
 [RuleEntity("logisticsMachineInput", Abstract = true, Display = "Gép / jármű")]
 internal interface ILogisticsMachine
 {
+    [RuleField("A projekt vezérlőjének kiválasztott művelete.", Display = "Vezérlő művelete")] BehaviorAction Control { get; }
+    [RuleField("Van aktív megbízása.", Display = "Megbízást végez")] bool Working { get; }
+    [RuleField("A gép meghibásodási állapota.", Display = "Meghibásodott")] bool Broken { get; }
+    [RuleField("A flottagépnek van fizikai közúti járműve.", Display = "Jármű a pályán")] bool HasVehicle { get; }
+    [RuleField("Megközelítő vagy hazatérő útvonalat jár.", Display = "Átmeneti útvonal")] bool Transit { get; }
+    [RuleField("A fizikai jármű szállítási fázisa.", Display = "Szállítási fázis")] VehicleTransportState TransportState { get; }
+    [RuleField("A jármű tényleges haladási sebessége.", Display = "Tényleges sebesség", Min = 0)] double Speed { get; }
     [RuleField("Gépfajta (0 processzor, 1 forwarder, 2 teherautó): a szabály futásakor rögzített bemenet.", Display = "Gépfajta (0 processzor, 1 forwarder, 2 teherautó)", Unit = "")] double Kind { get; }
     [RuleField("0 pihen, 1 halad, 2 vág, 3 felrakodik, 4 lerakodik. A szabály futásakor mért fázis.", Display = "Munkafázis", Unit = "")] double State { get; }
     [RuleField("Rakomány: a szabály futásakor rögzített bemenet.", Display = "Rakomány", Unit = "m³")] double Cargo { get; }
@@ -92,6 +121,7 @@ internal interface ILogisticsLog
 [RuleEntity("logisticsTransferInput", Abstract = true, Display = "Rakodási lépés")]
 internal interface ILogisticsTransfer
 {
+    [RuleField("A daruban lefoglalt, még át nem adott készlet.", Display = "Megfogott faanyag", Unit = "m³")] double Held { get; }
     [RuleField("Lerakodás folyik: a szabály futásakor rögzített bemenet.", Display = "Lerakodás folyik", Unit = "")] double Unloading { get; }
     [RuleField("Kért mennyiség: a szabály futásakor rögzített bemenet.", Display = "Kért mennyiség", Unit = "m³")] double Requested { get; }
     [RuleField("Ténylegesen felrakott mennyiség: a szabály futásakor rögzített bemenet.", Display = "Ténylegesen felrakott mennyiség", Unit = "m³")] double Loaded { get; }

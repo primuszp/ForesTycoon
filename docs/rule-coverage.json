@@ -29,7 +29,7 @@
         "terrain.hydrology"
       ],
       "editor": "Pálya; generálási beállítások.",
-      "remaining": "Az algoritmus motor marad; az eloszlási profilok és válaszfüggvények még nem szabad gráfok.",
+      "remaining": "A kezdeti terep és vízhálózat geometriai generálása motoralgoritmus, a beállítások pályaadatok. A futó víz- és erdőfolyamatok külön projektgráfok.",
       "tests": [
         "ForesTycoon.Tests/ForegroundWorkTests.cs"
       ]
@@ -53,10 +53,11 @@
         "machine.controller"
       ],
       "editor": "Szabályok → Gépek munkaciklusai / Folyamatkapcsolatok.",
-      "remaining": "Szerkeszthető vezérlő vagy eredménykapcsolat; a natív alapfolyamat átvezetése még hiányzik.",
+      "remaining": "A vezérlő állapotgépe szerkeszthető. A control.allow, control.home, control.upkeep, supply.active és workflow gráfok adják a végrehajtási döntéseket; az értelmező és a fizikai műveletek motorfeladatok.",
       "tests": [
         "ForesTycoon.Tests/TransportRuleTests.cs",
-        "ForesTycoon.Tests/FullRuleEditorTests.cs"
+        "ForesTycoon.Tests/FullRuleEditorTests.cs",
+        "ForesTycoon.Tests/RuleCompositionTests.cs"
       ]
     },
     {
@@ -112,7 +113,7 @@
       ]
     },
     {
-      "status": "pending",
+      "status": "graph",
       "ids": [
         "forest.initial",
         "forest.plant",
@@ -129,11 +130,14 @@
         "wildlife.forage",
         "wildlife.movement"
       ],
-      "editor": "Pálya és játékparancsok, hangolási adatok; általános hatásgráf nincs.",
-      "remaining": "6. csomag: eloszlás, műveleti feltételek, költségek, bevételek és vadak döntései. Könyvelés és geometria motor marad.",
+      "editor": "Szabályok → Játékszabály gráfok; az alapdefiníció az Editor/GameRules/default.project.json dokumentumban.",
+      "remaining": "A döntések projektgráfok. A motor végzi a geometriai érvényességet, a térfogat-érték megőrzését és az állapotváltozás végrehajtását. Új parancstípus és fizikai munkafázis továbbra is motorbővítést igényel.",
       "tests": [
+        "ForesTycoon.Tests/GameplayAuthoringTests.cs",
+        "ForesTycoon.Tests/AutomaticAnimalModelTests.cs",
+        "ForesTycoon.Tests/RuleCompositionTests.cs",
         "ForesTycoon.Tests/EconomyFeedbackTests.cs",
-        "ForesTycoon.Tests/ForegroundWorkTests.cs"
+        "ForesTycoon.Tests/MissionTests.cs"
       ]
     },
     {
@@ -373,7 +377,7 @@
         "visual.tree"
       ],
       "editor": "Megjelenítés; most nem része az átvezetésnek.",
-      "remaining": "A szimulációs szabályok lezárása után vizsgálandó.",
+      "remaining": "Rajzolás, animáció és vizuális geometria; a szimuláció eredményének megjelenítése motorfeladat.",
       "tests": [
         "ForesTycoon.Tests/CurrentGameRulesTests.cs"
       ]
@@ -384,7 +388,7 @@
         "visual.truck"
       ],
       "editor": "Megjelenítés; most nem része az átvezetésnek.",
-      "remaining": "A szimulációs szabályok lezárása után vizsgálandó.",
+      "remaining": "Rajzolás, animáció és vizuális geometria; a szimuláció eredményének megjelenítése motorfeladat.",
       "tests": [
         "ForesTycoon.Tests/CurrentGameRulesTests.cs"
       ]
@@ -395,7 +399,7 @@
         "visual.weather"
       ],
       "editor": "Megjelenítés; most nem része az átvezetésnek.",
-      "remaining": "A szimulációs szabályok lezárása után vizsgálandó.",
+      "remaining": "Rajzolás, animáció és vizuális geometria; a szimuláció eredményének megjelenítése motorfeladat.",
       "tests": [
         "ForesTycoon.Tests/CurrentGameRulesTests.cs"
       ]
@@ -406,7 +410,7 @@
         "visual.phenology"
       ],
       "editor": "Megjelenítés; most nem része az átvezetésnek.",
-      "remaining": "A szimulációs szabályok lezárása után vizsgálandó.",
+      "remaining": "Rajzolás, animáció és vizuális geometria; a szimuláció eredményének megjelenítése motorfeladat.",
       "tests": [
         "ForesTycoon.Tests/CurrentGameRulesTests.cs"
       ]
@@ -417,7 +421,7 @@
         "visual.deadwood"
       ],
       "editor": "Megjelenítés; most nem része az átvezetésnek.",
-      "remaining": "A szimulációs szabályok lezárása után vizsgálandó.",
+      "remaining": "Rajzolás, animáció és vizuális geometria; a szimuláció eredményének megjelenítése motorfeladat.",
       "tests": [
         "ForesTycoon.Tests/CurrentGameRulesTests.cs"
       ]
@@ -428,7 +432,7 @@
         "visual.machines"
       ],
       "editor": "Megjelenítés; most nem része az átvezetésnek.",
-      "remaining": "A szimulációs szabályok lezárása után vizsgálandó.",
+      "remaining": "Rajzolás, animáció és vizuális geometria; a szimuláció eredményének megjelenítése motorfeladat.",
       "tests": [
         "ForesTycoon.Tests/CurrentGameRulesTests.cs"
       ]
@@ -439,7 +443,7 @@
         "visual.buildings"
       ],
       "editor": "Megjelenítés; most nem része az átvezetésnek.",
-      "remaining": "A szimulációs szabályok lezárása után vizsgálandó.",
+      "remaining": "Rajzolás, animáció és vizuális geometria; a szimuláció eredményének megjelenítése motorfeladat.",
       "tests": [
         "ForesTycoon.Tests/CurrentGameRulesTests.cs"
       ]
@@ -450,7 +454,7 @@
         "visual.animals"
       ],
       "editor": "Megjelenítés; most nem része az átvezetésnek.",
-      "remaining": "A szimulációs szabályok lezárása után vizsgálandó.",
+      "remaining": "Rajzolás, animáció és vizuális geometria; a szimuláció eredményének megjelenítése motorfeladat.",
       "tests": [
         "ForesTycoon.Tests/CurrentGameRulesTests.cs"
       ]
@@ -461,7 +465,7 @@
         "visual.fish"
       ],
       "editor": "Megjelenítés; most nem része az átvezetésnek.",
-      "remaining": "A szimulációs szabályok lezárása után vizsgálandó.",
+      "remaining": "Rajzolás, animáció és vizuális geometria; a szimuláció eredményének megjelenítése motorfeladat.",
       "tests": [
         "ForesTycoon.Tests/CurrentGameRulesTests.cs"
       ]
@@ -472,7 +476,7 @@
         "visual.terrain"
       ],
       "editor": "Megjelenítés; most nem része az átvezetésnek.",
-      "remaining": "A szimulációs szabályok lezárása után vizsgálandó.",
+      "remaining": "Rajzolás, animáció és vizuális geometria; a szimuláció eredményének megjelenítése motorfeladat.",
       "tests": [
         "ForesTycoon.Tests/CurrentGameRulesTests.cs"
       ]
@@ -483,7 +487,7 @@
         "visual.roads"
       ],
       "editor": "Megjelenítés; most nem része az átvezetésnek.",
-      "remaining": "A szimulációs szabályok lezárása után vizsgálandó.",
+      "remaining": "Rajzolás, animáció és vizuális geometria; a szimuláció eredményének megjelenítése motorfeladat.",
       "tests": [
         "ForesTycoon.Tests/CurrentGameRulesTests.cs"
       ]
@@ -501,11 +505,12 @@
         "loading.policy"
       ],
       "editor": "Szabályok: processzor, forwarder, teherautó és malom közös válaszgráfjai.",
-      "remaining": "A projekt számolja a döntéseket; állapotléptetés, útgeometria, kapacitás és térfogat-érték megőrzése motorfeladat.",
+      "remaining": "A projekt választja a munkafázisokat, a vezérlési elsőbbséget és az utánpótlás aktivitását is (workflow, control, supply.active, loading.depart). Útkeresés, fizikai mozgatás, kapacitás és térfogat-érték megőrzése motorfeladat.",
       "tests": [
         "ForesTycoon.Tests/LogisticsGraphTests.cs",
         "ForesTycoon.Tests/FleetWorkTests.cs",
-        "ForesTycoon.Tests/FleetBehaviorTests.cs"
+        "ForesTycoon.Tests/FleetBehaviorTests.cs",
+        "ForesTycoon.Tests/RuleCompositionTests.cs"
       ]
     },
     {
@@ -524,13 +529,14 @@
   "outsideCatalog": [
     {
       "id": "missions",
-      "status": "pending",
+      "status": "graph",
       "source": "ForesTycoon/World/GameWorld.Missions.cs",
       "symbol": "MissionStatus",
       "editor": "Küldetések",
-      "remaining": "Metrika, küszöb és határidő szerkeszthető; általános feltétel- és eseménygráf még nincs.",
+      "remaining": "A teljesülés, lejárat és az egyidejű feltételek elsőbbsége projektgráf. A metrikák a felismert világmezőkből és összesítésekből készülnek; küszöb és határidő jelenetadat. Egyedi küldetésenkénti eseményhatás új funkcióként adható hozzá.",
       "tests": [
-        "ForesTycoon.Tests/MissionTests.cs"
+        "ForesTycoon.Tests/MissionTests.cs",
+        "ForesTycoon.Tests/RuleCompositionTests.cs"
       ]
     },
     {

@@ -13,10 +13,14 @@ namespace ForesTycoon
     internal sealed record AnimalCheckpoint(int Id, int Tile, int TargetTile, CheckpointPosition Position,
         CheckpointPosition PreviousPosition, CheckpointPosition Target, float Yaw, float PreviousYaw, float Blend,
         float Hunger, float WanderNeed, double WalkTime, double Age, uint Seed,
-        double? PreviousWalkTime = null, double? PreviousAge = null);
+        double? PreviousWalkTime = null, double? PreviousAge = null, string Kind = "deer", Dictionary<string, double> Fields = null,
+        double DistanceMoved = 0);
     internal sealed record ForageCheckpoint(int Tile, float Depletion);
+    internal sealed record WildlifeHabitatCheckpoint(int Tile, CheckpointPosition Position, uint Rank);
+    internal sealed record AnimalTypeCheckpoint(string Kind, int DesiredPopulation);
     internal sealed record WildlifeCheckpoint(AnimalCheckpoint[] Animals, ForageCheckpoint[] Forage,
-        ulong ForestRevision, ulong SurfaceRevision);
+        ulong ForestRevision, ulong SurfaceRevision, int NextAnimalId = 1,
+        WildlifeHabitatCheckpoint[] Habitat = null, AnimalTypeCheckpoint[] Types = null);
     internal sealed record PileCheckpoint(int Tile, float Volume);
     internal sealed record HarvestCheckpoint(int[] Tiles, float InitialVolume, int Landing = -1, PileCheckpoint[] Piles = null, float LandingStock = 0);
     internal sealed record ForestMachineCheckpoint(int Id, ForestMachineKind Kind, int Site, int[] Path, double Position, double PreviousPosition,

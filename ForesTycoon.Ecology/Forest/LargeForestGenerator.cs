@@ -9,8 +9,9 @@ namespace ForesTycoon.Ecology
             var result = new ForestStand[habitat.TileCount];
             SimulationWork.Complete(CreateWork(habitat, columns, rows, pattern, result)); return result;
         }
-        internal static IEnumerable<int> CreateWork(IForestHabitat habitat,int columns,int rows,ForestPattern pattern, ForestStand[] result)
+        internal static IEnumerable<int> CreateWork(IForestHabitat habitat,int columns,int rows,ForestPattern pattern, ForestStand[] result, ForesTycoon.Rules.GameplayProgram gameplay = null)
         {
+            gameplay ??= ForesTycoon.Rules.GameplayProgram.Default;
             if(columns*rows!=habitat.TileCount) throw new ArgumentException("Incorrect forest grid.");
 
             float Hash(int x,int y,int salt){
@@ -26,15 +27,13 @@ namespace ForesTycoon.Ecology
                 bool mixed=pattern==ForestPattern.LargeMixed;
                 float a=Ellipse(u,v,0.28f+shiftX,0.34f+shiftY,mixed?0.31f:0.43f,mixed?0.36f:0.44f);
                 float b=Ellipse(u,v,0.7f-shiftX,0.66f-shiftY,mixed?0.32f:0.43f,mixed?0.35f:0.44f);
-                if(Math.Min(a,b)>0.93f+Hash(x/3,y/3,3)*0.2f) continue;
-                bool spruce=pattern==ForestPattern.LargeSpruce || (mixed && a<b);
+                if (gameplay.Evaluate("forest.initialAllow", (int)pattern, Math.Min(a,b), Hash(x/3,y/3,3), habitat.GetMoisture(id), habitat.GetNormalizedElevation(id), 0, 0) < .5) continue;
                 float speciesSeed=Hash(x/6,y/6,4);
-                ForestSpecies species=spruce?ForestSpecies.Spruce:
-                    speciesSeed<0.65f?ForestSpecies.Beech:speciesSeed<0.9f?ForestSpecies.Oak:ForestSpecies.Birch;
+                ForestSpecies species=(ForestSpecies)(int)gameplay.Evaluate("forest.initialSpecies", (int)pattern, a < b ? 1 : 0, speciesSeed, habitat.GetMoisture(id), habitat.GetNormalizedElevation(id), 0, 0);
                 var profile=ForestSpeciesProfile.For(species);
-                float age=profile.MatureAgeYears*(0.8f+Hash(x/4,y/4,5)*0.65f);
-                float health=0.8f+Hash(x,y,6)*0.18f;
-                float biomass=profile.MaximumBiomass*Math.Clamp(age/profile.MatureAgeYears,0,1)*health;
+                float age=(float)gameplay.Evaluate("forest.initialAge", (int)pattern, profile.MatureAgeYears, Hash(x/4,y/4,5));
+                float health=(float)gameplay.Evaluate("forest.initialHealth", (int)pattern, Hash(x,y,6), 0);
+                float biomass=(float)gameplay.Evaluate("forest.initialBiomass", profile.MaximumBiomass, age, profile.MatureAgeYears, health);
                 result[id]=new ForestStand(species,age,biomass,health);
             }
 

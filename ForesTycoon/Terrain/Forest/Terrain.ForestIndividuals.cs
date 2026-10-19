@@ -13,6 +13,7 @@ namespace ForesTycoon
         internal const float TreeMetresToWorld = TreeScale.MetresToWorld;
         private readonly record struct ForestGpuTree(int TileId, int Index, ulong Id, ForestTreeDimensions Size, long ShapeKey, TreeSite Site,
             Vector4 SeasonTint, Vector4 SeasonBounds);
+        private readonly record struct ForestTileRange(int TileId, int WoodStart, int WoodCount, int CrownStart, int CrownCount, int FloorStart, int FloorCount);
         private sealed class IndividualForestChunk : IDisposable
         {
             internal readonly VertexBuffer Wood = new(PrimitiveTopology.Triangles);
@@ -27,11 +28,14 @@ namespace ForesTycoon
             internal double AnchorYear;
             internal double NextStageYear;
             internal bool Initialized;
-            internal bool SuppressDrawing;
+            internal readonly HashSet<int> HiddenTiles = new();
+            internal readonly List<ForestTileRange> TileRanges = new();
+            internal ulong VisibilityVersion = ulong.MaxValue;
             internal bool LightShapeDirty;
             internal long LastUsed;
             internal long GpuBytes => Wood.GpuPayloadBytes + Crowns.GpuPayloadBytes + Floor.GpuPayloadBytes + State.LongLength * 16;
             internal long CpuBytes => TileRevisions.LongLength * sizeof(ulong) + (long)Trees.Capacity * Unsafe.SizeOf<ForestGpuTree>()
+                + (long)TileRanges.Capacity * Unsafe.SizeOf<ForestTileRange>() + HiddenTiles.Count * sizeof(int)
                 + State.LongLength * 16 + Wood.CpuPayloadBytes + Crowns.CpuPayloadBytes + Floor.CpuPayloadBytes;
             internal Dictionary<int, ForestTreeStore.Patch> Snapshot;
             internal IndividualForestChunk(int count) => TileRevisions = new ulong[count];
@@ -266,14 +270,13 @@ namespace ForesTycoon
                 || forest.ForestYear >= geometry.NextStageYear
                 || geometry.Generation != forest.IndividualTrees.Generation;
             bool topologyChanged = changed;
-            bool roadClearedVegetation = false;
             if (changed || geometry.ForestRevision != forest.Revision)
             {
                 for (int i = 0; i < chunk.TileIds.Length; i++)
                 {
                     ulong revision = forest.IndividualTrees.TryGet(chunk.TileIds[i], out var patch) ? patch.TopologyRevision : 0;
                     changed |= geometry.TileRevisions[i] != revision;
-                    roadClearedVegetation |= geometry.TileRevisions[i] != 0 && roads.Has(chunk.TileIds[i]);
+                    if (geometry.TileRevisions[i] != 0 && roads.Has(chunk.TileIds[i])) geometry.HiddenTiles.Add(chunk.TileIds[i]);
                 }
                 topologyChanged = changed;
                 geometry.LightShapeDirty = false;
@@ -284,11 +287,10 @@ namespace ForesTycoon
             changed |= geometry.LightShapeDirty;
             if (changed)
             {
-                // Road construction must clear all vegetation before drawing the next frame,
-                // including floor geometry and stumps. Other edits keep their priority background rebuild.
+                // Keep neighbouring trees visible while rebuilding. Only the road tiles' cached
+                // ranges are hidden immediately, including their floor decals, dead wood and stumps.
                 bool edited = geometry.Initialized && geometry.Generation == forest.IndividualTrees.Generation
                     && (geometry.TerrainVersion != chunk.PropVersion || (geometry.EditRevision != forest.EditRevision && topologyChanged));
-                geometry.SuppressDrawing |= roadClearedVegetation;
                 bool immediate = SynchronousForestBuilds;
                 if (!immediate)
                 {
@@ -562,6 +564,8 @@ namespace ForesTycoon
             geometry.AnchorYear = basis?.AnchorYear ?? forest.ForestYear;
             geometry.NextStageYear = double.PositiveInfinity;
             geometry.Trees.Clear();
+            geometry.TileRanges.Clear(); geometry.HiddenTiles.Clear();
+            geometry.VisibilityVersion = ulong.MaxValue;
             geometry.TerrainVersion = chunk.PropVersion;
             geometry.Generation = forest.IndividualTrees.Generation;
             geometry.EditRevision = forest.EditRevision;
@@ -585,6 +589,7 @@ namespace ForesTycoon
             foreach (int id in chunk.TileIds)
             {
                 if (roads.Has(id) || !snapshots.TryGetValue(id, out var patch)) continue;
+                int woodStart = individualWood.Count, crownStart = individualCrowns.Count, floorStart = individualFloor.Count;
                 Tile tile = tiles[id];
                 for (int i = 0; i < patch.Count; i++)
                 {
@@ -647,8 +652,7 @@ namespace ForesTycoon
                             dead.Tree.Dimensions.Diameter*TreeMetresToWorld,stem.Yaw));
                         yield return true;
                     }
-                if (patch.Stumps == null) continue;
-                foreach (var stump in patch.Stumps)
+                if (patch.Stumps != null) foreach (var stump in patch.Stumps)
                 {
                     geometry.NextStageYear = Math.Min(geometry.NextStageYear, geometry.AnchorYear + 1.0 / 12);
                     TreeInstance stem = IndividualStem(tile, stump.Felled, stump.FelledYear);
@@ -658,6 +662,8 @@ namespace ForesTycoon
                     Repeat(individualWoodGrowth, wood.Length, new(Vector3.Zero, Vector3.Zero));
                         yield return true;
                 }
+                geometry.TileRanges.Add(new(id, woodStart, individualWood.Count - woodStart,
+                    crownStart, individualCrowns.Count - crownStart, floorStart, individualFloor.Count - floorStart));
             }
             foreach (var page in geometry.Wood.UploadForestPages(individualWood, individualWoodGrowth)) yield return page;
             foreach (var page in geometry.Crowns.UploadForestPages(individualCrowns, individualCrownGrowth)) yield return page;
@@ -710,7 +716,7 @@ namespace ForesTycoon
                     for (int c = 0; c < visibleChunks.Count; c++)
                     {
                         var geometry = individualForestChunks[(visibleChunks[c], chunkLods[c])];
-                        if (geometry.Initialized && !geometry.SuppressDrawing && geometry.Generation == forest.IndividualTrees.Generation) geometry.Floor.DrawArray();
+                        if (geometry.Initialized && geometry.Generation == forest.IndividualTrees.Generation) DrawForestPart(geometry, 2);
                     }
             }
             if (graphics.HideTrees) { if (!shadow) TrimForestCache(); return; }
@@ -718,7 +724,7 @@ namespace ForesTycoon
             for (int c = 0; c < visibleChunks.Count; c++)
             {
                 var geometry = individualForestChunks[(visibleChunks[c], chunkLods[c])];
-                if (geometry.Initialized && !geometry.SuppressDrawing && geometry.Generation == forest.IndividualTrees.Generation) geometry.Wood.DrawArray();
+                if (geometry.Initialized && geometry.Generation == forest.IndividualTrees.Generation) DrawForestPart(geometry, 0);
             }
             forestMaterial.Use();
             // The texture represents the whole foliage mass. Rendering only the front
@@ -729,11 +735,36 @@ namespace ForesTycoon
                 for (int c = 0; c < visibleChunks.Count; c++)
                 {
                     var geometry = individualForestChunks[(visibleChunks[c], chunkLods[c])];
-                    if (geometry.Initialized && !geometry.SuppressDrawing && geometry.Generation == forest.IndividualTrees.Generation) geometry.Crowns.DrawArray(false);
+                    if (geometry.Initialized && geometry.Generation == forest.IndividualTrees.Generation) DrawForestPart(geometry, 1);
                 }
             }
             forestMaterial.Use();
             if (!shadow) TrimForestCache();
+        }
+
+        private void DrawForestPart(IndividualForestChunk geometry, int part)
+        {
+            // A displayed fallback LOD may differ from the LOD currently being rebuilt.
+            // Apply road clearing to whichever cached level is actually drawn.
+            if (geometry.VisibilityVersion != map.SurfaceVersion) {
+                foreach (var range in geometry.TileRanges) if (roads.Has(range.TileId)) geometry.HiddenTiles.Add(range.TileId);
+                geometry.VisibilityVersion = map.SurfaceVersion;
+            }
+            var buffer = part == 0 ? geometry.Wood : part == 1 ? geometry.Crowns : geometry.Floor;
+            bool shader = part != 1;
+            if (geometry.HiddenTiles.Count == 0) { buffer.DrawArray(shader); return; }
+            int start = 0, count = 0;
+            foreach (var range in geometry.TileRanges) {
+                if (geometry.HiddenTiles.Contains(range.TileId)) {
+                    if (count > 0) buffer.DrawRange(start, count, shader);
+                    count = 0; continue;
+                }
+                int first = part == 0 ? range.WoodStart : part == 1 ? range.CrownStart : range.FloorStart;
+                int length = part == 0 ? range.WoodCount : part == 1 ? range.CrownCount : range.FloorCount;
+                if (count == 0) start = first;
+                count += length;
+            }
+            if (count > 0) buffer.DrawRange(start, count, shader);
         }
 
 

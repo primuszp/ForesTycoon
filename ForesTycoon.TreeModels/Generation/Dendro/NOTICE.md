@@ -8,6 +8,9 @@ The algorithm is preserved. On 2026-10-07 the sources were integrated into
 ForesTycoon.TreeModels under Generation/Dendro; namespaces and base-library
 imports were adapted to the host project. There is no separate DendroKit assembly.
 
+The unused `Mesh` export layer was removed on 2026-10-19. The runtime uses the
+skeleton adapter and ForesTycoon's own meshing below; the recursive generator is retained.
+
 The source project's README declares GNU GPL version 2 and includes a
 version-2-or-later grant. The full GNU GPL v2 text is included in `LICENSE.txt`.
 Arbaro's source headers credit Wolfram Diestel (2002). DendroKit's README contains

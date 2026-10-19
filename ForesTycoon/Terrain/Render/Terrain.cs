@@ -25,7 +25,6 @@ namespace ForesTycoon
         private static readonly Color RoadFoundationColor = Color.FromArgb(154, 120, 72);
         private static readonly Color RoadFoundationSlopeColor = Color.FromArgb(126, 88, 48);
         private static readonly Color RoadFoundationLineColor = Color.FromArgb(74, 43, 20);
-        private static readonly Color TerrainTopColor = Color.FromArgb(141, 184, 75);  // fű (terep tető)
 
         // The map's facts, under the short names the render partials grew up with.
         private TerrainSettings settings => map.Settings;
@@ -44,7 +43,6 @@ namespace ForesTycoon
         private int offsetY => data.OffsetY;
         private IReadOnlySet<int> flippedDiagonalTiles => map.FlippedDiagonalTiles;
         private HashSet<int> riverNodeIds => hydro.RiverNodeIds;
-        private HashSet<int> standingWaterTileIds => hydro.StandingWaterTileIds;
         private float[] tileMoisture => hydro.TileMoisture;
         private float[] nodeWaterDepth => hydro.NodeWaterDepth;
         private float MinimumWaterDepth => settings.MinimumWaterDepth;
@@ -54,26 +52,17 @@ namespace ForesTycoon
             TerrainMap.SurfacePoint(tile, u, v, out x, out y, out z);
         private Node getNodeByCoords(int u, int v) => map.GetNode(u, v);
         private Tile getTileByCoords(int u, int v) => map.GetTile(u, v);
-        private bool checkNode(int u, int v) => data.CheckNode(u, v);
         private bool checkTile(int u, int v) => map.CheckTile(u, v);
         private int CountRiverCorners(Tile tile) => map.CountRiverCorners(tile);
         private bool HasDynamicWater(Tile tile) => map.HasDynamicWater(tile);
         private bool ShouldDrawStandingWater(Tile tile) => map.ShouldDrawStandingWater(tile);
-        private bool IsValidTileId(int tileId) => map.IsValidTileId(tileId);
-        private bool IsBuildingTile(int tileId) => map.IsBuildingTile(tileId);
         private TileSurface GetTileSurface(Tile tile) => map.GetTileSurface(tile);
         private TileSurfaceMaterial GetTileSurfaceMaterial(Tile tile) => map.GetTileSurfaceMaterial(tile);
-        private bool UseTileDiagonalWE(Tile tile) => map.UseTileDiagonalWE(tile);
         private bool UseTileDiagonalWE(Tile tile, TileSurface visual) => map.UseTileDiagonalWE(tile, visual);
-        private bool TileEdgeHasFoundation(Tile tile, TileSurface visual, RoadEdge edge) => map.TileEdgeHasFoundation(tile, visual, edge);
-        private float RoadSurfaceZ(Node n) => map.RoadSurfaceZ(n);
         private Vector3 RoadCorner(Node n) => map.RoadCorner(n);
-        private static Vector3 Corner(Node n) => TerrainMap.Corner(n);
         private static Vector3 Corner(Tile tile, TileCorner corner) => TerrainMap.Corner(tile, corner);
         private bool TryGetFoundationFaceForRoadEdge(int u, int v, Node a, Node b, RoadEdge edge, out FoundationFaceData face) =>
             map.TryGetFoundationFaceForRoadEdge(u, v, a, b, edge, out face);
-        private bool TryGetFoundationFace(int u, int v, Node a, Node b, Node oa, Node ob, out FoundationFaceData face) =>
-            map.TryGetFoundationFace(u, v, a, b, oa, ob, out face);
 
         /// <summary>The ground this scene draws.</summary>
         internal TerrainMap Map => map;

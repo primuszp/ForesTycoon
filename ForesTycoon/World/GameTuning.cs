@@ -100,7 +100,14 @@ namespace ForesTycoon
 
         private static readonly Dictionary<string, TuningSpec> byId = Specs.ToDictionary(s => s.Id, StringComparer.Ordinal);
         private static readonly string[] behaviorKeys = Specs.Select(s => "tuning." + s.Id).ToArray();
-        internal static readonly GameTuning Default = new(Specs.Select(s => s.Default).ToArray());
+        internal static readonly GameTuning Default = ReadAuthoredDefaults();
+        private static GameTuning ReadAuthoredDefaults()
+        {
+            var authored = RuleProject.CreateDefault().Tuning;
+            var values = Specs.Select(s => authored.TryGetValue(s.Id, out double value) && double.IsFinite(value) && value >= s.Min && value <= s.Max
+                ? value : throw new InvalidOperationException("Hiányzó vagy hibás projektparaméter: " + s.Id)).ToArray();
+            return new(values);
+        }
 
         static GameTuning()
         {
@@ -137,6 +144,8 @@ namespace ForesTycoon
         /// <summary>Only the values that differ from the defaults, by name — what files and saves store.</summary>
         internal Dictionary<string, double> ToOverrides() =>
             Specs.Where(s => values[(int)s.Key] != s.Default).ToDictionary(s => s.Id, s => values[(int)s.Key], StringComparer.Ordinal);
+        /// <summary>The project owns all values, including those currently equal to the shipped defaults.</summary>
+        internal Dictionary<string, double> ToValues() => Specs.ToDictionary(s => s.Id, s => values[(int)s.Key], StringComparer.Ordinal);
 
         /// <summary>Defaults with the given values; unknown names, non-finite or out-of-range values are rejected.</summary>
         internal static GameTuning FromOverrides(IReadOnlyDictionary<string, double> overrides)

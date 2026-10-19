@@ -49,7 +49,7 @@ sealed partial class GameWorld
                     if (!Fundable()) break;
                     var repaired = new WorkResult<(int Tile, float Damage)[]>();
                     foreach (int unit in map.RepairRoadPathWork(record.A, record.B, repaired)) yield return unit;
-                    foreach (var (tile, damage) in repaired.Value) { Expenses += RoadCosts.Repair(map.GetRoadPaving(tile), damage, Tuning); yield return 1; }
+                    foreach (var (tile, damage) in repaired.Value) { var surface = map.GetRoadPaving(tile); Expenses += behaviorPolicy.Gameplay.Evaluate("road.repairCost", RoadCosts.Build(surface, Tuning), damage, Tuning[Tune.RoadRepairShare], (int)surface); yield return 1; }
                     if (map.TryGetRoadTileCenter(record.B, out var position)) effects.Spawn(WorldEffectKind.RoadChanged, position);
                     break;
                 }
@@ -60,7 +60,7 @@ sealed partial class GameWorld
                     var work = record.Flag ? map.RemoveSkidTrailPathWork(record.A, record.B, changed) : map.MarkSkidTrailPathWork(record.A, record.B, changed);
                     foreach (int unit in work) yield return unit;
                     if (changed.Value.Length == 0) break;
-                    if (!record.Flag) Expenses += changed.Value.Length * Tuning[Tune.TrailCost];
+                    if (!record.Flag) Expenses += behaviorPolicy.Gameplay.Evaluate("trail.buildCost", changed.Value.Length, Tuning[Tune.TrailCost]);
                     Logistics?.TrailsChanged();
                     foreach (int unit in vehicles.RemoveInvalidRoutesWork(map.IsNetworkTile, map.AreNetworkNeighbours)) yield return unit;
                     if (map.TryGetTileCenter(record.B, out var position)) effects.Spawn(WorldEffectKind.RoadChanged, position);
@@ -143,7 +143,7 @@ sealed partial class GameWorld
         var changed = new WorkResult<int[]>();
         foreach (int unit in map.RoadPathWork(start, end, remove, surface, changed)) yield return unit;
         if (changed.Value.Length == 0) yield break;
-        if (!remove) Expenses += changed.Value.Length * RoadCosts.Build(surface, Tuning);
+        if (!remove) Expenses += behaviorPolicy.Gameplay.Evaluate("road.buildCost", changed.Value.Length, RoadCosts.Build(surface, Tuning), (int)surface);
         var unavailable = new List<int>();
         foreach (int id in changed.Value) { if (!((IForestHabitat)map).CanSupportForest(id)) unavailable.Add(id); yield return 1; }
         foreach (int unit in forest.ClearTerrainTilesWork(unavailable.ToArray())) yield return unit;

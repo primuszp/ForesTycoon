@@ -12,6 +12,7 @@ internal sealed partial class RuleEditorView
     /// <summary>The object a field belongs to: the scope, an attached object (“tile”), or a collection (“trees”, “tile.trees”) for a summary.</summary>
     private static string FieldObject(string scope, string field)
     {
+        if (scope != "world" && field.StartsWith("world.", StringComparison.Ordinal)) return "world";
         if (SchemaField(scope, field)?.Collection is { } c) {
             int at = field.LastIndexOf(c.Name + ".", StringComparison.Ordinal);
             if (at >= 0) return field[..(at + c.Name.Length)];

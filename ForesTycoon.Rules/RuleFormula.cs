@@ -530,8 +530,6 @@ public sealed class MissionGoal
     /// <summary>The forest year (<c>world.time</c>) by which the goal must be reached; 0 means no deadline.</summary>
     public double DeadlineYear { get; set; }
 
-    public bool Reached(double value) => Comparison == "<=" ? value <= Target : value >= Target;
-
     public void Validate()
     {
         if (string.IsNullOrWhiteSpace(Title) || Description == null || string.IsNullOrWhiteSpace(Metric)

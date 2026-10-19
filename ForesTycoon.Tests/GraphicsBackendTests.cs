@@ -373,6 +373,7 @@ public sealed class GraphicsBackendTests
             yield return true;
         }
         public void DrawArray(bool useGeometryShader) { }
+        public void DrawRange(int first, int count, bool useGeometryShader) { }
         public void DrawElements() { }
         public void ReadVertices(Vertex[] destination) => vertices.CopyTo(destination, 0);
         public void Dispose()

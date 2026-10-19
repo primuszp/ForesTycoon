@@ -24,7 +24,10 @@ internal static class RuleProjectCli
             if (!int.TryParse(args[2], out int ticks) || ticks < 0 || ticks > 100000) throw new ArgumentException("0–100000 tick szükséges.");
             string save = Path.GetFullPath(args[5]); using var input = File.OpenRead(save); var checkpoint = WorldSaveSerializer.Read(input).Checkpoint;
             if (checkpoint == null || checkpoint.PendingCommands != 0) throw new InvalidDataException("Függő parancs nélküli checkpoint szükséges.");
-            var baseline = new RuleProject { Name = checkpoint.RuleProjectName ?? "Mentés szabályai",
+            var baseline = new RuleProject { Version = checkpoint.RuleBook?.ProjectVersion ?? 2, Name = checkpoint.RuleProjectName ?? "Mentés szabályai",
+                Rules = checkpoint.RuleBook?.Rules == null ? RuleProject.CreateDefault().Rules : RuleEngine.Clone(checkpoint.RuleBook.Rules),
+                Fields = checkpoint.RuleBook?.Fields == null ? new() : RuleEngine.CloneFields(checkpoint.RuleBook.Fields),
+                RemovedStarters = checkpoint.RuleBook?.RemovedStarters?.ToList() ?? new(),
                 Tuning = checkpoint.Tuning ?? new(), Behaviors = checkpoint.Behaviors ?? WorldBehaviorPolicy.DefaultDocument(), Dynamics = checkpoint.Dynamics ?? new(), Algorithms = checkpoint.Algorithms };
             var edited = ReadRuntimeProject(args[1]); GameWorld.ValidateRuleProject(edited);
             var result = RuleTrialRunner.Run(baseline, edited, save, Path.GetFullPath(args[3]), edited.ContentRevision(), save, ticks, default).GetAwaiter().GetResult();
@@ -85,6 +88,7 @@ internal static class RuleProjectCli
             RuleProject.WriteAtomic(args[1], JsonSerializer.Serialize(new {
                 schema = "forest-rule-api", version = 1, projectPath = RuleProject.DefaultPath,
                 hooks = WorldBehaviorPolicy.Hooks, worldFields = GameWorld.RuleWorldFields,
+                objectModel = GameWorld.RuleModel,
                 operations = Enum.GetValues<BehaviorOperation>().Select(op => new { name = op.ToString(), inputs = BehaviorModel.Inputs(op) }),
                 algorithms = new { schema = "forest-algorithm-graphs", version = 1, nodeKinds = AlgorithmBundle.NodeKinds,
                     templates = AlgorithmBundle.Templates, projects = AlgorithmBundle.Projects,

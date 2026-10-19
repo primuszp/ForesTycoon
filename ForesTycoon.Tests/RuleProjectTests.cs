@@ -39,7 +39,8 @@ public class RuleProjectTests
     [Fact]
     public void AnObjectConditionOverridesTheDefaultGrowthThroughTheSameRuleBook()
     {
-        using var world = World(); world.Update(1d / 30);
+        // Use enough habitat for a live growth subject; a tiny generated map can legitimately have no forest.
+        using var world = new GameWorld(TerrainSettings.Default.WithNodeSize(17, 42), enableRendering: false); world.Update(1d / 30);
         var target = world.CaptureCheckpoint().Ecology.Forest.Trees.Patches.SelectMany(p => p.Trees).First(t => t.AnnualGrowth.Height > 0);
         var project = world.RuleProjectDocument;
         project.Rules.Single(r => r.Id == "forest.growth").Enabled = false;

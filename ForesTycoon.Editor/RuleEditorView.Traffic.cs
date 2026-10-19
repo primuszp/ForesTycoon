@@ -12,7 +12,7 @@ internal sealed partial class RuleEditorView
 
     private static void SetRuleScope(WorldRule rule, string scope)
     {
-        rule.Scope = scope; rule.Schedule = scope == "passage" ? "passage" : rule.Schedule == "month" ? "month" : scope == "tree" && rule.Schedule == "growth" ? "growth" : "step";
+        rule.Scope = scope; rule.Schedule = scope == "passage" ? "passage" : rule.Schedule is "wildlife" or "population" or "month" or "birth" ? rule.Schedule : scope == "tree" && rule.Schedule == "growth" ? "growth" : "step";
         if (rule.Schedule == "passage") foreach (var effect in rule.Effects)
             if (effect.Influence != null) effect.Influence.PerYear = effect.Influence.PerHour = false;
     }
@@ -20,10 +20,11 @@ internal sealed partial class RuleEditorView
     private static void DrawSchedule(WorldRule rule, ref bool changed)
     {
         if (rule.Scope == "passage") { ImGui.TextUnformatted("Minden áthaladáskor"); return; }
-        int choice = rule.Schedule == "growth" ? 2 : rule.Schedule == "month" ? 1 : 0;
-        var options = rule.Scope == "tree" ? new[] { "Időszakonként", "Erdőhónaponként", "Növekedési ráta frissítésekor" } : new[] { "Időszakonként", "Erdőhónaponként" };
+        var schedules = WorldRule.Schedules.Where(s => s != "passage" && (s != "growth" || rule.Scope == "tree")).ToArray();
+        int choice = Math.Max(0, Array.IndexOf(schedules, rule.Schedule));
+        var options = schedules.Select(s => s == "step" ? "Időszakonként" : s == "month" ? "Erdőhónaponként" : s == "wildlife" ? "Állati lépésenként (másodperc)" : s == "population" ? "Állománykezeléskor, élőhelyfelmérés után" : s == "birth" ? "Létrehozáskor, az új egyedeken" : "Növekedési ráta frissítésekor").ToArray();
         if (ImGui.Combo("Mikor fusson?", ref choice, options, options.Length)) {
-            rule.Schedule = choice == 2 ? "growth" : choice == 1 ? "month" : "step"; changed = true;
+            rule.Schedule = schedules[choice]; changed = true;
         }
     }
 

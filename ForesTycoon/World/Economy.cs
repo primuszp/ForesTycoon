@@ -7,8 +7,6 @@ namespace ForesTycoon
     internal static class Economy
     {
         internal const double UnlimitedCredit = 1e9;
-        /// <summary>Building and repairs start only while the balance has not passed the negative credit line.</summary>
-        internal static bool CanInvest(double balance, double creditLimit) => balance >= -creditLimit;
         internal const string NoFunds = "Nincs fedezet: az egyenleg elérte a hitelkeretet. Előbb adj el faanyagot.";
     }
 }

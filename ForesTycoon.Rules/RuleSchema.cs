@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.ComponentModel;
 
 namespace ForesTycoon.Rules;
 
@@ -11,7 +12,7 @@ namespace ForesTycoon.Rules;
 // the fields of the interfaces it extends: IForwarder : ITruck : IVehicle gets every vehicle and truck field.
 
 /// <summary>A kind of world object rules can address. Abstract kinds group fields; concrete kinds are rule scopes.</summary>
-[AttributeUsage(AttributeTargets.Interface)]
+[AttributeUsage(AttributeTargets.Interface | AttributeTargets.Class, Inherited = false)]
 public sealed class RuleEntityAttribute : Attribute
 {
     public RuleEntityAttribute(string id) { Id = id; }
@@ -22,9 +23,27 @@ public sealed class RuleEntityAttribute : Attribute
     /// <summary>What one element is called in a sentence (“fa”, “csempe”).</summary>
     public string Element { get; set; } = "";
     public string Help { get; set; } = "";
-    /// <summary>Only groups fields for its descendants; no rule runs on it directly.</summary>
+    /// <summary>Groups descendants. Abstract classes are also polymorphic scopes over their live descendants.</summary>
     public bool Abstract { get; set; }
+    /// <summary>Concrete descendants are entities automatically, without an editor registration or another attribute.</summary>
+    public bool DiscoverDerived { get; set; }
 }
+
+/// <summary>A host collection containing live rule objects. The runtime binds every discovered subtype automatically.</summary>
+[AttributeUsage(AttributeTargets.Property)]
+public sealed class RuleObjectSourceAttribute : Attribute { }
+
+/// <summary>Excludes a public implementation detail from automatic class property discovery.</summary>
+[AttributeUsage(AttributeTargets.Property)]
+public sealed class RuleIgnoreAttribute : Attribute { }
+
+/// <summary>Stable identity within an object family; never a transient list position.</summary>
+public interface IRuleInstance { int RuleId { get; } }
+public interface IRuleDisplay { string RuleLabel { get; } }
+
+/// <summary>A numeric reference to a discovered concrete type, presented with that type's display name.</summary>
+[AttributeUsage(AttributeTargets.Property)]
+public sealed class RuleTypeReferenceAttribute(Type family) : Attribute { public Type Family { get; } = family; }
 
 /// <summary>
 /// A value of the object: a number, a bool (0/1 in formulas) or an enum (its numeric value in formulas, a dropdown in
@@ -211,47 +230,63 @@ public sealed class RuleSchema
     public static RuleSchema Discover(IEnumerable<Type> types, RuleTexts texts = null)
     {
         texts ??= new();
-        var marked = types.Where(t => t.IsInterface && t.GetCustomAttribute<RuleEntityAttribute>() != null)
-            .OrderBy(t => Depth(t)).ThenBy(t => t.GetCustomAttribute<RuleEntityAttribute>().Id, StringComparer.Ordinal).ToList();
-        var ids = marked.ToDictionary(t => t, t => t.GetCustomAttribute<RuleEntityAttribute>().Id);
+        var marked = types.Distinct().Where(t => (t.IsInterface || t.IsClass && !t.ContainsGenericParameters) && Entity(t) != null)
+            .OrderBy(Depth).ThenBy(t => Entity(t).Id, StringComparer.Ordinal).ToList();
+        var ids = marked.ToDictionary(t => t, t => Entity(t).Id);
         var list = new List<RuleEntitySchema>();
         foreach (var type in marked) {
-            var a = type.GetCustomAttribute<RuleEntityAttribute>();
+            var a = Entity(type);
             // Ancestors first, so a child's own fields follow the inherited ones.
-            var lineage = type.GetInterfaces().Where(ids.ContainsKey).OrderBy(Depth).Append(type).ToArray();
-            var parents = type.GetInterfaces().Where(ids.ContainsKey)
-                .Where(p => !type.GetInterfaces().Any(o => o != p && ids.ContainsKey(o) && p.IsAssignableFrom(o))).Select(p => ids[p]).ToArray();
+            var ancestors = Ancestors(type).Where(ids.ContainsKey).Distinct().ToArray();
+            var lineage = ancestors.OrderBy(Depth).Append(type).ToArray();
+            var parents = ancestors.Where(p => !ancestors.Any(o => o != p && p.IsAssignableFrom(o))).Select(p => ids[p]).ToArray();
             var fields = new List<RuleFieldSchema>(); var relations = new List<RuleRelationSchema>(); var actions = new List<RuleActionSchema>();
             var collections = new List<RuleCollectionSchema>();
             foreach (var level in lineage) {
-                foreach (var p in level.GetProperties()) {
-                    if (p.GetCustomAttribute<RuleFieldAttribute>() is { } f) {
-                        string name = f.Name ?? Camel(p.Name), code = f.Display ?? Words(p.Name);
+                foreach (var p in level.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly).Where(p => p.GetIndexParameters().Length == 0 && p.GetCustomAttribute<RuleIgnoreAttribute>() == null)) {
+                    var field = p.GetCustomAttribute<RuleFieldAttribute>();
+                    if (field != null || level.IsClass && IsScalar(p.PropertyType) && p.GetMethod?.IsPublic == true) {
+                        var f = field ?? new RuleFieldAttribute(p.GetCustomAttribute<DescriptionAttribute>()?.Description ?? "");
+                        string name = f.Name ?? Camel(p.Name), code = f.Display ?? p.GetCustomAttribute<DisplayNameAttribute>()?.DisplayName ?? Words(p.Name);
                         var t = texts.Find(ids[level] + "." + name);
                         var (kind, options) = Kind(p.PropertyType, ids[level] + "." + name, texts);
+                        if (p.GetCustomAttribute<RuleTypeReferenceAttribute>() is { } reference) {
+                            kind = RuleFieldKind.Enum;
+                            options = marked.Where(t => t.IsClass && !t.IsAbstract && reference.Family.IsAssignableFrom(t))
+                                .Select(t => new RuleFieldOption(ids[t], texts.Find(ids[t])?.Name ?? Entity(t).Display
+                                    ?? t.GetCustomAttribute<DisplayNameAttribute>()?.DisplayName ?? Words(t.Name), TypeCode(ids[t])))
+                                .OrderBy(o => o.Value).ToArray();
+                            if (options.Select(o => o.Value).Distinct().Count() != options.Length) throw new InvalidOperationException("Ütköző típusazonosítók: " + reference.Family.Name);
+                        }
                         double min = options.Length > 0 ? options[0].Value : f.Min, max = options.Length > 0 ? options[^1].Value : f.Max;
-                        fields.Add(new(name, t?.Name ?? code, t?.Help ?? f.Help, texts.Unit(f.Unit, t), min, max, p.CanWrite, ids[level], p) {
+                        fields.RemoveAll(existing => existing.Name == name);
+                        fields.Add(new(name, t?.Name ?? code, t?.Help ?? f.Help, texts.Unit(f.Unit, t), min, max, p.SetMethod?.IsPublic == true, ids[level], p) {
                             CodeDisplay = code, True = t?.True, False = t?.False, Kind = kind, Options = options, Pace = Math.Sign(f.Pace) });
                     }
                     if (p.GetCustomAttribute<RuleRelationAttribute>() is { } r && ids.TryGetValue(p.PropertyType, out string target)) {
                         string name = r.Name ?? Camel(p.Name); var t = texts.Find(ids[level] + "." + name);
+                        relations.RemoveAll(existing => existing.Name == name);
                         relations.Add(new(name, t?.Name ?? r.Display ?? Words(p.Name), t?.Help ?? r.Help, target, p));
                     }
-                    if (p.GetCustomAttribute<RuleCollectionAttribute>() is { } c && p.PropertyType.IsGenericType
-                        && p.PropertyType.GetGenericTypeDefinition() == typeof(IEnumerable<>) && ids.TryGetValue(p.PropertyType.GetGenericArguments()[0], out string of)) {
+                    if (p.GetCustomAttribute<RuleCollectionAttribute>() is { } c && CollectionElement(p.PropertyType) is { } itemType
+                        && ids.TryGetValue(itemType, out string of)) {
                         string name = c.Name ?? Camel(p.Name); var t = texts.Find(ids[level] + "." + name);
+                        collections.RemoveAll(existing => existing.Name == name);
                         collections.Add(new(name, t?.Name ?? c.Display ?? Words(p.Name), t?.Help ?? c.Help, of, p) { Addressable = c.Addressable });
                     }
                 }
-                foreach (var m in level.GetMethods())
+                foreach (var m in level.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
                     if (m.GetCustomAttribute<RuleActionAttribute>() is { } act && m.GetParameters().Length == 0 && m.ReturnType == typeof(bool)) {
                         string name = act.Name ?? Camel(m.Name); var t = texts.Find(ids[level] + "." + name);
+                        actions.RemoveAll(existing => existing.Name == name);
                         actions.Add(new(name, t?.Name ?? act.Display ?? Words(m.Name), t?.Help ?? act.Help, ids[level], m));
                     }
             }
             var text = texts.Find(a.Id);
-            string entityCode = a.Display ?? Words(type.Name.StartsWith("I") ? type.Name[1..] : type.Name);
-            list.Add(new() { Id = a.Id, Name = text?.Name ?? entityCode, CodeName = entityCode, Element = text?.Element ?? a.Element, Help = text?.Help ?? a.Help, Abstract = a.Abstract, Parents = parents,
+            string entityCode = a.Display ?? type.GetCustomAttribute<DisplayNameAttribute>()?.DisplayName ?? Words(type.IsInterface && type.Name.StartsWith("I") ? type.Name[1..] : type.Name);
+            list.Add(new() { Id = a.Id, Name = text?.Name ?? entityCode, CodeName = entityCode,
+                Element = text?.Element ?? (string.IsNullOrWhiteSpace(a.Element) ? entityCode.ToLowerInvariant() : a.Element),
+                Help = text?.Help ?? a.Help, Abstract = a.Abstract || type.IsClass && type.IsAbstract, Parents = parents,
                 Type = type, Fields = fields.ToArray(), Relations = relations.ToArray(), Actions = actions.ToArray(), Collections = collections.ToArray() });
         }
         var schema = new RuleSchema(list);
@@ -288,9 +323,29 @@ public sealed class RuleSchema
 
     /// <summary>WaterSupply → waterSupply: the code name, as written in formulas.</summary>
     public static string Camel(string name) => name.Length == 0 ? name : char.ToLowerInvariant(name[0]) + name[1..];
+    public static int TypeCode(string id) {
+        uint hash = 2166136261;
+        foreach (char c in id) hash = unchecked((hash ^ c) * 16777619);
+        return (int)(hash % 999983);
+    }
+    public static string EntityId(Type type) => Entity(type)?.Id;
     /// <summary>WaterSupply → “Water supply”: the code name, as shown to the designer.</summary>
     public static string Words(string name) =>
         string.Concat(name.Select((c, i) => i > 0 && char.IsUpper(c) ? " " + char.ToLowerInvariant(c) : c.ToString()));
 
-    private static int Depth(Type t) => t.GetInterfaces().Count(i => i.GetCustomAttribute<RuleEntityAttribute>() != null);
+    public static bool IsScalar(Type type) => type.IsEnum || type == typeof(bool) || type == typeof(double) || type == typeof(float)
+        || type == typeof(decimal) || type == typeof(int) || type == typeof(uint) || type == typeof(long) || type == typeof(ulong) || type == typeof(short) || type == typeof(byte);
+    public static Type CollectionElement(Type type) => type.GetInterfaces().Append(type)
+        .FirstOrDefault(t => t.IsGenericType && t.GetGenericTypeDefinition() == typeof(IEnumerable<>))?.GetGenericArguments()[0];
+    private static IEnumerable<Type> Ancestors(Type type) {
+        foreach (var contract in type.GetInterfaces()) yield return contract;
+        for (var parent = type.BaseType; parent != null; parent = parent.BaseType) yield return parent;
+    }
+    private static RuleEntityAttribute Entity(Type type) {
+        if (type.GetCustomAttribute<RuleEntityAttribute>() is { } own) return own;
+        if (type.IsClass && Ancestors(type).Any(t => t.GetCustomAttribute<RuleEntityAttribute>()?.DiscoverDerived == true))
+            return new(Camel(type.Name)) { Abstract = type.IsAbstract };
+        return null;
+    }
+    private static int Depth(Type t) => Ancestors(t).Count(i => Entity(i) != null);
 }

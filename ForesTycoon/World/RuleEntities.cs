@@ -25,6 +25,8 @@ internal interface IPlace : IWorldObject { }
 [RuleEntity("tile", Element = "tile", Help = "One map tile: its soil, water and cover. Other objects read it through their tile relation.")]
 internal interface ITile : IPlace
 {
+    [RuleCollection("Az ezen a csempén tartózkodó élő állatok.", Display = "Állatok a csempén", Addressable = true)] IEnumerable<WildlifeSystem.Animal> Animals { get; }
+    [RuleField("A legelő elfogyasztott hányada.", Display = "Táplálékfogyás", Min = 0, Max = 1)] double ForageDepletion { get; set; }
     [RuleField("Hydrological map moisture used by road weathering (not root-zone water).", Unit = "0–1", Min = 0, Max = 1)]
     double Moisture { get; }
     [RuleField("Water in the root zone.", Unit = "mm", Min = 0)]
@@ -72,6 +74,14 @@ internal interface ITile : IPlace
     Help = "The whole game: time, weather and money. Every rule also reads these as world.<field> (world.rain).")]
 internal interface IWorld : IWorldObject
 {
+    [RuleField("A ténylegesen leszállított faanyag összesen.", Display = "Leszállított faanyag", Unit = "m³", Min = 0)] double DeliveredTimber { get; }
+    [RuleCollection("A világ összes élő állata.", Display = "Állatok", Addressable = true)] IEnumerable<WildlifeSystem.Animal> Animals { get; }
+    [RuleCollection("A kódból felismert állattípusok állományadatai.", Display = "Állattípusok", Addressable = true)] IEnumerable<WildlifeSystem.AnimalType> AnimalTypes { get; }
+    [RuleCollection("A világ erdészeti gépei.", Display = "Erdészeti gépek", Addressable = true)] IEnumerable<IForestMachine> Machines { get; }
+    [RuleField("Megváltozott az élőhely vagy a projekt populációszabálya.", Display = "Állatállomány frissítése szükséges")]
+    bool WildlifeNeedsRefresh { get; }
+    [RuleAction("Az élőhelybejáró algoritmus futtatásának kérése.", Display = "Állatállomány egyeztetése")]
+    bool ReconcileWildlife();
     [RuleField("Forest years since the start of the game.", Unit = "forest years", Min = 0)] double Time { get; }
     [RuleField("Living trees.", Min = 0)] double TreeCount { get; }
     [RuleField("Road tiles.", Min = 0)] double RoadCount { get; }
@@ -252,6 +262,8 @@ sealed partial class GameWorld
 
     private sealed class TileView : RuleView, ITile
     {
+        public IEnumerable<WildlifeSystem.Animal> Animals => World.RuleAnimals.Where(a => a.TileId == Id);
+        public double ForageDepletion { get => World.wildlife.Forage(Id); set => World.wildlife.SetForage(Id, value); }
         // The soil of one tile is looked up once for all the fields read from it (trees of a tile are visited together).
         // Water stores are read directly; trafficability is computed only when a rule reads it.
         private int cached = -1, trafficable = -1; private bool known; private ulong cachedRevision;
@@ -447,6 +459,14 @@ sealed partial class GameWorld
 
     private sealed class WorldView : RuleView, IWorld
     {
+        public double DeliveredTimber => World.DeliveredTimber;
+        public IEnumerable<WildlifeSystem.Animal> Animals => World.RuleAnimals;
+        public IEnumerable<WildlifeSystem.AnimalType> AnimalTypes => World.RuleAnimalTypes;
+        public IEnumerable<IForestMachine> Machines {
+            get { for (int i = 0; i < World.Logistics.Machines.Count; i++) { var view = new MachineView(); view.Attach(World); view.Bind(World, i); yield return view; } }
+        }
+        public bool WildlifeNeedsRefresh => World.wildlife.NeedsPopulationRefresh;
+        public bool ReconcileWildlife() => World.wildlife.RequestPopulation();
         internal override int[] Elements() => new[] { 0 };
         internal override int Size() => 1;
         public double Time => World.RuleEvaluationYear;
@@ -765,12 +785,15 @@ sealed partial class GameWorld
     private static readonly Lazy<RuleSchema> ruleObjects = new(() => RuleSchema.Discover(RuleEntityTexts.Hungarian, typeof(GameWorld).Assembly));
     /// <summary>The object model of the game, as the editor sees it.</summary>
     internal static RuleSchema RuleObjects => ruleObjects.Value;
+    private static readonly Lazy<RuleObjectModel> ruleModel = new(() => RuleObjectModel.Describe(RuleObjects));
+    internal static RuleObjectModel RuleModel => ruleModel.Value;
 
     /// <summary>Rule scopes of the game: every concrete kind of the object model with the view that implements it.</summary>
     private void ClearRuleViews()
     {
         foreach (var scope in RuleEngine.Scopes) scope.Release?.Invoke(this);
         ruleViews.Clear();
+        classRuleObjects.Clear();
     }
 
     internal static RuleScope[] DiscoveredScopes() => DiscoverScopes(RuleObjects, typeof(GameWorld).Assembly.GetTypes());
@@ -783,7 +806,8 @@ sealed partial class GameWorld
     {
         var views = types.Where(t => t.IsClass && !t.IsAbstract && typeof(RuleView).IsAssignableFrom(t)).ToArray();
         var scopes = new List<RuleScope>();
-        foreach (var entity in schema.Entities.Where(e => !e.Abstract)) {
+        foreach (var entity in schema.Entities.Where(e => !e.Abstract || e.Type.IsClass)) {
+            if (entity.Type.IsClass) { scopes.Add(ClassScope(schema, entity)); continue; }
             // The view of a kind implements it, and no more specific concrete kind it also implements.
             var matches = views.Where(v => entity.Type.IsAssignableFrom(v) && !schema.Entities.Any(o => !o.Abstract && o != entity
                 && entity.Type.IsAssignableFrom(o.Type) && o.Type.IsAssignableFrom(v))).ToArray();
@@ -843,7 +867,7 @@ sealed partial class GameWorld
         var collections = entity.Collections.Where(c => c.Addressable).Select(c => {
             var items = c.Property.GetMethod;
             return new RuleScopeCollection(c.Name, c.Target, Direct<Func<GameWorld, int, int[]>>("DirectMembers", c.Property.Name)
-                ?? ((w, id) => ((IEnumerable<object>)items.Invoke(Bound(w, id), null)).Select(m => (int)((RuleView)m).Index).ToArray()));
+                ?? ((w, id) => ((IEnumerable<object>)items.Invoke(Bound(w, id), null)).Select(m => m is IRuleInstance live ? live.RuleId : (int)((RuleView)m).Index).ToArray()));
         }).ToArray();
         return new(entity.Id, entity.Name, entity.Element, w => View(w, viewType).Elements(), w => View(w, viewType).Size(), fields.ToArray(), actions) {
             PrepareElements = w => Bound(w, 0).PrepareElementsWork(), PreparedElements = w => Bound(w, 0).PreparedElements,
@@ -851,7 +875,7 @@ sealed partial class GameWorld
                 var cached = last;
                 if (cached?.World == w) System.Threading.Interlocked.CompareExchange(ref last, null, cached);
             },
-            Entity = entity.Id, Collections = collections,
+            Entity = entity.Id, ObjectType = entity.Type, Collections = collections,
             StateIndex = entity.Id == "tree" ? (w, id) => checked((int)((TreeView)Bound(w, id)).TreeId) : (_, id) => id,
             StateSize = entity.Id == "tree" ? w => w.forest.IndividualTrees.StateSize : null };
     }
@@ -910,8 +934,10 @@ sealed partial class GameWorld
     /// <summary>The world values every formula reads as named values (<c>world.time</c>, <c>world.rain</c>…): the world entity's own fields.</summary>
     internal static string[] RuleWorldFields => worldReaders.Value.Keys;
     private static readonly Lazy<(string[] Keys, Dictionary<string, Func<object, double>> Read)> worldReaders = new(() => {
-        var fields = RuleObjects.Find("world").Fields.Where(f => f.DeclaredBy == "world").ToArray();
-        return (fields.Select(f => "world." + f.Name).ToArray(), fields.ToDictionary(f => "world." + f.Name, f => Getter(f.Property), StringComparer.Ordinal));
+        var world = RuleObjects.Find("world");
+        var fields = world.Fields.Where(f => f.DeclaredBy == "world").Concat(world.Summaries).ToArray();
+        return (fields.Select(f => "world." + f.Name).ToArray(), fields.ToDictionary(f => "world." + f.Name,
+            f => f.Collection == null ? Getter(f.Property) : Summary(f), StringComparer.Ordinal));
     });
     private double ReadWorldValue(string key) => worldReaders.Value.Read.TryGetValue(key, out var read)
         ? read(View(this, typeof(WorldView))) : throw new ArithmeticException("Ismeretlen világmező: " + key);

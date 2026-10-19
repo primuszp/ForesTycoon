@@ -123,8 +123,10 @@ public sealed class RuleSchemaDrivenTests
     [Fact]
     public void WorldValuesAreTheWorldEntityFields()
     {
-        Assert.Equal(new[] { "world.time", "world.treeCount", "world.roadCount", "world.rain", "world.temperature",
-            "world.snow", "world.water", "world.income", "world.expenses", "world.runningCosts", "world.balance", "world.hoursPerYear" }, GameWorld.RuleWorldFields);
+        var entity = GameWorld.RuleObjects.Find("world");
+        Assert.Equal(entity.Fields.Where(f => f.DeclaredBy == "world").Concat(entity.Summaries).Select(f => "world." + f.Name), GameWorld.RuleWorldFields);
+        Assert.Contains("world.animals.avg.hunger", GameWorld.RuleWorldFields);
+        Assert.Contains("world.machines.avg.wear", GameWorld.RuleWorldFields);
         using var world = World();
         for (int i = 0; i < 30; i++) world.Update(1d / 30);
         var scope = RuleEngine.Scope("world");

@@ -26,7 +26,7 @@ public class StumpRuleExampleTests
         Assert.Equal(1, factors.Single(f => f.Source == "tile.moisture").ToCurve().Sign);
         Assert.Equal(-1, factors.Single(f => f.Source == "diameter").ToCurve().Sign);
         using var world = new GameWorld(TerrainSettings.Default.WithNodeSize(17, 42), enableRendering: false);
-        Assert.Null(world.CaptureCheckpoint().RuleBook); // an unedited default is omitted from the save
+        Assert.NotNull(world.CaptureCheckpoint().RuleBook); // Even an unedited book belongs to this saved world.
         using var stream = new MemoryStream(); world.Save(stream); stream.Position = 0;
         using var restored = new GameWorld(TerrainSettings.Default.WithNodeSize(17, 42), enableRendering: false);
         restored.Load(stream);

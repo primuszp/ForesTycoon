@@ -6,27 +6,31 @@ namespace ForesTycoon
 {
     internal sealed class WorldBehaviorPolicy : IBehaviorPolicy
     {
-        internal static readonly BehaviorHook[] Hooks = EcologyResponseProgram.Hooks.Concat(VehicleResponseRules.Hooks).Concat(LogisticsRules.Hooks).Concat(GameTuning.Specs.Select(s => new BehaviorHook("tuning." + s.Id, s.Name, "world", s.Unit, s.Min, s.Max,
+        internal static readonly BehaviorHook[] Hooks = EcologyResponseProgram.Hooks.Concat(VehicleResponseRules.Hooks).Concat(LogisticsRules.Hooks).Concat(GameplayRules.Hooks).Concat(GameTuning.Specs.Select(s => new BehaviorHook("tuning." + s.Id, s.Name, "world", s.Unit, s.Min, s.Max,
             "Nem használt", "Nem használt", "Paraméter lekérdezése; járműspecifikáció alkalmazáskor", false))).ToArray();
         private readonly CompiledBehaviorModel model;
         internal CompiledBehaviorControllers Controllers { get; }
         internal EcologyResponseProgram Responses { get; }
         internal VehicleRuleProgram VehicleResponses { get; }
+        internal GameplayProgram Gameplay { get; }
         internal WorldBehaviorPolicy(BehaviorModel document, IReadOnlySet<string> keys = null, Func<string, double> read = null, bool prepareExecutables = true)
         {
             document = document.Clone();
-            foreach (var hook in EcologyResponseProgram.Hooks.Concat(VehicleResponseRules.Hooks).Concat(LogisticsRules.Hooks))
+            foreach (var hook in EcologyResponseProgram.Hooks.Concat(VehicleResponseRules.Hooks).Concat(LogisticsRules.Hooks).Concat(GameplayRules.Hooks))
                 if (!document.Graphs.Any(g => g.Hook == hook.Id && g.Kind == hook.Kind && g.ObjectId == null)) document.Graphs.Add(DefaultGraph(hook));
             model = new(document, Hooks, keys, read); if (prepareExecutables) model.Prepare();
             Controllers = model.Controllers; Responses = new(document, model, prepareExecutables); VehicleResponses = new(document, model);
+            Gameplay = Responses.Gameplay;
         }
 
-        internal static BehaviorGraph DefaultGraph(BehaviorHook hook) => LogisticsRules.IsKind(hook.Kind) ? LogisticsRules.DefaultGraph(hook) : hook.Kind == "vehicleResponse" ? VehicleResponseRules.DefaultGraph(hook) : EcologyResponseProgram.IsPureKind(hook.Kind) ? EcologyResponseProgram.DefaultGraph(hook) : new() {
-            Id = "default." + hook.Kind + "." + hook.Id, Name = hook.Name, Hook = hook.Id, Kind = hook.Kind
+        internal static BehaviorGraph DefaultGraph(BehaviorHook hook) => RuleProject.DefaultGraph(hook);
+        internal static BehaviorModel DefaultDocument() => RuleProject.CreateDefault().Behaviors;
+        internal static BehaviorGraph InactiveGraph(BehaviorHook hook) => new() {
+            Id = "inactive." + hook.Kind + "." + hook.Id, Name = hook.Name, Hook = hook.Id, Kind = hook.Kind,
+            Output = "inactive", Nodes = new() { new() { Id = "inactive", Name = "Inaktív szabály", Operation = BehaviorOperation.Constant, Value = Math.Clamp(0, hook.Min, hook.Max) } }
         };
-        internal static BehaviorModel DefaultDocument() => new() { Graphs = Hooks.Select(DefaultGraph).ToList() };
         internal BehaviorModel Document => model.Document;
-        internal string LastError => model.LastError ?? Responses.LastError ?? VehicleResponses.LastError;
+        internal string LastError => model.LastError ?? Responses.LastError ?? VehicleResponses.LastError ?? Gameplay.LastError;
         internal bool HasGraphs => model.HasGraphs;
         public bool Overrides(string hook, string kind) => model.Overrides(hook, kind);
         public double Evaluate(in BehaviorQuery query) => model.Evaluate(query.Hook, query.Kind, query.Id,
@@ -35,13 +39,17 @@ namespace ForesTycoon
     }
     sealed partial class GameWorld
     {
-        private WorldBehaviorPolicy behaviorPolicy = new(new BehaviorModel());
+        private WorldBehaviorPolicy behaviorPolicy = new(WorldBehaviorPolicy.DefaultDocument());
         internal BehaviorModel BehaviorDocument => behaviorPolicy.Document;
         internal string BehaviorError => behaviorPolicy.LastError;
         internal BehaviorControllerSnapshot[] BehaviorStates => behaviorPolicy.Controllers.Capture();
         internal IEnumerable<(ulong Id, string Label)> BehaviorTargets(string kind)
         {
             if (LogisticsRules.IsKind(kind)) kind = kind[9..].ToLowerInvariant();
+            if (RuleObjects.Find(kind) is { Type.IsClass: true } entity && RuleEngine.Scope(kind) is { } scope) {
+                foreach (int id in scope.Elements(this)) yield return ((ulong)id, scope.Label?.Invoke(this, id) ?? entity.Name + " #" + id);
+                yield break;
+            }
             if (kind == "world") { yield return (0, "Teljes játékvilág"); }
             else if (kind == "tree") {
                 foreach (var entry in forest.IndividualTrees.Patches)
@@ -81,6 +89,7 @@ namespace ForesTycoon
                 pendingForestRateRefresh = true; Environment.InvalidateVegetation();
             }
             behaviorPolicy = replacement;
+            wildlife.InvalidateRules();
             BindBehaviors();
             ApplyTuning(Tuning);
             yield return 1;
@@ -93,6 +102,10 @@ namespace ForesTycoon
             forest.MonthlyRules = TreeMonthWork;
             forest.GrowthRules = TreeGrowthWork;
             Logistics.Behaviors = active;
+            Logistics.Gameplay = wildlife.Gameplay = map.Gameplay = behaviorPolicy.Gameplay;
+            wildlife.RuleStep = WildlifeRuleWork;
+            wildlife.PopulationRuleStep = PopulationRuleWork;
+            wildlife.BirthRuleStep = ids => CreatedObjectsWork("animal", ids);
             Logistics.Controllers = behaviorPolicy.Controllers.HasControllers ? behaviorPolicy.Controllers : null;
         }
     }

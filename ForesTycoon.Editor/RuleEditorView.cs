@@ -15,7 +15,6 @@ namespace ForesTycoon.Editor
     /// </summary>
     internal sealed partial class RuleEditorView
     {
-        private enum View { Overview, Tuning, Behaviors, Dynamics, Objects, Algorithms }
 
         private string message = "";
         private string projectLoadError;
@@ -23,7 +22,6 @@ namespace ForesTycoon.Editor
         private readonly CurrentRulesView currentRules = new();
         private readonly BehaviorEditorView behaviors = new();
         internal void AdvanceSandbox(GameWorld world, double elapsed) => behaviors.Advance(world, elapsed);
-        private View view = View.Overview;
 
         internal RuleEditorView(string modelPath = null)
         {
@@ -45,7 +43,7 @@ namespace ForesTycoon.Editor
             if (document.RootElement.TryGetProperty("schema", out var projectSchema) && projectSchema.GetString() == "forest-rule-project")
             { pendingProject = RuleProject.FromJson(document.RootElement.GetRawText()); projectPath = RuleWorkshopModel.PublishedPath(path); return; }
             if (document.RootElement.TryGetProperty("schema", out var behaviorSchema) && behaviorSchema.GetString() == "forest-behaviors")
-            { behaviors.Load(BehaviorModel.FromJson(document.RootElement.GetRawText()), path); view = View.Behaviors; return; }
+            { behaviors.Load(BehaviorModel.FromJson(document.RootElement.GetRawText()), path); return; }
             if (document.RootElement.TryGetProperty("schema", out var schema) && schema.GetString() == "forest-current-rules")
             { currentRules.Load(GameRuleCatalog.FromJson(document.RootElement.GetRawText()), path); return; }
             throw new InvalidDataException("Nyiss meg egy teljes szabályprojektet; a külön útkopási modell megszűnt.");

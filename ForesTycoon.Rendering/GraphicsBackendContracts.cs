@@ -35,6 +35,7 @@ namespace ForesTycoon.Rendering
         void SetForestGrowth(ForestVertexGrowth[] data);
         IEnumerable<bool> UploadForestPages(List<Vertex> data, List<ForestVertexGrowth> growth);
         void DrawArray(bool useGeometryShader);
+        void DrawRange(int first, int count, bool useGeometryShader);
         void DrawElements();
         void ReadVertices(Vertex[] destination);
     }

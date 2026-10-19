@@ -307,10 +307,6 @@ namespace ForesTycoon.Map
             return RemoveRoadTilePath(tiles[startTileId], tiles[endTileId]);
         }
 
-        // Teljes újraépítés minden road módosítás után: sorrendfüggetlen, univerzális.
-        // Minden road tile minden szomszédos él-párjánál beállítja a diagonális szomszéd flipjét.
-        private void RebuildFlippedDiagonalTiles() => SimulationWork.Complete(RebuildFlippedDiagonalTilesWork());
-
         private IEnumerable<int> RebuildFlippedDiagonalTilesWork()
         {
             flippedDiagonalTiles.Clear();
@@ -411,8 +407,6 @@ namespace ForesTycoon.Map
             (roadSurfaceW.TryGetValue(n.Id, out int w) ? w : n.W) * tileSizeM;
 
         internal Vector3 RoadCorner(Node n) => new Vector3(n.xPos, n.yPos, RoadSurfaceZ(n));
-
-        private Vector3 RoadCorner(Node n, int w) => new Vector3(n.xPos, n.yPos, w * tileSizeM);
 
         // Csempe-útvonal bejárása a rácson (egyenes lépcsős út a → b között).
         internal readonly struct RoadPlanStep

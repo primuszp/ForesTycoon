@@ -11,7 +11,87 @@ dotnet run --project ForesTycoon.Editor -- --project projekt.json
 
 A cél egy rendszerdinamikai modell: a **Típusok** a modell állandói (talaj, fafaj, burkolat),
 a **Pálya** a kezdőállapota (domborzat, víz, talaj, erdő), a **Szabályok** az áramlásai
-(mi mit változtat, miből). A játék szabályai fokozatosan költöznek ide a kódból.
+(mi mit változtat, miből). A kiinduló szabályok az
+[`Editor/GameRules/default.project.json`](../ForesTycoon.Editor/GameRules/default.project.json)
+projektben vannak; ezt csomagolja a játék is. A 4-es projektverzióban a szabálykönyv
+pontos tartalma fut: törölt szabályt nem pótol vissza a motor. Az 1–3-as projektek
+első betöltéskor migrálódnak. [Szabálytulajdonlás és motoralgoritmusok](../ForesTycoon.Editor/GameRules/README.md).
+
+A közös gráfszerkesztőben az induló erdő eloszlása, fajválasztása, kora és egészsége,
+a telepítés és fakivágás engedélye, az építés és javítás költsége, a faeladás,
+az üzemanyag elszámolása, a gazdasági eredmény, a küldetések teljesülése és lejárata,
+valamint a vadak élőhely-, legelési és célválasztási szabályai is szerkeszthetők.
+
+## Kódból felismert objektumok és új állattípus
+
+A futó modell a lefordított játékkód osztályaiból és interfészeiből készül reflexióval.
+Újrafordítás és újraindítás után az editor ugyanazt a hierarchiát és mezőlistát látja,
+ami ténylegesen fut. Nincs külön kézzel karbantartott állatlista az editorban.
+Például a játék projektjében:
+
+```csharp
+[DisplayName("Róka")]
+internal sealed class Fox : WildlifeSystem.Animal
+{
+    [RuleField("A róka energiatartaléka.", Display = "Energia", Unit = "kJ", Min = 0)]
+    public double Energy { get; set; }
+}
+```
+
+A **Világobjektum → Állat → Róka** automatikusan megjelenik az örökölt éhség,
+életkor, mozgás, csempekapcsolat és műveletek mellett az **Energia** mezővel.
+A nyilvános numerikus, logikai és enum tulajdonságok `RuleField` nélkül is
+felismerhetők; a `DisplayName` és `Description` is használható. A belső geometriai
+adatok nem modellmezők; egy nyilvános tulajdonságot `RuleIgnore` rejt el.
+A `RuleRelation` egy másik objektumra, a `RuleCollection` objektumgyűjteményre
+mutat. Címezhető gyűjteményen megőrző készletáramlás is létrehozható.
+
+Az **Állat** hatókör minden leszármazotton fut, a **Róka** csak a rókákon.
+Új állatok létező példányait a közös `RuleObjectSource` gyűjtemény kapcsolja a
+motorhoz. Minden konkrét típushoz automatikusan létrejön egy **Állattípus állománya**
+objektum. A típus felismerése önmagában nem hoz létre egyedeket vagy új
+3D-modellt. Az egyedazonosító stabil; listaelemek törlése nem tolja át a saját
+készleteket más állatokra. A publikus írható mezők mentése automatikus;
+a visszatöltéshez paraméter nélküli konstruktor szükséges. Osztály átnevezésekor
+stabil `[RuleEntity("fox")]` azonosítóval tarthatók meg a korábbi kötések.
+
+A `wildlife` időzítés másodpercben fut. A kiinduló projektben külön szabály tartja
+az életkort, éhséget, legelést, legelőregenerációt és mozgási paramétereket;
+a szabály hívja meg a célválasztó és mozgató motoralgoritmust is. Törlésük nem
+kapcsol vissza rejtett C#-os éhség- vagy regenerációképletet. A 2-es projekt
+régi állati válaszgráfjai egyszeri migrációval objektumhatásokká alakulnak.
+
+A `population` időzítés az élőhelyfelmérés után fut. Az állományobjektum
+`DesiredPopulation` mezőjét bármilyen más modellmezőből számíthatod, majd az
+`ApplyPopulation` művelet a kért létszámhoz igazítja az egyedeket. A motor a mért
+élőhelyek és a végrehajtási keret határain belül dolgozik. Az alapdokumentum választja
+ki a Gímszarvast; a motor nem tartalmaz ilyen fajválasztási feltételt. A típusazonosító
+mezők választólistájában a kódból felismert szép nevek jelennek meg.
+
+A `birth` időzítés csak az újonnan létrehozott példányokra fut; az alapdokumentum
+itt állítja az induló éhséget és irányt. Az esemény hatóköre és egyedazonosítói a
+végrehajtási ellenőrzőpontban is megmaradnak. Új motoroldali példányosító művelet
+ugyanezen eseménykapun adhatja át az új objektumokat a szabályoknak.
+
+Az összefüggésekhez nem kell külön C#-os bemenetet írni. A `world.animals.count`,
+`world.animals.avg.hunger` és `world.machines.avg.wear` globális összesítések;
+a `tile.animals.avg.hunger` és `tile.trees` a helyi állapotot kapcsolja össze.
+Például egy fa egészsége függhet az ugyanazon csempén élő állatok átlagos éhségétől,
+az állomány célértéke pedig az időjárástól vagy a gépek állapotától. A felismert
+kapcsolatok a mezőválasztóban és az oksági térképen is használhatók.
+
+A `machine.workflow` és `truck.workflow` gráfok a munkafázisok közötti döntéseket
+adják; a motor a kiválasztott útkeresést, mozgatást vagy átadást hajtja végre.
+A rakomány elvesztését és a térbeli ugrást megakadályozó fizikai korlátok megmaradnak.
+A `control.allow`, `control.home` és `control.upkeep` a várakozás, hazatérés és
+fenntartás döntéseit, a `supply.active` az utánpótlási lánc aktivitását adja.
+A `loading.depart` határozza meg a választható rakott indulást; a motor a már
+megfogott rönk átadását befejezi. A `mission.state` választja ki a küldetés állapotát,
+ha több feltétel egyszerre igaz. A küldetések mérőszámai a világ mezőiből és
+összesítéseiből automatikusan készülnek.
+Az `--export-rule-api` és `--export-world` JSON `objectModel` része a neveket,
+mezőket, öröklést, kapcsolatokat, műveleteket és a modell tartalmi revízióját is
+közzéteszi; ezt ugyanabból a felismert modellből állítjuk elő.
 
 Négy munkatér van.
 
@@ -152,7 +232,7 @@ gyökérzóna-vize. A választó ezeket külön csoportban kínálja. A kódban 
 
 **A vízháztartás áramlásokkal.** A csempe vízkészletei (lombkorona-víz, felszíni víz, hó,
 gyökérzóna- és mélyvíz) csak a projekt induló szabályainak áramlásain keresztül változnak; a
-natív vízlépés már nem mozgat vizet. Átállított szabályok (`ForesTycoon.Rules/WaterRules.cs`):
+natív vízlépés már nem mozgat vizet. Átállított szabályok (`ForesTycoon.Editor/GameRules/default.project.json`):
 
 | Szabály | Áramlások |
 | --- | --- |

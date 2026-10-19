@@ -89,7 +89,7 @@ public static class AlgorithmBuild
                 if (relative.Split('/').Any(p => p is "obj" or "bin") || rendered.ContainsKey(relative)) continue;
                 hostHash.AppendData(Encoding.UTF8.GetBytes(relative + "\0" + File.ReadAllText(path)));
             }
-        foreach (string path in new[] { "Directory.Build.props", "Directory.Build.targets", "global.json", "NuGet.Config" })
+        foreach (string path in new[] { "Directory.Build.props", "Directory.Build.targets", "global.json", "NuGet.Config", "ForesTycoon.Editor/GameRules/default.project.json" })
             if (File.Exists(Path.Combine(workspace, path))) hostHash.AppendData(File.ReadAllBytes(Path.Combine(workspace, path)));
         string hostRevision = Convert.ToHexString(hostHash.GetHashAndReset())[..16].ToLowerInvariant();
         string directory = Path.Combine(CacheRoot, reference.Revision + "-" + hostRevision);
@@ -139,7 +139,9 @@ public static class AlgorithmBuild
             }
             project.Add(target); File.WriteAllText(targets, project.ToString());
             var info = new ProcessStartInfo("dotnet") { WorkingDirectory = workspace, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
-            foreach (string arg in new[] { "build", "ForesTycoon/ForesTycoon.csproj", "-c", "Release", "--nologo", "-v:q", "-p:DirectoryBuildPropsPath=" + props,
+            // This is a captured child process, not an interactive build server. Reused
+            // MSBuild workers can retain its redirected pipes after the build exits.
+            foreach (string arg in new[] { "build", "ForesTycoon/ForesTycoon.csproj", "-c", "Release", "--nologo", "-v:q", "-m:1", "-nr:false", "-p:DirectoryBuildPropsPath=" + props,
                 "-p:DirectoryBuildTargetsPath=" + targets, "-p:UseSharedCompilation=false" }) info.ArgumentList.Add(arg);
             using var process = Process.Start(info) ?? throw new IOException("A gráffordító nem indult el.");
             var output = process.StandardOutput.ReadToEndAsync(cancellation); var error = process.StandardError.ReadToEndAsync(cancellation);

@@ -26,7 +26,7 @@ namespace ForesTycoon.Editor
         internal void RestoreDefault(string hook, string kind, ulong? id) {
             Remember(); model.Graphs.RemoveAll(g => g.Hook == hook && g.Kind == kind && g.ObjectId == id);
             if (EcologyResponseProgram.IsPureKind(kind) && !id.HasValue) {
-                var graph = EcologyResponseProgram.DefaultGraph(availableHooks.Single(h => h.Id == hook && h.Kind == kind));
+                var graph = WorldBehaviorPolicy.DefaultGraph(availableHooks.Single(h => h.Id == hook && h.Kind == kind));
                 model.Graphs.Add(graph); selectedGraph = graph.Id; selectedNode = graph.Output;
             } else selectedGraph = model.Graphs.FirstOrDefault(g => g.Hook == hook && g.Kind == kind && !g.ObjectId.HasValue)?.Id;
         }
@@ -107,7 +107,8 @@ namespace ForesTycoon.Editor
             hookIndex = Array.IndexOf(availableHooks, hook);
             var graph = model.Graphs.Find(g => g.Hook == hook.Id && g.Kind == hook.Kind && g.ObjectId == null);
             if (graph == null) {
-                Remember(); graph = EcologyResponseProgram.IsPureKind(hook.Kind) ? EcologyResponseProgram.DefaultGraph(hook) : new() { Id = Guid.NewGuid().ToString("N"), Name = hook.Name, Hook = hook.Id, Kind = hook.Kind };
+                Remember(); graph = WorldBehaviorPolicy.Hooks.Any(h => h.Id == hook.Id && h.Kind == hook.Kind)
+                    ? WorldBehaviorPolicy.DefaultGraph(hook) : WorldBehaviorPolicy.InactiveGraph(hook);
                 model.Graphs.Add(graph);
             }
             selectedGraph = graph.Id; selectedNode = graph.Output;

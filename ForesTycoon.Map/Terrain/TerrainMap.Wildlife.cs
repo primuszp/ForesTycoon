@@ -6,6 +6,7 @@ namespace ForesTycoon.Map
     internal readonly record struct WildlifeSpot(int TileId, Vector3 Position, uint Rank);
     internal sealed partial class TerrainMap
     {
+        internal ForesTycoon.Rules.GameplayProgram Gameplay { get; set; } = ForesTycoon.Rules.GameplayProgram.Default;
         internal bool CanWildlifeWalkAt(float x,float y) =>
             TryGetTileCoordinates(x,y,out int u,out int v,out _,out _) &&
             TryGetWildlifeDestination(GetTile(u,v).Id,out _);
@@ -13,11 +14,11 @@ namespace ForesTycoon.Map
         {
             position = default;
             Tile tile = tiles[id];
-            if (roads.Has(id) || ShouldDrawStandingWater(tile) || CountRiverCorners(tile) > 0 ||
-                !((IForestHabitat)this).CanSupportForest(id)) return false;
             float low = Math.Min(Math.Min(tile.W.zPos, tile.S.zPos), Math.Min(tile.E.zPos, tile.N.zPos));
             float high = Math.Max(Math.Max(tile.W.zPos, tile.S.zPos), Math.Max(tile.E.zPos, tile.N.zPos));
-            if (high - low > Math.Min(data.TileSizeH, data.TileSizeV) * 0.4f) return false;
+            if (Gameplay.Evaluate("wildlife.walkable", roads.Has(id) ? 1 : 0, ShouldDrawStandingWater(tile) ? 1 : 0,
+                CountRiverCorners(tile) > 0 ? 1 : 0, ((IForestHabitat)this).CanSupportForest(id) ? 1 : 0,
+                (high - low) / Math.Min(data.TileSizeH, data.TileSizeV)) < .5) return false;
             return TryGetTileCenter(id, out position);
         }
         internal void CollectWildlifeSpots(ForestSystem forest,List<WildlifeSpot> output,bool stopAfterFirst=false)
@@ -28,25 +29,24 @@ namespace ForesTycoon.Map
             // Reuse one flattened sample for all nine candidate positions. Preserve the
             // original own-tile/adjacent-tile order so minimum-distance ties stay identical.
             Vector2[] stems=new Vector2[ForestTreeStore.PlantedTreesPerTile * 5];
+            int limit = (int)Gameplay.Evaluate("wildlife.habitatCapacity");
+            if (limit == 0) yield break;
             foreach(Tile tile in tiles)
             {
                 yield return 1;
-                if(roads.Has(tile.Id)||ShouldDrawStandingWater(tile)||CountRiverCorners(tile)>0||!((IForestHabitat)this).CanSupportForest(tile.Id))continue;
-                float low=Math.Min(Math.Min(tile.W.zPos,tile.S.zPos),Math.Min(tile.E.zPos,tile.N.zPos));
-                float high=Math.Max(Math.Max(tile.W.zPos,tile.S.zPos),Math.Max(tile.E.zPos,tile.N.zPos));
-                if(high-low>Math.Min(data.TileSizeH,data.TileSizeV)*0.4f)continue;
+                if (!TryGetWildlifeDestination(tile.Id, out _)) continue;
                 forest.TryGetStand(tile.Id,out var stand);
                 int forestNeighbours=0;bool nearRoad=false;
                 foreach(Tile adjacent in data.GetAdjacentTiles(tile).ToArray()) {
                     if(roads.Has(adjacent.Id))nearRoad=true;
-                    if(forest.TryGetStand(adjacent.Id,out var neighbouring)&&neighbouring.Maturity>=0.2f)forestNeighbours++;
+                    forest.TryGetStand(adjacent.Id, out var neighbouring);
+                    if (Gameplay.Evaluate("wildlife.neighbour", neighbouring.IsEmpty ? 1 : 0, neighbouring.Maturity) >= .5) forestNeighbours++;
                 }
-                if(nearRoad)continue;
-                if(stand.IsEmpty ? forestNeighbours<1 : stand.Maturity<0.2f)continue;
+                if (Gameplay.Evaluate("wildlife.habitat", nearRoad ? 1 : 0, stand.IsEmpty ? 1 : 0, forestNeighbours, stand.Maturity) < .5) continue;
                 // Stable seeded selection across the whole map, independent of camera.
                 uint rank=unchecked((uint)(tile.Id*747796405+settings.Seed*2891336453L));rank=(rank^(rank>>16))*2246822519u;rank^=rank>>13;
-                rank=(rank&0x7fffffffu)|(stand.IsEmpty?0u:0x80000000u);
-                if(output.Count==16&&rank>=output[^1].Rank)continue;
+                rank = (uint)Gameplay.Evaluate("wildlife.habitatRank", rank & 0x7fffffffu, stand.IsEmpty ? 1 : 0, stand.Maturity);
+                if(output.Count==limit&&rank>=output[^1].Rank)continue;
                 Vector3 center=new((tile.W.xPos+tile.E.xPos)*0.5f,(tile.W.yPos+tile.E.yPos)*0.5f,0);
                 int count=CollectWildlifeStemPositions(forest,tile,stems.AsSpan(0,ForestTreeStore.PlantedTreesPerTile));
                 foreach(Tile adjacent in data.GetAdjacentTiles(tile).ToArray()) {
@@ -62,7 +62,7 @@ namespace ForesTycoon.Map
                 if(!TryGetSurfaceZ(best.X,best.Y,out float z))continue;
                 var spot=new WildlifeSpot(tile.Id,new Vector3(best.X,best.Y,z),rank);
                 int index=0;while(index<output.Count&&output[index].Rank<rank)index++;
-                output.Insert(index,spot);if(output.Count>16)output.RemoveAt(16);
+                output.Insert(index,spot);if(output.Count>limit)output.RemoveAt(limit);
                 if(stopAfterFirst)yield break;
             }
         }

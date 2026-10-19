@@ -28,6 +28,8 @@ internal sealed record RuleScope(string Id, string Name, string Element, Func<Ga
 {
     /// <summary>The discovered object kind (<see cref="GameWorld.RuleObjects"/>) behind the scope.</summary>
     public string Entity { get; init; }
+    public Type ObjectType { get; init; }
+    public Func<GameWorld, int, string> Label { get; init; }
     public Func<GameWorld, int, int> StateIndex { get; init; } = (_, id) => id;
     public Func<GameWorld, int> StateSize { get; init; }
     public Func<GameWorld, IEnumerable<int>> PrepareElements { get; init; }
@@ -41,9 +43,10 @@ internal sealed record RuleScope(string Id, string Name, string Element, Func<Ga
 internal sealed record RuleScopeCollection(string Name, string Target, Func<GameWorld, int, int[]> Members);
 
 internal sealed record RuleBookCheckpoint(List<WorldRule> Rules, List<RuleFieldDefinition> Fields, Dictionary<string, double[]> Values,
-    List<string> RemovedStarters = null, Dictionary<string, double> FlowTotals = null);
+    List<string> RemovedStarters = null, Dictionary<string, double> FlowTotals = null, int ProjectVersion = 2);
 /// <summary>A rule step under way: its time step, where it stands (rule, element) and the named values it has read so far.</summary>
-internal sealed record RuleStepCheckpoint(double Years, double Time, int Rule, int Element, Dictionary<string, double> Named);
+internal sealed record RuleStepCheckpoint(double Years, double Time, int Rule, int Element, Dictionary<string, double> Named,
+    string Schedule = "step", int EventElement = 0, string EventScope = null, int[] EventElements = null);
 
 /// <summary>
 /// Runs the rule book: every enabled rule, in order, on every element of its scope. Per element the condition is
@@ -63,21 +66,7 @@ internal sealed partial class RuleEngine
     // ── Starter rules: what a new project begins with ────────────────────
     // They were C# once; now they are ordinary rules of the project, edited, switched off or deleted like any other.
     // A starter only seeds a project (and older projects that have not seen it yet); the game itself owns no rule.
-    internal static List<WorldRule> StarterRules() => WaterRules.Defaults().Concat(TreeVitalityRules.Defaults()).Concat(new[] { TreeGrowthRule.Default() }).Concat(new List<WorldRule> {
-        TrafficWearRule.Default(),
-        RoadWeatherRule.Default(),
-        TrailAgeRule.Default(),
-        StumpDecayRule.Default(),
-        // A sample of the object model: a tree rule reading its own tile through a relation. Off by default, so the
-        // shipped game behaves as before; switch it on in the editor to see dry ground weaken the trees on it.
-        new() { Id = "tree.drought", Enabled = false, Name = "Aszálykár a fákon", Scope = "tree", Schedule = "month",
-            Description = "Kiszáradt talajon a fa egészsége romlik; az árnyéktűrő fajok jobban bírják. Opcionális saját hatás az egészséggráf mellett.",
-            Effects = { new() { Target = "health", Mode = "add", Influence = new() { Terms = {
-                new() { Name = "Száraz talaj gyengíti a fát", Amount = .3, Factors = {
-                    new() { Source = "tile.waterSupply", InputHigh = .2, OutputLow = 1, OutputHigh = 0 },
-                    new() { Source = "shadeTolerance", OutputLow = 1, OutputHigh = .5 } } }
-            } } } } },
-    }).Select(r => { r.Template = r.Id; return r; }).ToList();
+    internal static List<WorldRule> StarterRules() => RuleProject.CreateDefault().Rules;
 
     /// <summary>
     /// Starter rules the project has not seen yet are added (a new project gets them all); one the author deleted is
@@ -88,9 +77,6 @@ internal sealed partial class RuleEngine
         foreach (var rule in StarterRules())
             if (!rules.Exists(r => r.Id == rule.Id || r.Template == rule.Id) && removed?.Contains(rule.Id) != true) rules.Add(rule);
     }
-
-    internal static bool IsDefault(List<WorldRule> rules, List<RuleFieldDefinition> fields, ICollection<string> removed) =>
-        fields.Count == 0 && (removed == null || removed.Count == 0) && JsonSerializer.Serialize(rules) == JsonSerializer.Serialize(StarterRules());
 
     // ── Compilation ──────────────────────────────────────────────────────
     private sealed class Expression
@@ -137,7 +123,11 @@ internal sealed partial class RuleEngine
     internal IReadOnlyDictionary<string, double> FlowTotals => flowTotals;
     internal List<WorldRule> Rules { get; }
     internal List<RuleFieldDefinition> Fields { get; }
-    internal string LastError { get; private set; }
+    private readonly Dictionary<string, string> scheduleErrors = new(StringComparer.Ordinal);
+    internal string LastError {
+        get => scheduleErrors.Values.LastOrDefault();
+        private set { if (value == null) scheduleErrors.Remove(stepSchedule); else scheduleErrors[stepSchedule] = value; }
+    }
 
     internal sealed record InfluenceContribution(string Name, double Change);
     internal sealed record InfluencePreview(string Target, double Before, double After, InfluenceContribution[] Contributions);
@@ -214,12 +204,13 @@ internal sealed partial class RuleEngine
 
     /// <summary>The names a rule's formulas may use on a scope: fields, custom fields, step, time, world values, stocks, tuning.</summary>
     internal static IReadOnlyList<FormulaName> Names(string scope, IEnumerable<RuleFieldDefinition> fields, IEnumerable<string> stocks)
+        => Names(Scope(scope) ?? throw new InvalidDataException("Ismeretlen hatókör: " + scope), fields, stocks);
+    private static IReadOnlyList<FormulaName> Names(RuleScope s, IEnumerable<RuleFieldDefinition> fields, IEnumerable<string> stocks)
     {
-        var s = Scope(scope) ?? throw new InvalidDataException("Ismeretlen hatókör: " + scope);
         var inputs = InputNames(s, fields);
         var names = RuleFormula.Names(Hook("rule", s, inputs), stocks).Where(n => n.Operation is not (BehaviorOperation.Native or BehaviorOperation.State or BehaviorOperation.Amount)).ToList();
         names.RemoveAll(n => n.Operation == BehaviorOperation.Delta || n.Operation == BehaviorOperation.Time);
-        names.Insert(0, new("lépés", BehaviorOperation.Delta, Help: "Az eltelt idő ebben a lépésben (erdőév)."));
+        names.Insert(0, new("lépés", BehaviorOperation.Delta, Help: "Az eltelt idő a választott időzítés egységében; állati lépésnél másodperc, erdőlépésnél erdőév."));
         names.Insert(1, new("idő", BehaviorOperation.Time, Help: "Eltelt idő a játék kezdete óta (erdőév)."));
         names.Insert(0, new("deltaYears", BehaviorOperation.Delta, Help: "Elapsed forest years in this rule step."));
         for (int i = 0; i < names.Count; i++)
@@ -229,7 +220,7 @@ internal sealed partial class RuleEngine
         // Every field of the world and every stock by its code name, as the editor's pickers offer them.
         var world = GameWorld.RuleObjects.Find("world");
         foreach (string key in GameWorld.RuleWorldFields)
-            names.Add(new(key, BehaviorOperation.NamedValue, key, world?.Fields.FirstOrDefault(f => "world." + f.Name == key)?.Help ?? ""));
+            names.Add(new(key, BehaviorOperation.NamedValue, key, world?.Fields.Concat(world.Summaries).FirstOrDefault(f => "world." + f.Name == key)?.Help ?? ""));
         foreach (string id in stocks ?? Enumerable.Empty<string>()) names.Add(new("stock." + id, BehaviorOperation.NamedValue, "stock." + id, "Saját készlet."));
         foreach (var spec in GameTuning.Specs) names.Add(new("tuning." + spec.Id, BehaviorOperation.NamedValue, "tuning." + spec.Id, $"{spec.Name} ({spec.Unit})."));
         return names;
@@ -289,16 +280,19 @@ internal sealed partial class RuleEngine
         return slot;
     }
 
-    internal RuleEngine(List<WorldRule> rules, List<RuleFieldDefinition> fields, IEnumerable<string> stockIds, Func<string, double> readValue, bool prepareExecutables = true)
+    private readonly Dictionary<string, RuleScope> objectScopes;
+    private RuleScope FindScope(string id) => objectScopes.GetValueOrDefault(id);
+    internal RuleEngine(List<WorldRule> rules, List<RuleFieldDefinition> fields, IEnumerable<string> stockIds, Func<string, double> readValue, bool prepareExecutables = true, IEnumerable<RuleScope> scopes = null)
     {
+        objectScopes = (scopes ?? Scopes).ToDictionary(s => s.Id, StringComparer.Ordinal);
         readNamed = readValue;
         Rules = rules; Fields = fields;
         if (rules.Count > 256 || fields.Count > 64) throw new InvalidDataException("Legfeljebb 256 szabály és 64 saját mező lehet.");
         var fieldNames = new HashSet<string>(StringComparer.Ordinal);
         foreach (var f in fields) {
             f.Validate();
-            if (Scope(f.Scope) == null) throw new InvalidDataException($"{f.Name}: ismeretlen hatókör.");
-            if (!fieldNames.Add(f.Name) || Scope(f.Scope).Fields.Any(x => x.Name == f.Name)) throw new InvalidDataException($"{f.Name}: ez a név már foglalt.");
+            if (FindScope(f.Scope) == null) throw new InvalidDataException($"{f.Name}: ismeretlen hatókör.");
+            if (!fieldNames.Add(f.Name) || FindScope(f.Scope).Fields.Any(x => x.Name == f.Name)) throw new InvalidDataException($"{f.Name}: ez a név már foglalt.");
         }
         var ids = new HashSet<string>(StringComparer.Ordinal);
         var stocks = stockIds.ToArray();
@@ -308,9 +302,9 @@ internal sealed partial class RuleEngine
         foreach (var rule in rules) {
             rule.Validate();
             if (!ids.Add(rule.Id)) throw new InvalidDataException($"{rule.Name}: az azonosító ({rule.Id}) már foglalt.");
-            var scope = Scope(rule.Scope) ?? throw new InvalidDataException($"{rule.Name}: ismeretlen hatókör ({rule.Scope}).");
+            var scope = FindScope(rule.Scope) ?? throw new InvalidDataException($"{rule.Name}: ismeretlen hatókör ({rule.Scope}).");
             var inputs = InputNames(scope, fields);
-            var names = Names(rule.Scope, fields, stocks);
+            var names = Names(scope, fields, stocks);
             Expression Compile(string text, string part)
             {
                 string id = "rule." + counter++;
@@ -349,7 +343,7 @@ internal sealed partial class RuleEngine
                     var spread = dot > 0 ? Array.Find(scope.Collections, c => c.Name == e.To[..dot]) : null;
                     CompiledFlow flow;
                     if (spread != null) {
-                        var into = Scope(spread.Target);
+                        var into = FindScope(spread.Target);
                         int intoField = Array.FindIndex(into.Fields, f => f.Name == e.To[(dot + 1)..] && f.Write != null);
                         if (intoField < 0) throw new InvalidDataException($"{rule.Name}: a(z) {e.To} nem írható készlet.");
                         bool downhill = e.Spread == "downhill";
@@ -390,7 +384,7 @@ internal sealed partial class RuleEngine
 
     private double[] Values(GameWorld world, RuleFieldDefinition field)
     {
-        var scope = Scope(field.Scope); int size = (scope.StateSize ?? scope.Size)(world);
+        var scope = FindScope(field.Scope); int size = (scope.StateSize ?? scope.Size)(world);
         if (!values.TryGetValue(field.Name, out var array) || array.Length != size) {
             var previous = array; array = new double[size]; Array.Fill(array, field.Initial);
             if (previous != null) Array.Copy(previous, array, Math.Min(previous.Length, size)); values[field.Name] = array;
@@ -402,7 +396,7 @@ internal sealed partial class RuleEngine
     {
         var f = Fields.Find(x => x.Name == name);
         if (f == null) return double.NaN;
-        var scope = Scope(f.Scope);
+        var scope = FindScope(f.Scope);
         if (id < 0 || id >= scope.Size(world)) return double.NaN;
         id = scope.StateIndex(world, id);
         if (previewing) {
@@ -434,17 +428,25 @@ internal sealed partial class RuleEngine
     internal bool NetworkChanged { get; private set; }
     private bool stepPending; private double stepYears, stepTime; private int stepRule, stepElement;
     private string stepSchedule = "step"; private int eventElement;
+    private string eventScope;
+    private Type eventType;
+    private HashSet<int> eventElements;
     /// <summary>A step has begun and not all of its work is done yet.</summary>
     internal bool StepPending => stepPending;
 
     /// <summary>Starts a step of <paramref name="years"/>; <see cref="Continue"/> does the work. The previous step must be finished.</summary>
-    internal void Begin(GameWorld world, double years, double time, string schedule = "step", int element = 0)
+    internal void Begin(GameWorld world, double years, double time, string schedule = "step", int element = 0,
+        string eventScope = null, int[] eventElements = null)
     {
         if (!double.IsFinite(years) || years < 0 || !double.IsFinite(time) || Array.IndexOf(WorldRule.Schedules, schedule) < 0) throw new ArgumentException("Invalid rule interval or schedule.");
         if (stepPending) throw new InvalidOperationException("Az előző szabálylépés még fut.");
         execution?.Dispose(); execution = null; NetworkChanged = false;
-        LastError = null; namedStep++;
-        stepSchedule = schedule; eventElement = element;
+        stepSchedule = schedule; LastError = null; namedStep++;
+        eventElement = element;
+        this.eventScope = eventScope;
+        eventType = eventScope == null ? null : FindScope(eventScope)?.ObjectType ?? GameWorld.RuleObjects.Find(eventScope)?.Type
+            ?? throw new ArgumentException("Ismeretlen esemény-objektumcsalád: " + eventScope);
+        this.eventElements = eventElements == null ? null : new(eventElements);
         stepPending = true; stepYears = years; stepTime = time; stepRule = stepElement = 0;
     }
 
@@ -499,7 +501,7 @@ internal sealed partial class RuleEngine
 
     private IEnumerable<int> PrepareValuesWork(GameWorld world, RuleFieldDefinition field)
     {
-        var scope = Scope(field.Scope); int size = (scope.StateSize ?? scope.Size)(world);
+        var scope = FindScope(field.Scope); int size = (scope.StateSize ?? scope.Size)(world);
         if (values.TryGetValue(field.Name, out var previous) && previous.Length == size) yield break;
         var array = new double[size];
         for (int first = 0; first < size; first += 1024) {
@@ -533,8 +535,14 @@ internal sealed partial class RuleEngine
             yield return 1;
             if (!rule.Source.Enabled) continue;
             var scope = rule.Scope;
+            if (eventType != null && (scope.ObjectType == null || !eventType.IsAssignableFrom(scope.ObjectType))) continue;
             if (stepSchedule is not ("passage" or "growth") && scope.PrepareElements != null && preparedScopes.Add(scope)) foreach (int work in scope.PrepareElements(world)) yield return work;
             var elements = stepSchedule == "passage" ? new[] { eventElement } : scope.PreparedElements?.Invoke(world) ?? scope.Elements(world);
+            if (eventElements != null) {
+                var selected = new List<int>();
+                foreach (int id in elements) { if (eventElements.Contains(scope.StateIndex(world, id))) selected.Add(id); yield return 1; }
+                elements = selected.ToArray();
+            }
             if (!climatePrepared && stepSchedule == "step" && stepElement < elements.Length && ReadsTileClimate(rule)) {
                 // Prime the first row in its original read order, preserving which query error is reported first.
                 foreach (var read in rule.Readers) read(world, elements[stepElement]);
@@ -603,7 +611,8 @@ internal sealed partial class RuleEngine
     internal RuleStepCheckpoint CaptureStep()
     {
         lock (namedReadLock) return !stepPending ? null : new(stepYears, stepTime, stepRule, stepElement,
-            namedSlots.OrderBy(p => p.Value).Where(p => namedStamps[p.Value] == namedStep).ToDictionary(p => p.Key, p => namedValues[p.Value], StringComparer.Ordinal));
+            namedSlots.OrderBy(p => p.Value).Where(p => namedStamps[p.Value] == namedStep).ToDictionary(p => p.Key, p => namedValues[p.Value], StringComparer.Ordinal),
+            stepSchedule, eventElement, eventScope, eventElements?.Order().ToArray());
     }
 
     /// <summary>Takes up a step saved by <see cref="CaptureStep"/>: it continues where it stood, with the named values it had read.</summary>
@@ -614,7 +623,7 @@ internal sealed partial class RuleEngine
         CheckpointGuard.Require(double.IsFinite(saved.Years) && saved.Years >= 0 && double.IsFinite(saved.Time) && saved.Rule >= 0
             && saved.Rule <= compiled.Length && saved.Element >= 0 && saved.Named != null && saved.Named.Values.All(double.IsFinite), "rule step");
         stepPending = false;
-        Begin(world, saved.Years, saved.Time);
+        Begin(world, saved.Years, saved.Time, saved.Schedule, saved.EventElement, saved.EventScope, saved.EventElements);
         stepRule = saved.Rule; stepElement = saved.Element;
         foreach (var (key, value) in saved.Named) {
             CheckpointGuard.Require(namedSlots.ContainsKey(key), "rule step value");
@@ -701,10 +710,9 @@ internal sealed partial class RuleEngine
 
     /// <summary>Starter rules the author deleted; saved with the rules so they stay deleted.</summary>
     internal List<string> RemovedStarters { get; init; } = new();
-    // The starter book is left out of a checkpoint only while its flow ledger is empty: the ledger must survive a save.
-    internal RuleBookCheckpoint Capture() => IsDefault(Rules, Fields, RemovedStarters) && flowTotals.Count == 0 ? null
-        : new(Clone(Rules), CloneFields(Fields), values.ToDictionary(p => p.Key, p => (double[])p.Value.Clone(), StringComparer.Ordinal),
-            RemovedStarters.ToList(), flowTotals.Count == 0 ? null : new(flowTotals, StringComparer.Ordinal));
+    // The complete authored book survives a save, even if it currently equals the shipped project.
+    internal RuleBookCheckpoint Capture() => new(Clone(Rules), CloneFields(Fields), values.ToDictionary(p => p.Key, p => (double[])p.Value.Clone(), StringComparer.Ordinal),
+            RemovedStarters.ToList(), flowTotals.Count == 0 ? null : new(flowTotals, StringComparer.Ordinal), 4);
 
     internal void RestoreFlows(Dictionary<string, double> saved)
     {

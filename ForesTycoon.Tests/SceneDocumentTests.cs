@@ -13,8 +13,8 @@ public sealed class SceneDocumentTests
     {
         var project = Project();
         using var loaded = WorldLoader.CreateProject(project);
-        var expected = JsonSerializer.Deserialize<Dictionary<string, string>>(
-            File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "OpeningReference.json")))!;
+        using var source = WorldLoader.CreateOpening(false);
+        var expected = OpeningSceneReference.Fingerprints(source);
         var actual = OpeningSceneReference.Fingerprints(loaded);
         foreach (var pair in expected)
             if (pair.Key != "CommandCursor") Assert.Equal(pair.Value, actual[pair.Key]);

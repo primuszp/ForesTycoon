@@ -9,6 +9,7 @@ public class WorldLifecycleTests
     public void OneTimesPaceKeepsWildlifeAndVehicleClocksInRealTimeAndPauseStopsThem()
     {
         using var world = Create();
+        world.Update(0); // Establish the authored initial population before measuring elapsed time.
         var clock = new FixedStepClock { Speed = Viewport.GamePace };
         for (int frame = 0; frame < 240; frame++) clock.Advance(1.0 / 60, world.Update);
         var state = world.CaptureCheckpoint();

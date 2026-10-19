@@ -40,11 +40,21 @@ internal readonly record struct LogisticsInputs(
     double MillStock = 0,
     double MillProcessed = 0,
     double SiteForest = 0, double SiteHarvest = 0, double SiteRoadAccess = 0, double DepotCount = 0,
-    double OrderHasTimber = 0, double OrderDestinationIsMill = 0)
+    double OrderHasTimber = 0, double OrderDestinationIsMill = 0,
+    double WorkflowStage = 0, double DecisionContinue = 0, double DecisionDeliver = 0, double DecisionFetch = 0, double DecisionReturn = 0,
+    double WorkflowArrived = 0, double WorkflowAtSource = 0,
+    double MachineControl = 0, double MachineWorking = 0, double MachineBroken = 0, double MachineHasVehicle = 0,
+    double MachineTransit = 0, double MachineTransportState = 0, double MachineSpeed = 0, double DecisionAllow = 0, double TransferHeld = 0)
 {
     internal void Write(double[] buffer, string[] keys)
     {
         for (int i = 0; i < keys.Length; i++) buffer[i] = keys[i] switch {
+            "transfer.held" => TransferHeld,
+            "machine.control" => MachineControl, "machine.working" => MachineWorking, "machine.broken" => MachineBroken,
+            "machine.hasVehicle" => MachineHasVehicle, "machine.transit" => MachineTransit, "machine.transportState" => MachineTransportState,
+            "machine.speed" => MachineSpeed, "decision.allow" => DecisionAllow,
+            "workflow.stage" => WorkflowStage, "workflow.arrived" => WorkflowArrived, "workflow.atSource" => WorkflowAtSource,
+            "decision.continue" => DecisionContinue, "decision.deliver" => DecisionDeliver, "decision.fetch" => DecisionFetch, "decision.return" => DecisionReturn,
             "site.forest" => SiteForest, "site.harvest" => SiteHarvest, "site.roadAccess" => SiteRoadAccess, "depot.count" => DepotCount,
             "order.hasTimber" => OrderHasTimber, "order.destinationIsMill" => OrderDestinationIsMill,
             "step.seconds" => StepSeconds,
@@ -97,7 +107,7 @@ internal sealed class LogisticsRuleEvaluator
         var definition = hooks[(hook, kind)];
         inputs.Write(buffer, definition.Inputs);
         if (policy != null) return policy.Evaluate(new(hook, kind, id, 0, Extras: buffer));
-        defaults ??= new(new() { Graphs = LogisticsRules.Hooks.Select(LogisticsRules.DefaultGraph).ToList() }, LogisticsRules.Hooks);
+        defaults ??= new(new() { Graphs = RuleProject.CreateDefault().Behaviors.Graphs.Where(g => LogisticsRules.IsKind(g.Kind)).ToList() }, LogisticsRules.Hooks);
         return defaults.Evaluate(hook, kind, id, new(), buffer);
     }
 }
