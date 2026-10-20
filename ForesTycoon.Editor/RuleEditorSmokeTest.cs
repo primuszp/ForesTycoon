@@ -543,6 +543,25 @@ namespace ForesTycoon.Editor
                 ui.Render(); GL.Finish();
                 Require(world.RuleProjectDocument.ToJson() == activeBeforeDraft, "Opening an incomplete draft changed the active project.");
                 Require(GL.GetError() == ErrorCode.NoError, "Incomplete draft editor OpenGL error.");
+                // Old startup projects must migrate before the editor validates current hook bindings.
+                var legacy = RuleProject.CreateDefault(); legacy.Version = 2;
+                legacy.Rules.RemoveAll(r => r.Schedule == "wildlife");
+                legacy.Behaviors.Graphs.Add(new() { Id = "default.gameplay.wildlife.forageRecovery", Name = "Legelő regenerációja",
+                    Kind = "gameplay", Hook = "wildlife.forageRecovery", Output = "custom",
+                    Nodes = new() { new() { Id = "custom", Name = "Saját ütem", Operation = BehaviorOperation.Constant, Value = .123 } } });
+                string legacyFile = Path.Combine(output, "legacy-wildlife.project.json"), legacyJson = legacy.ToJson();
+                File.WriteAllText(legacyFile, legacyJson);
+                var legacyEditor = new RuleEditorView(legacyFile);
+                ui.Update(width, height, width, height, Vec2.One, 1f / 60);
+                ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 900)); legacyEditor.Draw(world, ref open);
+                ui.Render(); GL.Finish();
+                Require(legacyEditor.ProjectLoadError == null, "Legacy startup project failed: " + legacyEditor.ProjectLoadError);
+                var recovered = legacyEditor.CollectProject(world).Rules.Single(r => r.Id == "wildlife.forageRecovery")
+                    .Effects.Single(e => e.Target == "depletion").Computation;
+                Require(recovered != null && recovered.Nodes.Single(n => n.Id == "custom").Value == .123, "Legacy editor formula was lost.");
+                Require(File.ReadAllText(legacyFile) == legacyJson, "Opening the legacy project overwrote its file.");
+                Require(world.RuleProjectDocument.ToJson() == activeBeforeDraft, "Legacy startup project changed active rules.");
+                Require(GL.GetError() == ErrorCode.NoError, "Legacy startup editor OpenGL error.");
                 // Unsupported project data remains on disk and is reported without crashing Draw.
                 string unsupportedFile = Path.Combine(output, "unsupported-traffic.project.json");
                 string unsupportedJson = "{\"schema\":\"forest-rule-project\",\"road\":{}}";
