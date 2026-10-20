@@ -11,7 +11,7 @@ using Vec4 = System.Numerics.Vector4;
 
 namespace ForesTycoon.Editor;
 
-internal enum WorldTab { Map, Types, Missions, Rules, Trial }
+internal enum WorldTab { Map, Types, Objects, Missions, Rules, Trial }
 internal enum MapLayer { Soil, Elevation, Water, GroundWater, Forest, Tracks, Trafficability }
 internal enum TypeTab { Soil, Species, Surfaces, Vehicles, Parameters }
 
@@ -88,6 +88,7 @@ internal sealed partial class RuleEditorView
         foreach (var (tab, label, help) in new[] {
             (WorldTab.Map, "Pálya", "A világ térképe: generálás, majd talaj festése; rétegek, csempék."),
             (WorldTab.Types, "Típusok", "Talajtípusok és paramétereik: amit a térkép fest, és amit a szabályok olvasnak."),
+            (WorldTab.Objects, "Objektumok", "A játék kódjából felderített objektumok és mezőik; innen adsz nekik viselkedést."),
             (WorldTab.Missions, "Küldetések", "A pálya céljai: amit a játék a futó világ értékeiből ellenőriz."),
             (WorldTab.Rules, "Szabályok", "Te állítod össze: mi hasson mire, milyen feltétellel és milyen görbe szerint."),
             (WorldTab.Trial, "Próba", "Eső a pályán: az alap és a szerkesztett szabályok összevetése.") }) {
@@ -169,6 +170,7 @@ internal sealed partial class RuleEditorView
         if (standalone && !scenarioBuilt) { scenarioBuilt = true; if (appliedScenario != ScenarioKey()) ApplyScenario(world, "A tesztvilág a pályából épült."); }
         switch (worldTab) {
             case WorldTab.Types: TypesTab(world); break;
+            case WorldTab.Objects: ObjectsTab(world); break;
             case WorldTab.Missions: MissionsTab(world); break;
             case WorldTab.Rules: RulesArea(world); break;
             case WorldTab.Trial: TrialTab(world); break;

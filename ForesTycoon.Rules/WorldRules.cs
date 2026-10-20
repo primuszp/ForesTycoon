@@ -15,6 +15,8 @@ public sealed class WorldRule
     public string Id { get; set; } = "szabaly";
     public string Name { get; set; } = "Új szabály";
     public string Description { get; set; } = "";
+    /// <summary>The author's group in the editor's rule list; empty groups the rule by its object. No effect on the game.</summary>
+    public string Group { get; set; } = "";
     public bool Enabled { get; set; } = true;
     /// <summary>The starter rule this one was made from (its id), so it can be reset to it; empty for a rule written from scratch.</summary>
     public string Template { get; set; } = "";

@@ -65,7 +65,7 @@ namespace ForesTycoon.Editor
             VSync = VSyncMode.On;
             // The editor opens the scene the game starts from, missions and rules included.
             startupWork = WorldLoader.CreateStartWork(startupResult, enableRendering: false).GetEnumerator();
-            ui = new ImGuiController(); HudTheme.Apply();
+            ui = new ImGuiController(ImGuiController.Authoring); EditorStyle.Apply();
         }
         protected override void RenderScene(FrameEventArgs args)
         {

@@ -64,7 +64,7 @@ namespace ForesTycoon.Editor
                 for (int tick = 0; tick < 600; tick++) { truck.Update(1.0 / 30); SimulationWork.Complete(world.TrafficWork()); }
                 Require(passes > 0 && truck.FuelUsed > 0 && world.GetRoadCondition(other) < otherBefore,
                     "Moving truck did not execute the edited rule.");
-                using var ui = new ImGuiController(); HudTheme.Apply(); var editor = new RuleEditorView(); bool open = true;
+                using var ui = new ImGuiController(ImGuiController.Authoring); EditorStyle.Apply(); var editor = new RuleEditorView(); bool open = true;
                 string snapshot = world.RuleProjectDocument.ToJson();
                 for (int frame = 0; frame < 3; frame++)
                 {
@@ -93,6 +93,7 @@ namespace ForesTycoon.Editor
                     (() => editor.ShowWorld(WorldTab.Types), "world-types"),
                     (() => editor.ShowWorldTypes(TypeTab.Species, 2), "world-types-species"),
                     (() => editor.ShowWorldTypes(TypeTab.Surfaces), "world-types-surfaces"),
+                    (() => editor.ShowObject("tree"), "world-objects-tree"),
                     (() => editor.ShowWorld(WorldTab.Rules, tile: forestTile), "world-rules"),
                     (() => editor.ShowMissions(), "world-missions"),
                     (() => editor.ShowRuleBook(), "world-rulebook"),

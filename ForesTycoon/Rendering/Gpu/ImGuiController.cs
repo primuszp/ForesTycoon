@@ -25,8 +25,16 @@ namespace ForesTycoon
         internal bool IsDisposed => disposed;
         internal IntPtr Context => context;
         internal void MakeCurrent() => SelectContext();
-        public ImGuiController(IUiRenderBackend backend = null)
+        /// <summary>Text sizes of one UI: the game's compact HUD, or the editor's larger, sans-serif authoring face.</summary>
+        internal sealed record FontProfile(float Body, float Title, float LargeTitle, bool SansTitles);
+        internal static readonly FontProfile Hud = new(16f, 22f, 34f, false);
+        internal static readonly FontProfile Authoring = new(18f, 22f, 30f, true);
+        private readonly FontProfile profile;
+
+        public ImGuiController(IUiRenderBackend backend = null) : this(Hud, backend) { }
+        internal ImGuiController(FontProfile profile, IUiRenderBackend backend = null)
         {
+            this.profile = profile;
             this.backend = backend ?? SceneRenderBackends.Current.CreateUi();
             context = ImGui.CreateContext();
             ImGui.SetCurrentContext(context);
@@ -47,7 +55,7 @@ namespace ForesTycoon
         // ── Per-frame ────────────────────────────────────────────────────────
         private void LoadUIFont(ImGuiIOPtr io)
         {
-            string fontPath = FindUIFont();
+            string fontPath = profile.SansTitles ? FindAuthoringFont(false) ?? FindUIFont() : FindUIFont();
             if (fontPath == null)
             {
                 io.Fonts.AddFontDefault();
@@ -57,11 +65,11 @@ namespace ForesTycoon
             // Latin Extended-A contains Hungarian double acute glyphs: ő/Ő and ű/Ű.
             ushort[] ranges = { 0x0020, 0x017F, 0x2000, 0x206F, 0 };
             glyphRangeHandle = GCHandle.Alloc(ranges, GCHandleType.Pinned);
-            io.Fonts.AddFontFromFileTTF(fontPath, 16f, IntPtr.Zero, glyphRangeHandle.AddrOfPinnedObject());
-            // A serif face for estate names, seasons and panel titles (the HUD's calm "voice").
-            string title = FindTitleFont() ?? fontPath;
-            titleFont = io.Fonts.AddFontFromFileTTF(title, 22f, IntPtr.Zero, glyphRangeHandle.AddrOfPinnedObject());
-            largeTitleFont = io.Fonts.AddFontFromFileTTF(title, 34f, IntPtr.Zero, glyphRangeHandle.AddrOfPinnedObject());
+            io.Fonts.AddFontFromFileTTF(fontPath, profile.Body, IntPtr.Zero, glyphRangeHandle.AddrOfPinnedObject());
+            // The HUD speaks in a serif face (estate names, seasons); the editor uses a semibold sans for a tool-like hierarchy.
+            string title = (profile.SansTitles ? FindAuthoringFont(true) : FindTitleFont()) ?? fontPath;
+            titleFont = io.Fonts.AddFontFromFileTTF(title, profile.Title, IntPtr.Zero, glyphRangeHandle.AddrOfPinnedObject());
+            largeTitleFont = io.Fonts.AddFontFromFileTTF(title, profile.LargeTitle, IntPtr.Zero, glyphRangeHandle.AddrOfPinnedObject());
         }
 
         internal static unsafe bool HasTitleFonts => TitleFont.NativePtr != null;
@@ -83,6 +91,24 @@ namespace ForesTycoon
                 "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf"
             };
             foreach (string candidate in candidates)
+                if (File.Exists(candidate)) return candidate;
+            return null;
+        }
+
+        /// <summary>A modern sans (Inter if installed, else Segoe UI); <paramref name="strong"/> picks its semibold cut.</summary>
+        private static string FindAuthoringFont(bool strong)
+        {
+            string fonts = Environment.GetFolderPath(Environment.SpecialFolder.Fonts);
+            string local = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "Windows", "Fonts");
+            string[] names = strong
+                ? new[] { "Inter-SemiBold.ttf", "seguisb.ttf", "segoeuib.ttf" }
+                : new[] { "Inter-Regular.ttf", "segoeui.ttf" };
+            foreach (string name in names)
+                foreach (string folder in new[] { local, fonts })
+                    if (File.Exists(Path.Combine(folder, name))) return Path.Combine(folder, name);
+            foreach (string candidate in strong
+                ? new[] { "/System/Library/Fonts/Supplemental/Arial Bold.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" }
+                : new[] { "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf" })
                 if (File.Exists(candidate)) return candidate;
             return null;
         }

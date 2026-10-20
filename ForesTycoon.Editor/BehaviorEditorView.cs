@@ -399,7 +399,13 @@ namespace ForesTycoon.Editor
             if (!ImGui.IsMouseDown(ImGuiMouseButton.Left)) dragging = null;
             draw.PopClipRect();
         }
+        /// <summary>Fields fill the panel up to a fixed label column, so labels on the right stay readable at the editor's text size.</summary>
         private void Inspector(GameWorld world, BehaviorGraph graph, bool equation = false)
+        {
+            ImGui.PushItemWidth(-EditorStyle.LabelWidth());
+            try { InspectorBody(world, graph, equation); } finally { ImGui.PopItemWidth(); }
+        }
+        private void InspectorBody(GameWorld world, BehaviorGraph graph, bool equation)
         {
             var hook = availableHooks.Single(h => h.Id == graph.Hook && h.Kind == graph.Kind);
             ImGui.TextWrapped(hook.Schedule + " · " + hook.Unit);

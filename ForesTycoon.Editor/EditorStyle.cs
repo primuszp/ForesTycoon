@@ -11,6 +11,31 @@ namespace ForesTycoon.Editor
     /// </summary>
     internal static class EditorStyle
     {
+        /// <summary>
+        /// The game's theme with authoring metrics: roomier rows and frames for the larger editor face, flatter corners,
+        /// and visible frame borders so inputs read as inputs.
+        /// </summary>
+        internal static void Apply()
+        {
+            HudTheme.Apply();
+            var style = ImGui.GetStyle();
+            style.WindowRounding = 6f; style.ChildRounding = 6f; style.FrameRounding = 5f; style.PopupRounding = 6f;
+            style.FrameBorderSize = 1f;
+            style.WindowPadding = new Vec2(16, 14);
+            style.FramePadding = new Vec2(10, 6);
+            style.ItemSpacing = new Vec2(10, 8);
+            style.ItemInnerSpacing = new Vec2(8, 6);
+            style.CellPadding = new Vec2(8, 5);
+            style.IndentSpacing = 20;
+            style.ScrollbarSize = 14;
+            style.Colors[(int)ImGuiCol.Border] = new Vec4(0.36f, 0.50f, 0.27f, 0.28f);
+        }
+
+        /// <summary>Room kept for the label to the right of a field in inspector panels.</summary>
+        internal const float LabelColumn = 210;
+        /// <summary>The label column for the current panel: <see cref="LabelColumn"/>, or 40% of a narrow panel.</summary>
+        internal static float LabelWidth() => Math.Min(LabelColumn, ImGui.GetContentRegionAvail().X * 0.4f);
+
         internal static uint U(Vec4 c) => ImGui.ColorConvertFloat4ToU32(c);
         internal static uint U(float r, float g, float b, float a = 1) => ImGui.ColorConvertFloat4ToU32(new Vec4(r, g, b, a));
 
@@ -128,7 +153,7 @@ namespace ForesTycoon.Editor
         internal static bool BeginFacts(string id)
         {
             if (!ImGui.BeginTable(id, 2, ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.RowBg)) return false;
-            ImGui.TableSetupColumn("k", ImGuiTableColumnFlags.WidthFixed, 110);
+            ImGui.TableSetupColumn("k", ImGuiTableColumnFlags.WidthFixed, 140);
             ImGui.TableSetupColumn("v", ImGuiTableColumnFlags.WidthStretch);
             return true;
         }

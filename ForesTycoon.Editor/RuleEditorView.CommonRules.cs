@@ -119,6 +119,13 @@ internal sealed partial class RuleEditorView
     private void DrawRuleCalculation(GameWorld world, WorldRule rule)
     {
         ImGui.BeginChild("rule-calculation", Vec2.Zero, ImGuiChildFlags.Borders);
+        ImGui.PushItemWidth(-EditorStyle.LabelWidth());
+        try { RuleCalculationBody(world, rule); } finally { ImGui.PopItemWidth(); }
+        ImGui.EndChild();
+    }
+
+    private void RuleCalculationBody(GameWorld world, WorldRule rule)
+    {
         WorldRuleCard(world, rule);
         bool changed = false; string name = rule.Name;
         if (ImGui.InputText("Szabály neve", ref name, 120)) rule.Name = name; if (ImGui.IsItemDeactivatedAfterEdit()) { rule.Name = name; changed = true; }
@@ -129,9 +136,8 @@ internal sealed partial class RuleEditorView
             ImGui.EndCombo();
         }
         var scope = RuleEngine.Scope(rule.Scope);
-        if (scope == null) { ImGui.TextWrapped("A szabály hatóköre nem érhető el: " + rule.Scope); ImGui.EndChild(); return; }
+        if (scope == null) { ImGui.TextWrapped("A szabály hatóköre nem érhető el: " + rule.Scope); return; }
         if (rule.Effects.All(e => e.Influence != null) && ImGui.Button("Hatáskapcsolatok gráfja")) editRuleCalculation = false;
-        ImGui.SetNextItemWidth(-1);
         if (ImGui.BeginCombo("Számítás kiválasztása", selectedCalculation < 0 ? "A szabály teljesülési feltétele" : "Hatás: " + FieldDisplay(rule.Scope, rule.Effects[Math.Min(selectedCalculation, rule.Effects.Count - 1)].Target))) {
             if (ImGui.Selectable("A szabály teljesülési feltétele")) { selectedCalculation = -1; expressionKey = null; }
             for (int i = 0; i < rule.Effects.Count; i++)
@@ -185,7 +191,6 @@ internal sealed partial class RuleEditorView
             }
         } catch (Exception e) when (Expected(e) || e is FormatException) { ImGui.TextWrapped(e.Message); }
         if (ruleBookError != null) ImGui.TextWrapped(ruleBookError);
-        ImGui.EndChild();
     }
     private bool pendingExpressionChange;
 }

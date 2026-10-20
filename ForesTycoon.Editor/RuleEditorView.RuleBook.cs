@@ -73,17 +73,10 @@ internal sealed partial class RuleEditorView
         selectedBookRule = Math.Clamp(selectedBookRule, 0, Math.Max(0, rules.Count - 1));
 
         // ── Left: the book ───────────────────────────────────────────────
-        ImGui.BeginChild("book-list", new Vec2(290, 0), ImGuiChildFlags.Borders);
+        ImGui.BeginChild("book-list", new Vec2(320, 0), ImGuiChildFlags.Borders);
         EditorStyle.Section("Szabályok");
         {
-            for (int i = 0; i < rules.Count; i++) {
-                var entry = rules[i]; int index = i;
-                RuleCardEntry("rule:" + entry.Id, entry.Name, "Állapotot változtat",
-                    selectedBookRule == i && commonSelection == null && !ruleOverview, entry.Enabled,
-                    () => { selectedBookRule = index; commonSelection = null; editRuleCalculation = false; ruleOverview = false; },
-                    enabled => { entry.Enabled = enabled; ApplyRuleBook(world, entry.Name + (enabled ? ": bekapcsolva." : ": kikapcsolva.")); },
-                    "Kikapcsolva nem hajtja végre a hatásait. A korábbi változtatások és más szabályok hatásai megmaradnak.");
-            }
+            GroupedRuleList(world, rules);
             if (rules.Count == 0) EditorStyle.Text(HudTheme.Muted, "Nincs szabály. Az „+ Új szabály” üresen vagy mintából indít egyet.");
         }
         DrawCommonRuleList(world);
