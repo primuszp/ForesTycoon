@@ -16,7 +16,14 @@ A 4-es projektverzió szabálykönyve teljes definíció: a törléshez nincs sz
 `removedStarters` bejegyzésre. Hiányzó számítási kötésből inaktív, korlátozott nulla
 lesz; a motor nem állítja vissza az eredeti összefüggést. Egyes fizikai mennyiségek
 pozitív alsó korlátja továbbra is érvényes. Az 1–3-as projektek első normalizálásakor
-egyszeri migráció történik 4-es verzióra; a meglévő szerkesztett gráfok megmaradnak.
+egyszeri migráció történik; a meglévő szerkesztett gráfok megmaradnak.
+
+Az aktuális projektverzió 5. A `wildlife.timeScale` adja az állatok időszorzóját
+a világ korából és az élő egyedszámból. A `trail.drivingCondition` a földfelszín
+menetállapotát számolja a nyomkopásból és a talaj járhatóságából. Az 1–4-es
+projektek és régi teljes mentéspillanatképek egyszer kapják meg ezeket a korábbi
+működést leíró gráfokat. Az 5-ös projektből törölt kötés nem kerül vissza betöltéskor;
+a nulla időszorzó megállítja az állatok időarányos folyamatait.
 
 A `gameplay` gráfok az erdő kezdeti eloszlását, telepítést, kitermelési engedélyt,
 gazdasági döntéseket, küldetésfeltételeket és vadak döntéseit számolják. Ezek tiszta

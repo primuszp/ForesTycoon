@@ -25,6 +25,7 @@ internal static class RuleWorkshopModel
     internal static string DraftPath(string published) => PublishedPath(published) + ".draft.json";
     /// <summary>The catalog rule whose result a formula hook replaces or whose parameter it computes.</summary>
     internal static bool HookBelongsTo(BehaviorHook h, GameRuleDefinition rule) => h.Id == rule.Id
+        || h.Kind == "gameplay" && GameplayRules.CatalogHooks.TryGetValue(rule.Id, out var hooks) && hooks.Contains(h.Id)
         || h.Id == "orders.allow" && rule.Id == "fleet.orders"
         || h.Id.StartsWith("depot.") && rule.Id == "fleet.depot"
         || h.Id.StartsWith("tuning.") && GameTuning.Spec(h.Id[7..])?.Rule == rule.Id

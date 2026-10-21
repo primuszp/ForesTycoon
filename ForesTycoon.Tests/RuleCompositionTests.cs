@@ -142,7 +142,7 @@ public sealed class RuleCompositionTests
         p.Behaviors.Graphs.RemoveAll(g => g.Hook.StartsWith("control."));
         p.Rules.RemoveAll(r => r.Schedule == "population" || r.Id == "wildlife.initialize");
         p = GameWorld.NormalizeRuleProject(p);
-        Assert.Equal(4, p.Version); Assert.Contains(p.Rules, r => r.Schedule == "population");
+        Assert.Equal(RuleProject.CurrentVersion, p.Version); Assert.Contains(p.Rules, r => r.Schedule == "population");
         Assert.Contains(p.Behaviors.Graphs, g => g.Hook == "control.allow");
         p.Rules.RemoveAll(r => r.Schedule == "population" || r.Id == "wildlife.initialize");
         Assert.DoesNotContain(GameWorld.NormalizeRuleProject(p).Rules, r => r.Schedule == "population" || r.Id == "wildlife.initialize");

@@ -40,8 +40,6 @@ namespace ForesTycoon
         /// real time, while the year runs slowly enough to plan.
         /// </summary>
         internal const double VehicleTimeScale = 4;
-        /// <summary>Wildlife gait, roaming and feeding run in real time at the viewport's 1× pace.</summary>
-        internal const double WildlifeTimeScale = VehicleTimeScale;
         private ForestryAreaSummary lastForestryArea;
         internal GraphicsSettings Graphics { get; }
         internal TerrainMap Map => map;
@@ -297,7 +295,8 @@ namespace ForesTycoon
             foreach (int unit in Environment.RefreshVegetationWork()) yield return unit;
             foreach (int unit in WeatherRoadsWork(fixedDeltaSeconds)) yield return unit;
             workPhase = 4;
-            foreach (int unit in wildlife.UpdateWork(fixedDeltaSeconds * WildlifeTimeScale, map, forest, Environment)) yield return unit;
+            double wildlifeTimeScale = behaviorPolicy.Gameplay.Evaluate("wildlife.timeScale", forest.ForestYear, wildlife.Animals.Count);
+            foreach (int unit in wildlife.UpdateWork(fixedDeltaSeconds * wildlifeTimeScale, map, forest, Environment)) yield return unit;
             workPhase = 5;
             foreach (int unit in systems.UpdateWork(fixedDeltaSeconds)) yield return unit;
             foreach (int unit in TrafficWork()) yield return unit;

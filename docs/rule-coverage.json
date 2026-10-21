@@ -4,7 +4,6 @@
     {
       "status": "engine",
       "ids": [
-        "time.world",
         "time.ecology",
         "commands.apply",
         "save.restore",
@@ -92,12 +91,13 @@
         "upkeep.service"
       ],
       "editor": "Szabályok → közös jármű- és fenntartási válaszgráfok.",
-      "remaining": "5/a kész: tömeg, útválaszok, fogyasztás, terhelés, kopás, sorsolási esély, javítás és karbantartás. A fizikai integrátor, a visszaszámláló és a költségkönyvelés motorfeladat.",
+      "remaining": "5/a kész: tömeg, útválaszok, fogyasztás, terhelés, kopás, sorsolási esély, javítás és karbantartás. A fizikai integrátor, a visszaszámláló és a költségkönyvelés motorfeladat. A földfelszín menetállapotát a trail.drivingCondition gráf adja a kopásból és a járhatóságból.",
       "tests": [
         "ForesTycoon.Tests/VehicleResponseRuleTests.cs",
         "ForesTycoon.Tests/FleetWorkTests.cs",
         "ForesTycoon.Tests/VehicleDynamicsTests.cs",
-        "ForesTycoon.Tests/VehicleUpkeepTests.cs"
+        "ForesTycoon.Tests/VehicleUpkeepTests.cs",
+        "ForesTycoon.Tests/SimulationPolicyTests.cs"
       ]
     },
     {
@@ -523,6 +523,18 @@
       "tests": [
         "ForesTycoon.Tests/DepotGraphTests.cs",
         "ForesTycoon.Tests/SceneStructureTests.cs"
+      ]
+    },
+    {
+      "status": "graph",
+      "ids": [
+        "time.world"
+      ],
+      "editor": "Szabályok → wildlife.timeScale; járműidő hangolási gráf.",
+      "remaining": "Az állatok időszorzója a világ idejéből és az állományból számolható. A lépések sorrendje és az ökológiai integrátor motorfeladat.",
+      "tests": [
+        "ForesTycoon.Tests/SimulationPolicyTests.cs",
+        "ForesTycoon.Tests/ForegroundWorkTests.cs"
       ]
     }
   ],

@@ -4,6 +4,16 @@ namespace ForesTycoon.Tests;
 
 public sealed class EditorProjectLoaderTests
 {
+    [Fact]
+    public void VersionOneEditorMigrationKeepsTheSameRuleBookAsTheGame()
+    {
+        var source = RuleProject.CreateDefault(); source.Version = 1; source.Rules.Clear();
+        source.RemovedStarters.Add("traffic.wear");
+        var editor = EditorProjectLoader.Prepare(source);
+        var runtime = GameWorld.NormalizeRuleProject(source);
+        Assert.Equal(runtime.Rules.Select(r => r.Id), editor.Rules.Select(r => r.Id));
+        Assert.DoesNotContain(editor.Rules, r => r.Id == "traffic.wear");
+    }
     [Theory]
     [InlineData(1)]
     [InlineData(2)]
@@ -19,7 +29,7 @@ public sealed class EditorProjectLoaderTests
 
         var loaded = EditorProjectLoader.Prepare(RuleProject.FromJson(original));
 
-        Assert.Equal(4, loaded.Version);
+        Assert.Equal(RuleProject.CurrentVersion, loaded.Version);
         Assert.DoesNotContain(loaded.Behaviors.Graphs, g => RuleProjectMigrations.RetiredWildlifeQueries.Contains(g.Hook));
         var computations = loaded.Rules.SelectMany(r => r.Effects).Select(e => e.Computation).OfType<BehaviorGraph>().ToArray();
         foreach (string hook in RuleProjectMigrations.RetiredWildlifeQueries) {

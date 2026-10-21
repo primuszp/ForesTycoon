@@ -47,12 +47,13 @@ namespace ForesTycoon
         };
         private void BindRoadRules()
         {
-            vehicles.RoadState = id => map.IsRoadTile(id)
-                ? (map.GetRoadPaving(id) == RoadPaving.Asphalt ? RoadSurface.Asphalt : RoadSurface.Gravel, map.GetRoadCondition(id))
-                : (RoadSurface.Dirt, (0.2f - 0.2f * map.GetSkidTrailWear(id)) * Trafficability(id));
+            vehicles.RoadState = DrivingSurface;
             vehicles.Passage = RecordPassage;
             Logistics.Passage = RecordPassage;
         }
+        internal (RoadSurface Surface, float Condition) DrivingSurface(int id) => map.IsRoadTile(id)
+            ? (map.GetRoadPaving(id) == RoadPaving.Asphalt ? RoadSurface.Asphalt : RoadSurface.Gravel, map.GetRoadCondition(id))
+            : (RoadSurface.Dirt, (float)behaviorPolicy.Gameplay.Evaluate("trail.drivingCondition", map.GetSkidTrailWear(id), Trafficability(id)));
         /// <summary>Soaked soil with low bearing capacity makes dirt tracks rough: lower condition, more rolling resistance.</summary>
         internal float Trafficability(int id)
         {

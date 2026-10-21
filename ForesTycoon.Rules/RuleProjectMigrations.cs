@@ -9,6 +9,14 @@ public static class RuleProjectMigrations
     public static void UpgradeProject(RuleProject project)
     {
         UpgradeObjectSimulation(project);
+        UpgradePopulationPolicies(project);
+        if (project.Version >= 5) return;
+        foreach (var graph in RuleProject.CreateDefault().Behaviors.Graphs.Where(g => g.Hook is "trail.drivingCondition" or "wildlife.timeScale"))
+            if (!project.Behaviors.Graphs.Any(g => g.Hook == graph.Hook && g.Kind == graph.Kind && !g.ObjectId.HasValue)) project.Behaviors.Graphs.Add(graph);
+        project.Version = 5;
+    }
+    private static void UpgradePopulationPolicies(RuleProject project)
+    {
         if (project.Version >= 4) return;
         var defaults = RuleProject.CreateDefault();
         foreach (var graph in defaults.Behaviors.Graphs.Where(g => g.Hook.StartsWith("control.") || g.Hook == "supply.active" ||

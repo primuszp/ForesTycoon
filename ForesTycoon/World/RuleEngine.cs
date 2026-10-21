@@ -712,7 +712,7 @@ internal sealed partial class RuleEngine
     internal List<string> RemovedStarters { get; init; } = new();
     // The complete authored book survives a save, even if it currently equals the shipped project.
     internal RuleBookCheckpoint Capture() => new(Clone(Rules), CloneFields(Fields), values.ToDictionary(p => p.Key, p => (double[])p.Value.Clone(), StringComparer.Ordinal),
-            RemovedStarters.ToList(), flowTotals.Count == 0 ? null : new(flowTotals, StringComparer.Ordinal), 4);
+            RemovedStarters.ToList(), flowTotals.Count == 0 ? null : new(flowTotals, StringComparer.Ordinal), RuleProject.CurrentVersion);
 
     internal void RestoreFlows(Dictionary<string, double> saved)
     {

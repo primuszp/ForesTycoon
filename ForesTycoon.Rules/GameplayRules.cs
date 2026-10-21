@@ -9,6 +9,8 @@ namespace ForesTycoon.Rules;
 public static class GameplayRules
 {
     public static readonly IReadOnlyDictionary<string, string[]> CatalogHooks = new Dictionary<string, string[]> {
+        ["time.world"] = new[] { "wildlife.timeScale" },
+        ["vehicle.resistance"] = new[] { "trail.drivingCondition" },
         ["forest.initial"] = new[] { "forest.initialAllow", "forest.initialSpecies", "forest.initialAge", "forest.initialHealth", "forest.initialBiomass" },
         ["forest.plant"] = new[] { "forest.plantAllow", "forest.plantHealth" },
         ["forest.designate"] = new[] { "forest.designateAllow" }, ["forest.fell"] = new[] { "forest.fellAllow" },
@@ -24,6 +26,8 @@ public static class GameplayRules
         new(id, name, "gameplay", unit, min, max, "", "", "A művelet végrehajtásakor, a mért bemenetekből", false, inputs);
 
     public static readonly BehaviorHook[] Hooks = {
+        H("wildlife.timeScale", "Állatok szimulációs időszorzója", "×", 0, 100, "world.year", "animals.count"),
+        H("trail.drivingCondition", "Földfelszín menetállapota", "0–1", 0, 1, "trail.wear", "tile.trafficability"),
         H("forest.initialAllow", "Kezdő erdő eloszlása", "0–1", 0, 1, "pattern.type", "pattern.distance", "noise.value", "tile.moisture", "tile.elevation", "noise.bucket3", "noise.bucket5"),
         H("forest.initialSpecies", "Kezdő erdő fajválasztása", "fajazonosító", 2, 17, "pattern.type", "pattern.first", "noise.value", "tile.moisture", "tile.elevation", "noise.bucket8", "noise.bucket10"),
         H("forest.initialAge", "Kezdő erdő kora", "év", 0, 1e4, "pattern.type", "species.matureAge", "noise.value"),

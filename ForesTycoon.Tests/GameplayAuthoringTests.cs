@@ -24,7 +24,7 @@ public sealed class GameplayAuthoringTests
     public void EditorDocumentOwnsEveryDefaultBindingAndEachCopyIsIndependent()
     {
         var p = RuleProject.CreateDefault(); var other = RuleProject.CreateDefault();
-        Assert.Equal(4, p.Version);
+        Assert.Equal(RuleProject.CurrentVersion, p.Version);
         Assert.NotEmpty(p.Rules);
         Assert.Equal(WorldBehaviorPolicy.Hooks.Select(h => (h.Id, h.Kind)).Order(), p.Behaviors.Graphs.Select(g => (g.Hook, g.Kind)).Order());
         p.Rules.Clear(); p.Behaviors.Graphs.Clear();
@@ -52,7 +52,7 @@ public sealed class GameplayAuthoringTests
     {
         var p = RuleProject.CreateDefault(); p.Version = 1; p.Rules.Clear();
         p = GameWorld.NormalizeRuleProject(p);
-        Assert.Equal(4, p.Version); Assert.NotEmpty(p.Rules);
+        Assert.Equal(RuleProject.CurrentVersion, p.Version); Assert.NotEmpty(p.Rules);
         p.Rules.Clear();
         Assert.Empty(GameWorld.NormalizeRuleProject(p).Rules);
     }

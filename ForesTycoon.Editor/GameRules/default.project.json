@@ -1,6 +1,6 @@
 {
   "schema": "forest-rule-project",
-  "version": 4,
+  "version": 5,
   "name": "ForesTycoon szab\u00E1lyrendszer",
   "tuning": {
     "VehicleTimeScale": 4,
@@ -59,6 +59,110 @@
     "schema": "forest-behaviors",
     "version": 3,
     "graphs": [
+      {
+        "id": "default.gameplay.wildlife.timeScale",
+        "name": "\u00c1llatok szimul\u00e1ci\u00f3s id\u0151szorz\u00f3ja",
+        "hook": "wildlife.timeScale",
+        "kind": "gameplay",
+        "objectId": null,
+        "output": "rate",
+        "nodes": [
+          {
+            "id": "rate",
+            "name": "Id\u0151szorz\u00f3",
+            "operation": "Constant",
+            "value": 4,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 30
+          }
+        ]
+      },
+      {
+        "id": "default.gameplay.trail.drivingCondition",
+        "name": "F\u00f6ldfelsz\u00edn menet\u00e1llapota",
+        "hook": "trail.drivingCondition",
+        "kind": "gameplay",
+        "objectId": null,
+        "output": "result",
+        "nodes": [
+          {
+            "id": "base",
+            "name": "Alap\u00e1llapot",
+            "operation": "Constant",
+            "value": 0.2,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 30
+          },
+          {
+            "id": "wear",
+            "name": "Nyom kop\u00e1sa",
+            "operation": "Input",
+            "value": 0,
+            "key": "trail.wear",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 150
+          },
+          {
+            "id": "loss",
+            "name": "Kop\u00e1s miatti cs\u00f6kken\u00e9s",
+            "operation": "Multiply",
+            "value": 0,
+            "key": "",
+            "a": "base",
+            "b": "wear",
+            "c": "",
+            "x": 280,
+            "y": 30
+          },
+          {
+            "id": "dry",
+            "name": "Sz\u00e1raz \u00e1llapot",
+            "operation": "Subtract",
+            "value": 0,
+            "key": "",
+            "a": "base",
+            "b": "loss",
+            "c": "",
+            "x": 530,
+            "y": 30
+          },
+          {
+            "id": "ground",
+            "name": "Talaj j\u00e1rhat\u00f3s\u00e1ga",
+            "operation": "Input",
+            "value": 0,
+            "key": "tile.trafficability",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 270
+          },
+          {
+            "id": "result",
+            "name": "Menet\u00e1llapot",
+            "operation": "Multiply",
+            "value": 0,
+            "key": "",
+            "a": "dry",
+            "b": "ground",
+            "c": "",
+            "x": 780,
+            "y": 30
+          }
+        ]
+      },
       {
         "id": "default.site.forest.site",
         "name": "Term\u0151helyi alkalmass\u00E1g",

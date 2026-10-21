@@ -143,7 +143,7 @@ public sealed class AutomaticAnimalModelTests
         var p = RuleProject.CreateDefault(); p.Version = 2; p.Rules.RemoveAll(r => r.Schedule == "wildlife");
         p.Behaviors.Graphs.Add(new() { Id = "old-hunger", Name = "Saját régi éhség", Kind = "gameplay", Hook = "wildlife.hungerRate", Output = "rate",
             Nodes = new() { new() { Id = "rate", Name = "Ütem", Operation = BehaviorOperation.Constant, Value = .5 } } });
-        p = GameWorld.NormalizeRuleProject(p); Assert.Equal(4, p.Version);
+        p = GameWorld.NormalizeRuleProject(p); Assert.Equal(RuleProject.CurrentVersion, p.Version);
         Assert.NotNull(p.Rules.Single(r => r.Id == "wildlife.ageAndHunger").Effects.Single(e => e.Target == "hunger").Computation);
         Assert.DoesNotContain(p.Behaviors.Graphs, g => g.Hook == "wildlife.hungerRate");
         p.Rules.RemoveAll(r => r.Schedule == "wildlife");

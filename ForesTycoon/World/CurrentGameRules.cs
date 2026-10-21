@@ -49,9 +49,8 @@ namespace ForesTycoon
             const string upkeep = "ForesTycoon/World/Cargo/VehicleUpkeep.cs", logistics = "ForesTycoon/World/Cargo/ForestryLogistics.cs";
 
             var clock = Add("time.world", "Szimulációs órák és sorrend", "Idő és vezérlés", "Világ", "Fix világlépés", game, "VehicleTimeScale",
-                "commands", "calendar.time|vehicle.time|wildlife.time", "Ökoszisztéma, logisztika, útöregedés, vadak, majd a regisztrált rendszerek (rakomány, járművek, effektek). A járművek hangolható órát, a vadak külön rögzített időszorzót kapnak.");
+                "commands", "calendar.time|vehicle.time|wildlife.time", "Ökoszisztéma, logisztika, útöregedés, vadak, majd a regisztrált rendszerek (rakomány, járművek, effektek). A járművek hangolható órát, a vadak a projekt wildlife.timeScale gráfjával megadott időszorzót kapnak.");
             Param(clock, "Erdőév", forestYearSeconds, "játék-s");
-            Param(clock, "Vadak időszorzója", GameWorld.WildlifeTimeScale, "×");
             var phases = Add("time.ecology", "Ökológiai többütemű futtatás", "Idő és vezérlés", "Világ / hónaphatár", "0,5 s; havi határra bontva",
                 "ForesTycoon.Ecology/Water/ForestEnvironmentCoordinator.cs", "ForestEnvironmentCoordinator",
                 "calendar.time|forest.trees|water.root", "ecology.steps|forest.month", "Előkészítés → víz és időjárás → havi növényzet → havi integrálok törlése. A sorrend befolyásolja az eredményt.");

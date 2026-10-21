@@ -10,7 +10,7 @@ internal static class EditorProjectLoader
 {
     internal static RuleProject Prepare(RuleProject project)
     {
-        if (project == null || project.Schema != "forest-rule-project" || project.Version is not (1 or 2 or 3 or 4) || project.Name == null
+        if (project == null || project.Schema != "forest-rule-project" || project.Version < 1 || project.Version > RuleProject.CurrentVersion || project.Name == null
             || project.Tuning == null
             || project.Behaviors?.Graphs == null || project.Behaviors.Graphs.Count > 512 || project.Behaviors.Controllers == null
             || project.Dynamics?.Stocks == null || project.Dynamics.Stocks.Count > 256 || project.Dynamics.Flows == null || project.Dynamics.Flows.Count > 512
@@ -28,6 +28,8 @@ internal static class EditorProjectLoader
             throw new InvalidDataException("Hibás szerkesztési objektum vagy nem támogatott kötés.");
         // Migrate a copy before checking current hooks; reopening a draft must not compile it.
         project = project.Clone();
+        project.Rules ??= new(); project.Fields ??= new(); project.RemovedStarters ??= new();
+        if (project.Version == 1) RuleEngine.AddMissingStarters(project.Rules, project.RemovedStarters);
         RuleProjectMigrations.UpgradeProject(project);
         foreach (var graph in project.Behaviors.Graphs)
             if (!WorldBehaviorPolicy.Hooks.Any(h => h.Id == graph.Hook && h.Kind == graph.Kind))

@@ -61,7 +61,7 @@ sealed partial class GameWorld
         ArgumentNullException.ThrowIfNull(project);
         var copy = project.Clone();
         bool seedLegacyGraphs = copy.Version == 1;
-        if (copy.Schema != "forest-rule-project" || copy.Version is not (1 or 2 or 3 or 4) || string.IsNullOrWhiteSpace(copy.Name)
+        if (copy.Schema != "forest-rule-project" || copy.Version < 1 || copy.Version > RuleProject.CurrentVersion || string.IsNullOrWhiteSpace(copy.Name)
             || copy.Tuning == null || copy.Behaviors?.Graphs == null || copy.Behaviors.Graphs.Count > 512) throw new InvalidDataException("Ismeretlen vagy hiányos szabályprojekt.");
         if (copy.Algorithms is AlgorithmGraphReference algorithms && (algorithms.Revision?.Length != 64
             || !algorithms.Revision.All(char.IsAsciiHexDigit) || string.IsNullOrWhiteSpace(algorithms.BundlePath)

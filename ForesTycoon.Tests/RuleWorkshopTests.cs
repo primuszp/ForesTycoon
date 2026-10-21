@@ -6,6 +6,14 @@ namespace ForesTycoon.Tests;
 public sealed class RuleWorkshopTests
 {
     [Fact]
+    public void GameplayPolicyBindingsUseTheSharedCatalogOwnership()
+    {
+        var catalog = CurrentGameRules.Build();
+        foreach (var entry in GameplayRules.CatalogHooks)
+            foreach (string hook in entry.Value)
+                Assert.True(RuleWorkshopModel.HookBelongsTo(GameplayRules.Hooks.Single(h => h.Id == hook), catalog.Rules.Single(r => r.Id == entry.Key)));
+    }
+    [Fact]
     public void EveryCurrentRuleHasExactlyOneThematicHome()
     {
         var catalog = CurrentGameRules.Build();

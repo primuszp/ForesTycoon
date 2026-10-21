@@ -15,7 +15,10 @@ a **Pálya** a kezdőállapota (domborzat, víz, talaj, erdő), a **Szabályok**
 [`Editor/GameRules/default.project.json`](../ForesTycoon.Editor/GameRules/default.project.json)
 projektben vannak; ezt csomagolja a játék is. A 4-es projektverzióban a szabálykönyv
 pontos tartalma fut: törölt szabályt nem pótol vissza a motor. Az 1–3-as projektek
-első betöltéskor migrálódnak. [Szabálytulajdonlás és motoralgoritmusok](../ForesTycoon.Editor/GameRules/README.md).
+első betöltéskor migrálódnak. Az aktuális, 5-ös verzió ezen felül az állatok
+időszorzóját (`wildlife.timeScale`) és a földfelszín menetállapotát
+(`trail.drivingCondition`) is projektgráfként tárolja; ezeket az 1–4-es projektek
+egyszeri migrációval kapják meg. [Szabálytulajdonlás és motoralgoritmusok](../ForesTycoon.Editor/GameRules/README.md).
 
 A közös gráfszerkesztőben az induló erdő eloszlása, fajválasztása, kora és egészsége,
 a telepítés és fakivágás engedélye, az építés és javítás költsége, a faeladás,
