@@ -35,7 +35,6 @@ namespace ForesTycoon.Editor
         {
             if (!namedKeys.SetEquals(keys) || !availableHooks.SequenceEqual(hooks)) validatedJson = null;
             availableHooks = hooks; namedKeys = keys; namedReader = read;
-            hookIndex = Math.Clamp(hookIndex, 0, Math.Max(0, hooks.Length - 1));
         }
         internal void DrawEquation(GameWorld world)
         {
@@ -54,8 +53,6 @@ namespace ForesTycoon.Editor
         private readonly Stack<string> undo = new(), redo = new();
         private string selectedGraph, selectedNode, message = "", targetId = "", dragging, linking;
         private string targetSearch = "";
-        private string path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ForesTycoon", "rules", "behaviors.json");
-        private int hookIndex;
         private Vec2 pan = new(20, 20);
         private float zoom = .85f;
         private string validatedJson;
@@ -76,7 +73,6 @@ namespace ForesTycoon.Editor
         }
         internal bool IsPaused => clock.IsPaused;
         internal void TogglePause() => clock.IsPaused = !clock.IsPaused;
-        internal void Step(GameWorld world) => clock.RequestTick();
         internal void RequestTime(double seconds) => clock.RequestTime(seconds);
         private static readonly string[] Names = { "Állandó", "Beépített eredmény", "Időlépés", "Szimulációs idő", "Állapot", "Mennyiség",
             "Összeadás", "Kivonás", "Szorzás", "Osztás", "Minimum", "Maximum", "Nagyobb", "Kisebb", "Feltételes választás", "Abszolút érték", "Negálás",
@@ -87,15 +83,6 @@ namespace ForesTycoon.Editor
             var graph = model.Graphs.Single(g => g.Id == id); Remember();
             graph.Disabled = disabled; if (value.HasValue) graph.DisabledValue = value.Value;
         }
-        internal string ScopeSummary {
-            get {
-                var controller = model.Controllers.Find(c => c.Id == selectedController);
-                var graph = model.Graphs.Find(g => g.Id == selectedGraph);
-                string kind = controller?.Kind ?? graph?.Kind;
-                ulong? id = controller != null ? controller.ObjectId : graph?.ObjectId;
-                return kind == null ? "Nincs kiválasztott kötés" : RuleWorkshopModel.KindName(kind) + (id.HasValue ? " · egyedi objektum #" + id : " · típusszintű kötés");
-            }
-        }
         internal void LoadDraft(BehaviorModel value)
         {
             model = value.Clone(); selectedGraph = model.Graphs.FirstOrDefault()?.Id; selectedNode = null;
@@ -104,7 +91,6 @@ namespace ForesTycoon.Editor
         internal void SelectHook(BehaviorHook hook)
         {
             selectedController = null;
-            hookIndex = Array.IndexOf(availableHooks, hook);
             var graph = model.Graphs.Find(g => g.Hook == hook.Id && g.Kind == hook.Kind && g.ObjectId == null);
             if (graph == null) {
                 Remember(); graph = WorldBehaviorPolicy.Hooks.Any(h => h.Id == hook.Id && h.Kind == hook.Kind)
@@ -113,29 +99,13 @@ namespace ForesTycoon.Editor
             }
             selectedGraph = graph.Id; selectedNode = graph.Output;
         }
-        internal void SelectObjectHook(BehaviorHook hook, ulong objectId)
-        {
-            if (!hook.SupportsObjects) { SelectHook(hook); return; }
-            var graph = model.Graphs.Find(g => g.Hook == hook.Id && g.Kind == hook.Kind && g.ObjectId == objectId);
-            if (graph == null) {
-                Remember();
-                graph = model.Clone().Graphs.Find(g => g.Hook == hook.Id && g.Kind == hook.Kind && g.ObjectId == null)
-                    ?? new BehaviorGraph { Name = hook.Name, Hook = hook.Id, Kind = hook.Kind };
-                graph.Id = Guid.NewGuid().ToString("N"); graph.ObjectId = objectId; graph.Name += " #" + objectId;
-                model.Graphs.Add(graph);
-            }
-            selectedController = null; selectedGraph = graph.Id; selectedNode = graph.Output;
-            targetId = objectId.ToString(); hookIndex = Array.IndexOf(availableHooks, hook);
-        }
-        internal void Load(BehaviorModel value, string file = null)
+        internal void Load(BehaviorModel value)
         {
             _ = new CompiledBehaviorModel(value, availableHooks, namedKeys, key => namedReader(key));
             model = value.Clone(); model.Version = 3; selectedGraph = model.Graphs.FirstOrDefault()?.Id; selectedNode = null;
             selectedController = model.Graphs.Count == 0 ? model.Controllers.FirstOrDefault()?.Id : null;
             selectedState = model.Controllers.Find(c => c.Id == selectedController)?.InitialState;
-            if (model.Graphs.Count > 0) hookIndex = Array.FindIndex(availableHooks, h => h.Id == model.Graphs[0].Hook && h.Kind == model.Graphs[0].Kind);
             undo.Clear(); redo.Clear(); validatedJson = null;
-            if (file != null) path = file;
         }
         private void Remember() { undo.Push(model.ToJson()); redo.Clear(); }
         private void History(Stack<string> from, Stack<string> to)
@@ -204,13 +174,6 @@ namespace ForesTycoon.Editor
             Remember();
             selectedNode = AuthoringOperations.AddInfluence(graph, key, name, reference, strength);
         }
-        /// <summary>Replaces the type-level graph of the graph's hook (a rule formula compiled by the world editor).</summary>
-        internal void SetTypeGraph(BehaviorGraph graph)
-        {
-            Remember();
-            model.Graphs.RemoveAll(g => g.Hook == graph.Hook && g.Kind == graph.Kind && g.ObjectId == null);
-            model.Graphs.Add(graph); selectedGraph = graph.Id; selectedNode = graph.Output;
-        }
         internal void AddOutputCurve()
         {
             var graph = model.Graphs.Find(g => g.Id == selectedGraph);
@@ -232,51 +195,6 @@ namespace ForesTycoon.Editor
             var product = new BehaviorNode { Id = Guid.NewGuid().ToString("N"), Name = "Szorzott eredmény", Operation = BehaviorOperation.Multiply, A = output.Id, B = scale.Id, X = output.X + 250, Y = output.Y + 60 };
             graph.Nodes.Add(scale); graph.Nodes.Add(product); graph.Output = product.Id; selectedNode = scale.Id;
             pan = new(20 - output.X * zoom, 20 - output.Y * zoom);
-        }
-        internal void Draw(GameWorld world)
-        {
-            Validate();
-            ImGui.SetNextItemWidth(390); ImGui.InputText("Fájl##behavior", ref path, 1024); ImGui.SameLine();
-            if (ImGui.Button("Mentés##behavior")) Try(() => {
-                if (compiled == null) throw new InvalidDataException(error);
-                string file = Path.GetFullPath(path); Directory.CreateDirectory(Path.GetDirectoryName(file));
-                File.WriteAllText(file + ".tmp", model.ToJson()); File.Move(file + ".tmp", file, true); message = "Viselkedések és objektumkötések mentve.";
-            });
-            ImGui.SameLine(); if (ImGui.Button("Megnyitás##behavior")) Try(() => Load(BehaviorModel.FromJson(File.ReadAllText(path)), path));
-            ImGui.SameLine(); if (ImGui.Button("Vissza##behavior")) History(undo, redo);
-            ImGui.SameLine(); if (ImGui.Button("Újra##behavior")) History(redo, undo);
-            if (EditorStyle.PrimaryButton("Viselkedések alkalmazása a tesztvilágban", compiled != null, "Naplózott parancs: a következő események már ezeket a gráfokat használják."))
-                Try(() => { if (ApplyProject != null) ApplyProject(); else world.QueueBehaviors(model); message = "Szabályváltás naplózva."; });
-            ImGui.SameLine(); if (ImGui.Button("Aktív viselkedések átvétele")) { Remember(); model = world.BehaviorDocument; selectedGraph = model.Graphs.FirstOrDefault()?.Id; }
-            if (ImGui.Button(clock.IsPaused ? "Tesztvilág indítása" : "Szünet")) clock.IsPaused = !clock.IsPaused;
-            ImGui.SameLine(); if (ImGui.Button("Egy szimulációs lépés")) Step(world);
-            ImGui.SameLine(); ImGui.TextUnformatted($"Tick: {world.SimulationTick} · {world.ObserveRuleField("water.snow")}");
-            ImGui.TextWrapped(error ?? message);
-            if (world.BehaviorError != null) ImGui.TextWrapped(world.BehaviorError);
-            ImGui.BeginChild("behavior-bindings", new Vec2(270, 0), ImGuiChildFlags.Borders);
-            ImGui.TextWrapped("Világkötések · az egyedi kötés felülírja a típusszintű gráfot.");
-            ImGui.TextWrapped("Képletgráfok és gépvezérlési állapotgráfok. Az alacsony szintű rakodás és útkeresés beépített művelet.");
-            if (ImGui.BeginCombo("Folyamat", availableHooks[hookIndex].Name)) {
-                for (int i = 0; i < availableHooks.Length; i++)
-                    if (ImGui.Selectable(availableHooks[i].Name, hookIndex == i)) hookIndex = i;
-                ImGui.EndCombo();
-            }
-            if (ImGui.Button("Típusszintű gráf megnyitása")) SelectHook(availableHooks[hookIndex]);
-            ImGui.Separator();
-            foreach (var g in model.Graphs)
-                if (ImGui.Selectable($"{g.Name} · {(g.ObjectId.HasValue ? "#" + g.ObjectId : g.Kind)}##{g.Id}", selectedGraph == g.Id && selectedController == null)) { selectedGraph = g.Id; selectedNode = null; selectedController = null; }
-            ControllerList();
-            ImGui.EndChild(); ImGui.SameLine();
-            var selected = model.Graphs.Find(g => g.Id == selectedGraph);
-            ImGui.BeginChild("behavior-canvas", new Vec2(-350, 0), ImGuiChildFlags.Borders, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
-            var controller = model.Controllers.Find(c => c.Id == selectedController);
-            if (controller != null) ControllerCanvas(controller, world);
-            else if (selected != null) Canvas(selected); else ImGui.TextWrapped("Válassz folyamatot, majd hozz létre egy gráfot. A beépített eredmény változatlanul továbbadása megőrzi az eredeti viselkedést.");
-            ImGui.EndChild(); ImGui.SameLine();
-            ImGui.BeginChild("behavior-inspector", new Vec2(0, 0), ImGuiChildFlags.Borders);
-            if (controller != null) ControllerInspector(controller, world);
-            else if (selected != null) Inspector(world, selected);
-            ImGui.EndChild();
         }
         private bool processLayout = true;
         // Layout is derived from the authored edges; it never introduces another rule model.

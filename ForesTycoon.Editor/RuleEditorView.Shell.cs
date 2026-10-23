@@ -14,7 +14,7 @@ internal enum EditorPage
     Map, Soils, Species, Surfaces,
     Missions, Vehicles, Parameters,
     Objects, Rules, Responses, Processes, Controllers, Stocks, Library,
-    Overview, Trial
+    SystemMap, Overview, Trial
 }
 
 /// <summary>
@@ -51,10 +51,13 @@ internal sealed partial class RuleEditorView
             new(EditorPage.Library, "Szabálytár", GameIcon.Load, "Aktív kötések, egyedi felülírások és újrahasználható sablonok."),
         }),
         ("Ellenőrzés", new NavEntry[] {
+            new(EditorPage.SystemMap, "Rendszertérkép", GameIcon.Lightning, "A játék rendszerei és kapcsolataik: mit végez a motor magától, mit futtat a projekt szabályaiból, és hol szerkeszthető."),
             new(EditorPage.Overview, "Mezőhasználat", GameIcon.Graphics, "Melyik szabály melyik objektum melyik tulajdonságát olvassa és írja, és hol írja több szabály ugyanazt."),
             new(EditorPage.Trial, "Esős próba", GameIcon.Rain, "Ugyanaz a pálya, ugyanannyi eső: az alap és a szerkesztett szabályok összevetése."),
         }),
     };
+
+    internal void ShowSystemMap() => ShowPage(EditorPage.SystemMap);
 
     private static NavEntry Entry(EditorPage p) => Navigation.SelectMany(g => g.Items).First(e => e.Page == p);
 
@@ -145,9 +148,24 @@ internal sealed partial class RuleEditorView
             case EditorPage.Stocks: CommonListPage(world, StockList, "Még nincs saját készlet. Az „+ Készlet” gomb indít egyet."); break;
             case EditorPage.Library: DrawCommonSelection(world); break;
             case EditorPage.Overview: RuleOverviewArea(world, RuleBookRules(world)); break;
+            case EditorPage.SystemMap: currentRules.Draw(world, OpenHook, OpenController); break;
             case EditorPage.Trial: TrialTab(world); break;
             default: MapTab(world); break;
         }
+    }
+
+    /// <summary>Opens the graph bound to a hook, creating the type-level graph when the project has none yet.</summary>
+    private void OpenHook(BehaviorHook hook)
+    {
+        var graph = behaviors.Document.Graphs.FirstOrDefault(g => g.Hook == hook.Id && g.Kind == hook.Kind && g.ObjectId == null);
+        if (graph == null) { behaviors.SelectHook(hook); graph = behaviors.Document.Graphs.Last(g => g.Hook == hook.Id && g.Kind == hook.Kind && g.ObjectId == null); }
+        ShowCommonRule("behavior:" + graph.Id);
+    }
+
+    private void OpenController(string kind)
+    {
+        var controller = behaviors.Document.Controllers.FirstOrDefault(c => c.Kind == kind && c.ObjectId == null);
+        ShowCommonRule(controller != null ? "controllerId:" + controller.Id : "controller:" + kind);
     }
 
     // ── Project bar ──────────────────────────────────────────────────────
@@ -343,7 +361,7 @@ internal sealed partial class RuleEditorView
         "environment" => "Környezet és időjárás",
         "vehicleResponse" => "Járművek",
         "gameplay" => "Játékmenet és gazdaság",
-        _ when LogisticsRules.IsKind(kind) => "Logisztika",
+        _ when LogisticsRules.IsKind(kind) => "Logisztika · " + RuleWorkshopModel.KindName(kind),
         _ => kind
     };
 

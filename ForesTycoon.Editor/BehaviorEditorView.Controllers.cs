@@ -10,16 +10,6 @@ namespace ForesTycoon.Editor
     {
         private string selectedController, selectedState;
         internal void SelectControllerById(string id) { selectedController = id; selectedGraph = null; selectedState = model.Controllers.Find(c => c.Id == id)?.InitialState; }
-        internal void SelectObjectController(string kind, ulong id)
-        {
-            var existing = model.Controllers.Find(c => c.Kind == kind && c.ObjectId == id);
-            if (existing == null) {
-                Remember(); var source = model.Clone().Controllers.Find(c => c.Kind == kind && c.ObjectId == null);
-                existing = source ?? (kind is "truck" or "forwarder" ? BehaviorController.TransportCycle(kind) : BehaviorController.TimedPause(kind));
-                existing.Id = Guid.NewGuid().ToString("N"); existing.ObjectId = id; model.Controllers.Add(existing);
-            }
-            SelectControllerById(existing.Id);
-        }
         internal void RestoreController(string kind, ulong? id) { Remember(); model.Controllers.RemoveAll(c => c.Kind == kind && c.ObjectId == id); selectedController = null; }
         private static readonly string[] ActionNames = { "Automatikus munkavégzés", "Várakozás", "Hazatérés kérése", "Csak felrakodás", "Csak lerakodás", "Csak haladás", "Indulás a rakománnyal" };
         private static readonly string[] TriggerNames = { "Mindig", "Állapotban eltelt idő (s)", "Rakomány legalább (m³)", "Rakomány kisebb (m³)",
@@ -31,28 +21,6 @@ namespace ForesTycoon.Editor
             var controller = model.Controllers.Find(c => c.Kind == kind && c.ObjectId == null);
             if (controller == null) { Remember(); controller = useTransportCycle && kind is "truck" or "forwarder" ? BehaviorController.TransportCycle(kind) : BehaviorController.TimedPause(kind); model.Controllers.Add(controller); }
             selectedController = controller.Id; selectedState = controller.InitialState;
-        }
-        private void ControllerList()
-        {
-            ImGui.Separator(); ImGui.TextUnformatted("Gépvezérlés · állapotgráf");
-            foreach (string kind in new[] { "forwarder", "processor", "truck" }) {
-                if (ImGui.Button("Új " + kind + " vezérlés")) {
-                    Remember(); var controller = BehaviorController.TimedPause(kind);
-                    model.Controllers.Add(controller); selectedController = controller.Id; selectedState = controller.InitialState;
-                }
-            }
-            if (ImGui.Button("Teherautó szállítási ciklus")) {
-                Remember(); var controller = BehaviorController.TransportCycle("truck");
-                model.Controllers.Add(controller); selectedController = controller.Id; selectedState = controller.InitialState;
-            }
-            if (ImGui.Button("Forwarder szállítási ciklus")) {
-                Remember(); var controller = BehaviorController.TransportCycle("forwarder");
-                model.Controllers.Add(controller); selectedController = controller.Id; selectedState = controller.InitialState;
-            }
-            foreach (var controller in model.Controllers)
-                if (ImGui.Selectable($"{controller.Name} · {controller.Kind} {(controller.ObjectId.HasValue ? "#" + controller.ObjectId : "típus")}##ctl{controller.Id}", selectedController == controller.Id)) {
-                    selectedController = controller.Id; selectedState = controller.InitialState;
-                }
         }
         private void ControllerCanvas(BehaviorController controller, GameWorld world)
         {

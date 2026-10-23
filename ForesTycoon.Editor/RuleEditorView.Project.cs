@@ -18,7 +18,8 @@ internal sealed partial class RuleEditorView
     private string liveStatus = "";
     private DateTime nextObjectRead;
     private readonly DynamicsEditorView dynamicsEditor = new();
-    private readonly AlgorithmEditorView algorithms = new();
+    // Compiled engine algorithms are not edited here; a project's reference to them is kept as it was loaded.
+    private AlgorithmGraphReference algorithmReference;
     private Task<AlgorithmBuildResult> algorithmBuild;
     private RuleProject publishingProject;
     private string publishingPath;
@@ -47,7 +48,6 @@ internal sealed partial class RuleEditorView
             behaviors.ApplyProject = () => ApplyProject(world, false);
             behaviors.StoreGraphTemplate = graph => { RememberAuthoring(); authoring.Templates.Add(AuthoringOperations.Template(graph)); message = "A gráf másolata a szabálytárban van; új kötés még nem jött létre."; };
             behaviors.StoreControllerTemplate = controller => { RememberAuthoring(); authoring.Templates.Add(AuthoringOperations.Template(controller)); message = "A munkaciklus másolata a szabálytárban van."; };
-            currentRules.EditAlgorithm = algorithms.SelectSource;
             currentRules.RuleTarget = rule => {
                 var rules = RuleBookRules(world);
                 int index = rules.FindIndex(r => r.Id == rule.Id || r.Template == rule.Id);
@@ -56,9 +56,7 @@ internal sealed partial class RuleEditorView
                     && WorldBehaviorPolicy.Hooks.Any(h => h.Id == g.Hook && h.Kind == g.Kind && RuleWorkshopModel.HookBelongsTo(h, rule)));
                 return graph == null ? null : () => ShowCommonRule("behavior:" + graph.Id);
             };
-            if (pendingProject == null && AlgorithmBuild.FindWorkspace() is string workspace) algorithms.ImportWorkspace(workspace);
         }
-        algorithms.Refresh();
         if (guardedPath != Path.GetFullPath(projectPath)) { guardedPath = Path.GetFullPath(projectPath); publishedGuard.Observe(projectPath); draftGuard.Observe(RuleWorkshopModel.DraftPath(projectPath)); }
         var dynamics = dynamicsEditor.Draft;
         behaviors.Configure(WorldBehaviorPolicy.Hooks, DynamicsRuntime.Keys(dynamics, GameWorld.RuleWorldFields), key => PreviewValue(world, key));
@@ -92,7 +90,7 @@ internal sealed partial class RuleEditorView
         if (scenario != null) seedEdit = scenario.Seed;
         authoringUndo.Clear(); authoringRedo.Clear();
         publishedGuard.Observe(projectPath); draftGuard.Observe(RuleWorkshopModel.DraftPath(projectPath)); guardedPath = Path.GetFullPath(projectPath);
-        algorithms.Load(project.Algorithms);
+        algorithmReference = project.Algorithms;
         dynamicsEditor.Load(project.Dynamics);
         behaviors.Configure(WorldBehaviorPolicy.Hooks, DynamicsRuntime.Keys(project.Dynamics, GameWorld.RuleWorldFields), key => PreviewValue(world, key));
         behaviors.LoadDraft(project.Behaviors);
@@ -104,7 +102,7 @@ internal sealed partial class RuleEditorView
     }
     internal RuleProject CollectProject(GameWorld world) => new() { Name = projectName,
         Tuning = currentRules.TuningOverrides(world), Behaviors = behaviors.Document, Dynamics = dynamicsEditor.Document,
-        Algorithms = algorithms.Reference, Rules = RuleEngine.Clone(RuleBookRules(world)), RemovedStarters = RemovedStarters(world).ToList(), Fields = RuleEngine.CloneFields(RuleBookFields(world)),
+        Algorithms = algorithmReference, Rules = RuleEngine.Clone(RuleBookRules(world)), RemovedStarters = RemovedStarters(world).ToList(), Fields = RuleEngine.CloneFields(RuleBookFields(world)),
         Authoring = JsonSerializer.Deserialize<RuleAuthoring>(JsonSerializer.Serialize(authoring)),
         World = scenario == null ? world.RuleProjectDocument.World : RuleProject.FromJson(new RuleProject { World = scenario }.ToJson()).World };
     private double PreviewValue(GameWorld world, string key)
@@ -173,7 +171,7 @@ internal sealed partial class RuleEditorView
         trialCancellation?.Cancel();
         publishingCancellation?.Cancel();
         if (world == null || !projectInitialized || !workshopVersions.Unsaved) return;
-        try { WorkshopDraftStore.Save(RecoveryStem(), CollectProject(world), algorithms.Document, algorithms.Workspace); }
+        try { WorkshopDraftStore.Save(RecoveryStem(), CollectProject(world)); }
         catch (Exception e) { Console.Error.WriteLine("A helyreállítási munkapéldány mentése nem sikerült: " + e.Message); }
     }
     internal void ShowDynamics() {

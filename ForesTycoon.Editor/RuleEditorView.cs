@@ -42,7 +42,7 @@ namespace ForesTycoon.Editor
             if (document.RootElement.TryGetProperty("schema", out var projectSchema) && projectSchema.GetString() == "forest-rule-project")
             { pendingProject = RuleProject.FromJson(document.RootElement.GetRawText()); projectPath = RuleWorkshopModel.PublishedPath(path); return; }
             if (document.RootElement.TryGetProperty("schema", out var behaviorSchema) && behaviorSchema.GetString() == "forest-behaviors")
-            { behaviors.Load(BehaviorModel.FromJson(document.RootElement.GetRawText()), path); return; }
+            { behaviors.Load(BehaviorModel.FromJson(document.RootElement.GetRawText())); return; }
             if (document.RootElement.TryGetProperty("schema", out var schema) && schema.GetString() == "forest-current-rules")
             { currentRules.Load(GameRuleCatalog.FromJson(document.RootElement.GetRawText()), path); return; }
             throw new InvalidDataException("Nyiss meg egy teljes szabályprojektet; a külön útkopási modell megszűnt.");

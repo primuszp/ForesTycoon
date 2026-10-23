@@ -218,7 +218,6 @@ namespace ForesTycoon.Editor
 
         // Kinds: inputs from the world (moss), constants (amber), operations (blue), the output (honey), native rules, presentation.
         internal static readonly Vec4 InputKind = new(0.40f, 0.62f, 0.33f, 1);
-        internal static readonly Vec4 ConstantKind = new(0.85f, 0.62f, 0.28f, 1);
         internal static readonly Vec4 OperationKind = new(0.38f, 0.58f, 0.78f, 1);
         internal static readonly Vec4 OutputKind = new(0.93f, 0.75f, 0.36f, 1);
         internal static readonly Vec4 NativeKind = new(0.42f, 0.58f, 0.40f, 1);
@@ -271,11 +270,6 @@ namespace ForesTycoon.Editor
             return clickable && clicked;
         }
 
-        /// <summary>The validation/state pill of the status bar.</summary>
-        internal static void Pill(string text, bool ok)
-        {
-            Chip(text, ok ? HudTheme.Good : HudTheme.Bad, "pill");
-        }
 
         /// <summary>The one prominent action of a view (honey-coloured).</summary>
         internal static bool PrimaryButton(string label, bool enabled = true, string tooltip = null)

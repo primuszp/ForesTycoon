@@ -7,7 +7,6 @@ using ForesTycoon.Rules;
 
 namespace ForesTycoon.Editor;
 
-internal enum WorkshopPhase { Understand, Edit, Trial, Apply }
 internal sealed record WorkshopTopic(string Name, string[] Modules);
 
 /// <summary>One thematic identity per rule. Other entry points navigate to that identity.</summary>

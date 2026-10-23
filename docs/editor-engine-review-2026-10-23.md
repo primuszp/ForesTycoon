@@ -46,11 +46,26 @@ talaj- és fafajkatalógus, vízmérleg-zárás, útvonalkeresés, sarang-mérle
 - **Ablakméret a smoke tesztben.** A `Draw` felülírta a hívó ablakméretét, így a teszt az
   önálló ablak `imgui.ini`-ben tárolt méretét örökölte.
 
-## Nyitott pontok
+## Nézetek és halott kód
 
-- Az `AlgorithmEditorView` (a teljes játékkód szerkezeti gráfként) és a motorszabály-katalógus
-  részletes nézete (`CurrentRulesView.Draw`) nincs bekötve a felületbe. Az algoritmusgráfok
-  revíziója a játékban érvényesül (`RequireAlgorithmRuntime`), de a felületen csak a
-  munkapéldány mentése érinti őket.
-- A **Logisztika** témacsoport 55 gráfja egy listában van; géptípus szerinti
-  alcsoport segítené a keresést.
+Az editor célja, hogy nem programozó írjon le objektumok közötti szabályokat és
+viselkedést, amelyet a motor futtat. Ennek mentén:
+
+- **Rendszertérkép bekötve** (Ellenőrzés csoport). A motor szabálykatalógusa: rendszerek,
+  kapcsolatok, élő értékek, hangolható számok, és melyik rész szerkeszthető. A
+  szerkesztőgombok a közös `HookBelongsTo` leképezést használják; a nézet saját, hiányos
+  leképezése és a C#-forrásfájlok listája megszűnt. A „Natív C#” felirat helyett
+  „A motor végzi”.
+- **Algoritmusgráf-szerkesztő törölve.** A játék C#-kódját mutatta szerkezeti gráfként; ez
+  programozás, nem szabályleírás. Nem volt bekötve, mégis az editor indulásakor beolvasta a
+  teljes játékkódot, hogy a munkapéldányba mentse. Egy projekt algoritmushivatkozását az
+  editor most változatlanul továbbadja; fordítása és ellenőrzése a CLI és a játék
+  projektkapcsolata dolga marad.
+- **Halott kód törölve:** a csak a smoke teszt által rajzolt önálló viselkedésszerkesztő
+  (`BehaviorEditorView.Draw`, fájlmentéssel) és dinamikanézet (`DynamicsEditorView.Draw`),
+  valamint sehonnan nem hívott tagok (objektumszintű kötés-létrehozók, hangolási
+  segédek, régi munkafázis-enum, `Pill`). A smoke teszt a viselkedésgráfokat és
+  munkaciklusokat a termékben használt beágyazott nézettel rajzolja.
+
+Az **Összefüggések** oldalon a logisztikai gráfok (55) géptípus szerint csoportosulnak:
+processzor, forwarder, teherautó, malom, telephely.

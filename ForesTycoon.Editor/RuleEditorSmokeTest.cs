@@ -148,6 +148,7 @@ namespace ForesTycoon.Editor
                     (() => editor.ShowCommonRule("behavior:" + world.BehaviorDocument.Graphs.First(g => g.Hook == "water.waterlogging").Id), "site-waterlogging-graph"),
                                         (() => editor.ShowRuleCalculation(world.RuleProjectDocument.Rules.FindIndex(r => r.Id == "forest.growth"), 0), "common-calculation"),
                     (() => editor.ShowRuleOverview(), "world-rule-overview"),
+                    (() => editor.ShowSystemMap(), "world-system-map"),
                     (() => { editor.ShowWorld(WorldTab.Trial); editor.ShowWorldTrial(rainTrial); }, "world-trial") }) {
                     screen.Show();
                     for (int frame = 0; frame < 3; frame++) {
@@ -435,7 +436,7 @@ namespace ForesTycoon.Editor
                 for (int frame = 0; frame < 3; frame++) {
                     ui.Update(width, height, width, height, Vec2.One, 1f / 60);
                     ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 900));
-                    ImGui.Begin("Viselkedések", ImGuiWindowFlags.NoSavedSettings); behaviorView.Draw(world); ImGui.End();
+                    ImGui.Begin("Viselkedések", ImGuiWindowFlags.NoSavedSettings); behaviorView.SelectGraph(behavior.Graphs[0].Id); behaviorView.DrawEmbedded(world); ImGui.End();
                     GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit); ui.Render(); GL.Finish();
                 }
                 Require(GL.GetError() == ErrorCode.NoError, "Behavior editor OpenGL error.");
@@ -446,7 +447,7 @@ namespace ForesTycoon.Editor
                 for (int frame = 0; frame < 3; frame++) {
                     ui.Update(width, height, width, height, Vec2.One, 1f / 60);
                     ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 900));
-                    ImGui.Begin("Gépvezérlés", ImGuiWindowFlags.NoSavedSettings); behaviorView.Draw(world); ImGui.End();
+                    ImGui.Begin("Gépvezérlés", ImGuiWindowFlags.NoSavedSettings); behaviorView.SelectControllerById(controller.Id); behaviorView.DrawEmbedded(world); ImGui.End();
                     GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit); ui.Render(); GL.Finish();
                 }
                 Require(GL.GetError() == ErrorCode.NoError, "Controller editor OpenGL error.");
@@ -457,7 +458,7 @@ namespace ForesTycoon.Editor
                 for (int frame = 0; frame < 3; frame++) {
                     ui.Update(width, height, width, height, Vec2.One, 1f / 60);
                     ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 900));
-                    ImGui.Begin("Szállítási gráf", ImGuiWindowFlags.NoSavedSettings); behaviorView.Draw(world); ImGui.End();
+                    ImGui.Begin("Szállítási gráf", ImGuiWindowFlags.NoSavedSettings); behaviorView.SelectControllerById(transport.Controllers[0].Id); behaviorView.DrawEmbedded(world); ImGui.End();
                     GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit); ui.Render(); GL.Finish();
                 }
                 Require(GL.GetError() == ErrorCode.NoError, "Truck controller editor OpenGL error.");
@@ -471,7 +472,7 @@ namespace ForesTycoon.Editor
                 for (int frame = 0; frame < 3; frame++) {
                     ui.Update(width, height, width, height, Vec2.One, 1f / 60);
                     ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 900));
-                    ImGui.Begin("Útvonalszabály", ImGuiWindowFlags.NoSavedSettings); behaviorView.Draw(world); ImGui.End();
+                    ImGui.Begin("Útvonalszabály", ImGuiWindowFlags.NoSavedSettings); behaviorView.SelectGraph(route.Id); behaviorView.DrawEmbedded(world); ImGui.End();
                     GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit); ui.Render(); GL.Finish();
                 }
                 Require(GL.GetError() == ErrorCode.NoError, "Route graph editor OpenGL error.");
@@ -521,20 +522,6 @@ namespace ForesTycoon.Editor
                 }
                 Require(GL.GetError() == ErrorCode.NoError, "Animal object fields OpenGL error.");
                 FramebufferCapture.SavePng(Path.Combine(output, "animal-fields.png"), width, height);
-                var algorithmView = new AlgorithmEditorView();
-                string workspace = ForesTycoon.RuleCompiler.AlgorithmBuild.FindWorkspace();
-                var algorithmBundle = new ForesTycoon.RuleCompiler.AlgorithmBundle();
-                algorithmBundle.Files.Add(ForesTycoon.RuleCompiler.AlgorithmBundle.Import("ForesTycoon/World/GameWorld.cs", File.ReadAllText(Path.Combine(workspace, "ForesTycoon/World/GameWorld.cs"))));
-                algorithmView.LoadDocument(algorithmBundle, workspace);
-                algorithmView.SelectSource(new("ForesTycoon/World/GameWorld.cs", "GameWorld.Update"));
-                for (int frame = 0; frame < 3; frame++) {
-                    ui.Update(width, height, width, height, Vec2.One, 1f / 60);
-                    ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 900));
-                    ImGui.Begin("Teljes algoritmusgráf", ImGuiWindowFlags.NoSavedSettings); algorithmView.Draw(); ImGui.End();
-                    GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit); ui.Render(); GL.Finish();
-                }
-                Require(GL.GetError() == ErrorCode.NoError, "Algorithm graph editor OpenGL error.");
-                FramebufferCapture.SavePng(Path.Combine(output, "algorithms.png"), width, height);
                 // Incomplete projects can be reopened for repair without mutating the running world.
                 project.Dynamics.Flows[0].Rate.Nodes.Clear();
                 string incompleteFile = Path.Combine(output, "feedback-draft.json"); RuleProject.WriteAtomic(incompleteFile, project.ToJson());

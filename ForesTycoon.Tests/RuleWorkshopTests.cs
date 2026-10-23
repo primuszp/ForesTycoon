@@ -66,7 +66,7 @@ public sealed class RuleWorkshopTests
         Assert.NotEqual(first.ContentRevision(), second.ContentRevision());
     }
     [Fact]
-    public void RepairableDraftSaveLeavesThePublishedProjectAndPreviousGraphsIntact()
+    public void RepairableDraftSaveLeavesThePublishedProjectIntact()
     {
         string folder = Path.Combine(Path.GetTempPath(), "forest-workshop-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);
@@ -74,20 +74,15 @@ public sealed class RuleWorkshopTests
             string published = Path.Combine(folder, "project.json");
             var active = GameWorld.DefaultRuleProject(); string original = active.ToJson(); File.WriteAllText(published, original);
             var incomplete = active.Clone(); incomplete.Rules.Add(new() { Id = "incomplete", Scope = "passage", Schedule = "passage", Effects = { new() { Target = "unknown", Influence = new() { PerYear = false } } } });
-            var bundle = new AlgorithmBundle(); bundle.Files.Add(AlgorithmBundle.Import("ForesTycoon/World/Test.cs", "class Fixture { int Value => 1; }"));
-            string draft = WorkshopDraftStore.Save(published, incomplete, bundle, folder);
+            string draft = WorkshopDraftStore.Save(published, incomplete);
             var saved = RuleProject.FromJson(File.ReadAllText(draft));
-            Assert.Equal("unknown", saved.Rules.Single(r => r.Id == "incomplete").Effects.Single().Target); Assert.Equal("draft", saved.Algorithms.Revision);
-            string firstBundle = saved.Algorithms.BundlePath, firstContents = File.ReadAllText(firstBundle);
-            bundle.Files[0].Nodes.First(n => n.Token && n.Text == "1").Text = "unresolvedName";
+            Assert.Equal("unknown", saved.Rules.Single(r => r.Id == "incomplete").Effects.Single().Target);
             // Reopening a draft must preserve its publication target and permit another incomplete edit.
-            WorkshopDraftStore.Save(draft, incomplete, bundle, folder);
-            var later = RuleProject.FromJson(File.ReadAllText(draft));
+            incomplete.Name = "Második mentés";
+            WorkshopDraftStore.Save(draft, incomplete);
             Assert.Equal(published, RuleWorkshopModel.PublishedPath(draft));
-            Assert.NotEqual(firstBundle, later.Algorithms.BundlePath);
-            Assert.Equal(firstContents, File.ReadAllText(firstBundle));
+            Assert.Equal("Második mentés", RuleProject.FromJson(File.ReadAllText(draft)).Name);
             Assert.Equal(original, File.ReadAllText(published));
-            Assert.Null(incomplete.Algorithms); // Saving does not replace the caller's algorithm reference.
         } finally { Directory.Delete(folder, recursive: true); }
     }
 }

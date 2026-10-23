@@ -16,7 +16,7 @@ internal sealed partial class RuleEditorView
     private string AuthoringRevision(GameWorld world)
     {
         var project = CollectProject(world); project.Algorithms = null;
-        return project.ContentRevision() + ":" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(authoring)))) + ":" + algorithms.ChangeVersion + ":" + algorithms.Workspace;
+        return project.ContentRevision() + ":" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(authoring))));
     }
     private void RefreshWorkshopRevision(GameWorld world)
     {
@@ -27,10 +27,9 @@ internal sealed partial class RuleEditorView
     }
     private void SaveProjectDraft(GameWorld world)
     {
-        if (algorithms.IsLoading) throw new InvalidOperationException("A gráfok beolvasása még tart. A befejezés után a teljes munkapéldány menthető.");
         draftGuard.RequireUnchanged(RuleWorkshopModel.DraftPath(projectPath));
         ProjectHistory.Archive(RuleWorkshopModel.DraftPath(projectPath));
-        string destination = WorkshopDraftStore.Save(projectPath, CollectProject(world), algorithms.Document, algorithms.Workspace);
+        string destination = WorkshopDraftStore.Save(projectPath, CollectProject(world));
         draftGuard.Observe(destination);
         RefreshWorkshopRevision(world); workshopVersions.MarkSaved();
         message = "Munkapéldány mentve. A játékban futó szabályokat nem módosította. " + destination;

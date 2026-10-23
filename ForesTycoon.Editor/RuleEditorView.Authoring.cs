@@ -14,7 +14,6 @@ internal sealed partial class RuleEditorView
     private string librarySearch = "", templateTarget = "", templateId,
         transferPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ForesTycoon", "rules", "sablonok.json");
     private readonly Stack<string> authoringUndo = new(), authoringRedo = new();
-    private int TopicOf(string id, int fallback) => authoring.Entries.TryGetValue(id, out var entry) ? Math.Clamp(entry.Topic, 0, 6) : fallback;
     private string RecoveryStem() => projectPath + ".recovery-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N")[..8];
     private void RememberAuthoring() { authoringUndo.Push(JsonSerializer.Serialize(authoring)); authoringRedo.Clear(); }
     private void AuthoringHistory(Stack<string> from, Stack<string> to) { if (from.Count == 0) return; to.Push(JsonSerializer.Serialize(authoring)); authoring = JsonSerializer.Deserialize<RuleAuthoring>(from.Pop()); }

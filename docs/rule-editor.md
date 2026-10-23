@@ -109,13 +109,18 @@ az oldalak feladat szerint csoportosítva; a sáv ikonokra csukható.
 | Világ | Térkép, Talajtípusok, Fafajok, Utak és burkolatok | Pálya; Típusok › Talajtípusok, Fafajok, Burkolatok |
 | Játékmenet | Küldetések, Járművek, Játékparaméterek | Küldetések; Típusok › Járművek, Játékparaméterek |
 | Szabályrendszer | Objektumok, Szabályok, Összefüggések, Folyamatkapcsolatok, Munkaciklusok, Készletek és áramlások, Szabálytár | Objektumok; a Szabályok fül közös listája |
-| Ellenőrzés | Mezőhasználat, Esős próba | Szabályok › Áttekintés; Próba |
+| Ellenőrzés | Rendszertérkép, Mezőhasználat, Esős próba | —; Szabályok › Áttekintés; Próba |
 
 Egy szabály kártyája fejléccel indul: név, típus, állapot, időzítés, objektum és csoport,
 jobbra Visszaállítás a mintára, Másolat és Törlés. Ha más szabály is írja a célmezőt, egy
 sor jelzi (rákattintva Mezőhasználat). Alatta négy fül: **Kapcsolatok** (a gráf és a
 kiválasztott kapcsolat), **Próba**, **Beállítások** (név, objektum, időzítés, feltétel,
 saját tulajdonságok) és **Leírás** (mikor fut, miből számol, mire hat, szövegesen).
+
+A **Rendszertérkép** a játék rendszereit és kapcsolataikat mutatja: melyik folyamatot végzi
+a motor magától, melyiket a projekt szabályai és gráfjai, és mely számai hangolhatók.
+Egy szerkeszthető folyamatnál a „Megnyitás szerkesztésre” a hozzá tartozó szabályra vagy
+gráfra visz.
 
 Az editor és a motor összhangját a `--check-editor-coverage` kapcsoló ellenőrzi; részletek:
 [editor–motor ellenőrzés, 2026-10-23](editor-engine-review-2026-10-23.md).

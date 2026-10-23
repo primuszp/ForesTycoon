@@ -46,15 +46,9 @@ namespace ForesTycoon.Editor
 
         /// <summary>The last file operation's result, shown by the editor's status bar.</summary>
         internal string Message { get; set; } = "";
-        internal Action<RuleSource> EditAlgorithm { get; set; }
         internal GameRuleCatalog Catalog => catalog;
         internal GameRuleIndex Index => index;
         internal void EnsureCatalog(GameWorld world) { if (catalog == null) Load(world.DescribeCurrentRules()); }
-        internal void DrawRuleParameters(GameRuleDefinition rule) {
-            if (!BeginParameterTable("workshop-parameters", true)) return;
-            for (int i = 0; i < rule.Parameters.Count; i++) ParameterRow(rule, i, true);
-            ImGui.EndTable();
-        }
 
         internal void Load(GameRuleCatalog loaded, string file = null, GameRuleCatalog current = null)
         {
@@ -130,20 +124,20 @@ namespace ForesTycoon.Editor
             GameRuleExecution.EditableController => "Szerkeszthető vezérlés",
             GameRuleExecution.EditableExpressions => "Viselkedésképletek",
             GameRuleExecution.Presentation => "Megjelenítés",
-            _ => "Natív C#"
+            _ => "A motor végzi"
         };
 
         private static string StatusHelp(GameRuleExecution execution) => execution switch
         {
-            GameRuleExecution.EditableGraph => "Az editor egyenlete fut a játékban; a gráf nézetben módosítható.",
-            GameRuleExecution.EditableController => "Az editor állapotgráfja vezérli a gépet; a Viselkedések fülön módosítható.",
-            GameRuleExecution.EditableExpressions => "A folyamat döntéseit és mennyiségeit a Viselkedések fül képletgráfjai adják.",
+            GameRuleExecution.EditableGraph => "A projekt gráfja fut a játékban; a „Megnyitás szerkesztésre” gomb viszi oda.",
+            GameRuleExecution.EditableController => "A projekt munkaciklusa vezérli a gépet; a Munkaciklusok oldalon módosítható.",
+            GameRuleExecution.EditableExpressions => "A folyamat döntéseit és mennyiségeit a projekt gráfjai adják (Összefüggések, Folyamatkapcsolatok).",
             GameRuleExecution.Presentation => "Csak megjelenítés: a szimuláció állapotát olvassa, nem változtatja.",
-            _ => "A meglévő C# folyamat futtatja; a képlet és a paraméterek az implementációból feltérképezett adatok."
+            _ => "A játék motorja végzi. A logikája itt nem szerkeszthető; a számai a Játékparaméterek oldalon hangolhatók."
         };
 
         // ── Layout ───────────────────────────────────────────────────────────
-        internal void Draw(GameWorld world, Action<string> editGraph, Action<BehaviorHook> editBehavior = null, Action<string> editController = null)
+        internal void Draw(GameWorld world, Action<BehaviorHook> editBehavior = null, Action<string> editController = null)
         {
             if (catalog == null) Load(world.DescribeCurrentRules());
             float height = Math.Max(260, ImGui.GetContentRegionAvail().Y);
@@ -155,7 +149,7 @@ namespace ForesTycoon.Editor
             if (module == "gaps") Gaps(); else Canvas();
             ImGui.EndChild(); ImGui.SameLine();
             ImGui.BeginChild("rules-inspector", new Vec2(0, height), ImGuiChildFlags.Borders);
-            Inspector(world, editGraph, editBehavior, editController);
+            Inspector(world, editBehavior, editController);
             ImGui.EndChild();
         }
 
@@ -513,10 +507,10 @@ namespace ForesTycoon.Editor
         }
 
         // ── Inspector ────────────────────────────────────────────────────────
-        private void Inspector(GameWorld world, Action<string> editGraph, Action<BehaviorHook> editBehavior, Action<string> editController)
+        private void Inspector(GameWorld world, Action<BehaviorHook> editBehavior, Action<string> editController)
         {
             var rule = index.Find(selected);
-            if (rule != null) { RuleDetails(world, rule, editGraph, editBehavior, editController); return; }
+            if (rule != null) { RuleDetails(world, rule, editBehavior, editController); return; }
             if (module.Length > 0 && module != "gaps") { ModuleSummary(); return; }
 
             EditorStyle.Title(catalog.Name);
@@ -570,7 +564,7 @@ namespace ForesTycoon.Editor
             }
         }
 
-        private void RuleDetails(GameWorld world, GameRuleDefinition rule, Action<string> editGraph, Action<BehaviorHook> editBehavior, Action<string> editController)
+        private void RuleDetails(GameWorld world, GameRuleDefinition rule, Action<BehaviorHook> editBehavior, Action<string> editController)
         {
             var domain = DomainOf(rule.Module);
             if (EditorStyle.Chip(rule.Module, domain.Colour, "rule-module", true)) { search = ""; string id = rule.Id; SelectModule(rule.Module); selected = id; }
@@ -582,18 +576,15 @@ namespace ForesTycoon.Editor
                 foreach (string kind in new[] { "forwarder", "processor", "truck" })
                     if ((rule.Id == "machine.controller" || rule.Id == "machine." + kind || kind == "truck" && rule.Id is "vehicle.transfer" or "fleet.orders")
                         && ImGui.Button("Állapotgráf: " + kind)) editController(kind);
-            if (editBehavior != null)
-                foreach (var hook in WorldBehaviorPolicy.Hooks.Where(h => h.Id == rule.Id
-                    || h.Id.StartsWith("tuning.") && GameTuning.Spec(h.Id[7..])?.Rule == rule.Id
-                    || h.Id.StartsWith("route.") && rule.Id is "route.find" or "route.policy"
-                    || (h.Id.StartsWith("loading.") || h.Id == "unloading.amount") && (rule.Id == "loading.policy" || rule.Id == "machine.logTransfer" && h.Kind == "logisticsForwarder" || rule.Id == "vehicle.transfer" && h.Kind == "logisticsTruck")
-                    || h.Id == "machine.pace" && rule.Id == (h.Kind == "logisticsForwarder" ? "machine.forwarder" : "machine.processor")))
-                    if (ImGui.Button("Viselkedésgráf: " + hook.Name + "##" + hook.Id + hook.Kind)) editBehavior(hook);
             ImGui.PushTextWrapPos(); EditorStyle.Text(HudTheme.Parchment, rule.Description); ImGui.PopTextWrapPos();
-            if (rule.Execution == GameRuleExecution.EditableGraph)
-            {
-                ImGui.Spacing();
-                if (EditorStyle.PrimaryButton("Gráf megnyitása szerkesztésre")) editGraph(rule.Id);
+            ImGui.Spacing();
+            if (RuleTarget?.Invoke(rule) is { } open && EditorStyle.PrimaryButton("Megnyitás szerkesztésre")) open();
+            if (editBehavior != null) {
+                var hooks = WorldBehaviorPolicy.Hooks.Where(h => !h.Id.StartsWith("tuning.", StringComparison.Ordinal) && RuleWorkshopModel.HookBelongsTo(h, rule)).ToArray();
+                // A rule made of several graphs lists each of them.
+                if (hooks.Length > 1)
+                    foreach (var hook in hooks)
+                        if (EditorStyle.QuietButton("› " + hook.Name + "##" + hook.Id + hook.Kind)) editBehavior(hook);
             }
             if (EditorStyle.BeginFacts("rule-facts"))
             {
@@ -642,15 +633,6 @@ namespace ForesTycoon.Editor
                 EditorStyle.Section("Élő adatok a tesztvilágból");
                 foreach (string value in observations) { ImGui.Bullet(); ImGui.SameLine(); ImGui.PushTextWrapPos(); EditorStyle.Text(HudTheme.Info, value); ImGui.PopTextWrapPos(); }
             }
-            EditorStyle.Section("Forrás a projektben");
-            foreach (var source in rule.Sources)
-            {
-                ImGui.PushID(source.File + source.Symbol);
-                EditorStyle.Text(HudTheme.Parchment, source.Symbol);
-                EditorStyle.Text(HudTheme.Muted, source.File);
-                if (EditAlgorithm != null && ImGui.Button("Algoritmusgráf szerkesztése")) EditAlgorithm(source);
-                ImGui.PopID();
-            }
             EditorStyle.Section("Tervezői megjegyzés");
             string notes = rule.Notes;
             if (ImGui.InputTextMultiline("##notes", ref notes, 4096, new Vec2(-1, 96))) rule.Notes = notes;
@@ -691,19 +673,7 @@ namespace ForesTycoon.Editor
             return false;
         }
 
-        /// <summary>The tunable number with this key, or null before the catalog is loaded.</summary>
-        internal RuleParameter TuningParameter(string key) =>
-            catalog?.Rules.SelectMany(r => r.Parameters).FirstOrDefault(p => p.Key == key);
 
-        /// <summary>Puts a tunable number back to the game's default; true when it had been changed.</summary>
-        internal bool ResetTuning(string key)
-        {
-            bool reset = false;
-            foreach (var rule in catalog?.Rules ?? new())
-                for (int i = 0; i < rule.Parameters.Count; i++)
-                    if (rule.Parameters[i].Key == key && rule.Parameters[i].Changed) { rule.Parameters[i] = rule.Parameters[i] with { Value = rule.Parameters[i].Default }; reset = true; }
-            return reset;
-        }
 
         /// <summary>Sets every tunable number: the given overrides, defaults for the rest.</summary>
         internal void SetTuning(IReadOnlyDictionary<string, double> overrides)
