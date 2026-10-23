@@ -20,7 +20,7 @@ internal sealed partial class RuleEditorView
     private List<string> removedStarters;
     private int selectedBookRule;
     private int? initialBookSelection;
-    private string ruleBookError;
+    private string ruleBookError, ruleFilter = "";
     private RuleFieldDefinition newField = new() { Name = "saját.", Scope = "tile" };
 
     private void LoadRuleBook(RuleProject project)
@@ -50,11 +50,10 @@ internal sealed partial class RuleEditorView
         var rules = RuleBookRules(world);
         if (rules.Exists(r => r.Id == starter.Id)) starter.Id = starter.Id + "-" + Guid.NewGuid().ToString("N")[..4];
         RemovedStarters(world).Remove(starter.Template);
-        rules.Add(starter); selectedBookRule = rules.Count - 1; selectedInfluence = selectedTerm = 0; commonSelection = null; editRuleCalculation = false; ruleOverview = false;
+        rules.Add(starter); selectedBookRule = rules.Count - 1; selectedInfluence = selectedTerm = 0; editRuleCalculation = false; page = EditorPage.Rules;
         ApplyRuleBook(world, starter.Name + ": hozzáadva a mintából.");
     }
-    internal void ShowRuleBook(int index = 0) { scrollRuleCard = true; worldTab = WorldTab.Rules; commonSelection = null; selectedBookRule = index; editRuleCalculation = false; if (!projectInitialized) initialBookSelection = index; ruleOverview = false; }
-    private void RulesArea(GameWorld world) => RuleBookArea(world);
+    internal void ShowRuleBook(int index = 0) { scrollRuleCard = true; page = EditorPage.Rules; selectedBookRule = index; editRuleCalculation = false; if (!projectInitialized) initialBookSelection = index; }
 
     /// <summary>Checks the whole book as the game will; on success the test world runs it at once.</summary>
     private void ApplyRuleBook(GameWorld world, string what)
@@ -73,18 +72,10 @@ internal sealed partial class RuleEditorView
         selectedBookRule = Math.Clamp(selectedBookRule, 0, Math.Max(0, rules.Count - 1));
 
         // ── Left: the book ───────────────────────────────────────────────
-        ImGui.BeginChild("book-list", new Vec2(320, 0), ImGuiChildFlags.Borders);
-        EditorStyle.Section("Szabályok");
-        {
-            GroupedRuleList(world, rules);
-            if (rules.Count == 0) EditorStyle.Text(HudTheme.Muted, "Nincs szabály. Az „+ Új szabály” üresen vagy mintából indít egyet.");
-        }
-        DrawCommonRuleList(world);
-        ImGui.Spacing();
-        if (ImGui.Selectable("Áttekintés: ki mit ír és olvas", ruleOverview)) { commonSelection = null; ruleOverview = !ruleOverview; }
-        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Melyik szabály melyik mezőt írja és olvassa, és melyik mezőt írja több szabály.");
-        ImGui.Spacing();
-        if (ImGui.Button("+ Új szabály", new Vec2(-1, 0))) ImGui.OpenPopup("new-rule");
+        EditorStyle.BeginPanel("book-list", new Vec2(ListWidth, 0));
+        if (EditorStyle.PrimaryButton("+ Új szabály")) ImGui.OpenPopup("new-rule");
+        ImGui.SameLine();
+        RuleGroupsToolbar();
         if (ImGui.BeginPopup("new-rule")) {
             if (ImGui.Selectable("Üres szabály")) {
                 int n = rules.Count + 1;
@@ -93,10 +84,9 @@ internal sealed partial class RuleEditorView
                 var first = RuleEngine.Scopes.First(s => s.Fields.Any(f => f.Write != null));
                 rules.Add(new WorldRule { Id = $"rule-{Guid.NewGuid():N}", Name = $"Szabály {n}", Scope = first.Id, Enabled = false,
                     Effects = { new() { Target = first.Fields.First(f => f.Write != null).Name, Mode = "add", Influence = new() } } });
-                selectedBookRule = rules.Count - 1; commonSelection = null; editRuleCalculation = false; ruleOverview = false;
+                selectedBookRule = rules.Count - 1; editRuleCalculation = false;
                 message = "Új szabály: válaszd ki, hol fusson, és adj hozzá hatást.";
             }
-            CommonCreateMenu(world);
             ImGui.Separator();
             EditorStyle.Text(HudTheme.Muted, "Mintából");
             foreach (var template in RuleEngine.StarterRules()) {
@@ -105,14 +95,17 @@ internal sealed partial class RuleEditorView
             }
             ImGui.EndPopup();
         }
+        string filter = EditorStyle.Search("##rule-filter", "Keresés: szabály vagy csoport…", ref ruleFilter);
         ImGui.Spacing();
+        ImGui.BeginChild("book-scroll", new Vec2(0, -ImGui.GetTextLineHeightWithSpacing() * 3 - 4));
+        GroupedRuleList(world, rules, filter);
+        if (rules.Count == 0) EditorStyle.Text(HudTheme.Muted, "Nincs szabály. Az „+ Új szabály” üresen vagy mintából indít egyet.");
+        ImGui.EndChild();
         ImGui.PushTextWrapPos(0);
         EditorStyle.Text(HudTheme.Muted, "Időszakos: 0,5 játékmásodpercenként. Havi: minden erdőhónap végén. Áthaladási: egy jármű belépésekor. Azonos indításnál fentről lefelé haladnak.");
         ImGui.PopTextWrapPos();
-        ImGui.EndChild(); ImGui.SameLine();
+        EditorStyle.EndPanel(); ImGui.SameLine();
 
-        if (commonSelection != null) { DrawCommonSelection(world); return; }
-        if (ruleOverview) { RuleOverviewArea(world, rules); return; }
         if (rules.Count == 0) return;
         var rule = rules[selectedBookRule];
         if (rule.Effects.All(e => e.Influence != null) && !editRuleCalculation) {

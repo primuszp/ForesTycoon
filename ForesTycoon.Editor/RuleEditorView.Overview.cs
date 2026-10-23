@@ -14,10 +14,9 @@ namespace ForesTycoon.Editor;
 /// </summary>
 internal sealed partial class RuleEditorView
 {
-    private bool ruleOverview;
     private bool overviewOnlyShared;
 
-    internal void ShowRuleOverview() { worldTab = WorldTab.Rules; commonSelection = null; ruleOverview = true; }
+    internal void ShowRuleOverview() => ShowPage(EditorPage.Overview);
 
     internal sealed record FieldWrite(int Rule, string Name, string Mode, bool Enabled, string Schedule);
     internal sealed record FieldUse(string Key, string Entity, string Field, List<FieldWrite> Writers, List<(int Rule, string Name, bool Enabled)> Readers, List<string> Native)
@@ -96,17 +95,16 @@ internal sealed partial class RuleEditorView
         foreach (var use in shared) {
             string order = string.Join("; ", use.Writers.Where(w => w.Enabled || w.Rule == self).OrderBy(w => w.Rule).Select(w => $"{w.Rule + 1}. {(w.Rule == self ? "ez a szabály" : w.Name)} ({ScheduleLabel(w.Schedule)})"));
             EditorStyle.Text(HudTheme.AmberAccent, $"A(z) {KeyDisplay(use.Key)} mezőt más szabály is írja: {order}. Azonos indításnál listasorrendben futnak; külön eseményeknél a tényleges időrend dönt.");
-            if (ImGui.IsItemClicked()) ruleOverview = true;
+            if (ImGui.IsItemClicked()) ShowPage(EditorPage.Overview);
             if (ImGui.IsItemHovered()) ImGui.SetTooltip("Kattintás: áttekintés, melyik szabály mit olvas és ír.");
         }
     }
 
     private void RuleOverviewArea(GameWorld world, List<WorldRule> rules)
     {
-        ImGui.BeginChild("rule-overview", Vec2.Zero, ImGuiChildFlags.Borders);
+        EditorStyle.BeginPanel("rule-overview", Vec2.Zero);
         ImGui.PushTextWrapPos(0);
-        EditorStyle.Title("Mezők és szabályok");
-        EditorStyle.Text(HudTheme.Muted, "Melyik szabály melyik objektum melyik tulajdonságát olvassa és írja. Az azonos eseményre vagy időlépésre induló szabályok listasorrendben futnak. " +
+        EditorStyle.Text(HudTheme.Muted, "Az azonos eseményre vagy időlépésre induló szabályok listasorrendben futnak. " +
             "Az áthaladási és időszakos szabályok a saját indításukkor futnak; a későbbi végrehajtás az addig kialakult állapotot látja.");
         var uses = FieldUses(rules);
         int shared = uses.Count(u => u.Shared);
@@ -147,7 +145,7 @@ internal sealed partial class RuleEditorView
         void RuleLink(int index, string text, bool enabled)
         {
             ImGui.PushStyleColor(ImGuiCol.Text, enabled ? HudTheme.Parchment : HudTheme.Muted);
-            if (ImGui.Selectable(text + (enabled ? "" : " (ki)") + "##link" + index + text)) { selectedBookRule = index; ruleOverview = false; }
+            if (ImGui.Selectable(text + (enabled ? "" : " (ki)") + "##link" + index + text)) ShowRuleBook(index);
             ImGui.PopStyleColor();
             if (ImGui.IsItemHovered()) ImGui.SetTooltip("Kattintás: a szabály megnyitása.");
         }

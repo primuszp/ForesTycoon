@@ -19,11 +19,15 @@ internal sealed partial class RuleEditorView
     {
         ImGui.PushID(id);
         bool on = enabled;
-        if (ImGui.Checkbox("##enabled", ref on)) enable(on);
+        if (EditorStyle.Toggle("##enabled", ref on)) enable(on);
         RuleCardAnchors["enable:" + id] = (ImGui.GetItemRectMin() + ImGui.GetItemRectMax()) / 2;
         if (ImGui.IsItemHovered()) ImGui.SetTooltip(tooltip);
-        ImGui.SameLine();
-        if (ImGui.Selectable(name, selected)) select();
+        ImGui.SameLine(0, 8);
+        ImGui.SetCursorPosY(ImGui.GetCursorPosY() - (ImGui.GetFrameHeight() - ImGui.GetFrameHeight() * 0.62f) / 2);
+        ImGui.PushStyleColor(ImGuiCol.Text, enabled ? HudTheme.Parchment : HudTheme.Muted);
+        bool picked = ImGui.Selectable(name, selected, ImGuiSelectableFlags.None, new Vec2(0, ImGui.GetFrameHeight() - 4));
+        ImGui.PopStyleColor();
+        if (picked) select();
         if (ImGui.IsItemHovered()) ImGui.SetTooltip(tooltip);
         ImGui.PopID();
         if (selected && scrollRuleCard) { ImGui.SetScrollHereY(.4f); scrollRuleCard = false; }
@@ -31,7 +35,7 @@ internal sealed partial class RuleEditorView
     }
     private void Facts(string name, string kind, string when, string[] reads, string targets, string consumers, bool enabled, string off)
     {
-        EditorStyle.Text(HudTheme.Parchment, name);
+        EditorStyle.Title(name);
         EditorStyle.Text(HudTheme.Muted, kind + " · " + (enabled ? "Aktív" : "Kikapcsolva"));
         bool details = ImGui.CollapsingHeader("Mikor fut, mire hat, ki használja?##rule-details");
         if (details && EditorStyle.BeginFacts("rule-card-facts")) {

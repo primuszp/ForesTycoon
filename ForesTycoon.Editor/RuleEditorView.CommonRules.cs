@@ -17,7 +17,7 @@ internal sealed partial class RuleEditorView
     private int selectedCalculation = -1;
     private readonly BehaviorEditorView expressionEditor = new();
     internal void ShowRuleCalculation(int index, int effect = -1) { ShowRuleBook(index); editRuleCalculation = true; selectedCalculation = effect; expressionKey = null; }
-    internal void ShowCommonRule(string key) { if (commonSelection != key) scrollRuleCard = true; worldTab = WorldTab.Rules; commonSelection = key; ruleOverview = false; }
+    internal void ShowCommonRule(string key) { if (commonSelection != key) scrollRuleCard = true; commonSelection = key; page = CommonPage(key); lastCommon[page] = key; }
     internal void AddResponseCurve(string hook)
     {
         var graph = behaviors.Document.Graphs.Single(g => g.Hook == hook);
@@ -25,48 +25,9 @@ internal sealed partial class RuleEditorView
         ShowCommonRule("behavior:" + graph.Id); pendingCommonChange = true;
     }
 
-    private void DrawCommonRuleList(GameWorld world)
-    {
-        void Item(string key, string label) {
-            if (ImGui.Selectable(label + "##common-" + key, commonSelection == key)) ShowCommonRule(key);
-        }
-        var model = behaviors.Document;
-        foreach (var g in model.Graphs.Where(g => EcologyResponseProgram.IsPureKind(g.Kind)))
-            RuleCardEntry("behavior:" + g.Id, g.Name + (g.ObjectId.HasValue ? " · #" + g.ObjectId : ""), "Értéket számol", commonSelection == "behavior:" + g.Id, !g.Disabled,
-                () => ShowCommonRule("behavior:" + g.Id), enabled => RequestResponseAvailability(g, enabled),
-                g.Disabled ? "Fix eredményt ad. Kattintás: az összefüggés visszakapcsolása." : "Kikapcsoláskor te választod ki a helyettesítő eredményt.");
-        if (ImGui.Selectable("Szabálytár és sablonok", commonSelection == "library")) ShowCommonRule("library");
-        if (ImGui.CollapsingHeader("Folyamatkapcsolatok"))
-            foreach (var g in model.Graphs.Where(g => !EcologyResponseProgram.IsPureKind(g.Kind) && (!g.Hook.StartsWith("tuning.", StringComparison.Ordinal)
-                || g.Nodes.Any(n => n.Operation != BehaviorOperation.Native)))) Item("behavior:" + g.Id, g.Name);
-        if (ImGui.CollapsingHeader("Gépek munkaciklusai")) {
-            foreach (var c in model.Controllers) Item("controllerId:" + c.Id, c.Name + (c.ObjectId.HasValue ? " · #" + c.ObjectId : ""));
-            foreach (string kind in new[] { "forwarder", "processor", "truck" })
-                if (!model.Controllers.Any(c => c.Kind == kind && c.ObjectId == null)) Item("controller:" + kind, "+ " + RuleWorkshopModel.KindName(kind) + " munkaciklusa");
-        }
-        if (ImGui.CollapsingHeader("Saját készletek és áramlások")) {
-            foreach (var s in dynamicsEditor.Draft.Stocks) Item("stock:" + s.Id, s.Name + " · készlet");
-            foreach (var f in dynamicsEditor.Draft.Flows) Item("flow:" + f.Id, f.Name + " · áramlás");
-        }
-    }
-    private void CommonCreateMenu(GameWorld world)
-    {
-        if (ImGui.Selectable("Saját készlet")) ShowCommonRule("stock:" + dynamicsEditor.CreateStock());
-        ImGui.BeginDisabled(dynamicsEditor.Draft.Stocks.Count == 0);
-        if (ImGui.Selectable("Készletek közötti áramlás")) ShowCommonRule("flow:" + dynamicsEditor.CreateFlow());
-        ImGui.EndDisabled();
-        if (ImGui.BeginMenu("Folyamatkapcsolat")) {
-            foreach (var hook in WorldBehaviorPolicy.Hooks.Where(h => !h.Id.StartsWith("tuning.", StringComparison.Ordinal)))
-                if (ImGui.MenuItem(hook.Name + " · " + hook.Kind)) {
-                    behaviors.SelectHook(hook);
-                    ShowCommonRule("behavior:" + behaviors.Document.Graphs.Last(g => g.Hook == hook.Id && g.Kind == hook.Kind && g.ObjectId == null).Id);
-                }
-            ImGui.EndMenu();
-        }
-    }
     private void DrawCommonSelection(GameWorld world)
     {
-        ImGui.BeginChild("common-rule-workspace", Vec2.Zero, ImGuiChildFlags.Borders);
+        EditorStyle.BeginPanel("common-rule-workspace", Vec2.Zero);
         string before = new RuleProject { Behaviors = behaviors.Document, Dynamics = dynamicsEditor.Document }.ToJson();
         string key = commonSelection;
         if (key == "library") DrawRuleLibrary(world);

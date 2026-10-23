@@ -19,16 +19,160 @@ namespace ForesTycoon.Editor
         {
             HudTheme.Apply();
             var style = ImGui.GetStyle();
-            style.WindowRounding = 6f; style.ChildRounding = 6f; style.FrameRounding = 5f; style.PopupRounding = 6f;
-            style.FrameBorderSize = 1f;
+            style.WindowRounding = 0f; style.ChildRounding = 8f; style.FrameRounding = 6f; style.PopupRounding = 8f;
+            style.GrabRounding = 4f; style.ScrollbarRounding = 8f; style.TabRounding = 6f;
+            style.FrameBorderSize = 1f; style.WindowBorderSize = 0f; style.ChildBorderSize = 1f; style.PopupBorderSize = 1f;
             style.WindowPadding = new Vec2(16, 14);
             style.FramePadding = new Vec2(10, 6);
             style.ItemSpacing = new Vec2(10, 8);
             style.ItemInnerSpacing = new Vec2(8, 6);
             style.CellPadding = new Vec2(8, 5);
-            style.IndentSpacing = 20;
-            style.ScrollbarSize = 14;
-            style.Colors[(int)ImGuiCol.Border] = new Vec4(0.36f, 0.50f, 0.27f, 0.28f);
+            style.IndentSpacing = 18;
+            style.ScrollbarSize = 11;
+            style.GrabMinSize = 10;
+            style.SelectableTextAlign = new Vec2(0, 0.5f);
+            // Calm, neutral surfaces: the moss and honey accents are kept for state and selection, not for every frame.
+            var c = style.Colors;
+            c[(int)ImGuiCol.WindowBg] = Background;
+            c[(int)ImGuiCol.ChildBg] = new Vec4(0, 0, 0, 0);
+            c[(int)ImGuiCol.PopupBg] = new Vec4(0.090f, 0.110f, 0.098f, 0.98f);
+            c[(int)ImGuiCol.Border] = Hairline;
+            c[(int)ImGuiCol.FrameBg] = new Vec4(0.118f, 0.145f, 0.129f, 1f);
+            c[(int)ImGuiCol.FrameBgHovered] = new Vec4(0.153f, 0.188f, 0.161f, 1f);
+            c[(int)ImGuiCol.FrameBgActive] = new Vec4(0.176f, 0.220f, 0.184f, 1f);
+            c[(int)ImGuiCol.Button] = new Vec4(0.141f, 0.176f, 0.153f, 1f);
+            c[(int)ImGuiCol.ButtonHovered] = new Vec4(0.204f, 0.259f, 0.200f, 1f);
+            c[(int)ImGuiCol.ButtonActive] = new Vec4(0.27f, 0.36f, 0.24f, 1f);
+            // Headers (collapsing sections, selected rows) stay neutral; the active moment gets the accent.
+            c[(int)ImGuiCol.Header] = new Vec4(0.62f, 0.74f, 0.56f, 0.10f);
+            c[(int)ImGuiCol.HeaderHovered] = new Vec4(0.62f, 0.74f, 0.56f, 0.16f);
+            c[(int)ImGuiCol.HeaderActive] = Fade(HudTheme.Moss, 0.45f);
+            c[(int)ImGuiCol.Separator] = Hairline;
+            c[(int)ImGuiCol.TableBorderLight] = Hairline;
+            c[(int)ImGuiCol.TableBorderStrong] = Hairline;
+            c[(int)ImGuiCol.TableHeaderBg] = new Vec4(0.110f, 0.137f, 0.122f, 1f);
+            c[(int)ImGuiCol.TableRowBgAlt] = new Vec4(1, 1, 1, 0.025f);
+            c[(int)ImGuiCol.ScrollbarBg] = new Vec4(0, 0, 0, 0);
+            c[(int)ImGuiCol.ScrollbarGrab] = new Vec4(1, 1, 1, 0.10f);
+            c[(int)ImGuiCol.ScrollbarGrabHovered] = new Vec4(1, 1, 1, 0.18f);
+            c[(int)ImGuiCol.ScrollbarGrabActive] = Fade(HudTheme.MossBright, 0.8f);
+        }
+
+        // Surfaces of the editor shell, darkest to lightest.
+        internal static readonly Vec4 Background = new(0.055f, 0.067f, 0.060f, 1f);
+        internal static readonly Vec4 Sidebar = new(0.071f, 0.086f, 0.078f, 1f);
+        internal static readonly Vec4 Surface = new(0.086f, 0.106f, 0.094f, 1f);
+        internal static readonly Vec4 Hairline = new(1f, 1f, 1f, 0.075f);
+
+        /// <summary>A bordered panel on the raised surface colour; pair with <see cref="EndPanel"/>.</summary>
+        internal static bool BeginPanel(string id, Vec2 size, ImGuiWindowFlags flags = ImGuiWindowFlags.None)
+        {
+            ImGui.PushStyleColor(ImGuiCol.ChildBg, Surface);
+            bool visible = ImGui.BeginChild(id, size, ImGuiChildFlags.Borders, flags);
+            ImGui.PopStyleColor();
+            return visible;
+        }
+        internal static void EndPanel() => ImGui.EndChild();
+
+        /// <summary>The title row of a page: a heading and, on the same line, what the page is for.</summary>
+        internal static void PageHeader(string title, string help)
+        {
+            bool pushed = ImGuiController.HasTitleFonts;
+            if (pushed) ImGui.PushFont(ImGuiController.TitleFont);
+            ImGui.AlignTextToFramePadding();
+            Text(HudTheme.Parchment, title);
+            if (pushed) ImGui.PopFont();
+            if (string.IsNullOrEmpty(help)) return;
+            ImGui.SameLine(0, 14);
+            ImGui.AlignTextToFramePadding();
+            float room = ImGui.GetContentRegionAvail().X;
+            string shown = help;
+            if (ImGui.CalcTextSize(shown).X > room) {
+                while (shown.Length > 8 && ImGui.CalcTextSize(shown + "…").X > room) shown = shown[..^1];
+                shown = shown.TrimEnd() + "…";
+            }
+            Text(HudTheme.Muted, shown);
+            if (shown != help && ImGui.IsItemHovered()) ImGui.SetTooltip(help);
+        }
+
+        /// <summary>A search field filling the row; returns the trimmed filter.</summary>
+        internal static string Search(string id, string hint, ref string filter)
+        {
+            ImGui.SetNextItemWidth(-1);
+            ImGui.InputTextWithHint(id, hint, ref filter, 80);
+            return filter.Trim();
+        }
+
+        /// <summary>A small on/off switch; the item rectangle is the switch, so callers can anchor to it.</summary>
+        internal static bool Toggle(string id, ref bool value)
+        {
+            float h = ImGui.GetFrameHeight() * 0.62f, w = h * 1.8f;
+            Vec2 p = ImGui.GetCursorScreenPos() + new Vec2(0, (ImGui.GetFrameHeight() - h) / 2);
+            ImGui.SetCursorScreenPos(p);
+            bool clicked = ImGui.InvisibleButton(id, new Vec2(w, h));
+            if (clicked) value = !value;
+            bool hover = ImGui.IsItemHovered();
+            var draw = ImGui.GetWindowDrawList();
+            Vec4 track = value ? Dim(HudTheme.MossBright, hover ? 1f : 0.85f) : new Vec4(1, 1, 1, hover ? 0.18f : 0.12f);
+            draw.AddRectFilled(p, p + new Vec2(w, h), U(track), h / 2);
+            float r = h / 2 - 2.5f;
+            Vec2 knob = p + new Vec2(value ? w - h / 2 : h / 2, h / 2);
+            draw.AddCircleFilled(knob, r, U(value ? HudTheme.Parchment : HudTheme.Muted));
+            return clicked;
+        }
+
+        /// <summary>
+        /// A navigation row: icon, label and an optional count, with an amber marker when active. In compact mode only the
+        /// icon is drawn and the label becomes the tooltip.
+        /// </summary>
+        internal static bool NavItem(string id, GameIcon icon, string label, string help, bool active, bool compact, string badge = null)
+        {
+            float height = 34, width = ImGui.GetContentRegionAvail().X;
+            Vec2 p = ImGui.GetCursorScreenPos();
+            bool clicked = ImGui.InvisibleButton(id, new Vec2(width, height));
+            bool hover = ImGui.IsItemHovered();
+            var draw = ImGui.GetWindowDrawList();
+            if (active || hover)
+                draw.AddRectFilled(p, p + new Vec2(width, height), U(active ? Fade(HudTheme.Moss, 0.32f) : new Vec4(1, 1, 1, 0.045f)), 7);
+            if (active) draw.AddRectFilled(p + new Vec2(0, 8), p + new Vec2(3, height - 8), U(HudTheme.AmberAccent), 2);
+            float glyph = 20;
+            float x = compact ? (width - glyph) / 2 : 12;
+            GameIcons.Draw(draw, icon, p + new Vec2(x, (height - glyph) / 2), glyph, U(1, 1, 1, active || hover ? 1f : 0.78f));
+            if (!compact) {
+                float textY = (height - ImGui.GetTextLineHeight()) / 2;
+                draw.AddText(p + new Vec2(x + glyph + 10, textY), U(active ? HudTheme.Parchment : hover ? HudTheme.Parchment : Fade(HudTheme.Parchment, 0.82f)), label);
+                if (!string.IsNullOrEmpty(badge)) {
+                    Vec2 size = ImGui.CalcTextSize(badge) + new Vec2(12, 2);
+                    Vec2 at = p + new Vec2(width - size.X - 8, (height - size.Y) / 2);
+                    draw.AddRectFilled(at, at + size, U(1, 1, 1, active ? 0.10f : 0.06f), size.Y / 2);
+                    draw.AddText(at + new Vec2(6, 1), TextMuted, badge);
+                }
+            }
+            if (hover) {
+                if (compact) HudTheme.Tooltip(label, badge, help);
+                else if (help != null) ImGui.SetTooltip(help);
+            }
+            return clicked;
+        }
+
+        /// <summary>A muted, upper-case label above a group of navigation rows.</summary>
+        internal static void NavGroup(string text, bool compact)
+        {
+            ImGui.Dummy(new Vec2(0, 4));
+            if (compact) {
+                Vec2 p = ImGui.GetCursorScreenPos(); float w = ImGui.GetContentRegionAvail().X;
+                ImGui.GetWindowDrawList().AddLine(p + new Vec2(10, 4), p + new Vec2(w - 10, 4), U(Hairline));
+                ImGui.Dummy(new Vec2(0, 8)); return;
+            }
+            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 12);
+            Text(Fade(HudTheme.Muted, 0.75f), text.ToUpperInvariant());
+        }
+
+        /// <summary>A button sized to <paramref name="label"/>, as <see cref="ImGui.Button(string)"/> would draw it.</summary>
+        internal static float ButtonWidth(string label)
+        {
+            int hash = label.IndexOf("##", StringComparison.Ordinal);
+            return ImGui.CalcTextSize(hash >= 0 ? label[..hash] : label).X + ImGui.GetStyle().FramePadding.X * 2;
         }
 
         /// <summary>Room kept for the label to the right of a field in inspector panels.</summary>

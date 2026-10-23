@@ -37,7 +37,7 @@ internal sealed partial class RuleEditorView
 
     private void RuleGroupsToolbar()
     {
-        if (ImGui.SmallButton("+ Új csoport")) { newRuleGroup = ""; ImGui.OpenPopup("new-rule-group"); }
+        if (ImGui.Button("+ Csoport")) { newRuleGroup = ""; ImGui.OpenPopup("new-rule-group"); }
         if (ImGui.IsItemHovered()) ImGui.SetTooltip("Saját csoport a szabályaidnak; húzd bele őket, vagy jobb gomb a szabályon.");
         if (ImGui.BeginPopup("new-rule-group")) {
             ImGui.TextUnformatted("Csoport neve");
@@ -52,7 +52,6 @@ internal sealed partial class RuleEditorView
             ImGui.EndDisabled();
             ImGui.EndPopup();
         }
-        ImGui.Spacing();
     }
 
     private void DropRuleInto(List<WorldRule> rules, string group)
@@ -84,12 +83,14 @@ internal sealed partial class RuleEditorView
     }
 
     /// <summary>The rule list, one collapsible header per group; a header accepts dropped rules.</summary>
-    private void GroupedRuleList(GameWorld world, List<WorldRule> rules)
+    private void GroupedRuleList(GameWorld world, List<WorldRule> rules, string filter = "")
     {
-        RuleGroupsToolbar();
-        foreach (var (group, members) in RuleGroups(rules)) {
+        foreach (var (group, all) in RuleGroups(rules)) {
             bool custom = !group.StartsWith(AutoGroupPrefix, StringComparison.Ordinal);
-            if (members.Contains(selectedBookRule) && commonSelection == null && !ruleOverview) ImGui.SetNextItemOpen(true, ImGuiCond.Once);
+            var members = filter.Length == 0 || Contains(GroupTitle(group), filter) ? all : all.Where(m => Contains(rules[m].Name, filter)).ToList();
+            if (filter.Length > 0 && members.Count == 0) continue;
+            if (filter.Length > 0) ImGui.SetNextItemOpen(true);
+            else if (members.Contains(selectedBookRule)) ImGui.SetNextItemOpen(true, ImGuiCond.Once);
             ImGui.PushStyleColor(ImGuiCol.Text, custom ? HudTheme.AmberAccent : HudTheme.Parchment);
             bool open = ImGui.TreeNodeEx($"{GroupTitle(group)}  ({members.Count(m => rules[m].Enabled)}/{members.Count})##group-{group}",
                 ImGuiTreeNodeFlags.FramePadding | ImGuiTreeNodeFlags.SpanAvailWidth | (custom ? ImGuiTreeNodeFlags.DefaultOpen : 0));
@@ -104,8 +105,8 @@ internal sealed partial class RuleEditorView
             foreach (int i in members) {
                 var entry = rules[i]; int index = i;
                 RuleCardEntry("rule:" + entry.Id, entry.Name, "Állapotot változtat",
-                    selectedBookRule == i && commonSelection == null && !ruleOverview, entry.Enabled,
-                    () => { selectedBookRule = index; commonSelection = null; editRuleCalculation = false; ruleOverview = false; },
+                    selectedBookRule == i, entry.Enabled,
+                    () => { selectedBookRule = index; editRuleCalculation = false; },
                     enabled => { entry.Enabled = enabled; ApplyRuleBook(world, entry.Name + (enabled ? ": bekapcsolva." : ": kikapcsolva.")); },
                     "Kikapcsolva nem hajtja végre a hatásait. A korábbi változtatások és más szabályok hatásai megmaradnak.\nHúzd egy csoportra, vagy jobb gomb: csoportba helyezés.");
                 if (ImGui.BeginDragDropSource()) { draggedRule = index; ImGui.SetDragDropPayload("rule", IntPtr.Zero, 0); ImGui.TextUnformatted(entry.Name); ImGui.EndDragDropSource(); }

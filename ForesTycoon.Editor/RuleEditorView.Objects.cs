@@ -44,7 +44,7 @@ internal sealed partial class RuleEditorView
         || Objects.Children(e.Id).Any(c => MatchesObject(c, filter));
     private static bool Contains(string text, string part) => text?.IndexOf(part, StringComparison.CurrentCultureIgnoreCase) >= 0;
 
-    internal void ShowObject(string id) { worldTab = WorldTab.Objects; selectedObject = id; }
+    internal void ShowObject(string id) { page = EditorPage.Objects; selectedObject = id; }
 
     // ── The workspace ────────────────────────────────────────────────────
     private void ObjectsTab(GameWorld world)
@@ -53,7 +53,7 @@ internal sealed partial class RuleEditorView
         var rules = RuleBookRules(world);
         var uses = FieldUses(rules).ToDictionary(u => u.Key, StringComparer.Ordinal);
 
-        ImGui.BeginChild("objects-tree", new Vec2(300, 0), ImGuiChildFlags.Borders);
+        EditorStyle.BeginPanel("objects-tree", new Vec2(300, 0));
         EditorStyle.Section("Objektumok a játékból");
         ImGui.SetNextItemWidth(-1);
         ImGui.InputTextWithHint("##object-filter", "Keresés: objektum vagy mező…", ref objectFilter, 64);
@@ -77,7 +77,7 @@ internal sealed partial class RuleEditorView
         ImGui.EndChild();
 
         ImGui.SameLine();
-        ImGui.BeginChild("objects-card", Vec2.Zero, ImGuiChildFlags.Borders);
+        EditorStyle.BeginPanel("objects-card", Vec2.Zero);
         var entity = Objects.Find(selectedObject);
         if (entity == null) EditorStyle.Text(HudTheme.Muted, "Válassz egy objektumot a bal oldali fából.");
         else ObjectCard(world, entity, rules, uses);
@@ -218,6 +218,6 @@ internal sealed partial class RuleEditorView
 
     private void OpenRule(int index)
     {
-        worldTab = WorldTab.Rules; selectedBookRule = index; commonSelection = null; editRuleCalculation = false; ruleOverview = false;
+        ShowRuleBook(index);
     }
 }

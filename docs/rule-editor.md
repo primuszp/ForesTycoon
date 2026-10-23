@@ -9,8 +9,8 @@ dotnet run --project ForesTycoon.Editor
 dotnet run --project ForesTycoon.Editor -- --project projekt.json
 ```
 
-A cél egy rendszerdinamikai modell: a **Típusok** a modell állandói (talaj, fafaj, burkolat),
-a **Pálya** a kezdőállapota (domborzat, víz, talaj, erdő), a **Szabályok** az áramlásai
+A cél egy rendszerdinamikai modell: a talaj-, fafaj- és burkolattípusok a modell állandói,
+a **Térkép** a kezdőállapota (domborzat, víz, talaj, erdő), a **Szabályrendszer** az áramlásai
 (mi mit változtat, miből). A kiinduló szabályok az
 [`Editor/GameRules/default.project.json`](../ForesTycoon.Editor/GameRules/default.project.json)
 projektben vannak; ezt csomagolja a játék is. A 4-es projektverzióban a szabálykönyv
@@ -96,7 +96,26 @@ Az `--export-rule-api` és `--export-world` JSON `objectModel` része a neveket,
 mezőket, öröklést, kapcsolatokat, műveleteket és a modell tartalmi revízióját is
 közzéteszi; ezt ugyanabból a felismert modellből állítjuk elő.
 
-Négy munkatér van.
+## Felület
+
+Felül a projektsáv: a jelenet neve és mentési állapota, Vissza/Újra (Ctrl+Z / Ctrl+Y),
+a **Jelenet…** menü (Ctrl+O: megnyitás, mentés másként, nyitójelenet), **Mentés** (Ctrl+S)
+és **Alkalmazás a játékban**. Alul az állapotsor: a tesztvilág órája (Indítás/Szünet,
++1 óra, +1 nap), az utolsó üzenet és a tesztvilág, illetve a játék állapota. Bal oldalt
+az oldalak feladat szerint csoportosítva; a sáv ikonokra csukható.
+
+| Csoport | Oldal | Korábban |
+| --- | --- | --- |
+| Világ | Térkép, Talajtípusok, Fafajok, Utak és burkolatok | Pálya; Típusok › Talajtípusok, Fafajok, Burkolatok |
+| Játékmenet | Küldetések, Járművek, Játékparaméterek | Küldetések; Típusok › Járművek, Játékparaméterek |
+| Szabályrendszer | Objektumok, Szabályok, Összefüggések, Folyamatkapcsolatok, Munkaciklusok, Készletek és áramlások, Szabálytár | Objektumok; a Szabályok fül közös listája |
+| Ellenőrzés | Mezőhasználat, Esős próba | Szabályok › Áttekintés; Próba |
+
+A **Szabályok** oldalon csak az állapotot változtató szabályok vannak; az értéket számoló
+válaszgráfok az **Összefüggések** oldalon, témák szerint csoportosítva (termőhely, verseny,
+felújulás, környezet, járművek, logisztika…). A listák kereshetők; az oldalak megjegyzik az
+utoljára megnyitott elemet. Az alábbi fejezetek a régi munkatérnevekkel hivatkoznak a
+megfelelő oldalakra.
 
 ## Pálya
 

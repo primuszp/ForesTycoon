@@ -11,12 +11,12 @@ internal sealed partial class RuleEditorView
 {
     private int selectedMission;
 
-    internal void ShowMissions(int index = 0) { worldTab = WorldTab.Missions; selectedMission = index; }
+    internal void ShowMissions(int index = 0) { page = EditorPage.Missions; selectedMission = index; }
 
     private void MissionsTab(GameWorld world)
     {
         var missions = scenario.Missions;
-        ImGui.BeginChild("missions-left", new Vec2(280, 0), ImGuiChildFlags.Borders);
+        EditorStyle.BeginPanel("missions-left", new Vec2(280, 0));
         EditorStyle.Section("Küldetések");
         for (int i = 0; i < missions.Count; i++)
             if (ImGui.Selectable($"{missions[i].Title}##mission{i}", selectedMission == i)) selectedMission = i;
@@ -38,8 +38,11 @@ internal sealed partial class RuleEditorView
         ImGui.PopTextWrapPos();
         ImGui.EndChild();
         ImGui.SameLine();
-        ImGui.BeginChild("missions-body", Vec2.Zero, ImGuiChildFlags.Borders);
-        if (missions.Count == 0) { ImGui.EndChild(); return; }
+        EditorStyle.BeginPanel("missions-body", Vec2.Zero);
+        if (missions.Count == 0) {
+            EditorStyle.Text(HudTheme.Muted, "Az „Új küldetés” gomb felvesz egy célt: mérőszám, küszöb és határidő.");
+            ImGui.EndChild(); return;
+        }
         selectedMission = Math.Clamp(selectedMission, 0, missions.Count - 1);
         var goal = missions[selectedMission];
         EditorStyle.Section("Küldetés");

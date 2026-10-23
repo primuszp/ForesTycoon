@@ -56,7 +56,7 @@ namespace ForesTycoon.Editor
         private System.Collections.Generic.SortedDictionary<string, string> openingReference;
         internal EditorWindow(string file, bool smoke = false, bool visible = true, string worldFile = null) : base(GameWindowSettings.Default, new NativeWindowSettings
         {
-            Title = "ForesTycoon – Világszerkesztő", ClientSize = new(1280, 900),
+            Title = "ForesTycoon – Világszerkesztő", ClientSize = new(1600, 960),
             API = ContextAPI.OpenGL, APIVersion = new(3, 3), Profile = ContextProfile.Core, StartVisible = !smoke && visible
         }) { editor = new RuleEditorView(file); this.smoke = smoke; this.worldFile = worldFile; }
 

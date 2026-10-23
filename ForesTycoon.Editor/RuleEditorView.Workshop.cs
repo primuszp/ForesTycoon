@@ -35,17 +35,6 @@ internal sealed partial class RuleEditorView
         RefreshWorkshopRevision(world); workshopVersions.MarkSaved();
         message = "Munkapéldány mentve. A játékban futó szabályokat nem módosította. " + destination;
     }
-    private void WorkshopStatus()
-    {
-        ImGui.Separator();
-        string status = message.Split('\n')[0];
-        EditorStyle.Text(HudTheme.Muted, status.Length > 115 ? status[..115] + "…" : status);
-        if (message.Length > 0) { ImGui.SameLine(); if (ImGui.SmallButton("Részletek")) ImGui.OpenPopup("workshop-message"); }
-        if (ImGui.BeginPopupModal("workshop-message", ImGuiWindowFlags.AlwaysAutoResize)) {
-            ImGui.InputTextMultiline("##workshop-diagnostic", ref message, 30000, new Vec2(820, 420), ImGuiInputTextFlags.ReadOnly);
-            if (ImGui.Button("Bezárás")) ImGui.CloseCurrentPopup(); ImGui.EndPopup();
-        }
-    }
     internal void ShowWorkshopComparison(RuleTrialResult result)
     {
         trialResult = result; workshopVersions.CompleteTrial(result.DraftRevision);
