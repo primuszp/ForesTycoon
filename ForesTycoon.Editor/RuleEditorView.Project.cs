@@ -48,6 +48,14 @@ internal sealed partial class RuleEditorView
             behaviors.StoreGraphTemplate = graph => { RememberAuthoring(); authoring.Templates.Add(AuthoringOperations.Template(graph)); message = "A gráf másolata a szabálytárban van; új kötés még nem jött létre."; };
             behaviors.StoreControllerTemplate = controller => { RememberAuthoring(); authoring.Templates.Add(AuthoringOperations.Template(controller)); message = "A munkaciklus másolata a szabálytárban van."; };
             currentRules.EditAlgorithm = algorithms.SelectSource;
+            currentRules.RuleTarget = rule => {
+                var rules = RuleBookRules(world);
+                int index = rules.FindIndex(r => r.Id == rule.Id || r.Template == rule.Id);
+                if (index >= 0) return () => ShowRuleBook(index);
+                var graph = behaviors.Document.Graphs.FirstOrDefault(g => !g.Hook.StartsWith("tuning.", StringComparison.Ordinal)
+                    && WorldBehaviorPolicy.Hooks.Any(h => h.Id == g.Hook && h.Kind == g.Kind && RuleWorkshopModel.HookBelongsTo(h, rule)));
+                return graph == null ? null : () => ShowCommonRule("behavior:" + graph.Id);
+            };
             if (pendingProject == null && AlgorithmBuild.FindWorkspace() is string workspace) algorithms.ImportWorkspace(workspace);
         }
         algorithms.Refresh();

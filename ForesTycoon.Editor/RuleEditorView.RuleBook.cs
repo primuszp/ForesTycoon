@@ -53,7 +53,7 @@ internal sealed partial class RuleEditorView
         rules.Add(starter); selectedBookRule = rules.Count - 1; selectedInfluence = selectedTerm = 0; editRuleCalculation = false; page = EditorPage.Rules;
         ApplyRuleBook(world, starter.Name + ": hozzáadva a mintából.");
     }
-    internal void ShowRuleBook(int index = 0) { scrollRuleCard = true; page = EditorPage.Rules; selectedBookRule = index; editRuleCalculation = false; if (!projectInitialized) initialBookSelection = index; }
+    internal void ShowRuleBook(int index = 0) { scrollRuleCard = true; page = EditorPage.Rules; ruleCardTab = 0; selectedBookRule = index; editRuleCalculation = false; if (!projectInitialized) initialBookSelection = index; }
 
     /// <summary>Checks the whole book as the game will; on success the test world runs it at once.</summary>
     private void ApplyRuleBook(GameWorld world, string what)
@@ -65,6 +65,9 @@ internal sealed partial class RuleEditorView
             message = what + " A tesztvilágban már ez fut.";
         } catch (InvalidDataException e) { ruleBookError = e.Message; }
     }
+
+    private const string ScheduleHelp = "Időszakos: 0,5 játékmásodpercenként. Havi: erdőhónap végén. Áthaladási: jármű belépésekor. "
+        + "Állati: állati lépésenként. Állomány: élőhelyfelmérés után. Létrehozáskor: az új egyedeken. Azonos indításnál fentről lefelé haladnak.";
 
     private void RuleBookArea(GameWorld world)
     {
@@ -97,12 +100,14 @@ internal sealed partial class RuleEditorView
         }
         string filter = EditorStyle.Search("##rule-filter", "Keresés: szabály vagy csoport…", ref ruleFilter);
         ImGui.Spacing();
-        ImGui.BeginChild("book-scroll", new Vec2(0, -ImGui.GetTextLineHeightWithSpacing() * 3 - 4));
+        // The schedule note under the list keeps the room its wrapped text needs.
+        float note = ImGui.CalcTextSize(ScheduleHelp, false, ImGui.GetContentRegionAvail().X).Y + ImGui.GetStyle().ItemSpacing.Y * 2;
+        ImGui.BeginChild("book-scroll", new Vec2(0, -note));
         GroupedRuleList(world, rules, filter);
         if (rules.Count == 0) EditorStyle.Text(HudTheme.Muted, "Nincs szabály. Az „+ Új szabály” üresen vagy mintából indít egyet.");
         ImGui.EndChild();
         ImGui.PushTextWrapPos(0);
-        EditorStyle.Text(HudTheme.Muted, "Időszakos: 0,5 játékmásodpercenként. Havi: minden erdőhónap végén. Áthaladási: egy jármű belépésekor. Azonos indításnál fentről lefelé haladnak.");
+        EditorStyle.Text(HudTheme.Muted, ScheduleHelp);
         ImGui.PopTextWrapPos();
         EditorStyle.EndPanel(); ImGui.SameLine();
 

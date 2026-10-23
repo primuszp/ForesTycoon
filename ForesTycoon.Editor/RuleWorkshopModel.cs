@@ -32,7 +32,16 @@ internal static class RuleWorkshopModel
         || h.Id.StartsWith("route.") && rule.Id is "route.find" or "route.policy"
         || (h.Id.StartsWith("loading.") || h.Id == "unloading.amount") && (rule.Id == "loading.policy" || rule.Id == "machine.logTransfer" && h.Kind == "logisticsForwarder" || rule.Id == "vehicle.transfer" && h.Kind == "logisticsTruck")
         || h.Id.StartsWith("machine.") && rule.Id == (h.Kind == "logisticsForwarder" ? "machine.forwarder" : "machine.processor")
-        || h.Id == "truck.return" && rule.Id == "fleet.orders";
+        || h.Id == "truck.return" && rule.Id == "fleet.orders"
+        // Engine rules whose steps are a family of project graphs: climate, weather events, snow drift, canopy, new trees,
+        // competition and regeneration.
+        || h.Kind == "environment" && (rule.Id == "climate.regional" && h.Id.StartsWith("climate.", StringComparison.Ordinal)
+            || rule.Id == "weather.events" && h.Id.StartsWith("weather.", StringComparison.Ordinal) && h.Id != "weather.evaporation"
+            || rule.Id == "water.snowdrift" && h.Id.StartsWith("snow.", StringComparison.Ordinal)
+            || rule.Id == "forest.canopy" && h.Id is "forest.crownArea" or "forest.interception" or "forest.leafArea" or "forest.cover" or "forest.canopyCapacity" or "forest.leafIndex")
+        || h.Kind == "initialTree" && rule.Id == "forest.initialSize"
+        || h.Kind is "competition" or "competitionPair" or "resource" && rule.Id == "forest.competition"
+        || h.Kind == "regeneration" && rule.Id == "forest.regeneration";
 
     /// <summary>
     /// The game's system model with this project's own stocks, flows and the formulas that read model quantities, so a

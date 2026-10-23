@@ -111,6 +111,15 @@ az oldalak feladat szerint csoportosítva; a sáv ikonokra csukható.
 | Szabályrendszer | Objektumok, Szabályok, Összefüggések, Folyamatkapcsolatok, Munkaciklusok, Készletek és áramlások, Szabálytár | Objektumok; a Szabályok fül közös listája |
 | Ellenőrzés | Mezőhasználat, Esős próba | Szabályok › Áttekintés; Próba |
 
+Egy szabály kártyája fejléccel indul: név, típus, állapot, időzítés, objektum és csoport,
+jobbra Visszaállítás a mintára, Másolat és Törlés. Ha más szabály is írja a célmezőt, egy
+sor jelzi (rákattintva Mezőhasználat). Alatta négy fül: **Kapcsolatok** (a gráf és a
+kiválasztott kapcsolat), **Próba**, **Beállítások** (név, objektum, időzítés, feltétel,
+saját tulajdonságok) és **Leírás** (mikor fut, miből számol, mire hat, szövegesen).
+
+Az editor és a motor összhangját a `--check-editor-coverage` kapcsoló ellenőrzi; részletek:
+[editor–motor ellenőrzés, 2026-10-23](editor-engine-review-2026-10-23.md).
+
 A **Szabályok** oldalon csak az állapotot változtató szabályok vannak; az értéket számoló
 válaszgráfok az **Összefüggések** oldalon, témák szerint csoportosítva (termőhely, verseny,
 felújulás, környezet, járművek, logisztika…). A listák kereshetők; az oldalak megjegyzik az

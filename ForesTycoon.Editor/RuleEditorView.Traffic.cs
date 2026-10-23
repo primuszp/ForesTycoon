@@ -30,7 +30,6 @@ internal sealed partial class RuleEditorView
 
     private void PassagePreviewArea(GameWorld world, WorldRule rule)
     {
-        if (!ImGui.CollapsingHeader("Áthaladás próbája", ImGuiTreeNodeFlags.DefaultOpen)) return;
         ImGui.TextWrapped("Válassz utat vagy nyomot és egy járművet. Az előnézet egy áthaladás hatását mutatja; a próbagomb a tesztvilágot is megváltoztatja.");
         if (!world.Map.IsRoadTile(passageTile) && !world.Map.IsSkidTrail(passageTile))
             passageTile = world.Map.RoadTiles.Concat(world.Map.SkidTrailTiles).FirstOrDefault(-1);

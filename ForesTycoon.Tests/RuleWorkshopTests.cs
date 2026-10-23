@@ -14,6 +14,19 @@ public sealed class RuleWorkshopTests
                 Assert.True(RuleWorkshopModel.HookBelongsTo(GameplayRules.Hooks.Single(h => h.Id == hook), catalog.Rules.Single(r => r.Id == entry.Key)));
     }
     [Fact]
+    public void EveryEditableEngineRuleOwnsAProjectGraphOrRule()
+    {
+        // A catalog rule marked editable must lead somewhere in the editor: a state rule, a bound graph, a controller or a number.
+        var catalog = CurrentGameRules.Build();
+        var project = GameWorld.DefaultRuleProject();
+        foreach (var rule in catalog.Rules.Where(r => r.Execution is GameRuleExecution.EditableGraph or GameRuleExecution.EditableExpressions)) {
+            bool owned = project.Rules.Any(r => r.Id == rule.Id || r.Template == rule.Id)
+                || WorldBehaviorPolicy.Hooks.Any(h => RuleWorkshopModel.HookBelongsTo(h, rule) && project.Behaviors.Graphs.Any(g => g.Hook == h.Id && g.Kind == h.Kind))
+                || rule.Parameters.Any(p => p.Tunable);
+            Assert.True(owned, rule.Id + " is marked editable but nothing in the project edits it.");
+        }
+    }
+    [Fact]
     public void EveryCurrentRuleHasExactlyOneThematicHome()
     {
         var catalog = CurrentGameRules.Build();

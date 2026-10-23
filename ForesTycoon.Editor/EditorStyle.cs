@@ -155,6 +155,27 @@ namespace ForesTycoon.Editor
             return clicked;
         }
 
+        /// <summary>A row of text tabs with an amber underline under the selected one, above a hairline; returns true on change.</summary>
+        internal static bool Tabs(string id, string[] labels, ref int selected)
+        {
+            int before = selected;
+            var draw = ImGui.GetWindowDrawList();
+            Vec2 start = ImGui.GetCursorScreenPos();
+            float height = ImGui.GetTextLineHeight() + 14, right = start.X + ImGui.GetContentRegionAvail().X;
+            for (int i = 0; i < labels.Length; i++) {
+                if (i > 0) ImGui.SameLine(0, 4);
+                Vec2 p = ImGui.GetCursorScreenPos(), size = new(ImGui.CalcTextSize(labels[i]).X + 20, height);
+                if (ImGui.InvisibleButton(id + i, size)) selected = i;
+                bool hover = ImGui.IsItemHovered(), active = selected == i;
+                if (hover && !active) draw.AddRectFilled(p, p + size, U(1, 1, 1, 0.04f), 6, ImDrawFlags.RoundCornersTop);
+                draw.AddText(p + new Vec2(10, 6), U(active ? HudTheme.Parchment : hover ? Fade(HudTheme.Parchment, 0.9f) : HudTheme.Muted), labels[i]);
+                if (active) draw.AddRectFilled(p + new Vec2(6, size.Y - 2), p + new Vec2(size.X - 6, size.Y), U(HudTheme.AmberAccent), 1);
+            }
+            draw.AddLine(new Vec2(start.X, start.Y + height), new Vec2(right, start.Y + height), U(Hairline));
+            ImGui.Dummy(new Vec2(0, 4));
+            return selected != before;
+        }
+
         /// <summary>A muted, upper-case label above a group of navigation rows.</summary>
         internal static void NavGroup(string text, bool compact)
         {

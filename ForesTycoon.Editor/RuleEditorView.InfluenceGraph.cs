@@ -195,7 +195,7 @@ internal sealed partial class RuleEditorView
         float height = Math.Max(240, Math.Max(Math.Max(nextFree, nextTerm), top + sources.Length * (sourceSize.Y + gap)) + 8);
         // Columns keep lanes for the wires between them; a narrow panel scrolls sideways instead of squeezing them.
         float needed = 10 + sourceSize.X + lane + termWidth + lane + targetWidth + 10;
-        ImGui.BeginChild("influence-canvas", new Vec2(0, Math.Min(380, height + 18)), ImGuiChildFlags.Borders, ImGuiWindowFlags.HorizontalScrollbar);
+        ImGui.BeginChild("influence-canvas", new Vec2(0, Math.Min(Math.Max(380, ImGui.GetContentRegionAvail().Y - 4), height + 18)), ImGuiChildFlags.Borders, ImGuiWindowFlags.HorizontalScrollbar);
         var draw = ImGui.GetWindowDrawList(); var origin = ImGui.GetCursorScreenPos();
         float width = Math.Max(needed, ImGui.GetContentRegionAvail().X - 1);
         ImGui.InvisibleButton("canvas", new Vec2(width, height), ImGuiButtonFlags.MouseButtonLeft);

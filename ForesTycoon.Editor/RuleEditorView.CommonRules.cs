@@ -87,8 +87,9 @@ internal sealed partial class RuleEditorView
 
     private void RuleCalculationBody(GameWorld world, WorldRule rule)
     {
-        WorldRuleCard(world, rule);
-        bool changed = false; string name = rule.Name;
+        bool changed = false, delete = false; string name = rule.Name;
+        RuleHeader(world, rule, ref changed, ref delete);
+        if (delete) { DeleteRule(world, rule); return; }
         if (ImGui.InputText("Szabály neve", ref name, 120)) rule.Name = name; if (ImGui.IsItemDeactivatedAfterEdit()) { rule.Name = name; changed = true; }
         DrawSchedule(rule, ref changed); DrawCustomFields(world, rule.Scope);
         if (ImGui.BeginCombo("Mely objektumokon fusson?", ObjectDisplay(rule.Scope, rule.Scope))) {

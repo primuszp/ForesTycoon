@@ -665,8 +665,8 @@ namespace ForesTycoon.Editor
         private string tuningSearch = "";
         private bool changedOnly;
 
-        /// <summary>Set when the tuning list asks to show a rule in the overview.</summary>
-        internal bool OverviewRequested { get; set; }
+        /// <summary>Where a catalog rule is edited in the project (a state rule or a graph); null when nothing edits it but its numbers.</summary>
+        internal Func<GameRuleDefinition, Action> RuleTarget { get; set; }
 
         /// <summary>The edited tunable numbers that differ from the game's defaults.</summary>
         /// <summary>One tunable number as an inline field; returns true when an edit was finished.</summary>
@@ -826,8 +826,9 @@ namespace ForesTycoon.Editor
                         ImGui.Indent(10);
                         ImGui.Spacing();
                         ImGui.PushStyleColor(ImGuiCol.Text, HudTheme.Parchment);
-                        if (EditorStyle.QuietButton(rule.Name + "##tr" + rule.Id, "Megnyitás az áttekintésben"))
-                        { search = ""; SelectModule(rule.Module); selected = rule.Id; OverviewRequested = true; }
+                        if (RuleTarget?.Invoke(rule) is { } open) {
+                            if (EditorStyle.QuietButton(rule.Name + " ›##tr" + rule.Id, "A szabály megnyitása, amely ezeket a számokat használja.")) open();
+                        } else { ImGui.AlignTextToFramePadding(); ImGui.TextUnformatted(rule.Name); }
                         ImGui.PopStyleColor();
                         ImGui.SameLine(); ImGui.AlignTextToFramePadding(); EditorStyle.Text(EditorStyle.Fade(HudTheme.Muted, 0.8f), rule.Scope);
                         if (BeginParameterTable("tt" + rule.Id, true))

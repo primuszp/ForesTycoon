@@ -84,19 +84,23 @@ internal sealed partial class RuleEditorView
     }
 
     private static string WriteMode(string mode) => mode switch { "set" => "felülírja", "approach" => "közelíti", "action" => "végrehajtja", _ => "változtatja" };
-    private static string ScheduleLabel(string schedule) => schedule switch { "passage" => "áthaladáskor", "month" => "erdőhónaponként", "growth" => "növekedési ráta frissítésekor", _ => "időszakonként" };
+    private static string ScheduleLabel(string schedule) => ScheduleChip(schedule);
+    /// <summary>The effect modes the rule card's inspector edits; the coverage check compares them with the engine's.</summary>
+    internal static readonly string[] EditableModes = { "add", "set", "approach", "flow", "action" };
 
-    /// <summary>Under the rule's sentence: other rules writing the same field, and in which order they run.</summary>
+    /// <summary>Under the rule's header: one line when other rules write the same fields; the run order is in its tooltip.</summary>
     private void OtherWriters(GameWorld world, WorldRule rule)
     {
         var rules = RuleBookRules(world); int self = rules.IndexOf(rule);
         var shared = FieldUses(rules).Where(u => u.Writers.Any(w => w.Rule == self) && u.Writers.Any(w => w.Rule != self && w.Enabled)).ToArray();
-        if (shared.Length == 0 || !ImGui.CollapsingHeader($"{shared.Length} célmezőt más szabály is változtat · futási rend")) return;
-        foreach (var use in shared) {
-            string order = string.Join("; ", use.Writers.Where(w => w.Enabled || w.Rule == self).OrderBy(w => w.Rule).Select(w => $"{w.Rule + 1}. {(w.Rule == self ? "ez a szabály" : w.Name)} ({ScheduleLabel(w.Schedule)})"));
-            EditorStyle.Text(HudTheme.AmberAccent, $"A(z) {KeyDisplay(use.Key)} mezőt más szabály is írja: {order}. Azonos indításnál listasorrendben futnak; külön eseményeknél a tényleges időrend dönt.");
-            if (ImGui.IsItemClicked()) ShowPage(EditorPage.Overview);
-            if (ImGui.IsItemHovered()) ImGui.SetTooltip("Kattintás: áttekintés, melyik szabály mit olvas és ír.");
+        if (shared.Length == 0) return;
+        var orders = shared.Select(use => $"{KeyDisplay(use.Key)}: " + string.Join("; ", use.Writers.Where(w => w.Enabled || w.Rule == self).OrderBy(w => w.Rule)
+            .Select(w => $"{w.Rule + 1}. {(w.Rule == self ? "ez a szabály" : w.Name)} ({ScheduleLabel(w.Schedule)})")));
+        EditorStyle.Text(HudTheme.AmberAccent, $"(!) {shared.Length} célmezőt más szabály is ír: {string.Join(", ", shared.Select(u => KeyDisplay(u.Key)))} · futási rend »");
+        if (ImGui.IsItemClicked()) ShowPage(EditorPage.Overview);
+        if (ImGui.IsItemHovered()) {
+            ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+            ImGui.SetTooltip(string.Join("\n", orders) + "\n\nAzonos indításnál listasorrendben futnak; külön eseményeknél a tényleges időrend dönt.\nKattintás: Mezőhasználat.");
         }
     }
 

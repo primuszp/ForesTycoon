@@ -64,6 +64,8 @@ namespace ForesTycoon.Editor
                 for (int tick = 0; tick < 600; tick++) { truck.Update(1.0 / 30); SimulationWork.Complete(world.TrafficWork()); }
                 Require(passes > 0 && truck.FuelUsed > 0 && world.GetRoadCondition(other) < otherBefore,
                     "Moving truck did not execute the edited rule.");
+                var coverage = EditorCoverage.Check(world, world.BehaviorDocument);
+                Require(coverage.Gaps.Count == 0, "The editor does not reach everything the engine runs:\n" + EditorCoverage.Format(coverage));
                 using var ui = new ImGuiController(ImGuiController.Authoring); EditorStyle.Apply(); var editor = new RuleEditorView(); bool open = true;
                 string snapshot = world.RuleProjectDocument.ToJson();
                 for (int frame = 0; frame < 3; frame++)

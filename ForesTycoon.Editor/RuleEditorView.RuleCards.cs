@@ -3,6 +3,7 @@ using System.Linq;
 using ForesTycoon.Rules;
 using ImGuiNET;
 using Vec2 = System.Numerics.Vector2;
+using Vec4 = System.Numerics.Vector4;
 
 namespace ForesTycoon.Editor;
 
@@ -33,24 +34,93 @@ internal sealed partial class RuleEditorView
         if (selected && scrollRuleCard) { ImGui.SetScrollHereY(.4f); scrollRuleCard = false; }
         return on != enabled;
     }
+    /// <summary>What a card tells about its rule: when it runs, what it reads and changes, who uses the result.</summary>
+    private sealed record CardFacts(string Kind, string When, string[] Reads, string Targets, string Consumers, bool Enabled, string Off);
+
+    /// <summary>The card's title and a row of chips: the kind of rule, whether it runs, and any further facts.</summary>
+    private static void CardHeader(string name, string kind, bool enabled, params (string Text, Vec4 Colour, string Tip)[] chips)
+    {
+        EditorStyle.Title(name, true);
+        EditorStyle.Chip(kind, EditorStyle.PresentationKind, "card-kind");
+        ImGui.SameLine(0, 6);
+        EditorStyle.Chip(enabled ? "aktív" : "kikapcsolva", enabled ? HudTheme.Good : HudTheme.Muted, "card-state");
+        for (int i = 0; i < chips.Length; i++) {
+            if (string.IsNullOrEmpty(chips[i].Text)) continue;
+            ImGui.SameLine(0, 6);
+            EditorStyle.Chip(chips[i].Text, chips[i].Colour, "card-chip" + i);
+            if (chips[i].Tip != null && ImGui.IsItemHovered()) ImGui.SetTooltip(chips[i].Tip);
+        }
+    }
+
+    private static void FactsTable(CardFacts f)
+    {
+        if (!EditorStyle.BeginFacts("rule-card-facts")) return;
+        EditorStyle.Fact("Mikor fut?", f.When);
+        string inputs = f.Kind == "Értéket számol" && !f.Enabled ? "A megadott fix értékből; a gráf forrásait most nem olvassa."
+            : f.Reads.Length == 0 ? "Állandókból; nincs bekötött forrás."
+            : string.Join("; ", f.Reads.Take(6)) + (f.Reads.Length > 6 ? $"; +{f.Reads.Length - 6} további forrás a gráfon" : "");
+        EditorStyle.Fact("Miből számol?", inputs);
+        if (ImGui.IsItemHovered() && f.Reads.Length > 0) ImGui.SetTooltip(string.Join("\n", f.Reads));
+        EditorStyle.Fact("Mire hat?", f.Targets);
+        EditorStyle.Fact("Ki használja?", f.Consumers);
+        EditorStyle.Fact("Kikapcsolva", f.Off, f.Enabled ? null : HudTheme.AmberAccent);
+        ImGui.EndTable();
+    }
+
+    /// <summary>Header and folded facts of a response or process card.</summary>
     private void Facts(string name, string kind, string when, string[] reads, string targets, string consumers, bool enabled, string off)
     {
-        EditorStyle.Title(name);
-        EditorStyle.Text(HudTheme.Muted, kind + " · " + (enabled ? "Aktív" : "Kikapcsolva"));
-        bool details = ImGui.CollapsingHeader("Mikor fut, mire hat, ki használja?##rule-details");
-        if (details && EditorStyle.BeginFacts("rule-card-facts")) {
-            EditorStyle.Fact("Mikor fut?", when);
-            string inputs = kind == "Értéket számol" && !enabled ? "A megadott fix értékből; a gráf forrásait most nem olvassa." : reads.Length == 0 ? "Állandókból; nincs bekötött forrás." : string.Join("; ", reads.Take(4)) + (reads.Length > 4 ? $"; +{reads.Length - 4} további forrás a gráfon" : "");
-            EditorStyle.Fact("Miből számol?", inputs);
-            if (ImGui.IsItemHovered() && reads.Length > 0) ImGui.SetTooltip(string.Join("\n", reads));
-            EditorStyle.Fact("Mire hat?", targets);
-            EditorStyle.Fact("Ki használja?", consumers);
-            ImGui.EndTable();
-        }
-        if (details || !enabled) ImGui.TextWrapped(off);
+        var facts = new CardFacts(kind, when, reads, targets, consumers, enabled, off);
+        CardHeader(name, kind, enabled);
+        ImGui.Spacing();
+        if (ImGui.CollapsingHeader("Mikor fut, mire hat, ki használja?##rule-details")) FactsTable(facts);
+        else if (!enabled) EditorStyle.Text(HudTheme.AmberAccent, off);
         ImGui.Separator();
     }
-    private void WorldRuleCard(GameWorld world, WorldRule rule)
+
+    /// <summary>The short label of a rule schedule; the same words on the card, the field overview and the coverage check.</summary>
+    internal static string ScheduleChip(string schedule) => schedule switch {
+        "passage" => "áthaladáskor", "month" => "erdőhónaponként", "growth" => "növekedéskor", "wildlife" => "állati lépésenként",
+        "population" => "állománykezeléskor", "birth" => "létrehozáskor", _ => "időszakonként"
+    };
+
+    /// <summary>A state rule's header: title and chips on the left, the rule's own commands on the right.</summary>
+    private void RuleHeader(GameWorld world, WorldRule rule, ref bool changed, ref bool delete)
+    {
+        var facts = WorldRuleFacts(world, rule);
+        string reset = "Visszaállítás a mintára", copy = "Másolat", remove = "Törlés";
+        var style = ImGui.GetStyle();
+        float actions = EditorStyle.ButtonWidth(copy) + EditorStyle.ButtonWidth(remove) + style.ItemSpacing.X
+            + (rule.Template.Length > 0 ? EditorStyle.ButtonWidth(reset) + style.ItemSpacing.X : 0);
+        float top = ImGui.GetCursorPosY(), edge = ImGui.GetCursorPosX() + ImGui.GetContentRegionAvail().X;
+        ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + Math.Max(200, ImGui.GetContentRegionAvail().X - actions - 16));
+        CardHeader(rule.Name, "Állapotot változtat", rule.Enabled,
+            (ScheduleChip(rule.Schedule), EditorStyle.OperationKind, facts.When),
+            (ObjectDisplay(rule.Scope, rule.Scope), EditorStyle.InputKind, "Ezen az objektumon fut: " + (Objects.Find(rule.Scope)?.Help ?? rule.Scope)),
+            (string.IsNullOrWhiteSpace(rule.Group) ? null : rule.Group, HudTheme.AmberAccent, "Saját csoport a szabálylistában."));
+        ImGui.PopTextWrapPos();
+        float bottom = ImGui.GetCursorPosY();
+        ImGui.SetCursorPos(new Vec2(edge - actions, top));
+        if (rule.Template.Length > 0) {
+            if (EditorStyle.QuietButton(reset, "A szabály hatásai a minta szerinti változatra állnak vissza. Visszavonható.")) ResetVisualRule(world, rule.Id);
+            ImGui.SameLine();
+        }
+        if (ImGui.Button(copy)) {
+            var clone = RuleEngine.Clone(new() { rule })[0]; clone.Id = "rule-" + Guid.NewGuid().ToString("N")[..8];
+            clone.Name += " (másolat)"; clone.Enabled = false;
+            ruleBook.Add(clone); selectedBookRule = ruleBook.Count - 1; changed = true;
+        }
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Kikapcsolt másolat a lista végén.");
+        ImGui.SameLine();
+        ImGui.PushStyleColor(ImGuiCol.Text, HudTheme.Bad);
+        if (ImGui.Button(remove)) delete = true;
+        ImGui.PopStyleColor();
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("A szabály törlése. Ctrl+Z visszahozza.");
+        ImGui.SetCursorPosY(Math.Max(bottom, ImGui.GetCursorPosY()));
+        if (!rule.Enabled) EditorStyle.Text(HudTheme.AmberAccent, facts.Off);
+    }
+
+    private CardFacts WorldRuleFacts(GameWorld world, WorldRule rule)
     {
         var all = RuleBookRules(world); int self = all.FindIndex(r => r.Id == rule.Id);
         string signature = System.Text.Json.JsonSerializer.Serialize(all);
@@ -68,9 +138,9 @@ internal sealed partial class RuleEditorView
         var targets = rule.Effects.SelectMany(e => e.Mode == "flow" ? new[] { e.Target, e.To } : new[] { e.Target }).Where(f => f.Length > 0).Select(f => FieldTitle(rule.Scope, f)).Distinct();
         var consumers = uses.Where(u => u.Writers.Any(w => w.Rule == self)).SelectMany(u => u.Readers.Where(r => r.Rule != self && r.Enabled).Select(r => r.Name)).Distinct().ToArray();
         string when = rule.Schedule switch { "passage" => "Jármű áthaladásakor", "month" => "Minden erdőhónap végén", "growth" => "A fa növekedési rátájának frissítésekor", "wildlife" => "Minden állati lépésben; a lépés időegysége másodperc", "population" => "Állománykezeléskor, élőhelyfelmérés után; másodpercben", "birth" => "Létrehozáskor, csak az új egyedeken; egyszeri kezdőállapot", _ => "0,5 játékmásodpercenként, szeletelt feldolgozással" };
-        Facts(rule.Name, "Állapotot változtat", when, reads, string.Join("; ", targets),
+        return new("Állapotot változtat", when, reads, string.Join("; ", targets),
             consumers.Length > 0 ? string.Join("; ", consumers) : "Az érintett objektum állapotát használó folyamatok, a megjelenítés és a mentés.", rule.Enabled,
-            "Kikapcsolva: nem hajtja végre a hatásait. A korábbi változtatásokat nem vonja vissza; más szabályok tovább hathatnak az objektumra.");
+            "Kikapcsolva nem hajtja végre a hatásait. A korábbi változtatásokat nem vonja vissza; más szabályok tovább hathatnak az objektumra.");
     }
     private void ProcessRuleCard(BehaviorGraph graph)
     {

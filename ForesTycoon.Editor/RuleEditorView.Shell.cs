@@ -335,7 +335,7 @@ internal sealed partial class RuleEditorView
 
     private static bool Matches(string filter, params string[] texts) => filter.Length == 0 || texts.Any(t => Contains(t, filter));
 
-    private static string ResponseFamily(string kind) => kind switch {
+    internal static string ResponseFamily(string kind) => kind switch {
         "site" => "Termőhely és víz",
         "competition" or "competitionPair" or "resource" => "Verseny, fény és erőforrás",
         "regeneration" => "Felújulás",

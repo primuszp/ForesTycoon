@@ -15,6 +15,13 @@ namespace ForesTycoon.Editor
         {
             if (RuleProjectCli.Run(args)) return;
             if (args.Length == 1 && args[0] == "--rules-benchmark") { RuleOptimizationBenchmark.Run(); return; }
+            if (args.Length == 1 && args[0] == "--check-editor-coverage")
+            {
+                using var world = WorldLoader.CreateProject(GameWorld.DefaultRuleProject());
+                var report = EditorCoverage.Check(world, world.BehaviorDocument);
+                Console.WriteLine(EditorCoverage.Format(report));
+                Environment.ExitCode = report.Gaps.Count == 0 ? 0 : 1; return;
+            }
             if (args.Length == 2 && args[0] == "--export-current-rules")
             {
                 string destination = System.IO.Path.GetFullPath(args[1]);

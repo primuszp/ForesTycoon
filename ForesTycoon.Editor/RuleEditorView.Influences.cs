@@ -11,40 +11,21 @@ internal sealed partial class RuleEditorView
     private int selectedInfluence, selectedTerm, influencePreviewId = -1;
     private float influencePreviewYears = .1f;
 
+    // The rule card's tab: 0 the graph, 1 a trial, 2 the rule's settings, 3 its description.
+    private int ruleCardTab;
+
     private void InfluenceArea(GameWorld world, WorldRule rule)
     {
-        ImGui.BeginChild("influence-editor", Vec2.Zero, ImGuiChildFlags.Borders);
+        EditorStyle.BeginPanel("influence-editor", Vec2.Zero);
         ImGui.PushTextWrapPos(0);
         ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vec2(8, 4));
-        WorldRuleCard(world, rule);
-        bool changed = false;
+        bool changed = false, delete = false;
         var scope = RuleEngine.Scope(rule.Scope);
-        if (ImGui.CollapsingHeader("Név, futási idő és egyéb beállítások")) {
-            string name = rule.Name;
-            ImGui.SetNextItemWidth(-1);
-            if (ImGui.InputText("##name", ref name, 120) && !string.IsNullOrWhiteSpace(name)) rule.Name = name;
-            changed |= ImGui.IsItemDeactivatedAfterEdit();
-            ImGui.SetNextItemWidth(230);
-            if (ImGui.BeginCombo("Mely objektumokon fusson?", ObjectDisplay(rule.Scope, rule.Scope))) {
-                foreach (var s in RuleEngine.Scopes.Where(s => s.Entity != null && (s.Fields.Any(f => f.Write != null) || s.Actions.Length > 0))) {
-                    if (ImGui.Selectable(ObjectDisplay(s.Id, s.Id) + "##" + s.Id, s.Id == rule.Scope) && s.Id != rule.Scope) {
-                        SetRuleScope(rule, s.Id); scope = s;
-                        // Keep existing effects intact: incompatible bindings remain visible and require a deliberate replacement.
-                        changed = true;
-                    }
-                    if (ImGui.IsItemHovered()) ImGui.SetTooltip((Objects.Find(s.Id)?.Help ?? "") + "\nKód: " + s.Id);
-                }
-                ImGui.EndCombo();
-            }
-            DrawSchedule(rule, ref changed);
-            if (ImGui.SmallButton("Teljesülési feltétel / számítási csomópontok")) { editRuleCalculation = true; selectedCalculation = -1; }
-            if (rule.ConditionGraph != null || rule.Condition.Length > 0) ImGui.TextWrapped("Ez a szabály csak a teljesülési feltétel igaz állapotában hat. A feltétel a fenti gombbal, csomópontokból szerkeszthető.");
-            DrawCustomFields(world, rule.Scope);
-            if (rule.Template.Length > 0) {
-                if (ImGui.Button("Visszaállítás a mintára")) ResetVisualRule(world, rule.Id);
-                if (ImGui.IsItemHovered()) ImGui.SetTooltip("A szabály hatásai a minta szerinti változatra állnak vissza. Visszavonható.");
-            }
-        }
+        RuleHeader(world, rule, ref changed, ref delete);
+        OtherWriters(world, rule);
+        if (ruleBookError != null) EditorStyle.Text(HudTheme.Bad, ruleBookError);
+        if (world.RuleBook.LastError != null) EditorStyle.Text(HudTheme.Bad, world.RuleBook.LastError);
+        ImGui.Spacing();
         var readable = ReadableFields(world, scope);
         var writable = WritableFields(world, scope);
         bool Pick(string label, string current, string[] choices, Action<string> set, bool empty = false)
@@ -62,25 +43,31 @@ internal sealed partial class RuleEditorView
         string current = null;
         if (rule.Effects.Count > 0 && rule.Effects[Math.Clamp(selectedInfluence, 0, rule.Effects.Count - 1)] is { } shown && shown.Influence.Terms.Count > 0)
             current = sentences.Term(shown, shown.Influence.Terms[Math.Clamp(selectedTerm, 0, shown.Influence.Terms.Count - 1)]);
-        if (ImGui.CollapsingHeader("A szabály szövegesen")) {
-            ImGui.BeginChild("rule-sentences", new Vec2(0, Math.Min(126, 10 + InfluenceSentences.Count * ImGui.GetTextLineHeightWithSpacing() * 1.6f)), ImGuiChildFlags.Borders);
-            ImGui.PushTextWrapPos(0);
-            foreach (string line in InfluenceSentences)
-                EditorStyle.Text(line == current ? HudTheme.Parchment : HudTheme.Muted, (line == current ? "» " : "• ") + line);
-            ImGui.PopTextWrapPos();
-            ImGui.EndChild();
-            if (ImGui.IsItemHovered()) ImGui.SetTooltip("A szabály szövegesen, a gráfból számolva. A kijelölt kapcsolat világos.");
-        }
-        OtherWriters(world, rule);
 
-        if (ruleBookError != null) EditorStyle.Text(HudTheme.Bad, ruleBookError);
-        if (ImGui.BeginTable("graph-workspace", 2, ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingStretchProp)) {
+        EditorStyle.Tabs("rule-tab", new[] { "Kapcsolatok", rule.Schedule == "passage" ? "Áthaladás próbája" : "Próba", "Beállítások", "Leírás" }, ref ruleCardTab);
+        switch (ruleCardTab) {
+            case 1: InfluencePreviewArea(world, rule, scope); StumpComparisonArea(world, rule); break;
+            case 2: RuleSettings(world, rule, ref scope, ref changed); break;
+            case 3:
+                FactsTable(WorldRuleFacts(world, rule));
+                EditorStyle.Section("A szabály szövegesen");
+                foreach (string line in InfluenceSentences)
+                    EditorStyle.Text(line == current ? HudTheme.Parchment : HudTheme.Muted, (line == current ? "» " : "• ") + line);
+                break;
+            default: InfluenceLinks(); break;
+        }
+        if (changed) ApplyRuleBook(world, "Hatások módosítva.");
+        ImGui.PopStyleVar(); ImGui.PopTextWrapPos(); EditorStyle.EndPanel();
+        if (delete) DeleteRule(world, rule);
+
+        // ── The graph and its inspector ──────────────────────────────────
+        void InfluenceLinks()
+        {
+        if (!ImGui.BeginTable("graph-workspace", 2, ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingStretchProp)) return;
         ImGui.TableSetupColumn("Gráf", ImGuiTableColumnFlags.WidthStretch, 1.9f);
         ImGui.TableSetupColumn("Hatás", ImGuiTableColumnFlags.WidthStretch, 1);
         ImGui.TableNextColumn();
         DrawInfluenceGraph(world, rule, scope, ref changed);
-        InfluencePreviewArea(world, rule, scope);
-        StumpComparisonArea(world, rule);
         ImGui.TableNextColumn();
         ImGui.BeginChild("graph-inspector", new Vec2(0, Math.Max(440, ImGui.GetContentRegionAvail().Y - 40)), ImGuiChildFlags.Borders);
         ImGui.PushTextWrapPos(0);
@@ -258,22 +245,42 @@ internal sealed partial class RuleEditorView
                 }
             }
         }
-        ImGui.Separator();
         ImGui.PopTextWrapPos();
         ImGui.EndChild(); ImGui.EndTable();
         }
-        if (ImGui.Button("Másolat")) {
-            var copy = RuleEngine.Clone(new() { rule })[0]; copy.Id = "rule-" + Guid.NewGuid().ToString("N")[..8];
-            copy.Name += " (másolat)"; copy.Enabled = false;
-            ruleBook.Add(copy); selectedBookRule = ruleBook.Count - 1; changed = true;
+    }
+
+    /// <summary>The settings tab: name, scope, schedule, the rule's condition, own fields and the starter it came from.</summary>
+    private void RuleSettings(GameWorld world, WorldRule rule, ref RuleScope scope, ref bool changed)
+    {
+        ImGui.PushItemWidth(-EditorStyle.LabelWidth());
+        EditorStyle.Section("Alapadatok");
+        string name = rule.Name;
+        if (ImGui.InputText("Szabály neve", ref name, 120) && !string.IsNullOrWhiteSpace(name)) rule.Name = name;
+        changed |= ImGui.IsItemDeactivatedAfterEdit();
+        if (ImGui.BeginCombo("Mely objektumokon fusson?", ObjectDisplay(rule.Scope, rule.Scope))) {
+            foreach (var s in RuleEngine.Scopes.Where(s => s.Entity != null && (s.Fields.Any(f => f.Write != null) || s.Actions.Length > 0))) {
+                if (ImGui.Selectable(ObjectDisplay(s.Id, s.Id) + "##" + s.Id, s.Id == rule.Scope) && s.Id != rule.Scope) {
+                    SetRuleScope(rule, s.Id); scope = s;
+                    // Keep existing effects intact: incompatible bindings remain visible and require a deliberate replacement.
+                    changed = true;
+                }
+                if (ImGui.IsItemHovered()) ImGui.SetTooltip((Objects.Find(s.Id)?.Help ?? "") + "\nKód: " + s.Id);
+            }
+            ImGui.EndCombo();
         }
-        ImGui.SameLine();
-        if (ImGui.Button("Szabály törlése")) { DeleteRule(world, rule); ImGui.PopStyleVar(); ImGui.PopTextWrapPos(); ImGui.EndChild(); return; }
-        if (changed) { ApplyRuleBook(world, "Hatások módosítva."); }
-        if (ruleBookError != null) EditorStyle.Text(HudTheme.Bad, ruleBookError);
-        if (world.RuleBook.LastError != null) EditorStyle.Text(HudTheme.Bad, world.RuleBook.LastError);
-        ImGui.Spacing();
-        ImGui.PopStyleVar(); ImGui.PopTextWrapPos(); ImGui.EndChild();
+        DrawSchedule(rule, ref changed);
+        ImGui.PopItemWidth();
+        EditorStyle.Section("Teljesülési feltétel");
+        EditorStyle.Text(HudTheme.Muted, rule.ConditionGraph != null || rule.Condition.Length > 0
+            ? "Ez a szabály csak akkor hat, ha a teljesülési feltétele igaz."
+            : "Nincs feltétel: a szabály minden futáskor hat. A kapcsolatoknak saját feltételeik is lehetnek.");
+        if (ImGui.Button("Feltétel és számítási csomópontok szerkesztése")) { editRuleCalculation = true; selectedCalculation = -1; }
+        DrawCustomFields(world, rule.Scope);
+        if (rule.Template.Length > 0) {
+            EditorStyle.Section("Minta");
+            EditorStyle.Text(HudTheme.Muted, "Mintából készült: " + rule.Template + ". A fejléc „Visszaállítás a mintára” gombja a minta szerinti változatra állítja vissza.");
+        }
     }
 
     /// <summary>The tile an element stands on, through its own index (roads, trails) or its tile relation; −1 when it has none.</summary>
@@ -310,7 +317,7 @@ internal sealed partial class RuleEditorView
     {
         if (rule.Schedule == "passage") { PassagePreviewArea(world, rule); return; }
         // Folded when the rule has its own comparison trial below, so the two do not crowd each other.
-        if (ImGui.CollapsingHeader("Próba a kiválasztott objektumon", HasComparisonTrial(rule) ? ImGuiTreeNodeFlags.None : ImGuiTreeNodeFlags.DefaultOpen)) {
+        {
             EditorStyle.Text(HudTheme.Muted, "A tesztvilág egy objektumán mutatja, mit tenne a szabály, változatlan környezettel. Nem ír a világba.");
             var elements = scope.Elements(world);
             if (!elements.Contains(influencePreviewId)) influencePreviewId = elements.FirstOrDefault(-1);
