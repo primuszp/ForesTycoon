@@ -30,6 +30,8 @@ namespace ForesTycoon
                     Lighting = false, Shadows = false, Weather = false, Quality = GraphicsQuality.Low };
                 using var visuals = new SurfaceVisualRenderer(settings, new WeatherVisualState());
                 using var material = new ForestMaterial();
+                // The surface material initializes over frames; finish it so crowns use it.
+                foreach (int _ in visuals.PrepareWork()) { }
                 RenderDevice.Visuals = visuals; visuals.BeginFrame();
                 Clear(); material.Use(); quad.DrawArray(false);
                 bool[] main = Coverage();
@@ -132,6 +134,7 @@ namespace ForesTycoon
             var autumnColours = new System.Collections.Generic.HashSet<string>();
             try
             {
+                foreach (int _ in visuals.PrepareWork()) { }
                 RenderDevice.Visuals = visuals; RenderDevice.SetCamera(Matrix4.Identity);
                 foreach (var species in Enum.GetValues<ForestSpecies>().Where(s => s != ForestSpecies.None))
                 {
