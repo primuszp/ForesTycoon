@@ -27,6 +27,10 @@ namespace ForesTycoon
                 foreach (var (id, species) in new[] { (102, ForestSpecies.Oak), (105, ForestSpecies.Birch), (150, ForestSpecies.Spruce), (153, ForestSpecies.Beech) })
                     stands[id] = new(species, 3, 0.1f, 1);
                 var forest = new ForestSystem(new GrowthHabitat(terrain), stands);
+                // Growth is project-authored (GameWorld binds the graphs); this render test only needs
+                // trees that grow, so it hosts a constant rate. Biology is tested in TreeGrowthGraphTests.
+                forest.GrowthRules = (tile, _) => ConstantGrowth(forest, tile);
+                SimulationWork.Complete(forest.RefreshEnvironmentRatesWork());
                 // Isolate continuous growth from spring bud-burst transitions, which
                 // legitimately replace crown geometry between monthly ticks.
                 forest.Update(ForestSystem.DefaultSecondsPerYear * 0.25);
@@ -191,6 +195,11 @@ namespace ForesTycoon
             finally { RenderDevice.Dispose(); }
         }
 
+        private static System.Collections.Generic.IEnumerable<int> ConstantGrowth(ForestSystem forest, int tile)
+        {
+            forest.IndividualTrees.TryGet(tile, out var p);
+            for (int i = 0; i < p.Count; i++) { p.Trees[i] = p.Trees[i] with { AnnualGrowth = new(.01f, .2f, .1f) }; yield return 1; }
+        }
         private static void Require(bool condition, string message)
         {
             if (!condition) throw new InvalidOperationException(message);
