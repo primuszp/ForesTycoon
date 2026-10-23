@@ -194,6 +194,35 @@ A futó világra is hatnak: a fák ezután ezekkel nőnek, a fa ezen az áron ke
 **Alapértékek visszaállítása** a beépített számokat adja vissza. Új fajhoz famodell is kell,
 ezért egyelőre a meglévő fajok paraméterei szerkeszthetők.
 
+#### Megjelenés
+
+A fafaj **Megjelenés** lapján a játék fagenerátorának paraméterei állíthatók, magyar
+nevekkel, csoportosítva: korona, törzs, vázágak, mellékágak, lombozat. A „Generátor összes
+paramétere” kapcsoló a többit is mutatja, eredeti nevükkel és leírásukkal.
+
+- **Minden fázis:** közös értékek. A játék ezekből indul, és a fa korához és a fényhez
+  igazítja őket (fiatalon kevesebb, árnyékban meredekebb ág).
+- **Magonc, Csemete, Fiatal, Érett, Idős, Öreg:** az adott életfázis saját értékei. Ezek
+  végsők: a játék igazítása után érvényesek, csak abban a fázisban.
+
+A saját értéket a borostyán háttér jelzi, a ↺ törli; ilyenkor ismét az örökölt érték
+érvényes. Az előnézetnek két nézete van; mindkettő forgatható, dönthető és nagyítható,
+16 egyedváltozatban, választható fényben.
+
+- **Játékban:** a játék saját fahálója 3D-ben, a fázis jellemző méretével, rögzített
+  léptékben. Lombos vagy lombtalan, és az **Áttetsző korona** a lomb alatt a teljes
+  ágszerkezetet mutatja. A magasságot és a koronaszélességet a növekedési szabályok adják,
+  ezért itt a paraméterek a formát, a sűrűséget és az ágakat alakítják.
+- **Ágszerkezet:** a generátor nyers ágváza saját léptékben, ágszintenként színezve. Itt az
+  ághosszak és a szögek hatása közvetlenül látszik. Ha az egér egy paraméteren áll, az
+  általa alakított ágszint kiemelődik.
+
+Az **Összevetés a gyárival** a beépített formát is mutatja: a Játékban nézetben mellette,
+az Ágszerkezetben halványan alatta. A szerkesztett
+értékek a projekt fafajánál, a `shape` mezőben mentődnek (`all`, illetve `phases` fázisnév
+szerint). Alkalmazás után a futó játék fái is újraépülnek. Ismeretlen paraméternév projekt-hiba;
+a túl nagy értékeket a játék a generátor biztonságos és gyakorlati tartományára szorítja.
+
 ### Burkolatok
 
 Aszfalt, makadám, földút és közelítőnyom egy táblázatban: építési költség,

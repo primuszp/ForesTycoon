@@ -20,13 +20,14 @@ namespace ForesTycoon.TreeModels
         // A mixed forest touches a fraction of species x phase x light x variant; ~22 KB each caps this near 45 MB.
         private const int Capacity = 2048;
 
-        private readonly record struct Key(ForestSpecies Species, int Variant, TreeLifePhase Phase, int Light, float ShadeTolerance);
+        private readonly record struct Key(ForestSpecies Species, int Variant, TreeLifePhase Phase, int Light, float ShadeTolerance, string Form);
         private static readonly Dictionary<Key, TreeSkeleton> Cache = new();
         private static readonly Queue<Key> Order = new();
 
         internal static TreeSkeleton Skeleton(ForestSpecies species, int seed, TreeLifePhase phase, int lightBand)
         {
-            var key = new Key(species, seed & (Variants - 1), phase, lightBand, ForestSpeciesProfile.For(species).ShadeTolerance);
+            var key = new Key(species, seed & (Variants - 1), phase, lightBand, ForestSpeciesProfile.For(species).ShadeTolerance,
+                ForestSpeciesBook.Shape(species)?.Revision ?? "");
             lock (Cache) if (Cache.TryGetValue(key, out var ready)) return ready;
             var tree = new TreeImpl(key.Variant, Parameters(key));
             tree.Make();
@@ -51,6 +52,18 @@ namespace ForesTycoon.TreeModels
 
         /// <summary>Crown fraction of the height for the species at the light of the band.</summary>
         internal static float CrownFraction(ForestSpecies species, TreeLifePhase phase, int lightBand)
+        {
+            // An authored form moves the crown base: a phase's own value is final, the common value scales the built-in one.
+            var form = ForestSpeciesBook.Shape(species);
+            if (form != null && form.Phases.TryGetValue(phase, out var own) && own.TryGetValue("BaseSize", out double phaseBase))
+                return Math.Clamp(1 - (float)phaseBase, 0.05f, 0.98f);
+            float fraction = BuiltinCrownFraction(species, phase, lightBand);
+            if (form != null && form.All.TryGetValue("BaseSize", out double common))
+                fraction *= (float)((1 - Math.Clamp(common, 0, 0.95)) / Math.Max(0.05, 1 - Preset(species).GetValueOrDefault("BaseSize", 0.3)));
+            return Math.Clamp(fraction, 0.05f, 0.98f);
+        }
+
+        private static float BuiltinCrownFraction(ForestSpecies species, TreeLifePhase phase, int lightBand)
         {
             float light = TreeShapeBands.BandLight(lightBand);
             // Whorled conifers keep their lower branches and are branched to the ground in the open and while
@@ -89,13 +102,38 @@ namespace ForesTycoon.TreeModels
         }
 
         /// <summary>
-        /// The species' Arbaro parameter set (mature, well lit) adapted to life phase and light:
-        /// fewer, shorter limbs and a single-level seedling; steeper, sparser limbs in shade;
-        /// forking and coarser limbs with age.
+        /// The generator parameters a tree of the species gets in a phase and light band, with the active species set's
+        /// authored form: what the editor shows as the current values.
         /// </summary>
+        internal static IReadOnlyDictionary<string, double> EffectiveParameters(ForestSpecies species, TreeLifePhase phase, int lightBand) =>
+            Values(new Key(species, 0, phase, lightBand, ForestSpeciesProfile.For(species).ShadeTolerance, ForestSpeciesBook.Shape(species)?.Revision ?? ""));
+
+        /// <summary>The species' parameters before life-phase and light adaptation: its preset with the authored common values.</summary>
+        internal static IReadOnlyDictionary<string, double> BaseParameters(ForestSpecies species)
+        {
+            var values = new Dictionary<string, double>(Preset(species), StringComparer.Ordinal);
+            if (ForestSpeciesBook.Shape(species) is { } form) TreeShapeParameters.Apply(values, form.All);
+            return values;
+        }
+
         private static TreeParams Parameters(Key key)
         {
+            var p = new TreeParams();
+            foreach (var pair in Values(key)) p.SetParam(pair.Key, pair.Value.ToString(CultureInfo.InvariantCulture));
+            return p;
+        }
+
+        /// <summary>
+        /// The species' Arbaro parameter set (mature, well lit) adapted to life phase and light:
+        /// fewer, shorter limbs and a single-level seedling; steeper, sparser limbs in shade;
+        /// forking and coarser limbs with age. An authored form sets the base values before this adaptation
+        /// and a phase's own values after it, each kept within the generator's safe range.
+        /// </summary>
+        private static Dictionary<string, double> Values(Key key)
+        {
             var v = new Dictionary<string, double>(Preset(key.Species), StringComparer.Ordinal);
+            var form = ForestSpeciesBook.Shape(key.Species);
+            if (form != null) TreeShapeParameters.Apply(v, form.All);
             var phase = key.Phase;
             float m = Math.Min(1, TreeLifePhases.Maturity(phase));
             bool juvenile = phase <= TreeLifePhase.Young, old = phase >= TreeLifePhase.Old, senescent = phase == TreeLifePhase.Senescent;
@@ -161,9 +199,8 @@ namespace ForesTycoon.TreeModels
                     }
                     break;
             }
-            var p = new TreeParams();
-            foreach (var pair in v) p.SetParam(pair.Key, pair.Value.ToString(CultureInfo.InvariantCulture));
-            return p;
+            if (form != null && form.Phases.TryGetValue(phase, out var own)) TreeShapeParameters.Apply(v, own);
+            return v;
         }
     }
 }

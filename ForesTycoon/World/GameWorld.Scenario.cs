@@ -39,6 +39,26 @@ namespace ForesTycoon
                 TimberPrice = ForestryLogistics.BuiltinTimberPrice(s) };
         }
 
+        /// <summary>
+        /// A species' authored tree form for the tree generator; null when it has none. Unknown parameter names are an error
+        /// of the project, not something to drop silently.
+        /// </summary>
+        internal static TreeShapeOverride ShapeOverride(SpeciesDefinition species)
+        {
+            if (species.Shape == null || species.Shape.IsEmpty) return null;
+            IReadOnlyDictionary<string, double> Checked(Dictionary<string, double> values)
+            {
+                foreach (string name in values.Keys)
+                    if (!ForesTycoon.TreeModels.TreeShapeParameters.Known(name))
+                        throw new System.IO.InvalidDataException($"{species.Name}: ismeretlen famegjelenési paraméter: {name}.");
+                return new Dictionary<string, double>(values, StringComparer.Ordinal);
+            }
+            var phases = new Dictionary<TreeLifePhase, IReadOnlyDictionary<string, double>>();
+            foreach (var (name, values) in species.Shape.Phases ?? new())
+                if (values is { Count: > 0 } && Enum.TryParse(name, out TreeLifePhase phase)) phases[phase] = Checked(values);
+            return TreeShapeOverride.Of(Checked(species.Shape.All ?? new()), phases);
+        }
+
         /// <summary>Only the numbers that differ from the built-in species become edits.</summary>
         internal static Dictionary<ForestSpecies, ForestSpeciesEdit> SpeciesEdits(WorldScenario scenario)
         {
@@ -52,7 +72,7 @@ namespace ForesTycoon
                     F(d.AnnualGrowthRate, b.AnnualGrowthRate), F(d.PreferredMoisture, b.PreferredMoisture), F(d.MoistureTolerance, b.MoistureTolerance),
                     F(d.PreferredElevation, b.PreferredElevation), F(d.ElevationTolerance, b.ElevationTolerance), F(d.ShadeTolerance, b.ShadeTolerance),
                     F(d.WoodDensity, b.WoodDensity), F(d.DrySensitivity, b.DrySensitivity), F(d.MatureHeight, b.MatureHeight), F(d.MaxHeight, b.MaxHeight),
-                    d.Capacity != b.Capacity ? d.Capacity : null, F(d.TimberPrice, b.TimberPrice));
+                    d.Capacity != b.Capacity ? d.Capacity : null, F(d.TimberPrice, b.TimberPrice), ShapeOverride(d));
                 if (edit != new ForestSpeciesEdit()) edits[s] = edit;
             }
             return edits;

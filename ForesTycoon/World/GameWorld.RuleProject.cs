@@ -68,6 +68,7 @@ sealed partial class GameWorld
             || !Path.IsPathFullyQualified(algorithms.BundlePath) || string.IsNullOrWhiteSpace(algorithms.WorkspaceRoot)
             || !Path.IsPathFullyQualified(algorithms.WorkspaceRoot))) throw new InvalidDataException("Hibás algoritmusgráf-hivatkozás.");
         copy.World?.Validate();
+        foreach (var species in copy.World?.Species ?? new()) _ = ShapeOverride(species);
         copy.Rules ??= new(); copy.Fields ??= new(); copy.RemovedStarters ??= new();
         if (copy.Version == 1) RuleEngine.AddMissingStarters(copy.Rules, copy.RemovedStarters);
         RuleProjectMigrations.UpgradeProject(copy);

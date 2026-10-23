@@ -234,6 +234,30 @@ namespace ForesTycoon.Editor
                 FramebufferCapture.SavePng(Path.Combine(output, "common-response-curve.png"), width, height);
                 editor.Undo(world); world.ExecutePendingCommands(); Frames(12);
                 Require(!world.BehaviorDocument.Graphs.Single(g => g.Hook == "water.stress").Nodes.Any(n => n.Operation == BehaviorOperation.Curve), "Undo did not restore the original response graph.");
+                // Species appearance: the preview is the game's own mesh; an authored form reaches the generator, common and per phase.
+                int oakIndex = editor.EditedScenario.Species.FindIndex(x => x.Id == "Oak");
+                void PreviewFrames() { for (int i = 0; i < 600 && !editor.TreePreviewReady; i++) { Frames(1); System.Threading.Thread.Sleep(5); } Frames(3); }
+                editor.ShowSpeciesAppearance(oakIndex, 4); PreviewFrames();
+                Require(editor.TreePreviewReady, "Tree preview was not built.");
+                FramebufferCapture.SavePng(Path.Combine(output, "species-appearance.png"), width, height);
+                var oak = editor.EditedScenario.Species[oakIndex];
+                oak.Shape = new() { All = { ["1Branches"] = 9, ["AttractionUp"] = -1.2 }, Phases = { ["Old"] = new() { ["1DownAngle"] = 95 } } };
+                PreviewFrames();
+                FramebufferCapture.SavePng(Path.Combine(output, "species-appearance-edited.png"), width, height);
+                editor.SetTreePreviewForTest(0, -1, true); PreviewFrames();
+                FramebufferCapture.SavePng(Path.Combine(output, "species-appearance-see-through.png"), width, height);
+                editor.SetTreePreviewForTest(1, 1, false); PreviewFrames();
+                Require(editor.TreePreviewReady, "Branch structure preview was not built.");
+                FramebufferCapture.SavePng(Path.Combine(output, "species-appearance-branches.png"), width, height);
+                editor.SetTreePreviewForTest(0, -1, false);
+                Require(GL.GetError() == ErrorCode.NoError, "Tree preview OpenGL error.");
+                editor.ApplyEditsForTest(world); world.ExecutePendingCommands(); Frames(4);
+                Require(ForesTycoon.TreeModels.TreeArchitecture.BaseParameters(ForestSpecies.Oak)["1Branches"] == 9
+                    && ForesTycoon.TreeModels.TreeArchitecture.EffectiveParameters(ForestSpecies.Oak, TreeLifePhase.Old, 2)["1DownAngle"] == 95
+                    && ForesTycoon.TreeModels.TreeArchitecture.EffectiveParameters(ForestSpecies.Oak, TreeLifePhase.Mature, 2)["1DownAngle"] != 95,
+                    "Authored tree form did not reach the generator.");
+                oak.Shape = null; editor.ApplyEditsForTest(world); world.ExecutePendingCommands(); Frames(4);
+                Require(ForestSpeciesBook.Shape(ForestSpecies.Oak) == null, "Clearing the form did not restore the built-in tree.");
                 editor.ShowMissions(); Frames(12);
                 int missions = editor.EditedScenario.Missions.Count;
                 editor.EditedScenario.Missions.Add(new MissionGoal { Id = "undo-proba", Title = "Visszavonási próba" }); Frames(12);

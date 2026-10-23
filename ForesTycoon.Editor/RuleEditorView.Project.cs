@@ -170,6 +170,7 @@ internal sealed partial class RuleEditorView
     {
         trialCancellation?.Cancel();
         publishingCancellation?.Cancel();
+        treeRenderer?.Dispose(); treeRenderer = null;
         if (world == null || !projectInitialized || !workshopVersions.Unsaved) return;
         try { WorkshopDraftStore.Save(RecoveryStem(), CollectProject(world)); }
         catch (Exception e) { Console.Error.WriteLine("A helyreállítási munkapéldány mentése nem sikerült: " + e.Message); }

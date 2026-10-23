@@ -417,9 +417,13 @@ public sealed class SpeciesDefinition
     public int Capacity { get; set; } = 6;
     /// <summary>Timber value, thousand forints per cubic metre.</summary>
     public double TimberPrice { get; set; } = 30;
+    /// <summary>The tree form authored over the built-in architecture; null keeps the built-in form.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public TreeShapeDefinition Shape { get; set; }
 
     internal void Validate()
     {
+        Shape?.Validate(Name);
         bool Unit(double v) => v is >= 0 and <= 1;
         if (string.IsNullOrWhiteSpace(Id) || string.IsNullOrWhiteSpace(Name) || Description == null)
             throw new InvalidDataException("Minden fafajnak azonosítója és neve legyen.");
@@ -429,6 +433,32 @@ public sealed class SpeciesDefinition
               && WoodDensity is > 0 and <= 5 && DrySensitivity is > 0 and <= 5 && MatureHeight > 0 && MaxHeight >= MatureHeight
               && MaxHeight <= 100 && Capacity is >= 1 and <= 64 && TimberPrice is >= 0 and <= 10000))
             throw new InvalidDataException($"{Name}: érvénytelen paraméter (kor, magasság, arányok 0–1, ár nem negatív).");
+    }
+}
+
+/// <summary>
+/// A species' tree form as tree-generator parameters (Weber–Penn names such as "1Branches" or "AttractionUp") over its
+/// built-in architecture. <see cref="All"/> applies in every life phase; a phase's own set in <see cref="Phases"/> applies on
+/// top of it, after the game's light and age adaptation, so it is the final word for that phase.
+/// </summary>
+public sealed class TreeShapeDefinition
+{
+    /// <summary>The life phases, in order, as the keys of <see cref="Phases"/>.</summary>
+    public static readonly string[] PhaseNames = { "Seedling", "Sapling", "Young", "Mature", "Old", "Senescent" };
+    public Dictionary<string, double> All { get; set; } = new();
+    public Dictionary<string, Dictionary<string, double>> Phases { get; set; } = new();
+
+    public bool IsEmpty => (All?.Count ?? 0) == 0 && (Phases?.Values.All(p => p == null || p.Count == 0) ?? true);
+
+    internal void Validate(string species)
+    {
+        All ??= new(); Phases ??= new();
+        foreach (var (phase, values) in Phases)
+            if (Array.IndexOf(PhaseNames, phase) < 0 || values == null)
+                throw new InvalidDataException($"{species}: ismeretlen életfázis a famegjelenésben: {phase}.");
+        foreach (var (name, value) in All.Concat(Phases.Values.SelectMany(p => p)))
+            if (string.IsNullOrWhiteSpace(name) || !double.IsFinite(value))
+                throw new InvalidDataException($"{species}: érvénytelen famegjelenési paraméter: {name}.");
     }
 }
 
