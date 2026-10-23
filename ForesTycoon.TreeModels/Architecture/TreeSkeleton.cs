@@ -276,7 +276,11 @@ namespace ForesTycoon.TreeModels
                     flow[starts[i] + v] = running;
                 }
             }
-            // 4. Leaves: deterministic stride thinning keeps the spatial spread of the cloud.
+            // 4. Leaves: deterministic stride thinning keeps the spatial spread of the cloud. A tree without leaves
+            // (no stems on the leaf-bearing level) takes its branch tips, so the crown and its scaling still have support.
+            if (collector.Leaves.Count == 0)
+                for (int i = 0; i < count; i++)
+                    if (raw[i].Children.Count == 0 && (raw[i].Level > 0 || count == 1)) { collector.Leaves.Add(points[i][^1]); collector.LeafOwner.Add(i); }
             int leafTotal = collector.Leaves.Count;
             int keep = Math.Min(leafTotal, maxLeaves);
             var leaves = new Vector3[keep]; var owners = new int[keep];

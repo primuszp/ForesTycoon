@@ -18,13 +18,14 @@ layout(location = 1) in vec3 in_normal;
 layout(location = 2) in vec4 in_color;
 uniform mat4 view_projection;
 uniform vec3 offset;
+uniform float scale;
 out vec3 normal;
 out vec3 color;
 void main()
 {
     normal = in_normal;
     color = in_color.rgb;
-    gl_Position = view_projection * vec4(in_position + offset, 1.0);
+    gl_Position = view_projection * vec4(in_position * scale + offset, 1.0);
 }";
     private const string FragmentSource = @"#version 330 core
 in vec3 normal;
@@ -48,10 +49,10 @@ void main()
     internal int Texture => colour;
 
     /// <summary>
-    /// Renders the meshes side by side (one per offset) at <paramref name="pixels"/>; <paramref name="crownAlpha"/> below 1
-    /// draws the crowns see-through after the wood.
+    /// Renders the meshes side by side (each placed at its offset, uniformly scaled) at <paramref name="pixels"/>;
+    /// <paramref name="crownAlpha"/> below 1 draws the crowns see-through after the wood.
     /// </summary>
-    internal void Render(IReadOnlyList<(DendroTreeGenerator.Mesh Mesh, Vector3 Offset)> trees, Vector2i pixels, Matrix4 viewProjection, float crownAlpha)
+    internal void Render(IReadOnlyList<(DendroTreeGenerator.Mesh Mesh, Vector3 Offset, float Scale)> trees, Vector2i pixels, Matrix4 viewProjection, float crownAlpha)
     {
         if (pixels.X < 4 || pixels.Y < 4) return;
         if (program == 0) Create();
@@ -74,11 +75,12 @@ void main()
             GL.UseProgram(program);
             GL.UniformMatrix4(GL.GetUniformLocation(program, "view_projection"), false, ref viewProjection);
             GL.Uniform3(GL.GetUniformLocation(program, "sun"), Vector3.Normalize(new Vector3(-.45f, -.55f, .75f)));
-            int offsetLocation = GL.GetUniformLocation(program, "offset"), alphaLocation = GL.GetUniformLocation(program, "alpha");
+            int offsetLocation = GL.GetUniformLocation(program, "offset"), alphaLocation = GL.GetUniformLocation(program, "alpha"),
+                scaleLocation = GL.GetUniformLocation(program, "scale");
             GL.BindVertexArray(vao);
             GL.Uniform1(alphaLocation, 1f);
             for (int i = 0; i < uploaded.Count; i++) {
-                GL.Uniform3(offsetLocation, trees[i].Offset);
+                GL.Uniform3(offsetLocation, trees[i].Offset); GL.Uniform1(scaleLocation, trees[i].Scale);
                 GL.DrawArrays(PrimitiveType.Triangles, uploaded[i].Wood, uploaded[i].WoodCount);
                 if (crownAlpha >= 1) GL.DrawArrays(PrimitiveType.Triangles, uploaded[i].Crown, uploaded[i].CrownCount);
             }
@@ -89,7 +91,7 @@ void main()
                 GL.Enable(EnableCap.CullFace); GL.CullFace(CullFaceMode.Back);
                 GL.Uniform1(alphaLocation, crownAlpha);
                 for (int i = 0; i < uploaded.Count; i++) {
-                    GL.Uniform3(offsetLocation, trees[i].Offset);
+                    GL.Uniform3(offsetLocation, trees[i].Offset); GL.Uniform1(scaleLocation, trees[i].Scale);
                     GL.DrawArrays(PrimitiveType.Triangles, uploaded[i].Crown, uploaded[i].CrownCount);
                 }
                 GL.DepthMask(true); GL.Disable(EnableCap.CullFace);
@@ -140,14 +142,14 @@ void main()
         if (status != FramebufferErrorCode.FramebufferComplete) throw new InvalidOperationException("Fa-előnézet: " + status);
     }
 
-    private void Upload(IReadOnlyList<(DendroTreeGenerator.Mesh Mesh, Vector3 Offset)> trees)
+    private void Upload(IReadOnlyList<(DendroTreeGenerator.Mesh Mesh, Vector3 Offset, float Scale)> trees)
     {
         // Re-upload only when the set of meshes changes; the camera moves every frame.
         bool same = uploaded.Count == trees.Count;
         for (int i = 0; same && i < trees.Count; i++) same = ReferenceEquals(uploaded[i].Mesh, trees[i].Mesh);
         if (same && uploadedKey != null) return;
         var all = new List<Vertex>(); uploaded.Clear();
-        foreach (var (mesh, _) in trees) {
+        foreach (var (mesh, _, _) in trees) {
             int wood = all.Count; all.AddRange(mesh.Trunk); all.AddRange(mesh.Branches);
             int crown = all.Count; all.AddRange(mesh.Crown);
             uploaded.Add((mesh, wood, crown - wood, crown, all.Count - crown));

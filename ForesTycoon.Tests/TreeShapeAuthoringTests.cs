@@ -31,6 +31,21 @@ public sealed class TreeShapeAuthoringTests
     }
 
     [Fact]
+    public void ADeadTreeKeepsItsLivingStructureUnlessTheFormSaysOtherwise()
+    {
+        try {
+            var living = TreeArchitecture.Skeleton(ForestSpecies.Oak, 5, TreeLifePhase.Old, 2);
+            Assert.Same(living, TreeArchitecture.Skeleton(ForestSpecies.Oak, 5, TreeLifePhase.Old, 2, dead: true));
+            ForestSpeciesBook.Apply(GameWorld.SpeciesEdits(WithOakForm(new() {
+                Phases = { [TreeShapeDefinition.DeadState] = new() { ["2Branches"] = 0 } } })));
+            Assert.Equal(0, TreeArchitecture.EffectiveParameters(ForestSpecies.Oak, TreeLifePhase.Old, 2, dead: true)["2Branches"]);
+            Assert.NotEqual(0, TreeArchitecture.EffectiveParameters(ForestSpecies.Oak, TreeLifePhase.Old, 2)["2Branches"]);
+            var snag = TreeArchitecture.Skeleton(ForestSpecies.Oak, 5, TreeLifePhase.Old, 2, dead: true);
+            Assert.True(snag.StemCount < TreeArchitecture.Skeleton(ForestSpecies.Oak, 5, TreeLifePhase.Old, 2).StemCount);
+        } finally { ForestSpeciesBook.Apply(null); }
+    }
+
+    [Fact]
     public void AFormChangesTheShapeKeySoBuiltTreesAreRebuilt()
     {
         var spec = new TreeShapeSpec(ForestSpecies.Oak, 7, TreeLifePhase.Mature, new(.4f, 20, 4), 1, new TreeSite(1), LeafState.Full, 0);

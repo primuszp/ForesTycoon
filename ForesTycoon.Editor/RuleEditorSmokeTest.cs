@@ -249,7 +249,11 @@ namespace ForesTycoon.Editor
                 editor.SetTreePreviewForTest(1, 1, false); PreviewFrames();
                 Require(editor.TreePreviewReady, "Branch structure preview was not built.");
                 FramebufferCapture.SavePng(Path.Combine(output, "species-appearance-branches.png"), width, height);
-                editor.SetTreePreviewForTest(0, -1, false);
+                editor.SetTreePreviewForTest(2, -1, false); PreviewFrames();
+                Require(editor.TreePreviewReady, "Life course preview was not built.");
+                FramebufferCapture.SavePng(Path.Combine(output, "species-life-course.png"), width, height);
+                editor.SetTreePreviewForTest(0, -1, false); editor.ShowSpeciesAppearance(oakIndex, 7); PreviewFrames();
+                FramebufferCapture.SavePng(Path.Combine(output, "species-appearance-dead.png"), width, height);
                 Require(GL.GetError() == ErrorCode.NoError, "Tree preview OpenGL error.");
                 editor.ApplyEditsForTest(world); world.ExecutePendingCommands(); Frames(4);
                 Require(ForesTycoon.TreeModels.TreeArchitecture.BaseParameters(ForestSpecies.Oak)["1Branches"] == 9

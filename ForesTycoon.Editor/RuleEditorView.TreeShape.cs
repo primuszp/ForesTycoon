@@ -19,11 +19,12 @@ internal sealed partial class RuleEditorView
     private static readonly string[] PhaseLabels = { "Magonc", "Csemete", "Fiatal", "Érett", "Idős", "Öreg" };
     private static readonly string[] LightLabels = { "Árnyék", "Félárnyék", "Napos" };
 
-    // 0 = every phase, 1..6 = one life phase.
+    // 0 = every phase, 1..6 = one life phase, 7 = the dead tree.
+    private const int DeadTab = 7;
     private int speciesTab, shapePhase, previewLight = 2, previewVariant;
     private bool previewBare, showAllShapeParameters;
     private float previewYaw = .6f;
-    private string shapeFilter = "";
+    private string shapeFilter = "", shapeRevisionSeen;
 
 
     internal void ShowSpeciesAppearance(int index, int phase = 0) { ShowWorldTypes(TypeTab.Species, index); speciesTab = 1; shapePhase = phase; }
@@ -31,34 +32,48 @@ internal sealed partial class RuleEditorView
     internal void SetTreePreviewForTest(int mode, int level, bool seeThrough) { previewMode = mode; testShapeLevel = level; previewSeeThrough = seeThrough; }
     private int? testShapeLevel;
 
-    private static TreeLifePhase Phase(int selection) => (TreeLifePhase)Math.Clamp(selection - 1, 0, 5);
+    // The dead tree is shown as an old tree that died.
+    private static TreeLifePhase Phase(int selection) => selection == DeadTab ? TreeLifePhase.Old : (TreeLifePhase)Math.Clamp(selection - 1, 0, 5);
 
     private void TreeShapeArea(GameWorld world, SpeciesDefinition sp)
     {
         if (!Enum.TryParse(sp.Id, out ForestSpecies species) || species == ForestSpecies.None) {
             EditorStyle.Text(HudTheme.Muted, "Ennek a fafajnak nincs famodellje."); return;
         }
-        EditorStyle.Tabs("shape-phase", new[] { "Minden fázis" }.Concat(PhaseLabels).ToArray(), ref shapePhase);
+        EditorStyle.Tabs("shape-phase", new[] { "Minden fázis" }.Concat(PhaseLabels).Append("Elhalt").ToArray(), ref shapePhase);
         ImGui.PushTextWrapPos(0);
         EditorStyle.Text(HudTheme.Muted, shapePhase == 0
             ? "Közös értékek minden életfázisra. A játék ezekből indul, és a fa korához és a fényhez igazítja őket (például fiatalon kevesebb, árnyékban meredekebb ág)."
+            : shapePhase == DeadTab
+            ? "Az elpusztult fa értékei, bármely fázisban halt el: mit tart meg az álló holtfa az élő fa ágaiból (például kevesebb vékony ág). Üresen a holtfa az élő fa ágszerkezetét tartja meg. Két év múlva kidől."
             : $"{PhaseLabels[shapePhase - 1]} fázis saját értékei. Ezek végső értékek: a játék kor- és fényigazítása után érvényesek, csak ebben a fázisban.");
         ImGui.PopTextWrapPos();
 
         // The draft form as the game would see it; previews and current values come from it, not from the applied project.
         object context = ForestSpeciesBook.Compose(GameWorld.SpeciesEdits(scenario));
         var phase = Phase(shapePhase);
+        bool dead = shapePhase == DeadTab;
+        // A form the generator cannot build falls back to the built-in tree; say so until the form changes.
+        string revision = ForestSpeciesBook.WithContext(context, () => ForestSpeciesBook.Shape(species)?.Revision ?? "");
+        if (revision != shapeRevisionSeen) { shapeRevisionSeen = revision; TreeArchitecture.LastFormError = null; }
+        if (TreeArchitecture.LastFormError is string failed && failed.StartsWith(sp.Name, StringComparison.Ordinal)) {
+            ImGui.PushTextWrapPos(0);
+            EditorStyle.Text(HudTheme.Bad, "Ezzel a beállítással a fa nem építhető, ezért a játék a beépített formát használja: " + failed);
+            ImGui.PopTextWrapPos();
+        }
         var shown = ForestSpeciesBook.WithContext(context, () => shapePhase == 0
-            ? TreeArchitecture.BaseParameters(species) : TreeArchitecture.EffectiveParameters(species, phase, previewLight));
+            ? TreeArchitecture.BaseParameters(species) : TreeArchitecture.EffectiveParameters(species, phase, previewLight, dead));
 
-        float previewWidth = Math.Clamp(ImGui.GetContentRegionAvail().X * .5f, 300, 820);
+        // The life course is a long row of trees: it gets most of the width.
+        float previewWidth = previewMode == 2 ? Math.Max(300, ImGui.GetContentRegionAvail().X * .68f)
+            : Math.Clamp(ImGui.GetContentRegionAvail().X * .5f, 300, 820);
         ImGui.BeginChild("shape-parameters", new Vec2(-previewWidth - 10, 0));
         bool finished = ShapeParameterList(sp, shown);
         ImGui.EndChild();
         ImGui.SameLine(0, 10);
         shownShapeLevel = testShapeLevel ?? hoveredShapeLevel;
         ImGui.BeginChild("shape-preview", Vec2.Zero, ImGuiChildFlags.None, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
-        TreePreview(species, phase, context, sp);
+        TreePreview(species, phase, dead, context, sp);
         ImGui.EndChild();
         if (finished) { Try(() => ApplyProject(world, false)); message = sp.Name + ": megjelenés módosítva; a tesztvilág fái újraépülnek."; }
     }
@@ -68,7 +83,7 @@ internal sealed partial class RuleEditorView
     {
         if (sp.Shape == null) { if (!create) return null; sp.Shape = new(); }
         if (shapePhase == 0) return sp.Shape.All;
-        string key = TreeShapeDefinition.PhaseNames[shapePhase - 1];
+        string key = shapePhase == DeadTab ? TreeShapeDefinition.DeadState : TreeShapeDefinition.PhaseNames[shapePhase - 1];
         if (!sp.Shape.Phases.TryGetValue(key, out var values) && create) sp.Shape.Phases[key] = values = new();
         return values;
     }
@@ -99,7 +114,8 @@ internal sealed partial class RuleEditorView
         if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
             ImGui.SetTooltip(shapePhase == 0 ? "Vissza a beépített fafajformához (a fázisok saját értékei megmaradnak)." : "Ebben a fázisban ismét a közös értékek és a játék igazítása érvényes.");
         if (shapePhase > 0 && sp.Shape?.Phases is { Count: > 0 } phases) {
-            var used = PhaseLabels.Where((_, i) => phases.ContainsKey(TreeShapeDefinition.PhaseNames[i])).ToArray();
+            var used = PhaseLabels.Where((_, i) => phases.ContainsKey(TreeShapeDefinition.PhaseNames[i]))
+                .Concat(phases.ContainsKey(TreeShapeDefinition.DeadState) ? new[] { "Elhalt" } : Array.Empty<string>()).ToArray();
             if (used.Length > 0) EditorStyle.Text(HudTheme.Muted, "Saját értékei vannak: " + string.Join(", ", used));
         }
 
@@ -182,8 +198,11 @@ internal sealed partial class RuleEditorView
     private readonly PreviewBuild<TreeSkeleton> editedSkeleton = new(), builtinSkeleton = new();
     private TreePreviewRenderer treeRenderer;
     private string previewKey, builtinKey;
-    // 0 = as in the game, 1 = the raw branch structure.
+    // 0 = as in the game, 1 = the raw branch structure, 2 = the whole life course.
     private int previewMode;
+    private bool lifeTrueScale = true;
+    private readonly PreviewBuild<LifeStage[]> lifeCourse = new();
+    private string lifeKey;
     private bool previewCompare = true, previewSeeThrough, previewLeafPoints = true;
     private float previewPitch = .28f, previewZoom = 1;
     // The branch level the hovered parameter shapes (0 trunk, 1 limbs, 2 side branches, 3 twigs); -1 = the whole tree.
@@ -192,31 +211,32 @@ internal sealed partial class RuleEditorView
 
     internal bool TreePreviewReady => previewKey != null && (previewMode == 0
         ? editedMesh.Current(previewKey + "|" + Seasonal) && (!previewCompare || builtinMesh.Current(builtinKey + "|" + Seasonal))
-        : editedSkeleton.Current(previewKey) && builtinSkeleton.Current(builtinKey));
+        : previewMode == 1 ? editedSkeleton.Current(previewKey) && builtinSkeleton.Current(builtinKey)
+        : lifeCourse.Current(lifeKey));
 
     /// <summary>The branch level a parameter shapes, from its name ("1Length" → 1) or its group; -1 for the whole tree.</summary>
     private static int BranchLevel(TreeShapeParameters.Entry e) =>
         char.IsDigit(e.Name[0]) ? e.Name[0] - '0' : e.Group switch { "Törzs" => 0, "Vázágak" => 1, "Mellékágak" => 2, _ => -1 };
 
-    private void TreePreview(ForestSpecies species, TreeLifePhase phase, object context, SpeciesDefinition sp)
+    private void TreePreview(ForestSpecies species, TreeLifePhase phase, bool dead, object context, SpeciesDefinition sp)
     {
-        EditorStyle.Tabs("preview-mode", new[] { "Játékban", "Ágszerkezet" }, ref previewMode);
+        EditorStyle.Tabs("preview-mode", new[] { "Játékban", "Ágszerkezet", "Életút" }, ref previewMode);
+        if (previewMode == 2) { LifeCoursePreview(species, context, sp); return; }
         // The built-in form of this species, with the project's other species edits: what the comparison shows.
         var form = sp.Shape; sp.Shape = null;
         object builtinContext = ForestSpeciesBook.Compose(GameWorld.SpeciesEdits(scenario));
         sp.Shape = form;
 
         // Representative size for the phase: the middle of its age range, sized by the game's initial-size graphs.
-        float start = phase == TreeLifePhase.Seedling ? 0 : TreeLifePhases.NextAge(species, phase - 1);
-        float end = TreeLifePhases.NextAge(species, phase);
-        float age = float.IsInfinity(end) ? start + Math.Max(5, (float)sp.MaximumAgeYears - start) * .5f : (start + end) / 2;
+        float age = PhaseAge(species, phase, sp);
         var size = ForestSpeciesBook.WithContext(context, () => ForestTreeGrowth.Initial(species, Math.Max(.5f, age), .5f));
         int seed = previewVariant * 7919 + 13;
         string revision = ForestSpeciesBook.WithContext(context, () => ForestSpeciesBook.Shape(species)?.Revision ?? "");
-        string common = string.Join("|", species, phase, previewLight, previewBare, previewVariant, size, previewMode);
+        string common = string.Join("|", species, phase, dead, previewLight, previewBare, previewVariant, size, previewMode);
         previewKey = common + "|" + revision; builtinKey = common + "|built-in";
 
-        string note = $"{PhaseLabels[(int)phase]} · {age:0} év · {size.Height:0.#} m magas, {size.CrownRadius * 2:0.#} m széles korona. "
+        string note = (dead ? $"Elhalt fa ({PhaseLabels[(int)phase].ToLowerInvariant()} fázisban pusztult el) · " : PhaseLabels[(int)phase] + " · ")
+            + $"{age:0} év · {size.Height:0.#} m magas, {size.CrownRadius * 2:0.#} m széles korona. "
             + (previewMode == 0
                 ? "A magasságot és a korona szélességét a növekedési szabályok adják; ezek a paraméterek a fa formáját, sűrűségét és ágait alakítják."
                 : "A generátor nyers ágváza saját léptékben: itt az ághosszak és szögek hatása közvetlenül látszik.");
@@ -225,8 +245,8 @@ internal sealed partial class RuleEditorView
         area = Vec2.Max(area, new Vec2(40, 40));
         Vec2 origin = ImGui.GetCursorScreenPos();
         if (previewMode == 0) {
-            var spec = new TreeShapeSpec(species, seed, phase, size, 1, new TreeSite(TreeShapeBands.BandLight(previewLight)),
-                previewBare ? LeafState.Bare : LeafState.Full, 0);
+            var spec = new TreeShapeSpec(species, seed, phase, size, dead ? 0 : 1, new TreeSite(TreeShapeBands.BandLight(previewLight)),
+                previewBare || dead ? LeafState.Bare : LeafState.Full, 0, dead);
             // See-through: the leafy crown over the complete leafless branch system, as the game keeps both for the seasons.
             bool seasonal = Seasonal;
             DendroTreeGenerator.Mesh Build(object books) => ForestSpeciesBook.WithContext(books, () => seasonal
@@ -235,8 +255,8 @@ internal sealed partial class RuleEditorView
             if (previewCompare) builtinMesh.Update(builtinKey + "|" + seasonal, () => Build(builtinContext));
             GamePreview(origin, area, size);
         } else {
-            editedSkeleton.Update(previewKey, () => ForestSpeciesBook.WithContext(context, () => TreeArchitecture.Skeleton(species, seed, phase, previewLight)));
-            builtinSkeleton.Update(builtinKey, () => ForestSpeciesBook.WithContext(builtinContext, () => TreeArchitecture.Skeleton(species, seed, phase, previewLight)));
+            editedSkeleton.Update(previewKey, () => ForestSpeciesBook.WithContext(context, () => TreeArchitecture.Skeleton(species, seed, phase, previewLight, dead)));
+            builtinSkeleton.Update(builtinKey, () => ForestSpeciesBook.WithContext(builtinContext, () => TreeArchitecture.Skeleton(species, seed, phase, previewLight, dead)));
             ImGui.InvisibleButton("tree-preview", area);
             var draw = ImGui.GetWindowDrawList();
             draw.AddRectFilled(origin, origin + area, EditorStyle.U(.105f, .135f, .15f));
@@ -274,6 +294,138 @@ internal sealed partial class RuleEditorView
         ImGui.PopTextWrapPos();
     }
 
+    /// <summary>Age in the middle of a phase; the last phase lasts until the species' maximum age.</summary>
+    private static float PhaseAge(ForestSpecies species, TreeLifePhase phase, SpeciesDefinition sp)
+    {
+        float start = phase == TreeLifePhase.Seedling ? 0 : TreeLifePhases.NextAge(species, phase - 1);
+        float end = TreeLifePhases.NextAge(species, phase);
+        return float.IsInfinity(end) ? start + Math.Max(5, (float)sp.MaximumAgeYears - start) * .5f : (start + end) / 2;
+    }
+
+    /// <summary>One step of a tree's life: what it is called, the page that shapes it, and the tree as the game builds it.</summary>
+    private sealed record LifeStage(string Label, int Tab, float Age, ForestTreeDimensions Size, DendroTreeGenerator.Mesh Mesh, bool Fallen);
+
+    /// <summary>
+    /// The whole life of one tree in a row, as the game shows it: the six phases, a weakened old tree losing limbs, the standing
+    /// dead tree and the fallen one. True scale shows how it grows; otherwise each is enlarged to the same height.
+    /// </summary>
+    private void LifeCoursePreview(ForestSpecies species, object context, SpeciesDefinition sp)
+    {
+        int seed = previewVariant * 7919 + 13, light = previewLight; bool bare = previewBare;
+        lifeKey = string.Join("|", species, light, bare, previewVariant, sp.MaximumAgeYears, sp.MatureAgeYears,
+            ForestSpeciesBook.WithContext(context, () => ForestSpeciesBook.Shape(species)?.Revision ?? ""));
+        var ages = Enum.GetValues<TreeLifePhase>().Select(p => PhaseAge(species, p, sp)).ToArray();
+        lifeCourse.Update(lifeKey, () => ForestSpeciesBook.WithContext(context, () => {
+            var site = new TreeSite(TreeShapeBands.BandLight(light));
+            LifeStage Stage(string label, int tab, TreeLifePhase phase, float vigor, bool dead, bool fallen)
+            {
+                float age = ages[(int)phase];
+                var size = ForestTreeGrowth.Initial(species, Math.Max(.5f, age), .5f);
+                var mesh = DendroTreeGenerator.Generate(new TreeShapeSpec(species, seed, phase, size, vigor, site,
+                    bare || dead ? LeafState.Bare : LeafState.Full, 0, dead), ForestLod.Near);
+                return new(label, tab, age, size, fallen ? Fallen(mesh, size.Diameter * TreeScale.MetresToWorld) : mesh, fallen);
+            }
+            var stages = Enum.GetValues<TreeLifePhase>().Select(p => Stage(PhaseLabels[(int)p], (int)p + 1, p, 1, false, false)).ToList();
+            stages.Add(Stage("Legyengült", 5, TreeLifePhase.Old, .2f, false, false));
+            stages.Add(Stage("Elhalt", DeadTab, TreeLifePhase.Old, 0, true, false));
+            stages.Add(Stage("Kidőlt", DeadTab, TreeLifePhase.Old, 0, true, true));
+            return stages.ToArray();
+        }));
+
+        Vec2 area = ImGui.GetContentRegionAvail() - new Vec2(0, ImGui.GetFrameHeightWithSpacing() * 2 + ImGui.GetTextLineHeightWithSpacing() * 5 + 44);
+        area = Vec2.Max(area, new Vec2(40, 40));
+        Vec2 origin = ImGui.GetCursorScreenPos();
+        var stagesShown = lifeCourse.Value;
+        if (stagesShown == null) { ImGui.InvisibleButton("life-course", area); }
+        else {
+            // Slots side by side on one ground line, crowns standing close as in a stand; a fallen tree lies along its slot.
+            float reference = stagesShown.Max(s => s.Size.Height) * TreeScale.MetresToWorld;
+            int n = stagesShown.Length;
+            var natural = new float[n]; var scales = new float[n];
+            float top = 0;
+            for (int i = 0; i < n; i++) {
+                var s = stagesShown[i];
+                float height = s.Size.Height * TreeScale.MetresToWorld, crown = s.Size.CrownRadius * TreeScale.MetresToWorld;
+                scales[i] = lifeTrueScale ? 1 : reference * .9f / Math.Max(1e-3f, height);
+                natural[i] = Math.Max(reference * .06f, (s.Fallen ? height * 1.05f : Math.Max(crown * 1.6f, height * .3f)) * scales[i]);
+                top = Math.Max(top, (s.Fallen ? crown : height) * scales[i]);
+            }
+            float gap = reference * .02f;
+            // Labels alternate rows, so a label shares the width of two slots: small trees get room for half a label.
+            float perPixel = Math.Max((natural.Sum() + gap * (n - 1)) / area.X, top * 1.3f / area.Y);
+            var widths = natural.Select((w, i) => Math.Max(w, .55f * (ImGui.CalcTextSize("000 év · 00.0 m").X + 8) * perPixel)).ToArray();
+            var trees = new List<(DendroTreeGenerator.Mesh, OpenTK.Mathematics.Vector3, float)>();
+            var centres = new float[n];
+            float x = 0;
+            for (int i = 0; i < n; i++) {
+                var s = stagesShown[i];
+                float height = s.Size.Height * TreeScale.MetresToWorld;
+                centres[i] = x + widths[i] / 2;
+                trees.Add((s.Mesh, new(centres[i] - (s.Fallen ? height * .5f * scales[i] : 0), 0, 0), scales[i]));
+                x += widths[i] + gap;
+            }
+            float total = x - gap, viewHeight = Math.Max(top * 1.3f, total * area.Y / area.X);
+            float viewWidth = viewHeight * area.X / area.Y;
+            const float pitch = .12f;
+            // Ground a little above the bottom edge, the tallest crown well inside the top.
+            var target = new OpenTK.Mathematics.Vector3(total / 2, 0, viewHeight * .43f);
+            var eye = target + new OpenTK.Mathematics.Vector3(0, -MathF.Cos(pitch), MathF.Sin(pitch)) * total * 3;
+            var viewProjection = OpenTK.Mathematics.Matrix4.LookAt(eye, target, OpenTK.Mathematics.Vector3.UnitZ)
+                * OpenTK.Mathematics.Matrix4.CreateOrthographic(viewWidth, viewHeight, total * .5f, total * 6);
+            float pixels = ImGui.GetIO().DisplayFramebufferScale.X * 1.5f;
+            treeRenderer ??= new TreePreviewRenderer();
+            treeRenderer.Render(trees, new(Math.Min(4096, (int)(area.X * pixels)), Math.Min(2048, (int)(area.Y * pixels))), viewProjection, 1);
+            ImGui.Image((IntPtr)treeRenderer.Texture, area, new Vec2(0, 1), new Vec2(1, 0));
+            // Labels under the slots; a click opens the page that shapes that stage.
+            var draw = ImGui.GetWindowDrawList();
+            for (int i = 0; i < stagesShown.Length; i++) {
+                var s = stagesShown[i];
+                float sx = origin.X + area.X / 2 + (centres[i] - total / 2) / viewWidth * area.X;
+                string label = s.Label, detail = s.Label is "Elhalt" or "Kidőlt" ? (s.Label == "Kidőlt" ? "+2 év" : $"{s.Age:0} év") : $"{s.Age:0} év · {s.Size.Height:0.#} m";
+                float w = Math.Max(ImGui.CalcTextSize(label).X, ImGui.CalcTextSize(detail).X);
+                // Alternate rows keep neighbouring names apart.
+                Vec2 at = new(Math.Clamp(sx - w / 2, origin.X, origin.X + area.X - w), origin.Y + area.Y + 4 + (i % 2) * (ImGui.GetTextLineHeight() * 2 + 4));
+                draw.AddLine(new Vec2(sx, origin.Y + area.Y), new Vec2(sx, at.Y), EditorStyle.U(EditorStyle.Hairline));
+                ImGui.SetCursorScreenPos(at);
+                bool active = shapePhase == s.Tab;
+                if (ImGui.InvisibleButton("life-" + i, new Vec2(Math.Max(w, 10), ImGui.GetTextLineHeight() * 2 + 2))) shapePhase = s.Tab;
+                bool hover = ImGui.IsItemHovered();
+                if (hover) ImGui.SetTooltip("Kattintás: ennek a szakasznak a paraméterei.");
+                draw.AddText(at + new Vec2((w - ImGui.CalcTextSize(label).X) / 2, 0), active ? EditorStyle.U(HudTheme.AmberAccent) : hover ? EditorStyle.TextBright : EditorStyle.U(HudTheme.Parchment), label);
+                draw.AddText(at + new Vec2((w - ImGui.CalcTextSize(detail).X) / 2, ImGui.GetTextLineHeight() + 1), EditorStyle.TextMuted, detail);
+            }
+        }
+        if (lifeCourse.Busy) ImGui.GetWindowDrawList().AddText(origin + new Vec2(10, 8), EditorStyle.TextMuted, "Életút építése…");
+        if (lifeCourse.Error is string error) EditorStyle.Text(HudTheme.Bad, "Az életút nem készült el: " + error);
+
+        ImGui.SetCursorScreenPos(origin + new Vec2(0, area.Y + ImGui.GetTextLineHeight() * 4 + 18));
+        float third = (ImGui.GetContentRegionAvail().X - 16) / 3;
+        ImGui.SetNextItemWidth(third); ImGui.Combo("##light", ref previewLight, LightLabels, LightLabels.Length);
+        ImGui.SameLine(0, 8);
+        int season = previewBare ? 1 : 0; ImGui.SetNextItemWidth(third);
+        if (ImGui.Combo("##season", ref season, new[] { "Lombos", "Lombtalan" }, 2)) previewBare = season == 1;
+        ImGui.SameLine(0, 8); ImGui.Checkbox("Valós méretarány", ref lifeTrueScale);
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Bekapcsolva a fák valós méretükben, egymás mellett; kikapcsolva mind azonos magasságra nagyítva.");
+        ImGui.SameLine();
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + Math.Max(0, ImGui.GetContentRegionAvail().X - 130));
+        if (ImGui.Button("‹##life-variant")) previewVariant = (previewVariant + TreeArchitecture.Variants - 1) % TreeArchitecture.Variants;
+        ImGui.SameLine(0, 4); ImGui.AlignTextToFramePadding(); ImGui.TextUnformatted($"{previewVariant + 1}. egyed");
+        ImGui.SameLine(0, 4); if (ImGui.Button("›##life-variant")) previewVariant = (previewVariant + 1) % TreeArchitecture.Variants;
+        ImGui.PushTextWrapPos(0);
+        EditorStyle.Text(HudTheme.Muted, $"Egy fa élete a magonctól a kidőlésig. A méretet és az életkort a növekedési szabályok adják "
+            + $"(érett kor {sp.MatureAgeYears:0}, legnagyobb kor {sp.MaximumAgeYears:0} év); a legyengült fán ágak száradnak el, az elhalt fa két év múlva kidől. "
+            + "Egy szakasz nevére kattintva annak a paraméterei nyílnak meg.");
+        ImGui.PopTextWrapPos();
+    }
+
+    /// <summary>A dead tree lying on the ground, as the game turns it two years after death: along x, resting on its stem.</summary>
+    private static DendroTreeGenerator.Mesh Fallen(DendroTreeGenerator.Mesh mesh, float stem)
+    {
+        static Vertex[] Lay(Vertex[] source, float lift) => source.Select(v => new Vertex(
+            new(v.Position.Z, v.Position.Y, -v.Position.X + lift), new(v.Normal.Z, v.Normal.Y, -v.Normal.X), v.Color)).ToArray();
+        return mesh with { Trunk = Lay(mesh.Trunk, stem * .5f), Branches = Lay(mesh.Branches, stem * .5f), Crown = Array.Empty<Vertex>() };
+    }
+
     /// <summary>Drag to turn and tilt, wheel to zoom, double-click to reset; acts on the last drawn view.</summary>
     private void Orbit()
     {
@@ -295,9 +447,9 @@ internal sealed partial class RuleEditorView
         float height = size.Height * TreeScale.MetresToWorld, crown = size.CrownRadius * TreeScale.MetresToWorld;
         bool compare = previewCompare && builtinMesh.Value != null;
         float spacing = Math.Max(crown * 2.6f, height * .55f);
-        var trees = new List<(DendroTreeGenerator.Mesh, OpenTK.Mathematics.Vector3)>();
-        if (compare) trees.Add((builtinMesh.Value, new(-spacing / 2, 0, 0)));
-        if (editedMesh.Value != null) trees.Add((editedMesh.Value, new(compare ? spacing / 2 : 0, 0, 0)));
+        var trees = new List<(DendroTreeGenerator.Mesh, OpenTK.Mathematics.Vector3, float)>();
+        if (compare) trees.Add((builtinMesh.Value, new(-spacing / 2, 0, 0), 1));
+        if (editedMesh.Value != null) trees.Add((editedMesh.Value, new(compare ? spacing / 2 : 0, 0, 0), 1));
         // A fixed frame for the phase: a longer or wider tree looks longer or wider, it is not refitted.
         float extent = Math.Max(height * 1.1f, (compare ? spacing + crown * 2 : crown * 2) * 1.15f * area.Y / Math.Max(1, area.X));
         float distance = extent * 2.1f / previewZoom;

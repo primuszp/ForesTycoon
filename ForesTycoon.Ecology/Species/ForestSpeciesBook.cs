@@ -13,11 +13,12 @@ namespace ForesTycoon.Ecology
         float? MaxHeight = null, int? Capacity = null, float? TimberPrice = null, TreeShapeOverride Shape = null);
 
     /// <summary>
-    /// Tree-generator parameters authored for a species: <see cref="All"/> in every life phase, then a phase's own set.
-    /// <see cref="Revision"/> names the content, so caches keyed by it rebuild when the form changes.
+    /// Tree-generator parameters authored for a species: <see cref="All"/> in every life phase, then a phase's own set, then
+    /// <see cref="Dead"/> for a dead tree. <see cref="Revision"/> names the content, so caches keyed by it rebuild when the
+    /// form changes.
     /// </summary>
     internal sealed record TreeShapeOverride(IReadOnlyDictionary<string, double> All,
-        IReadOnlyDictionary<TreeLifePhase, IReadOnlyDictionary<string, double>> Phases, string Revision)
+        IReadOnlyDictionary<TreeLifePhase, IReadOnlyDictionary<string, double>> Phases, IReadOnlyDictionary<string, double> Dead, string Revision)
     {
         /// <summary>A short, stable code of the revision for packed shape keys; 0 is the built-in form.</summary>
         internal ushort Code
@@ -30,14 +31,15 @@ namespace ForesTycoon.Ecology
         }
 
         internal static TreeShapeOverride Of(IReadOnlyDictionary<string, double> all,
-            IReadOnlyDictionary<TreeLifePhase, IReadOnlyDictionary<string, double>> phases)
+            IReadOnlyDictionary<TreeLifePhase, IReadOnlyDictionary<string, double>> phases, IReadOnlyDictionary<string, double> dead = null)
         {
             string Text(IReadOnlyDictionary<string, double> values) => string.Join(";", System.Linq.Enumerable.Select(
                 System.Linq.Enumerable.OrderBy(values, v => v.Key, StringComparer.Ordinal),
                 v => v.Key + "=" + v.Value.ToString("R", System.Globalization.CultureInfo.InvariantCulture)));
             var revision = new System.Text.StringBuilder(Text(all));
             foreach (var (phase, values) in System.Linq.Enumerable.OrderBy(phases, p => p.Key)) revision.Append('|').Append(phase).Append(':').Append(Text(values));
-            return new(all, phases, revision.ToString());
+            if (dead != null) revision.Append("|Dead:").Append(Text(dead));
+            return new(all, phases, dead, revision.ToString());
         }
     }
 

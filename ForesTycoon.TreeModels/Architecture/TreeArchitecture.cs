@@ -20,23 +20,40 @@ namespace ForesTycoon.TreeModels
         // A mixed forest touches a fraction of species x phase x light x variant; ~22 KB each caps this near 45 MB.
         private const int Capacity = 2048;
 
-        private readonly record struct Key(ForestSpecies Species, int Variant, TreeLifePhase Phase, int Light, float ShadeTolerance, string Form);
+        // Dead is set only when the form has a dead tree's own set; otherwise a dead tree keeps its living skeleton.
+        private readonly record struct Key(ForestSpecies Species, int Variant, TreeLifePhase Phase, int Light, float ShadeTolerance, string Form, bool Dead = false);
         private static readonly Dictionary<Key, TreeSkeleton> Cache = new();
         private static readonly Queue<Key> Order = new();
 
-        internal static TreeSkeleton Skeleton(ForestSpecies species, int seed, TreeLifePhase phase, int lightBand)
+        internal static TreeSkeleton Skeleton(ForestSpecies species, int seed, TreeLifePhase phase, int lightBand, bool dead = false)
         {
+            var form = ForestSpeciesBook.Shape(species);
             var key = new Key(species, seed & (Variants - 1), phase, lightBand, ForestSpeciesProfile.For(species).ShadeTolerance,
-                ForestSpeciesBook.Shape(species)?.Revision ?? "");
+                form?.Revision ?? "", dead && form?.Dead != null);
             lock (Cache) if (Cache.TryGetValue(key, out var ready)) return ready;
-            var tree = new TreeImpl(key.Variant, Parameters(key));
-            tree.Make();
-            var skeleton = TreeSkeleton.From(tree, key.Variant, MaxLeafSamples);
+            TreeSkeleton skeleton;
+            try { skeleton = Build(key); }
+            catch (Exception error) when (key.Form.Length > 0)
+            {
+                // An authored form must never stop a tree from being drawn: the tree falls back to the built-in form.
+                LastFormError = $"{ForestSpeciesTraits.For(species).Name} · {phase}: {error.Message}";
+                skeleton = Build(key with { Form = "", Dead = false });
+            }
             lock (Cache) {
                 if (Cache.TryGetValue(key, out var ready)) return ready;
                 if (Cache.Count == Capacity) Cache.Remove(Order.Dequeue());
                 Cache.Add(key, skeleton); Order.Enqueue(key); return skeleton;
             }
+        }
+
+        /// <summary>The last authored form that could not be built (species, phase and reason); its trees use the built-in form.</summary>
+        internal static volatile string LastFormError;
+
+        private static TreeSkeleton Build(Key key)
+        {
+            var tree = new TreeImpl(key.Variant, Parameters(key));
+            tree.Make();
+            return TreeSkeleton.From(tree, key.Variant, MaxLeafSamples);
         }
 
         /// <summary>Skeleton of an arbitrary Arbaro parameter file (reference and tooling use; not cached).</summary>
@@ -105,8 +122,9 @@ namespace ForesTycoon.TreeModels
         /// The generator parameters a tree of the species gets in a phase and light band, with the active species set's
         /// authored form: what the editor shows as the current values.
         /// </summary>
-        internal static IReadOnlyDictionary<string, double> EffectiveParameters(ForestSpecies species, TreeLifePhase phase, int lightBand) =>
-            Values(new Key(species, 0, phase, lightBand, ForestSpeciesProfile.For(species).ShadeTolerance, ForestSpeciesBook.Shape(species)?.Revision ?? ""));
+        internal static IReadOnlyDictionary<string, double> EffectiveParameters(ForestSpecies species, TreeLifePhase phase, int lightBand, bool dead = false) =>
+            Values(new Key(species, 0, phase, lightBand, ForestSpeciesProfile.For(species).ShadeTolerance,
+                ForestSpeciesBook.Shape(species)?.Revision ?? "", dead && ForestSpeciesBook.Shape(species)?.Dead != null));
 
         /// <summary>The species' parameters before life-phase and light adaptation: its preset with the authored common values.</summary>
         internal static IReadOnlyDictionary<string, double> BaseParameters(ForestSpecies species)
@@ -132,7 +150,8 @@ namespace ForesTycoon.TreeModels
         private static Dictionary<string, double> Values(Key key)
         {
             var v = new Dictionary<string, double>(Preset(key.Species), StringComparer.Ordinal);
-            var form = ForestSpeciesBook.Shape(key.Species);
+            // A key without a form revision is the built-in form, also when the species book has one (the fallback above).
+            var form = key.Form.Length > 0 ? ForestSpeciesBook.Shape(key.Species) : null;
             if (form != null) TreeShapeParameters.Apply(v, form.All);
             var phase = key.Phase;
             float m = Math.Min(1, TreeLifePhases.Maturity(phase));
@@ -200,6 +219,7 @@ namespace ForesTycoon.TreeModels
                     break;
             }
             if (form != null && form.Phases.TryGetValue(phase, out var own)) TreeShapeParameters.Apply(v, own);
+            if (key.Dead && form?.Dead != null) TreeShapeParameters.Apply(v, form.Dead);
             return v;
         }
     }

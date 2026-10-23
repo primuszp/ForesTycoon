@@ -84,7 +84,7 @@ namespace ForesTycoon.TreeModels
                 throw new ArgumentOutOfRangeException(nameof(spec));
             var traits = ForestSpeciesTraits.For(spec.Species);
             Spec = spec; Bands = spec.Bands; Shrub = traits.Shrub;
-            Skeleton = skeleton ?? TreeArchitecture.Skeleton(spec.Species, spec.Seed, spec.Phase, Bands.Light);
+            Skeleton = skeleton ?? TreeArchitecture.Skeleton(spec.Species, spec.Seed, spec.Phase, Bands.Light, spec.Dead);
             float light = Bands.Light01;
             float response = TreeArchitecture.LightResponse(spec.Species, light);
             CrownFraction = TreeArchitecture.CrownFraction(spec.Species, spec.Phase, Bands.Light);

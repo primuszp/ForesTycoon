@@ -439,12 +439,15 @@ public sealed class SpeciesDefinition
 /// <summary>
 /// A species' tree form as tree-generator parameters (Weber–Penn names such as "1Branches" or "AttractionUp") over its
 /// built-in architecture. <see cref="All"/> applies in every life phase; a phase's own set in <see cref="Phases"/> applies on
-/// top of it, after the game's light and age adaptation, so it is the final word for that phase.
+/// top of it, after the game's light and age adaptation, so it is the final word for that phase. The <see cref="DeadState"/>
+/// set applies last, to a dead tree of any phase: what the standing dead tree keeps of the living one.
 /// </summary>
 public sealed class TreeShapeDefinition
 {
     /// <summary>The life phases, in order, as the keys of <see cref="Phases"/>.</summary>
     public static readonly string[] PhaseNames = { "Seedling", "Sapling", "Young", "Mature", "Old", "Senescent" };
+    /// <summary>The key in <see cref="Phases"/> of the dead tree's set.</summary>
+    public const string DeadState = "Dead";
     public Dictionary<string, double> All { get; set; } = new();
     public Dictionary<string, Dictionary<string, double>> Phases { get; set; } = new();
 
@@ -454,7 +457,7 @@ public sealed class TreeShapeDefinition
     {
         All ??= new(); Phases ??= new();
         foreach (var (phase, values) in Phases)
-            if (Array.IndexOf(PhaseNames, phase) < 0 || values == null)
+            if (Array.IndexOf(PhaseNames, phase) < 0 && phase != DeadState || values == null)
                 throw new InvalidDataException($"{species}: ismeretlen életfázis a famegjelenésben: {phase}.");
         foreach (var (name, value) in All.Concat(Phases.Values.SelectMany(p => p)))
             if (string.IsNullOrWhiteSpace(name) || !double.IsFinite(value))

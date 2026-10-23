@@ -54,9 +54,12 @@ namespace ForesTycoon
                 return new Dictionary<string, double>(values, StringComparer.Ordinal);
             }
             var phases = new Dictionary<TreeLifePhase, IReadOnlyDictionary<string, double>>();
+            IReadOnlyDictionary<string, double> dead = null;
             foreach (var (name, values) in species.Shape.Phases ?? new())
-                if (values is { Count: > 0 } && Enum.TryParse(name, out TreeLifePhase phase)) phases[phase] = Checked(values);
-            return TreeShapeOverride.Of(Checked(species.Shape.All ?? new()), phases);
+                if (values is not { Count: > 0 }) continue;
+                else if (name == TreeShapeDefinition.DeadState) dead = Checked(values);
+                else if (Enum.TryParse(name, out TreeLifePhase phase)) phases[phase] = Checked(values);
+            return TreeShapeOverride.Of(Checked(species.Shape.All ?? new()), phases, dead);
         }
 
         /// <summary>Only the numbers that differ from the built-in species become edits.</summary>

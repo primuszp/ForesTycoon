@@ -204,6 +204,9 @@ paramétere” kapcsoló a többit is mutatja, eredeti nevükkel és leírásukk
   igazítja őket (fiatalon kevesebb, árnyékban meredekebb ág).
 - **Magonc, Csemete, Fiatal, Érett, Idős, Öreg:** az adott életfázis saját értékei. Ezek
   végsők: a játék igazítása után érvényesek, csak abban a fázisban.
+- **Elhalt:** az elpusztult fa értékei, bármelyik fázisban halt el (például kevesebb vékony
+  ág az álló holtfán). Üresen a holtfa az élő fa ágszerkezetét tartja meg. Az elhalt fa két
+  év múlva kidől.
 
 A saját értéket a borostyán háttér jelzi, a ↺ törli; ilyenkor ismét az örökölt érték
 érvényes. Az előnézetnek két nézete van; mindkettő forgatható, dönthető és nagyítható,
@@ -217,11 +220,18 @@ A saját értéket a borostyán háttér jelzi, a ↺ törli; ilyenkor ismét az
   ághosszak és a szögek hatása közvetlenül látszik. Ha az egér egy paraméteren áll, az
   általa alakított ágszint kiemelődik.
 
+- **Életút:** egy fa teljes élete egy sorban: a hat életfázis, a legyengült fa (száradó
+  ágak, ritkuló lomb), az álló holtfa és a kidőlt fa. Valós méretarányban vagy azonos
+  magasságra nagyítva, életkorral és magassággal; egy szakasz nevére kattintva annak
+  paraméterei nyílnak meg.
+
 Az **Összevetés a gyárival** a beépített formát is mutatja: a Játékban nézetben mellette,
 az Ágszerkezetben halványan alatta. A szerkesztett
 értékek a projekt fafajánál, a `shape` mezőben mentődnek (`all`, illetve `phases` fázisnév
 szerint). Alkalmazás után a futó játék fái is újraépülnek. Ismeretlen paraméternév projekt-hiba;
-a túl nagy értékeket a játék a generátor biztonságos és gyakorlati tartományára szorítja.
+a túl nagy értékeket a játék a generátor biztonságos és gyakorlati tartományára szorítja. Ha a generátor egy
+beállítással mégsem tud fát építeni, a játék a beépített formát használja, és a Megjelenés
+lap kiírja az okát.
 
 ### Burkolatok
 
