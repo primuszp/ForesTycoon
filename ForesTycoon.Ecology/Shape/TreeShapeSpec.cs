@@ -46,10 +46,10 @@ namespace ForesTycoon.Ecology
         internal TreeShapeBands Bands => TreeShapeBands.Of(this);
 
         /// <summary>
-        /// Equal keys mean equal geometry: changes only when a band boundary, the phase or the species' authored form changes.
+        /// Equal keys mean equal geometry: changes only when a band boundary, the phase or the species' authored form or colours change.
         /// </summary>
         internal long ShapeKey => (long)(uint)Bands.Pack() | (long)(uint)Phase << 17 | (long)Bands.Space.Code << 20
-            | (long)(ForestSpeciesBook.Shape(Species)?.Code ?? 0) << 46;
+            | (long)ForestSpeciesBook.FormCode(Species) << 46;
     }
 
     /// <summary>Quantised shape inputs. Equal bands always produce an identical model.</summary>

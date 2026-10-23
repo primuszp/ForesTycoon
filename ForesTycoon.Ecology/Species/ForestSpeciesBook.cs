@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 
 namespace ForesTycoon.Ecology
@@ -10,7 +11,17 @@ namespace ForesTycoon.Ecology
         float? MaximumAgeYears = null, float? MatureAgeYears = null, float? MaximumBiomass = null, float? AnnualGrowthRate = null,
         float? PreferredMoisture = null, float? MoistureTolerance = null, float? PreferredElevation = null, float? ElevationTolerance = null,
         float? ShadeTolerance = null, float? WoodDensity = null, float? DrySensitivity = null, float? MatureHeight = null,
-        float? MaxHeight = null, int? Capacity = null, float? TimberPrice = null, TreeShapeOverride Shape = null);
+        float? MaxHeight = null, int? Capacity = null, float? TimberPrice = null, TreeShapeOverride Shape = null, TreeLook Look = null);
+
+    /// <summary>
+    /// Authored colours of a species (null keeps the built-in one) and its bark pattern (the surface shader's family code).
+    /// Summer, bark and pattern replace the species traits; spring and autumn are the colours the crown reaches.
+    /// </summary>
+    internal sealed record TreeLook(System.Drawing.Color? Spring, System.Drawing.Color? Summer, System.Drawing.Color? Autumn,
+        System.Drawing.Color? Bark, System.Drawing.Color? Dead, int? Pattern)
+    {
+        internal string Revision => string.Join(",", new[] { Spring, Summer, Autumn, Bark, Dead }.Select(c => c?.ToArgb().ToString("x") ?? "-")) + "," + Pattern;
+    }
 
     /// <summary>
     /// Tree-generator parameters authored for a species: <see cref="All"/> in every life phase, then a phase's own set, then
@@ -20,16 +31,6 @@ namespace ForesTycoon.Ecology
     internal sealed record TreeShapeOverride(IReadOnlyDictionary<string, double> All,
         IReadOnlyDictionary<TreeLifePhase, IReadOnlyDictionary<string, double>> Phases, IReadOnlyDictionary<string, double> Dead, string Revision)
     {
-        /// <summary>A short, stable code of the revision for packed shape keys; 0 is the built-in form.</summary>
-        internal ushort Code
-        {
-            get {
-                uint hash = 2166136261;
-                foreach (char c in Revision) hash = (hash ^ c) * 16777619;
-                return (ushort)Math.Max(1, hash & 0xFFFF);
-            }
-        }
-
         internal static TreeShapeOverride Of(IReadOnlyDictionary<string, double> all,
             IReadOnlyDictionary<TreeLifePhase, IReadOnlyDictionary<string, double>> phases, IReadOnlyDictionary<string, double> dead = null)
         {
@@ -49,7 +50,7 @@ namespace ForesTycoon.Ecology
     /// </summary>
     internal static class ForestSpeciesBook
     {
-        private sealed record Book(ForestSpeciesProfile[] Profiles, ForestSpeciesTraits[] Traits, float?[] Prices, TreeShapeOverride[] Shapes);
+        private sealed record Book(ForestSpeciesProfile[] Profiles, ForestSpeciesTraits[] Traits, float?[] Prices, TreeShapeOverride[] Shapes, TreeLook[] Looks);
         private static volatile Book current;
         private sealed record WorkerContext(Book Book);
         private static readonly AsyncLocal<WorkerContext> workerContext = new();
@@ -87,6 +88,23 @@ namespace ForesTycoon.Ecology
             var book = ActiveBook;
             return book != null && (int)species < book.Shapes.Length ? book.Shapes[(int)species] : null;
         }
+        /// <summary>The species' authored colours, or null for the built-in look.</summary>
+        internal static TreeLook Look(ForestSpecies species)
+        {
+            var book = ActiveBook;
+            return book != null && (int)species < book.Looks.Length ? book.Looks[(int)species] : null;
+        }
+
+        /// <summary>A short code of the species' authored form and colours for packed shape keys; 0 is the built-in tree.</summary>
+        internal static ushort FormCode(ForestSpecies species)
+        {
+            var shape = Shape(species); var look = Look(species);
+            if (shape == null && look == null) return 0;
+            uint hash = 2166136261;
+            foreach (char c in (shape?.Revision ?? "") + "#" + (look?.Revision ?? "")) hash = (hash ^ c) * 16777619;
+            return (ushort)Math.Max(1, hash & 0xFFFF);
+        }
+
         internal static float? TimberPrice(ForestSpecies species)
         {
             var book = ActiveBook;
@@ -101,7 +119,8 @@ namespace ForesTycoon.Ecology
             if (next != null && previous != null && next.Profiles.AsSpan().SequenceEqual(previous.Profiles)
                 && next.Traits.AsSpan().SequenceEqual(previous.Traits) && next.Prices.AsSpan().SequenceEqual(previous.Prices)
                 && System.Linq.Enumerable.SequenceEqual(System.Linq.Enumerable.Select(next.Shapes, x => x?.Revision),
-                    System.Linq.Enumerable.Select(previous.Shapes, x => x?.Revision))) return;
+                    System.Linq.Enumerable.Select(previous.Shapes, x => x?.Revision))
+                && System.Linq.Enumerable.SequenceEqual(next.Looks, previous.Looks)) return;
             InstallBook(next);
         }
 
@@ -114,7 +133,7 @@ namespace ForesTycoon.Ecology
             if (edits == null || edits.Count == 0) return null;
             int count = Enum.GetValues<ForestSpecies>().Length + 2;
             var profiles = new ForestSpeciesProfile[count]; var traits = new ForestSpeciesTraits[count]; var prices = new float?[count];
-            var shapes = new TreeShapeOverride[count];
+            var shapes = new TreeShapeOverride[count]; var looks = new TreeLook[count];
             foreach (ForestSpecies s in Enum.GetValues<ForestSpecies>()) {
                 profiles[(int)s] = ForestSpeciesProfile.Builtin(s);
                 traits[(int)s] = ForestSpeciesTraits.Builtin(s);
@@ -131,11 +150,12 @@ namespace ForesTycoon.Ecology
                 if (t.Preset != null)
                     traits[(int)s] = t with {
                         Name = e.Name ?? t.Name, Description = e.Description ?? t.Description, DrySensitivity = e.DrySensitivity ?? t.DrySensitivity,
-                        MatureHeight = e.MatureHeight ?? t.MatureHeight, MaxHeight = e.MaxHeight ?? t.MaxHeight, Capacity = e.Capacity ?? t.Capacity };
+                        MatureHeight = e.MatureHeight ?? t.MatureHeight, MaxHeight = e.MaxHeight ?? t.MaxHeight, Capacity = e.Capacity ?? t.Capacity,
+                        Crown = e.Look?.Summer ?? t.Crown, Bark = e.Look?.Bark ?? t.Bark, Pattern = e.Look?.Pattern ?? t.Pattern };
                 prices[(int)s] = e.TimberPrice;
-                shapes[(int)s] = e.Shape;
+                shapes[(int)s] = e.Shape; looks[(int)s] = e.Look;
             }
-            return new Book(profiles, traits, prices, shapes);
+            return new Book(profiles, traits, prices, shapes, looks);
         }
     }
 }

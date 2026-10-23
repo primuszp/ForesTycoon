@@ -401,8 +401,29 @@ namespace ForesTycoon
             return displayed;
         }
 
+        private static object springTintBook = new();
+
+        /// <summary>The spring colour of every species as a multiplier of its summer colour, for the crown shader.</summary>
+        private static void UpdateSpringTints()
+        {
+            object book = ForestSpeciesBook.CaptureContext();
+            if (ReferenceEquals(book, springTintBook)) return;
+            springTintBook = book;
+            var tints = new float[18 * 3]; Array.Fill(tints, 1f);
+            foreach (ForestSpecies species in Enum.GetValues<ForestSpecies>()) {
+                int code = TreeScale.CrownSpeciesCode(species) - 224;
+                if (species == ForestSpecies.None || code < 0 || code >= 18) continue;
+                var (spring, summer, _, _, _) = TreeForm.Colours(species);
+                tints[code * 3] = spring.R / (float)Math.Max(1, (int)summer.R);
+                tints[code * 3 + 1] = spring.G / (float)Math.Max(1, (int)summer.G);
+                tints[code * 3 + 2] = spring.B / (float)Math.Max(1, (int)summer.B);
+            }
+            ForesTycoon.Rendering.OpenGl.OpenGlVertexBuffer.ForestSpringTints = tints;
+        }
+
         private static void SetIndividualForestElapsed(IndividualForestChunk geometry, double year)
         {
+            UpdateSpringTints();
             float elapsed = (float)Math.Max(0, year - geometry.GrowthYear);
             geometry.Wood.ForestElapsedYears = geometry.Crowns.ForestElapsedYears = elapsed;
             geometry.Wood.ForestCurrentYear = geometry.Crowns.ForestCurrentYear = (float)year;

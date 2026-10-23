@@ -254,6 +254,19 @@ namespace ForesTycoon.Editor
                 FramebufferCapture.SavePng(Path.Combine(output, "species-life-course.png"), width, height);
                 editor.SetTreePreviewForTest(0, -1, false); editor.ShowSpeciesAppearance(oakIndex, 7); PreviewFrames();
                 FramebufferCapture.SavePng(Path.Combine(output, "species-appearance-dead.png"), width, height);
+                // Colours and bark: an authored autumn colour and bark reach the meshes, the pattern the shader family.
+                oak.Colours = new() { Autumn = "#B8321E", Bark = "#D8D6CC", BarkPattern = "birch" };
+                editor.ShowSpeciesColoursForTest(oakIndex, 2, 1); PreviewFrames();
+                Require(editor.TreePreviewReady, "Colour preview was not built.");
+                FramebufferCapture.SavePng(Path.Combine(output, "species-colours-autumn.png"), width, height);
+                editor.ShowSpeciesColoursForTest(oakIndex, 1, 9); PreviewFrames();
+                FramebufferCapture.SavePng(Path.Combine(output, "species-colours-bark.png"), width, height);
+                editor.ApplyEditsForTest(world); world.ExecutePendingCommands(); Frames(4);
+                var oakColours = ForesTycoon.TreeModels.TreeForm.Colours(ForestSpecies.Oak);
+                Require(oakColours.Autumn.ToArgb() == System.Drawing.Color.FromArgb(0xB8, 0x32, 0x1E).ToArgb() && ForestSpeciesTraits.For(ForestSpecies.Oak).Pattern == 3,
+                    "Authored colours did not reach the game.");
+                oak.Colours = null; editor.ApplyEditsForTest(world); world.ExecutePendingCommands(); Frames(4);
+                Require(ForestSpeciesBook.Look(ForestSpecies.Oak) == null, "Clearing the colours did not restore the built-in look.");
                 Require(GL.GetError() == ErrorCode.NoError, "Tree preview OpenGL error.");
                 editor.ApplyEditsForTest(world); world.ExecutePendingCommands(); Frames(4);
                 Require(ForesTycoon.TreeModels.TreeArchitecture.BaseParameters(ForestSpecies.Oak)["1Branches"] == 9

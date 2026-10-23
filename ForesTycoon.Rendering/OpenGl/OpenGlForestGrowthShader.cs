@@ -11,6 +11,8 @@ uniform float forest_elapsed;
 uniform float forest_year;
 uniform samplerBuffer forest_state;
 uniform int forest_dynamic;
+// Spring colour of each species' crown relative to its summer colour, by crown code (vertex alpha - 224).
+uniform vec3 forest_spring[18];
 out float forest_foliage;
 bool forestCrown(vec4 c){
     int code=int(c.a*255.0+0.5);
@@ -29,6 +31,15 @@ vec2 forestSeason(vec4 c){
     float autumn=smoothstep(bounds.y,mix(bounds.y,bounds.z,0.55),phase);
     return vec2(cover,autumn);
 }
+// Fresh leaves: full spring colour while the leaves unfold, fading to the summer colour by full leaf.
+float forestSpring(vec4 c){
+    if(!forestCrown(c)) return 0;
+    int slot=int(forest_tree)*4;
+    float start=texelFetch(forest_state,slot+2).w;
+    if(start<0 || fract(forest_year)>=0.75) return 0;
+    vec4 bounds=texelFetch(forest_state,slot+3);
+    return 1.0-smoothstep(bounds.x,bounds.y,fract(forest_year-start));
+}
 float forestLight(){
     return forest_dynamic != 0 && forest_tree >= 0 && forest_rate.x > -1.5
         ? clamp(texelFetch(forest_state,int(forest_tree)*4+1).w,0,1) : 1;
@@ -45,7 +56,10 @@ vec3 forestScale(){
 vec4 forestTint(vec4 c){
     vec2 season=forestSeason(c);
     forest_foliage=season.x;
-    if(forestCrown(c)) c.rgb*=mix(vec3(1),texelFetch(forest_state,int(forest_tree)*4+2).rgb,season.y);
+    if(forestCrown(c)) {
+        c.rgb*=mix(vec3(1),texelFetch(forest_state,int(forest_tree)*4+2).rgb,season.y);
+        c.rgb*=mix(vec3(1),forest_spring[clamp(int(c.a*255.0+0.5)-224,0,17)],forestSpring(c));
+    }
     if(forest_dynamic != 0 && forest_tree >= 0 && forest_rate.x > -1.5) {
         float health=texelFetch(forest_state,int(forest_tree)*4).w;
         c.rgb=mix(c.rgb,vec3(146,118,58)/255.0,clamp(1-health,0,1)*0.55);

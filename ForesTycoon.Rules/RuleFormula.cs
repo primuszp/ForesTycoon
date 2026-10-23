@@ -420,10 +420,14 @@ public sealed class SpeciesDefinition
     /// <summary>The tree form authored over the built-in architecture; null keeps the built-in form.</summary>
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public TreeShapeDefinition Shape { get; set; }
+    /// <summary>The colours of the foliage through the year, of the bark and of dead wood, and the bark pattern; null keeps the built-in look.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public TreeColoursDefinition Colours { get; set; }
 
     internal void Validate()
     {
         Shape?.Validate(Name);
+        Colours?.Validate(Name);
         bool Unit(double v) => v is >= 0 and <= 1;
         if (string.IsNullOrWhiteSpace(Id) || string.IsNullOrWhiteSpace(Name) || Description == null)
             throw new InvalidDataException("Minden fafajnak azonosítója és neve legyen.");
@@ -462,6 +466,33 @@ public sealed class TreeShapeDefinition
         foreach (var (name, value) in All.Concat(Phases.Values.SelectMany(p => p)))
             if (string.IsNullOrWhiteSpace(name) || !double.IsFinite(value))
                 throw new InvalidDataException($"{species}: érvénytelen famegjelenési paraméter: {name}.");
+    }
+}
+
+/// <summary>
+/// A species' colours as "#RRGGBB": the foliage at bud burst, in summer and in autumn, the bark and dead wood, and the bark
+/// pattern by name. A missing value keeps the built-in one. Spring and autumn are the colours the crown reaches, not a blend.
+/// </summary>
+public sealed class TreeColoursDefinition
+{
+    /// <summary>The bark patterns the game draws: general, scaly (spruce), white with dark marks (birch), furrowed (oak), smooth (beech).</summary>
+    public static readonly string[] BarkPatterns = { "general", "scaly", "birch", "furrowed", "smooth" };
+    public string Spring { get; set; }
+    public string Summer { get; set; }
+    public string Autumn { get; set; }
+    public string Bark { get; set; }
+    public string Dead { get; set; }
+    public string BarkPattern { get; set; }
+
+    public bool IsEmpty => Spring == null && Summer == null && Autumn == null && Bark == null && Dead == null && BarkPattern == null;
+
+    internal void Validate(string species)
+    {
+        foreach (string colour in new[] { Spring, Summer, Autumn, Bark, Dead })
+            if (colour != null && !(colour.Length == 7 && colour[0] == '#' && colour.Skip(1).All(Uri.IsHexDigit)))
+                throw new InvalidDataException($"{species}: a színt #RRGGBB alakban add meg ({colour}).");
+        if (BarkPattern != null && Array.IndexOf(BarkPatterns, BarkPattern) < 0)
+            throw new InvalidDataException($"{species}: ismeretlen kéregminta: {BarkPattern}.");
     }
 }
 

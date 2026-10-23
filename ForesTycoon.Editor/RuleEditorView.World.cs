@@ -574,8 +574,9 @@ internal sealed partial class RuleEditorView
         for (int t = 0; t < tiles; t++) if (world.TileSpecies(t).ToString() == sp.Id) count++;
         EditorStyle.Text(HudTheme.Muted, $"A tesztvilágban {count} csempén áll ({100.0 * count / Math.Max(1, tiles):0}%) · azonosító: {sp.Id}");
         ImGui.Spacing();
-        EditorStyle.Tabs("species-tab", new[] { "Élettan és gazdaság", "Megjelenés" }, ref speciesTab);
+        EditorStyle.Tabs("species-tab", new[] { "Élettan és gazdaság", "Megjelenés", "Színek és kéreg" }, ref speciesTab);
         if (speciesTab == 1) { TreeShapeArea(world, sp); ImGui.EndChild(); return; }
+        if (speciesTab == 2) { TreeColoursArea(world, sp); ImGui.EndChild(); return; }
         bool changed = ParameterTable("species-fields", Row => {
             Row("Név", "Megjelenik a játékban és a listákban.", () => { string n = sp.Name; if (ImGui.InputText("##name", ref n, 80) && n.Trim().Length > 0) sp.Name = n.Trim(); });
             Row("Faanyagár (eFt/m³)", "Gazdaság: ennyit ér a kitermelt fa a malomban (a piaci árszorzóval).", () => Number("##price", () => sp.TimberPrice, v => sp.TimberPrice = v, 1, "%.1f", 0, 10000));

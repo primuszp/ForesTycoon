@@ -208,7 +208,7 @@ paramétere” kapcsoló a többit is mutatja, eredeti nevükkel és leírásukk
   ág az álló holtfán). Üresen a holtfa az élő fa ágszerkezetét tartja meg. Az elhalt fa két
   év múlva kidől.
 
-A saját értéket a borostyán háttér jelzi, a ↺ törli; ilyenkor ismét az örökölt érték
+A saját értéket a borostyán háttér jelzi, az **alap** gomb törli; ilyenkor ismét az örökölt érték
 érvényes. Az előnézetnek két nézete van; mindkettő forgatható, dönthető és nagyítható,
 16 egyedváltozatban, választható fényben.
 
@@ -225,7 +225,24 @@ A saját értéket a borostyán háttér jelzi, a ↺ törli; ilyenkor ismét az
   magasságra nagyítva, életkorral és magassággal; egy szakasz nevére kattintva annak
   paraméterei nyílnak meg.
 
-Az **Összevetés a gyárival** a beépített formát is mutatja: a Játékban nézetben mellette,
+#### Színek és kéreg
+
+A fafaj **Színek és kéreg** lapján:
+
+- **Lomb évszakonként:** tavaszi (kibomló), nyári és őszi szín. A megadott tavaszi és őszi
+  színt a korona eléri; a beépített színek felé a játék csak részben keveri. Az örökzöldek
+  egész évben a nyári színüket viselik.
+- **Kéreg:** a kéreg színe és mintája: általános, pikkelyes (luc), fehér sötét foltokkal
+  (nyír), mélyen barázdált (tölgy) vagy sima, foltos (bükk). Ezt a mintát a játék
+  shadere rajzolja; az előnézet ugyanígy, a **Kéreg közelről** gombbal a törzs aljára nagyítva.
+- **Holtfa színe:** az álló és a kidőlt elpusztult fa színe.
+
+Az előnézet évszakonként (tavasz, nyár, ősz, tél) mutatja a fát. A színek a projekt
+fafajánál, a `colours` mezőben mentődnek (`spring`, `summer`, `autumn`, `bark`, `dead`
+`#RRGGBB` alakban, `barkPattern` a minta nevével). A futó játékban a tavaszi szín a
+lombfakadástól a teljes lombosodásig a nyári színbe vált; ősszel az őszi színbe fordul.
+
+Az **Összevetés a gyárival** a fafaj beépített kinézetét (formát és színeket) is mutatja: a Játékban nézetben mellette,
 az Ágszerkezetben halványan alatta. A szerkesztett
 értékek a projekt fafajánál, a `shape` mezőben mentődnek (`all`, illetve `phases` fázisnév
 szerint). Alkalmazás után a futó játék fái is újraépülnek. Ismeretlen paraméternév projekt-hiba;

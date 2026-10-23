@@ -6,6 +6,12 @@ namespace ForesTycoon.Tests;
 [Collection("SpeciesBook")]
 public sealed class TreeShapeAuthoringTests
 {
+    /// <summary>
+    /// Runs with a species book of the test's own: edits applied inside stay in this flow, so tests building trees in
+    /// parallel keep the built-in species.
+    /// </summary>
+    private static void Isolated(Action test) => ForestSpeciesBook.WithContext<object>(null, () => { test(); return null; });
+
     private static WorldScenario WithOakForm(TreeShapeDefinition shape)
     {
         var scenario = GameWorld.DefaultScenario();
@@ -16,7 +22,7 @@ public sealed class TreeShapeAuthoringTests
     [Fact]
     public void CommonValuesSetTheBaseAndAPhaseValueIsFinal()
     {
-        try {
+        Isolated(() => {
             ForestSpeciesBook.Apply(GameWorld.SpeciesEdits(WithOakForm(new() {
                 All = { ["1Branches"] = 11, ["AttractionUp"] = -1 },
                 Phases = { ["Old"] = new() { ["1DownAngle"] = 100, ["BaseSize"] = .5 } } })));
@@ -27,13 +33,13 @@ public sealed class TreeShapeAuthoringTests
             // The crown base the mesher uses follows the authored base size.
             Assert.Equal(.5f, TreeArchitecture.CrownFraction(ForestSpecies.Oak, TreeLifePhase.Old, 2), 3);
             Assert.True(TreeArchitecture.Skeleton(ForestSpecies.Oak, 3, TreeLifePhase.Old, 2).StemCount > 0);
-        } finally { ForestSpeciesBook.Apply(null); }
+        });
     }
 
     [Fact]
     public void ADeadTreeKeepsItsLivingStructureUnlessTheFormSaysOtherwise()
     {
-        try {
+        Isolated(() => {
             var living = TreeArchitecture.Skeleton(ForestSpecies.Oak, 5, TreeLifePhase.Old, 2);
             Assert.Same(living, TreeArchitecture.Skeleton(ForestSpecies.Oak, 5, TreeLifePhase.Old, 2, dead: true));
             ForestSpeciesBook.Apply(GameWorld.SpeciesEdits(WithOakForm(new() {
@@ -42,7 +48,7 @@ public sealed class TreeShapeAuthoringTests
             Assert.NotEqual(0, TreeArchitecture.EffectiveParameters(ForestSpecies.Oak, TreeLifePhase.Old, 2)["2Branches"]);
             var snag = TreeArchitecture.Skeleton(ForestSpecies.Oak, 5, TreeLifePhase.Old, 2, dead: true);
             Assert.True(snag.StemCount < TreeArchitecture.Skeleton(ForestSpecies.Oak, 5, TreeLifePhase.Old, 2).StemCount);
-        } finally { ForestSpeciesBook.Apply(null); }
+        });
     }
 
     [Fact]
@@ -50,25 +56,71 @@ public sealed class TreeShapeAuthoringTests
     {
         var spec = new TreeShapeSpec(ForestSpecies.Oak, 7, TreeLifePhase.Mature, new(.4f, 20, 4), 1, new TreeSite(1), LeafState.Full, 0);
         long builtin = spec.ShapeKey;
-        try {
+        Isolated(() => {
             ForestSpeciesBook.Apply(GameWorld.SpeciesEdits(WithOakForm(new() { All = { ["1Branches"] = 11 } })));
             Assert.NotEqual(builtin, spec.ShapeKey);
             var first = TreeArchitecture.Skeleton(ForestSpecies.Oak, 7, TreeLifePhase.Mature, 2);
             ForestSpeciesBook.Apply(GameWorld.SpeciesEdits(WithOakForm(new() { All = { ["1Branches"] = 30 } })));
             Assert.NotSame(first, TreeArchitecture.Skeleton(ForestSpecies.Oak, 7, TreeLifePhase.Mature, 2));
-        } finally { ForestSpeciesBook.Apply(null); }
+        });
         Assert.Equal(builtin, spec.ShapeKey);
     }
 
     [Fact]
     public void ValuesOutsideTheGeneratorsSafeRangeAreClamped()
     {
-        try {
+        Isolated(() => {
             ForestSpeciesBook.Apply(GameWorld.SpeciesEdits(WithOakForm(new() { All = { ["Levels"] = 40, ["BaseSize"] = 7 } })));
             var values = TreeArchitecture.BaseParameters(ForestSpecies.Oak);
             Assert.True(values["Levels"] <= 4 && values["BaseSize"] < 1);
             Assert.True(TreeArchitecture.Skeleton(ForestSpecies.Oak, 1, TreeLifePhase.Young, 1).StemCount > 0);
-        } finally { ForestSpeciesBook.Apply(null); }
+        });
+    }
+
+    private static WorldScenario WithOakColours(TreeColoursDefinition colours)
+    {
+        var scenario = GameWorld.DefaultScenario();
+        scenario.Species.Single(s => s.Id == "Oak").Colours = colours;
+        return scenario;
+    }
+
+    [Fact]
+    public void AuthoredColoursAreReachedAndTheBarkPatternIsTheShadersFamily()
+    {
+        var builtin = TreeForm.Colours(ForestSpecies.Oak);
+        var spec = new TreeShapeSpec(ForestSpecies.Oak, 7, TreeLifePhase.Mature, new(.4f, 20, 4), 1, new TreeSite(1), LeafState.Full, 0);
+        long key = spec.ShapeKey;
+        Isolated(() => {
+            ForestSpeciesBook.Apply(GameWorld.SpeciesEdits(WithOakColours(new() {
+                Spring = "#C8E050", Summer = "#3C6428", Autumn = "#B8321E", Bark = "#D8D6CC", Dead = "#605850", BarkPattern = "birch" })));
+            var colours = TreeForm.Colours(ForestSpecies.Oak);
+            Assert.Equal(System.Drawing.Color.FromArgb(0xC8, 0xE0, 0x50).ToArgb(), colours.Spring.ToArgb());
+            Assert.Equal(System.Drawing.Color.FromArgb(0x3C, 0x64, 0x28).ToArgb(), colours.Summer.ToArgb());
+            Assert.Equal(System.Drawing.Color.FromArgb(0xB8, 0x32, 0x1E).ToArgb(), colours.Autumn.ToArgb());
+            Assert.Equal(System.Drawing.Color.FromArgb(0xD8, 0xD6, 0xCC).ToArgb(), colours.Bark.ToArgb());
+            Assert.Equal(3, ForestSpeciesTraits.For(ForestSpecies.Oak).Pattern);
+            Assert.Equal(246 + 3, TreeScale.SurfaceSpeciesCode(ForestSpecies.Oak));
+            // Built trees are rebuilt with the new colours.
+            Assert.NotEqual(key, spec.ShapeKey);
+            var form = new TreeForm(spec with { Dead = true, Leaves = LeafState.Bare, Vigor = 0 });
+            // Dead wood takes the authored colour, with the tree's own slight pigment variation.
+            Assert.InRange((int)(form.WoodColor & 0xFF), 0x60 - 10, 0x60 + 10);
+        });
+        Assert.Equal(builtin, TreeForm.Colours(ForestSpecies.Oak));
+        Assert.Equal(key, spec.ShapeKey);
+    }
+
+    [Fact]
+    public void ColoursAreCheckedAndKeepTheJsonOfUntouchedSpecies()
+    {
+        var project = GameWorld.DefaultRuleProject();
+        project.World = WithOakColours(new() { Autumn = "red" });
+        Assert.Throws<InvalidDataException>(() => GameWorld.ValidateRuleProject(project));
+        project.World = WithOakColours(new() { BarkPattern = "zebra" });
+        Assert.Throws<InvalidDataException>(() => GameWorld.ValidateRuleProject(project));
+        Assert.DoesNotContain("\"colours\"", new RuleProject { World = GameWorld.DefaultScenario() }.ToJson());
+        var round = RuleProject.FromJson(new RuleProject { World = WithOakColours(new() { Bark = "#112233", BarkPattern = "scaly" }) }.ToJson());
+        Assert.Equal("scaly", round.World.Species.Single(s => s.Id == "Oak").Colours.BarkPattern);
     }
 
     [Fact]

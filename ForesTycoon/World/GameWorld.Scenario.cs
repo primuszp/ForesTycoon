@@ -62,6 +62,17 @@ namespace ForesTycoon
             return TreeShapeOverride.Of(Checked(species.Shape.All ?? new()), phases, dead);
         }
 
+        /// <summary>A species' authored colours and bark pattern for the tree meshes; null when it has none.</summary>
+        internal static TreeLook Look(TreeColoursDefinition colours)
+        {
+            if (colours == null || colours.IsEmpty) return null;
+            static System.Drawing.Color? C(string hex) => hex == null ? null
+                : System.Drawing.Color.FromArgb(Convert.ToInt32(hex.Substring(1, 2), 16), Convert.ToInt32(hex.Substring(3, 2), 16), Convert.ToInt32(hex.Substring(5, 2), 16));
+            // Pattern names in the order of TreeColoursDefinition.BarkPatterns; the codes are the surface shader's families.
+            int? pattern = colours.BarkPattern == null ? null : new[] { 0, 2, 3, 4, 5 }[Array.IndexOf(TreeColoursDefinition.BarkPatterns, colours.BarkPattern)];
+            return new(C(colours.Spring), C(colours.Summer), C(colours.Autumn), C(colours.Bark), C(colours.Dead), pattern);
+        }
+
         /// <summary>Only the numbers that differ from the built-in species become edits.</summary>
         internal static Dictionary<ForestSpecies, ForestSpeciesEdit> SpeciesEdits(WorldScenario scenario)
         {
@@ -75,7 +86,7 @@ namespace ForesTycoon
                     F(d.AnnualGrowthRate, b.AnnualGrowthRate), F(d.PreferredMoisture, b.PreferredMoisture), F(d.MoistureTolerance, b.MoistureTolerance),
                     F(d.PreferredElevation, b.PreferredElevation), F(d.ElevationTolerance, b.ElevationTolerance), F(d.ShadeTolerance, b.ShadeTolerance),
                     F(d.WoodDensity, b.WoodDensity), F(d.DrySensitivity, b.DrySensitivity), F(d.MatureHeight, b.MatureHeight), F(d.MaxHeight, b.MaxHeight),
-                    d.Capacity != b.Capacity ? d.Capacity : null, F(d.TimberPrice, b.TimberPrice), ShapeOverride(d));
+                    d.Capacity != b.Capacity ? d.Capacity : null, F(d.TimberPrice, b.TimberPrice), ShapeOverride(d), Look(d.Colours));
                 if (edit != new ForestSpeciesEdit()) edits[s] = edit;
             }
             return edits;

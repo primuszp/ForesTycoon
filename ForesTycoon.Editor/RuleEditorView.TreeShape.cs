@@ -22,13 +22,29 @@ internal sealed partial class RuleEditorView
     // 0 = every phase, 1..6 = one life phase, 7 = the dead tree.
     private const int DeadTab = 7;
     private int speciesTab, shapePhase, previewLight = 2, previewVariant;
-    private bool previewBare, showAllShapeParameters;
+    private bool showAllShapeParameters;
+    // 0 spring, 1 summer, 2 autumn, 3 winter.
+    private int previewSeason = 1;
+    private static readonly string[] SeasonLabels = { "Tavasz", "Nyár", "Ősz", "Tél" };
+    private bool previewBare => previewSeason == 3;
+
+    /// <summary>The leaves of a living tree in the previewed season; evergreens keep theirs in winter.</summary>
+    private LeafState SeasonLeaves(ForestSpecies species) => previewSeason switch {
+        0 => TreePhenology.Evergreen(species) ? LeafState.Full : LeafState.Budding,
+        2 => TreePhenology.Evergreen(species) ? LeafState.Full : LeafState.Autumn,
+        3 => TreePhenology.Evergreen(species) ? LeafState.Full : LeafState.Bare,
+        _ => LeafState.Full };
+
+    /// <summary>What the preview builds from: the species' authored form and colours.</summary>
+    private static string LookRevision(object context, ForestSpecies species) => ForestSpeciesBook.WithContext(context,
+        () => (ForestSpeciesBook.Shape(species)?.Revision ?? "") + "#" + (ForestSpeciesBook.Look(species)?.Revision ?? ""));
     private float previewYaw = .6f;
     private string shapeFilter = "", shapeRevisionSeen;
 
 
     internal void ShowSpeciesAppearance(int index, int phase = 0) { ShowWorldTypes(TypeTab.Species, index); speciesTab = 1; shapePhase = phase; }
     internal void ApplyEditsForTest(GameWorld world) => ApplyProject(world, false);
+    internal void ShowSpeciesColoursForTest(int index, int season, float zoom) { ShowWorldTypes(TypeTab.Species, index); speciesTab = 2; previewSeason = season; previewZoom = zoom; previewPitch = zoom > 2 ? .12f : .28f; }
     internal void SetTreePreviewForTest(int mode, int level, bool seeThrough) { previewMode = mode; testShapeLevel = level; previewSeeThrough = seeThrough; }
     private int? testShapeLevel;
 
@@ -166,10 +182,92 @@ internal sealed partial class RuleEditorView
         if (changed) ShapeLevel(sp, true)[e.Name] = value;
         if (own) {
             ImGui.SameLine(0, 4);
-            if (EditorStyle.QuietButton("↺", "Saját érték törlése: ismét az örökölt érték érvényes.")) { authored.Remove(e.Name); TidyShape(sp); finished = true; }
+            if (EditorStyle.QuietButton("alap", "Saját érték törlése: ismét az örökölt érték érvényes.")) { authored.Remove(e.Name); TidyShape(sp); finished = true; }
         }
         ImGui.PopID();
         return finished;
+    }
+
+    // ── Colours and bark ─────────────────────────────────────────────────
+    private static readonly string[] BarkPatternLabels = { "Általános kéreg", "Pikkelyes (lucfenyő)", "Fehér, sötét foltokkal (nyír)", "Mélyen barázdált (tölgy)", "Sima, foltos (bükk)" };
+    private static readonly int[] BarkPatternCodes = { 0, 2, 3, 4, 5 };
+
+    /// <summary>
+    /// The species' colours through the year, its bark and dead wood, and the bark pattern; each authored value can be reset.
+    /// The preview beside shows the tree in the chosen season with the bark as the game draws it.
+    /// </summary>
+    private void TreeColoursArea(GameWorld world, SpeciesDefinition sp)
+    {
+        if (!Enum.TryParse(sp.Id, out ForestSpecies species) || species == ForestSpecies.None) {
+            EditorStyle.Text(HudTheme.Muted, "Ennek a fafajnak nincs famodellje."); return;
+        }
+        object context = ForestSpeciesBook.Compose(GameWorld.SpeciesEdits(scenario));
+        var shown = ForestSpeciesBook.WithContext(context, () => TreeForm.Colours(species));
+        var traits = ForestSpeciesBook.WithContext(context, () => ForestSpeciesTraits.For(species));
+        bool evergreen = traits.Evergreen, finished = false;
+
+        float previewWidth = Math.Clamp(ImGui.GetContentRegionAvail().X * .5f, 300, 820);
+        ImGui.BeginChild("colour-list", new Vec2(-previewWidth - 10, 0));
+        ImGui.PushTextWrapPos(0);
+        EditorStyle.Text(HudTheme.Muted, "A korona a játék naptára szerint vált: tavasszal kibomlik és friss színű, nyáron a nyári szín, ősszel az őszi szín felé fordul, majd lehullik. "
+            + "A megadott tavaszi és őszi szín az, amit a korona eléri.");
+        ImGui.PopTextWrapPos();
+        var colours = sp.Colours;
+        string Get(Func<TreeColoursDefinition, string> read) => colours == null ? null : read(colours);
+        void Set(Action<TreeColoursDefinition> write) { sp.Colours ??= new(); write(sp.Colours); if (sp.Colours.IsEmpty) sp.Colours = null; }
+        void Row(string label, string help, System.Drawing.Color current, Func<TreeColoursDefinition, string> read, Action<TreeColoursDefinition, string> write, bool enabled = true)
+        {
+            ImGui.PushID(label);
+            bool own = Get(read) != null;
+            var rgb = new System.Numerics.Vector3(current.R / 255f, current.G / 255f, current.B / 255f);
+            ImGui.BeginDisabled(!enabled);
+            ImGui.PushStyleColor(ImGuiCol.FrameBg, own ? EditorStyle.Fade(HudTheme.AmberAccent, .14f) : ImGui.GetStyle().Colors[(int)ImGuiCol.FrameBg]);
+            if (ImGui.ColorEdit3(label, ref rgb, ImGuiColorEditFlags.DisplayHex | ImGuiColorEditFlags.PickerHueWheel))
+                Set(c => write(c, Hex(new Vec4(rgb, 1))));
+            ImGui.PopStyleColor();
+            finished |= ImGui.IsItemDeactivatedAfterEdit();
+            ImGui.EndDisabled();
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled)) ImGui.SetTooltip(help + (own ? "\n\nSaját szín." : "\n\nBeépített szín; módosításkor saját színné válik."));
+            if (own) {
+                ImGui.SameLine(0, 4);
+                if (EditorStyle.QuietButton("alap", "Vissza a beépített színre.")) { Set(c => write(c, null)); finished = true; }
+            }
+            ImGui.PopID();
+        }
+        ImGui.PushItemWidth(-EditorStyle.LabelWidth());
+        EditorStyle.Section("Lomb évszakonként");
+        Row("Tavasz", "A kibomló lomb színe; a teljes lombosodásig a nyári színre vált.", shown.Spring, c => c.Spring, (c, v) => c.Spring = v, !evergreen);
+        Row("Nyár", "A korona alapszíne. Az örökzöldek egész évben ezt viselik.", shown.Summer, c => c.Summer, (c, v) => c.Summer = v);
+        Row("Ősz", "Az őszi lomb színe lombhulláskor.", shown.Autumn, c => c.Autumn, (c, v) => c.Autumn = v, !evergreen);
+        if (evergreen) EditorStyle.Text(HudTheme.Muted, "Örökzöld: tavasszal és ősszel is a nyári színét viseli, télen sem hullajtja.");
+        EditorStyle.Section("Kéreg");
+        Row("Kéreg színe", "A törzs és az ágak színe; a minta erre rajzolódik.", shown.Bark, c => c.Bark, (c, v) => c.Bark = v);
+        int pattern = Math.Max(0, Array.IndexOf(BarkPatternCodes, traits.Pattern));
+        bool ownPattern = colours?.BarkPattern != null;
+        ImGui.PushStyleColor(ImGuiCol.FrameBg, ownPattern ? EditorStyle.Fade(HudTheme.AmberAccent, .14f) : ImGui.GetStyle().Colors[(int)ImGuiCol.FrameBg]);
+        if (ImGui.Combo("Kéregminta", ref pattern, BarkPatternLabels, BarkPatternLabels.Length)) { Set(c => c.BarkPattern = TreeColoursDefinition.BarkPatterns[pattern]); finished = true; }
+        ImGui.PopStyleColor();
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("A játék shaderében rajzolt kéregfelület. Közelről, nagyítva látszik a legjobban.");
+        if (ownPattern) {
+            ImGui.SameLine(0, 4);
+            if (EditorStyle.QuietButton("alap##pattern", "Vissza a beépített mintára.")) { Set(c => c.BarkPattern = null); finished = true; }
+        }
+        Row("Holtfa színe", "Az elpusztult, álló és kidőlt fa színe.", shown.Dead, c => c.Dead, (c, v) => c.Dead = v);
+        ImGui.PopItemWidth();
+        ImGui.Spacing();
+        if (ImGui.Button("Kéreg közelről")) { previewMode = 0; previewZoom = 6; previewPitch = .12f; }
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Az előnézet a törzs aljára nagyít; görgővel vissza.");
+        ImGui.SameLine();
+        ImGui.BeginDisabled(colours == null);
+        if (ImGui.Button("Minden szín vissza a beépítettre")) { sp.Colours = null; finished = true; }
+        ImGui.EndDisabled();
+        ImGui.EndChild();
+        ImGui.SameLine(0, 10);
+        shownShapeLevel = -1;
+        ImGui.BeginChild("colour-preview", Vec2.Zero, ImGuiChildFlags.None, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
+        TreePreview(species, TreeLifePhase.Mature, false, context, sp);
+        ImGui.EndChild();
+        if (finished) { Try(() => ApplyProject(world, false)); message = sp.Name + ": színek módosítva; a tesztvilág fái újraszíneződnek."; }
     }
 
     // ── Preview ──────────────────────────────────────────────────────────
@@ -222,17 +320,17 @@ internal sealed partial class RuleEditorView
     {
         EditorStyle.Tabs("preview-mode", new[] { "Játékban", "Ágszerkezet", "Életút" }, ref previewMode);
         if (previewMode == 2) { LifeCoursePreview(species, context, sp); return; }
-        // The built-in form of this species, with the project's other species edits: what the comparison shows.
-        var form = sp.Shape; sp.Shape = null;
+        // The built-in look of this species (form and colours), with the project's other species edits: what the comparison shows.
+        var (form, colours) = (sp.Shape, sp.Colours); sp.Shape = null; sp.Colours = null;
         object builtinContext = ForestSpeciesBook.Compose(GameWorld.SpeciesEdits(scenario));
-        sp.Shape = form;
+        (sp.Shape, sp.Colours) = (form, colours);
 
         // Representative size for the phase: the middle of its age range, sized by the game's initial-size graphs.
         float age = PhaseAge(species, phase, sp);
         var size = ForestSpeciesBook.WithContext(context, () => ForestTreeGrowth.Initial(species, Math.Max(.5f, age), .5f));
         int seed = previewVariant * 7919 + 13;
-        string revision = ForestSpeciesBook.WithContext(context, () => ForestSpeciesBook.Shape(species)?.Revision ?? "");
-        string common = string.Join("|", species, phase, dead, previewLight, previewBare, previewVariant, size, previewMode);
+        string revision = LookRevision(context, species);
+        string common = string.Join("|", species, phase, dead, previewLight, previewSeason, previewVariant, size, previewMode);
         previewKey = common + "|" + revision; builtinKey = common + "|built-in";
 
         string note = (dead ? $"Elhalt fa ({PhaseLabels[(int)phase].ToLowerInvariant()} fázisban pusztult el) · " : PhaseLabels[(int)phase] + " · ")
@@ -246,7 +344,7 @@ internal sealed partial class RuleEditorView
         Vec2 origin = ImGui.GetCursorScreenPos();
         if (previewMode == 0) {
             var spec = new TreeShapeSpec(species, seed, phase, size, dead ? 0 : 1, new TreeSite(TreeShapeBands.BandLight(previewLight)),
-                previewBare || dead ? LeafState.Bare : LeafState.Full, 0, dead);
+                dead ? LeafState.Bare : SeasonLeaves(species), 0, dead);
             // See-through: the leafy crown over the complete leafless branch system, as the game keeps both for the seasons.
             bool seasonal = Seasonal;
             DendroTreeGenerator.Mesh Build(object books) => ForestSpeciesBook.WithContext(books, () => seasonal
@@ -276,8 +374,7 @@ internal sealed partial class RuleEditorView
         if (ImGui.IsItemHovered()) ImGui.SetTooltip("A fa ekkora fényben nőtt: a játék a fényhez igazítja az ágazást.");
         ImGui.SameLine(0, 8);
         if (previewMode == 0) {
-            int season = previewBare ? 1 : 0; ImGui.SetNextItemWidth(third);
-            if (ImGui.Combo("##season", ref season, new[] { "Lombos", "Lombtalan" }, 2)) previewBare = season == 1;
+            ImGui.SetNextItemWidth(third); ImGui.Combo("##season", ref previewSeason, SeasonLabels, SeasonLabels.Length);
             ImGui.SameLine(0, 8);
             ImGui.BeginDisabled(previewBare); ImGui.Checkbox("Áttetsző korona", ref previewSeeThrough); ImGui.EndDisabled();
         } else ImGui.Checkbox("Lombpontok", ref previewLeafPoints);
@@ -311,9 +408,8 @@ internal sealed partial class RuleEditorView
     /// </summary>
     private void LifeCoursePreview(ForestSpecies species, object context, SpeciesDefinition sp)
     {
-        int seed = previewVariant * 7919 + 13, light = previewLight; bool bare = previewBare;
-        lifeKey = string.Join("|", species, light, bare, previewVariant, sp.MaximumAgeYears, sp.MatureAgeYears,
-            ForestSpeciesBook.WithContext(context, () => ForestSpeciesBook.Shape(species)?.Revision ?? ""));
+        int seed = previewVariant * 7919 + 13, light = previewLight; var leaves = SeasonLeaves(species);
+        lifeKey = string.Join("|", species, light, leaves, previewVariant, sp.MaximumAgeYears, sp.MatureAgeYears, LookRevision(context, species));
         var ages = Enum.GetValues<TreeLifePhase>().Select(p => PhaseAge(species, p, sp)).ToArray();
         lifeCourse.Update(lifeKey, () => ForestSpeciesBook.WithContext(context, () => {
             var site = new TreeSite(TreeShapeBands.BandLight(light));
@@ -322,7 +418,7 @@ internal sealed partial class RuleEditorView
                 float age = ages[(int)phase];
                 var size = ForestTreeGrowth.Initial(species, Math.Max(.5f, age), .5f);
                 var mesh = DendroTreeGenerator.Generate(new TreeShapeSpec(species, seed, phase, size, vigor, site,
-                    bare || dead ? LeafState.Bare : LeafState.Full, 0, dead), ForestLod.Near);
+                    dead ? LeafState.Bare : leaves, 0, dead), ForestLod.Near);
                 return new(label, tab, age, size, fallen ? Fallen(mesh, size.Diameter * TreeScale.MetresToWorld) : mesh, fallen);
             }
             var stages = Enum.GetValues<TreeLifePhase>().Select(p => Stage(PhaseLabels[(int)p], (int)p + 1, p, 1, false, false)).ToList();
@@ -402,8 +498,7 @@ internal sealed partial class RuleEditorView
         float third = (ImGui.GetContentRegionAvail().X - 16) / 3;
         ImGui.SetNextItemWidth(third); ImGui.Combo("##light", ref previewLight, LightLabels, LightLabels.Length);
         ImGui.SameLine(0, 8);
-        int season = previewBare ? 1 : 0; ImGui.SetNextItemWidth(third);
-        if (ImGui.Combo("##season", ref season, new[] { "Lombos", "Lombtalan" }, 2)) previewBare = season == 1;
+        ImGui.SetNextItemWidth(third); ImGui.Combo("##season", ref previewSeason, SeasonLabels, SeasonLabels.Length);
         ImGui.SameLine(0, 8); ImGui.Checkbox("Valós méretarány", ref lifeTrueScale);
         if (ImGui.IsItemHovered()) ImGui.SetTooltip("Bekapcsolva a fák valós méretükben, egymás mellett; kikapcsolva mind azonos magasságra nagyítva.");
         ImGui.SameLine();
@@ -434,7 +529,7 @@ internal sealed partial class RuleEditorView
             var delta = ImGui.GetIO().MouseDelta;
             previewYaw -= delta.X * .01f; previewPitch = Math.Clamp(previewPitch + delta.Y * .006f, -.15f, 1.3f);
         }
-        if (hovered && ImGui.GetIO().MouseWheel != 0) previewZoom = Math.Clamp(previewZoom * (1 + ImGui.GetIO().MouseWheel * .12f), .5f, 5);
+        if (hovered && ImGui.GetIO().MouseWheel != 0) previewZoom = Math.Clamp(previewZoom * (1 + ImGui.GetIO().MouseWheel * .12f), .5f, 14);
         if (hovered && ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left)) { previewYaw = .6f; previewPitch = .28f; previewZoom = 1; }
         if (hovered) ImGui.SetTooltip("Húzás: forgatás és döntés · görgő: nagyítás · dupla kattintás: alaphelyzet");
     }
@@ -453,7 +548,11 @@ internal sealed partial class RuleEditorView
         // A fixed frame for the phase: a longer or wider tree looks longer or wider, it is not refitted.
         float extent = Math.Max(height * 1.1f, (compare ? spacing + crown * 2 : crown * 2) * 1.15f * area.Y / Math.Max(1, area.X));
         float distance = extent * 2.1f / previewZoom;
-        var target = new OpenTK.Mathematics.Vector3(0, 0, height * .48f);
+        // Zooming in moves the view down to the lower trunk, where the bark is seen.
+        float closeUp = Math.Clamp((previewZoom - 2) / 6, 0, 1);
+        // A close-up looks at the edited tree, not at the gap between the two.
+        float focusX = compare ? spacing / 2 * closeUp : 0;
+        var target = new OpenTK.Mathematics.Vector3(focusX, 0, height * (.48f - .4f * closeUp));
         var eye = target + distance * new OpenTK.Mathematics.Vector3(MathF.Sin(previewYaw) * MathF.Cos(previewPitch),
             -MathF.Cos(previewYaw) * MathF.Cos(previewPitch), MathF.Sin(previewPitch));
         var view = OpenTK.Mathematics.Matrix4.LookAt(eye, target, OpenTK.Mathematics.Vector3.UnitZ);

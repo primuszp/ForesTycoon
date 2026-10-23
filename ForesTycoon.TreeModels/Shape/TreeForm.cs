@@ -131,9 +131,11 @@ namespace ForesTycoon.TreeModels
             TwigRadius = BreastRadius / (Math.Max(unit, 1e-3f) * (1 + FlareStrength * MathF.Exp(-BreastHeight / FlareHeight)));
 
             float pigment = ForestTreeVariation.Range(spec.Seed, 601, 0.90f, 1.08f);
-            Color bark = spec.Species == ForestSpecies.Birch && spec.Phase <= TreeLifePhase.Sapling ? Color.FromArgb(115, 77, 48) : traits.Bark;
+            var look = ForestSpeciesBook.Look(spec.Species);
+            // Young birches are brown before the white bark forms, unless the bark colour is authored.
+            Color bark = spec.Species == ForestSpecies.Birch && spec.Phase <= TreeLifePhase.Sapling && look?.Bark == null ? Color.FromArgb(115, 77, 48) : traits.Bark;
             Color crown = traits.Crown;
-            DeadColor = Pack(Color.FromArgb(112, 102, 92), spec.Species, pigment);
+            DeadColor = Pack(look?.Dead ?? BuiltinDeadColor, spec.Species, pigment);
             WoodColor = spec.Dead ? DeadColor : Pack(bark, spec.Species, pigment);
             CrownColor = (Pack(LeafTint(crown, spec), spec.Species, pigment) & 0x00ffffffu)
                 | (uint)TreeScale.CrownSpeciesCode(spec.Species) << 24;
@@ -171,9 +173,17 @@ namespace ForesTycoon.TreeModels
         internal float Flare(float heightAboveGround) =>
             1 + FlareStrength * MathF.Exp(-Math.Max(0, heightAboveGround) / FlareHeight);
 
+        internal static readonly Color BuiltinDeadColor = Color.FromArgb(112, 102, 92);
+
+        /// <summary>
+        /// The crown colour in a leaf state. Built-in spring and autumn colours are blended towards; authored ones are reached,
+        /// so the colour a designer picks is the colour the crown shows.
+        /// </summary>
         internal static Color LeafTint(Color crown, in TreeShapeSpec spec)
         {
-            Color target = spec.Leaves switch
+            var look = ForestSpeciesBook.Look(spec.Species);
+            Color? authored = spec.Leaves switch { LeafState.Budding => look?.Spring, LeafState.Autumn or LeafState.Falling => look?.Autumn, _ => null };
+            Color target = authored ?? spec.Leaves switch
             {
                 LeafState.Budding => Color.FromArgb(150, 190, 70),
                 LeafState.Autumn or LeafState.Falling => spec.Species switch
@@ -194,7 +204,7 @@ namespace ForesTycoon.TreeModels
                 },
                 _ => crown
             };
-            float amount = spec.Leaves switch { LeafState.Budding => 0.6f, LeafState.Autumn => 0.8f, LeafState.Falling => 0.9f, _ => 0 };
+            float amount = authored != null ? 1 : spec.Leaves switch { LeafState.Budding => 0.6f, LeafState.Autumn => 0.8f, LeafState.Falling => 0.9f, _ => 0 };
             Color c = Lerp(crown, target, amount);
             // Weak trees carry dull, yellowing foliage.
             float weak = TreeShapeBands.VigorBand(spec.Vigor) switch
@@ -213,6 +223,15 @@ namespace ForesTycoon.TreeModels
 
         private static Color Lerp(Color a, Color b, float t) => Color.FromArgb(
             (int)(a.R + (b.R - a.R) * t), (int)(a.G + (b.G - a.G) * t), (int)(a.B + (b.B - a.B) * t));
+
+        /// <summary>The species' crown colour in spring, summer and autumn and its bark and dead-wood colours, as a healthy tree shows them.</summary>
+        internal static (Color Spring, Color Summer, Color Autumn, Color Bark, Color Dead) Colours(ForestSpecies species)
+        {
+            var traits = ForestSpeciesTraits.For(species);
+            var spec = new TreeShapeSpec(species, 0, TreeLifePhase.Mature, new(1, 1, 1), 1, TreeSite.Open, LeafState.Full, 0);
+            return (LeafTint(traits.Crown, spec with { Leaves = LeafState.Budding }), LeafTint(traits.Crown, spec),
+                LeafTint(traits.Crown, spec with { Leaves = LeafState.Autumn }), traits.Bark, ForestSpeciesBook.Look(species)?.Dead ?? BuiltinDeadColor);
+        }
 
         internal static uint Pack(Color color, ForestSpecies species, float shade) =>
             (uint)TreeScale.SurfaceSpeciesCode(species) << 24 | (uint)Math.Clamp((int)(color.R * shade), 0, 255)

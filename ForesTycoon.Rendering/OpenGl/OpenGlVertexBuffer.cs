@@ -13,6 +13,8 @@ namespace ForesTycoon.Rendering.OpenGl
         private int growthVbo;
         public float ForestElapsedYears { get; set; }
         public float ForestCurrentYear { get; set; }
+        /// <summary>Spring colour multipliers of the 18 crown codes (RGB triplets); white keeps the summer colour.</summary>
+        internal static float[] ForestSpringTints = System.Linq.Enumerable.ToArray(System.Linq.Enumerable.Repeat(1f, 18 * 3));
         public IForestStateBuffer ForestState { get; set; }
         private int ForestStateTexture => ForestState is OpenGlForestStateBuffer state ? state.Texture : ForestState == null ? 0 : throw new InvalidOperationException("Forest state belongs to another backend.");
         private bool disposed;
@@ -243,6 +245,7 @@ namespace ForesTycoon.Rendering.OpenGl
             GL.Uniform1(GlProgram.Uniform(currentProgram, "forest_elapsed"), growthVbo != 0 ? ForestElapsedYears : 0);
             GL.Uniform1(GlProgram.Uniform(currentProgram, "forest_year"), ForestCurrentYear);
             GL.Uniform1(GlProgram.Uniform(currentProgram, "forest_dynamic"), ForestStateTexture != 0 ? 1 : 0);
+            GL.Uniform3(GlProgram.Uniform(currentProgram, "forest_spring[0]"), 18, ForestSpringTints);
             // Even an inactive sampler must not share a unit with a different sampler
             // type. macOS validates this for static preview trees as well.
             GL.Uniform1(GlProgram.Uniform(currentProgram, "forest_state"), 7);
