@@ -229,7 +229,7 @@ internal sealed partial class RuleEditorView
         ImGui.PushStyleColor(ImGuiCol.ChildBg, EditorStyle.Sidebar);
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vec2(8, 10));
         ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vec2(4, 2));
-        ImGui.BeginChild("editor-nav", new Vec2(compact ? 56 : 224, 0), ImGuiChildFlags.AlwaysUseWindowPadding);
+        ImGui.BeginChild("editor-nav", new Vec2(compact ? 56 : ImGui.GetFontSize() * 15f, 0), ImGuiChildFlags.AlwaysUseWindowPadding);
         var draw = ImGui.GetWindowDrawList();
         Vec2 origin = ImGui.GetWindowPos(), size = ImGui.GetWindowSize();
         draw.AddLine(origin + new Vec2(size.X - 1, 0), origin + size - new Vec2(1, 0), EditorStyle.U(EditorStyle.Hairline));

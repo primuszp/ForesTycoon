@@ -240,6 +240,13 @@ namespace ForesTycoon.Editor
                 editor.ShowSpeciesAppearance(oakIndex, 4); PreviewFrames();
                 Require(editor.TreePreviewReady, "Tree preview was not built.");
                 FramebufferCapture.SavePng(Path.Combine(output, "species-appearance.png"), width, height);
+                // Scots pine: the high, flat, clumpy crown on a clear bole, and how it grows out of the young cone.
+                int pineIndex = editor.EditedScenario.Species.FindIndex(x => x.Id == "Pine");
+                editor.ShowSpeciesAppearance(pineIndex, 4); PreviewFrames();
+                FramebufferCapture.SavePng(Path.Combine(output, "species-appearance-pine.png"), width, height);
+                editor.SetTreePreviewForTest(2, -1, false); PreviewFrames();
+                FramebufferCapture.SavePng(Path.Combine(output, "species-life-course-pine.png"), width, height);
+                editor.SetTreePreviewForTest(0, -1, false); editor.ShowSpeciesAppearance(oakIndex, 4); PreviewFrames();
                 var oak = editor.EditedScenario.Species[oakIndex];
                 oak.Shape = new() { All = { ["1Branches"] = 9, ["AttractionUp"] = -1.2 }, Phases = { ["Old"] = new() { ["1DownAngle"] = 95 } } };
                 PreviewFrames();

@@ -82,7 +82,7 @@ internal sealed partial class RuleEditorView
 
         // The life course is a long row of trees: it gets most of the width.
         float previewWidth = previewMode == 2 ? Math.Max(300, ImGui.GetContentRegionAvail().X * .68f)
-            : Math.Clamp(ImGui.GetContentRegionAvail().X * .5f, 300, 820);
+            : Math.Clamp(ImGui.GetContentRegionAvail().X * .6f, 300, 1200);
         ImGui.BeginChild("shape-parameters", new Vec2(-previewWidth - 10, 0));
         bool finished = ShapeParameterList(sp, shown);
         ImGui.EndChild();
@@ -206,7 +206,7 @@ internal sealed partial class RuleEditorView
         var traits = ForestSpeciesBook.WithContext(context, () => ForestSpeciesTraits.For(species));
         bool evergreen = traits.Evergreen, finished = false;
 
-        float previewWidth = Math.Clamp(ImGui.GetContentRegionAvail().X * .5f, 300, 820);
+        float previewWidth = Math.Clamp(ImGui.GetContentRegionAvail().X * .6f, 300, 1200);
         ImGui.BeginChild("colour-list", new Vec2(-previewWidth - 10, 0));
         ImGui.PushTextWrapPos(0);
         EditorStyle.Text(HudTheme.Muted, "A korona a játék naptára szerint vált: tavasszal kibomlik és friss színű, nyáron a nyári szín, ősszel az őszi szín felé fordul, majd lehullik. "
@@ -255,7 +255,7 @@ internal sealed partial class RuleEditorView
         Row("Holtfa színe", "Az elpusztult, álló és kidőlt fa színe.", shown.Dead, c => c.Dead, (c, v) => c.Dead = v);
         ImGui.PopItemWidth();
         ImGui.Spacing();
-        if (ImGui.Button("Kéreg közelről")) { previewMode = 0; previewZoom = 6; previewPitch = .12f; }
+        if (ImGui.Button("Kéreg közelről")) { previewMode = 0; previewZoom = 6; previewPitch = .12f; previewPan = Vec2.Zero; }
         if (ImGui.IsItemHovered()) ImGui.SetTooltip("Az előnézet a törzs aljára nagyít; görgővel vissza.");
         ImGui.SameLine();
         ImGui.BeginDisabled(colours == null);
@@ -303,6 +303,10 @@ internal sealed partial class RuleEditorView
     private string lifeKey;
     private bool previewCompare = true, previewSeeThrough, previewLeafPoints = true;
     private float previewPitch = .28f, previewZoom = 1;
+    // Pan offset of the view in tree-frame units, and how far one pixel of mouse travel moves it in the last drawn view.
+    private Vec2 previewPan, panPerPixel;
+    private int panMode = -1;
+    private const ImGuiButtonFlags ViewButtons = ImGuiButtonFlags.MouseButtonLeft | ImGuiButtonFlags.MouseButtonRight | ImGuiButtonFlags.MouseButtonMiddle;
     // The branch level the hovered parameter shapes (0 trunk, 1 limbs, 2 side branches, 3 twigs); -1 = the whole tree.
     private int hoveredShapeLevel = -1, shownShapeLevel = -1;
     private bool Seasonal => previewSeeThrough && !previewBare;
@@ -355,13 +359,15 @@ internal sealed partial class RuleEditorView
         } else {
             editedSkeleton.Update(previewKey, () => ForestSpeciesBook.WithContext(context, () => TreeArchitecture.Skeleton(species, seed, phase, previewLight, dead)));
             builtinSkeleton.Update(builtinKey, () => ForestSpeciesBook.WithContext(builtinContext, () => TreeArchitecture.Skeleton(species, seed, phase, previewLight, dead)));
-            ImGui.InvisibleButton("tree-preview", area);
+            ImGui.InvisibleButton("tree-preview", area, ViewButtons);
             var draw = ImGui.GetWindowDrawList();
             draw.AddRectFilled(origin, origin + area, EditorStyle.U(.105f, .135f, .15f));
             draw.PushClipRect(origin, origin + area, true);
             SkeletonPreview(draw, origin, area);
             draw.PopClipRect();
         }
+        // Pan is in the units of the view it was made in; another view starts centred.
+        if (panMode != previewMode) { panMode = previewMode; previewPan = Vec2.Zero; }
         Orbit();
         if ((editedMesh.Error ?? editedSkeleton.Error) is string error) EditorStyle.Text(HudTheme.Bad, "Az előnézet nem készült el: " + error);
         if (editedMesh.Busy || editedSkeleton.Busy || builtinMesh.Busy || builtinSkeleton.Busy)
@@ -521,17 +527,35 @@ internal sealed partial class RuleEditorView
         return mesh with { Trunk = Lay(mesh.Trunk, stem * .5f), Branches = Lay(mesh.Branches, stem * .5f), Crown = Array.Empty<Vertex>() };
     }
 
-    /// <summary>Drag to turn and tilt, wheel to zoom, double-click to reset; acts on the last drawn view.</summary>
+    /// <summary>
+    /// Left drag turns and tilts, right or middle drag (or Shift + left) pans, the wheel zooms, arrow keys turn,
+    /// double-click resets; acts on the last drawn view.
+    /// </summary>
     private void Orbit()
     {
-        bool hovered = ImGui.IsItemHovered();
-        if (ImGui.IsItemActive() && ImGui.IsMouseDragging(ImGuiMouseButton.Left)) {
-            var delta = ImGui.GetIO().MouseDelta;
-            previewYaw -= delta.X * .01f; previewPitch = Math.Clamp(previewPitch + delta.Y * .006f, -.15f, 1.3f);
+        bool hovered = ImGui.IsItemHovered(), active = ImGui.IsItemActive();
+        var io = ImGui.GetIO();
+        bool panning = active && (ImGui.IsMouseDragging(ImGuiMouseButton.Right, 0) || ImGui.IsMouseDragging(ImGuiMouseButton.Middle, 0)
+            || (io.KeyShift && ImGui.IsMouseDragging(ImGuiMouseButton.Left, 0)));
+        if (panning) {
+            previewPan += new Vec2(-io.MouseDelta.X * panPerPixel.X, io.MouseDelta.Y * panPerPixel.Y);
+            previewPan = Vec2.Clamp(previewPan, new Vec2(-3), new Vec2(3));
+            ImGui.SetMouseCursor(ImGuiMouseCursor.ResizeAll);
         }
-        if (hovered && ImGui.GetIO().MouseWheel != 0) previewZoom = Math.Clamp(previewZoom * (1 + ImGui.GetIO().MouseWheel * .12f), .5f, 14);
-        if (hovered && ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left)) { previewYaw = .6f; previewPitch = .28f; previewZoom = 1; }
-        if (hovered) ImGui.SetTooltip("Húzás: forgatás és döntés · görgő: nagyítás · dupla kattintás: alaphelyzet");
+        else if (active && ImGui.IsMouseDragging(ImGuiMouseButton.Left, 0)) {
+            previewYaw -= io.MouseDelta.X * .01f; previewPitch = Math.Clamp(previewPitch + io.MouseDelta.Y * .006f, -.15f, 1.45f);
+        }
+        // Smooth, proportional zoom so a trackpad and a wheel feel alike.
+        if (hovered && io.MouseWheel != 0) previewZoom = Math.Clamp(previewZoom * MathF.Exp(io.MouseWheel * .12f), .3f, 30);
+        if (hovered) {
+            float turn = io.DeltaTime * 1.6f;
+            if (ImGui.IsKeyDown(ImGuiKey.LeftArrow)) previewYaw += turn;
+            if (ImGui.IsKeyDown(ImGuiKey.RightArrow)) previewYaw -= turn;
+            if (ImGui.IsKeyDown(ImGuiKey.UpArrow)) previewPitch = Math.Clamp(previewPitch + turn * .6f, -.15f, 1.45f);
+            if (ImGui.IsKeyDown(ImGuiKey.DownArrow)) previewPitch = Math.Clamp(previewPitch - turn * .6f, -.15f, 1.45f);
+        }
+        if (hovered && ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left)) { previewYaw = .6f; previewPitch = .28f; previewZoom = 1; previewPan = Vec2.Zero; }
+        if (hovered && !active) ImGui.SetTooltip("Bal húzás: forgatás · jobb/középső vagy Shift+bal húzás: mozgatás · görgő: nagyítás · nyilak: forgatás · dupla kattintás: alaphelyzet");
     }
 
     /// <summary>The game's meshes in 3D, the built-in form on the left when comparing, framed by the phase's size.</summary>
@@ -553,15 +577,26 @@ internal sealed partial class RuleEditorView
         // A close-up looks at the edited tree, not at the gap between the two.
         float focusX = compare ? spacing / 2 * closeUp : 0;
         var target = new OpenTK.Mathematics.Vector3(focusX, 0, height * (.48f - .4f * closeUp));
-        var eye = target + distance * new OpenTK.Mathematics.Vector3(MathF.Sin(previewYaw) * MathF.Cos(previewPitch),
+        var direction = new OpenTK.Mathematics.Vector3(MathF.Sin(previewYaw) * MathF.Cos(previewPitch),
             -MathF.Cos(previewYaw) * MathF.Cos(previewPitch), MathF.Sin(previewPitch));
+        // Pan slides the view across the screen plane; one pixel moves it by the visible height over the view height.
+        const float fieldOfView = MathF.PI / 6.5f;
+        var right = new OpenTK.Mathematics.Vector3(MathF.Cos(previewYaw), MathF.Sin(previewYaw), 0);
+        var up = OpenTK.Mathematics.Vector3.Cross(right, -direction).Normalized();
+        float perPixel = 2 * distance * MathF.Tan(fieldOfView / 2) / Math.Max(1, area.Y) / extent;
+        panPerPixel = new(perPixel, perPixel);
+        target += (right * previewPan.X + up * previewPan.Y) * extent;
+        var eye = target + distance * direction;
         var view = OpenTK.Mathematics.Matrix4.LookAt(eye, target, OpenTK.Mathematics.Vector3.UnitZ);
-        var projection = OpenTK.Mathematics.Matrix4.CreatePerspectiveFieldOfView(MathF.PI / 6.5f, area.X / area.Y, distance * .05f, distance * 4);
+        var projection = OpenTK.Mathematics.Matrix4.CreatePerspectiveFieldOfView(fieldOfView, area.X / area.Y, distance * .05f, distance * 4);
         if (trees.Count > 0) {
             treeRenderer ??= new TreePreviewRenderer();
             treeRenderer.Render(trees, pixels, view * projection, Seasonal ? .22f : 1);
             ImGui.Image((IntPtr)treeRenderer.Texture, area, new Vec2(0, 1), new Vec2(1, 0));
-        } else ImGui.InvisibleButton("tree-preview", area);
+        }
+        // The image takes no input: an invisible button over it receives the drags and the wheel.
+        ImGui.SetCursorScreenPos(origin);
+        ImGui.InvisibleButton("tree-preview", area, ViewButtons);
         if (compare) {
             var draw = ImGui.GetWindowDrawList();
             draw.AddText(origin + new Vec2(12, 10), EditorStyle.TextMuted, "Gyári");
@@ -582,7 +617,8 @@ internal sealed partial class RuleEditorView
         if (edited == null) return;
         float cy = MathF.Cos(previewYaw), sy = MathF.Sin(previewYaw), cp = MathF.Cos(previewPitch), spt = MathF.Sin(previewPitch);
         float scale = area.Y * .8f / Math.Max(1e-3f, builtin.Height) * previewZoom;
-        Vec2 baseAt = origin + new Vec2(area.X / 2, area.Y * .92f - (previewZoom - 1) * area.Y * .3f);
+        panPerPixel = new(1 / Math.Max(1, area.Y), 1 / Math.Max(1, area.Y));
+        Vec2 baseAt = origin + new Vec2(area.X / 2, area.Y * .92f - (previewZoom - 1) * area.Y * .3f) + new Vec2(-previewPan.X, previewPan.Y) * area.Y;
         (Vec2 Screen, float Depth) Project(OpenTK.Mathematics.Vector3 p)
         {
             float x = p.X * cy - p.Y * sy, y = p.X * sy + p.Y * cy;

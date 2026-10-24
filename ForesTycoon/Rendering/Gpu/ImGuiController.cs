@@ -26,15 +26,21 @@ namespace ForesTycoon
         internal IntPtr Context => context;
         internal void MakeCurrent() => SelectContext();
         /// <summary>Text sizes of one UI: the game's compact HUD, or the editor's larger, sans-serif authoring face.</summary>
-        internal sealed record FontProfile(float Body, float Title, float LargeTitle, bool SansTitles);
+        internal sealed record FontProfile(float Body, float Title, float LargeTitle, bool SansTitles)
+        {
+            /// <summary>The same profile at another UI size, e.g. a smaller one on a laptop screen.</summary>
+            internal FontProfile Scaled(float scale) => this with { Body = Body * scale, Title = Title * scale, LargeTitle = LargeTitle * scale };
+        }
         internal static readonly FontProfile Hud = new(16f, 22f, 34f, false);
         internal static readonly FontProfile Authoring = new(18f, 22f, 30f, true);
         private readonly FontProfile profile;
+        // Glyphs are rasterised at this many pixels per point (2 on Retina) and drawn back at point size, so text stays sharp.
+        private readonly float rasterScale;
 
         public ImGuiController(IUiRenderBackend backend = null) : this(Hud, backend) { }
-        internal ImGuiController(FontProfile profile, IUiRenderBackend backend = null)
+        internal ImGuiController(FontProfile profile, IUiRenderBackend backend = null, float rasterScale = 1)
         {
-            this.profile = profile;
+            this.profile = profile; this.rasterScale = Math.Max(1, rasterScale);
             this.backend = backend ?? SceneRenderBackends.Current.CreateUi();
             context = ImGui.CreateContext();
             ImGui.SetCurrentContext(context);
@@ -65,11 +71,12 @@ namespace ForesTycoon
             // Latin Extended-A contains Hungarian double acute glyphs: ő/Ő and ű/Ű.
             ushort[] ranges = { 0x0020, 0x017F, 0x2000, 0x206F, 0 };
             glyphRangeHandle = GCHandle.Alloc(ranges, GCHandleType.Pinned);
-            io.Fonts.AddFontFromFileTTF(fontPath, profile.Body, IntPtr.Zero, glyphRangeHandle.AddrOfPinnedObject());
+            io.FontGlobalScale = 1 / rasterScale;
+            io.Fonts.AddFontFromFileTTF(fontPath, profile.Body * rasterScale, IntPtr.Zero, glyphRangeHandle.AddrOfPinnedObject());
             // The HUD speaks in a serif face (estate names, seasons); the editor uses a semibold sans for a tool-like hierarchy.
             string title = (profile.SansTitles ? FindAuthoringFont(true) : FindTitleFont()) ?? fontPath;
-            titleFont = io.Fonts.AddFontFromFileTTF(title, profile.Title, IntPtr.Zero, glyphRangeHandle.AddrOfPinnedObject());
-            largeTitleFont = io.Fonts.AddFontFromFileTTF(title, profile.LargeTitle, IntPtr.Zero, glyphRangeHandle.AddrOfPinnedObject());
+            titleFont = io.Fonts.AddFontFromFileTTF(title, profile.Title * rasterScale, IntPtr.Zero, glyphRangeHandle.AddrOfPinnedObject());
+            largeTitleFont = io.Fonts.AddFontFromFileTTF(title, profile.LargeTitle * rasterScale, IntPtr.Zero, glyphRangeHandle.AddrOfPinnedObject());
         }
 
         internal static unsafe bool HasTitleFonts => TitleFont.NativePtr != null;

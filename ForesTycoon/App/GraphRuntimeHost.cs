@@ -38,7 +38,13 @@ internal static class GraphRuntimeHost
     internal static bool DispatchProjectRuntime(string[] args)
     {
         if (!File.Exists(RuleProject.DefaultPath)) return false;
-        var project = RuleProject.FromJson(File.ReadAllText(RuleProject.DefaultPath));
+        RuleProject project;
+        // An unreadable local project must not keep the game from starting; the rule link reports it in game.
+        try { project = RuleProject.FromJson(File.ReadAllText(RuleProject.DefaultPath)); }
+        catch (Exception error) when (error is InvalidDataException or JsonException or IOException) {
+            Console.WriteLine("A helyi szabályprojektet nem lehet betölteni (" + error.Message + "); a játék a lefordított kódjával indul.");
+            return false;
+        }
         if (project.Algorithms == null || project.Algorithms.Revision == AlgorithmBuild.CurrentRevision) return false;
         if (AlgorithmBuild.StaleReason(project.Algorithms) is string stale) {
             Console.WriteLine("A projekt algoritmusmásolatát figyelmen kívül hagyom (" + stale + "); a játék a lefordított kódjával indul.");

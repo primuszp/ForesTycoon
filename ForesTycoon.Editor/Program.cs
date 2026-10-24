@@ -65,14 +65,29 @@ namespace ForesTycoon.Editor
         {
             Title = "ForesTycoon – Világszerkesztő", ClientSize = new(1600, 960),
             API = ContextAPI.OpenGL, APIVersion = new(3, 3), Profile = ContextProfile.Core, StartVisible = !smoke && visible
-        }) { editor = new RuleEditorView(file); this.smoke = smoke; this.worldFile = worldFile; }
+        }) { editor = new RuleEditorView(file); this.smoke = smoke; this.worldFile = worldFile; if (!smoke) FitToScreen(); }
+
+        // A laptop screen (e.g. a 1512×982 pt MacBook) cannot hold the 1600×960 window: open inside the work area, and
+        // shrink text and spacing a little so the panels and previews keep their room.
+        private float uiScale = 1;
+        private void FitToScreen()
+        {
+            var work = Monitors.GetPrimaryMonitor().ClientArea;
+            int width = work.Size.X, height = work.Size.Y;
+            if (width <= 0 || height <= 0) return;
+            uiScale = Math.Clamp(Math.Min(width / 1800f, height / 1100f), .78f, 1);
+            ClientSize = new(Math.Min(1600, width - 40), Math.Min(960, (int)(height * .86f)));
+            CenterWindow();
+        }
 
         protected override void LoadScene()
         {
             VSync = VSyncMode.On;
             // The editor opens the scene the game starts from, missions and rules included.
             startupWork = WorldLoader.CreateStartWork(startupResult, enableRendering: false).GetEnumerator();
-            ui = new ImGuiController(ImGuiController.Authoring); EditorStyle.Apply();
+            float pixelsPerPoint = (float)FramebufferSize.X / Math.Max(1, ClientSize.X);
+            ui = new ImGuiController(ImGuiController.Authoring.Scaled(uiScale), rasterScale: MathF.Round(pixelsPerPoint));
+            EditorStyle.Apply(); if (uiScale < 1) ImGui.GetStyle().ScaleAllSizes(uiScale);
         }
         protected override void RenderScene(FrameEventArgs args)
         {

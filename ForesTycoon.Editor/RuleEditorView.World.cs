@@ -462,7 +462,7 @@ internal sealed partial class RuleEditorView
 
     private void SoilTypesTab(GameWorld world)
     {
-        EditorStyle.BeginPanel("types-list", new Vec2(280, 0));
+        EditorStyle.BeginPanel("types-list", new Vec2(ImGui.GetFontSize() * 15.5f, 0));
         EditorStyle.Section("Talajtípusok");
         selectedSoilType = Math.Clamp(selectedSoilType, 0, scenario.SoilTypes.Count - 1);
         for (int i = 0; i < scenario.SoilTypes.Count; i++)
@@ -554,7 +554,7 @@ internal sealed partial class RuleEditorView
 
     private void SpeciesTab(GameWorld world)
     {
-        EditorStyle.BeginPanel("species-list", new Vec2(280, 0));
+        EditorStyle.BeginPanel("species-list", new Vec2(ImGui.GetFontSize() * 15.5f, 0));
         EditorStyle.Section("Fafajok");
         selectedSpecies = Math.Clamp(selectedSpecies, 0, scenario.Species.Count - 1);
         for (int i = 0; i < scenario.Species.Count; i++)

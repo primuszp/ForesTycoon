@@ -43,8 +43,9 @@ namespace ForesTycoon.TreeModels
             CrownForm.Maple => new(5, 7, 7, 0.28f, 0.42f, 0.56f, 0.90f, 0.80f, 0.22f, 0.88f, 0.46f, 0.08f, Roundness: .65f),
             // Ash: open, sparse crown with smaller, more separated masses.
             CrownForm.Ash => new(5, 6, 7, 0.22f, 0.36f, 0.48f, 0.85f, 0.78f, 0.22f, 0.88f, 0.54f, 0.12f, Roundness: .3f),
-            // Mature Scots pine: flat cushions high on the bole.
-            CrownForm.Pine => new(4, 5, 6, 0.30f, 0.40f, 0.50f, 0.62f, 0.70f, 0.34f, 0.82f, 0.46f, 0.07f),
+            // Mature Scots pine: an open umbrella of flat, separate cushions on the limb ends, high on the bole, in two loose
+            // tiers; the upper cushions spread widest, so the top reads flat, and old trees hold more, wider ones.
+            CrownForm.Pine => new(5, 8, 9, 0.18f, 0.34f, 0.48f, 0.38f, 0.60f, 0.30f, 0.70f, 0.70f, 0.10f, 2, 1.0f),
             // Shrubs: hazel opens into a vase (masses high and wide), hawthorn is a low, dense dome.
             CrownForm.Hazel => new(4, 4, 4, 0.24f, 0.42f, 0.54f, 0.85f, 0.75f, 0.50f, 0.90f, 0.56f, 0.10f, 0, 0.9f),
             CrownForm.Hawthorn => new(4, 4, 4, 0.34f, 0.44f, 0.54f, 0.70f, 0.70f, 0.15f, 0.45f, 0.46f, 0.10f),
