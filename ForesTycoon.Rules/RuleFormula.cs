@@ -394,6 +394,29 @@ public sealed class ElevationZoneDefinition
         new() { Id = "mountain", Name = "Hegyvidék", Color = "#B4ADA2", MaxLevel = 99 } };
 }
 
+/// <summary>
+/// A biome: the landscape of an elevation zone (a dune coast, a floodplain meadow, oak–hornbeam hills). A zone may hold
+/// several biomes; they then share it in large patches by their <see cref="Share"/>, so the map has regions, not stripes.
+/// </summary>
+public sealed class BiomeDefinition
+{
+    public string Id { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string Color { get; set; } = "#7FA05A";
+    /// <summary>The elevation zone (its ID) the biome belongs to.</summary>
+    public string Zone { get; set; } = "";
+    /// <summary>Its part of the zone against the zone's other biomes (any positive weight).</summary>
+    public double Share { get; set; } = 1;
+    public string Description { get; set; } = "";
+
+    /// <summary>One built-in biome per built-in zone, after Hungarian forest landscapes.</summary>
+    public static List<BiomeDefinition> Defaults() => new() {
+        new() { Id = "dune-coast", Name = "Homokos part", Zone = "coast", Color = "#D9C48A", Description = "Parti homok, nádas és fűz; a víz közelében." },
+        new() { Id = "floodplain", Name = "Ártéri rét és ligeterdő", Zone = "plain", Color = "#7DB25A", Description = "Sík, nedves rét, kőris, nyár és tölgy ligetekkel." },
+        new() { Id = "oak-hornbeam", Name = "Gyertyános-tölgyes dombság", Zone = "hills", Color = "#9E9A4E", Description = "Lankás domboldalak tölgyessel és gyertyánnal." },
+        new() { Id = "beech-spruce", Name = "Bükkös–fenyves hegyvidék", Zone = "mountain", Color = "#6F8A6A", Description = "Hűvös, csapadékos hegyoldalak bükkel és lucfenyővel." } };
+}
+
 /// <summary>One horizon of a soil profile, from the surface down: what the diorama's sides show under a tile of the soil.</summary>
 public sealed class SoilHorizon
 {
@@ -572,6 +595,8 @@ public sealed class WorldScenario
     public List<SoilTypeDefinition> SoilTypes { get; set; } = new();
     /// <summary>Elevation zones from low to high; a scene saved before zones existed reads the built-in ones.</summary>
     public List<ElevationZoneDefinition> ElevationZones { get; set; } = ElevationZoneDefinition.Defaults();
+    /// <summary>The biomes of the zones; a scene saved before biomes existed reads the built-in ones.</summary>
+    public List<BiomeDefinition> Biomes { get; set; } = BiomeDefinition.Defaults();
     /// <summary>How much deeper the soil horizons are drawn on the diorama's sides than they are, so thin horizons can be seen.</summary>
     public double ProfileScale { get; set; } = 6;
     /// <summary>Painted soil: soil type ID by tile ID, over the generated map.</summary>
@@ -600,6 +625,38 @@ public sealed class WorldScenario
         return ElevationZones.Count - 1;
     }
 
+    /// <summary>
+    /// The index of the biome at a tile of the given level, column and row, or -1 when its zone has no biome. With several
+    /// biomes in a zone a smooth 16-tile noise of the map seed picks among them by share: deterministic, nothing stored,
+    /// so a terrain edit moves the biome with the zone.
+    /// </summary>
+    public int BiomeOf(int level, int column, int row)
+    {
+        string zone = ElevationZones[ZoneOf(level)].Id;
+        double total = 0; int only = -1, count = 0;
+        for (int i = 0; i < Biomes.Count; i++) if (Biomes[i].Zone == zone) { total += Biomes[i].Share; only = i; count++; }
+        if (count <= 1) return only;
+        double pick = PatchNoise(Seed, column, row) * total;
+        for (int i = 0; i < Biomes.Count; i++)
+            if (Biomes[i].Zone == zone && (pick -= Biomes[i].Share) < 0) return i;
+        return only;
+    }
+
+    private static double PatchNoise(int seed, int column, int row)
+    {
+        int x = column / 16, y = row / 16;
+        double u = column % 16 / 16.0, v = row % 16 / 16.0;
+        u = u * u * (3 - 2 * u); v = v * v * (3 - 2 * v);
+        double Corner(int cx, int cy)
+        {
+            uint h = unchecked((uint)seed ^ (uint)cx * 0x9e3779b9u ^ (uint)cy * 0x85ebca6bu ^ 0x62696f6du);
+            h ^= h >> 16; h = unchecked(h * 0x7feb352du); h ^= h >> 15; h = unchecked(h * 0x846ca68bu); h ^= h >> 16;
+            return h / ((double)uint.MaxValue + 1);
+        }
+        double a = Corner(x, y), b = Corner(x + 1, y), c = Corner(x, y + 1), d = Corner(x + 1, y + 1);
+        return (a + (b - a) * u) * (1 - v) + (c + (d - c) * u) * v;
+    }
+
     public void Validate()
     {
         if (string.IsNullOrWhiteSpace(Name) || SoilTypes == null || SoilTypes.Count is 0 or > 64 || SoilPaint == null)
@@ -626,6 +683,18 @@ public sealed class WorldScenario
         HeightPaint ??= new(); ForestPaint ??= new(); Species ??= new(); Springs ??= new(); Missions ??= new();
         ElevationZones ??= ElevationZoneDefinition.Defaults();
         if (!(ProfileScale is >= 1 and <= 30)) throw new InvalidDataException("A talajszelvény nagyítása 1–30 legyen.");
+        Biomes ??= BiomeDefinition.Defaults();
+        if (Biomes.Count > 32) throw new InvalidDataException("Egy pályán legfeljebb 32 biom lehet.");
+        var biomes = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var b in Biomes) {
+            if (b == null || string.IsNullOrWhiteSpace(b.Id) || string.IsNullOrWhiteSpace(b.Name) || !biomes.Add(b.Id))
+                throw new InvalidDataException("Minden biomnak egyedi azonosítója és neve legyen.");
+            if (!ElevationZones.Any(z => z.Id == b.Zone)) throw new InvalidDataException($"{b.Name}: a biom egy létező magassági övhöz tartozzon.");
+            if (!(b.Share is > 0 and <= 1000)) throw new InvalidDataException($"{b.Name}: a részarány pozitív szám legyen.");
+            if (b.Color is not { Length: 7 } || b.Color[0] != '#' || !uint.TryParse(b.Color.AsSpan(1), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
+                throw new InvalidDataException($"{b.Name}: a szín #RRGGBB legyen.");
+            b.Description ??= "";
+        }
         if (ElevationZones.Count is 0 or > 8) throw new InvalidDataException("A pályának 1–8 magassági öve legyen.");
         var zones = new HashSet<string>(StringComparer.Ordinal);
         for (int i = 0; i < ElevationZones.Count; i++) {

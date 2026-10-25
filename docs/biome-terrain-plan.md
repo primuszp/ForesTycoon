@@ -157,8 +157,17 @@ default loam: O 0.05 dark brown litter · A 0.25 humus · B 0.6 brown · C 1.5 p
    rebuild the test world. Found on the way: `Adopt` handed the scene to the adopting world but
    left its callbacks on the retired one (the side profile and the existing flood depth read the
    bootstrap world); `BindRendering` now rebinds them on attach and on adopt.
-3. **Biomes** — `BiomeDefinition`, `BiomeMap` (generation, edits, checkpoint), rule fields, editor
-   Biomok page and layer; soil and species generation read biome weights.
+3. **Biomes — part 1 done 2026-10-25.** `BiomeDefinition` (id, name, colour, zone, share,
+   description) in `WorldScenario.Biomes`, one built-in biome per zone. The biome is *derived*,
+   not stored: `WorldScenario.BiomeOf(level, column, row)` takes the zone's biomes and, with
+   several, picks by share from a smooth 16-tile noise of the map seed — so terrain edits move it
+   and saves need nothing new (this replaces the planned stored `BiomeMap`). Rule fields
+   `tile.zone`, `tile.biome` (indices) and `tile.slope` (enum). Editor: **Biomok** page, map layer
+   **Biom**, biome in the tile facts; editing biomes does not rebuild the test world.
+   **Part 2, open:** how biomes steer soil and species generation. Constraint found: a save
+   without a checkpoint regenerates its soils from `SoilLandscapeDefinition` (catalog + painted
+   overrides), and species fitness is an editable response graph with positional inputs — biome
+   weights applied only at generation would not survive such a replay.
 4. **Ground materials** — texture array palette, two-material blend in mesh and shader, macro
    variation; editor material preview. Replaces `GetTerrainColorRange`.
 5. **Relief** — `MaxHeight` 16 and per-zone relief profiles in the generator; road/foundation and

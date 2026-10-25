@@ -91,6 +91,8 @@ namespace ForesTycoon.Editor
                     (() => editor.ShowWorld(WorldTab.Map, MapLayer.Trafficability, forestTile), "world-map-traffic"),
                     (() => editor.ShowWorld(WorldTab.Map, MapLayer.Elevation, forestTile), "world-map-elevation"),
                     (() => editor.ShowWorld(WorldTab.Map, MapLayer.Zones, forestTile), "world-map-zones"),
+                    (() => editor.ShowWorld(WorldTab.Map, MapLayer.Biomes, forestTile), "world-map-biomes"),
+                    (() => editor.ShowBiomes(2), "world-biomes"),
                     (() => editor.ShowWorld(WorldTab.Map, MapLayer.Forest, forestTile), "world-map-forest"),
                     (() => editor.ShowWorld(WorldTab.Map, MapLayer.Tracks, forestTile), "world-map-structures"),
                     (() => editor.ShowWorld(WorldTab.Types), "world-types"),

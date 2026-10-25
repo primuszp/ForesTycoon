@@ -11,7 +11,7 @@ namespace ForesTycoon.Editor;
 /// <summary>Every page of the editor. The sidebar groups them by the designer's task, not by where the data lives.</summary>
 internal enum EditorPage
 {
-    Map, Soils, Species, Surfaces,
+    Map, Soils, Biomes, Species, Surfaces,
     Missions, Vehicles, Parameters,
     Objects, Rules, Responses, Processes, Controllers, Stocks, Library,
     SystemMap, Overview, Trial
@@ -33,6 +33,7 @@ internal sealed partial class RuleEditorView
         ("Világ", new NavEntry[] {
             new(EditorPage.Map, "Térkép", GameIcon.NewMap, "Generálás seedből, majd talaj, domborzat, víz, erdő és utak festése; rétegek és csempék."),
             new(EditorPage.Soils, "Talajtípusok", GameIcon.Lower, "Amit a térkép fest: víztartás, termékenység, teherbírás."),
+            new(EditorPage.Biomes, "Biomok", GameIcon.Environment, "Tájtípusok magassági övenként: tengerpart, ártér, dombság, hegyvidék."),
             new(EditorPage.Species, "Fafajok", GameIcon.Spruce, "Növekedés, termőhely, méret és faanyagár."),
             new(EditorPage.Surfaces, "Utak és burkolatok", GameIcon.Macadam, "Utak és nyomok: költség, kopás, romlás, menetellenállás."),
         }),
@@ -135,6 +136,7 @@ internal sealed partial class RuleEditorView
         ImGui.Dummy(new Vec2(0, 2));
         switch (page) {
             case EditorPage.Soils: SoilTypesTab(world); break;
+            case EditorPage.Biomes: BiomesTab(world); break;
             case EditorPage.Species: SpeciesTab(world); break;
             case EditorPage.Surfaces: SurfacesTab(world); break;
             case EditorPage.Missions: MissionsTab(world); break;
@@ -262,6 +264,7 @@ internal sealed partial class RuleEditorView
             case EditorPage.Stocks: return (dynamicsEditor.Draft.Stocks.Count + dynamicsEditor.Draft.Flows.Count).ToString();
             case EditorPage.Missions: return scenario?.Missions.Count.ToString();
             case EditorPage.Soils: return scenario?.SoilTypes.Count.ToString();
+            case EditorPage.Biomes: return scenario?.Biomes.Count.ToString();
             case EditorPage.Species: return scenario?.Species.Count.ToString();
             default: return null;
         }

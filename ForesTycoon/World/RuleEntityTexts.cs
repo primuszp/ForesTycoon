@@ -38,6 +38,10 @@ internal static class RuleEntityTexts
             ["tile.wetness"] = new("Átnedvesedés", "Mennyire ázott át a talaj."),
             ["tile.elevation"] = new("Terepmagasság", "A talajfelszín magassága a térkép alapszintje fölött."),
             ["tile.waterLevel"] = new("Vízszint", "A vízfelszín magassága: terep plusz álló víz. A víz az alacsonyabb szint felé folyik."),
+            ["tile.zone"] = new("Magassági öv", "A csempe magassági öve alulról számolva: 0 a legalacsonyabb (alapból tengerpart), felfelé nő (síkság, dombvidék, hegyvidék)."),
+            ["tile.biome"] = new("Biom", "A csempe biomjának sorszáma a pálya biomlistájában (a Biomok oldalon látható); -1, ha az övének nincs biomja."),
+            ["tile.slope"] = new("Lejtő", "A csempe meredeksége a sarkai magasságkülönbségéből."),
+            ["tile.slope.flat"] = new("sík"), ["tile.slope.gentle"] = new("enyhe"), ["tile.slope.steep"] = new("meredek"),
 
             ["tile.neighbours"] = new("Szomszéd csempék", "A csempével oldalt határos négy csempe."),
             ["tile.trees"] = new("Fák a csempén", "A csempén álló élő fák."),

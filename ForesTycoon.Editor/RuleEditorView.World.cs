@@ -12,7 +12,7 @@ using Vec4 = System.Numerics.Vector4;
 namespace ForesTycoon.Editor;
 
 internal enum WorldTab { Map, Types, Objects, Missions, Rules, Trial }
-internal enum MapLayer { Soil, Elevation, Zones, Water, GroundWater, Forest, Tracks, Trafficability }
+internal enum MapLayer { Soil, Elevation, Zones, Biomes, Water, GroundWater, Forest, Tracks, Trafficability }
 internal enum TypeTab { Soil, Species, Surfaces, Vehicles, Parameters }
 
 /// <summary>
@@ -136,6 +136,7 @@ internal sealed partial class RuleEditorView
         (MapLayer.Soil, "Talaj", "Talajtípus csempénként. Festhető."),
         (MapLayer.Elevation, "Domborzat", "Magasság. Festhető: emelés, süllyesztés, simítás."),
         (MapLayer.Zones, "Magassági övek", "Tengerpart, síkság, dombvidék, hegyvidék a terep szintje szerint; a meredek csempe sötétebb. Az övek határa itt állítható."),
+        (MapLayer.Biomes, "Biom", "A csempe biomja: az öve és – ha az övben több biom van – a nagy foltokban váltakozó részarányuk szerint. A biomok a Biomok oldalon szerkeszthetők."),
         (MapLayer.Water, "Víz", "Tavak és folyók. Festhető: a vízszint alá süllyesztett terep megtelik."),
         (MapLayer.GroundWater, "Talajvíz", "Gyökérzóna telítettsége."),
         (MapLayer.Forest, "Erdő", "Fafaj és fatérfogat. Festhető: kezdő erdő fajjal, vagy irtás."),
@@ -269,6 +270,8 @@ internal sealed partial class RuleEditorView
             if (section.TryGetValue(key, out var value)) EditorStyle.Fact(label, value);
         EditorStyle.Fact("Magasság", $"{world.TileLevel(tile)}. szint");
         EditorStyle.Fact("Magassági öv", scenario.ElevationZones[scenario.ZoneOf(world.TileLevel(tile))].Name);
+        int biome = TileBiome(world, tile);
+        EditorStyle.Fact("Biom", biome < 0 ? "nincs" : $"{scenario.Biomes[biome].Name} (#{biome})");
         EditorStyle.Fact("Lejtő", world.TileSlope(tile) switch { TerrainSlope.Flat => "sík", TerrainSlope.Gentle => "enyhe", _ => "meredek" });
         ImGui.EndTable();
         int soil = world.SoilIndex(tile);
@@ -370,6 +373,7 @@ internal sealed partial class RuleEditorView
         MapLayer.Elevation => tile => Mix(new(0.18f, 0.30f, 0.20f, 1), new(0.86f, 0.82f, 0.68f, 1), world.TileElevation(tile)),
         MapLayer.Zones => tile => EditorStyle.Dim(Colour(scenario.ElevationZones[scenario.ZoneOf(world.TileLevel(tile))].Color),
             world.TileSlope(tile) switch { TerrainSlope.Flat => 1f, TerrainSlope.Gentle => .86f, _ => .66f }),
+        MapLayer.Biomes => tile => BiomeColour(world, tile),
         MapLayer.Water => tile => world.IsWaterTile(tile) ? new(0.25f, 0.50f, 0.90f, 1)
             : Mix(Mix(new(0.22f, 0.24f, 0.20f, 1), new(0.62f, 0.60f, 0.52f, 1), world.TileElevation(tile)), new(0.30f, 0.62f, 0.95f, 1),
                 (float)Math.Sqrt(Math.Clamp((world.TileSurfaceWater(tile) - 0.5) / 100, 0, 1))),
@@ -398,6 +402,76 @@ internal sealed partial class RuleEditorView
         return new(.5f, .5f, .5f, 1);
     }
     private static string Hex(Vec4 c) => $"#{(int)(c.X * 255):X2}{(int)(c.Y * 255):X2}{(int)(c.Z * 255):X2}";
+
+    // The editor shows the edited scene's biomes, not the applied ones: the same lookup as the game, on the scenario.
+    private int TileBiome(GameWorld world, int tile) => scenario.BiomeOf(world.TileLevel(tile), tile / world.TileGrid.Rows, tile % world.TileGrid.Rows);
+    private Vec4 BiomeColour(GameWorld world, int tile)
+    {
+        int b = TileBiome(world, tile);
+        return EditorStyle.Dim(b < 0 ? new Vec4(.35f, .35f, .35f, 1) : Colour(scenario.Biomes[b].Color),
+            world.TileSlope(tile) switch { TerrainSlope.Flat => 1f, TerrainSlope.Gentle => .88f, _ => .7f });
+    }
+    /// <summary>Tiles per biome; the last slot counts the tiles whose zone has no biome.</summary>
+    private int[] BiomeCounts(GameWorld world)
+    {
+        var counts = new int[scenario.Biomes.Count + 1];
+        int tiles = world.TileGrid.Columns * world.TileGrid.Rows;
+        for (int t = 0; t < tiles; t++) { int b = TileBiome(world, t); counts[b < 0 ? ^1 : b]++; }
+        return counts;
+    }
+
+    private int selectedBiome;
+    internal void ShowBiomes(int index = 0) { selectedBiome = index; ShowPage(EditorPage.Biomes); }
+    private void BiomesTab(GameWorld world)
+    {
+        EditorStyle.BeginPanel("biome-list", new Vec2(ImGui.GetFontSize() * 15.5f, 0));
+        EditorStyle.Section("Biomok");
+        selectedBiome = Math.Clamp(selectedBiome, 0, Math.Max(0, scenario.Biomes.Count - 1));
+        foreach (var zone in scenario.ElevationZones) {
+            EditorStyle.Text(HudTheme.Muted, zone.Name);
+            for (int i = 0; i < scenario.Biomes.Count; i++)
+                if (scenario.Biomes[i].Zone == zone.Id && ColourSwatch(scenario.Biomes[i].Name, Colour(scenario.Biomes[i].Color), i == selectedBiome, "biome" + i)) selectedBiome = i;
+            if (!scenario.Biomes.Any(b => b.Zone == zone.Id)) EditorStyle.Text(HudTheme.Muted, "   (nincs biom)");
+        }
+        ImGui.Spacing();
+        ImGui.BeginDisabled(scenario.Biomes.Count >= 32);
+        if (ImGui.Button("Új biom", new Vec2(-1, 0))) {
+            var zone = scenario.Biomes.Count > 0 ? scenario.Biomes[selectedBiome].Zone : scenario.ElevationZones[0].Id;
+            scenario.Biomes.Add(new BiomeDefinition { Id = "biome" + Guid.NewGuid().ToString("N")[..6], Name = "Új biom", Zone = zone, Color = "#8A9A6A" });
+            selectedBiome = scenario.Biomes.Count - 1;
+        }
+        ImGui.EndDisabled();
+        ImGui.BeginDisabled(scenario.Biomes.Count == 0);
+        if (ImGui.Button("Törlés", new Vec2(-1, 0))) { scenario.Biomes.RemoveAt(selectedBiome); selectedBiome = 0; }
+        ImGui.EndDisabled();
+        if (ImGui.Button("Alapértelmezett biomok", new Vec2(-1, 0))) { scenario.Biomes = BiomeDefinition.Defaults(); selectedBiome = 0; }
+        EditorStyle.EndPanel(); ImGui.SameLine();
+
+        EditorStyle.BeginPanel("biome-form", Vec2.Zero);
+        if (scenario.Biomes.Count == 0) { EditorStyle.Text(HudTheme.Muted, "Nincs biom: minden csempe biom nélküli (tile.biome = -1)."); EditorStyle.EndPanel(); return; }
+        var biome = scenario.Biomes[selectedBiome];
+        EditorStyle.Title(biome.Name);
+        var counts = BiomeCounts(world); int tiles = world.TileGrid.Columns * world.TileGrid.Rows;
+        EditorStyle.Text(HudTheme.Muted, $"A tesztvilágban {counts[selectedBiome]} csempe ({100.0 * counts[selectedBiome] / Math.Max(1, tiles):0}%) · szabályokban: tile.biome = {selectedBiome} · azonosító: {biome.Id}");
+        ParameterTable("biome-fields", Row => {
+            Row("Név", "A térképen, a csempeadatoknál és a játékban.", () => { string n = biome.Name; if (ImGui.InputText("##name", ref n, 60) && n.Trim().Length > 0) biome.Name = n.Trim(); });
+            Row("Szín", "A Biom térképréteg színe.", () => { var c = Colour(biome.Color); var rgb = new System.Numerics.Vector3(c.X, c.Y, c.Z);
+                if (ImGui.ColorEdit3("##colour", ref rgb, ImGuiColorEditFlags.NoInputs)) biome.Color = Hex(new Vec4(rgb, 1)); });
+            Row("Magassági öv", "Ebben az övben fordul elő. Az övek határa a Térkép · Magassági övek rétegen állítható.", () => {
+                int zone = Math.Max(0, scenario.ElevationZones.FindIndex(z => z.Id == biome.Zone));
+                if (ImGui.Combo("##zone", ref zone, scenario.ElevationZones.Select(z => z.Name).ToArray(), scenario.ElevationZones.Count)) biome.Zone = scenario.ElevationZones[zone].Id; });
+            Row("Részarány", "Ha az övben több biom van, ekkora súllyal osztoznak rajta, kb. 16 csempés foltokban.", () =>
+                Number("##share", () => biome.Share, v => biome.Share = v, .1, "%.2f", .01, 1000));
+            Row("Leírás", "A táj jellege; a súgóban és a tervezésnél segít.", () => { string d = biome.Description ?? "";
+                if (ImGui.InputTextMultiline("##description", ref d, 400, new Vec2(-1, ImGui.GetTextLineHeight() * 3.4f))) biome.Description = d.Trim(); });
+        });
+        ImGui.Spacing();
+        ImGui.PushTextWrapPos(0);
+        EditorStyle.Text(HudTheme.Muted, "A biom a csempe övéből adódik, ezért terepszerkesztéskor vele együtt változik; tárolni nem kell. "
+            + "A szabályok a tile.zone, tile.biome és tile.slope mezőkből olvassák; a térképen a Biom réteg mutatja.");
+        ImGui.PopTextWrapPos();
+        EditorStyle.EndPanel();
+    }
 
     /// <summary>Colour swatches with labels in a row that wraps to the next line when the panel is full.</summary>
     private static void Legend(IEnumerable<(Vec4 Colour, string Label)> items)
@@ -476,6 +550,12 @@ internal sealed partial class RuleEditorView
             for (int t = 0; t < tiles; t++) { int s = world.SoilIndex(t); if (s < counts.Length) counts[s]++; }
             Legend(scenario.SoilTypes.Select((type, i) => (Colour(type.Color), $"{type.Name} · {Share(counts[i])}")));
             if (mapLayer == MapLayer.Tracks) { EditorStyle.Text(HudTheme.Muted, "világos: út · barna: épület · narancs: közelítőnyom"); }
+            return;
+        }
+        if (mapLayer == MapLayer.Biomes) {
+            var counts = BiomeCounts(world);
+            Legend(scenario.Biomes.Select((biome, i) => (Colour(biome.Color), $"{biome.Name} · {Share(counts[i])}")));
+            if (counts[^1] > 0) EditorStyle.Text(HudTheme.Muted, $"szürke: biom nélküli öv · {Share(counts[^1])}");
             return;
         }
         if (mapLayer == MapLayer.Zones) {

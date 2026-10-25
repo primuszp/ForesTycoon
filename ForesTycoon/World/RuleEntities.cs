@@ -65,6 +65,9 @@ internal interface ITile : IPlace
     [RuleField("Water a spring adds to the surface.", Unit = "mm/h", Min = 0)] double SpringRate { get; }
     [RuleField("Height of the ground above the map's base.", Unit = "m")] double Elevation { get; }
     [RuleField("Height of the water surface: ground plus standing water. Water flows towards a lower level.", Unit = "m")] double WaterLevel { get; }
+    [RuleField("Elevation zone of the tile, counted from the lowest (0) upwards, as the scene's zones are ordered.", Min = 0)] double Zone { get; }
+    [RuleField("Biome of the tile: its index in the scene's biome list, -1 when its zone has none.", Min = -1)] double Biome { get; }
+    [RuleField("Steepness of the tile from the height difference of its corners.")] ForesTycoon.Map.TerrainSlope Slope { get; }
     [RuleCollection("The four tiles next to this one.", Addressable = true)] IEnumerable<ITile> Neighbours { get; }
     [RuleCollection("The living trees standing on the tile.")] IEnumerable<ITree> Trees { get; }
     [RuleCollection("The stumps left on the tile.")] IEnumerable<IStump> Stumps { get; }
@@ -337,6 +340,9 @@ sealed partial class GameWorld
         public double Drop => WaterDrop(World, Id);
         public double Elevation => World.Map.IsValidTileId(Id) ? ((Ecology.IForestHabitat)World.Map).GetGroundHeight(Id) : 0;
         public double WaterLevel => Elevation + SurfaceWater / 1000;
+        public double Zone => World.Map.IsValidTileId(Id) ? World.TileZoneIndex(Id) : 0;
+        public double Biome => World.Map.IsValidTileId(Id) ? World.TileBiomeIndex(Id) : -1;
+        public ForesTycoon.Map.TerrainSlope Slope => World.Map.IsValidTileId(Id) ? World.TileSlope(Id) : ForesTycoon.Map.TerrainSlope.Flat;
 
         // ── Direct access: the same values as the properties above, without binding the view ──
         // Rules visit every tile several times a step, so the fields the environment keeps in arrays are read (and the
