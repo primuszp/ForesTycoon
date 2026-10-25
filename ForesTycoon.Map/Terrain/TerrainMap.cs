@@ -225,6 +225,14 @@ namespace ForesTycoon.Map
             tiles[tileId].W.xPos / WorldScale.MetresToWorld, tiles[tileId].W.yPos / WorldScale.MetresToWorld,
             data.TileSizeH / WorldScale.MetresToWorld, data.TileSizeV / WorldScale.MetresToWorld);
 
+        /// <summary>The scene's zone and biome of a tile; set by the world that owns the map, (0, -1) without one.</summary>
+        internal Func<int, (int Zone, int Biome)> LandscapeClass { get; set; }
+        (int Zone, int Biome, int Slope) IForestHabitat.GetLandscape(int tileId)
+        {
+            var (zone, biome) = LandscapeClass?.Invoke(tileId) ?? (0, -1);
+            return (zone, biome, (int)tiles[tileId].Shape.Slope);
+        }
+
         float IForestHabitat.GetNormalizedElevation(int tileId) =>
             Math.Clamp(tiles[tileId].Low / (float)Math.Max(1, settings.MaxHeight), 0f, 1f);
 

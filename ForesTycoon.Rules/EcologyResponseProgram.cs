@@ -9,7 +9,8 @@ public sealed class EcologyResponseProgram
 {
     private static readonly BehaviorHook[] SiteHooks = {
         new("forest.site", "Termőhelyi alkalmasság", "site", "0–1", 0, 1, "", "", "Ültetés, fajajánló és fa-erőforrás frissítése", false,
-            new[] { "tile.moisture", "tile.elevation", "tile.fertility", "species.preferredElevation", "species.elevationTolerance" }),
+            new[] { "tile.moisture", "tile.elevation", "tile.fertility", "species.preferredElevation", "species.elevationTolerance",
+                "tile.zone", "tile.biome", "tile.slope", "species.kind" }),
         new("water.stress", "Fafaj vízválasza", "site", "0–1", 0, 1, "", "", "Pillanatnyi és havi fa-erőforrás frissítése", false,
             new[] { "tile.waterSupply", "tile.waterlogging", "species.drySensitivity" }),
         new("water.drought", "Aszály követése", "site", "0–1", 0, 1, "", "", "Szeletelt környezeti lépés, csempénként", false,
@@ -96,9 +97,12 @@ public sealed class EcologyResponseProgram
         values.CopyTo(inputs[index]);
         return Evaluate(index);
     }
-    public double Fitness(double moisture, double elevation, double fertility, double preferredElevation, double elevationTolerance)
+    /// <summary>Site suitability of a species on a tile; the landscape inputs let rules favour species by zone, biome or slope.</summary>
+    public double Fitness(double moisture, double elevation, double fertility, double preferredElevation, double elevationTolerance,
+        int zone = 0, int biome = -1, int slope = 0, int species = 0)
     {
         var v = inputs[0]; v[0] = moisture; v[1] = elevation; v[2] = fertility; v[3] = preferredElevation; v[4] = elevationTolerance;
+        v[5] = zone; v[6] = biome; v[7] = slope; v[8] = species;
         return Evaluate(0);
     }
     public double WaterFactor(double supply, double waterlogging, double sensitivity)

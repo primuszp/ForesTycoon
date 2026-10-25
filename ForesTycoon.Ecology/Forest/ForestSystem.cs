@@ -349,8 +349,9 @@ namespace ForesTycoon.Ecology
         private float Suitability(ForestSpecies species, int tileId)
         {
             var profile = ForestSpeciesProfile.For(species);
+            var (zone, biome, slope) = habitat.GetLandscape(tileId);
             return (float)Responses.Fitness(habitat.GetMoisture(tileId), habitat.GetNormalizedElevation(tileId),
-                habitat.GetSoilProperties(tileId).Fertility, profile.PreferredElevation, profile.ElevationTolerance);
+                habitat.GetSoilProperties(tileId).Fertility, profile.PreferredElevation, profile.ElevationTolerance, zone, biome, slope, (int)species);
         }
 
         private float InitialBiomass(ForestSpeciesProfile profile, float age, float health)

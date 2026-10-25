@@ -52,3 +52,42 @@ public sealed class BiomeTests
         }
     }
 }
+
+public sealed class BiomeSiteRuleTests
+{
+    private static BehaviorNode Input(string id, string key) => new() { Id = id, Name = id, Operation = BehaviorOperation.Input, Key = key };
+    private static BehaviorNode Constant(string id, double value) => new() { Id = id, Name = id, Operation = BehaviorOperation.Constant, Value = value };
+    private static BehaviorNode Op(string id, BehaviorOperation op, string a, string b) => new() { Id = id, Name = id, Operation = op, A = a, B = b };
+
+    [Fact]
+    public void ASiteRuleCanFavourASpeciesInABiome()
+    {
+        var project = GameWorld.DefaultRuleProject();
+        var site = project.Behaviors.Graphs.Single(g => g.Hook == "forest.site");
+        double spruce = (int)ForestSpecies.Spruce;
+        // 0.2 + 0.8 · [biome = 3] · [species = spruce], equality as two comparisons.
+        site.Nodes = new() {
+            Input("biome", "tile.biome"), Input("species", "species.kind"),
+            Constant("b-low", 2.5), Constant("b-high", 3.5), Constant("s-low", spruce - .5), Constant("s-high", spruce + .5),
+            Op("b1", BehaviorOperation.Greater, "biome", "b-low"), Op("b2", BehaviorOperation.Less, "biome", "b-high"),
+            Op("s1", BehaviorOperation.Greater, "species", "s-low"), Op("s2", BehaviorOperation.Less, "species", "s-high"),
+            Op("b", BehaviorOperation.Multiply, "b1", "b2"), Op("s", BehaviorOperation.Multiply, "s1", "s2"),
+            Op("both", BehaviorOperation.Multiply, "b", "s"), Constant("gain", .8), Op("bonus", BehaviorOperation.Multiply, "both", "gain"),
+            Constant("base", .2), Op("fitness", BehaviorOperation.Add, "base", "bonus") };
+        site.Output = "fitness";
+        var program = EcologyResponseProgram.FromModel(project.Behaviors);
+        Assert.Equal(1, program.Fitness(.5, .5, 1, .5, .4, zone: 3, biome: 3, slope: 1, species: (int)ForestSpecies.Spruce), 9);
+        Assert.Equal(.2, program.Fitness(.5, .5, 1, .5, .4, zone: 3, biome: 3, slope: 1, species: (int)ForestSpecies.Oak), 9);
+        Assert.Equal(.2, program.Fitness(.5, .5, 1, .5, .4, zone: 1, biome: 1, slope: 0, species: (int)ForestSpecies.Spruce), 9);
+    }
+
+    [Fact]
+    public void TheForestReadsTheLandscapeOfTheRunningSceneThroughItsMap()
+    {
+        using var world = WorldLoader.CreateStart(WorldLoader.OpeningScenePath()!, enableRendering: false);
+        var habitat = (IForestHabitat)world.Map;
+        int tiles = world.TileGrid.Columns * world.TileGrid.Rows;
+        for (int id = 0; id < tiles; id += 7)
+            Assert.Equal((world.TileZoneIndex(id), world.TileBiomeIndex(id), (int)world.TileSlope(id)), habitat.GetLandscape(id));
+    }
+}

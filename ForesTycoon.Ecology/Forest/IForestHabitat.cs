@@ -25,5 +25,10 @@ namespace ForesTycoon.Ecology
         ForestPattern ForestPattern => ForestPattern.Natural;
         /// <summary>Tile grid size, needed only by the large patterned initial forests.</summary>
         (int Columns, int Rows) TileGrid => (0, 0);
+        /// <summary>
+        /// The landscape class of a tile, as the scene defines it: elevation zone index (0 = lowest), biome index (-1 = none)
+        /// and slope (0 flat, 1 gentle, 2 steep). Site rules may read it; habitats without a scene report a flat, lowest zone.
+        /// </summary>
+        (int Zone, int Biome, int Slope) GetLandscape(int tileId) => (0, -1, 0);
     }
 }

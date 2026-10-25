@@ -106,5 +106,6 @@ namespace ForesTycoon.Ecology
         public float GetNormalizedElevation(int id) => terrain.GetNormalizedElevation(id);
         public float GetGroundHeight(int id) => terrain.GetGroundHeight(id);
         public int GetAdjacentTileIds(int id, Span<int> destination) => terrain.GetAdjacentTileIds(id, destination);
+        public (int Zone, int Biome, int Slope) GetLandscape(int id) => terrain.GetLandscape(id);
     }
 }
