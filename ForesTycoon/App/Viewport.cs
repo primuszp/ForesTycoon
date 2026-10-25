@@ -595,7 +595,10 @@ namespace ForesTycoon
 
         protected override void RenderScene(FrameEventArgs e)
         {
-            if (world == null || !world.MapGeometryPrepared)
+            // Loading ends when the loading frame finishes its own preparation pass and sets isLoaded. The renderer may already
+            // report its geometry prepared (a generated world arrives prepared); skipping the loading frame then left the game
+            // on the loading screen for good whenever that last pass needed more than one 4 ms slice.
+            if (world == null || !isLoaded || !world.MapGeometryPrepared)
             {
                 RenderLoadingFrame();
                 return;

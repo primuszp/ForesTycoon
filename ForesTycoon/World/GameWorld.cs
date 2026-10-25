@@ -127,6 +127,8 @@ namespace ForesTycoon
             // The ecosystem may rebuild its environment (new map, loaded save): always draw the current one.
             terrainRenderer.FloodDepth = id => Environment?.SurfaceDepth(id) ?? 0;
             terrain.SideProfile = SideProfile;
+            terrain.GroundOf = TileGround;
+            terrain.InvalidateGround();
         }
 
         public Tile HoveredTile => map.HoveredTile;

@@ -14,6 +14,8 @@ namespace ForesTycoon.OpenGl
         private int program, depthProgram, textures, shadowTexture, shadowFramebuffer;
         private int environmentTexture;
         private float[] environmentPixels;
+        // The per-tile ground map (pattern, steep pattern, steep blend) and the terrain ground revision it was built from.
+        private int groundTexture; private byte[] groundPixels; private ulong groundRevision;
         private ulong environmentRevision = ulong.MaxValue;
         private readonly EnvironmentSystem environment;
         private readonly Terrain environmentTerrain;
@@ -81,6 +83,7 @@ namespace ForesTycoon.OpenGl
                 } while (++units < 16 && Stopwatch.GetElapsedTime(started).TotalMilliseconds < 1);
                 GL.ActiveTexture(TextureUnit.Texture0);
             }
+            if (settings.Enhanced && initialized) UploadGround();
             if (settings.Enhanced && shadowSize != settings.ShadowResolution)
             {
                 shadowSize = settings.ShadowResolution;
@@ -157,6 +160,8 @@ namespace ForesTycoon.OpenGl
                 GL.Uniform1(GlProgram.Uniform(shader, "time"), (float)(weather.Time % 4096));
                 GL.Uniform1(GlProgram.Uniform(shader, "materials"), 0);
                 GL.Uniform1(GlProgram.Uniform(shader, "environment_map"), 5);
+                GL.Uniform1(GlProgram.Uniform(shader, "ground_map"), 6);
+                GL.Uniform1(GlProgram.Uniform(shader, "ground_active"), groundTexture != 0 ? 1 : 0);
                 GL.Uniform1(GlProgram.Uniform(shader, "environment_active"), environment != null && environmentRevision != ulong.MaxValue && settings.AutomaticWeather && settings.Weather ? 1 : 0);
                 if (environmentTerrain != null)
                 {
@@ -167,9 +172,32 @@ namespace ForesTycoon.OpenGl
                 globalsUploaded = true;
             }
             GL.ActiveTexture(TextureUnit.Texture5); GL.BindTexture(TextureTarget.Texture2D, environmentTexture);
+            GL.ActiveTexture(TextureUnit.Texture6); GL.BindTexture(TextureTarget.Texture2D, groundTexture);
             GL.ActiveTexture(TextureUnit.Texture0); GL.BindTexture(TextureTarget.Texture2DArray, textures);
             GL.ActiveTexture(TextureUnit.Texture1); GL.BindTexture(TextureTarget.Texture2D, shadowTexture);
             GL.ActiveTexture(TextureUnit.Texture0);
+        }
+
+        /// <summary>Sends the terrain's ground map when its ground changed: one small RGBA8 texel per tile.</summary>
+        private void UploadGround()
+        {
+            if (environmentTerrain == null || groundRevision == environmentTerrain.GroundRevision) return;
+            int columns = environmentTerrain.Settings.TileColumns, rows = environmentTerrain.Settings.TileRows;
+            if (groundPixels?.Length != columns * rows * 4) groundPixels = new byte[columns * rows * 4];
+            environmentTerrain.FillGroundMap(groundPixels);
+            GL.ActiveTexture(TextureUnit.Texture6);
+            if (groundTexture == 0)
+            {
+                groundTexture = GL.GenTexture(); GL.BindTexture(TextureTarget.Texture2D, groundTexture);
+                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Nearest);
+                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Nearest);
+                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
+                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
+            }
+            GL.BindTexture(TextureTarget.Texture2D, groundTexture);
+            GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba8, columns, rows, 0, PixelFormat.Rgba, PixelType.UnsignedByte, groundPixels);
+            GL.ActiveTexture(TextureUnit.Texture0);
+            groundRevision = environmentTerrain.GroundRevision;
         }
 
         private IEnumerable<int> UploadEnvironmentWork()
@@ -239,6 +267,8 @@ uniform sampler2DShadow shadow_map;
 uniform sampler2D environment_map;
 uniform vec4 environment_bounds;
 uniform int environment_active;
+uniform sampler2D ground_map;
+uniform int ground_active;
 uniform int kind, textured, lit, shadowed;
 uniform float outline_width, time, flash, storm;
 uniform int clouds;
@@ -315,6 +345,19 @@ vec3 foliagePattern(int code, vec3 c, vec3 w, vec3 n){
     float under = 0.82 + 0.20*smoothstep(-0.5, 0.7, n.z);
     return c * under * mix(0.86, 1.14, clamp((leaves - 0.53) / 0.30, 0.0, 1.0));
 }
+// The ground's detail from the per-tile ground map: each tile blends its ground and steep patterns, and the four tiles
+// around the point blend bilinearly, so patterns fade across tile edges like the vertex colours do. The map holds the
+// texture layers themselves (no integer mapping or branching here: macOS compiles such variants very slowly).
+float groundTile(ivec2 c, vec2 uv){
+    vec4 m = texelFetch(ground_map, clamp(c, ivec2(0), textureSize(ground_map, 0) - 1), 0) * 255.0;
+    return mix(texture(materials, vec3(uv, m.r)).r, texture(materials, vec3(uv, m.g)).r, m.b / 255.0);
+}
+float groundDetail(vec2 uv){
+    vec2 t = (world.xy - environment_bounds.xy) / environment_bounds.zw * vec2(textureSize(ground_map, 0)) - 0.5;
+    ivec2 i = ivec2(floor(t)); vec2 f = fract(t);
+    return mix(mix(groundTile(i, uv), groundTile(i + ivec2(1, 0), uv), f.x),
+               mix(groundTile(i + ivec2(0, 1), uv), groundTile(i + ivec2(1, 1), uv), f.x), f.y);
+}
 float cloudDensity(vec2 p){
     p=p/42.0-vec2(time*0.012,time*0.004);
     return smoothstep(0.28,0.72,surfaceNoise2(p)*0.65+surfaceNoise2(p*2.03)*0.25+surfaceNoise2(p*4.1)*0.1);
@@ -342,6 +385,7 @@ void main() {
         float layer = kind == 3 ? 5 : (kind == 11 ? 2 : (kind == 5 ? 3 : (kind == 8 || kind == 2 || kind == 12 || kind == 13 ? 1 : 0)));
         vec2 uv = kind == 5 || kind == 2 ? vec2(world.x+world.y,world.z)/4.0 : world.xy/5.0;
         detail = texture(materials,vec3(uv,layer)).r / 0.84;
+        if(kind == 1 && ground_active != 0) detail = groundDetail(uv) / 0.84;
         detail *= 0.94 + materialPatch * 0.1;
         if(kind == 6) detail = 0.94 + 0.1 * texture(materials,vec3(world.xy/2.5,0)).r;
         if(kind == 4 || kind == 9) detail = 1;
@@ -490,6 +534,7 @@ void main(){lodMask(); forestLeafMask(); }");
             if (shadowTexture != 0) GL.DeleteTexture(shadowTexture);
             if (shadowFramebuffer != 0) GL.DeleteFramebuffer(shadowFramebuffer);
             if (environmentTexture != 0) GL.DeleteTexture(environmentTexture); environmentTexture = 0;
+            if (groundTexture != 0) GL.DeleteTexture(groundTexture); groundTexture = 0;
             program = depthProgram = textures = shadowTexture = shadowFramebuffer = 0;
             environmentPixels = null; shadowsReady = ShadowPass = false;
         }

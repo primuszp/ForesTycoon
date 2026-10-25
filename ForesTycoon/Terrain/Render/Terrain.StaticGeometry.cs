@@ -28,6 +28,13 @@ namespace ForesTycoon
         internal int StaticCacheEvictions { get; private set; }
         private long staticUseSequence;
 
+        /// <summary>The tile corner a vertex of the shared shape mesh sits on (W at the origin, S along x, N along y).</summary>
+        private Node ShapeCorner(Tile tile, Vector3 position)
+        {
+            bool east = position.X > tileSizeH * .5f, north = position.Y > tileSizeV * .5f;
+            return east ? (north ? tile.E : tile.S) : (north ? tile.N : tile.W);
+        }
+
         internal void WarmStaticGeometry() => DrawCachedTerrain(chunkIndex.Chunks, false);
         private void DrawCachedTerrain(IReadOnlyList<TerrainChunk> chunks = null, bool draw = true)
         {
@@ -57,8 +64,19 @@ namespace ForesTycoon
                         bool flip = flippedDiagonalTiles.Contains(id);
                         var mesh = vbos[tile.Code + "_" + tile.Low + (flip ? "_f" : "")];
                         Vector3 offset = new Vector3(tile.W.xPos, tile.W.yPos, tile.LowPos);
-                        foreach (Vertex vertex in mesh.CpuVertices)
-                            staticTerrainScratch.Add(new Vertex(vertex.Position + offset, vertex.Normal, vertex.Color));
+                        // The shape mesh is shared by every tile of this shape: recolour its corners with this tile's ground,
+                        // shading each triangle by its own face.
+                        var shape = mesh.CpuVertices;
+                        for (int v = 0; v + 2 < shape.Length; v += 3)
+                        {
+                            Vector3 a = shape[v].Position, b = shape[v + 1].Position, c = shape[v + 2].Position;
+                            for (int k = 0; k < 3; k++)
+                            {
+                                var vertex = shape[v + k];
+                                var colour = TileShading.Shade(CornerColor(ShapeCorner(tile, vertex.Position)), a, b, c);
+                                staticTerrainScratch.Add(new Vertex(vertex.Position + offset, vertex.Normal, ColorToUInt(colour)));
+                            }
+                        }
                     }
                     geometry.Land.SetData(staticTerrainScratch.ToArray(), retainCpuCopy: false);
                     geometry.Grid.SetData(DynamicPrimitiveBatch.BuildGeometry(PrimitiveTopology.Lines, () => {

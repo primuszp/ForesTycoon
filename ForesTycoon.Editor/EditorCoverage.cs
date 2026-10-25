@@ -23,7 +23,7 @@ internal static class EditorCoverage
         [typeof(WorldScenario)] = new Dictionary<string, string> {
             ["Name"] = "Térkép · Pálya neve", ["Seed"] = "Térkép · Generálás", ["Size"] = "Térkép · Méret",
             ["InitialState"] = "Jelenet… · rögzített nyitójelenet", ["SoilTypes"] = "Talajtípusok", ["SoilPaint"] = "Térkép · Talaj réteg",
-            ["ElevationZones"] = "Térkép · Magassági övek réteg", ["ProfileScale"] = "Talajtípusok · Rétegrend (nagyítás)", ["Biomes"] = "Biomok", ["HeightPaint"] = "Térkép · Domborzat és Víz réteg",
+            ["ElevationZones"] = "Térkép · Magassági övek réteg", ["ProfileScale"] = "Talajtípusok · Rétegrend (nagyítás)", ["Biomes"] = "Biomok", ["GroundMaterials"] = "Biomok · Felszínanyagok", ["HeightPaint"] = "Térkép · Domborzat és Víz réteg",
             ["ForestPaint"] = "Térkép · Erdő réteg", ["Springs"] = "Térkép · Víz réteg (forrás)", ["Species"] = "Fafajok",
             ["Roads"] = "Térkép · Utak és épületek", ["Sawmills"] = "Térkép · Utak és épületek", ["Depots"] = "Térkép · Utak és épületek",
             ["Missions"] = "Küldetések" },
@@ -35,7 +35,10 @@ internal static class EditorCoverage
             ["InfiltrationPerHour"] = "Talajtípusok", ["DrainagePerHour"] = "Talajtípusok", ["Fertility"] = "Talajtípusok", ["BearingCapacity"] = "Talajtípusok",
             ["Horizons"] = "Talajtípusok · Rétegrend" },
         [typeof(BiomeDefinition)] = new Dictionary<string, string> {
-            ["Id"] = "Biomok (létrehozáskor)", ["Name"] = "Biomok", ["Color"] = "Biomok", ["Zone"] = "Biomok", ["Share"] = "Biomok", ["Description"] = "Biomok" },
+            ["Id"] = "Biomok (létrehozáskor)", ["Name"] = "Biomok", ["Color"] = "Biomok", ["Zone"] = "Biomok", ["Share"] = "Biomok", ["Description"] = "Biomok",
+            ["DryGround"] = "Biomok", ["WetGround"] = "Biomok", ["SteepGround"] = "Biomok" },
+        [typeof(GroundMaterialDefinition)] = new Dictionary<string, string> {
+            ["Id"] = "Felszínanyagok (létrehozáskor)", ["Name"] = "Biomok · Felszínanyagok", ["Color"] = "Biomok · Felszínanyagok", ["Pattern"] = "Biomok · Felszínanyagok" },
         [typeof(SoilHorizon)] = new Dictionary<string, string> {
             ["Name"] = "Talajtípusok · Rétegrend", ["Depth"] = "Talajtípusok · Rétegrend", ["Color"] = "Talajtípusok · Rétegrend" },
         [typeof(SpeciesDefinition)] = new Dictionary<string, string> {

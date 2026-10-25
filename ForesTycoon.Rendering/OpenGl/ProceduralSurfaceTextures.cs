@@ -9,7 +9,10 @@ namespace ForesTycoon.Rendering
     internal static class ProceduralSurfaceTextures
     {
         internal const int Size = 256;
-        internal const int Layers = 22; // six terrain materials, sixteen species foliage materials
+        // Six terrain materials, sixteen species foliage materials, five more ground patterns (sand, rock, moss, gravel, snow).
+        internal const int Layers = 27;
+        /// <summary>The texture layer of a ground pattern, in the order of <c>GroundMaterialDefinition.Patterns</c>.</summary>
+        internal static int GroundLayer(int pattern) => pattern switch { 0 => 0, 1 => 1, _ => 20 + pattern };
 
         private static readonly Lazy<Task<byte[]>> pixels = new(() => Task.Run(Build));
 
@@ -22,7 +25,7 @@ namespace ForesTycoon.Rendering
                     {
                         float fine = Noise(x, y, layer);
                         float coarse = Smooth(x / 8f, y / 8f, layer, 32);
-                        float detail = layer >= 6 ? LeafDetail(x, y, layer - 4) : layer switch
+                        float detail = layer >= 22 ? GroundDetail(x, y, layer, coarse, fine) : layer >= 6 ? LeafDetail(x, y, layer - 4) : layer switch
                         {
                             0 => 0.75f + 0.28f * coarse + 0.18f * fine,
                             1 => 0.72f + 0.3f * coarse + 0.18f * fine,
@@ -37,6 +40,45 @@ namespace ForesTycoon.Rendering
                         data[at + 3] = 255;
                     }
             return data;
+        }
+
+        /// <summary>The extra ground patterns; every term wraps at the texture edge.</summary>
+        private static float GroundDetail(int x, int y, int layer, float coarse, float fine)
+        {
+            switch (layer)
+            {
+                case 22: // sand: wind ripples bent by a slow noise
+                {
+                    float bend = Smooth(x / 32f, y / 32f, layer, 8) * 6.28f;
+                    float ripple = 0.5f + 0.5f * MathF.Sin(MathF.Tau * (x + y * 0.35f) / 16f + bend);
+                    return 0.82f + 0.10f * ripple + 0.06f * fine;
+                }
+                case 23: // rock: broad plates, dark cracks where a noise crosses its middle
+                {
+                    float plates = Smooth(x / 16f, y / 16f, layer, 16);
+                    float crack = MathF.Abs(Smooth(x / 8f, y / 8f, layer + 7, 32) - 0.5f);
+                    return 0.66f + 0.30f * plates + 0.06f * fine - (crack < 0.035f ? 0.22f * (1 - crack / 0.035f) : 0);
+                }
+                case 24: // moss: soft, dense clumps
+                    return 0.70f + 0.24f * Smooth(x / 4f, y / 4f, layer, 64) + 0.12f * fine;
+                case 25: // gravel: pebbles in a jittered 16-px grid, each with its own tone
+                {
+                    float best = 1e9f, tone = 0.5f;
+                    int cx = x / 16, cy = y / 16;
+                    for (int dy = -1; dy <= 1; dy++)
+                        for (int dx = -1; dx <= 1; dx++)
+                        {
+                            int sx = ((cx + dx) % 16 + 16) % 16, sy = ((cy + dy) % 16 + 16) % 16;
+                            float px = (cx + dx) * 16 + 4 + 8 * Noise(sx, sy, layer), py = (cy + dy) * 16 + 4 + 8 * Noise(sx, sy, layer + 1);
+                            float d = (x - px) * (x - px) + (y - py) * (y - py);
+                            if (d < best) { best = d; tone = Noise(sx, sy, layer + 2); }
+                        }
+                    float pebble = Math.Clamp(1.4f - MathF.Sqrt(best) / 6f, 0, 1);
+                    return 0.62f + pebble * (0.22f + 0.18f * tone) + 0.05f * fine;
+                }
+                default: // snow: smooth, faintly drifted, rare sparkles
+                    return 0.95f + 0.04f * coarse + (fine > 0.985f ? 0.08f : 0);
+            }
         }
 
         private static float LeafDetail(int x, int y, int species)

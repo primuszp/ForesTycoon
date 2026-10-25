@@ -245,6 +245,10 @@ namespace ForesTycoon
             int rows = map.Settings.TileRows;
             return scene.BiomeOf(TileLevel(id), id / rows, id % rows);
         }
+        /// <summary>The ground surface of a tile: its biome's materials, by the map's moisture and the tile's slope.</summary>
+        internal float TileMoisture(int id) => ((IForestHabitat)map).GetMoisture(id);
+        internal WorldScenario.GroundSurface TileGround(int id) =>
+            (ruleProjectWorld ?? BuiltinZones).Ground(TileBiomeIndex(id), ((IForestHabitat)map).GetMoisture(id), (int)TileSlope(id));
         internal BiomeDefinition TileBiome(int id) { int b = TileBiomeIndex(id); var scene = ruleProjectWorld ?? BuiltinZones; return b < 0 ? null : scene.Biomes[b]; }
         internal bool IsWaterTile(int id) => map.IsWaterTile(id);
         /// <summary>Game seconds per environment hour, and the area of one tile in square metres.</summary>

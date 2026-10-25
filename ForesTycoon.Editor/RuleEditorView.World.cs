@@ -12,7 +12,7 @@ using Vec4 = System.Numerics.Vector4;
 namespace ForesTycoon.Editor;
 
 internal enum WorldTab { Map, Types, Objects, Missions, Rules, Trial }
-internal enum MapLayer { Soil, Elevation, Zones, Biomes, Water, GroundWater, Forest, Tracks, Trafficability }
+internal enum MapLayer { Soil, Elevation, Zones, Biomes, Ground, Water, GroundWater, Forest, Tracks, Trafficability }
 internal enum TypeTab { Soil, Species, Surfaces, Vehicles, Parameters }
 
 /// <summary>
@@ -137,6 +137,7 @@ internal sealed partial class RuleEditorView
         (MapLayer.Elevation, "Domborzat", "Magasság. Festhető: emelés, süllyesztés, simítás."),
         (MapLayer.Zones, "Magassági övek", "Tengerpart, síkság, dombvidék, hegyvidék a terep szintje szerint; a meredek csempe sötétebb. Az övek határa itt állítható."),
         (MapLayer.Biomes, "Biom", "A csempe biomja: az öve és – ha az övben több biom van – a nagy foltokban váltakozó részarányuk szerint. A biomok a Biomok oldalon szerkeszthetők."),
+        (MapLayer.Ground, "Felszín", "A talaj felszíne, ahogy a játék rajzolja: a biom száraz, nedves és meredek felszínanyaga a csempe nedvessége és lejtése szerint."),
         (MapLayer.Water, "Víz", "Tavak és folyók. Festhető: a vízszint alá süllyesztett terep megtelik."),
         (MapLayer.GroundWater, "Talajvíz", "Gyökérzóna telítettsége."),
         (MapLayer.Forest, "Erdő", "Fafaj és fatérfogat. Festhető: kezdő erdő fajjal, vagy irtás."),
@@ -374,6 +375,7 @@ internal sealed partial class RuleEditorView
         MapLayer.Zones => tile => EditorStyle.Dim(Colour(scenario.ElevationZones[scenario.ZoneOf(world.TileLevel(tile))].Color),
             world.TileSlope(tile) switch { TerrainSlope.Flat => 1f, TerrainSlope.Gentle => .86f, _ => .66f }),
         MapLayer.Biomes => tile => BiomeColour(world, tile),
+        MapLayer.Ground => tile => { var g = scenario.Ground(TileBiome(world, tile), world.TileMoisture(tile), (int)world.TileSlope(tile)); return new Vec4(g.R, g.G, g.B, 1); },
         MapLayer.Water => tile => world.IsWaterTile(tile) ? new(0.25f, 0.50f, 0.90f, 1)
             : Mix(Mix(new(0.22f, 0.24f, 0.20f, 1), new(0.62f, 0.60f, 0.52f, 1), world.TileElevation(tile)), new(0.30f, 0.62f, 0.95f, 1),
                 (float)Math.Sqrt(Math.Clamp((world.TileSurfaceWater(tile) - 0.5) / 100, 0, 1))),
@@ -420,10 +422,12 @@ internal sealed partial class RuleEditorView
         return counts;
     }
 
-    private int selectedBiome;
-    internal void ShowBiomes(int index = 0) { selectedBiome = index; ShowPage(EditorPage.Biomes); }
+    private int selectedBiome, biomeTab, selectedMaterial;
+    internal void ShowBiomes(int index = 0, int tab = 0) { selectedBiome = index; biomeTab = tab; ShowPage(EditorPage.Biomes); }
     private void BiomesTab(GameWorld world)
     {
+        EditorStyle.Tabs("biome-tab", new[] { "Biomok", "Felszínanyagok" }, ref biomeTab);
+        if (biomeTab == 1) { GroundMaterialsTab(world); return; }
         EditorStyle.BeginPanel("biome-list", new Vec2(ImGui.GetFontSize() * 15.5f, 0));
         EditorStyle.Section("Biomok");
         selectedBiome = Math.Clamp(selectedBiome, 0, Math.Max(0, scenario.Biomes.Count - 1));
@@ -460,6 +464,13 @@ internal sealed partial class RuleEditorView
             Row("Magassági öv", "Ebben az övben fordul elő. Az övek határa a Térkép · Magassági övek rétegen állítható.", () => {
                 int zone = Math.Max(0, scenario.ElevationZones.FindIndex(z => z.Id == biome.Zone));
                 if (ImGui.Combo("##zone", ref zone, scenario.ElevationZones.Select(z => z.Name).ToArray(), scenario.ElevationZones.Count)) biome.Zone = scenario.ElevationZones[zone].Id; });
+            string[] names = scenario.GroundMaterials.Select(m => m.Name).ToArray();
+            void Ground(string label, string help, Func<string> get, Action<string> set) => Row(label, help, () => {
+                int i = Math.Max(0, scenario.GroundMaterials.FindIndex(m => m.Id == get()));
+                if (ImGui.Combo("##" + label, ref i, names, names.Length)) set(scenario.GroundMaterials[i].Id); });
+            Ground("Száraz felszín", "Ez borítja a biom csempéit, ahol a talaj száraz vagy átlagos.", () => biome.DryGround, v => biome.DryGround = v);
+            Ground("Nedves felszín", "A nedves csempék (patak, mélyedés, tópart) felé erre vált át, fokozatosan.", () => biome.WetGround, v => biome.WetGround = v);
+            Ground("Meredek felszín", "A lejtős csempéken ez keveredik be: enyhe lejtőn kicsit, meredeken teljesen.", () => biome.SteepGround, v => biome.SteepGround = v);
             Row("Részarány", "Ha az övben több biom van, ekkora súllyal osztoznak rajta, kb. 16 csempés foltokban.", () =>
                 Number("##share", () => biome.Share, v => biome.Share = v, .1, "%.2f", .01, 1000));
             Row("Leírás", "A táj jellege; a súgóban és a tervezésnél segít.", () => { string d = biome.Description ?? "";
@@ -469,6 +480,61 @@ internal sealed partial class RuleEditorView
         ImGui.PushTextWrapPos(0);
         EditorStyle.Text(HudTheme.Muted, "A biom a csempe övéből adódik, ezért terepszerkesztéskor vele együtt változik; tárolni nem kell. "
             + "A szabályok a tile.zone, tile.biome és tile.slope mezőkből olvassák; a térképen a Biom réteg mutatja.");
+        ImGui.PopTextWrapPos();
+        EditorStyle.EndPanel();
+    }
+
+    private static readonly string[] PatternNames = { "Fű", "Talaj, avar", "Homok", "Szikla", "Moha", "Kőtörmelék", "Hó" };
+    /// <summary>The ground materials the biomes draw with: colour and detail pattern; a material a biome uses cannot be deleted.</summary>
+    private void GroundMaterialsTab(GameWorld world)
+    {
+        var materials = scenario.GroundMaterials;
+        EditorStyle.BeginPanel("material-list", new Vec2(ImGui.GetFontSize() * 15.5f, 0));
+        EditorStyle.Section("Felszínanyagok");
+        selectedMaterial = Math.Clamp(selectedMaterial, 0, materials.Count - 1);
+        for (int i = 0; i < materials.Count; i++)
+            if (ColourSwatch(materials[i].Name, Colour(materials[i].Color), i == selectedMaterial, "material" + i)) selectedMaterial = i;
+        ImGui.Spacing();
+        ImGui.BeginDisabled(materials.Count >= 32);
+        if (ImGui.Button("Új felszínanyag", new Vec2(-1, 0))) {
+            materials.Add(new GroundMaterialDefinition { Id = "ground" + Guid.NewGuid().ToString("N")[..6], Name = "Új felszín", Color = materials[selectedMaterial].Color, Pattern = materials[selectedMaterial].Pattern });
+            selectedMaterial = materials.Count - 1;
+        }
+        ImGui.EndDisabled();
+        var material = materials[selectedMaterial];
+        var users = scenario.Biomes.Where(b => b.DryGround == material.Id || b.WetGround == material.Id || b.SteepGround == material.Id).Select(b => b.Name).ToList();
+        ImGui.BeginDisabled(users.Count > 0 || materials.Count == 1);
+        if (ImGui.Button("Törlés", new Vec2(-1, 0))) { materials.RemoveAt(selectedMaterial); selectedMaterial = 0; }
+        ImGui.EndDisabled();
+        if (users.Count > 0) ImGui.TextWrapped("Biom használja, ezért nem törölhető.");
+        if (ImGui.Button("Alapértelmezett anyagok", new Vec2(-1, 0))) {
+            // The built-in set, keeping authored materials the biomes still use.
+            var keep = materials.Where(m => !GroundMaterialDefinition.Defaults().Any(d => d.Id == m.Id)
+                && scenario.Biomes.Any(b => b.DryGround == m.Id || b.WetGround == m.Id || b.SteepGround == m.Id)).ToList();
+            scenario.GroundMaterials = GroundMaterialDefinition.Defaults().Concat(keep).ToList(); selectedMaterial = 0;
+        }
+        EditorStyle.EndPanel(); ImGui.SameLine();
+
+        EditorStyle.BeginPanel("material-form", Vec2.Zero);
+        EditorStyle.Title(material.Name);
+        EditorStyle.Text(HudTheme.Muted, users.Count == 0 ? $"Nem használja biom · azonosító: {material.Id}" : $"Használja: {string.Join(", ", users)} · azonosító: {material.Id}");
+        ParameterTable("material-fields", Row => {
+            Row("Név", "A biomok felszínválasztójában.", () => { string n = material.Name; if (ImGui.InputText("##name", ref n, 60) && n.Trim().Length > 0) material.Name = n.Trim(); });
+            Row("Szín", "A talaj alapszíne; a játék a szomszédos csempék színével keveri, és nagy foltokban kissé világosítja, sötétíti.", () => {
+                var c = Colour(material.Color); var rgb = new System.Numerics.Vector3(c.X, c.Y, c.Z);
+                if (ImGui.ColorEdit3("##colour", ref rgb, ImGuiColorEditFlags.NoInputs)) material.Color = Hex(new Vec4(rgb, 1)); });
+            Row("Minta", "A felszín apró részletei a játékban: fűszálak, homokfodrok, sziklarepedések, kavicsok…", () => {
+                int p = Math.Max(0, Array.IndexOf(GroundMaterialDefinition.Patterns, material.Pattern));
+                if (ImGui.Combo("##pattern", ref p, PatternNames, PatternNames.Length)) material.Pattern = GroundMaterialDefinition.Patterns[p]; });
+        });
+        ImGui.Spacing();
+        // A strip of the material next to the biomes' other grounds, as the map draws them.
+        var draw = ImGui.GetWindowDrawList(); Vec2 at = ImGui.GetCursorScreenPos(); float size = ImGui.GetFontSize() * 3;
+        draw.AddRectFilled(at, at + new Vec2(size * 4, size), EditorStyle.U(Colour(material.Color)), 4);
+        draw.AddRect(at, at + new Vec2(size * 4, size), EditorStyle.U(EditorStyle.Hairline), 4);
+        ImGui.Dummy(new Vec2(size * 4, size + 4));
+        ImGui.PushTextWrapPos(0);
+        EditorStyle.Text(HudTheme.Muted, "A játék ezt a színt és mintát rajzolja azokon a csempéken, ahol egy biom ezt az anyagot használja; a Térkép · Felszín réteg mutatja, hol.");
         ImGui.PopTextWrapPos();
         EditorStyle.EndPanel();
     }
@@ -550,6 +616,12 @@ internal sealed partial class RuleEditorView
             for (int t = 0; t < tiles; t++) { int s = world.SoilIndex(t); if (s < counts.Length) counts[s]++; }
             Legend(scenario.SoilTypes.Select((type, i) => (Colour(type.Color), $"{type.Name} · {Share(counts[i])}")));
             if (mapLayer == MapLayer.Tracks) { EditorStyle.Text(HudTheme.Muted, "világos: út · barna: épület · narancs: közelítőnyom"); }
+            return;
+        }
+        if (mapLayer == MapLayer.Ground) {
+            var used = new HashSet<string>(scenario.Biomes.SelectMany(b => new[] { b.DryGround, b.WetGround, b.SteepGround }));
+            Legend(scenario.GroundMaterials.Where(m => used.Contains(m.Id)).Select(m => (Colour(m.Color), m.Name)));
+            EditorStyle.Text(HudTheme.Muted, "a csempék színe keveredik: száraz és nedves a nedvesség, meredek a lejtő szerint");
             return;
         }
         if (mapLayer == MapLayer.Biomes) {

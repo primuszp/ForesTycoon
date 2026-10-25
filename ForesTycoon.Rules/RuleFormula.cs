@@ -394,6 +394,30 @@ public sealed class ElevationZoneDefinition
         new() { Id = "mountain", Name = "Hegyvidék", Color = "#B4ADA2", MaxLevel = 99 } };
 }
 
+/// <summary>A ground surface material: its colour and the detail pattern the terrain shader draws with it.</summary>
+public sealed class GroundMaterialDefinition
+{
+    /// <summary>The shader's ground patterns, in texture-layer order (see ProceduralSurfaceTextures).</summary>
+    public static readonly string[] Patterns = { "grass", "soil", "sand", "rock", "moss", "gravel", "snow" };
+    public string Id { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string Color { get; set; } = "#6FA53A";
+    public string Pattern { get; set; } = "grass";
+
+    public static List<GroundMaterialDefinition> Defaults() => new() {
+        new() { Id = "meadow", Name = "Rét", Color = "#6FA53A", Pattern = "grass" },
+        new() { Id = "dry-grass", Name = "Száraz gyep", Color = "#A3A04E", Pattern = "grass" },
+        new() { Id = "wet-meadow", Name = "Nedves rét", Color = "#4F8E3C", Pattern = "moss" },
+        new() { Id = "forest-floor", Name = "Avar", Color = "#6B5A3A", Pattern = "soil" },
+        new() { Id = "moss", Name = "Moha", Color = "#4E7438", Pattern = "moss" },
+        new() { Id = "dune", Name = "Parti homok", Color = "#D8C690", Pattern = "sand" },
+        new() { Id = "wet-sand", Name = "Nedves homok", Color = "#B3A274", Pattern = "sand" },
+        new() { Id = "gravel", Name = "Kőtörmelék", Color = "#9A9488", Pattern = "gravel" },
+        new() { Id = "rock", Name = "Szikla", Color = "#878279", Pattern = "rock" },
+        new() { Id = "alpine", Name = "Havasi gyep", Color = "#88A066", Pattern = "grass" },
+        new() { Id = "snow", Name = "Hó", Color = "#E6EAEC", Pattern = "snow" } };
+}
+
 /// <summary>
 /// A biome: the landscape of an elevation zone (a dune coast, a floodplain meadow, oak–hornbeam hills). A zone may hold
 /// several biomes; they then share it in large patches by their <see cref="Share"/>, so the map has regions, not stripes.
@@ -408,13 +432,21 @@ public sealed class BiomeDefinition
     /// <summary>Its part of the zone against the zone's other biomes (any positive weight).</summary>
     public double Share { get; set; } = 1;
     public string Description { get; set; } = "";
+    /// <summary>The ground on dry, on wet (moist map tiles) and on steep tiles: IDs of the scene's ground materials.</summary>
+    public string DryGround { get; set; } = "meadow";
+    public string WetGround { get; set; } = "wet-meadow";
+    public string SteepGround { get; set; } = "gravel";
 
     /// <summary>One built-in biome per built-in zone, after Hungarian forest landscapes.</summary>
     public static List<BiomeDefinition> Defaults() => new() {
-        new() { Id = "dune-coast", Name = "Homokos part", Zone = "coast", Color = "#D9C48A", Description = "Parti homok, nádas és fűz; a víz közelében." },
-        new() { Id = "floodplain", Name = "Ártéri rét és ligeterdő", Zone = "plain", Color = "#7DB25A", Description = "Sík, nedves rét, kőris, nyár és tölgy ligetekkel." },
-        new() { Id = "oak-hornbeam", Name = "Gyertyános-tölgyes dombság", Zone = "hills", Color = "#9E9A4E", Description = "Lankás domboldalak tölgyessel és gyertyánnal." },
-        new() { Id = "beech-spruce", Name = "Bükkös–fenyves hegyvidék", Zone = "mountain", Color = "#6F8A6A", Description = "Hűvös, csapadékos hegyoldalak bükkel és lucfenyővel." } };
+        new() { Id = "dune-coast", Name = "Homokos part", Zone = "coast", Color = "#D9C48A", Description = "Parti homok, nádas és fűz; a víz közelében.",
+            DryGround = "dune", WetGround = "wet-sand", SteepGround = "gravel" },
+        new() { Id = "floodplain", Name = "Ártéri rét és ligeterdő", Zone = "plain", Color = "#7DB25A", Description = "Sík, nedves rét, kőris, nyár és tölgy ligetekkel.",
+            DryGround = "meadow", WetGround = "wet-meadow", SteepGround = "forest-floor" },
+        new() { Id = "oak-hornbeam", Name = "Gyertyános-tölgyes dombság", Zone = "hills", Color = "#9E9A4E", Description = "Lankás domboldalak tölgyessel és gyertyánnal.",
+            DryGround = "dry-grass", WetGround = "meadow", SteepGround = "gravel" },
+        new() { Id = "beech-spruce", Name = "Bükkös–fenyves hegyvidék", Zone = "mountain", Color = "#6F8A6A", Description = "Hűvös, csapadékos hegyoldalak bükkel és lucfenyővel.",
+            DryGround = "alpine", WetGround = "moss", SteepGround = "rock" } };
 }
 
 /// <summary>One horizon of a soil profile, from the surface down: what the diorama's sides show under a tile of the soil.</summary>
@@ -595,6 +627,8 @@ public sealed class WorldScenario
     public List<SoilTypeDefinition> SoilTypes { get; set; } = new();
     /// <summary>Elevation zones from low to high; a scene saved before zones existed reads the built-in ones.</summary>
     public List<ElevationZoneDefinition> ElevationZones { get; set; } = ElevationZoneDefinition.Defaults();
+    /// <summary>The ground surface materials the biomes draw with; a scene saved before them reads the built-in ones.</summary>
+    public List<GroundMaterialDefinition> GroundMaterials { get; set; } = GroundMaterialDefinition.Defaults();
     /// <summary>The biomes of the zones; a scene saved before biomes existed reads the built-in ones.</summary>
     public List<BiomeDefinition> Biomes { get; set; } = BiomeDefinition.Defaults();
     /// <summary>How much deeper the soil horizons are drawn on the diorama's sides than they are, so thin horizons can be seen.</summary>
@@ -657,6 +691,31 @@ public sealed class WorldScenario
         return (a + (b - a) * u) * (1 - v) + (c + (d - c) * u) * v;
     }
 
+    /// <summary>The ground of a tile: its colour and two pattern layers, the second (steep) one blended in by <c>Steep</c>.</summary>
+    public readonly record struct GroundSurface(float R, float G, float B, int Pattern, int SteepPattern, float Steep);
+
+    /// <summary>
+    /// The ground surface of a tile from its biome, its map moisture (0–1) and its slope (0 flat, 1 gentle, 2 steep): the biome's
+    /// dry ground turning to its wet ground on moist tiles, its steep ground on slopes. A tile without a biome is meadow.
+    /// The game's terrain and the editor's map both draw from this.
+    /// </summary>
+    public GroundSurface Ground(int biome, double moisture, int slope)
+    {
+        var b = biome >= 0 && biome < Biomes.Count ? Biomes[biome] : null;
+        GroundMaterialDefinition Find(string id) => GroundMaterials.Find(m => m.Id == id) ?? GroundMaterials.FirstOrDefault() ?? Fallback;
+        var dry = Find(b?.DryGround ?? "meadow"); var wet = Find(b?.WetGround ?? "wet-meadow"); var steep = Find(b?.SteepGround ?? "gravel");
+        double t = Math.Clamp((moisture - .45) / .35, 0, 1); t = t * t * (3 - 2 * t);
+        float s = slope >= 2 ? 1f : slope == 1 ? .35f : 0f;
+        var (dr, dg, db) = Rgb(dry.Color); var (wr, wg, wb) = Rgb(wet.Color); var (sr, sg, sb) = Rgb(steep.Color);
+        float Mix(float a, float c, float d) { float ground = (float)(a + (c - a) * t); return ground + (d - ground) * s; }
+        return new(Mix(dr, wr, sr), Mix(dg, wg, sg), Mix(db, wb, sb), PatternIndex(t < .5 ? dry : wet), PatternIndex(steep), s);
+    }
+    private static readonly GroundMaterialDefinition Fallback = GroundMaterialDefinition.Defaults()[0];
+    private static int PatternIndex(GroundMaterialDefinition m) => Math.Max(0, Array.IndexOf(GroundMaterialDefinition.Patterns, m.Pattern));
+    private static (float, float, float) Rgb(string hex) =>
+        hex is { Length: 7 } && uint.TryParse(hex.AsSpan(1), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out uint rgb)
+            ? ((rgb >> 16 & 255) / 255f, (rgb >> 8 & 255) / 255f, (rgb & 255) / 255f) : (.5f, .5f, .5f);
+
     public void Validate()
     {
         if (string.IsNullOrWhiteSpace(Name) || SoilTypes == null || SoilTypes.Count is 0 or > 64 || SoilPaint == null)
@@ -683,6 +742,16 @@ public sealed class WorldScenario
         HeightPaint ??= new(); ForestPaint ??= new(); Species ??= new(); Springs ??= new(); Missions ??= new();
         ElevationZones ??= ElevationZoneDefinition.Defaults();
         if (!(ProfileScale is >= 1 and <= 30)) throw new InvalidDataException("A talajszelvény nagyítása 1–30 legyen.");
+        GroundMaterials ??= GroundMaterialDefinition.Defaults();
+        if (GroundMaterials.Count is 0 or > 32) throw new InvalidDataException("A pályának 1–32 felszínanyaga legyen.");
+        var materials = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var m in GroundMaterials) {
+            if (m == null || string.IsNullOrWhiteSpace(m.Id) || string.IsNullOrWhiteSpace(m.Name) || !materials.Add(m.Id))
+                throw new InvalidDataException("Minden felszínanyagnak egyedi azonosítója és neve legyen.");
+            if (Array.IndexOf(GroundMaterialDefinition.Patterns, m.Pattern) < 0) throw new InvalidDataException($"{m.Name}: ismeretlen felszínminta ({m.Pattern}).");
+            if (m.Color is not { Length: 7 } || m.Color[0] != '#' || !uint.TryParse(m.Color.AsSpan(1), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
+                throw new InvalidDataException($"{m.Name}: a szín #RRGGBB legyen.");
+        }
         Biomes ??= BiomeDefinition.Defaults();
         if (Biomes.Count > 32) throw new InvalidDataException("Egy pályán legfeljebb 32 biom lehet.");
         var biomes = new HashSet<string>(StringComparer.Ordinal);
@@ -691,6 +760,8 @@ public sealed class WorldScenario
                 throw new InvalidDataException("Minden biomnak egyedi azonosítója és neve legyen.");
             if (!ElevationZones.Any(z => z.Id == b.Zone)) throw new InvalidDataException($"{b.Name}: a biom egy létező magassági övhöz tartozzon.");
             if (!(b.Share is > 0 and <= 1000)) throw new InvalidDataException($"{b.Name}: a részarány pozitív szám legyen.");
+            foreach (string ground in new[] { b.DryGround, b.WetGround, b.SteepGround })
+                if (!materials.Contains(ground)) throw new InvalidDataException($"{b.Name}: a felszíne a pálya egy felszínanyaga legyen ({ground}).");
             if (b.Color is not { Length: 7 } || b.Color[0] != '#' || !uint.TryParse(b.Color.AsSpan(1), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
                 throw new InvalidDataException($"{b.Name}: a szín #RRGGBB legyen.");
             b.Description ??= "";

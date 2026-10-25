@@ -118,6 +118,8 @@ sealed partial class GameWorld
         wildlife.InvalidateRules();
         // A rules-only project keeps the running scene (its map and missions); a project with a world replaces it.
         ruleProjectWorld = next.Document.World ?? ruleProjectWorld;
+        // Biomes and ground materials may have changed: the terrain recolours (the scene geometry is unchanged).
+        terrain?.InvalidateGround();
         // Species numbers are world content the rules read; a project change installs them for the whole process.
         var previousSpecies = ForestSpeciesBook.CaptureContext();
         ForestSpeciesBook.Apply(SpeciesEdits(next.Document.World));

@@ -60,6 +60,7 @@ internal sealed partial class RuleEditorView
             : J(a.SoilTypes) != J(b.SoilTypes) ? "talajtípus módosítása"
             : J(a.ElevationZones) != J(b.ElevationZones) ? "magassági övek módosítása"
             : J(a.Biomes) != J(b.Biomes) ? "biomok módosítása"
+            : J(a.GroundMaterials) != J(b.GroundMaterials) ? "felszínanyagok módosítása"
             : J(a.Species) != J(b.Species) ? "fafaj módosítása"
             : J(a.Roads) != J(b.Roads) || J(a.Sawmills) != J(b.Sawmills) || J(a.Depots) != J(b.Depots) ? "út vagy épület" : "pálya módosítása";
     }
@@ -90,7 +91,7 @@ internal sealed partial class RuleEditorView
     /// </summary>
     private static string MapPart(string scenarioJson)
     {
-        var p = RuleProject.FromJson(scenarioJson); p.World.Missions = new(); p.World.ElevationZones = new(); p.World.Biomes = new(); p.World.ProfileScale = 0;
+        var p = RuleProject.FromJson(scenarioJson); p.World.Missions = new(); p.World.ElevationZones = new(); p.World.Biomes = new(); p.World.GroundMaterials = new(); p.World.ProfileScale = 0;
         foreach (var soil in p.World.SoilTypes) soil.Horizons = new();
         return p.ToJson();
     }

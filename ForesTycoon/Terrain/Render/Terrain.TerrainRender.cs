@@ -19,11 +19,11 @@ namespace ForesTycoon
             Vector3 e = new Vector3(tile.E.xPos, tile.E.yPos, tile.E.zPos);
             Vector3 n = new Vector3(tile.N.xPos, tile.N.yPos, tile.N.zPos);
 
-            DynamicPrimitiveBatch.Color4(TileShading.Shade(TerrainSurfaceColor(tile.Code, tile.Low), w, s, e));
-            DynamicPrimitiveBatch.Vertex3(w);
-            DynamicPrimitiveBatch.Vertex3(s);
-            DynamicPrimitiveBatch.Vertex3(e);
-            DynamicPrimitiveBatch.Vertex3(n);
+            // One flat face: one shade, each corner its own blended ground colour.
+            DynamicPrimitiveBatch.Color4(TileShading.Shade(CornerColor(tile.W), w, s, e)); DynamicPrimitiveBatch.Vertex3(w);
+            DynamicPrimitiveBatch.Color4(TileShading.Shade(CornerColor(tile.S), w, s, e)); DynamicPrimitiveBatch.Vertex3(s);
+            DynamicPrimitiveBatch.Color4(TileShading.Shade(CornerColor(tile.E), w, s, e)); DynamicPrimitiveBatch.Vertex3(e);
+            DynamicPrimitiveBatch.Color4(TileShading.Shade(CornerColor(tile.N), w, s, e)); DynamicPrimitiveBatch.Vertex3(n);
         }
 
         internal void DrawTerrainDecals(RenderContext context = default, bool winter = false)
