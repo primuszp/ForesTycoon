@@ -227,6 +227,16 @@ namespace ForesTycoon
         internal (int Columns, int Rows) TileGrid => Soils == null ? (0, 0) : (Soils.Grid.Columns, Soils.Grid.Rows);
         internal int SoilIndex(int id) => Soils?.ProfileIndices[id] ?? 0;
         internal float TileElevation(int id) => ((IForestHabitat)map).GetNormalizedElevation(id);
+        /// <summary>The terrain level of a tile (its lowest corner) and its steepness, as the elevation zones read them.</summary>
+        internal int TileLevel(int id) => map.Tiles[id].Low;
+        internal TerrainSlope TileSlope(int id) => map.Tiles[id].Shape.Slope;
+        /// <summary>The elevation zone of a tile under the running world's zones (the built-in ones before a scene sets them).</summary>
+        internal ElevationZoneDefinition TileZone(int id)
+        {
+            var zones = ruleProjectWorld ?? BuiltinZones;
+            return zones.ElevationZones[zones.ZoneOf(TileLevel(id))];
+        }
+        private static readonly WorldScenario BuiltinZones = new();
         internal bool IsWaterTile(int id) => map.IsWaterTile(id);
         /// <summary>Game seconds per environment hour, and the area of one tile in square metres.</summary>
         internal double SecondsPerEnvironmentHour => Environment == null ? 45 : EnvironmentSystem.StepSeconds / Environment.HoursPerStep;

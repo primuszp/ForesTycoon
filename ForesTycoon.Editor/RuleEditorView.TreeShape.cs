@@ -280,6 +280,8 @@ internal sealed partial class RuleEditorView
         internal bool Current(string key) => Value != null && valueKey == key && task == null;
         internal bool Busy => task != null;
         internal string Error { get; private set; }
+        /// <summary>Why the value is not current for <paramref name="key"/>: the error, still building, or built for another key.</summary>
+        internal string Why(string key) => Error ?? (task != null ? $"épül ({taskKey}; kész érték kulcsa: {valueKey ?? "nincs"})" : Value == null ? "még nem indult" : $"más kulcs: {valueKey} ≠ {key}");
 
         internal void Update(string key, Func<T> build)
         {
@@ -311,6 +313,9 @@ internal sealed partial class RuleEditorView
     private int hoveredShapeLevel = -1, shownShapeLevel = -1;
     private bool Seasonal => previewSeeThrough && !previewBare;
 
+    /// <summary>Why the shown preview could not be built, if it failed.</summary>
+    internal string TreePreviewError => previewMode == 0 ? editedMesh.Error ?? builtinMesh.Error
+        : previewMode == 1 ? editedSkeleton.Error ?? builtinSkeleton.Error : lifeCourse.Why(lifeKey);
     internal bool TreePreviewReady => previewKey != null && (previewMode == 0
         ? editedMesh.Current(previewKey + "|" + Seasonal) && (!previewCompare || builtinMesh.Current(builtinKey + "|" + Seasonal))
         : previewMode == 1 ? editedSkeleton.Current(previewKey) && builtinSkeleton.Current(builtinKey)

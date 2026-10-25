@@ -388,11 +388,13 @@ float focus_depth() {
 }
 // Circle of confusion as a share of the full blur: 0 within the focus range, rising beyond it.
 // The backdrop counts as far; a gentle screen band keeps the miniature look on flat views.
+// The middle of the screen, where the player works, always stays sharp: blur only grows towards the edges.
 float coc(vec2 p, float focus) {
     float d = texture(depth, p).r;
-    float depth_blur = d >= 0.99999 ? 1.0 : smoothstep(0.7, 1.4, abs(d * depth_range - focus) / focus_range);
+    float depth_blur = d >= 0.99999 ? 1.0 : smoothstep(1.0, 2.0, abs(d * depth_range - focus) / focus_range);
     float band = smoothstep(0.38, 0.62, abs(p.y - 0.46));
-    return max(depth_blur, 0.3 * band);
+    float edge = smoothstep(0.32, 0.62, length((p - vec2(0.5, 0.48)) * vec2(aspect.x * 0.62, 1.0)));
+    return max(depth_blur, 0.3 * band) * edge;
 }
 void main() {
     vec3 c = texture(graded, uv).rgb;

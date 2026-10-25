@@ -374,6 +374,26 @@ public static class RuleFormula
     }
 }
 
+/// <summary>
+/// An elevation zone of a world (coast, plain, hills, mountains): it reaches from the zone below it up to
+/// <see cref="MaxLevel"/>, the highest terrain level it covers; the last zone is open upwards.
+/// </summary>
+public sealed class ElevationZoneDefinition
+{
+    public string Id { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string Color { get; set; } = "#7FA05A";
+    /// <summary>The highest terrain level (the tile's lowest corner) that still belongs to this zone.</summary>
+    public int MaxLevel { get; set; }
+
+    /// <summary>The built-in zones: sea-level coast, lowland plain, hills, mountains.</summary>
+    public static List<ElevationZoneDefinition> Defaults() => new() {
+        new() { Id = "coast", Name = "Tengerpart", Color = "#D8C690", MaxLevel = 1 },
+        new() { Id = "plain", Name = "Síkság", Color = "#86B35A", MaxLevel = 3 },
+        new() { Id = "hills", Name = "Dombvidék", Color = "#A69A52", MaxLevel = 5 },
+        new() { Id = "mountain", Name = "Hegyvidék", Color = "#B4ADA2", MaxLevel = 99 } };
+}
+
 /// <summary>One soil type of a world: what the map paints and what the rules read as <c>talaj.*</c>.</summary>
 public sealed class SoilTypeDefinition
 {
@@ -510,6 +530,8 @@ public sealed class WorldScenario
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public string InitialState { get; set; }
     public List<SoilTypeDefinition> SoilTypes { get; set; } = new();
+    /// <summary>Elevation zones from low to high; a scene saved before zones existed reads the built-in ones.</summary>
+    public List<ElevationZoneDefinition> ElevationZones { get; set; } = ElevationZoneDefinition.Defaults();
     /// <summary>Painted soil: soil type ID by tile ID, over the generated map.</summary>
     public Dictionary<int, string> SoilPaint { get; set; } = new();
     /// <summary>Painted terrain: absolute height by corner (node) ID; water lies where corners are below sea level.</summary>
@@ -529,6 +551,13 @@ public sealed class WorldScenario
     /// <summary>The scene's missions: goals the game checks against world values while it runs.</summary>
     public List<MissionGoal> Missions { get; set; } = new();
 
+    /// <summary>The index of the elevation zone a terrain level belongs to: the first zone that reaches it, else the highest.</summary>
+    public int ZoneOf(int level)
+    {
+        for (int i = 0; i < ElevationZones.Count - 1; i++) if (level <= ElevationZones[i].MaxLevel) return i;
+        return ElevationZones.Count - 1;
+    }
+
     public void Validate()
     {
         if (string.IsNullOrWhiteSpace(Name) || SoilTypes == null || SoilTypes.Count is 0 or > 64 || SoilPaint == null)
@@ -547,6 +576,18 @@ public sealed class WorldScenario
                 throw new InvalidDataException($"{s.Name}: érvénytelen paraméter (arányok 0–1, ráták nem negatívak).");
         }
         HeightPaint ??= new(); ForestPaint ??= new(); Species ??= new(); Springs ??= new(); Missions ??= new();
+        ElevationZones ??= ElevationZoneDefinition.Defaults();
+        if (ElevationZones.Count is 0 or > 8) throw new InvalidDataException("A pályának 1–8 magassági öve legyen.");
+        var zones = new HashSet<string>(StringComparer.Ordinal);
+        for (int i = 0; i < ElevationZones.Count; i++) {
+            var z = ElevationZones[i];
+            if (z == null || string.IsNullOrWhiteSpace(z.Id) || string.IsNullOrWhiteSpace(z.Name) || !zones.Add(z.Id))
+                throw new InvalidDataException("Minden magassági övnek egyedi azonosítója és neve legyen.");
+            if (z.MaxLevel < 0 || i > 0 && z.MaxLevel <= ElevationZones[i - 1].MaxLevel)
+                throw new InvalidDataException($"{z.Name}: a magassági övek felső szintje alulról felfelé nőjön.");
+            if (z.Color is not { Length: 7 } || z.Color[0] != '#' || !uint.TryParse(z.Color.AsSpan(1), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
+                throw new InvalidDataException($"{z.Name}: a szín #RRGGBB legyen.");
+        }
         Roads ??= new(); Sawmills ??= new(); Depots ??= new();
         if (Roads.Count > 512 || Sawmills.Count > 32 || Depots.Count > 32) throw new InvalidDataException("Túl sok út, malom vagy telephely a pályán.");
         foreach (var r in Roads)

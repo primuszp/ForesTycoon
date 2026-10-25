@@ -246,25 +246,54 @@ namespace ForesTycoon.TreeModels
                     float z = 1 - (2 * i + 1f) / count, r = MathF.Sqrt(Math.Max(0, 1 - z * z));
                     d[i] = new(MathF.Cos(i * golden) * r, MathF.Sin(i * golden) * r, z);
                 }
-                // Points on a sphere: their convex hull is their spherical Delaunay triangulation. Brute
-                // force is bounded to the supported lattice sizes, once per size.
-                var faces = new List<int>();
-                for (int a = 0; a < count; a++)
-                    for (int b = a + 1; b < count; b++)
-                        for (int c = b + 1; c < count; c++)
-                        {
-                            var n = Vector3.Cross(d[b] - d[a], d[c] - d[a]);
-                            if (Vector3.Dot(n, d[a]) < 0) n = -n;
-                            bool hull = true;
-                            for (int k = 0; k < count && hull; k++)
-                                if (k != a && k != b && k != c && Vector3.Dot(n, d[k] - d[a]) > 1e-7f) hull = false;
-                            if (!hull) continue;
-                            if (Vector3.Dot(Vector3.Cross(d[b] - d[a], d[c] - d[a]), d[a]) >= 0) { faces.Add(a); faces.Add(b); faces.Add(c); }
-                            else { faces.Add(a); faces.Add(c); faces.Add(b); }
-                        }
-                if (faces.Count != 3 * (2 * count - 4)) throw new InvalidOperationException("Degenerate crown lattice.");
-                return Spheres[count] = (d, faces.ToArray());
+                var faces = HullFaces(d);
+                if (faces.Length != 3 * (2 * count - 4)) throw new InvalidOperationException("Degenerate crown lattice.");
+                return Spheres[count] = (d, faces);
             }
+        }
+
+        /// <summary>
+        /// The convex hull of points on the unit sphere (their spherical Delaunay triangulation), outward winding.
+        /// A hull face joins close neighbours, so faces are formed only from each point's nearest points. A face is
+        /// kept when no point lies above its plane; such a point would sit in the spherical cap the plane cuts off,
+        /// within the cap's diameter of the face's corner, so only that neighbourhood is checked — all points when the
+        /// cap reaches beyond it. The result equals testing every triple against every point (O(n⁴), seconds at 384).
+        /// </summary>
+        internal static int[] HullFaces(Vector3[] d)
+        {
+            int count = d.Length, near = Math.Min(count - 1, 16), wide = Math.Min(count - 1, 48);
+            var faces = new List<int>();
+            var order = new int[count];
+            var distance = new float[count];
+            for (int a = 0; a < count; a++)
+            {
+                for (int k = 0; k < count; k++) { order[k] = k; distance[k] = k == a ? -1 : (d[k] - d[a]).LengthSquared; }
+                Array.Sort(distance, order);
+                // order[0] is a itself; its neighbours follow, nearest first.
+                float reach = MathF.Sqrt(distance[wide]);
+                var candidates = new List<int>(near);
+                for (int i = 1; i <= near; i++) if (order[i] > a) candidates.Add(order[i]);
+                candidates.Sort();
+                for (int i = 0; i < candidates.Count; i++)
+                    for (int j = i + 1; j < candidates.Count; j++)
+                    {
+                        int b = candidates[i], c = candidates[j];
+                        var n = Vector3.Cross(d[b] - d[a], d[c] - d[a]);
+                        if (Vector3.Dot(n, d[a]) < 0) n = -n;
+                        float cap = 2 * MathF.Acos(Math.Clamp(Vector3.Dot(n.Normalized(), d[a]), -1, 1));
+                        int checks = cap < MathF.PI && 2 * MathF.Sin(cap / 2) < reach ? wide + 1 : count;
+                        bool hull = true;
+                        for (int i2 = 0; i2 < checks && hull; i2++)
+                        {
+                            int k = checks == count ? i2 : order[i2];
+                            if (k != a && k != b && k != c && Vector3.Dot(n, d[k] - d[a]) > 1e-7f) hull = false;
+                        }
+                        if (!hull) continue;
+                        if (Vector3.Dot(Vector3.Cross(d[b] - d[a], d[c] - d[a]), d[a]) >= 0) { faces.Add(a); faces.Add(b); faces.Add(c); }
+                        else { faces.Add(a); faces.Add(c); faces.Add(b); }
+                    }
+            }
+            return faces.ToArray();
         }
 
         // Farthest-point seeds + a fixed Lloyd iteration count: deterministic spatial

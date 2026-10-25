@@ -101,6 +101,12 @@ public sealed class TrafficRuleTests
     public void RetiredProjectDataAndInvalidJournalEventsAreRejectedClearly()
     {
         Assert.Throws<InvalidDataException>(() => RuleProject.FromJson("{\"road\":{}}"));
+        // The untouched retired road model equals the passage graph and is dropped; an edited one is refused.
+        string Road(double scale) => "{\"road\":{\"nodes\":[{\"id\":\"t\",\"operation\":\"TrafficWear\"},{\"id\":\"s\",\"operation\":\"SurfaceFactor\"},"
+            + "{\"id\":\"k\",\"operation\":\"Constant\",\"value\":" + scale.ToString(System.Globalization.CultureInfo.InvariantCulture) + "},{\"id\":\"w\",\"operation\":\"Multiply\"}]},"
+            + "\"schema\":\"forest-rule-project\",\"version\":1,\"name\":\"régi\"}";
+        Assert.Equal("régi", RuleProject.FromJson(Road(1)).Name);
+        Assert.Throws<InvalidDataException>(() => RuleProject.FromJson(Road(1.5)));
         Assert.Throws<ArgumentException>(() => new TrafficPassageCommand(new(0, TrafficVehicleKind.Truck, 1, double.NaN, 1)));
     }
 

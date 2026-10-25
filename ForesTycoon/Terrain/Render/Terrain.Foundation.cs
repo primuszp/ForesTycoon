@@ -69,7 +69,7 @@ namespace ForesTycoon
             Vector3 s = Corner(tile, TileCorner.S);
             Vector3 e = Corner(tile, TileCorner.E);
             Vector3 n = Corner(tile, TileCorner.N);
-            DynamicPrimitiveBatch.Color4(ShadedTileColor(baseColor, w, s, e));
+            DynamicPrimitiveBatch.Color4(TileShading.Shade(baseColor, w, s, e));
             DynamicPrimitiveBatch.Vertex3(w);
             DynamicPrimitiveBatch.Vertex3(s);
             DynamicPrimitiveBatch.Vertex3(e);
@@ -102,24 +102,12 @@ namespace ForesTycoon
             Vector3 pa = Corner(tile, a);
             Vector3 pb = Corner(tile, b);
             Vector3 pc = Corner(tile, c);
-            DynamicPrimitiveBatch.Color4(ShadedTileColor(baseColor, pa, pb, pc));
+            DynamicPrimitiveBatch.Color4(TileShading.Shade(baseColor, pa, pb, pc));
             DynamicPrimitiveBatch.Vertex3(pa);
             DynamicPrimitiveBatch.Vertex3(pb);
             DynamicPrimitiveBatch.Vertex3(pc);
         }
 
-        private static Color ShadedTileColor(Color baseColor, Vector3 a, Vector3 b, Vector3 c)
-        {
-            Vector3 cross = Vector3.Cross(b - a, c - a);
-            Vector3 normal = cross.LengthSquared > 0.0001f ? Vector3.Normalize(cross) : Vector3.UnitZ;
-            Vector3 light = Vector3.Normalize(new Vector3(0.4f, 0.6f, 1.5f));
-            float shade = Math.Max(0.55f, Math.Min(1.0f, Math.Abs(Vector3.Dot(normal, light))));
-            if (float.IsNaN(shade)) shade = 1.0f;
-            return Color.FromArgb(baseColor.A,
-                (int)(baseColor.R * shade),
-                (int)(baseColor.G * shade),
-                (int)(baseColor.B * shade));
-        }
 
         private void DrawFoundationFacesForRoadTile(int u, int v, Tile roadTile)
         {
@@ -150,16 +138,8 @@ namespace ForesTycoon
             DynamicPrimitiveBatch.Vertex3(face.BottomA); DynamicPrimitiveBatch.Vertex3(face.BottomB); DynamicPrimitiveBatch.Vertex3(face.TopB); DynamicPrimitiveBatch.Vertex3(face.TopA);
         }
 
-        private static Color FoundationFaceColor(Vector3 p0, Vector3 p1, Vector3 p2)
-        {
-            Vector3 cross = Vector3.Cross(p1 - p0, p2 - p0);
-            Vector3 normal = cross.LengthSquared > 0.0001f ? Vector3.Normalize(cross) : Vector3.UnitZ;
-            Vector3 light = Vector3.Normalize(new Vector3(0.4f, 0.6f, 1.5f));
-            float shade = Math.Max(0.55f, Math.Min(1.0f, Math.Abs(Vector3.Dot(normal, light))));
-            if (float.IsNaN(shade)) shade = 1.0f;
-            return Color.FromArgb(255, (int)(RoadFoundationSlopeColor.R * shade),
-                (int)(RoadFoundationSlopeColor.G * shade), (int)(RoadFoundationSlopeColor.B * shade));
-        }
+        private static Color FoundationFaceColor(Vector3 p0, Vector3 p1, Vector3 p2) =>
+            TileShading.Shade(Color.FromArgb(255, RoadFoundationSlopeColor), p0, p1, p2);
 
     }
 }

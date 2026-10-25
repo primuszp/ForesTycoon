@@ -137,7 +137,9 @@ internal sealed partial class RuleEditorView
         if (publish) { ProjectHistory.Archive(projectPath); RuleProject.WriteAtomic(projectPath, project.ToJson()); publishedGuard.Observe(projectPath); }
         world.QueueRuleProject(project);
         if (publish) { workshopVersions.MarkPublished(AuthoringRevision(world)); publishedProjectRevision = project.ContentRevision(); }
-        message = publish ? "Projekt mentve; a futó játék automatikusan átveszi. A tesztvilágban is alkalmazva." : "A teljes szabályprojekt alkalmazása naplózva a tesztvilágban.";
+        // Applying is saving: the scene the game starts from gets the same project, so a restart keeps what was applied.
+        if (publish && scenario != null) SaveScene(world);
+        message = publish ? "Alkalmazva: a futó játék átveszi, a jelenet mentése folyamatban (a következő indulás is ezt futtatja)." : "A teljes szabályprojekt alkalmazása naplózva a tesztvilágban.";
     }
     private void RefreshProjectOperations()
     {

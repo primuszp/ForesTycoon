@@ -90,6 +90,7 @@ namespace ForesTycoon.Editor
                     (() => editor.ShowWorld(WorldTab.Rules, tile: forestTile, rule: "water.infiltration|tile"), "world-rules-water"),
                     (() => editor.ShowWorld(WorldTab.Map, MapLayer.Trafficability, forestTile), "world-map-traffic"),
                     (() => editor.ShowWorld(WorldTab.Map, MapLayer.Elevation, forestTile), "world-map-elevation"),
+                    (() => editor.ShowWorld(WorldTab.Map, MapLayer.Zones, forestTile), "world-map-zones"),
                     (() => editor.ShowWorld(WorldTab.Map, MapLayer.Forest, forestTile), "world-map-forest"),
                     (() => editor.ShowWorld(WorldTab.Map, MapLayer.Tracks, forestTile), "world-map-structures"),
                     (() => editor.ShowWorld(WorldTab.Types), "world-types"),
@@ -236,7 +237,14 @@ namespace ForesTycoon.Editor
                 Require(!world.BehaviorDocument.Graphs.Single(g => g.Hook == "water.stress").Nodes.Any(n => n.Operation == BehaviorOperation.Curve), "Undo did not restore the original response graph.");
                 // Species appearance: the preview is the game's own mesh; an authored form reaches the generator, common and per phase.
                 int oakIndex = editor.EditedScenario.Species.FindIndex(x => x.Id == "Oak");
-                void PreviewFrames() { for (int i = 0; i < 600 && !editor.TreePreviewReady; i++) { Frames(1); System.Threading.Thread.Sleep(5); } Frames(3); }
+                // Previews build in the background. Draw the new view first: until it is drawn, readiness still refers to
+                // the previous view's preview (e.g. the previous species' life course), which may already be built.
+                void PreviewFrames() {
+                    Frames(1);
+                    var started = System.Diagnostics.Stopwatch.StartNew();
+                    while (!editor.TreePreviewReady && started.Elapsed < TimeSpan.FromSeconds(30)) { Frames(1); System.Threading.Thread.Sleep(5); }
+                    Frames(3);
+                }
                 editor.ShowSpeciesAppearance(oakIndex, 4); PreviewFrames();
                 Require(editor.TreePreviewReady, "Tree preview was not built.");
                 FramebufferCapture.SavePng(Path.Combine(output, "species-appearance.png"), width, height);
@@ -257,7 +265,7 @@ namespace ForesTycoon.Editor
                 Require(editor.TreePreviewReady, "Branch structure preview was not built.");
                 FramebufferCapture.SavePng(Path.Combine(output, "species-appearance-branches.png"), width, height);
                 editor.SetTreePreviewForTest(2, -1, false); PreviewFrames();
-                Require(editor.TreePreviewReady, "Life course preview was not built.");
+                Require(editor.TreePreviewReady, "Life course preview was not built: " + editor.TreePreviewError);
                 FramebufferCapture.SavePng(Path.Combine(output, "species-life-course.png"), width, height);
                 editor.SetTreePreviewForTest(0, -1, false); editor.ShowSpeciesAppearance(oakIndex, 7); PreviewFrames();
                 FramebufferCapture.SavePng(Path.Combine(output, "species-appearance-dead.png"), width, height);

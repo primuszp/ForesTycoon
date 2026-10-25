@@ -12,7 +12,7 @@ using Vec4 = System.Numerics.Vector4;
 namespace ForesTycoon.Editor;
 
 internal enum WorldTab { Map, Types, Objects, Missions, Rules, Trial }
-internal enum MapLayer { Soil, Elevation, Water, GroundWater, Forest, Tracks, Trafficability }
+internal enum MapLayer { Soil, Elevation, Zones, Water, GroundWater, Forest, Tracks, Trafficability }
 internal enum TypeTab { Soil, Species, Surfaces, Vehicles, Parameters }
 
 /// <summary>
@@ -69,13 +69,7 @@ internal sealed partial class RuleEditorView
         seedEdit = scenario.Seed;
         return scenario;
     }
-    // Missions are checked by the running game; editing them does not rebuild the test world.
-    private string ScenarioKey()
-    {
-        if (scenario == null) return new RuleProject().ToJson();
-        var missions = scenario.Missions; scenario.Missions = new();
-        try { return new RuleProject { World = scenario }.ToJson(); } finally { scenario.Missions = missions; }
-    }
+    private string ScenarioKey() => scenario == null ? new RuleProject().ToJson() : MapPart(new RuleProject { World = scenario }.ToJson());
     /// <summary>The editor's test world is rebuilt from the map whenever the map or a type changes.</summary>
     private void ApplyScenario(GameWorld world, string what)
     {
@@ -96,8 +90,7 @@ internal sealed partial class RuleEditorView
             if (!System.IO.File.Exists(scenePath)) return null;
             var written = System.IO.File.GetLastWriteTimeUtc(scenePath);
             if (sceneFile.Path != scenePath || sceneFile.Written != written) {
-                var p = RuleProject.FromJson(System.IO.File.ReadAllText(scenePath)); p.Algorithms = null; p.Authoring = null;
-                sceneFile = (scenePath, written, p.ToJson());
+                sceneFile = (scenePath, written, SceneKey(RuleProject.FromJson(System.IO.File.ReadAllText(scenePath))));
             }
             return sceneFile.Key;
         } catch (Exception e) when (e is System.IO.IOException or System.IO.InvalidDataException or System.Text.Json.JsonException) { return null; }
@@ -105,7 +98,15 @@ internal sealed partial class RuleEditorView
     private (bool SceneSaved, bool WorldCurrent) statusCache;
     private int statusFrame = -1000;
 
-    private string SceneDocumentKey(GameWorld world) { var p = CollectProject(world); p.Algorithms = null; p.Authoring = null; return p.ToJson(); }
+    private string SceneDocumentKey(GameWorld world) => SceneKey(CollectProject(world));
+    // The saved file and the edited document are compared in the form the game runs: migrated and normalised alike.
+    private static string SceneKey(RuleProject project)
+    {
+        project = project.Clone(); project.Algorithms = null;
+        try { project = GameWorld.NormalizeRuleProject(project); } catch (Exception e) when (Expected(e)) { }
+        project.Authoring = null;
+        return project.ContentRevision();
+    }
 
     private void SaveAll(GameWorld world) => world.AtTickBoundary(() => Try(() => SaveAllAtBoundary(world)));
 
@@ -132,6 +133,7 @@ internal sealed partial class RuleEditorView
     private static readonly (MapLayer Layer, string Name, string Help)[] Layers = {
         (MapLayer.Soil, "Talaj", "Talajtípus csempénként. Festhető."),
         (MapLayer.Elevation, "Domborzat", "Magasság. Festhető: emelés, süllyesztés, simítás."),
+        (MapLayer.Zones, "Magassági övek", "Tengerpart, síkság, dombvidék, hegyvidék a terep szintje szerint; a meredek csempe sötétebb. Az övek határa itt állítható."),
         (MapLayer.Water, "Víz", "Tavak és folyók. Festhető: a vízszint alá süllyesztett terep megtelik."),
         (MapLayer.GroundWater, "Talajvíz", "Gyökérzóna telítettsége."),
         (MapLayer.Forest, "Erdő", "Fafaj és fatérfogat. Festhető: kezdő erdő fajjal, vagy irtás."),
@@ -206,6 +208,7 @@ internal sealed partial class RuleEditorView
             ImGui.RadioButton("Emelés", ref elevationTool, 0); ImGui.SameLine(); ImGui.RadioButton("Süllyesztés", ref elevationTool, 1); ImGui.SameLine(); ImGui.RadioButton("Simítás", ref elevationTool, 2);
             ImGui.SetNextItemWidth(-60); ImGui.SliderInt("Méret", ref brushSize, 1, 6);
         }
+        else if (mapLayer == MapLayer.Zones) ZonePanel(world);
         else if (mapLayer == MapLayer.Water) {
             EditorStyle.Section("Ecset");
             ImGui.TextWrapped("A víz a domborzatból adódik: a zárt mélyedés a pereméig megtelik. A tó ecset a csempéket a vízszintre süllyeszti és partot emel köréjük; a szárazföld a vízszint fölé emel.");
@@ -262,7 +265,9 @@ internal sealed partial class RuleEditorView
             ("soil.profile", "Talaj"), ("soil.bearing", "Teherbírás"), ("soil.fertility", "Termékenység"),
             ("water.root", "Gyökérzónavíz"), ("water.deep", "Mélyvíz"), ("water.surface", "Felszíni víz") })
             if (section.TryGetValue(key, out var value)) EditorStyle.Fact(label, value);
-        EditorStyle.Fact("Magasság", world.TileElevation(tile).ToString("0.00"));
+        EditorStyle.Fact("Magasság", $"{world.TileLevel(tile)}. szint");
+        EditorStyle.Fact("Magassági öv", scenario.ElevationZones[scenario.ZoneOf(world.TileLevel(tile))].Name);
+        EditorStyle.Fact("Lejtő", world.TileSlope(tile) switch { TerrainSlope.Flat => "sík", TerrainSlope.Gentle => "enyhe", _ => "meredek" });
         ImGui.EndTable();
         int soil = world.SoilIndex(tile);
         if (soil < scenario.SoilTypes.Count && ImGui.SmallButton("Talajtípus megnyitása")) { selectedSoilType = soil; ShowPage(EditorPage.Soils); }
@@ -361,6 +366,8 @@ internal sealed partial class RuleEditorView
 
     private Func<int, Vec4> TileColour(GameWorld world) => mapLayer switch {
         MapLayer.Elevation => tile => Mix(new(0.18f, 0.30f, 0.20f, 1), new(0.86f, 0.82f, 0.68f, 1), world.TileElevation(tile)),
+        MapLayer.Zones => tile => EditorStyle.Dim(Colour(scenario.ElevationZones[scenario.ZoneOf(world.TileLevel(tile))].Color),
+            world.TileSlope(tile) switch { TerrainSlope.Flat => 1f, TerrainSlope.Gentle => .86f, _ => .66f }),
         MapLayer.Water => tile => world.IsWaterTile(tile) ? new(0.25f, 0.50f, 0.90f, 1)
             : Mix(Mix(new(0.22f, 0.24f, 0.20f, 1), new(0.62f, 0.60f, 0.52f, 1), world.TileElevation(tile)), new(0.30f, 0.62f, 0.95f, 1),
                 (float)Math.Sqrt(Math.Clamp((world.TileSurfaceWater(tile) - 0.5) / 100, 0, 1))),
@@ -390,36 +397,90 @@ internal sealed partial class RuleEditorView
     }
     private static string Hex(Vec4 c) => $"#{(int)(c.X * 255):X2}{(int)(c.Y * 255):X2}{(int)(c.Z * 255):X2}";
 
+    /// <summary>Colour swatches with labels in a row that wraps to the next line when the panel is full.</summary>
+    private static void Legend(IEnumerable<(Vec4 Colour, string Label)> items)
+    {
+        var draw = ImGui.GetWindowDrawList();
+        float right = ImGui.GetCursorScreenPos().X + ImGui.GetContentRegionAvail().X;
+        bool first = true;
+        foreach (var (colour, label) in items) {
+            float width = 22 + ImGui.CalcTextSize(label).X;
+            if (!first) {
+                ImGui.SameLine(0, 18);
+                if (ImGui.GetCursorScreenPos().X + width > right) ImGui.NewLine();
+            }
+            first = false;
+            Vec2 p = ImGui.GetCursorScreenPos();
+            draw.AddRectFilled(p + new Vec2(0, 3), p + new Vec2(14, 17), EditorStyle.U(colour), 2);
+            ImGui.Dummy(new Vec2(18, 20)); ImGui.SameLine(0, 4);
+            ImGui.TextUnformatted(label);
+        }
+    }
+
+    /// <summary>The elevation zones from low to high: name, colour and the highest level each one covers.</summary>
+    private void ZonePanel(GameWorld world)
+    {
+        EditorStyle.Section("Magassági övek");
+        ImGui.TextWrapped($"Egy öv a lenti övtől a felső szintjéig tart; a legfelső felfelé nyitott. A terep 0–{world.Map.MaximumHeight}. szintig emelhető, a víz a {world.Map.WaterHeight}. szintig áll.");
+        var zones = scenario.ElevationZones;
+        int remove = -1;
+        for (int i = 0; i < zones.Count; i++) {
+            var zone = zones[i];
+            ImGui.PushID("zone" + i);
+            var c = Colour(zone.Color); var rgb = new System.Numerics.Vector3(c.X, c.Y, c.Z);
+            if (ImGui.ColorEdit3("##colour", ref rgb, ImGuiColorEditFlags.NoInputs)) zone.Color = Hex(new Vec4(rgb, 1));
+            ImGui.SameLine();
+            string name = zone.Name; ImGui.SetNextItemWidth(zones.Count > 1 ? -(EditorStyle.ButtonWidth("Törlés") + 8) : -1);
+            if (ImGui.InputText("##name", ref name, 40) && name.Trim().Length > 0) zone.Name = name.Trim();
+            if (zones.Count > 1) { ImGui.SameLine(); if (EditorStyle.QuietButton("Törlés")) remove = i; }
+            int low = i == 0 ? 0 : zones[i - 1].MaxLevel + 1;
+            if (i < zones.Count - 1) {
+                int top = zone.MaxLevel; ImGui.AlignTextToFramePadding(); ImGui.TextUnformatted($"{low}. szinttől"); ImGui.SameLine(); ImGui.SetNextItemWidth(ImGui.GetFontSize() * 6);
+                // The upper bound stays between this zone's floor and the next zone's top, so the order never breaks.
+                if (ImGui.InputInt("szintig##top", ref top)) zone.MaxLevel = Math.Clamp(top, low, zones[i + 1].MaxLevel - 1);
+            } else { ImGui.AlignTextToFramePadding(); EditorStyle.Text(HudTheme.Muted, $"{low}. szinttől felfelé"); }
+            ImGui.PopID();
+            ImGui.Spacing();
+        }
+        if (remove >= 0) {
+            // The removed zone's levels go to the zone above it; removing the top zone opens the one below upwards.
+            if (remove == zones.Count - 1) zones[remove - 1].MaxLevel = zones[remove].MaxLevel;
+            zones.RemoveAt(remove);
+        }
+        ImGui.BeginDisabled(zones.Count >= 8 || zones[^1].MaxLevel - (zones.Count > 1 ? zones[^2].MaxLevel : -1) < 2);
+        if (ImGui.Button("Új öv a legfelső alá", new Vec2(-1, 0))) {
+            int floor = zones.Count > 1 ? zones[^2].MaxLevel + 1 : 0;
+            zones.Insert(zones.Count - 1, new ElevationZoneDefinition { Id = "zone" + Guid.NewGuid().ToString("N")[..6], Name = "Új öv", Color = "#9A9A9A", MaxLevel = floor });
+        }
+        ImGui.EndDisabled();
+        if (ImGui.Button("Alapértelmezett övek", new Vec2(-1, 0))) scenario.ElevationZones = ElevationZoneDefinition.Defaults();
+    }
+
     private void MapLegend(GameWorld world)
     {
         var draw = ImGui.GetWindowDrawList();
+        int tiles = world.TileGrid.Columns * world.TileGrid.Rows;
+        string Share(int count) => $"{100.0 * count / Math.Max(1, tiles):0}%";
         if (mapLayer == MapLayer.Forest) {
-            int tiles = world.TileGrid.Columns * world.TileGrid.Rows;
             var counts = Enumerable.Range(0, tiles).Select(world.TileSpecies).Where(s => s != ForesTycoon.Ecology.ForestSpecies.None)
                 .GroupBy(s => s).OrderByDescending(g => g.Count()).Take(6).ToArray();
-            for (int i = 0; i < counts.Length; i++) {
-                if (i > 0) ImGui.SameLine(0, 16);
-                Vec2 p = ImGui.GetCursorScreenPos();
-                draw.AddRectFilled(p + new Vec2(0, 3), p + new Vec2(14, 17), EditorStyle.U(SpeciesColour(counts[i].Key.ToString())), 2);
-                ImGui.Dummy(new Vec2(18, 20)); ImGui.SameLine();
-                string name = scenario.Species.Find(x => x.Id == counts[i].Key.ToString())?.Name ?? counts[i].Key.ToString();
-                ImGui.TextUnformatted($"{name} · {100.0 * counts[i].Count() / Math.Max(1, tiles):0}%");
-            }
+            Legend(counts.Select(g => (SpeciesColour(g.Key.ToString()),
+                $"{scenario.Species.Find(x => x.Id == g.Key.ToString())?.Name ?? g.Key.ToString()} · {Share(g.Count())}")));
             if (counts.Length == 0) EditorStyle.Text(HudTheme.Muted, "Nincs erdő a pályán.");
             return;
         }
         if (mapLayer is MapLayer.Soil or MapLayer.Tracks) {
             var counts = new int[scenario.SoilTypes.Count];
-            int tiles = world.TileGrid.Columns * world.TileGrid.Rows;
             for (int t = 0; t < tiles; t++) { int s = world.SoilIndex(t); if (s < counts.Length) counts[s]++; }
-            for (int i = 0; i < scenario.SoilTypes.Count; i++) {
-                if (i > 0) ImGui.SameLine(0, 18);
-                Vec2 p = ImGui.GetCursorScreenPos();
-                draw.AddRectFilled(p + new Vec2(0, 3), p + new Vec2(14, 17), EditorStyle.U(Colour(scenario.SoilTypes[i].Color)), 2);
-                ImGui.Dummy(new Vec2(18, 20)); ImGui.SameLine();
-                ImGui.TextUnformatted($"{scenario.SoilTypes[i].Name} · {100.0 * counts[i] / Math.Max(1, tiles):0}%");
-            }
+            Legend(scenario.SoilTypes.Select((type, i) => (Colour(type.Color), $"{type.Name} · {Share(counts[i])}")));
             if (mapLayer == MapLayer.Tracks) { EditorStyle.Text(HudTheme.Muted, "világos: út · barna: épület · narancs: közelítőnyom"); }
+            return;
+        }
+        if (mapLayer == MapLayer.Zones) {
+            var counts = new int[scenario.ElevationZones.Count];
+            for (int t = 0; t < tiles; t++) counts[scenario.ZoneOf(world.TileLevel(t))]++;
+            Legend(scenario.ElevationZones.Select((zone, i) => (Colour(zone.Color), $"{zone.Name} · {Share(counts[i])}")));
+            EditorStyle.Text(HudTheme.Muted, "sötétebb: enyhe vagy meredek lejtő");
             return;
         }
         (string Low, string High, Vec4 A, Vec4 B) = mapLayer switch {
@@ -579,6 +640,7 @@ internal sealed partial class RuleEditorView
         if (speciesTab == 2) { TreeColoursArea(world, sp); ImGui.EndChild(); return; }
         bool changed = ParameterTable("species-fields", Row => {
             Row("Név", "Megjelenik a játékban és a listákban.", () => { string n = sp.Name; if (ImGui.InputText("##name", ref n, 80) && n.Trim().Length > 0) sp.Name = n.Trim(); });
+            Row("Leírás", "A játék fafajleírása (súgó és erdőnézet).", () => { string d = sp.Description ?? ""; if (ImGui.InputTextMultiline("##description", ref d, 600, new Vec2(-1, ImGui.GetTextLineHeight() * 3.4f))) sp.Description = d.Trim(); });
             Row("Faanyagár (eFt/m³)", "Gazdaság: ennyit ér a kitermelt fa a malomban (a piaci árszorzóval).", () => Number("##price", () => sp.TimberPrice, v => sp.TimberPrice = v, 1, "%.1f", 0, 10000));
             Row("Éves növekedési ráta", "Milyen gyorsan gyarapszik a fatömeg kedvező termőhelyen.", () => Number("##growth", () => sp.AnnualGrowthRate, v => sp.AnnualGrowthRate = v, .005, "%.3f", .001, 1));
             Row("Legnagyobb fatömeg", "Ennyi fatömeget érhet el egy teljes állomány (relatív egység).", () => Number("##biomass", () => sp.MaximumBiomass, v => sp.MaximumBiomass = v, .05, "%.2f", .01, 10));

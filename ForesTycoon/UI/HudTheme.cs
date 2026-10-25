@@ -195,6 +195,13 @@ namespace ForesTycoon
             if (color.HasValue) ImGui.PopStyleColor();
         }
 
+        /// <summary>A temperature for display; a value that rounds to zero reads "0 °C", never "-0 °C".</summary>
+        internal static string Celsius(double value, int decimals = 1)
+        {
+            double shown = Math.Round(value, decimals);
+            return (shown == 0 ? 0 : shown).ToString(decimals == 0 ? "0" : "0." + new string('0', decimals)) + " °C";
+        }
+
         internal static void KeyValue(string key, string value)
         {
             ImGui.TextDisabled(key);

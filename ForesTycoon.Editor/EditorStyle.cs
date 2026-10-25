@@ -138,18 +138,24 @@ namespace ForesTycoon.Editor
             float glyph = 20;
             float x = compact ? (width - glyph) / 2 : 12;
             GameIcons.Draw(draw, icon, p + new Vec2(x, (height - glyph) / 2), glyph, U(1, 1, 1, active || hover ? 1f : 0.78f));
+            bool shortened = false;
             if (!compact) {
-                float textY = (height - ImGui.GetTextLineHeight()) / 2;
-                draw.AddText(p + new Vec2(x + glyph + 10, textY), U(active ? HudTheme.Parchment : hover ? HudTheme.Parchment : Fade(HudTheme.Parchment, 0.82f)), label);
+                float textY = (height - ImGui.GetTextLineHeight()) / 2, room = width - (x + glyph + 10) - 8;
                 if (!string.IsNullOrEmpty(badge)) {
                     Vec2 size = ImGui.CalcTextSize(badge) + new Vec2(12, 2);
                     Vec2 at = p + new Vec2(width - size.X - 8, (height - size.Y) / 2);
                     draw.AddRectFilled(at, at + size, U(1, 1, 1, active ? 0.10f : 0.06f), size.Y / 2);
                     draw.AddText(at + new Vec2(6, 1), TextMuted, badge);
+                    room -= size.X + 6;
                 }
+                // The label ends before the count; a shortened one is shown in full in the tooltip.
+                string shown = label;
+                while (shown.Length > 1 && ImGui.CalcTextSize(shown).X > room) { shown = shown[..^1]; shortened = true; }
+                if (shortened) shown = shown[..^1].TrimEnd() + "…";
+                draw.AddText(p + new Vec2(x + glyph + 10, textY), U(active ? HudTheme.Parchment : hover ? HudTheme.Parchment : Fade(HudTheme.Parchment, 0.82f)), shown);
             }
             if (hover) {
-                if (compact) HudTheme.Tooltip(label, badge, help);
+                if (compact || shortened) HudTheme.Tooltip(label, badge, help);
                 else if (help != null) ImGui.SetTooltip(help);
             }
             return clicked;

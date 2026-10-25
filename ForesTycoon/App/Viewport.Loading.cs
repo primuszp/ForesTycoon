@@ -35,9 +35,8 @@ namespace ForesTycoon
                     }
                     if (world == null) { DrawLoadingScreen(); return; }
                     if (resumeWorld != null) {
+                        // The rule project link applies the published project to the resumed world on its first poll.
                         using var input = System.IO.File.OpenRead(resumeWorld); world.Load(input, allowAlgorithmMigration: true);
-                        var project = RuleProject.FromJson(System.IO.File.ReadAllText(RuleProject.DefaultPath));
-                        world.QueueRuleProject(project);
                     }
                     interaction = new WorldInteractionController(world) { TargetPicked = SendTargetPicked };
                 }

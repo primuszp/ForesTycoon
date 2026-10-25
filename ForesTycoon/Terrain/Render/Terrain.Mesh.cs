@@ -68,23 +68,11 @@ namespace ForesTycoon
         {
             Color surfaceColor = TerrainSurfaceColor(code, low);
 
-            // Light direction: slightly from above-front in world space
-            Vector3 light = Vector3.Normalize(new Vector3(0.4f, 0.6f, 1.5f));
-
             // Minden primitív háromszög (stride = 3)
             int stride = 3;
             for (int start = 0; start < data.Count; start += stride)
             {
-                Vector3 p0 = data[start    ].Position;
-                Vector3 p1 = data[start + 1].Position;
-                Vector3 p2 = data[start + 2].Position;
-                Vector3 normal = Vector3.Normalize(Vector3.Cross(p1 - p0, p2 - p0));
-                float shade = Math.Max(0.55f, Math.Min(1.0f, Vector3.Dot(normal, light)));
-
-                int r = (int)(surfaceColor.R * shade);
-                int g = (int)(surfaceColor.G * shade);
-                int b = (int)(surfaceColor.B * shade);
-                uint color = ColorToUInt(Color.FromArgb(255, r, g, b));
+                uint color = ColorToUInt(TileShading.Shade(surfaceColor, data[start].Position, data[start + 1].Position, data[start + 2].Position));
 
                 int end = Math.Min(start + stride, data.Count);
                 for (int i = start; i < end; i++)

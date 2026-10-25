@@ -65,12 +65,16 @@ internal sealed class RuleProjectLink
         if (poll <= 0) {
             poll = .5;
             try {
-                if (!File.Exists(path)) RuleProject.WriteAtomic(path, world.RuleProjectDocument.ToJson());
+                // No published project yet: publish the running one, which is installed by definition.
+                if (!File.Exists(path)) { installed = world.RuleProjectDocument.ToJson(); RuleProject.WriteAtomic(path, installed); }
                 string json = File.ReadAllText(path);
                 if (installed == null && adoptRunning && building == null && replacement == null) installed = json;
                 if (json == installed && building == null && replacement == null) Error = null;
                 if (json != installed && json != rejectedJson && building == null && replacement == null) {
-                    var project = RuleProject.FromJson(json); GameWorld.ValidateRuleProject(project);
+                    RuleProject project;
+                    // A project the game cannot run is reported once and kept out; the running rules continue.
+                    try { project = RuleProject.FromJson(json); GameWorld.ValidateRuleProject(project); }
+                    catch (Exception e) when (e is InvalidDataException or InvalidOperationException or ArgumentException or System.Text.Json.JsonException) { rejectedJson = json; throw; }
                     string stale = AlgorithmBuild.StaleReason(project.Algorithms);
                     // An outdated code snapshot never replaces the running code; the rules, formulas and map still apply.
                     if (stale != null) project.Algorithms = AlgorithmBuild.CurrentReference;
@@ -96,7 +100,7 @@ internal sealed class RuleProjectLink
                         Error = stale == null ? null : "A projekt algoritmusmásolata elavult (" + stale + "); a játék a saját kódjával fut, a szabályokat átvette.";
                     }
                 }
-            } catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or ArgumentException) { Error = e.Message; }
+            } catch (Exception e) when (e is IOException or InvalidDataException or InvalidOperationException or UnauthorizedAccessException or System.Text.Json.JsonException or ArgumentException) { Error = e.Message; }
         }
         if (publish <= 0) {
             publish = 3;

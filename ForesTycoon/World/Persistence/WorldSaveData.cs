@@ -129,9 +129,7 @@ namespace ForesTycoon
                 if (Checkpoint.DynamicsValues != null) dynamics.Restore(Checkpoint.DynamicsValues);
                 if (Version >= 17 && (Checkpoint.Dynamics == null || Checkpoint.DynamicsValues == null)) throw new InvalidOperationException("Save has no dynamics state.");
                 if (Checkpoint.Behaviors != null) {
-                    var project = new RuleProject { Version = Checkpoint.RuleBook?.ProjectVersion ?? 2,
-                        Rules = RuleEngine.Clone(Checkpoint.RuleBook?.Rules ?? RuleEngine.StarterRules()), Behaviors = Checkpoint.Behaviors.Clone() };
-                    RuleProjectMigrations.UpgradeProject(project);
+                    var project = GameWorld.CheckpointProject(Checkpoint);
                     _ = new WorldBehaviorPolicy(project.Behaviors, DynamicsRuntime.Keys(dynamics.Document, GameWorld.RuleWorldFields), dynamics.Read);
                 }
                 if (Version >= 15 && Checkpoint.BehaviorStates == null) throw new InvalidOperationException("Save has no controller state.");

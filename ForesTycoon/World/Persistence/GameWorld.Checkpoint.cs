@@ -58,14 +58,21 @@ namespace ForesTycoon
             ApplyTuning(GameTuning.FromOverrides(s.Tuning));
         }
 
+        /// <summary>The rule book and behaviors a checkpoint carries, brought to the current project version.</summary>
+        internal static RuleProject CheckpointProject(WorldCheckpointData s)
+        {
+            var project = new RuleProject { Version = s.RuleBook?.ProjectVersion ?? 2,
+                Rules = RuleEngine.Clone(s.RuleBook?.Rules ?? RuleEngine.StarterRules()),
+                Behaviors = (s.Behaviors ?? WorldBehaviorPolicy.DefaultDocument()).Clone() };
+            RuleProjectMigrations.UpgradeProject(project);
+            return project;
+        }
+
         private (DynamicsRuntime Dynamics, RuleEngine Engine, WorldBehaviorPolicy Policy) PrepareCheckpointPrograms(WorldCheckpointData s)
         {
             var runtime = new DynamicsRuntime(s.Dynamics ?? new DynamicsModel(), RuleWorldFields, ruleValues.ReadWorld);
             if (s.DynamicsValues != null) runtime.Restore(s.DynamicsValues);
-            var migration = new RuleProject { Version = s.RuleBook?.ProjectVersion ?? 2,
-                Rules = RuleEngine.Clone(s.RuleBook?.Rules ?? RuleEngine.StarterRules()),
-                Behaviors = (s.Behaviors ?? WorldBehaviorPolicy.DefaultDocument()).Clone() };
-            RuleProjectMigrations.UpgradeProject(migration);
+            var migration = CheckpointProject(s);
             var rules = migration.Rules;
             var removed = s.RuleBook?.RemovedStarters ?? new();
             var engine = new RuleEngine(rules, s.RuleBook?.Fields ?? new(), runtime.Document.Stocks.Select(x => x.Id), ruleValues.ReadRule) { RemovedStarters = removed };

@@ -134,7 +134,7 @@ namespace ForesTycoon
             var environment = world.Environment;
             if (environment != null)
                 HudTheme.IconText(WeatherIcon(environment.Preset),
-                    $"{WeatherName(environment.Preset)} · {environment.Temperature:0} °C", HudTheme.Muted);
+                    $"{WeatherName(environment.Preset)} · {HudTheme.Celsius(environment.Temperature, 0)}", HudTheme.Muted);
             ImGui.EndGroup();
             toolbarBottom = ImGui.GetWindowPos().Y + ImGui.GetWindowSize().Y;
             EndPanel();

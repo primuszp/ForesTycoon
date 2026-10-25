@@ -97,8 +97,10 @@ namespace ForesTycoon.Rules
             var ids = new HashSet<string>(StringComparer.Ordinal);
             foreach (var graph in document.Graphs)
             {
-                if (graph == null || string.IsNullOrWhiteSpace(graph.Id) || !ids.Add(graph.Id) || string.IsNullOrWhiteSpace(graph.Name)
-                    || !hooks.TryGetValue((graph.Hook, graph.Kind), out var hook)) throw new InvalidDataException("Hibás gráfazonosító vagy nem támogatott világkötés.");
+                if (graph == null || string.IsNullOrWhiteSpace(graph.Id) || !ids.Add(graph.Id) || string.IsNullOrWhiteSpace(graph.Name))
+                    throw new InvalidDataException("Hibás vagy ismétlődő gráfazonosító: " + (graph?.Name ?? "névtelen") + " [" + graph?.Id + "].");
+                if (!hooks.TryGetValue((graph.Hook, graph.Kind), out var hook))
+                    throw new InvalidDataException($"Nem támogatott világkötés: {graph.Hook} ({graph.Kind}). Gráf: {graph.Name} [{graph.Id}].");
                 if (!hook.SupportsObjects && graph.ObjectId.HasValue) throw new InvalidDataException("Ez a paraméter a teljes világra vonatkozik.");
                 if (!programs.TryAdd((graph.Hook, graph.Kind, graph.ObjectId), new Program(graph, hook, namedValues, readValue, bindValue)))
                     throw new InvalidDataException("Egy eseményhez és célhoz csak egy viselkedés köthető.");

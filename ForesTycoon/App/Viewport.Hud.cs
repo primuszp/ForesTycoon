@@ -383,8 +383,9 @@ namespace ForesTycoon
             if (!open) return false;
             ImGui.SetNextWindowPos(defaultPosition, ImGuiCond.FirstUseEver);
             ImGui.SetNextWindowSize(new NVec2(width, 0), ImGuiCond.FirstUseEver);
+            // Auto-resize measures wrapped text unwrapped: cap the width, or a long line pushes the window off screen.
             ImGui.SetNextWindowSizeConstraints(new NVec2(width * 0.8f, 0),
-                new NVec2(Width, Math.Max(200f, Height - StatusBarHeight - defaultPosition.Y - 8f)));
+                new NVec2(Math.Min(Width - 16f, width * 1.25f), Math.Max(200f, Height - StatusBarHeight - defaultPosition.Y - 8f)));
             bool visible = ImGui.Begin(title, ref open, ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoCollapse);
             if (!visible) ImGui.End();
             return visible;
@@ -394,8 +395,8 @@ namespace ForesTycoon
         {
             if (!BeginGameWindow("Járművek", ref showVehicles, new NVec2(Width - 360, toolbarBottom + 10), 340)) return;
 
+            // The current logistics hint lives in the Transport bar; this window lists the fleet.
             var logistics = world.Logistics;
-            if (logistics != null) { ImGui.TextWrapped(logistics.Status); ImGui.Separator(); }
             if (logistics == null || logistics.Depots.Count == 0)
             {
                 ImGui.TextDisabled("Még nincs telephely. Épít → Telephely: 2×2 sík csempe út mellé.");
@@ -640,7 +641,7 @@ namespace ForesTycoon
                 $"{WeatherName(environment.Preset)} · még {Math.Max(0, environment.EventEnd - environment.Time):0} s", HudTheme.AmberAccent);
             HudTheme.KeyValue("Háttércsapadék", $"{environment.RainRate:0.0} mm/óra");
             HudTheme.KeyValue("Esemény", $"{environment.EventRain:0.00} / {environment.ExpectedEventRain:0.00} mm");
-            HudTheme.KeyValue("Háttér-hőmérséklet", $"{environment.Temperature:0.0} °C");
+            HudTheme.KeyValue("Háttér-hőmérséklet", HudTheme.Celsius(environment.Temperature));
             HudTheme.KeyValue("Szél", $"{environment.WindSpeed:0.0} m/s");
             HudTheme.KeyValue("Besugárzás", $"{environment.Radiation * 100:0}%");
             HudTheme.Meter("Gyökérzóna átlagos víztelítettsége", (float)environment.MeanSoil, $"{environment.MeanSoil * 100:0}%",
@@ -656,7 +657,7 @@ namespace ForesTycoon
                 ImGui.SeparatorText($"Csempe {id}");
                 if (world.Soils != null) HudTheme.KeyValue("Talaj", world.Soils.Profile(id).Name);
                 var local = environment.ClimateAt(id);
-                HudTheme.KeyValue("Helyi hőmérséklet", $"{local.Forcing.Temperature:0.0} °C");
+                HudTheme.KeyValue("Helyi hőmérséklet", HudTheme.Celsius(local.Forcing.Temperature));
                 HudTheme.KeyValue("Helyi csapadék", $"{environment.RainRate * local.RainMultiplier:0.0} mm/óra");
                 HudTheme.KeyValue("Páratartalom", $"{local.Forcing.Humidity:P0}");
                 HudTheme.Meter("Gyökérzóna", (float)(cell.Soil / cell.Capacity), $"{cell.Soil:0.0} / {cell.Capacity:0} mm", new NVec4(0.36f, 0.62f, 0.86f, 1f));

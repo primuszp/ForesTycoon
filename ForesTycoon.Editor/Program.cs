@@ -76,8 +76,9 @@ namespace ForesTycoon.Editor
             int width = work.Size.X, height = work.Size.Y;
             if (width <= 0 || height <= 0) return;
             uiScale = Math.Clamp(Math.Min(width / 1800f, height / 1100f), .78f, 1);
-            ClientSize = new(Math.Min(1600, width - 40), Math.Min(960, (int)(height * .86f)));
-            CenterWindow();
+            // Placed inside the work area below the menu bar, leaving the title bar and the Dock clear.
+            ClientSize = new(Math.Min(1600, width - 40), Math.Min(960, height - 110));
+            ClientLocation = new(work.Min.X + (width - ClientSize.X) / 2, work.Min.Y + 32);
         }
 
         protected override void LoadScene()

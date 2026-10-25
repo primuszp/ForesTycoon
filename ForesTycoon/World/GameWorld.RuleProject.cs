@@ -49,6 +49,16 @@ sealed partial class GameWorld
     {
         _ = PrepareRuleProject(project, _ => 0, prepareExecutables: false);
     }
+    /// <summary>
+    /// Brings an older document to the current version in place: the one migration the game and the editor share.
+    /// Only version 1 documents receive the starter rules; a later rule book is authoritative, even an empty one.
+    /// </summary>
+    internal static void MigrateRuleProject(RuleProject project)
+    {
+        project.Rules ??= new(); project.Fields ??= new(); project.RemovedStarters ??= new();
+        if (project.Version == 1) RuleEngine.AddMissingStarters(project.Rules, project.RemovedStarters);
+        RuleProjectMigrations.UpgradeProject(project);
+    }
     internal static RuleProject NormalizeRuleProject(RuleProject project)
     {
         var prepared = PrepareRuleProject(project, _ => 0, prepareExecutables: false);
@@ -69,9 +79,7 @@ sealed partial class GameWorld
             || !Path.IsPathFullyQualified(algorithms.WorkspaceRoot))) throw new InvalidDataException("Hibás algoritmusgráf-hivatkozás.");
         copy.World?.Validate();
         foreach (var species in copy.World?.Species ?? new()) _ = ShapeOverride(species);
-        copy.Rules ??= new(); copy.Fields ??= new(); copy.RemovedStarters ??= new();
-        if (copy.Version == 1) RuleEngine.AddMissingStarters(copy.Rules, copy.RemovedStarters);
-        RuleProjectMigrations.UpgradeProject(copy);
+        MigrateRuleProject(copy);
         var tuning = GameTuning.FromOverrides(copy.Tuning);
         var runtime = new DynamicsRuntime(copy.Dynamics, RuleWorldFields, readWorld);
         // Every host query has an explicit editable graph. Missing authored bindings remain inactive.

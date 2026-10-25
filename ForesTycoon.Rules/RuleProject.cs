@@ -51,9 +51,7 @@ public sealed class RuleProject
     public string ToJson() => JsonSerializer.Serialize(this, JsonOptions);
     public static RuleProject FromJson(string json)
     {
-        using var document = JsonDocument.Parse(json);
-        if (document.RootElement.ValueKind == JsonValueKind.Object && document.RootElement.TryGetProperty("road", out _))
-            throw new InvalidDataException("A projekt megszűnt külön útkopási modellt tartalmaz (road). A forgalmi kopást a közös szabálykönyv áthaladási gráfja szerkeszti; a régi modellt nem hagyjuk el észrevétlenül.");
+        json = RuleProjectMigrations.RemoveRetiredRoadModel(json);
         return JsonSerializer.Deserialize<RuleProject>(json, JsonOptions) ?? throw new InvalidDataException("Üres szabályprojekt.");
     }
     public RuleProject Clone() => FromJson(ToJson());

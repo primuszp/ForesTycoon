@@ -28,9 +28,7 @@ internal static class EditorProjectLoader
             throw new InvalidDataException("Hibás szerkesztési objektum vagy nem támogatott kötés.");
         // Migrate a copy before checking current hooks; reopening a draft must not compile it.
         project = project.Clone();
-        project.Rules ??= new(); project.Fields ??= new(); project.RemovedStarters ??= new();
-        if (project.Version == 1) RuleEngine.AddMissingStarters(project.Rules, project.RemovedStarters);
-        RuleProjectMigrations.UpgradeProject(project);
+        GameWorld.MigrateRuleProject(project);
         foreach (var graph in project.Behaviors.Graphs)
             if (!WorldBehaviorPolicy.Hooks.Any(h => h.Id == graph.Hook && h.Kind == graph.Kind))
                 throw new InvalidDataException($"Nem támogatott kötés: {graph.Hook} ({graph.Kind}). Gráf: {graph.Name} [{graph.Id}].");

@@ -33,6 +33,30 @@ public static class RuleProjectMigrations
             if (!body.Effects.Any(e => e.Target == effect.Target)) body.Effects.Add(effect);
         project.Version = 4;
     }
+    /// <summary>
+    /// The retired separate road wear model ("road"). Its untouched form, traffic × surface × 1, is what the rule book's
+    /// passage graph computes, so it is dropped; an edited one would change the game and is refused, never dropped silently.
+    /// </summary>
+    public static string RemoveRetiredRoadModel(string json)
+    {
+        var root = System.Text.Json.Nodes.JsonNode.Parse(json) as System.Text.Json.Nodes.JsonObject;
+        if (root == null || !root.TryGetPropertyValue("road", out var road)) return json;
+        if (!IsNeutralRoadModel(road))
+            throw new System.IO.InvalidDataException("A projekt megszűnt külön útkopási modellt tartalmaz (road), módosított értékekkel. A forgalmi kopást a közös szabálykönyv áthaladási gráfja szerkeszti; a módosítást ott kell újra megadni.");
+        root.Remove("road");
+        return root.ToJsonString();
+    }
+    private static bool IsNeutralRoadModel(System.Text.Json.Nodes.JsonNode road)
+    {
+        if (road?["nodes"] is not System.Text.Json.Nodes.JsonArray nodes || nodes.Count == 0) return false;
+        foreach (var node in nodes) {
+            string operation = node?["operation"]?.GetValue<string>();
+            if (operation is "TrafficWear" or "SurfaceFactor" or "Multiply") continue;
+            if (operation == "Constant" && node["value"]?.GetValue<double>() == 1) continue;
+            return false;
+        }
+        return true;
+    }
     public static readonly string[] RetiredWildlifeQueries = { "wildlife.forageRecovery", "wildlife.hungerRate", "wildlife.eatingRate", "wildlife.depletionRate", "wildlife.wanderRate", "wildlife.walkSpeed", "wildlife.wanderRelief" };
     public static void UpgradeObjectSimulation(RuleProject project)
     {

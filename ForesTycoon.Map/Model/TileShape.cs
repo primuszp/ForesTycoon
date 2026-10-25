@@ -12,6 +12,9 @@ namespace ForesTycoon.Map
         Steep
     }
 
+    /// <summary>How steep a tile is: the height difference of its corners (0, 1, or 2 and more steps).</summary>
+    enum TerrainSlope { Flat, Gentle, Steep }
+
     readonly struct TileShapeInfo
     {
         public readonly TileShapeKind Kind;
@@ -44,6 +47,7 @@ namespace ForesTycoon.Map
         public bool IsFlat => Kind == TileShapeKind.Flat;
         public bool IsRamp => Kind == TileShapeKind.Ramp;
         public bool IsPlanar => W + E == S + N;
+        public TerrainSlope Slope => (Max - Min) switch { 0 => TerrainSlope.Flat, 1 => TerrainSlope.Gentle, _ => TerrainSlope.Steep };
 
         public string RelativeCodeNESW =>
             (N - Min).ToString() + (E - Min).ToString() + (S - Min).ToString() + (W - Min).ToString();

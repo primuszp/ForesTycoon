@@ -218,7 +218,7 @@ internal sealed partial class RuleEditorView
         if (ImGui.GetIO().KeyCtrl && ImGui.IsKeyPressed(ImGuiKey.S)) Try(() => SaveAll(world));
         ImGui.SameLine();
         if (EditorStyle.PrimaryButton(apply, algorithmBuild == null,
-            "A futó játék azonnal átveszi a szabályokat; az új világ ebből a pályából épül.")) Try(() => ApplyProject(world, true));
+            "Menti a jelenetet, és a futó játék azonnal átveszi a szabályokat; a következő indulás is ezt futtatja.")) Try(() => ApplyProject(world, true));
         ImGui.EndChild();
     }
 
@@ -327,7 +327,7 @@ internal sealed partial class RuleEditorView
         if (ImGui.IsItemHovered()) ImGui.SetTooltip(statusCache.WorldCurrent ? "A tesztvilág ebből a pályából épült." : "A pálya megváltozott. Kattintás: a tesztvilág újraépítése.");
         ImGui.SameLine(0, 8);
         EditorStyle.Chip(gameChip, running ? HudTheme.Good : HudTheme.Muted, "chip-game");
-        if (ImGui.IsItemHovered()) ImGui.SetTooltip("„Alkalmazás a játékban” után a futó játék átveszi a szabályokat.");
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("„Alkalmazás a játékban” menti a jelenetet, és a futó játék átveszi a szabályokat.");
         ImGui.EndChild();
     }
 

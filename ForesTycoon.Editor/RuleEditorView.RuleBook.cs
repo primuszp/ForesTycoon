@@ -26,7 +26,8 @@ internal sealed partial class RuleEditorView
     private void LoadRuleBook(RuleProject project)
     {
         removedStarters = (project.RemovedStarters ?? new()).ToList();
-        ruleBook = RuleEngine.Clone(project.Rules ?? new()); RuleEngine.AddMissingStarters(ruleBook, removedStarters);
+        // The project is migrated on load like the game's; the editor shows exactly the rule book the game runs.
+        ruleBook = RuleEngine.Clone(project.Rules ?? new());
         ruleFields = RuleEngine.CloneFields(project.Fields ?? new());
         selectedBookRule = Math.Clamp(initialBookSelection ?? 0, 0, Math.Max(0, ruleBook.Count - 1)); initialBookSelection = null; ruleBookError = null;
     }

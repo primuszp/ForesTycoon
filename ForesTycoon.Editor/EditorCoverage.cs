@@ -12,7 +12,58 @@ namespace ForesTycoon.Editor;
 /// </summary>
 internal static class EditorCoverage
 {
-    internal sealed record Report(List<string> Gaps, List<string> Native, int Hooks, int Tuning, int Editable);
+    internal sealed record Report(List<string> Gaps, List<string> Native, int Hooks, int Tuning, int Editable, int SceneFields = 0);
+
+    /// <summary>
+    /// The editor page of every scene field: the scene itself and each item type it lists. A field the game reads from the
+    /// scene with no entry here is a gap, and so is an entry for a field that no longer exists. Adding scene data to the
+    /// game therefore needs an editor surface before the smoke test passes.
+    /// </summary>
+    internal static readonly IReadOnlyDictionary<Type, IReadOnlyDictionary<string, string>> SceneSurfaces = new Dictionary<Type, IReadOnlyDictionary<string, string>> {
+        [typeof(WorldScenario)] = new Dictionary<string, string> {
+            ["Name"] = "Térkép · Pálya neve", ["Seed"] = "Térkép · Generálás", ["Size"] = "Térkép · Méret",
+            ["InitialState"] = "Jelenet… · rögzített nyitójelenet", ["SoilTypes"] = "Talajtípusok", ["SoilPaint"] = "Térkép · Talaj réteg",
+            ["ElevationZones"] = "Térkép · Magassági övek réteg", ["HeightPaint"] = "Térkép · Domborzat és Víz réteg",
+            ["ForestPaint"] = "Térkép · Erdő réteg", ["Springs"] = "Térkép · Víz réteg (forrás)", ["Species"] = "Fafajok",
+            ["Roads"] = "Térkép · Utak és épületek", ["Sawmills"] = "Térkép · Utak és épületek", ["Depots"] = "Térkép · Utak és épületek",
+            ["Missions"] = "Küldetések" },
+        [typeof(ElevationZoneDefinition)] = new Dictionary<string, string> {
+            ["Id"] = "Magassági övek (létrehozáskor)", ["Name"] = "Magassági övek", ["Color"] = "Magassági övek", ["MaxLevel"] = "Magassági övek" },
+        [typeof(SoilTypeDefinition)] = new Dictionary<string, string> {
+            ["Id"] = "Talajtípusok (másoláskor)", ["Name"] = "Talajtípusok", ["Color"] = "Talajtípusok", ["PreferredMoisture"] = "Talajtípusok",
+            ["PreferredTexture"] = "Talajtípusok", ["Saturation"] = "Talajtípusok", ["FieldCapacity"] = "Talajtípusok", ["WiltingPoint"] = "Talajtípusok",
+            ["InfiltrationPerHour"] = "Talajtípusok", ["DrainagePerHour"] = "Talajtípusok", ["Fertility"] = "Talajtípusok", ["BearingCapacity"] = "Talajtípusok" },
+        [typeof(SpeciesDefinition)] = new Dictionary<string, string> {
+            ["Id"] = "Fafajok (beépített faj)", ["Name"] = "Fafajok · Élettan", ["Description"] = "Fafajok · Élettan", ["MaximumAgeYears"] = "Fafajok · Élettan",
+            ["MatureAgeYears"] = "Fafajok · Élettan", ["MaximumBiomass"] = "Fafajok · Élettan", ["AnnualGrowthRate"] = "Fafajok · Élettan",
+            ["PreferredMoisture"] = "Fafajok · Élettan", ["MoistureTolerance"] = "Fafajok · Élettan", ["PreferredElevation"] = "Fafajok · Élettan",
+            ["ElevationTolerance"] = "Fafajok · Élettan", ["ShadeTolerance"] = "Fafajok · Élettan", ["WoodDensity"] = "Fafajok · Élettan",
+            ["DrySensitivity"] = "Fafajok · Élettan", ["MatureHeight"] = "Fafajok · Élettan", ["MaxHeight"] = "Fafajok · Élettan",
+            ["Capacity"] = "Fafajok · Élettan", ["TimberPrice"] = "Fafajok · Élettan", ["Shape"] = "Fafajok · Megjelenés", ["Colours"] = "Fafajok · Színek és kéreg" },
+        [typeof(TreeShapeDefinition)] = new Dictionary<string, string> { ["All"] = "Fafajok · Megjelenés · Minden fázis", ["Phases"] = "Fafajok · Megjelenés · fázisfülek" },
+        [typeof(TreeColoursDefinition)] = new Dictionary<string, string> {
+            ["Spring"] = "Fafajok · Színek", ["Summer"] = "Fafajok · Színek", ["Autumn"] = "Fafajok · Színek", ["Bark"] = "Fafajok · Kéreg",
+            ["Dead"] = "Fafajok · Színek (holtfa)", ["BarkPattern"] = "Fafajok · Kéreg" },
+        [typeof(MissionGoal)] = new Dictionary<string, string> {
+            ["Id"] = "Küldetések", ["Title"] = "Küldetések", ["Description"] = "Küldetések", ["Metric"] = "Küldetések",
+            ["Comparison"] = "Küldetések", ["Target"] = "Küldetések", ["DeadlineYear"] = "Küldetések" },
+        [typeof(RoadSegment)] = new Dictionary<string, string> { ["From"] = "Térkép · Utak és épületek", ["To"] = "Térkép · Utak és épületek", ["Surface"] = "Térkép · Utak és épületek" },
+    };
+
+    private static int CheckScene(List<string> gaps)
+    {
+        int fields = 0;
+        foreach (var (type, surfaces) in SceneSurfaces) {
+            var properties = type.GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
+                .Where(p => p.CanWrite).Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
+            fields += properties.Count;
+            foreach (string name in properties.Where(p => !surfaces.ContainsKey(p)).Order())
+                gaps.Add($"Jelenetadat szerkesztőoldal nélkül: {type.Name}.{name}");
+            foreach (string name in surfaces.Keys.Where(p => !properties.Contains(p)).Order())
+                gaps.Add($"Szerkesztőoldal nem létező jelenetadatra: {type.Name}.{name}");
+        }
+        return fields;
+    }
 
     internal static Report Check(GameWorld world, BehaviorModel behaviors)
     {
@@ -56,13 +107,14 @@ internal static class EditorCoverage
                 || rule.Parameters.Any(p => p.Tunable);
             if (!owned) gaps.Add($"Szerkeszthetőnek jelölt motorszabály, amelyhez nincs szerkeszthető elem: {rule.Name} ({rule.Id})");
         }
-        return new Report(gaps, native, WorldBehaviorPolicy.Hooks.Count(), GameTuning.Specs.Length, editable);
+        int sceneFields = CheckScene(gaps);
+        return new Report(gaps, native, WorldBehaviorPolicy.Hooks.Count(), GameTuning.Specs.Length, editable, sceneFields);
     }
 
     internal static string Format(Report r)
     {
         var lines = new List<string> {
-            $"Editor–motor lefedettség: {r.Hooks} hook, {r.Tuning} hangolható szám, {r.Editable} szerkeszthető motorszabály.",
+            $"Editor–motor lefedettség: {r.Hooks} hook, {r.Tuning} hangolható szám, {r.Editable} szerkeszthető motorszabály, {r.SceneFields} jelenetadat.",
             r.Gaps.Count == 0 ? "Hiány: nincs." : $"Hiány: {r.Gaps.Count}"
         };
         lines.AddRange(r.Gaps.Select(g => "  - " + g));

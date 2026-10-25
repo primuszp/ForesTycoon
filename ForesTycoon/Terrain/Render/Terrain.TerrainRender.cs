@@ -18,7 +18,7 @@ namespace ForesTycoon
             Vector3 e = new Vector3(tile.E.xPos, tile.E.yPos, tile.E.zPos);
             Vector3 n = new Vector3(tile.N.xPos, tile.N.yPos, tile.N.zPos);
 
-            DynamicPrimitiveBatch.Color4(ShadedTileColor(TerrainSurfaceColor(tile.Code, tile.Low), w, s, e));
+            DynamicPrimitiveBatch.Color4(TileShading.Shade(TerrainSurfaceColor(tile.Code, tile.Low), w, s, e));
             DynamicPrimitiveBatch.Vertex3(w);
             DynamicPrimitiveBatch.Vertex3(s);
             DynamicPrimitiveBatch.Vertex3(e);

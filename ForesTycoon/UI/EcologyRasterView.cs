@@ -53,7 +53,7 @@ namespace ForesTycoon
                 ImGui.Text($"Csempe {id} ({x}, {y}) · {soils.Profile(id).Name}");
                 ImGui.Text($"Elérhető víz: {soils.Profile(id).Properties.Availability(water.Cell(id).Soil):P0}");
                 var local = water.ClimateAt(id);
-                ImGui.Text($"Hőmérséklet: {local.Forcing.Temperature:0.0} °C · páratartalom: {local.Forcing.Humidity:P0}");
+                ImGui.Text($"Hőmérséklet: {HudTheme.Celsius(local.Forcing.Temperature)} · páratartalom: {local.Forcing.Humidity:P0}");
                 ImGui.Text($"Csapadékszorzó: {local.RainMultiplier:0.00}× · eső: {water.RainRate * local.RainMultiplier:0.0} mm/óra");
                 ImGui.EndTooltip();
             }
@@ -87,7 +87,7 @@ namespace ForesTycoon
                 HudTheme.KeyValue("Beszivárgási korlát", $"{properties.InfiltrationPerHour:0.0} mm/óra");
                 HudTheme.KeyValue("Termékenység", $"{properties.Fertility:P0}");
                 var local = water.ClimateAt(selected);
-                HudTheme.KeyValue("Hőmérséklet", $"{local.Forcing.Temperature:0.0} °C");
+                HudTheme.KeyValue("Hőmérséklet", HudTheme.Celsius(local.Forcing.Temperature));
                 HudTheme.KeyValue("Csapadékszorzó", $"{local.RainMultiplier:0.00}×");
                 HudTheme.KeyValue("Páratartalom", $"{local.Forcing.Humidity:P0}");
                 if (water.Climate.Uniform) ImGui.TextDisabled("Történeti egységes klímamodell");

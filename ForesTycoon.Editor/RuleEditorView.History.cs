@@ -57,6 +57,7 @@ internal sealed partial class RuleEditorView
             : J(a.ForestPaint) != J(b.ForestPaint) ? "erdőfestés"
             : J(a.Springs) != J(b.Springs) ? "forrás módosítása"
             : J(a.SoilTypes) != J(b.SoilTypes) ? "talajtípus módosítása"
+            : J(a.ElevationZones) != J(b.ElevationZones) ? "magassági övek módosítása"
             : J(a.Species) != J(b.Species) ? "fafaj módosítása"
             : J(a.Roads) != J(b.Roads) || J(a.Sawmills) != J(b.Sawmills) || J(a.Depots) != J(b.Depots) ? "út vagy épület" : "pálya módosítása";
     }
@@ -81,9 +82,13 @@ internal sealed partial class RuleEditorView
     }
 
     /// <summary>The part of a snapshot that shapes the test world (missions do not).</summary>
+    /// <summary>
+    /// The part of a scene the test world is built from. Missions are checked by the running game and elevation zones only
+    /// classify the built terrain: editing either does not rebuild the test world.
+    /// </summary>
     private static string MapPart(string scenarioJson)
     {
-        var p = RuleProject.FromJson(scenarioJson); p.World.Missions = new();
+        var p = RuleProject.FromJson(scenarioJson); p.World.Missions = new(); p.World.ElevationZones = new();
         return p.ToJson();
     }
 
