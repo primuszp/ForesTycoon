@@ -1,4 +1,5 @@
 using System.IO;
+using OpenTK.Mathematics;
 
 namespace ForesTycoon
 {
@@ -73,7 +74,16 @@ namespace ForesTycoon
                 case 420: Save("12-verb-build"); break;
                 case 421: ChooseVerb(Verb.Transport); break;
                 case 440: Save("13-verb-transport"); break;
-                case 441: Close(); break;
+                case 441:
+                {
+                    // The diorama's cut sides: the soil horizons under the edge tiles, seen from outside the map.
+                    var settings = world.Map.Settings;
+                    var edge = world.Map.GetNode(settings.TileColumns / 2, 0);
+                    FocusOn(new Vector3(edge.xPos, edge.yPos, edge.zPos), 4f);
+                    break;
+                }
+                case 470: Save("14-diorama-sides"); break;
+                case 471: Close(); break;
             }
         }
 

@@ -1,3 +1,4 @@
+using System;
 using System.Drawing;
 using OpenTK.Mathematics;
 
@@ -56,92 +57,66 @@ namespace ForesTycoon
             DynamicPrimitiveBatch.Vertex3(tile.N.xPos, tile.N.yPos, tile.N.zPos); DynamicPrimitiveBatch.Vertex3(tile.W.xPos, tile.W.yPos, tile.W.zPos);
         }
 
+        /// <summary>The soil profile under a tile, top down; set by the world. Without it the sides show plain earth.</summary>
+        internal Func<int, SideLayer[]> SideProfile;
+
+        private const float PlinthBase = -16.0f;
+        private static readonly Color PlainEarth = Color.FromArgb(185, 148, 100);
+        private static readonly Color BedrockColor = GameWorld.Hex(SoilHorizon.Bedrock);
+        private static readonly Color PlinthBottom = Color.FromArgb(130, 100, 65);
+
+        /// <summary>
+        /// The diorama's four sides, cut through the ground: each edge tile's soil horizons follow the surface down, the
+        /// bedrock fills the rest to the plinth. South and north faces are drawn lighter than west and east, as before.
+        /// </summary>
         internal void DrawSkirts()
         {
-            const float BASE_Z      = -16.0f;
-            const float RIM_H       =   1.5f;
-            Color colorFront  = Color.FromArgb(205, 163, 112);
-            Color colorSide   = Color.FromArgb(185, 148, 100);
-            Color colorBottom = Color.FromArgb(130, 100,  65);
-            Color colorRim    = Color.FromArgb( 68,  48,  25);
-
             DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () =>
             {
-
-            // ── South edge (v = 0) ────────────────────────────────────────────
-            for (int u = 0; u < nodeCols - 1; u++)
-            {
-                Node a = getNodeByCoords(u,     0);
-                Node b = getNodeByCoords(u + 1, 0);
-                float rimA = a.zPos - RIM_H;
-                float rimB = b.zPos - RIM_H;
-                // sötét peremcsík (felső sáv)
-                DynamicPrimitiveBatch.Color3(colorRim);
-                DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, a.zPos); DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, b.zPos);
-                DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, rimB);   DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, rimA);
-                // világos oldallap (perem alatt → aljáig)
-                DynamicPrimitiveBatch.Color3(colorFront);
-                DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, rimA);   DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, rimB);
-                DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, BASE_Z); DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, BASE_Z);
-            }
-
-            // ── North edge (v = nodeRows-1) ───────────────────────────────────
-            for (int u = 0; u < nodeCols - 1; u++)
-            {
-                Node a = getNodeByCoords(u,     nodeRows - 1);
-                Node b = getNodeByCoords(u + 1, nodeRows - 1);
-                float rimA = a.zPos - RIM_H;
-                float rimB = b.zPos - RIM_H;
-                DynamicPrimitiveBatch.Color3(colorRim);
-                DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, b.zPos); DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, a.zPos);
-                DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, rimA);   DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, rimB);
-                DynamicPrimitiveBatch.Color3(colorFront);
-                DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, rimB);   DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, rimA);
-                DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, BASE_Z); DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, BASE_Z);
-            }
-
-            // ── West edge (u = 0) ─────────────────────────────────────────────
-            for (int v = 0; v < nodeRows - 1; v++)
-            {
-                Node a = getNodeByCoords(0, v);
-                Node b = getNodeByCoords(0, v + 1);
-                float rimA = a.zPos - RIM_H;
-                float rimB = b.zPos - RIM_H;
-                DynamicPrimitiveBatch.Color3(colorRim);
-                DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, a.zPos); DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, rimA);
-                DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, rimB);   DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, b.zPos);
-                DynamicPrimitiveBatch.Color3(colorSide);
-                DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, rimA);   DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, BASE_Z);
-                DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, BASE_Z); DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, rimB);
-            }
-
-            // ── East edge (u = nodeCols-1) ────────────────────────────────────
-            for (int v = 0; v < nodeRows - 1; v++)
-            {
-                Node a = getNodeByCoords(nodeCols - 1, v);
-                Node b = getNodeByCoords(nodeCols - 1, v + 1);
-                float rimA = a.zPos - RIM_H;
-                float rimB = b.zPos - RIM_H;
-                DynamicPrimitiveBatch.Color3(colorRim);
-                DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, b.zPos); DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, rimB);
-                DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, rimA);   DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, a.zPos);
-                DynamicPrimitiveBatch.Color3(colorSide);
-                DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, rimB);   DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, BASE_Z);
-                DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, BASE_Z); DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, rimA);
-            }
-
-            // ── Aljlap ────────────────────────────────────────────────────────
-            DynamicPrimitiveBatch.Color3(colorBottom);
-            Node sw = getNodeByCoords(0,            0);
-            Node se = getNodeByCoords(nodeCols - 1, 0);
-            Node ne = getNodeByCoords(nodeCols - 1, nodeRows - 1);
-            Node nw = getNodeByCoords(0,            nodeRows - 1);
-            DynamicPrimitiveBatch.Vertex3(sw.xPos, sw.yPos, BASE_Z);
-            DynamicPrimitiveBatch.Vertex3(se.xPos, se.yPos, BASE_Z);
-            DynamicPrimitiveBatch.Vertex3(ne.xPos, ne.yPos, BASE_Z);
-            DynamicPrimitiveBatch.Vertex3(nw.xPos, nw.yPos, BASE_Z);
-
+                for (int u = 0; u < nodeCols - 1; u++)
+                {
+                    Side(getNodeByCoords(u, 0), getNodeByCoords(u + 1, 0), getTileByCoords(u, 0), 1f);
+                    Side(getNodeByCoords(u + 1, nodeRows - 1), getNodeByCoords(u, nodeRows - 1), getTileByCoords(u, nodeRows - 2), 1f);
+                }
+                for (int v = 0; v < nodeRows - 1; v++)
+                {
+                    Side(getNodeByCoords(0, v + 1), getNodeByCoords(0, v), getTileByCoords(0, v), .9f);
+                    Side(getNodeByCoords(nodeCols - 1, v), getNodeByCoords(nodeCols - 1, v + 1), getTileByCoords(nodeCols - 2, v), .9f);
+                }
+                DynamicPrimitiveBatch.Color3(PlinthBottom);
+                Node sw = getNodeByCoords(0, 0), se = getNodeByCoords(nodeCols - 1, 0);
+                Node ne = getNodeByCoords(nodeCols - 1, nodeRows - 1), nw = getNodeByCoords(0, nodeRows - 1);
+                DynamicPrimitiveBatch.Vertex3(sw.xPos, sw.yPos, PlinthBase);
+                DynamicPrimitiveBatch.Vertex3(se.xPos, se.yPos, PlinthBase);
+                DynamicPrimitiveBatch.Vertex3(ne.xPos, ne.yPos, PlinthBase);
+                DynamicPrimitiveBatch.Vertex3(nw.xPos, nw.yPos, PlinthBase);
             });
+        }
+
+        /// <summary>One side segment from <paramref name="a"/> to <paramref name="b"/> (outward winding): horizon bands, then bedrock.</summary>
+        private void Side(Node a, Node b, Tile tile, float light)
+        {
+            var layers = SideProfile?.Invoke(tile.Id);
+            if (layers == null || layers.Length == 0) { Band(a, b, 0, float.MaxValue, PlainEarth, light); return; }
+            float depth = 0;
+            foreach (var layer in layers)
+            {
+                if (Band(a, b, depth, depth + layer.Depth, layer.Color, light)) return;
+                depth += layer.Depth;
+            }
+            Band(a, b, depth, float.MaxValue, BedrockColor, light);
+        }
+
+        /// <summary>Draws the band between two depths below the surface, cut at the plinth; true once it reaches the plinth.</summary>
+        private static bool Band(Node a, Node b, float top, float bottom, Color color, float light)
+        {
+            float topA = Math.Max(a.zPos - top, PlinthBase), topB = Math.Max(b.zPos - top, PlinthBase);
+            float lowA = Math.Max(a.zPos - bottom, PlinthBase), lowB = Math.Max(b.zPos - bottom, PlinthBase);
+            if (topA <= PlinthBase && topB <= PlinthBase) return true;
+            DynamicPrimitiveBatch.Color3(Color.FromArgb((int)(color.R * light), (int)(color.G * light), (int)(color.B * light)));
+            DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, topA); DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, topB);
+            DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, lowB); DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, lowA);
+            return lowA <= PlinthBase && lowB <= PlinthBase;
         }
 
     }

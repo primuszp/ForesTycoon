@@ -108,12 +108,23 @@ namespace ForesTycoon
             {
                 foreach (int unit in scene.PrepareBaseGeometryWork()) yield return unit;
                 var renderer = new TerrainRenderer(scene, vehicles, effects, forest, Graphics, Environment, wildlife, Logistics);
-                // The ecosystem may rebuild its environment (new map, loaded save): always draw the current one.
-                renderer.FloodDepth = id => Environment?.SurfaceDepth(id) ?? 0;
                 terrain = scene;
                 terrainRenderer = renderer; attached = true;
+                BindRendering();
             }
             finally { if (!attached) scene.Dispose(); }
+        }
+
+        /// <summary>
+        /// Points the scene's world queries at this world. Called when rendering is attached and again when this world adopts
+        /// another one's scene, so the scene never reads the retired world's environment or soils.
+        /// </summary>
+        private void BindRendering()
+        {
+            if (terrainRenderer == null) return;
+            // The ecosystem may rebuild its environment (new map, loaded save): always draw the current one.
+            terrainRenderer.FloodDepth = id => Environment?.SurfaceDepth(id) ?? 0;
+            terrain.SideProfile = SideProfile;
         }
 
         public Tile HoveredTile => map.HoveredTile;
@@ -606,6 +617,7 @@ namespace ForesTycoon
             // Route creation must follow this world's terrain after the ownership transfer.
             vehicles.RoadRouteFactory = route => VehicleRoadRoute.Create(map, route);
             vehicles.RoadRouteWorkFactory = (route, result) => VehicleRoadRoute.CreateWork(map, route, result);
+            BindRendering();
             ruleProjectName = candidate.ruleProjectName; ruleProjectWorld = candidate.ruleProjectWorld;
             algorithmGraphs = candidate.algorithmGraphs;
             ruleEngine = candidate.ruleEngine;

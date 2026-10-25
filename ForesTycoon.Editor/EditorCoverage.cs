@@ -23,7 +23,7 @@ internal static class EditorCoverage
         [typeof(WorldScenario)] = new Dictionary<string, string> {
             ["Name"] = "Térkép · Pálya neve", ["Seed"] = "Térkép · Generálás", ["Size"] = "Térkép · Méret",
             ["InitialState"] = "Jelenet… · rögzített nyitójelenet", ["SoilTypes"] = "Talajtípusok", ["SoilPaint"] = "Térkép · Talaj réteg",
-            ["ElevationZones"] = "Térkép · Magassági övek réteg", ["HeightPaint"] = "Térkép · Domborzat és Víz réteg",
+            ["ElevationZones"] = "Térkép · Magassági övek réteg", ["ProfileScale"] = "Talajtípusok · Rétegrend (nagyítás)", ["HeightPaint"] = "Térkép · Domborzat és Víz réteg",
             ["ForestPaint"] = "Térkép · Erdő réteg", ["Springs"] = "Térkép · Víz réteg (forrás)", ["Species"] = "Fafajok",
             ["Roads"] = "Térkép · Utak és épületek", ["Sawmills"] = "Térkép · Utak és épületek", ["Depots"] = "Térkép · Utak és épületek",
             ["Missions"] = "Küldetések" },
@@ -32,7 +32,10 @@ internal static class EditorCoverage
         [typeof(SoilTypeDefinition)] = new Dictionary<string, string> {
             ["Id"] = "Talajtípusok (másoláskor)", ["Name"] = "Talajtípusok", ["Color"] = "Talajtípusok", ["PreferredMoisture"] = "Talajtípusok",
             ["PreferredTexture"] = "Talajtípusok", ["Saturation"] = "Talajtípusok", ["FieldCapacity"] = "Talajtípusok", ["WiltingPoint"] = "Talajtípusok",
-            ["InfiltrationPerHour"] = "Talajtípusok", ["DrainagePerHour"] = "Talajtípusok", ["Fertility"] = "Talajtípusok", ["BearingCapacity"] = "Talajtípusok" },
+            ["InfiltrationPerHour"] = "Talajtípusok", ["DrainagePerHour"] = "Talajtípusok", ["Fertility"] = "Talajtípusok", ["BearingCapacity"] = "Talajtípusok",
+            ["Horizons"] = "Talajtípusok · Rétegrend" },
+        [typeof(SoilHorizon)] = new Dictionary<string, string> {
+            ["Name"] = "Talajtípusok · Rétegrend", ["Depth"] = "Talajtípusok · Rétegrend", ["Color"] = "Talajtípusok · Rétegrend" },
         [typeof(SpeciesDefinition)] = new Dictionary<string, string> {
             ["Id"] = "Fafajok (beépített faj)", ["Name"] = "Fafajok · Élettan", ["Description"] = "Fafajok · Élettan", ["MaximumAgeYears"] = "Fafajok · Élettan",
             ["MatureAgeYears"] = "Fafajok · Élettan", ["MaximumBiomass"] = "Fafajok · Élettan", ["AnnualGrowthRate"] = "Fafajok · Élettan",

@@ -146,8 +146,17 @@ default loam: O 0.05 dark brown litter · A 0.25 humus · B 0.6 brown · C 1.5 p
    5.8 s for the 384-point Near lattice on an idle machine, far more under load — stalling every
    tree build (and the editor's life-course preview test) the first time a large crown was built.
    `LobeCrownMesh.HullFaces` builds the identical hull from local neighbourhoods in ~25 ms.
-2. **Soil profile sides** — `SoilHorizon` data and defaults, `DioramaSides` geometry, editor soil
-   column. *First visible result; small and independent.*
+2. **Soil profile sides — done 2026-10-25.** `SoilHorizon` (name, metres, colour) on
+   `SoilTypeDefinition.Horizons`; empty means the soil's built-in O/A/B/C profile
+   (`SoilHorizon.Defaults`: sand, loam, clay, organic, and a generic one for authored soils);
+   `WorldScenario.ProfileScale` (default ×6). Horizons are presentation only — they stay out of
+   the soil catalog, so its hash, saves and the opening fingerprints are unchanged.
+   `GameWorld.SideProfile` resolves a tile's layers (cached per soil); `Terrain.DrawSkirts` draws
+   the bands following the surface, bedrock to the plinth. Editor: Talajtípusok → *Rétegrend*
+   (drawn column with a depth scale, horizon list, scale slider); editing horizons does not
+   rebuild the test world. Found on the way: `Adopt` handed the scene to the adopting world but
+   left its callbacks on the retired one (the side profile and the existing flood depth read the
+   bootstrap world); `BindRendering` now rebinds them on attach and on adopt.
 3. **Biomes** — `BiomeDefinition`, `BiomeMap` (generation, edits, checkpoint), rule fields, editor
    Biomok page and layer; soil and species generation read biome weights.
 4. **Ground materials** — texture array palette, two-material blend in mesh and shader, macro

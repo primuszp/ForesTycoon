@@ -52,6 +52,8 @@ internal sealed partial class RuleEditorView
         Scenario(world).Springs[tile] = rate; ApplyProject(world, false); world.ExecutePendingCommands();
         for (int i = 0; i < seconds * 30; i++) world.Update(1.0 / 30);
     }
+    private bool scrollToSoilProfile;
+    internal void ShowSoilProfileForTest(int index) { ShowWorldTypes(TypeTab.Soil, index); scrollToSoilProfile = true; }
     internal void ShowWorldTypes(TypeTab tab, int index = 0)
     {
         ShowPage(tab switch {
@@ -579,12 +581,86 @@ internal sealed partial class RuleEditorView
             ImGui.EndTable();
         }
         if (changed) ApplyScenario(world, $"{type.Name} módosítva.");
+        SoilProfileSection(type);
         ImGui.Spacing();
         ImGui.PushTextWrapPos(0);
         EditorStyle.Text(HudTheme.Muted, "A típusok új világ létrehozásakor kerülnek a játékba; a futó játék világa a régi talajjal fut tovább. A szerkesztőben a tesztvilág minden módosításkor újraépül.");
         if (scenario.InitialState != null) EditorStyle.Text(HudTheme.Muted, "A meglévő talajfoltok a helyükön maradnak; kisebb telítettségnél a többletvíz a felszínre kerül.");
         ImGui.PopTextWrapPos();
         EditorStyle.EndPanel();
+    }
+
+    /// <summary>
+    /// The soil's horizons from the surface down, as the diorama's sides show them: a drawn column next to the editable list.
+    /// The built-in profile is shown until the first edit, which copies it into the soil.
+    /// </summary>
+    private void SoilProfileSection(SoilTypeDefinition type)
+    {
+        EditorStyle.Section("Rétegrend · a dioráma oldala");
+        if (scrollToSoilProfile) { scrollToSoilProfile = false; ImGui.SetScrollHereY(0.1f); }
+        var shown = type.Profile();
+        bool builtin = type.Horizons is not { Count: > 0 };
+        List<SoilHorizon> Own() { if (type.Horizons is not { Count: > 0 }) type.Horizons = SoilHorizon.Defaults(type.Id, type.Color); return type.Horizons; }
+
+        // The column: true thicknesses times the diorama scale, bedrock below, a depth scale on the left.
+        float columnWidth = ImGui.GetFontSize() * 5, height = ImGui.GetFontSize() * 16;
+        double total = shown.Sum(h => h.Depth);
+        float perMetre = height / (float)Math.Max(.5, total * 1.15);
+        Vec2 at = ImGui.GetCursorScreenPos() + new Vec2(ImGui.GetFontSize() * 2.4f, 4);
+        var draw = ImGui.GetWindowDrawList();
+        float y = at.Y;
+        foreach (var h in shown) {
+            float next = y + (float)h.Depth * perMetre;
+            draw.AddRectFilled(new Vec2(at.X, y), new Vec2(at.X + columnWidth, next), EditorStyle.U(Colour(h.Color)));
+            y = next;
+        }
+        draw.AddRectFilled(new Vec2(at.X, y), new Vec2(at.X + columnWidth, at.Y + height), EditorStyle.U(Colour(SoilHorizon.Bedrock)));
+        draw.AddRect(at, at + new Vec2(columnWidth, height), EditorStyle.U(EditorStyle.Hairline));
+        for (double m = 0; m <= total * 1.15; m += .5) {
+            float ty = at.Y + (float)m * perMetre;
+            draw.AddLine(new Vec2(at.X - 5, ty), new Vec2(at.X, ty), EditorStyle.TextMuted);
+            draw.AddText(new Vec2(at.X - ImGui.GetFontSize() * 2.3f, ty - ImGui.GetFontSize() / 2), EditorStyle.TextMuted, $"{m:0.#} m");
+        }
+        Vec2 start = ImGui.GetCursorScreenPos();
+        ImGui.SetCursorScreenPos(new Vec2(at.X + columnWidth + 16, start.Y));
+        ImGui.BeginGroup();
+        ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + ImGui.GetContentRegionAvail().X);
+        EditorStyle.Text(HudTheme.Muted, builtin ? "A talaj beépített szelvénye; az első módosítás a talajtípushoz másolja." : "Saját szelvény. A sorrend felülről lefelé.");
+        ImGui.PopTextWrapPos();
+        int remove = -1, up = -1;
+        for (int i = 0; i < shown.Count; i++) {
+            var h = shown[i];
+            ImGui.PushID("horizon" + i);
+            var c = Colour(h.Color); var rgb = new System.Numerics.Vector3(c.X, c.Y, c.Z);
+            if (ImGui.ColorEdit3("##colour", ref rgb, ImGuiColorEditFlags.NoInputs)) Own()[i].Color = Hex(new Vec4(rgb, 1));
+            ImGui.SameLine();
+            string name = h.Name; ImGui.SetNextItemWidth(ImGui.GetFontSize() * 11);
+            if (ImGui.InputText("##name", ref name, 40) && name.Trim().Length > 0) Own()[i].Name = name.Trim();
+            ImGui.SameLine();
+            float depth = (float)h.Depth; ImGui.SetNextItemWidth(ImGui.GetFontSize() * 6);
+            if (ImGui.DragFloat("##depth", ref depth, .01f, .01f, 5, "%.2f m")) Own()[i].Depth = Math.Round(Math.Clamp(depth, .01, 5), 2);
+            ImGui.SameLine();
+            ImGui.BeginDisabled(i == 0); if (EditorStyle.QuietButton("Fel")) up = i; ImGui.EndDisabled();
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled)) ImGui.SetTooltip("Egy szinttel feljebb.");
+            ImGui.SameLine();
+            ImGui.BeginDisabled(shown.Count == 1); if (EditorStyle.QuietButton("Törlés")) remove = i; ImGui.EndDisabled();
+            ImGui.PopID();
+        }
+        if (up > 0) { var own = Own(); (own[up - 1], own[up]) = (own[up], own[up - 1]); }
+        if (remove >= 0) Own().RemoveAt(remove);
+        ImGui.BeginDisabled(shown.Count >= 8);
+        if (ImGui.Button("Új szint alulra")) Own().Add(new SoilHorizon { Name = "Új szint", Depth = .3, Color = shown[^1].Color });
+        ImGui.EndDisabled();
+        ImGui.SameLine();
+        ImGui.BeginDisabled(builtin);
+        if (ImGui.Button("Beépített szelvény")) type.Horizons = new();
+        ImGui.EndDisabled();
+        float scale = (float)scenario.ProfileScale; ImGui.SetNextItemWidth(ImGui.GetFontSize() * 10);
+        if (ImGui.SliderFloat("Nagyítás a dioráma oldalán", ref scale, 1, 30, "%.0f×")) scenario.ProfileScale = Math.Round(scale);
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("A vékony szintek a valóságos vastagságuknál ennyiszer mélyebbre rajzolódnak, hogy a terepasztal oldalán látszódjanak. Minden talajra közös.");
+        ImGui.EndGroup();
+        ImGui.SetCursorScreenPos(new Vec2(start.X, Math.Max(ImGui.GetCursorScreenPos().Y, at.Y + height + 8)));
+        ImGui.Dummy(new Vec2(1, 1));
     }
 
     /// <summary>A three-column parameter table: name, value, where it acts. Returns true when an edit was finished.</summary>

@@ -56,6 +56,7 @@ internal sealed partial class RuleEditorView
             : J(a.HeightPaint) != J(b.HeightPaint) ? "domborzat vagy víz festése"
             : J(a.ForestPaint) != J(b.ForestPaint) ? "erdőfestés"
             : J(a.Springs) != J(b.Springs) ? "forrás módosítása"
+            : J(a.SoilTypes.Select(s => s.Horizons)) != J(b.SoilTypes.Select(s => s.Horizons)) || a.ProfileScale != b.ProfileScale ? "talajszelvény módosítása"
             : J(a.SoilTypes) != J(b.SoilTypes) ? "talajtípus módosítása"
             : J(a.ElevationZones) != J(b.ElevationZones) ? "magassági övek módosítása"
             : J(a.Species) != J(b.Species) ? "fafaj módosítása"
@@ -84,11 +85,12 @@ internal sealed partial class RuleEditorView
     /// <summary>The part of a snapshot that shapes the test world (missions do not).</summary>
     /// <summary>
     /// The part of a scene the test world is built from. Missions are checked by the running game and elevation zones only
-    /// classify the built terrain: editing either does not rebuild the test world.
+    /// classify the built terrain, soil horizons only draw the diorama's sides: editing them does not rebuild the test world.
     /// </summary>
     private static string MapPart(string scenarioJson)
     {
-        var p = RuleProject.FromJson(scenarioJson); p.World.Missions = new(); p.World.ElevationZones = new();
+        var p = RuleProject.FromJson(scenarioJson); p.World.Missions = new(); p.World.ElevationZones = new(); p.World.ProfileScale = 0;
+        foreach (var soil in p.World.SoilTypes) soil.Horizons = new();
         return p.ToJson();
     }
 

@@ -387,8 +387,12 @@ namespace ForesTycoon
             ImGui.SetNextWindowSizeConstraints(new NVec2(width * 0.8f, 0),
                 new NVec2(Math.Min(Width - 16f, width * 1.25f), Math.Max(200f, Height - StatusBarHeight - defaultPosition.Y - 8f)));
             bool visible = ImGui.Begin(title, ref open, ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoCollapse);
-            if (!visible) ImGui.End();
-            return visible;
+            if (!visible) { ImGui.End(); return false; }
+            // A window grown by its content (or a smaller screen) is pulled back inside the screen.
+            NVec2 position = ImGui.GetWindowPos(), size = ImGui.GetWindowSize();
+            var inside = new NVec2(Math.Clamp(position.X, 8f, Math.Max(8f, Width - size.X - 8f)), Math.Clamp(position.Y, 8f, Math.Max(8f, Height - size.Y - 8f)));
+            if (inside != position) ImGui.SetWindowPos(inside);
+            return true;
         }
 
         private void DrawVehiclesWindow()

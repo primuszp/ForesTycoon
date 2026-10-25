@@ -94,6 +94,7 @@ namespace ForesTycoon.Editor
                     (() => editor.ShowWorld(WorldTab.Map, MapLayer.Forest, forestTile), "world-map-forest"),
                     (() => editor.ShowWorld(WorldTab.Map, MapLayer.Tracks, forestTile), "world-map-structures"),
                     (() => editor.ShowWorld(WorldTab.Types), "world-types"),
+                    (() => editor.ShowSoilProfileForTest(1), "world-types-soil-profile"),
                     (() => editor.ShowWorldTypes(TypeTab.Species, 2), "world-types-species"),
                     (() => editor.ShowWorldTypes(TypeTab.Surfaces), "world-types-surfaces"),
                     (() => editor.ShowObject("tree"), "world-objects-tree"),

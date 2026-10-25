@@ -394,6 +394,42 @@ public sealed class ElevationZoneDefinition
         new() { Id = "mountain", Name = "Hegyvidék", Color = "#B4ADA2", MaxLevel = 99 } };
 }
 
+/// <summary>One horizon of a soil profile, from the surface down: what the diorama's sides show under a tile of the soil.</summary>
+public sealed class SoilHorizon
+{
+    public string Name { get; set; } = "";
+    /// <summary>Thickness in metres.</summary>
+    public double Depth { get; set; } = .3;
+    public string Color { get; set; } = "#7A5A3A";
+
+    /// <summary>The colour of the rock under every profile.</summary>
+    public const string Bedrock = "#6E6A64";
+
+    /// <summary>
+    /// The built-in profile of a soil: litter (O), humus topsoil (A), subsoil (B) and parent material (C), after the soil
+    /// classes of Hungarian forest sites. A soil the game does not know gets a generic profile darkened from its colour.
+    /// </summary>
+    public static List<SoilHorizon> Defaults(string soilId, string soilColor) => soilId switch {
+        "sand" => new() { new() { Name = "O · avar", Depth = .03, Color = "#4A3B28" }, new() { Name = "A · humuszos homok", Depth = .15, Color = "#8A7550" },
+            new() { Name = "B · rozsdabarna homok", Depth = .5, Color = "#C9A66A" }, new() { Name = "C · futóhomok", Depth = 1.2, Color = "#E2CF98" } },
+        "loam" => new() { new() { Name = "O · avar", Depth = .05, Color = "#3B2C1C" }, new() { Name = "A · morzsás humusz", Depth = .25, Color = "#5C4430" },
+            new() { Name = "B · barna vályog", Depth = .6, Color = "#8E6A45" }, new() { Name = "C · lösz", Depth = 1.5, Color = "#C2A578" } },
+        "clay" => new() { new() { Name = "O · avar", Depth = .04, Color = "#3A2D22" }, new() { Name = "A · agyagos humusz", Depth = .2, Color = "#5E4636" },
+            new() { Name = "Bt · agyagbemosódás", Depth = .7, Color = "#9A5B3C" }, new() { Name = "C · tömör agyag", Depth = 1.5, Color = "#B98A62" } },
+        "organic" => new() { new() { Name = "O · nyers avar", Depth = .1, Color = "#2A1F16" }, new() { Name = "H · tőzeg", Depth = .6, Color = "#3E2E22" },
+            new() { Name = "G · glejes réteg", Depth = .8, Color = "#5E6B6A" }, new() { Name = "C · iszap", Depth = 1.0, Color = "#8C8C80" } },
+        _ => new() { new() { Name = "O · avar", Depth = .05, Color = "#3B2C1C" }, new() { Name = "A · feltalaj", Depth = .25, Color = Shade(soilColor, .55) },
+            new() { Name = "B · altalaj", Depth = .6, Color = Shade(soilColor, .8) }, new() { Name = "C · alapkőzet felett", Depth = 1.2, Color = soilColor } }
+    };
+
+    private static string Shade(string hex, double factor)
+    {
+        if (hex is not { Length: 7 } || !uint.TryParse(hex.AsSpan(1), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out uint rgb)) return "#7A5A3A";
+        int C(int shift) => (int)Math.Round(((rgb >> shift) & 255) * factor);
+        return $"#{C(16):X2}{C(8):X2}{C(0):X2}";
+    }
+}
+
 /// <summary>One soil type of a world: what the map paints and what the rules read as <c>talaj.*</c>.</summary>
 public sealed class SoilTypeDefinition
 {
@@ -410,6 +446,10 @@ public sealed class SoilTypeDefinition
     public double DrainagePerHour { get; set; } = 2;
     public double Fertility { get; set; } = 1;
     public double BearingCapacity { get; set; } = .5;
+    /// <summary>The soil profile from the surface down; empty means the built-in profile of the soil (<see cref="Profile"/>).</summary>
+    public List<SoilHorizon> Horizons { get; set; } = new();
+    /// <summary>The horizons the diorama shows: the authored ones, or the built-in profile when none are authored.</summary>
+    public List<SoilHorizon> Profile() => Horizons is { Count: > 0 } ? Horizons : SoilHorizon.Defaults(Id, Color);
 }
 
 /// <summary>One tree species: its biology, its size and the price of its timber. The ID is the game's species name.</summary>
@@ -532,6 +572,8 @@ public sealed class WorldScenario
     public List<SoilTypeDefinition> SoilTypes { get; set; } = new();
     /// <summary>Elevation zones from low to high; a scene saved before zones existed reads the built-in ones.</summary>
     public List<ElevationZoneDefinition> ElevationZones { get; set; } = ElevationZoneDefinition.Defaults();
+    /// <summary>How much deeper the soil horizons are drawn on the diorama's sides than they are, so thin horizons can be seen.</summary>
+    public double ProfileScale { get; set; } = 6;
     /// <summary>Painted soil: soil type ID by tile ID, over the generated map.</summary>
     public Dictionary<int, string> SoilPaint { get; set; } = new();
     /// <summary>Painted terrain: absolute height by corner (node) ID; water lies where corners are below sea level.</summary>
@@ -574,9 +616,16 @@ public sealed class WorldScenario
             if (!(s.InfiltrationPerHour >= 0 && s.DrainagePerHour >= 0 && s.Fertility is >= 0 and <= 1 && s.BearingCapacity is >= 0 and <= 1
                   && s.PreferredMoisture is >= 0 and <= 1 && s.PreferredTexture is >= 0 and <= 1))
                 throw new InvalidDataException($"{s.Name}: érvénytelen paraméter (arányok 0–1, ráták nem negatívak).");
+            s.Horizons ??= new();
+            if (s.Horizons.Count > 8) throw new InvalidDataException($"{s.Name}: legfeljebb 8 talajszint lehet.");
+            foreach (var h in s.Horizons)
+                if (h == null || string.IsNullOrWhiteSpace(h.Name) || !(h.Depth is > 0 and <= 5)
+                    || h.Color is not { Length: 7 } || h.Color[0] != '#' || !uint.TryParse(h.Color.AsSpan(1), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
+                    throw new InvalidDataException($"{s.Name}: minden talajszintnek neve, 0–5 m vastagsága és #RRGGBB színe legyen.");
         }
         HeightPaint ??= new(); ForestPaint ??= new(); Species ??= new(); Springs ??= new(); Missions ??= new();
         ElevationZones ??= ElevationZoneDefinition.Defaults();
+        if (!(ProfileScale is >= 1 and <= 30)) throw new InvalidDataException("A talajszelvény nagyítása 1–30 legyen.");
         if (ElevationZones.Count is 0 or > 8) throw new InvalidDataException("A pályának 1–8 magassági öve legyen.");
         var zones = new HashSet<string>(StringComparer.Ordinal);
         for (int i = 0; i < ElevationZones.Count; i++) {
