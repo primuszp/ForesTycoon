@@ -458,7 +458,7 @@ public sealed class SoilHorizon
     public string Color { get; set; } = "#7A5A3A";
 
     /// <summary>The colour of the rock under every profile.</summary>
-    public const string Bedrock = "#6E6A64";
+    public const string Bedrock = "#57514A";
 
     /// <summary>
     /// The built-in profile of a soil: litter (O), humus topsoil (A), subsoil (B) and parent material (C), after the soil

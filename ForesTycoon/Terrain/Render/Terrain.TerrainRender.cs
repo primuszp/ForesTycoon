@@ -64,6 +64,10 @@ namespace ForesTycoon
         private static readonly Color PlainEarth = Color.FromArgb(185, 148, 100);
         private static readonly Color BedrockColor = GameWorld.Hex(SoilHorizon.Bedrock);
         private static readonly Color PlinthBottom = Color.FromArgb(130, 100, 65);
+        // The bedrock darkens towards the plinth, which ends in a dark rim: the diorama stands out from the backdrop.
+        private static readonly Color BedrockDeep = Color.FromArgb(62, 56, 50);
+        private static readonly Color PlinthRim = Color.FromArgb(22, 20, 18);
+        private const float RimHeight = .7f;
 
         /// <summary>
         /// The diorama's four sides, cut through the ground. The top follows the terrain edge exactly; the horizon boundaries
@@ -150,18 +154,21 @@ namespace ForesTycoon
                 }
             }
 
-            void Quad(int i0, int i1, float a0, float a1, float b0, float b1, Color c0, Color c1)
+            // A band between two boundaries; the colour may differ along the side (soils) and from top to bottom (bedrock).
+            void Quad(int i0, int i1, float a0, float a1, float b0, float b1, Color c0, Color c1, Color? low0 = null, Color? low1 = null)
             {
                 (int from, int to) = reverse ? (i1, i0) : (i0, i1);
                 (float fromTop, float toTop, float fromLow, float toLow) = reverse ? (a1, a0, b1, b0) : (a0, a1, b0, b1);
-                (Color cf, Color ct) = reverse ? (c1, c0) : (c0, c1);
-                fromTop = Math.Max(fromTop, PlinthBase); toTop = Math.Max(toTop, PlinthBase);
-                fromLow = Math.Max(fromLow, PlinthBase); toLow = Math.Max(toLow, PlinthBase);
-                if (fromTop <= PlinthBase && toTop <= PlinthBase) return;
+                Color l0 = low0 ?? c0, l1 = low1 ?? c1;
+                (Color cf, Color ct, Color lf, Color lt) = reverse ? (c1, c0, l1, l0) : (c0, c1, l0, l1);
+                float floor = PlinthBase + RimHeight;
+                fromTop = Math.Max(fromTop, floor); toTop = Math.Max(toTop, floor);
+                fromLow = Math.Max(fromLow, floor); toLow = Math.Max(toLow, floor);
+                if (fromTop <= floor && toTop <= floor) return;
                 DynamicPrimitiveBatch.Color3(Lit(cf, light)); DynamicPrimitiveBatch.Vertex3(position[from].X, position[from].Y, fromTop);
                 DynamicPrimitiveBatch.Color3(Lit(ct, light)); DynamicPrimitiveBatch.Vertex3(position[to].X, position[to].Y, toTop);
-                DynamicPrimitiveBatch.Color3(Lit(ct, light)); DynamicPrimitiveBatch.Vertex3(position[to].X, position[to].Y, toLow);
-                DynamicPrimitiveBatch.Color3(Lit(cf, light)); DynamicPrimitiveBatch.Vertex3(position[from].X, position[from].Y, fromLow);
+                DynamicPrimitiveBatch.Color3(Lit(lt, light)); DynamicPrimitiveBatch.Vertex3(position[to].X, position[to].Y, toLow);
+                DynamicPrimitiveBatch.Color3(Lit(lf, light)); DynamicPrimitiveBatch.Vertex3(position[from].X, position[from].Y, fromLow);
             }
             for (int i = 0; i + 1 < samples; i++)
             {
@@ -171,7 +178,15 @@ namespace ForesTycoon
                     Quad(i, i + 1, upper0, upper1, bottom[i, k], bottom[i + 1, k], colour[i, k], colour[i + 1, k]);
                     upper0 = bottom[i, k]; upper1 = bottom[i + 1, k];
                 }
-                Quad(i, i + 1, upper0, upper1, PlinthBase, PlinthBase, BedrockColor, BedrockColor);
+                // Bedrock: its own colour where it starts, darkening linearly to the rim.
+                float floor = PlinthBase + RimHeight;
+                Color Rock(float z) => Mix(BedrockDeep, BedrockColor, Math.Clamp((z - floor) / 22f, 0, 1));
+                Quad(i, i + 1, upper0, upper1, floor, floor, Rock(upper0), Rock(upper1), BedrockDeep, BedrockDeep);
+                // The rim: a thin dark band along the plinth's foot.
+                (int from, int to) = reverse ? (i + 1, i) : (i, i + 1);
+                DynamicPrimitiveBatch.Color3(Lit(PlinthRim, light));
+                DynamicPrimitiveBatch.Vertex3(position[from].X, position[from].Y, floor); DynamicPrimitiveBatch.Vertex3(position[to].X, position[to].Y, floor);
+                DynamicPrimitiveBatch.Vertex3(position[to].X, position[to].Y, PlinthBase); DynamicPrimitiveBatch.Vertex3(position[from].X, position[from].Y, PlinthBase);
             }
         }
 
