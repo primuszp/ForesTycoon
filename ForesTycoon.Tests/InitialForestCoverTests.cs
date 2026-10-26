@@ -24,4 +24,31 @@ public sealed class InitialForestCoverTests
         Assert.InRange(cover, .20, .55);
         Assert.True(inWoods > .85, $"trees should stand in woods, not scattered: {inWoods:P0}");
     }
+
+    [Theory]
+    [InlineData(42)] [InlineData(3)] [InlineData(11)]
+    public void ZonesShapeTheNaturalInitialForest(int seed)
+    {
+        var project = GameWorld.DefaultRuleProject(); project.Algorithms = null;
+        project.World = GameWorld.DefaultScenario(seed, 64); project.World.MaxHeight = 16;
+        project.World.ElevationZones = ElevationZoneDefinition.Defaults(16);
+        using var world = WorldLoader.CreateProject(project);
+        var habitat = (IForestHabitat)world.Map;
+        Assert.Equal(ForestPattern.Natural, habitat.ForestPattern);
+        var support = new int[4]; var forested = new int[4]; var upland = new int[4];
+        for (int t = 0; t < world.TileGrid.Columns * world.TileGrid.Rows; t++) {
+            if (!habitat.CanSupportForest(t)) continue;
+            int zone = Math.Clamp(world.TileZoneIndex(t), 0, 3);
+            support[zone]++;
+            ForestSpecies species = world.TileSpecies(t);
+            if (world.TileForest(t) <= 0) continue;
+            forested[zone]++;
+            if (species is ForestSpecies.Beech or ForestSpecies.Spruce or ForestSpecies.Fir or ForestSpecies.Larch) upland[zone]++;
+        }
+        double Cover(int z) => (double)forested[z] / Math.Max(1, support[z]);
+        string report = string.Join(" ", Enumerable.Range(0, 4).Select(z => $"{z}:{forested[z]}/{support[z]} up{upland[z]}"));
+        Assert.True(Cover(2) > Cover(1), "hills should be denser than the plain: " + report);
+        Assert.True(forested[3] == 0 || upland[3] > forested[3] / 2, "mountain woods should be beech and conifers: " + report);
+        Assert.True(upland[1] < forested[1] / 3, "the plain should keep broadleaves: " + report);
+    }
 }

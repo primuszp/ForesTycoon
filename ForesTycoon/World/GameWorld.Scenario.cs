@@ -234,6 +234,12 @@ namespace ForesTycoon
         internal TerrainSlope TileSlope(int id) => map.Tiles[id].Shape.Slope;
         /// <summary>The elevation zone of a tile under the running world's zones (the built-in ones before a scene sets them).</summary>
         internal int TileZoneIndex(int id) => (ruleProjectWorld ?? BuiltinZones).ZoneOf(TileLevel(id));
+        /// <summary>A tile's zone and biome index under a scene: what the map hands the forest.</summary>
+        private static (int Zone, int Biome) Landscape(WorldScenario scene, TerrainMap map, int id)
+        {
+            int level = map.Tiles[id].Low, rows = map.Settings.TileRows;
+            return (scene.ZoneOf(level), scene.BiomeOf(level, id / rows, id % rows));
+        }
         internal ElevationZoneDefinition TileZone(int id)
         {
             var zones = ruleProjectWorld ?? BuiltinZones;
@@ -241,12 +247,7 @@ namespace ForesTycoon
         }
         private static readonly WorldScenario BuiltinZones = new();
         /// <summary>The index of a tile's biome in the running world's biomes (the built-in ones before a scene sets them); -1 for none.</summary>
-        internal int TileBiomeIndex(int id)
-        {
-            var scene = ruleProjectWorld ?? BuiltinZones;
-            int rows = map.Settings.TileRows;
-            return scene.BiomeOf(TileLevel(id), id / rows, id % rows);
-        }
+        internal int TileBiomeIndex(int id) => Landscape(ruleProjectWorld ?? BuiltinZones, map, id).Biome;
         /// <summary>The ground surface of a tile: its biome's materials, by the map's moisture and the tile's slope.</summary>
         internal float TileMoisture(int id) => ((IForestHabitat)map).GetMoisture(id);
         internal WorldScenario.GroundSurface TileGround(int id) =>

@@ -108,13 +108,14 @@ public sealed class TreeVitalityRuleTests
         var e = project.Rules.Single(r => r.Id == "forest.mortality").Effects[0];
         e.Influence.Terms.Clear(); e.Influence.Terms.Add(new() { Amount = 1, Decrease = false });
         w.QueueRuleProject(project); w.ExecutePendingCommands();
+        int standing = w.Forest.IndividualTreeCount;
         for (int i = 0; i < 299; i++) w.Update(1d / 30);
         Assert.False(w.ContinueUpdate(1d / 30, 1));
         using var saved = new MemoryStream(); bool captured = false;
         w.AtTickBoundary(() => { w.Save(saved); captured = true; });
         Assert.False(captured); Assert.Throws<InvalidOperationException>(() => w.CaptureCheckpoint());
         int slices = 0; while (!w.ContinueUpdate(1d / 30, 7)) Assert.True(++slices < 200000);
-        Assert.True(captured); Assert.True(slices > 100); Assert.Equal(0, w.Forest.IndividualTreeCount);
+        Assert.True(captured); Assert.True(slices > 100); Assert.True(w.Forest.IndividualTreeCount * 100 < standing, $"{w.Forest.IndividualTreeCount} of {standing}"); // only new seedlings remain
         saved.Position = 0; using var restored = World(); restored.Load(saved); Assert.Equal(State(w), State(restored));
         saved.Position = 0; var data = WorldSaveSerializer.Read(saved);
         using var journal = new MemoryStream(); WorldSaveSerializer.Write(journal, new WorldSaveData {

@@ -74,7 +74,7 @@ internal static partial class WorldLoader
         GameWorld.ValidateRuleProject(copy);
         var world = copy.World == null ? CreateOpening(false) : copy.World.InitialState != null ?
             new GameWorld(TerrainSettings.Default.WithNodeSize(17, 42), enableRendering: false) :
-            new GameWorld(GameWorld.ScenarioSettings(copy.World), soils: GameWorld.SoilModel(copy.World), enableRendering: false, responseRules: ForesTycoon.Rules.EcologyResponseProgram.FromModel(copy.Behaviors));
+            new GameWorld(GameWorld.ScenarioSettings(copy.World), soils: GameWorld.SoilModel(copy.World), enableRendering: false, responseRules: ForesTycoon.Rules.EcologyResponseProgram.FromModel(copy.Behaviors), scene: copy.World);
         try
         {
             if (copy.World?.InitialState != null) RestoreInitialState(world, copy.World);

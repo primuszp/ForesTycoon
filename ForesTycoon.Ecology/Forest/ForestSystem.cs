@@ -293,14 +293,15 @@ namespace ForesTycoon.Ecology
                 uint random = Hash(habitat.Seed, tileId, 0);
                 int rows = habitat.TileGrid.Rows > 0 ? habitat.TileGrid.Rows : stands.Length;
                 float patch = ForestPatchNoise.At(habitat.Seed, tileId / rows, tileId % rows);
-                if (Gameplay.Evaluate("forest.initialAllow", 0, 0, UnitFloat(random), moisture, elevation, random % 3, random % 5, patch) < .5) continue;
+                var (zone, biome, _) = habitat.GetLandscape(tileId);
+                if (Gameplay.Evaluate("forest.initialAllow", 0, 0, UnitFloat(random), moisture, elevation, random % 3, random % 5, patch, zone, biome) < .5) continue;
 
                 // Species must be drawn from an independent hash. Reusing the value the
                 // density filter just tested keeps only tiles where random % density == 0,
                 // which collapsed every mixture below to its first branch â€” the whole map
                 // came out as a single species.
                 uint speciesDraw = Hash(habitat.Seed, tileId, 2);
-                ForestSpecies species = (ForestSpecies)(int)Gameplay.Evaluate("forest.initialSpecies", 0, 0, UnitFloat(speciesDraw), moisture, elevation, speciesDraw % 8, speciesDraw % 10);
+                ForestSpecies species = (ForestSpecies)(int)Gameplay.Evaluate("forest.initialSpecies", 0, 0, UnitFloat(speciesDraw), moisture, elevation, speciesDraw % 8, speciesDraw % 10, zone, biome);
                 ForestSpeciesProfile profile = ForestSpeciesProfile.For(species);
                 float age = (float)Gameplay.Evaluate("forest.initialAge", 0, profile.MatureAgeYears, UnitFloat(Hash(habitat.Seed, tileId, 1)));
                 float health = (float)Gameplay.Evaluate("forest.initialHealth", 0, UnitFloat(Hash(habitat.Seed, tileId, 3)), Suitability(species, tileId));

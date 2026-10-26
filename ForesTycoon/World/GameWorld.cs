@@ -56,13 +56,13 @@ namespace ForesTycoon
         }
 
         public GameWorld(TerrainSettings settings, double forestYearSeconds = EcologyTime.DefaultGameSecondsPerYear,
-            SoilLandscapeDefinition soils = null, ClimateDefinition climate = null, bool enableRendering = true, ForesTycoon.Rules.EcologyResponseProgram responseRules = null)
+            SoilLandscapeDefinition soils = null, ClimateDefinition climate = null, bool enableRendering = true, ForesTycoon.Rules.EcologyResponseProgram responseRules = null, WorldScenario scene = null)
             : this(settings, new GraphicsSettings { AutomaticWeather = true }, forestYearSeconds, soils ?? SoilLandscapeDefinition.Default,
-                climate ?? ClimateDefinition.Default, enableRendering, responseRules) { }
+                climate ?? ClimateDefinition.Default, enableRendering, responseRules, scene) { }
 
         private GameWorld(TerrainSettings settings, GraphicsSettings graphics, double forestYearSeconds, SoilLandscapeDefinition soilModel,
-            ClimateDefinition climate, bool enableRendering = false, ForesTycoon.Rules.EcologyResponseProgram responseRules = null)
-            : this(CreateMap(settings, forestYearSeconds), graphics, forestYearSeconds, soilModel, climate, enableRendering, initialResponses: responseRules) { }
+            ClimateDefinition climate, bool enableRendering = false, ForesTycoon.Rules.EcologyResponseProgram responseRules = null, WorldScenario scene = null)
+            : this(CreateMap(settings, forestYearSeconds), graphics, forestYearSeconds, soilModel, climate, enableRendering, initialResponses: responseRules, scene: scene) { }
 
         private static TerrainMap CreateMap(TerrainSettings settings, double forestYearSeconds)
         {
@@ -77,11 +77,13 @@ namespace ForesTycoon
                 SoilLandscapeDefinition.Default, ClimateDefinition.Default, false) { }
 
         private GameWorld(TerrainMap map, GraphicsSettings graphics, double forestYearSeconds, SoilLandscapeDefinition soilModel,
-            ClimateDefinition climate, bool enableRendering, Ecosystem preparedEcosystem = null, bool deferRules = false, ForesTycoon.Rules.EcologyResponseProgram initialResponses = null)
+            ClimateDefinition climate, bool enableRendering, Ecosystem preparedEcosystem = null, bool deferRules = false, ForesTycoon.Rules.EcologyResponseProgram initialResponses = null, WorldScenario scene = null)
         {
             Graphics = graphics;
             ruleValues = new(this);
             this.map = map ?? throw new ArgumentNullException(nameof(map));
+            // The initial forest is grown here, so it already reads the scene's zones and biomes.
+            ruleProjectWorld = scene;
             BindWorldQueries();
             try
             {
@@ -122,7 +124,7 @@ namespace ForesTycoon
         /// </summary>
         private void BindWorldQueries()
         {
-            map.LandscapeClass = id => (TileZoneIndex(id), TileBiomeIndex(id));
+            map.LandscapeClass = id => Landscape(ruleProjectWorld ?? BuiltinZones, map, id);
             if (terrainRenderer == null) return;
             // The ecosystem may rebuild its environment (new map, loaded save): always draw the current one.
             terrainRenderer.FloodDepth = id => Environment?.SurfaceDepth(id) ?? 0;

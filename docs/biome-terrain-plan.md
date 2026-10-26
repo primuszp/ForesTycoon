@@ -207,6 +207,13 @@ default loam: O 0.05 dark brown litter · A 0.25 humus · B 0.6 brown · C 1.5 p
    water or the lowest coastal level, otherwise woods where the patch noise exceeds
    0.58 − 0.25 × moisture. Generated maps now carry 30–48 % forest on suitable tiles, 93–98 % of it
    in connected woods, on low and tall relief alike (`InitialForestCoverTests`).
+   **Zones shape the initial forest — 2026-10-26.** `forest.initialAllow` and `forest.initialSpecies`
+   take `tile.zone` and `tile.biome` as their last inputs. On natural maps the plain is more open
+   (patch threshold +0.08, groves) and hills and mountains denser (−0.10). Hills grow oak, sessile
+   and Turkey oak, beech, hazel and maple; mountains beech, spruce, fir, larch and some birch;
+   coast and plain keep the moisture-driven broadleaf mix. The forest is grown before the world
+   exists, so generation now hands the map the scene's zones up front (`GameWorld(scene:)`,
+   `GenerateWorldWork`); before, the sliced pipeline saw no zones and the direct one the built-in ones.
 
 Each phase ends with the editor smoke test capturing the new page and a game capture
 (`--smoke-test --capture-frame`) before/after, kept under `artifacts/`.

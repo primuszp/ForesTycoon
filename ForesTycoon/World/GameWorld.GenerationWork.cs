@@ -120,9 +120,12 @@ sealed partial class GameWorld
         var preparingResponses = Task.Run(() => ForesTycoon.Rules.EcologyResponseProgram.FromModel(project?.Behaviors ?? WorldBehaviorPolicy.DefaultDocument()));
         while (!preparingResponses.IsCompleted) yield return 64;
         var responses = preparingResponses.GetAwaiter().GetResult();
+        // The forest is grown with the ecosystem, before the candidate world exists: give it the scene's zones and biomes now.
+        var scene = project?.World ?? BuiltinZones; var generated = terrainResult.Value;
+        generated.LandscapeClass = id => Landscape(scene, generated, id);
         var ecologyResult = new WorkResult<Ecosystem>();
         foreach (int unit in Ecosystem.CreateWork(terrainResult.Value, yearSeconds, soils, climate, ecologyResult, responses)) yield return unit;
-        using var candidate = new GameWorld(terrainResult.Value, Graphics, yearSeconds, soils, climate, false, ecologyResult.Value, deferRules: true);
+        using var candidate = new GameWorld(terrainResult.Value, Graphics, yearSeconds, soils, climate, false, ecologyResult.Value, deferRules: true, scene: project?.World);
         GenerationStage = "Szabályok előkészítése";
         foreach (int unit in candidate.ApplyRuleProjectWork(DefaultRuleProject())) yield return unit;
         candidate.ApplyTuning(Tuning);
