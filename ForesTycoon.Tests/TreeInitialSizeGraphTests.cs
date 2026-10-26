@@ -92,7 +92,8 @@ public class TreeInitialSizeGraphTests
         var p = Project(); p.Rules = RuleEngine.StarterRules(); foreach (var r in p.Rules) r.Enabled = false;
         foreach (var w in new[] { whole, sliced }) { w.QueueRuleProject(p); w.ExecutePendingCommands(); }
         Assert.Equal(existing.Dimensions, Trees(whole.Forest).Single(t => t.Id == existing.Id).Dimensions);
-        int tile = Enumerable.Range(0, whole.Map.Tiles.Count).First(i => whole.Forest.Habitat.CanSupportForest(i));
+        // An open tile: a felled stand leaves stumps that take planting room.
+        int tile = Enumerable.Range(0, whole.Map.Tiles.Count).First(i => whole.Forest.Habitat.CanSupportForest(i) && !whole.Forest.IndividualTrees.TryGet(i, out _));
         foreach (var w in new[] { whole, sliced }) { w.QueueHarvestForest(tile); w.QueuePlantForestArea(tile, tile, ForestSpecies.Oak); }
         using var during = new MemoryStream(); bool saved = false;
         whole.ExecutePendingCommands(); Assert.Equal(0, sliced.ContinueCommands(1));

@@ -199,6 +199,14 @@ default loam: O 0.05 dark brown litter · A 0.25 humus · B 0.6 brown · C 1.5 p
    map's own relief. Measured: this was *not* the cause of sparse forest on generated tall maps —
    the generator lays down sparse forest on any relief (seed 42, 64 tiles: 59 forested tiles on six
    levels); the opening scene's forest is painted.
+   **Sparse forest — fixed 2026-10-26.** Cause: the map moisture is a coarse class (0 away from water,
+   0.35f on lowland, 0.45 by streams, 0.6 by lakes), and the default `forest.initialAllow` rule
+   required moisture ≥ 0.35; 0.35f is just below 0.35, so all lowland failed and only water edges
+   got trees, then one tile in three or five at random. The rule now has a smooth `noise.patch`
+   input (`ForestPatchNoise`, ~8-tile patches with 3-tile edges) and reads: no forest on standing
+   water or the lowest coastal level, otherwise woods where the patch noise exceeds
+   0.58 − 0.25 × moisture. Generated maps now carry 30–48 % forest on suitable tiles, 93–98 % of it
+   in connected woods, on low and tall relief alike (`InitialForestCoverTests`).
 
 Each phase ends with the editor smoke test capturing the new page and a game capture
 (`--smoke-test --capture-frame`) before/after, kept under `artifacts/`.

@@ -27,7 +27,7 @@ namespace ForesTycoon.Ecology
                 bool mixed=pattern==ForestPattern.LargeMixed;
                 float a=Ellipse(u,v,0.28f+shiftX,0.34f+shiftY,mixed?0.31f:0.43f,mixed?0.36f:0.44f);
                 float b=Ellipse(u,v,0.7f-shiftX,0.66f-shiftY,mixed?0.32f:0.43f,mixed?0.35f:0.44f);
-                if (gameplay.Evaluate("forest.initialAllow", (int)pattern, Math.Min(a,b), Hash(x/3,y/3,3), habitat.GetMoisture(id), habitat.GetNormalizedElevation(id), 0, 0) < .5) continue;
+                if (gameplay.Evaluate("forest.initialAllow", (int)pattern, Math.Min(a,b), Hash(x/3,y/3,3), habitat.GetMoisture(id), habitat.GetNormalizedElevation(id), 0, 0, ForestPatchNoise.At(habitat.Seed, x, y)) < .5) continue;
                 float speciesSeed=Hash(x/6,y/6,4);
                 ForestSpecies species=(ForestSpecies)(int)gameplay.Evaluate("forest.initialSpecies", (int)pattern, a < b ? 1 : 0, speciesSeed, habitat.GetMoisture(id), habitat.GetNormalizedElevation(id), 0, 0);
                 var profile=ForestSpeciesProfile.For(species);

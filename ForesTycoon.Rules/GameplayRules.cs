@@ -28,7 +28,7 @@ public static class GameplayRules
     public static readonly BehaviorHook[] Hooks = {
         H("wildlife.timeScale", "Állatok szimulációs időszorzója", "×", 0, 100, "world.year", "animals.count"),
         H("trail.drivingCondition", "Földfelszín menetállapota", "0–1", 0, 1, "trail.wear", "tile.trafficability"),
-        H("forest.initialAllow", "Kezdő erdő eloszlása", "0–1", 0, 1, "pattern.type", "pattern.distance", "noise.value", "tile.moisture", "tile.elevation", "noise.bucket3", "noise.bucket5"),
+        H("forest.initialAllow", "Kezdő erdő eloszlása", "0–1", 0, 1, "pattern.type", "pattern.distance", "noise.value", "tile.moisture", "tile.elevation", "noise.bucket3", "noise.bucket5", "noise.patch"),
         H("forest.initialSpecies", "Kezdő erdő fajválasztása", "fajazonosító", 2, 17, "pattern.type", "pattern.first", "noise.value", "tile.moisture", "tile.elevation", "noise.bucket8", "noise.bucket10"),
         H("forest.initialAge", "Kezdő erdő kora", "év", 0, 1e4, "pattern.type", "species.matureAge", "noise.value"),
         H("forest.initialHealth", "Kezdő erdő egészsége", "0–1", 0, 1, "pattern.type", "noise.value", "tile.suitability"),

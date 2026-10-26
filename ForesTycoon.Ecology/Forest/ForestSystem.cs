@@ -291,7 +291,9 @@ namespace ForesTycoon.Ecology
                 float moisture = habitat.GetMoisture(tileId);
                 float elevation = habitat.GetNormalizedElevation(tileId);
                 uint random = Hash(habitat.Seed, tileId, 0);
-                if (Gameplay.Evaluate("forest.initialAllow", 0, 0, UnitFloat(random), moisture, elevation, random % 3, random % 5) < .5) continue;
+                int rows = habitat.TileGrid.Rows > 0 ? habitat.TileGrid.Rows : stands.Length;
+                float patch = ForestPatchNoise.At(habitat.Seed, tileId / rows, tileId % rows);
+                if (Gameplay.Evaluate("forest.initialAllow", 0, 0, UnitFloat(random), moisture, elevation, random % 3, random % 5, patch) < .5) continue;
 
                 // Species must be drawn from an independent hash. Reusing the value the
                 // density filter just tested keeps only tiles where random % density == 0,
