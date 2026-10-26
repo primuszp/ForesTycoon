@@ -66,23 +66,21 @@ namespace ForesTycoon
         private static readonly Color PlinthBottom = Color.FromArgb(130, 100, 65);
 
         /// <summary>
-        /// The diorama's four sides, cut through the ground: each edge tile's soil horizons follow the surface down, the
-        /// bedrock fills the rest to the plinth. South and north faces are drawn lighter than west and east, as before.
+        /// The diorama's four sides, cut through the ground. The top follows the terrain edge exactly; the horizon boundaries
+        /// below follow a smoothed copy of it, sampled four times per tile, so they run in soft curves instead of the terrain's
+        /// height steps, and where the soil changes their thickness and colour fade over a tile. Bedrock fills the rest to the
+        /// plinth. South and north faces are drawn lighter than west and east.
         /// </summary>
         internal void DrawSkirts()
         {
             DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () =>
             {
-                for (int u = 0; u < nodeCols - 1; u++)
-                {
-                    Side(getNodeByCoords(u, 0), getNodeByCoords(u + 1, 0), getTileByCoords(u, 0), 1f);
-                    Side(getNodeByCoords(u + 1, nodeRows - 1), getNodeByCoords(u, nodeRows - 1), getTileByCoords(u, nodeRows - 2), 1f);
-                }
-                for (int v = 0; v < nodeRows - 1; v++)
-                {
-                    Side(getNodeByCoords(0, v + 1), getNodeByCoords(0, v), getTileByCoords(0, v), .9f);
-                    Side(getNodeByCoords(nodeCols - 1, v), getNodeByCoords(nodeCols - 1, v + 1), getTileByCoords(nodeCols - 2, v), .9f);
-                }
+                int tilesU = nodeCols - 1, tilesV = nodeRows - 1;
+                CurvedSide(tilesU, j => getNodeByCoords(j, 0), t => getTileByCoords(t, 0), reverse: false, light: 1f);
+                CurvedSide(tilesU, j => getNodeByCoords(j, nodeRows - 1), t => getTileByCoords(t, nodeRows - 2), reverse: true, light: 1f);
+                CurvedSide(tilesV, j => getNodeByCoords(0, j), t => getTileByCoords(0, t), reverse: true, light: .9f);
+                CurvedSide(tilesV, j => getNodeByCoords(nodeCols - 1, j), t => getTileByCoords(nodeCols - 2, t), reverse: false, light: .9f);
+
                 DynamicPrimitiveBatch.Color3(PlinthBottom);
                 Node sw = getNodeByCoords(0, 0), se = getNodeByCoords(nodeCols - 1, 0);
                 Node ne = getNodeByCoords(nodeCols - 1, nodeRows - 1), nw = getNodeByCoords(0, nodeRows - 1);
@@ -93,31 +91,98 @@ namespace ForesTycoon
             });
         }
 
-        /// <summary>One side segment from <paramref name="a"/> to <paramref name="b"/> (outward winding): horizon bands, then bedrock.</summary>
-        private void Side(Node a, Node b, Tile tile, float light)
+        private const int SideSamplesPerTile = 4;
+        private static readonly SideLayer[] PlainEarthProfile = { new(1e6f, PlainEarth) };
+
+        /// <summary>One side: <paramref name="tiles"/> edge tiles between nodes 0..tiles, drawn in outward winding order.</summary>
+        private void CurvedSide(int tiles, Func<int, Node> node, Func<int, Tile> tile, bool reverse, float light)
         {
-            var layers = SideProfile?.Invoke(tile.Id);
-            if (layers == null || layers.Length == 0) { Band(a, b, 0, float.MaxValue, PlainEarth, light); return; }
-            float depth = 0;
-            foreach (var layer in layers)
+            // The edge heights, and a smoothed copy (binomial 1-4-6-4-1) the horizon boundaries follow.
+            var height = new float[tiles + 1];
+            for (int j = 0; j <= tiles; j++) height[j] = node(j).zPos;
+            var smooth = new float[tiles + 1];
+            for (int j = 0; j <= tiles; j++)
             {
-                if (Band(a, b, depth, depth + layer.Depth, layer.Color, light)) return;
-                depth += layer.Depth;
+                float sum = 0, weight = 0;
+                for (int k = -2; k <= 2; k++)
+                {
+                    int at = Math.Clamp(j + k, 0, tiles); float w = k == 0 ? 6 : Math.Abs(k) == 1 ? 4 : 1;
+                    sum += height[at] * w; weight += w;
+                }
+                smooth[j] = sum / weight;
             }
-            Band(a, b, depth, float.MaxValue, BedrockColor, light);
+            var profiles = new SideLayer[tiles][];
+            for (int t = 0; t < tiles; t++)
+            {
+                var layers = SideProfile?.Invoke(tile(t).Id);
+                profiles[t] = layers is { Length: > 0 } ? layers : PlainEarthProfile;
+            }
+
+            int samples = tiles * SideSamplesPerTile + 1;
+            var position = new Vector3[samples]; var top = new float[samples];
+            int bands = 1; foreach (var p in profiles) bands = Math.Max(bands, p.Length);
+            // Boundary k is the bottom of horizon k (below the surface, in world units), the last one the bedrock's top.
+            var bottom = new float[samples, bands]; var colour = new Color[samples, bands];
+            for (int i = 0; i < samples; i++)
+            {
+                float s = (float)i / SideSamplesPerTile;                     // position along the side, in tiles
+                int j = Math.Min((int)s, tiles - 1); float f = s - j;
+                Node a = node(j), b = node(j + 1);
+                position[i] = new Vector3(a.xPos + (b.xPos - a.xPos) * f, a.yPos + (b.yPos - a.yPos) * f, 0);
+                top[i] = height[j] + (height[j + 1] - height[j]) * f;
+                float surface = CatmullRom(smooth, j, f);
+                // Blend the two tiles whose centres surround this point; profiles of different length use the nearer one.
+                float c = s - .5f; int left = Math.Clamp((int)MathF.Floor(c), 0, tiles - 1), right = Math.Clamp(left + 1, 0, tiles - 1);
+                float w = Math.Clamp(c - left, 0, 1); w = w * w * (3 - 2 * w);
+                var pl = profiles[left]; var pr = profiles[right];
+                if (pl.Length != pr.Length) { pl = pr = w < .5f ? pl : pr; }
+                float depth = 0;
+                for (int k = 0; k < bands; k++)
+                {
+                    if (k < pl.Length)
+                    {
+                        depth += pl[k].Depth + (pr[k].Depth - pl[k].Depth) * w;
+                        colour[i, k] = Mix(pl[k].Color, pr[k].Color, w);
+                    }
+                    else colour[i, k] = colour[i, Math.Max(0, k - 1)];
+                    // Never above the true edge, so thin top horizons do not pop out over a terrain step.
+                    bottom[i, k] = Math.Min(surface - depth, top[i] - .05f * (k + 1));
+                }
+            }
+
+            void Quad(int i0, int i1, float a0, float a1, float b0, float b1, Color c0, Color c1)
+            {
+                (int from, int to) = reverse ? (i1, i0) : (i0, i1);
+                (float fromTop, float toTop, float fromLow, float toLow) = reverse ? (a1, a0, b1, b0) : (a0, a1, b0, b1);
+                (Color cf, Color ct) = reverse ? (c1, c0) : (c0, c1);
+                fromTop = Math.Max(fromTop, PlinthBase); toTop = Math.Max(toTop, PlinthBase);
+                fromLow = Math.Max(fromLow, PlinthBase); toLow = Math.Max(toLow, PlinthBase);
+                if (fromTop <= PlinthBase && toTop <= PlinthBase) return;
+                DynamicPrimitiveBatch.Color3(Lit(cf, light)); DynamicPrimitiveBatch.Vertex3(position[from].X, position[from].Y, fromTop);
+                DynamicPrimitiveBatch.Color3(Lit(ct, light)); DynamicPrimitiveBatch.Vertex3(position[to].X, position[to].Y, toTop);
+                DynamicPrimitiveBatch.Color3(Lit(ct, light)); DynamicPrimitiveBatch.Vertex3(position[to].X, position[to].Y, toLow);
+                DynamicPrimitiveBatch.Color3(Lit(cf, light)); DynamicPrimitiveBatch.Vertex3(position[from].X, position[from].Y, fromLow);
+            }
+            for (int i = 0; i + 1 < samples; i++)
+            {
+                float upper0 = top[i], upper1 = top[i + 1];
+                for (int k = 0; k < bands; k++)
+                {
+                    Quad(i, i + 1, upper0, upper1, bottom[i, k], bottom[i + 1, k], colour[i, k], colour[i + 1, k]);
+                    upper0 = bottom[i, k]; upper1 = bottom[i + 1, k];
+                }
+                Quad(i, i + 1, upper0, upper1, PlinthBase, PlinthBase, BedrockColor, BedrockColor);
+            }
         }
 
-        /// <summary>Draws the band between two depths below the surface, cut at the plinth; true once it reaches the plinth.</summary>
-        private static bool Band(Node a, Node b, float top, float bottom, Color color, float light)
+        /// <summary>A smooth curve through the values, between index <paramref name="j"/> and the next, at <paramref name="t"/>.</summary>
+        private static float CatmullRom(float[] v, int j, float t)
         {
-            float topA = Math.Max(a.zPos - top, PlinthBase), topB = Math.Max(b.zPos - top, PlinthBase);
-            float lowA = Math.Max(a.zPos - bottom, PlinthBase), lowB = Math.Max(b.zPos - bottom, PlinthBase);
-            if (topA <= PlinthBase && topB <= PlinthBase) return true;
-            DynamicPrimitiveBatch.Color3(Color.FromArgb((int)(color.R * light), (int)(color.G * light), (int)(color.B * light)));
-            DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, topA); DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, topB);
-            DynamicPrimitiveBatch.Vertex3(b.xPos, b.yPos, lowB); DynamicPrimitiveBatch.Vertex3(a.xPos, a.yPos, lowA);
-            return lowA <= PlinthBase && lowB <= PlinthBase;
+            float p0 = v[Math.Max(j - 1, 0)], p1 = v[j], p2 = v[Math.Min(j + 1, v.Length - 1)], p3 = v[Math.Min(j + 2, v.Length - 1)];
+            return .5f * (2 * p1 + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t + (-p0 + 3 * p1 - 3 * p2 + p3) * t * t * t);
         }
-
+        private static Color Mix(Color a, Color b, float t) =>
+            Color.FromArgb(255, (int)(a.R + (b.R - a.R) * t), (int)(a.G + (b.G - a.G) * t), (int)(a.B + (b.B - a.B) * t));
+        private static Color Lit(Color c, float light) => Color.FromArgb(255, (int)(c.R * light), (int)(c.G * light), (int)(c.B * light));
     }
 }
