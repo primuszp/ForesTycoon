@@ -194,9 +194,11 @@ default loam: O 0.05 dark brown litter · A 0.25 humus · B 0.6 brown · C 1.5 p
    tenth mountains). Editor: Térkép → *Domborzat magassága*, zones on their defaults follow it.
    Measured on a 128-tile map, 6 vs 16 levels: generation 1.2 vs 2.0 s, 40 terrain edits 1.4 vs
    1.5 s, one game minute 12.1 vs 12.0 s. The UI font now loads the arrows block (← ↑ → ↓).
-   **Open:** forest site rules read a *normalised* elevation (level ÷ max), so the same hill reads
-   lower on a taller map and the species' preferred elevations, tuned on six levels, place fewer
-   trees there. Either normalise against a fixed reference height or retune per relief.
+   Ecology reads elevation against a fixed reference (`TerrainMap.EcologyReferenceLevels` = 6,
+   clamped to 1), so a level means the same on every map; editor maps still shade within the
+   map's own relief. Measured: this was *not* the cause of sparse forest on generated tall maps —
+   the generator lays down sparse forest on any relief (seed 42, 64 tiles: 59 forested tiles on six
+   levels); the opening scene's forest is painted.
 
 Each phase ends with the editor smoke test capturing the new page and a game capture
 (`--smoke-test --capture-frame`) before/after, kept under `artifacts/`.

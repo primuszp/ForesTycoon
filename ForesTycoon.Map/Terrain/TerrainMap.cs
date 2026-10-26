@@ -233,8 +233,15 @@ namespace ForesTycoon.Map
             return (zone, biome, (int)tiles[tileId].Shape.Slope);
         }
 
+        /// <summary>
+        /// The terrain level ecology reads as fully high (1). Fixed, not the map's own maximum: a hill is as high on a tall map
+        /// as on a low one, so species' preferred elevations, the climate's lapse and the regeneration rules mean the same
+        /// everywhere. It is the original relief, so six-level maps read exactly as before; taller land saturates at 1.
+        /// </summary>
+        internal const int EcologyReferenceLevels = 6;
+
         float IForestHabitat.GetNormalizedElevation(int tileId) =>
-            Math.Clamp(tiles[tileId].Low / (float)Math.Max(1, settings.MaxHeight), 0f, 1f);
+            Math.Clamp(tiles[tileId].Low / (float)EcologyReferenceLevels, 0f, 1f);
 
         float IForestHabitat.GetGroundHeight(int tileId)
         {

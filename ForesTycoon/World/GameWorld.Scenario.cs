@@ -227,7 +227,8 @@ namespace ForesTycoon
         /// <summary>Column-major tile grid of the soil raster: tile ID = column × rows + row.</summary>
         internal (int Columns, int Rows) TileGrid => Soils == null ? (0, 0) : (Soils.Grid.Columns, Soils.Grid.Rows);
         internal int SoilIndex(int id) => Soils?.ProfileIndices[id] ?? 0;
-        internal float TileElevation(int id) => ((IForestHabitat)map).GetNormalizedElevation(id);
+        /// <summary>A tile's height within this map's own relief (0 lowest, 1 the map's maximum), for drawing maps.</summary>
+        internal float TileElevation(int id) => Math.Clamp(TileLevel(id) / (float)Math.Max(1, map.MaximumHeight), 0f, 1f);
         /// <summary>The terrain level of a tile (its lowest corner) and its steepness, as the elevation zones read them.</summary>
         internal int TileLevel(int id) => map.Tiles[id].Low;
         internal TerrainSlope TileSlope(int id) => map.Tiles[id].Shape.Slope;

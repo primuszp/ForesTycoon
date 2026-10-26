@@ -28,6 +28,21 @@ public sealed class ReliefTests
     }
 
     [Fact]
+    public void EcologyReadsTheSameElevationForTheSameLevelWhateverTheMapsRelief()
+    {
+        using var low = Build(6); using var tall = Build(16);
+        foreach (var world in new[] { low, tall }) {
+            var habitat = (IForestHabitat)world.Map;
+            int tiles = world.TileGrid.Columns * world.TileGrid.Rows;
+            for (int t = 0; t < tiles; t++)
+                Assert.Equal(Math.Min(1f, world.TileLevel(t) / 6f), habitat.GetNormalizedElevation(t), 5);
+        }
+        // Maps are still drawn within their own relief.
+        int top = Enumerable.Range(0, tall.TileGrid.Columns * tall.TileGrid.Rows).MaxBy(tall.TileLevel);
+        Assert.Equal(tall.TileLevel(top) / 16f, tall.TileElevation(top), 5);
+    }
+
+    [Fact]
     public void ScenesKeepTheirOldReliefAndTheReliefStaysInRange()
     {
         var old = RuleProject.FromJson("{\"schema\":\"forest-rule-project\",\"version\":5,\"name\":\"régi\",\"world\":{\"name\":\"régi pálya\"}}").World;
