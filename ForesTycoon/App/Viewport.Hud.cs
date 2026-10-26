@@ -403,8 +403,11 @@ namespace ForesTycoon
             var logistics = world.Logistics;
             if (logistics == null || logistics.Depots.Count == 0)
             {
-                ImGui.TextDisabled("Még nincs telephely. Épít → Telephely: 2×2 sík csempe út mellé.");
-                ImGui.TextDisabled("Az első telephelyen egy processzor, egy forwarder és egy rönkszállító vár.");
+                // Wrapped: the window keeps its width, the hint does not run out of it.
+                ImGui.PushTextWrapPos(0);
+                ImGui.TextColored(HudTheme.Muted, "Még nincs telephely. Épít menü, Telephely: 2×2 sík csempe út mellé.");
+                ImGui.TextColored(HudTheme.Muted, "Az első telephelyen egy processzor, egy forwarder és egy rönkszállító vár.");
+                ImGui.PopTextWrapPos();
             }
             else
             {

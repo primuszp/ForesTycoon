@@ -68,8 +68,8 @@ namespace ForesTycoon
                 return;
             }
 
-            // Latin Extended-A contains Hungarian double acute glyphs: ő/Ő and ű/Ű.
-            ushort[] ranges = { 0x0020, 0x017F, 0x2000, 0x206F, 0 };
+            // Latin Extended-A contains Hungarian double acute glyphs: ő/Ő and ű/Ű; the arrows block holds the ←↑→↓ the texts use.
+            ushort[] ranges = { 0x0020, 0x017F, 0x2000, 0x206F, 0x2190, 0x21FF, 0 };
             glyphRangeHandle = GCHandle.Alloc(ranges, GCHandleType.Pinned);
             io.FontGlobalScale = 1 / rasterScale;
             io.Fonts.AddFontFromFileTTF(fontPath, profile.Body * rasterScale, IntPtr.Zero, glyphRangeHandle.AddrOfPinnedObject());

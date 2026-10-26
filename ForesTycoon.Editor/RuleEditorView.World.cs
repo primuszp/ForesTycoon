@@ -176,6 +176,20 @@ internal sealed partial class RuleEditorView
             if (ImGui.SmallButton("törlés##" + label)) { clear(); ApplyScenario(world, label + ": a festés törölve."); }
         }
         if (appliedScenario != ScenarioKey() && ImGui.Button("Tesztvilág építése a pályából")) ApplyScenario(world, "");
+        EditorStyle.Section("Domborzat magassága");
+        ImGui.BeginDisabled(captured);
+        int relief = scenario.MaxHeight; ImGui.SetNextItemWidth(-1);
+        ImGui.SliderInt("##relief", ref relief, WorldScenario.MinimumRelief, WorldScenario.MaximumRelief, $"{relief} szint · {relief * 2} m");
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip("A legmagasabb terepszint (szintenként 2 m). 6: alföldi, dombos táj; 10–16: dombság és hegyvidék, meredek oldalakkal.\nA magassági övek, ha az alapértékükön állnak, vele együtt igazodnak.");
+        if (ImGui.IsItemDeactivatedAfterEdit() && relief != scenario.MaxHeight) {
+            // Zones still on the defaults of the old height follow the new one; authored zones are kept as they are.
+            if (System.Text.Json.JsonSerializer.Serialize(scenario.ElevationZones) == System.Text.Json.JsonSerializer.Serialize(ElevationZoneDefinition.Defaults(scenario.MaxHeight)))
+                scenario.ElevationZones = ElevationZoneDefinition.Defaults(relief);
+            scenario.MaxHeight = relief;
+            ApplyScenario(world, $"A domborzat legfeljebb {relief} szint ({relief * 2} m).");
+        }
+        ImGui.EndDisabled();
         EditorStyle.Section("Méret");
         ImGui.BeginDisabled(captured);
         int sizeIndex = Array.IndexOf(MapSizes, scenario.Size);
@@ -595,7 +609,7 @@ internal sealed partial class RuleEditorView
             zones.Insert(zones.Count - 1, new ElevationZoneDefinition { Id = "zone" + Guid.NewGuid().ToString("N")[..6], Name = "Új öv", Color = "#9A9A9A", MaxLevel = floor });
         }
         ImGui.EndDisabled();
-        if (ImGui.Button("Alapértelmezett övek", new Vec2(-1, 0))) scenario.ElevationZones = ElevationZoneDefinition.Defaults();
+        if (ImGui.Button("Alapértelmezett övek", new Vec2(-1, 0))) scenario.ElevationZones = ElevationZoneDefinition.Defaults(scenario.MaxHeight);
     }
 
     private void MapLegend(GameWorld world)

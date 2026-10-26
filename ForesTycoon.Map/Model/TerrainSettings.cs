@@ -37,6 +37,11 @@ namespace ForesTycoon.Map
             nodeSize, nodeSize, TileWidth, TileHeight, HeightScale,
             MinimumWaterDepth, RiverWaterHeight, SeaLevel, seed, MaxHeight, ForestPattern);
 
+        /// <summary>Copy with another relief height: the highest terrain level, <see cref="HeightScale"/> metres each.</summary>
+        public TerrainSettings WithMaxHeight(int maxHeight) => new TerrainSettings(
+            NodeColumns, NodeRows, TileWidth, TileHeight, HeightScale,
+            MinimumWaterDepth, RiverWaterHeight, SeaLevel, Seed, maxHeight, ForestPattern);
+
         public TerrainSettings WithForestPattern(ForestPattern pattern) => new TerrainSettings(
             NodeColumns,NodeRows,TileWidth,TileHeight,HeightScale,MinimumWaterDepth,RiverWaterHeight,SeaLevel,Seed,MaxHeight,pattern);
 

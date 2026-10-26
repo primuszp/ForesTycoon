@@ -106,7 +106,8 @@ namespace ForesTycoon
             return new SoilLandscapeDefinition(1, catalog, scenario.SoilPaint.ToDictionary(p => p.Key, p => index[p.Value]));
         }
 
-        internal static TerrainSettings ScenarioSettings(WorldScenario scenario) => TerrainSettings.Default.WithNodeSize(scenario.Size + 1, scenario.Seed);
+        internal static TerrainSettings ScenarioSettings(WorldScenario scenario) =>
+            TerrainSettings.Default.WithNodeSize(scenario.Size + 1, scenario.Seed).WithMaxHeight(scenario.MaxHeight);
 
         /// <summary>Replaces this world with a new one built from the scenario; the scenario stays the project's map.</summary>
         internal void StartScenario(WorldScenario scenario, RuleProject definition = null)

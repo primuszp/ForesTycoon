@@ -22,7 +22,7 @@ namespace ForesTycoon
             ui.Update(width, height, width, height, Vector2.One, 1f / 60);
             var font = ImGui.GetFont();
             const string accents = "áéíóöőúüűÁÉÍÓÖŐÚÜŰ";
-            foreach (char c in accents + "–—…")
+            foreach (char c in accents + "–—…←↑→↓")
             {
                 if (c >= font.IndexLookup.Size || font.IndexLookup[c] == ushort.MaxValue)
                     throw new InvalidOperationException($"UI font is missing U+{(int)c:X4} ({c}).");
@@ -34,13 +34,14 @@ namespace ForesTycoon
             draw.AddText(new(24, 24), 0xffffffff, "Árvíztűrő tükörfúrógép – Erdőgazdálkodás");
             draw.AddText(new(24, 60), 0xffffffff, accents);
             draw.AddText(new(24, 96), 0xffffffff, "Tölgy, bükk, nyír – Eljárásos fák (kor és fény)");
+            draw.AddText(new(24, 132), 0xffffffff, "Sarang #3 → fűrészmalom · ← / → forgatás · ↑ ↓");
             ui.Render();
             if (GL.GetError() != ErrorCode.NoError)
                 throw new InvalidOperationException("UI font rendering produced an OpenGL error.");
             string output = Path.GetFullPath("artifacts/ui-font");
             Directory.CreateDirectory(output);
             FramebufferCapture.SavePng(Path.Combine(output, "hungarian.png"), width, height);
-            Console.WriteLine($"UI font smoke passed: all 18 Hungarian accented glyphs and dash/ellipsis glyphs present; rendered {output}/hungarian.png");
+            Console.WriteLine($"UI font smoke passed: all 18 Hungarian accented glyphs, dash/ellipsis and arrow glyphs present; rendered {output}/hungarian.png");
         }
     }
 }

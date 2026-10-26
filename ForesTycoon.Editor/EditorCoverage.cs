@@ -21,7 +21,7 @@ internal static class EditorCoverage
     /// </summary>
     internal static readonly IReadOnlyDictionary<Type, IReadOnlyDictionary<string, string>> SceneSurfaces = new Dictionary<Type, IReadOnlyDictionary<string, string>> {
         [typeof(WorldScenario)] = new Dictionary<string, string> {
-            ["Name"] = "Térkép · Pálya neve", ["Seed"] = "Térkép · Generálás", ["Size"] = "Térkép · Méret",
+            ["Name"] = "Térkép · Pálya neve", ["Seed"] = "Térkép · Generálás", ["Size"] = "Térkép · Méret", ["MaxHeight"] = "Térkép · Domborzat magassága",
             ["InitialState"] = "Jelenet… · rögzített nyitójelenet", ["SoilTypes"] = "Talajtípusok", ["SoilPaint"] = "Térkép · Talaj réteg",
             ["ElevationZones"] = "Térkép · Magassági övek réteg", ["ProfileScale"] = "Talajtípusok · Rétegrend (nagyítás)", ["Biomes"] = "Biomok", ["GroundMaterials"] = "Biomok · Felszínanyagok", ["HeightPaint"] = "Térkép · Domborzat és Víz réteg",
             ["ForestPaint"] = "Térkép · Erdő réteg", ["Springs"] = "Térkép · Víz réteg (forrás)", ["Species"] = "Fafajok",

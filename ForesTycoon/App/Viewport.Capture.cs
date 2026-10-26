@@ -44,7 +44,8 @@ namespace ForesTycoon
                 case 170: Save("04-deer-closeup"); break;
                 case 171:
                     world.Graphics.ShowGrid = true;
-                    if (world.DiagnosticFellForestBlock(out var block)) FocusOn(block, 30f);
+                    // Felled at a tick boundary like a player's order: a rule step may still be running in slices now.
+                    world.AtTickBoundary(() => { if (world.DiagnosticFellForestBlock(out var block)) FocusOn(block, 30f); });
                     break;
                 case 230: Save("05-stumps-grid"); break;
                 case 231: FocusOn(cameraFocus, 60f); world.Graphics.ShowGrid = false; break;

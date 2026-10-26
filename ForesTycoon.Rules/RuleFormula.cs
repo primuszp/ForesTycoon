@@ -386,12 +386,20 @@ public sealed class ElevationZoneDefinition
     /// <summary>The highest terrain level (the tile's lowest corner) that still belongs to this zone.</summary>
     public int MaxLevel { get; set; }
 
-    /// <summary>The built-in zones: sea-level coast, lowland plain, hills, mountains.</summary>
-    public static List<ElevationZoneDefinition> Defaults() => new() {
-        new() { Id = "coast", Name = "Tengerpart", Color = "#D8C690", MaxLevel = 1 },
-        new() { Id = "plain", Name = "Síkság", Color = "#86B35A", MaxLevel = 3 },
-        new() { Id = "hills", Name = "Dombvidék", Color = "#A69A52", MaxLevel = 5 },
-        new() { Id = "mountain", Name = "Hegyvidék", Color = "#B4ADA2", MaxLevel = 99 } };
+    /// <summary>
+    /// The built-in zones for a relief height: sea-level coast, lowland plain, hills, mountains. Up to 6 levels the plain
+    /// reaches level 3 and the hills level 5; taller relief moves them up with it (16 levels: plain 4, hills 8). The generator
+    /// rarely raises land to the very top, so the shares are set on the levels it does reach: about a tenth is mountains.
+    /// </summary>
+    public static List<ElevationZoneDefinition> Defaults(int maxHeight = 6)
+    {
+        int plain = maxHeight <= 6 ? 3 : (int)Math.Round(maxHeight * .25), hills = maxHeight <= 6 ? 5 : (int)Math.Round(maxHeight * .5);
+        return new() {
+            new() { Id = "coast", Name = "Tengerpart", Color = "#D8C690", MaxLevel = 1 },
+            new() { Id = "plain", Name = "Síkság", Color = "#86B35A", MaxLevel = Math.Max(2, plain) },
+            new() { Id = "hills", Name = "Dombvidék", Color = "#A69A52", MaxLevel = Math.Max(Math.Max(2, plain) + 1, hills) },
+            new() { Id = "mountain", Name = "Hegyvidék", Color = "#B4ADA2", MaxLevel = 99 } };
+    }
 }
 
 /// <summary>A ground surface material: its colour and the detail pattern the terrain shader draws with it.</summary>
@@ -621,6 +629,9 @@ public sealed class WorldScenario
     public int Seed { get; set; } = 42;
     /// <summary>Tiles per side of the square map.</summary>
     public int Size { get; set; } = 64;
+    /// <summary>The highest terrain level, 2 m each: 6 for the original lowland scenes, up to 16 for hills and mountains.</summary>
+    public int MaxHeight { get; set; } = 6;
+    public const int MinimumRelief = 4, MaximumRelief = 16;
     /// <summary>Optional portable gzip/base64 world checkpoint. Paint is applied over this exact scene.</summary>
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public string InitialState { get; set; }
@@ -721,6 +732,7 @@ public sealed class WorldScenario
         if (string.IsNullOrWhiteSpace(Name) || SoilTypes == null || SoilTypes.Count is 0 or > 64 || SoilPaint == null)
             throw new InvalidDataException("A pályának neve és 1–64 talajtípusa legyen.");
         if (Size is < 16 or > 128) throw new InvalidDataException("A pálya mérete 16–128 csempe lehet.");
+        if (MaxHeight is < MinimumRelief or > MaximumRelief) throw new InvalidDataException($"A domborzat magassága {MinimumRelief}–{MaximumRelief} szint lehet.");
         if (InitialState != null && (!InitialState.StartsWith("world-gzip-v1:", StringComparison.Ordinal) || InitialState.Length > 32 * 1024 * 1024))
             throw new InvalidDataException("Ismeretlen vagy túl nagy kiinduló jelenet.");
         var ids = new HashSet<string>(StringComparer.Ordinal);
