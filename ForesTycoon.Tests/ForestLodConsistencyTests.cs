@@ -49,13 +49,29 @@ public class ForestLodConsistencyTests
     [MemberData(nameof(Each))]
     internal void EveryLodFillsTheSameSilhouette(ForestSpecies species)
     {
-        var spec = Spec(species, LeafState.Full);
+        CheckSilhouette(Spec(species, LeafState.Full));
+    }
+
+    [Fact]
+    public void TheAuthoredOpeningPineKeepsItsSilhouetteAcrossLods()
+    {
+        var project = RuleProject.FromJson(File.ReadAllText(WorldLoader.OpeningScenePath()!));
+        ForestSpeciesBook.WithContext<object?>(null, () => {
+            ForestSpeciesBook.Apply(GameWorld.SpeciesEdits(project.World));
+            foreach (var phase in new[] { TreeLifePhase.Mature, TreeLifePhase.Old, TreeLifePhase.Senescent })
+                CheckSilhouette(Spec(ForestSpecies.Pine, LeafState.Full) with { Phase = phase });
+            return null;
+        });
+    }
+
+    private void CheckSilhouette(TreeShapeSpec spec)
+    {
         var results = new Dictionary<ForestLod, (double Area, double Width, double Top)>();
         foreach (var lod in Enum.GetValues<ForestLod>())
         {
             var mesh = DendroTreeGenerator.Generate(spec, lod);
             results[lod] = Silhouette(new[] { mesh.Trunk, mesh.Branches, mesh.Crown }, side: true);
-            output.WriteLine($"{species} {lod}: area {results[lod].Area:F2} width {results[lod].Width:F2} top {results[lod].Top:F2}");
+            output.WriteLine($"{spec.Species} {spec.Phase} {lod}: area {results[lod].Area:F2} width {results[lod].Width:F2} top {results[lod].Top:F2}");
         }
         var near = results[ForestLod.Near];
         foreach (var lod in new[] { ForestLod.Medium, ForestLod.Far })

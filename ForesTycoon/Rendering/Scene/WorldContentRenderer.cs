@@ -23,7 +23,7 @@ namespace ForesTycoon
                 double phase=context.SimulationTimeSeconds*0.22+habitat.Seed%628*0.01;
                 float radius=Math.Min(terrain.TileWidth,terrain.TileHeight)*0.22f;
                 Vector3 position=habitat.Position+new Vector3(MathF.Cos((float)phase)*radius,MathF.Sin((float)phase)*radius,MathF.Sin((float)phase*1.3f)*0.05f);
-                if(!RenderVisibility.SphereVisible(position,2,RenderDevice.ViewProjection)){index++;continue;}
+                if(!RenderDevice.Visibility.SphereVisible(position,2)){index++;continue;}
                 fish.Pose.Evaluate("ArmatureAction",context.SimulationTimeSeconds+index*0.71);
                 fish.Draw(Matrix4.CreateRotationZ((float)phase+MathF.PI/2)*Matrix4.CreateTranslation(position),settings,state);index++;
             }

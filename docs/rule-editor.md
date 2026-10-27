@@ -197,8 +197,25 @@ ezért egyelőre a meglévő fajok paraméterei szerkeszthetők.
 #### Megjelenés
 
 A fafaj **Megjelenés** lapján a játék fagenerátorának paraméterei állíthatók, magyar
-nevekkel, csoportosítva: korona, törzs, vázágak, mellékágak, lombozat. A „Generátor összes
+nevekkel, csoportosítva: korona, lombkorona, törzs, vázágak, mellékágak, lombozat. A „Generátor összes
 paramétere” kapcsoló a többit is mutatja, eredeti nevükkel és leírásukkal.
+
+A **Lombkorona** csoportban a lombtömegek száma, rétegződése, aránya,
+a korona közepének teltsége, összesimulása és egyenetlensége állítható.
+Az **Ágvégek követése** a levélcsoportok eredeti helyét követő, tagoltabb
+koronát ad. A **Lombtömegek nyúlása** az ágvégi levélpontok fő iránya szerint
+nyújtja a lombpárnákat, a térfogatuk megtartásával. Az egyenetlenség kisebb
+és nagyobb, összefüggő felületi foltokat ad, amelyek a fával együtt fordulnak.
+Az **Ágközi rések** vezérlő 0-nál összefüggő burkot, pozitív értéknél külön,
+ágvégi lombpárnákat ad. A nagyobb érték nyitottabbá teszi a koronát. A párnák
+maguk is szabálytalan hajtáscsoportokból állnak; köztük a tartóágak látszanak.
+Az érett erdeifenyő alapból ezt a nyitott változatot használja, mélyebb koronával
+és sok kisebb hajtáscsoporttal. A csoportszám 3–64 között állítható. A fenyő
+sűrűbb közeli hálót kapott; a távolabbi háló is minden csoportot megőriz,
+ezért több háromszöget használ a korábbi összefüggő buroknál.
+A közös beállításnál a kifejlett korona alapértékei látszanak; külön életfázisnál
+csak akkor jelennek meg, ha annak koronája ezt az eljárást használja.
+Az erdeifenyő fiatal, kúpos koronája például nem változik ezektől.
 
 - **Minden fázis:** közös értékek. A játék ezekből indul, és a fa korához és a fényhez
   igazítja őket (fiatalon kevesebb, árnyékban meredekebb ág).
@@ -209,7 +226,7 @@ paramétere” kapcsoló a többit is mutatja, eredeti nevükkel és leírásukk
   év múlva kidől.
 
 A saját értéket a borostyán háttér jelzi, az **alap** gomb törli; ilyenkor ismét az örökölt érték
-érvényes. Az előnézetnek két nézete van; mindkettő forgatható, dönthető és nagyítható,
+érvényes. Az előnézet három nézetben forgatható, dönthető és nagyítható,
 16 egyedváltozatban, választható fényben.
 
 - **Játékban:** a játék saját fahálója 3D-ben, a fázis jellemző méretével, rögzített

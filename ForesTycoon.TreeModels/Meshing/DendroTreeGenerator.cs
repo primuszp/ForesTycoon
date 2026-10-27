@@ -8,7 +8,7 @@ namespace ForesTycoon.TreeModels
 
     // Builds the render meshes of one tree from a TreeShapeSpec: a wood mesh (trunk with root flare
     // and roots, limbs, or the complete leafless branch system) and, while the tree carries leaves,
-    // one opaque, closed crown cloud derived from the live leaf positions. Leaves are construction
+    // opaque, closed crown surfaces derived from the live leaf positions. Leaves are construction
     // samples only; no leaf cards or alpha cut-outs are ever produced.
     // Species parameters follow docs/tree-generation-literature.md.
     internal static class DendroTreeGenerator

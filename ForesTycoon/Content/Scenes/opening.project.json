@@ -16759,7 +16759,22 @@
         "matureHeight": 30,
         "maxHeight": 34,
         "capacity": 10,
-        "timberPrice": 28
+        "timberPrice": 28,
+        "shape": {
+          "phases": {
+            "Mature": {
+              "BaseSize": 0.48,
+              "CrownClusters": 49
+            },
+            "Old": {
+              "BaseSize": 0.45,
+              "CrownClusters": 64
+            },
+            "Senescent": {
+              "BaseSize": 0.5
+            }
+          }
+        }
       },
       {
         "id": "Larch",

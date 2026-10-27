@@ -1,29 +1,45 @@
 using System;
 using System.Collections.Generic;
 using OpenTK.Graphics.OpenGL;
+using ForesTycoon.Rendering.OpenGl;
 
 namespace ForesTycoon.Rendering
 {
     internal static class GlProgram
     {
         private static readonly object uniformKey = new();
-        private static Dictionary<(int Program, string Name), int> uniforms => RenderDevice.GetState(uniformKey,
-            () => new Dictionary<(int Program, string Name), int>());
+        private sealed class ProgramCache
+        {
+            internal readonly Dictionary<(int Program, string Name), int> Uniforms = new();
+            internal readonly Dictionary<int, OpenGlForestUniforms> Forests = new();
+        }
+        private static ProgramCache Cache => RenderDevice.GetState(uniformKey, () => new ProgramCache());
         internal static int Uniform(int program, string name)
         {
             RenderDevice.Environment.VerifyAccess();
+            var uniforms = Cache.Uniforms;
             var key = (program, name);
             if (!uniforms.TryGetValue(key, out int location))
                 uniforms.Add(key, location = GL.GetUniformLocation(program, name));
             return location;
         }
+        internal static void ApplyForestState(float elapsed = 0, float year = 0, int texture = 0)
+        {
+            RenderDevice.Environment.VerifyAccess();
+            GL.GetInteger(GetPName.CurrentProgram, out int current);
+            var states = Cache.Forests;
+            if (!states.TryGetValue(current, out var state)) states.Add(current, state = new OpenGlForestUniforms(current));
+            state.Apply(elapsed, year, texture, OpenGlVertexBuffer.ForestSpringTints);
+        }
         internal static void Delete(int program)
         {
             RenderDevice.Environment.VerifyAccess();
             // GL names can be reused after deletion; never retain old locations.
+            var cache = Cache;
+            cache.Forests.Remove(program);
             var keys = new List<(int Program, string Name)>();
-            foreach (var key in uniforms.Keys) if (key.Program == program) keys.Add(key);
-            foreach (var key in keys) uniforms.Remove(key);
+            foreach (var key in cache.Uniforms.Keys) if (key.Program == program) keys.Add(key);
+            foreach (var key in keys) cache.Uniforms.Remove(key);
             GL.GetInteger(GetPName.CurrentProgram, out int current);
             if (current == program) GL.UseProgram(0); // Bound programs otherwise remain alive after deletion.
             GL.DeleteProgram(program);

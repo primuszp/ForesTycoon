@@ -54,9 +54,7 @@ namespace ForesTycoon.Rendering.OpenGl
                 GL.VertexAttribPointer(1, 4, VertexAttribPointerType.UnsignedByte, true, ColoredVertex.Stride, 3 * sizeof(float));
             }
             geometry.Use();
-            GL.GetInteger(GetPName.CurrentProgram, out int program);
-            GL.Uniform1(GlProgram.Uniform(program, "forest_dynamic"), 0);
-            GL.Uniform1(GlProgram.Uniform(program, "forest_elapsed"), 0f);
+            GlProgram.ApplyForestState();
             if (upload.Length < vertices.Length) upload = new ColoredVertex[Math.Max(vertices.Length, Math.Max(256, upload.Length * 2))];
             vertices.CopyTo(upload);
             GL.BindVertexArray(vao); GL.BindBuffer(BufferTarget.ArrayBuffer, buffer);

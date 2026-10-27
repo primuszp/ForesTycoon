@@ -15,15 +15,16 @@ public class DendroTreeGeneratorTests
     {
         var size = ForestTreeGrowth.Initial(species, stage == TreeLifeStage.Seedling ? 0.1f : 40, 1);
         var mesh = DendroTreeGenerator.Generate(species, seed, stage, 0.8f, size, 0.7f, ForestLod.Near);
+        bool detailedPine = species == ForestSpecies.Pine && stage is TreeLifeStage.Mature or TreeLifeStage.Old;
         Assert.True(mesh.StemCount > 1); Assert.True(mesh.LeafCount > 0);
         Assert.NotEmpty(mesh.Trunk);
         // Sub-pixel limbs are culled; broad-leaved scaffold limbs stay visible under the crown.
         if (species is ForestSpecies.Oak or ForestSpecies.Beech && stage is TreeLifeStage.Mature or TreeLifeStage.Old)
             Assert.NotEmpty(mesh.Branches);
-        // Detailed Near crowns retain a bounded mesh: 384-point broadleaf lattices,
-        // or up to 16 sides across conifer whorl rings; roots and visible wood are separate.
-        Assert.InRange(mesh.Crown.Length / 3, 1, 900);
-        Assert.InRange((mesh.Trunk.Length + mesh.Branches.Length + mesh.Crown.Length) / 3, 1, 1800);
+        // Broadleaves keep their 384-point lattice; adult pine distributes a denser budget
+        // over many small shoot groups. Whorled conifers retain up to 16 ring sides.
+        Assert.InRange(mesh.Crown.Length / 3, 1, detailedPine ? 3200 : 900);
+        Assert.InRange((mesh.Trunk.Length + mesh.Branches.Length + mesh.Crown.Length) / 3, 1, detailedPine ? 5200 : 1800);
         var edges = new Dictionary<(Vector3, Vector3), int>();
         var neighbours = new Dictionary<Vector3, HashSet<Vector3>>();
         for (int i = 0; i < mesh.Crown.Length; i += 3)
@@ -38,7 +39,13 @@ public class DendroTreeGeneratorTests
         var reached = new HashSet<Vector3>(); var work = new Stack<Vector3>();
         work.Push(neighbours.Keys.First());
         while (work.TryPop(out var p)) if (reached.Add(p)) foreach (var n in neighbours[p]) work.Push(n);
-        if (LobeCrownMesh.Applies(species, TreeLifePhases.From(stage)) && reached.Count != neighbours.Count)
+        if (species == ForestSpecies.Pine && stage is TreeLifeStage.Mature or TreeLifeStage.Old)
+        {
+            // Open Scots-pine foliage deliberately has several individually closed pads.
+            Assert.True(reached.Count < neighbours.Count);
+            Assert.NotEmpty(mesh.Branches);
+        }
+        else if (LobeCrownMesh.Applies(species, TreeLifePhases.From(stage)) && reached.Count != neighbours.Count)
             AssertOverlappingMasses(mesh.Crown);
         else
             Assert.Equal(neighbours.Count, reached.Count);
@@ -270,7 +277,8 @@ public class DendroTreeGeneratorTests
             float top = crown.Max(v => v.Position.Z), bottom = crown.Min(v => v.Position.Z);
             return (crown.MaxBy(v => v.Position.Xy.Length).Position.Z - bottom) / (top - bottom);
         }
-        Assert.True(WidestAt(hazel.Crown) > WidestAt(hawthorn.Crown));
+        Assert.True(WidestAt(hazel.Crown) > WidestAt(hawthorn.Crown),
+            $"widest crown height: hazel {WidestAt(hazel.Crown)}, hawthorn {WidestAt(hawthorn.Crown)}");
         Assert.True(hazel.StemCount > hawthorn.StemCount / 4);
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             DendroTreeGenerator.GenerateShrub(7, TreeLifeStage.Mature, 1, size, 0, ForestLod.Near, (ShrubForm)9));

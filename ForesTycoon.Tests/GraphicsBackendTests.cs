@@ -48,6 +48,8 @@ public sealed class GraphicsBackendTests
         Func<AnimatedGlbModel, IModelRenderBackend> factory = _ => throw new NotSupportedException("fixture");
         using (a.Activate()) {
             RenderDevice.Initialize(); RenderDevice.SetCamera(Matrix4.CreateTranslation(1, 2, 3));
+            Assert.False(RenderDevice.Visibility.SphereVisible(Vector3.Zero, 0));
+            Assert.True(RenderDevice.Visibility.SphereVisible(new Vector3(-1, -2, -3), 0));
             Daylight.Override = Daylight.Neutral with { Azimuth = 17 }; Daylight.Current = Daylight.Override.Value;
             RenderMetrics.BeginFrame(); RenderMetrics.RecordDraw(12); ModelRenderBackends.Create = factory;
             var effectsA = EffectRenderBackends.Current; var sceneA = SceneRenderBackends.Current;
@@ -55,6 +57,7 @@ public sealed class GraphicsBackendTests
                 DynamicPrimitiveBatch.ColorPacked(123); DynamicPrimitiveBatch.Vertex3(Vector3.Zero);
                 using (b.Activate()) {
                     Assert.Equal(Matrix4.Identity, RenderDevice.ViewProjection); Assert.Null(Daylight.Override);
+                    Assert.True(RenderDevice.Visibility.SphereVisible(Vector3.Zero, 0));
                     Assert.Equal(0, RenderMetrics.DrawCalls); Assert.NotSame(factory, ModelRenderBackends.Create);
                     Assert.NotSame(effectsA, EffectRenderBackends.Current); Assert.NotSame(sceneA, SceneRenderBackends.Current);
                     RenderDevice.Initialize(); RenderDevice.SetCamera(Matrix4.CreateScale(2));
@@ -65,6 +68,10 @@ public sealed class GraphicsBackendTests
                     RenderMetrics.RecordDraw(99); b.Dispose();
                 }
                 Assert.Equal(Matrix4.CreateTranslation(1, 2, 3), RenderDevice.ViewProjection);
+                Assert.False(RenderDevice.Visibility.SphereVisible(Vector3.Zero, 0));
+                RenderDevice.SetViewProjection(Matrix4.Identity);
+                Assert.True(RenderDevice.Visibility.SphereVisible(Vector3.Zero, 0));
+                RenderDevice.SetViewProjection(Matrix4.CreateTranslation(1, 2, 3));
                 Assert.Equal(17, Daylight.Current.Azimuth); Assert.Equal(12, RenderMetrics.SubmittedVertices);
                 Assert.Same(factory, ModelRenderBackends.Create); DynamicPrimitiveBatch.Vertex3(Vector3.UnitX);
             });
@@ -318,7 +325,7 @@ public sealed class GraphicsBackendTests
         public override void Dispose() => disposed = true;
     }
 
-    private sealed class RecordingGraphicsBackend : IGraphicsBackend
+    internal sealed class RecordingGraphicsBackend : IGraphicsBackend
     {
         internal int Disposals;
         internal int LiveBuffers;

@@ -109,15 +109,15 @@ namespace ForesTycoon.Models.OpenGl
                 GL.BindVertexArray(vaos[i]);GL.DrawElements(PrimitiveType.Triangles,mesh.Indices.Length,DrawElementsType.UnsignedInt,IntPtr.Zero);
                 RenderMetrics.RecordDraw(mesh.Indices.Length);
                 if(outline&&!blend) {
-                    using var contourState=RenderDevice.CreateStateScope().Enable(RenderCapability.CullFace);
-                    GL.GetInteger(GetPName.CullFaceMode,out int previousCull);
+                    // The batch already owns depth/blend/cull restoration. Capture its
+                    // cull mode once, rather than querying an entire scope for every mesh.
+                    drawState.Cull(RenderCullFace.Front);
                     try {
-                        GL.CullFace(TriangleFace.Front);
                         GL.Uniform1(GlProgram.Uniform(program,"outline_width"),frame.OutlineWorldWidth);
                         GL.DrawElements(PrimitiveType.Triangles,mesh.Indices.Length,DrawElementsType.UnsignedInt,IntPtr.Zero);
                         RenderMetrics.RecordDraw(mesh.Indices.Length);
                     } finally {
-                        GL.CullFace((TriangleFace)previousCull);
+                        drawState.Disable(RenderCapability.CullFace);
                         GL.Uniform1(GlProgram.Uniform(program,"outline_width"),0f);
                     }
                 }

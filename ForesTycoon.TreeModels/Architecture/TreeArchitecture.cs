@@ -92,7 +92,11 @@ namespace ForesTycoon.TreeModels
                     TreeLifePhase.Old or TreeLifePhase.Senescent => 1f, _ => 0f };
                 return 0.98f - lift * (1 - light) * age;
             }
-            return Math.Clamp(TreeLifePhases.CrownFraction(species, phase) * (0.72f + 0.28f * LightResponse(species, light)), 0.2f, 0.95f);
+            // A mature pine carries an open upper canopy, not a full-depth conifer cone.
+            float depth = species == ForestSpecies.Pine && phase >= TreeLifePhase.Mature
+                ? phase switch { TreeLifePhase.Mature => .56f, TreeLifePhase.Old => .58f, _ => .52f }
+                : TreeLifePhases.CrownFraction(species, phase);
+            return Math.Clamp(depth * (0.72f + 0.28f * LightResponse(species, light)), 0.2f, 0.95f);
         }
 
         internal static float LightResponse(ForestSpecies species, float light) =>
@@ -122,15 +126,20 @@ namespace ForesTycoon.TreeModels
         /// The generator parameters a tree of the species gets in a phase and light band, with the active species set's
         /// authored form: what the editor shows as the current values.
         /// </summary>
-        internal static IReadOnlyDictionary<string, double> EffectiveParameters(ForestSpecies species, TreeLifePhase phase, int lightBand, bool dead = false) =>
-            Values(new Key(species, 0, phase, lightBand, ForestSpeciesProfile.For(species).ShadeTolerance,
+        internal static IReadOnlyDictionary<string, double> EffectiveParameters(ForestSpecies species, TreeLifePhase phase, int lightBand, bool dead = false)
+        {
+            var values = Values(new Key(species, 0, phase, lightBand, ForestSpeciesProfile.For(species).ShadeTolerance,
                 ForestSpeciesBook.Shape(species)?.Revision ?? "", dead && ForestSpeciesBook.Shape(species)?.Dead != null));
+            TreeCrownParameters.AppendValues(values, species, phase, dead);
+            return values;
+        }
 
         /// <summary>The species' parameters before life-phase and light adaptation: its preset with the authored common values.</summary>
         internal static IReadOnlyDictionary<string, double> BaseParameters(ForestSpecies species)
         {
             var values = new Dictionary<string, double>(Preset(species), StringComparer.Ordinal);
             if (ForestSpeciesBook.Shape(species) is { } form) TreeShapeParameters.Apply(values, form.All);
+            TreeCrownParameters.AppendValues(values, species, TreeLifePhase.Mature, commonOnly: true);
             return values;
         }
 
@@ -201,9 +210,22 @@ namespace ForesTycoon.TreeModels
                 case ForestSpecies.Pine:
                     // Young pines are conical whorled trees; with age the leader gives way to a flat, irregular crown.
                     if (juvenile) { v["Shape"] = TreeParams.Conical; v["0CurveV"] = 15; v["1Length"] = 0.30; }
+                    else
+                    {
+                        // Upper scaffold branches spread as the leader loses dominance. These are
+                        // defaults only: common and phase-specific editor choices remain authoritative.
+                        AdultDefault("Shape", TreeParams.Hemispherical);
+                        AdultDefault("1Branches", 24);
+                        AdultDefault("1DownAngle", 80); AdultDefault("1DownAngleV", -12);
+                        AdultDefault("1Curve", 15); AdultDefault("1CurveV", 70); AdultDefault("2CurveV", 60);
+                    }
+                    void AdultDefault(string name, double value)
+                    {
+                        if (form?.All.ContainsKey(name) != true) v[name] = value;
+                    }
                     v["AttractionUp"] += 0.6 * shade;
                     v["1DownAngle"] -= 10 * shade;
-                    if (old) { v["0SegSplits"] = Math.Max(v["0SegSplits"], 0.25); v["0SplitAngle"] = Math.Max(v["0SplitAngle"], 20); }
+                    if (old) { AdultDefault("0SegSplits", .06); AdultDefault("0SplitAngle", 18); }
                     break;
                 default:
                     // Other species: shade tolerance decides whether shade flattens (tolerant) or steepens (intolerant).

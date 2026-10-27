@@ -38,7 +38,7 @@ namespace ForesTycoon
                 float yaw=animal.PreviousYaw+turn*alpha;
                 Vector3 position=Vector3.Lerp(animal.PreviousPosition,animal.Position,alpha);
                 if(!terrain.Map.TryGetSurfaceZ(position.X,position.Y,out float z))continue;position.Z=z+0.02f;
-                if(RenderDevice.Visuals?.ShadowPass!=true&&!RenderVisibility.SphereVisible(position+new Vector3(0,0,1.5f),3.5f,RenderDevice.ViewProjection))continue;
+                if(RenderDevice.Visuals?.ShadowPass!=true&&!RenderDevice.Visibility.SphereVisible(position+new Vector3(0,0,1.5f),3.5f))continue;
                 if(!poses.TryGetValue(animal.Id,out var pose))poses.Add(animal.Id,pose=model.CreatePose());
                 // Cross-fade per-node TRS; rigid antlers follow their animated parent too.
                 double age = animal.PreviousAge + (animal.Age - animal.PreviousAge) * alpha;

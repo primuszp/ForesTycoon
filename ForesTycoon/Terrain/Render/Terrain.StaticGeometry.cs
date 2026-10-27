@@ -108,7 +108,7 @@ namespace ForesTycoon
                 TerrainChunk victim = null;
                 long oldest = long.MaxValue;
                 foreach (var pair in staticTerrain)
-                    if (!visibleChunks.Contains(pair.Key) && pair.Value.LastUsed < oldest)
+                    if (!visibleChunkSet.Contains(pair.Key) && pair.Value.LastUsed < oldest)
                     { victim = pair.Key; oldest = pair.Value.LastUsed; }
                 if (victim == null) break;
                 staticTerrain[victim].Dispose(); staticTerrain.Remove(victim); StaticCacheEvictions++;

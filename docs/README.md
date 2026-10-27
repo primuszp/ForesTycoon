@@ -27,6 +27,9 @@
 at those dates. Other `*-plan.md`, `*-design.md` and study documents record design
 decisions and proposed work; their presence does not mean every item is implemented.
 
+[2026-10-26 codebase and render review](codebase-render-review-2026-10-26.md)
+records the duplicate-code cleanup, render preparation changes and their validation.
+
 A dátumozott review-k az akkori revíziók ellenőrzését dokumentálják. A terv-, design-
 és tanulmányfájlok döntéseket és tervezett munkát is tartalmaznak; nem helyettesítik
 a jelenlegi forrás és CI állapotának ellenőrzését.

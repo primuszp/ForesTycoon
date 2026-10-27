@@ -18,9 +18,7 @@ namespace ForesTycoon
         private bool disposed;
         private readonly TerrainMap map;
         private readonly Dictionary<string, VertexBuffer> vbos = new Dictionary<string, VertexBuffer>();
-        private readonly List<Tile> visibleTiles = new List<Tile>();
-        private readonly List<TerrainChunk> visibleChunks = new List<TerrainChunk>();
-        private int visibleChunkCount;
+
 
         private static readonly Color RoadFoundationColor = Color.FromArgb(154, 120, 72);
         private static readonly Color RoadFoundationSlopeColor = Color.FromArgb(126, 88, 48);
@@ -89,65 +87,10 @@ namespace ForesTycoon
             catch { Dispose(); throw; }
         }
 
-        public int VisibleChunkCount => visibleChunkCount;
         public int TotalChunkCount => chunkIndex.Chunks.Count;
         public int TileWidth => data.TileSizeH;
         public int TileHeight => data.TileSizeV;
         internal TerrainSettings Settings => settings;
-
-        internal void UpdateVisibleTiles(RenderContext context)
-        {
-            visibleTiles.Clear();
-            visibleChunks.Clear();
-            visibleChunkCount = 0;
-            const double margin = 12.0;
-            foreach (TerrainChunk chunk in chunkIndex.Chunks)
-            {
-                GetChunkViewBounds(chunk, context.CameraTilt, context.CameraYaw,
-                    out float minX, out float minY, out float maxX, out float maxY);
-                if (maxX < context.ViewMinX - margin || minX > context.ViewMaxX + margin
-                    || maxY < context.ViewMinY - margin || minY > context.ViewMaxY + margin) continue;
-
-                visibleChunkCount++;
-                visibleChunks.Add(chunk);
-
-                for (int i = 0; i < chunk.TileIds.Length; i++)
-                {
-                    int tileId = chunk.TileIds[i];
-                    visibleTiles.Add(tiles[tileId]);
-                }
-            }
-        }
-
-        private static void GetChunkViewBounds(TerrainChunk chunk, float tilt, float yaw,
-            out float minX, out float minY, out float maxX, out float maxY)
-        {
-            minX = minY = float.MaxValue;
-            maxX = maxY = float.MinValue;
-            for (int x = 0; x < 2; x++) for (int y = 0; y < 2; y++) for (int z = 0; z < 2; z++)
-            {
-                Vector3 p = new Vector3(x == 0 ? chunk.Min.X : chunk.Max.X,
-                    y == 0 ? chunk.Min.Y : chunk.Max.Y, z == 0 ? chunk.Min.Z : chunk.Max.Z);
-                Vector3 view = WorldToView(p, tilt, yaw);
-                minX = Math.Min(minX, view.X); minY = Math.Min(minY, view.Y);
-                maxX = Math.Max(maxX, view.X); maxY = Math.Max(maxY, view.Y);
-            }
-        }
-
-        private static Vector3 WorldToView(Vector3 point, float tiltDegrees, float yawDegrees)
-        {
-            double rz = yawDegrees * Math.PI / 180.0, rx = tiltDegrees * Math.PI / 180.0;
-            double x = Math.Cos(rz) * point.X - Math.Sin(rz) * point.Y;
-            double y = Math.Sin(rz) * point.X + Math.Cos(rz) * point.Y;
-            return new Vector3((float)x,
-                (float)(Math.Cos(rx) * y - Math.Sin(rx) * point.Z),
-                (float)(Math.Sin(rx) * y + Math.Cos(rx) * point.Z));
-        }
-
-
-
-
-
 
         /// <summary>GL-erőforrások felszabadítása (regeneráláskor a régi terep buffereihez).</summary>
         public void Dispose() => SimulationWork.Complete(DisposeWork());

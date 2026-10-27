@@ -125,7 +125,7 @@ public class GlbValidationTests
     {
         string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".glb");
         try {
-            using (var file = File.Create(path)) file.SetLength(AnimatedGlbModel.MaxAssetBytes + 1);
+            using (var file = File.Create(path)) file.SetLength(GlbDocument.MaxAssetBytes + 1);
             Assert.Throws<NotSupportedException>(() => AnimatedGlbModel.Load(path));
         } finally { File.Delete(path); }
     }

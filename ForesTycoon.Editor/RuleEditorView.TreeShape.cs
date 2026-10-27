@@ -138,7 +138,9 @@ internal sealed partial class RuleEditorView
         ImGui.PushItemWidth(-EditorStyle.LabelWidth());
         hoveredShapeLevel = -1;
         foreach (string group in TreeShapeParameters.Groups) {
-            var entries = TreeShapeParameters.Common.Where(e => e.Group == group && Matches(filter, e.Label, e.Name, e.Help)).ToArray();
+            var entries = TreeShapeParameters.Common.Where(e => e.Group == group
+                && (!TreeCrownParameters.IsSurfaceParameter(e.Name) || shown.ContainsKey(e.Name))
+                && Matches(filter, e.Label, e.Name, e.Help)).ToArray();
             if (entries.Length == 0) continue;
             EditorStyle.Section(group);
             foreach (var e in entries) finished |= ShapeRow(sp, e, shown);
@@ -162,6 +164,10 @@ internal sealed partial class RuleEditorView
         bool own = authored != null && authored.ContainsKey(e.Name);
         double value = own ? authored[e.Name] : TreeShapeParameters.ValueIn(shown, e.Name);
         ImGui.PushID("shape-" + e.Name);
+        // Keep the reset inside the parameter panel, including on narrow editor windows.
+        float resetWidth = ImGui.CalcTextSize("alap").X + 2 * ImGui.GetStyle().FramePadding.X + 4;
+        float labelWidth = Math.Max(EditorStyle.LabelWidth(), ImGui.CalcTextSize(e.Label).X + ImGui.GetStyle().ItemInnerSpacing.X);
+        ImGui.SetNextItemWidth(Math.Max(60, ImGui.GetContentRegionAvail().X - labelWidth - resetWidth));
         bool changed = false;
         ImGui.PushStyleColor(ImGuiCol.FrameBg, own ? EditorStyle.Fade(HudTheme.AmberAccent, .14f) : ImGui.GetStyle().Colors[(int)ImGuiCol.FrameBg]);
         if (e.Options != null) {

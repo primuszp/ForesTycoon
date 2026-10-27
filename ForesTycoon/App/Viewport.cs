@@ -119,49 +119,14 @@ namespace ForesTycoon
         }
 
         private static Vector3 WorldToView(Vector3 point, float tiltDegrees, float yawDegrees)
-        {
-            double rz = yawDegrees * Math.PI / 180.0;
-            double rx = tiltDegrees * Math.PI / 180.0;
-            double cosZ = Math.Cos(rz), sinZ = Math.Sin(rz);
-            double cosX = Math.Cos(rx), sinX = Math.Sin(rx);
-
-            double x1 = cosZ * point.X - sinZ * point.Y;
-            double y1 = sinZ * point.X + cosZ * point.Y;
-            double z1 = point.Z;
-
-            return new Vector3(
-                (float)x1,
-                (float)(cosX * y1 - sinX * z1),
-                (float)(sinX * y1 + cosX * z1));
-        }
+            => new IsometricView(tiltDegrees, yawDegrees).Transform(point);
 
         private bool IsFullTerrainVisible()
         {
             if (world == null) return true;
 
             world.GetWorldBounds(out Vector3 min, out Vector3 max);
-            Vector3[] corners =
-            {
-                new Vector3(min.X, min.Y, min.Z),
-                new Vector3(min.X, min.Y, max.Z),
-                new Vector3(min.X, max.Y, min.Z),
-                new Vector3(min.X, max.Y, max.Z),
-                new Vector3(max.X, min.Y, min.Z),
-                new Vector3(max.X, min.Y, max.Z),
-                new Vector3(max.X, max.Y, min.Z),
-                new Vector3(max.X, max.Y, max.Z)
-            };
-
-            float minX = float.MaxValue, minY = float.MaxValue;
-            float maxX = float.MinValue, maxY = float.MinValue;
-            for (int i = 0; i < corners.Length; i++)
-            {
-                Vector3 view = WorldToView(corners[i], rotx, roty);
-                minX = Math.Min(minX, view.X);
-                minY = Math.Min(minY, view.Y);
-                maxX = Math.Max(maxX, view.X);
-                maxY = Math.Max(maxY, view.Y);
-            }
+            new IsometricView(rotx, roty).ProjectBounds(min, max, out var lower, out var upper);
 
             double visibleMinX = screenX;
             double visibleMinY = screenY;
@@ -169,10 +134,10 @@ namespace ForesTycoon
             double visibleMaxY = screenY + Height / zoom;
             const double margin = 2.0;
 
-            return minX >= visibleMinX - margin
-                && maxX <= visibleMaxX + margin
-                && minY >= visibleMinY - margin
-                && maxY <= visibleMaxY + margin;
+            return lower.X >= visibleMinX - margin
+                && upper.X <= visibleMaxX + margin
+                && lower.Y >= visibleMinY - margin
+                && upper.Y <= visibleMaxY + margin;
         }
 
         private void BeginRotationPivot(int screenPixelX, int screenPixelY, Vector3 pivotWorld)

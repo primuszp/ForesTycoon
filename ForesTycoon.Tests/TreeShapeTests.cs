@@ -35,7 +35,7 @@ public class TreeShapeTests
         }
         Assert.Equal(TreeLifePhase.Old, last + 0 == TreeLifePhase.Old ? last : TreeLifePhase.Old);
         for (float a = 0; a < 400; a += 0.5f)
-            Assert.Equal(ForestTreeAppearance.Stage(species, a), TreeLifePhases.Coarse(TreeLifePhases.Of(species, a)));
+            Assert.Equal(TreeLifeStages.Of(species, a), TreeLifePhases.Coarse(TreeLifePhases.Of(species, a)));
     }
 
     [Theory]

@@ -72,7 +72,7 @@ namespace ForesTycoon
         }
 
         private static bool Culled(Vector3 center, float scale) => RenderDevice.Visuals?.ShadowPass != true &&
-            !RenderVisibility.SphereVisible(center, importedModel.Radius * scale + 0.5f, RenderDevice.ViewProjection);
+            !RenderDevice.Visibility.SphereVisible(center, importedModel.Radius * scale + 0.5f);
 
         /// <summary>
         /// Semi-trailer yaw relative to the tractor: the trailer points from its own axle group, which rolls along

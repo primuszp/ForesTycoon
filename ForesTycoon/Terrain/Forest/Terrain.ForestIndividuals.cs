@@ -136,7 +136,7 @@ namespace ForesTycoon
                 {
                     if (pendingForestBuild != null && entry.Key == (pendingForestBuild.Chunk, pendingForestBuild.Lod)) continue;
                     // Never release resources while they are the frame's visible continuity fallback.
-                    if (visibleChunks.Contains(entry.Key.Item1) && displayedForestLods.TryGetValue(entry.Key.Item1, out var displayed)
+                    if (visibleChunkSet.Contains(entry.Key.Item1) && displayedForestLods.TryGetValue(entry.Key.Item1, out var displayed)
                         && displayed == entry.Key.Item2) continue;
                     if (entry.Value.LastUsed < oldest) { victim = entry.Key; oldest = entry.Value.LastUsed; }
                 }
@@ -441,7 +441,7 @@ namespace ForesTycoon
             var build = pendingForestBuild;
             if (build == null) return;
             var geometry = build.Geometry;
-            bool obsolete = !visibleChunks.Contains(build.Chunk) || geometry.Generation != forest.IndividualTrees.Generation
+            bool obsolete = !visibleChunkSet.Contains(build.Chunk) || geometry.Generation != forest.IndividualTrees.Generation
                 || !forestLodSnapshots.TryGetValue(build.Chunk, out var snapshot) || !ReferenceEquals(snapshot, geometry.Snapshot)
                 || geometry.TerrainVersion != build.Chunk.PropVersion || geometry.EditRevision != forest.EditRevision;
             for (int i = 0; i < build.Chunk.TileIds.Length && !obsolete; i++)
@@ -556,8 +556,8 @@ namespace ForesTycoon
             TreeModel model = TreeModel.For(tree.Species);
             float scale = size.Height * TreeMetresToWorld / model.TotalHeight;
             float width = size.CrownRadius * TreeMetresToWorld / (model.CrownRadius * scale);
-            float crownFraction = ForestTreeAppearance.CrownFraction(tree.Species,
-                ForestTreeAppearance.Stage(tree.Species, tree.Age(year)));
+            float crownFraction = TreeLifeStages.CrownFraction(tree.Species,
+                TreeLifeStages.Of(tree.Species, tree.Age(year)));
             float crownHeight = size.Height * crownFraction * TreeMetresToWorld;
             float rise = crownHeight / (model.CrownHeight * scale);
             float boleHeight = size.Height * TreeMetresToWorld - crownHeight * (1 - model.CrownDrop);
@@ -615,11 +615,11 @@ namespace ForesTycoon
                 for (int i = 0; i < patch.Count; i++)
                 {
                     ForestTree tree = patch.Trees[i];
-                    var stage = ForestTreeAppearance.Stage(tree.Species, tree.Age(geometry.AnchorYear));
+                    var stage = TreeLifeStages.Of(tree.Species, tree.Age(geometry.AnchorYear));
                     var phase = TreeLifePhases.Of(tree.Species, tree.Age(geometry.AnchorYear));
                     geometry.NextStageYear = Math.Min(geometry.NextStageYear,
                         tree.BirthYear + Math.Min(TreeLifePhases.NextAge(tree.Species, phase),
-                            ForestTreeAppearance.NextStageAge(tree.Species, stage)));
+                            TreeLifeStages.NextAge(tree.Species, stage)));
                     // Health is applied from the small per-tree GPU state, not baked into the mesh.
                     TreeInstance stem = IndividualStem(tile, tree with { Health = 1 }, geometry.AnchorYear);
                     var size = tree.At(geometry.AnchorYear);

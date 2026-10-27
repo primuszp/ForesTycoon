@@ -48,44 +48,19 @@ namespace ForesTycoon
         public float AxleMidpoint { get; private set; }
         internal static GlbTruckModel Load(string path)
         {
-            if (new FileInfo(path).Length > AnimatedGlbModel.MaxAssetBytes) throw new NotSupportedException("GLB exceeds the asset budget.");
-            byte[] data=File.ReadAllBytes(path);
-            try { return LoadCore(data); }
+            using var document = GlbDocument.Load(path);
+            try { return LoadCore(document); }
             catch (Exception error) when (error is JsonException or KeyNotFoundException or InvalidOperationException
                 or ArgumentException or IndexOutOfRangeException or OverflowException)
             { throw new InvalidDataException("Malformed vehicle GLB structure or values.", error); }
         }
-        private static GlbTruckModel LoadCore(byte[] data)
+        private static GlbTruckModel LoadCore(GlbDocument document)
         {
-            if(data.Length<28 || BitConverter.ToUInt32(data,0)!=0x46546c67 || BitConverter.ToUInt32(data,4)!=2
-                || BitConverter.ToUInt32(data,8)!=data.Length) throw new InvalidDataException("Invalid GLB header.");
-            int jsonLength=checked((int)BitConverter.ToUInt32(data,12));
-            if(BitConverter.ToUInt32(data,16)!=0x4e4f534a || jsonLength>data.Length-28)throw new InvalidDataException("Invalid GLB JSON.");
-            using var doc=JsonDocument.Parse(data.AsMemory(20,jsonLength));
-            int chunk=20+jsonLength, binaryStart=chunk+8;
-            int binaryLength=checked((int)BitConverter.ToUInt32(data,chunk));
-            if(BitConverter.ToUInt32(data,chunk+4)!=0x004e4942 || binaryLength!=data.Length-binaryStart)
-                throw new InvalidDataException("Invalid GLB binary.");
-            var root=doc.RootElement;
-            AnimatedGlbModel.ValidateDocument(root, binaryLength);
-            var accessors=root.GetProperty("accessors");var views=root.GetProperty("bufferViews");
-            (int Offset,int Count,int Stride,int Type) Access(int id,int components)
-            {
-                var a=accessors[id];var v=views[a.GetProperty("bufferView").GetInt32()];
-                int type=a.GetProperty("componentType").GetInt32();
-                int bytes=type==5123?2:type==5121?1:4;
-                int count=a.GetProperty("count").GetInt32();
-                int offset=(v.TryGetProperty("byteOffset",out var o)?o.GetInt32():0)+(a.TryGetProperty("byteOffset",out o)?o.GetInt32():0);
-                int arity=a.GetProperty("type").GetString() switch{"SCALAR"=>1,"VEC2"=>2,"VEC3"=>3,"VEC4"=>4,_=>throw new InvalidDataException("Unsupported accessor type.")};
-                if(arity<components)throw new InvalidDataException("Invalid accessor arity.");
-                int stride=v.TryGetProperty("byteStride",out var st)?st.GetInt32():bytes*arity;
-                if(count<0 || offset<0 || stride<bytes*components || (long)offset+(long)Math.Max(0,count-1)*stride+bytes*components>binaryLength)
-                    throw new InvalidDataException("GLB accessor outside buffer.");
-                return (binaryStart+offset,count,stride,type);
-            }
+            byte[] data = document.Bytes;
+            var root = document.Root;
             Vector3 Read3(int id,int index)
             {
-                var a=Access(id,3);if(a.Type!=5126 || index<0 || index>=a.Count)throw new InvalidDataException("Invalid vertex accessor.");
+                var a=document.AccessorAt(id,3);if(a.Type!=5126 || index<0 || index>=a.Count)throw new InvalidDataException("Invalid vertex accessor.");
                 int o=a.Offset+index*a.Stride;
                 return new Vector3(BitConverter.ToSingle(data,o),BitConverter.ToSingle(data,o+4),BitConverter.ToSingle(data,o+8));
             }
@@ -105,12 +80,12 @@ namespace ForesTycoon
                     if(primitive.GetProperty("mode").GetInt32()!=4)throw new InvalidDataException("Vehicle must use triangles.");
                     var attributes=primitive.GetProperty("attributes");
                     int positions=attributes.GetProperty("POSITION").GetInt32(),normals=attributes.GetProperty("NORMAL").GetInt32(),colours=attributes.GetProperty("COLOR_0").GetInt32();
-                    var indices=Access(primitive.GetProperty("indices").GetInt32(),1);
+                    var indices=document.AccessorAt(primitive.GetProperty("indices").GetInt32(),1);
                     if(indices.Type!=5125 || indices.Count%3!=0)throw new InvalidDataException("Invalid triangle indices.");
                     decodedPayload += (long)indices.Count * Vertex.Stride * 2; // Part data plus grouped draw copies.
-                    if (decodedPayload > AnimatedGlbModel.MaxDecodedAssetBytes) throw new NotSupportedException("Vehicle exceeds the decoded asset budget.");
-                    var vertices=new Vertex[indices.Count];var c=Access(colours,4);
-                    if(c.Type!=5126 || c.Count != Access(positions, 3).Count)throw new InvalidDataException("Invalid colour accessor.");
+                    if (decodedPayload > GlbDocument.MaxDecodedAssetBytes) throw new NotSupportedException("Vehicle exceeds the decoded asset budget.");
+                    var vertices=new Vertex[indices.Count];var c=document.AccessorAt(colours,4);
+                    if(c.Type!=5126 || c.Count != document.AccessorAt(positions, 3).Count)throw new InvalidDataException("Invalid colour accessor.");
                     for(int i=0;i<vertices.Length;i++){
                         int index=checked((int)BitConverter.ToUInt32(data,indices.Offset+i*indices.Stride));
                         Vector3 p=Read3(positions,index),n=Read3(normals,index),rgb=Read3(colours,index);

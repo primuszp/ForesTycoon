@@ -217,3 +217,140 @@ szimuláció koronaméretei nem változnak):
   a koronaalap fölött irányonként skáláz (a törzs érintetlen, a vázágak a koronával mozognak),
   tűlevelűeknél fele erősséggel. Ismert térnél a régi egyirányú „rés felé nyújtás” kikapcsol, a dőlés marad.
 - Tesztek: `CrownSpaceTests`.
+
+### 2026-10-26 – erdeifenyő-korona hangolása a szerkesztőben
+
+A Fafajok → Erdeifenyő → Megjelenés → Lombkorona csoport a meglévő
+`LobeCrownMesh` hat paraméterét teszi szerkeszthetővé: lombtömegszám,
+lombszintek, magasság/szélesség arány, középrész teltsége, összesimulás és
+felszíni egyenetlenség. A közös, életfázisonkénti és elhalt állapotra megadott
+értékek ugyanabban a `shape` beállításban tárolódnak, mint a vázágak paraméterei.
+A felület értékei közvetlenül a meglévő koronaprofilra kerülnek; a Weber–Penn
+ágvázgenerátor nem kapja meg őket. A fiatal, kúpos koronákhoz ezek a vezérlők
+nem jelennek meg, és a lombfelületük sem változik.
+
+A nyitójelenet fenyőjének értékei az élő szerkesztőben készültek. A két
+szabályos lombszint helyett összefüggő, szabálytalanabb tömeg ül a magasabban
+kezdődő koronában. Az érett és idős fáknál az ágmentes törzs aránya 0,779,
+öreg fáknál 0,802. A közös felületbeállítások: `CrownLayers=0`,
+`CrownFlatten=0.663`, `CrownCore=0.502`, `CrownRoundness=0.405`,
+`CrownJitter=0.167`. A lombtömegszám továbbra is a faj és életfázis alapértéke.
+A fájlban csak a `Pine.shape` változott; a más fafajokhoz tartozó értékek és
+a növekedési szabályok érintetlenek.
+
+Az ellenőrzés az editor gyári/szerkesztett összehasonlításában, több egyeddel,
+az életút nézetben és a mentés visszanyitásával történt. Képek:
+`artifacts/pine-editor/editor-after-reopen.png` és
+`artifacts/pine-editor/editor-life-course.png`.
+A `TreeCrownAuthoringTests` ellenőrzi az értékek mentését, öröklését, a
+fiatal koronák megőrzését és azt, hogy a felülethangolás nem módosítja az
+ágvázat vagy a háló felbontását. Új koronagenerátor és új renderlépés nem készült.
+
+Ellenőrzés: 1523 teljes teszt sikeres; az utolsó vezérlőszűrés után az 57 célzott
+faforma- és LOD-teszt ismét sikeres. A teljes megoldás és a végleges editor
+Release fordítása figyelmeztetés és hiba nélkül lefutott.
+
+### 2026-10-26 – irányított lombpárnák és összefüggő felületi részletek
+
+A meglévő lebenyes koronagenerátor továbbfejlődött; a lombcsoportok képzése
+a `LobeCrownMesh.Clusters.cs` részfájlba került. Ugyanaz a felületépítő szolgálja
+ki az editort, a játékot és az összes LOD-ot.
+
+- A lombcsoportok vízszintes kovarianciájából számított főirány elforgatott,
+  elnyúlt ellipszoidokat ad. A két vízszintes sugár szorzata változatlan, ezért
+  az elnyúlás a térfogat megtartásával alakítja a lombpárnát.
+- Az `Ágvégek követése` (`CrownBranchFollow`) a levélcsoport eredeti helyéhez
+  közelebb tartja a lombot. A kapcsolódás ellenőrzése az elforgatott
+  ellipszoidot vizsgálja; a héj továbbra is összefüggő marad.
+- A csúcssorszámhoz kötött véletlen eltérést két léptékű, folytonos,
+  fahelyi részletmező váltotta fel (`CrownSurfaceDetail`). Egy adott irány
+  részlete minden LOD-ban ugyanaz, és a fával együtt fordul.
+- A felületkeresés végén már rendelkezésre álló lebeny-hozzájárulások
+  enyhén sötétítik a lombpárnák közti mélyedéseket. Ez előre számolt
+  felületszín; nem igényel új renderlépést.
+- A sugárkeresés az ellipszoidok befolyásolási tartományának analitikus
+  metszésénél indul. A korona előtti üres tér bejárása elmarad, a belső
+  mező és a tíz felezési lépés változatlan.
+- A lapos koronák távoli hálója az eredeti vízszintes konvex kontúron belül
+  tölti ki a felső és alsó vállrészt (`CrownContour`). A befoglaló méret,
+  magasság és háromszögszám nem nő. A nyitójelenet érett, idős és öreg
+  fenyőjének oldalnézeti vetülete is a meglévő LOD-tűréseken belül marad.
+
+Az editor új vezérlői: `CrownBranchFollow` és `CrownAnisotropy`. A fiatal
+kúpos fenyők továbbra is a saját, változatlan eljárásukat használják.
+A mogyoró és galagonya alapértékei megtartják a váza-, illetve gömbölyű formát;
+az új vezérlők ezeknél is használhatók.
+
+A 24 fás, nyolc fajból és három életfázisból álló ellenőrző galéria
+lombháromszögszáma előtte és utána is 16600 / 3628 / 676 (Near / Medium / Far).
+Képek: `artifacts/tree-gallery/crown-before-*.png`,
+`artifacts/tree-gallery/crown-after-*.png` és
+`artifacts/crown-evolution/editor-pine-after.png`.
+A `CrownSurfaceTests` a főirányt, a részletmező folytonosságát, a sugárhatárt,
+a kontúrkorlátot, a forgatást, a normálokat és a zárt hálót ellenőrzi.
+
+Ellenőrzés: 340 célzott és 1534 teljes teszt sikeres, a Release fordítás
+figyelmeztetés és hiba nélkül lefutott. Az új vezérlők módosítása és
+visszaállítása a futó editorban is ellenőrizve; a korábban hangolt nyitójelenet
+és a többi jelenetadat változatlan maradt.
+
+
+### 2026-10-27 – referencia szerinti erdeifenyő, mélyebb koronával
+
+A formai cél a kapott, 26 m magas és 10 m koronaszélességű erdei példány:
+a törzs felső felét követő, szabálytalanul ágas korona, sok kisebb hajtáscsoport,
+karcsú csúcs és a lehullott alsó ágak csonkjai. Összehasonlításként a
+[Maxtree Pinus sylvestris modelljeit](https://maxtree.org/3d-plant-models/v24_pinus_sylvestris_01/)
+és [a Pinus Sylvestris 05 modellképeit](https://www.cgtrader.com/3d-models/plant/conifer/pinus-sylvestris-05)
+néztem meg. Ezek a struktúra referenciái; külső modell vagy textúra nem került a projektbe.
+
+A meglévő `LobeCrownMesh` ugyanazzal az implicit felületmintavételezővel és
+hálókibocsátással készít egyesített koronát és külön, egyenként zárt
+hajtáscsoportokat. Az utóbbiak áttekinthető ágközi réseket hagynak. A kimenet
+mindkét esetben egy koronaháló; külön renderer, alfa-kivágás vagy renderlépés nincs.
+
+- Az új `CrownGaps` / **Ágközi rések** vezérlő 0-nál a közös burkot használja,
+  pozitív értéknél külön csoportokat tart meg, és azok méretén keresztül
+  szabályozza a nyitottságot. A közös/fázis/elhalt öröklés változatlan.
+- A nyitott korona kizárólag valódi levélcsoportokból származik: nincs külön
+  mesterséges csúcscsomó vagy középső zöld összekötő rész. Egy csoport maga is
+  eltérő méretű hajtások egyesítése. A belső csoportok teltségét a `CrownCore` állítja.
+- Az érett/idős alapprofil 32/36 csoportot képez. A szerkeszthető tartomány
+  3–64-re bővült. A nagyobb szám finomabb tagolást ad; a közeli teljes pontkeret
+  csoportok közötti elosztása területarányos.
+- Az alap koronamélység érett/idős/öreg fánál 0,56/0,58/0,52, a fényhez
+  igazítva. A vázágak alapformája félgömbös, felfelé keskenyedő; az idős
+  törzs villásodása ritkább. Minden közös és fázis szerinti szerkesztőérték
+  felülírhatja az alapokat. A fiatal fenyő kúpos eljárása és paraméterezése megmaradt.
+- A nyitott koronák ágkerete Near/Medium/Far esetén 1000/320/100 háromszög;
+  a törzs és gyökér külön készül. A vázágak a mellékágak előtt készülnek,
+  a felső támasztóágak előnyt kapnak. Az egyszerűsítés a gallyvastagság mellett
+  0,6 képpontos eltérési korlátot is figyelembe vesz. Az alsó ágcsonkok a tényleges
+  törzsvonalhoz kapcsolódnak, ugyanazzal a csőháló-építővel és környezeti deformációval.
+- A sok kisebb csoport közeli részletességéhez a fenyő pontkerete négyszeresére
+  nőtt: normál méretű közeli koronánál 3068 lombháromszög készül. A távolabbi
+  háló sem hagyja el a csoportokat; mindhárom távolság költsége nőtt a korábbi
+  egyburkos modellhez képest. Az effektek és a többi fafaj részletessége nem csökkent.
+  Ez látványfejlesztés, nem igazolt sebességnövekedés.
+- A csoportosítás a fa saját koordinátáiban történik, utána egyetlen elfordítás
+  forgatja a középpontokat és főirányokat. Így a közeli azonos távolságú minták
+  besorolását nem módosítja az elfordítás kerekítése. A nagy sűrűségű gömbháló
+  síktesztje kettős pontosságot használ; az 1536 pontos változat is zárt és konzisztens.
+
+A nyitójelenetben kizárólag `Pine.shape` változott. Az ágmentes törzs aránya
+érett/idős/öreg fánál 0,48/0,45/0,50. Az élő editorban az érett/idős csoportszámot
+49/64-re hangoltam; a korábbi közös laposság-felülbírálás megszűnt. A mentés
+visszanyitása és az életút több egyeddel ellenőrizve. Képek:
+`artifacts/pine-reference/editor-mature.png`, `editor-old.png`, `editor-life.png`,
+`editor-saved.png` és `editor-reopened.png`. A tűlevelek továbbra is a játék
+stilizált, zárt hajtáscsoportjaiként jelennek meg; ez nem a referencia részletes
+tűlevél-geometriájának vagy áttetsző levéltextúrájának reprodukciója.
+
+A `PineCrownTests` rögzíti a mélyebb koronát, a minden LOD-ban megmaradó zárt
+csoportokat, a részletkeretet, az ágcsonkokat és a résvezérlő visszaállítását.
+A `CrownLatticeTests` az 1536 pontos gömbhálót is ellenőrzi. A teljes tesztkör
+1543 sikeres teszttel zárult; a végső jelenet célzott LOD-ellenőrzése is sikeres.
+A Release fordítás 0 hibával és 0 figyelmeztetéssel lefutott. Naplók:
+`artifacts/pine-reference/full-tests.log`, `final-scene-tests.log`, `final-build.log`.
+A képek és tesztek a megvalósítást dokumentálják; a látvány felhasználói
+elfogadását nem helyettesítik.

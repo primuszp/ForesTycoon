@@ -3,6 +3,23 @@ namespace ForesTycoon.Tests;
 public class GlbTruckTests
 {
     [Theory]
+    [InlineData(0, 0u)] [InlineData(4, 1u)] [InlineData(8, 12u)]
+    [InlineData(12, uint.MaxValue)] [InlineData(16, 0u)]
+    public void BothImportersRejectTheSameMalformedContainer(int offset, uint value)
+    {
+        byte[] bytes = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Assets", "Vehicles", "log-truck.glb"));
+        BitConverter.GetBytes(value).CopyTo(bytes, offset);
+        string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".glb");
+        try
+        {
+            File.WriteAllBytes(path, bytes);
+            Assert.Throws<InvalidDataException>(() => AnimatedGlbModel.Load(path));
+            Assert.Throws<InvalidDataException>(() => GlbTruckModel.Load(path));
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Theory]
     [InlineData("NORMAL", 12)] [InlineData("COLOR_0", 16)]
     public void NonFiniteNormalsAndColorsAreRejected(string semantic, int defaultStride)
     {

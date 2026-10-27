@@ -32,6 +32,7 @@ namespace ForesTycoon
             if (GraphRuntimeHost.RunHeadless(args)) return;
             if ((args.Length == 0 || Array.IndexOf(args, "--algorithm-handoff") >= 0) && GraphRuntimeHost.DispatchProjectRuntime(args)) return;
             RenderBackendSelection.UseOpenGl();
+            if (args.Length == 2 && args[0] == "--render-throughput-benchmark") { RenderThroughputBenchmark.Run(args[1]); return; }
             int forwarderExport = Array.IndexOf(args, "--export-forwarder-animation");
             if (forwarderExport >= 0) { ForwarderAnimationExport.Run(args.Length > forwarderExport + 1 ? args[forwarderExport + 1] : "artifacts/forwarder-ik.glb"); return; }
             int loadingPreview = Array.IndexOf(args, "--forwarder-loading-preview");

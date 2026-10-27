@@ -36,12 +36,13 @@ public sealed class CrownLatticeTests
         Assert.Equal(Faces(Brute(directions)), Faces(triangles));
     }
 
-    [Fact]
-    public void TheLargestCrownLatticeIsAClosedSurfaceBuiltWithoutAStall()
+    [Theory]
+    [InlineData(384)] [InlineData(1536)]
+    public void TheLargestCrownLatticeIsAClosedSurfaceBuiltWithoutAStall(int count)
     {
         var watch = System.Diagnostics.Stopwatch.StartNew();
-        var (directions, triangles) = LobeCrownMesh.Sphere(384);
-        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(2), $"384-point lattice took {watch.Elapsed.TotalSeconds:0.0} s");
+        var (directions, triangles) = LobeCrownMesh.Sphere(count);
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(count > 384 ? 8 : 2), $"{count}-point lattice took {watch.Elapsed.TotalSeconds:0.0} s");
         Assert.Equal(3 * (2 * directions.Length - 4), triangles.Length);
         // Closed and consistently wound: every directed edge appears once and its reverse once.
         var edges = new HashSet<(int, int)>();

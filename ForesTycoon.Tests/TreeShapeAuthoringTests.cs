@@ -10,7 +10,7 @@ public sealed class TreeShapeAuthoringTests
     /// Runs with a species book of the test's own: edits applied inside stay in this flow, so tests building trees in
     /// parallel keep the built-in species.
     /// </summary>
-    private static void Isolated(Action test) => ForestSpeciesBook.WithContext<object>(null, () => { test(); return null; });
+    private static void Isolated(Action test) => ForestSpeciesBook.WithContext<object?>(null, () => { test(); return null; });
 
     private static WorldScenario WithOakForm(TreeShapeDefinition shape)
     {

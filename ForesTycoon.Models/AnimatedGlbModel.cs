@@ -39,48 +39,36 @@ namespace ForesTycoon.Models
         internal Pose CreatePose()=>new(this);
         internal static AnimatedGlbModel Load(string path)
         {
-            if (new FileInfo(path).Length > MaxAssetBytes) throw new NotSupportedException("GLB exceeds the 128 MiB asset budget.");
-            byte[] bytes=File.ReadAllBytes(path);
-            try { return LoadCore(bytes); }
+            using var document = GlbDocument.Load(path);
+            try { return LoadCore(document); }
             catch (Exception error) when (error is JsonException or EndOfStreamException or KeyNotFoundException or InvalidOperationException
                 or ArgumentException or IndexOutOfRangeException or OverflowException)
             { throw new InvalidDataException("Malformed GLB structure or values.", error); }
         }
-        private static AnimatedGlbModel LoadCore(byte[] bytes)
+        private static AnimatedGlbModel LoadCore(GlbDocument document)
         {
-            if(bytes.Length<28||BitConverter.ToUInt32(bytes,0)!=0x46546c67||BitConverter.ToUInt32(bytes,4)!=2||BitConverter.ToUInt32(bytes,8)!=bytes.Length)
-                throw new InvalidDataException("Invalid GLB.");
-            int jsonSize=checked((int)BitConverter.ToUInt32(bytes,12));
-            if(jsonSize>bytes.Length-28||jsonSize%4!=0||BitConverter.ToUInt32(bytes,16)!=0x4e4f534a)throw new InvalidDataException("Invalid JSON chunk.");
-            int binaryStart=28+jsonSize,binarySize=checked((int)BitConverter.ToUInt32(bytes,20+jsonSize));
-            if(binarySize!=bytes.Length-binaryStart||binarySize%4!=0||BitConverter.ToUInt32(bytes,24+jsonSize)!=0x004e4942)throw new InvalidDataException("Invalid BIN chunk.");
-            using var document=JsonDocument.Parse(bytes.AsMemory(20,jsonSize));var root=document.RootElement;
-            ValidateDocument(root, binarySize);
+            byte[] bytes = document.Bytes;
+            int binaryStart = document.BinaryOffset, binarySize = bytes.Length - binaryStart;
+            var root = document.Root;
             if(root.TryGetProperty("extensionsRequired",out var required))foreach(var extension in required.EnumerateArray())
                 if(extension.GetString()!="KHR_materials_pbrSpecularGlossiness")throw new NotSupportedException("Required GLB extension: "+extension.GetString());
             var accessors=root.GetProperty("accessors");var views=root.GetProperty("bufferViews");
             var cache=new Dictionary<int,float[]>();
             long decodedBytes = 0;
             void ReservePayload(long payload) {
-                if (payload < 0 || payload > MaxDecodedAssetBytes - decodedBytes) throw new NotSupportedException("GLB exceeds the 256 MiB decoded asset budget.");
+                if (payload < 0 || payload > GlbDocument.MaxDecodedAssetBytes - decodedBytes) throw new NotSupportedException("GLB exceeds the 256 MiB decoded asset budget.");
                 decodedBytes += payload;
             }
-            int Arity(JsonElement a)=>a.GetProperty("type").GetString() switch {"SCALAR"=>1,"VEC2"=>2,"VEC3"=>3,"VEC4"=>4,"MAT4"=>16,_=>throw new NotSupportedException("Accessor type.")};
             float[] Read(int id) {
                 if(cache.TryGetValue(id,out var result))return result;
-                var a=accessors[id];if(a.TryGetProperty("sparse",out _))throw new NotSupportedException("Sparse accessor.");
-                var view=views[a.GetProperty("bufferView").GetInt32()];int count=a.GetProperty("count").GetInt32(),arity=Arity(a),type=a.GetProperty("componentType").GetInt32();
-                int size=type is 5121 or 5120?1:type is 5122 or 5123?2:4;
-                int stride=view.TryGetProperty("byteStride",out var v)?v.GetInt32():arity*size;
-                int relative=a.TryGetProperty("byteOffset",out v)?v.GetInt32():0,offset=(view.TryGetProperty("byteOffset",out v)?v.GetInt32():0)+relative;
-                if(count<1||stride<arity*size||relative<0||(long)relative+(long)(count-1)*stride+arity*size>view.GetProperty("byteLength").GetInt32()||offset<0||(long)offset+view.GetProperty("byteLength").GetInt32()-relative>binarySize)
-                    throw new InvalidDataException("Accessor bounds.");
-                bool normalized=a.TryGetProperty("normalized",out v)&&v.GetBoolean();
+                var a = document.AccessorAt(id);
+                int count = a.Count, arity = a.Arity, type = a.Type, size = type is 5121 or 5120 ? 1 : type is 5122 or 5123 ? 2 : 4;
+                bool normalized = a.Normalized;
                 long payload = (long)count * arity * sizeof(float);
                 ReservePayload(payload);
                 result=new float[checked(count*arity)];
                 for(int i=0;i<count;i++)for(int c=0;c<arity;c++) {
-                    int at=binaryStart+offset+i*stride+c*size;
+                    int at=a.Offset+i*a.Stride+c*size;
                     float value=type switch {5126=>BitConverter.ToSingle(bytes,at),5125=>BitConverter.ToUInt32(bytes,at),5123=>BitConverter.ToUInt16(bytes,at),5121=>bytes[at],5122=>BitConverter.ToInt16(bytes,at),5120=>(sbyte)bytes[at],_=>throw new NotSupportedException("Component type.")};
                     if(normalized)value=type switch {5121=>value/255,5123=>value/65535,5120=>Math.Max(-1,value/127),5122=>Math.Max(-1,value/32767),_=>value};
                     if(!float.IsFinite(value))throw new InvalidDataException("Non-finite accessor.");result[i*arity+c]=value;

@@ -241,18 +241,8 @@ namespace ForesTycoon.Rendering.OpenGl
 
         private void ApplyForestState()
         {
-            GL.GetInteger(GetPName.CurrentProgram, out int currentProgram);
-            GL.Uniform1(GlProgram.Uniform(currentProgram, "forest_elapsed"), growthVbo != 0 ? ForestElapsedYears : 0);
-            GL.Uniform1(GlProgram.Uniform(currentProgram, "forest_year"), ForestCurrentYear);
-            GL.Uniform1(GlProgram.Uniform(currentProgram, "forest_dynamic"), ForestStateTexture != 0 ? 1 : 0);
-            GL.Uniform3(GlProgram.Uniform(currentProgram, "forest_spring[0]"), 18, ForestSpringTints);
-            // Even an inactive sampler must not share a unit with a different sampler
-            // type. macOS validates this for static preview trees as well.
-            GL.Uniform1(GlProgram.Uniform(currentProgram, "forest_state"), 7);
-            if (ForestStateTexture == 0) return;
-            GL.ActiveTexture(TextureUnit.Texture7);
-            GL.BindTexture(TextureTarget.TextureBuffer, ForestStateTexture);
-            GL.ActiveTexture(TextureUnit.Texture0);
+            GlProgram.ApplyForestState(growthVbo != 0 ? ForestElapsedYears : 0,
+                ForestCurrentYear, ForestStateTexture);
         }
 
         public void ReadVertices(Vertex[] destination)

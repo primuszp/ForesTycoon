@@ -43,7 +43,7 @@ public class ForestDynamicsTests
             {
                 Assert.Equal((i % ForestTreeStore.PlantingRows + .5f) / ForestTreeStore.PlantingRows, patch.Trees[i].U);
                 Assert.Equal((i / ForestTreeStore.PlantingRows + .5f) / ForestTreeStore.PlantingRows, patch.Trees[i].V);
-                Assert.Equal(TreeLifeStage.Seedling, ForestTreeAppearance.Stage(species, patch.Trees[i].Age(forest.ForestYear)));
+                Assert.Equal(TreeLifeStage.Seedling, TreeLifeStages.Of(species, patch.Trees[i].Age(forest.ForestYear)));
             }
         }
         Assert.Equal(ForestryActionResult.TileOccupied, forest.Plant(4, species));

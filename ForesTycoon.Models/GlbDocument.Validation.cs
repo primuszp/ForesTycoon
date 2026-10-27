@@ -5,7 +5,7 @@ using System.Text.Json;
 
 namespace ForesTycoon.Models
 {
-    internal sealed partial class AnimatedGlbModel
+    internal sealed partial class GlbDocument
     {
         internal const long MaxAssetBytes = 128L * 1024 * 1024;
         internal const long MaxDecodedAssetBytes = 256L * 1024 * 1024;
@@ -52,8 +52,8 @@ namespace ForesTycoon.Models
                 if (accessor.TryGetProperty("sparse", out _)) throw new NotSupportedException("Sparse accessor.");
                 var view = At(views, accessor.GetProperty("bufferView").GetInt32(), "accessor view");
                 int type = accessor.GetProperty("componentType").GetInt32();
-                int size = type switch { 5120 or 5121 => 1, 5122 or 5123 => 2, 5125 or 5126 => 4, _ => throw new NotSupportedException("Component type.") };
-                int arity = accessor.GetProperty("type").GetString() switch { "SCALAR" => 1, "VEC2" => 2, "VEC3" => 3, "VEC4" => 4, "MAT4" => 16, _ => throw new NotSupportedException("Accessor type.") };
+                int size = ComponentSize(type);
+                int arity = AccessorArity(accessor.GetProperty("type").GetString());
                 int count = accessor.GetProperty("count").GetInt32(), offset = OptionalInt(accessor, "byteOffset"), stride = OptionalInt(view, "byteStride", arity * size);
                 Require(count > 0 && offset >= 0 && offset % size == 0 && (OptionalInt(view, "byteOffset") + (long)offset) % size == 0
                     && stride >= arity * size && stride % size == 0 && (long)offset + (long)(count - 1) * stride + arity * size <= view.GetProperty("byteLength").GetInt32(), "accessor bounds/alignment");

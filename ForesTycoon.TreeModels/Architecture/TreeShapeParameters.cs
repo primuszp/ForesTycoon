@@ -16,13 +16,13 @@ namespace ForesTycoon.TreeModels
         internal sealed record Entry(string Name, string Label, string Group, double Min, double Max, bool Integer, string Help,
             string[] Options = null);
 
-        internal static readonly string[] Groups = { "Korona", "Törzs", "Vázágak", "Mellékágak", "Lombozat" };
+        internal static readonly string[] Groups = { "Korona", "Lombkorona", "Törzs", "Vázágak", "Mellékágak", "Lombozat" };
 
         private static readonly string[] Shapes =
             { "Kúpos", "Gömb", "Félgömb", "Henger", "Kúposodó henger", "Láng", "Fordított kúp", "Lángszerű", "Burok" };
 
         /// <summary>The tuned parameters, in display order.</summary>
-        internal static readonly Entry[] Common =
+        internal static readonly Entry[] Common = new Entry[]
         {
             new("Shape", "Koronaforma", "Korona", 0, 8, true, "Merre hosszabbak a vázágak: ez adja a korona körvonalát.", Shapes),
             new("BaseSize", "Ágmentes törzs aránya", "Korona", 0, .95, false,
@@ -53,7 +53,7 @@ namespace ForesTycoon.TreeModels
             new("2CurveV", "Ágak kanyargóssága", "Mellékágak", 0, 250, false, "Mennyire szabálytalan a mellékágak vonala (fok)."),
             new("Leaves", "Lombminták ágvégenként", "Lombozat", 0, 40, true, "Hány lombpont ül egy ágvégen; a korona burka ezekből épül."),
             new("LeafScale", "Lombfoltok mérete", "Lombozat", .02, 1, false, "A lombpontok mérete; nagyobb értéknél tömörebb a korona."),
-        };
+        }.Concat(TreeCrownParameters.Entries).ToArray();
 
         // The generator's own description of its parameters; read only.
         private static readonly IReadOnlyDictionary<string, AbstractParam> Database = new TreeParams().ParamDb;

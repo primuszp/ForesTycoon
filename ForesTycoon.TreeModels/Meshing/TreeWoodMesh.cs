@@ -26,12 +26,21 @@ namespace ForesTycoon.TreeModels
         {
             var spec = form.Spec;
             bool lobed = leafed && !form.Shrub && LobeCrownMesh.Applies(spec.Species, spec.Phase);
+            bool open = lobed && TreeCrownParameters.Resolve(spec.Species, spec.Phase, spec.Dead)?.Gaps > 0;
             int budget = Budget(lod, !leafed, lobed);
+            if (open) budget = lod == ForestLod.Near ? 1000 : lod == ForestLod.Medium ? 320 : 100;
             if (budget == 0) return;
             var sk = form.Skeleton;
             int n = sk.StemCount;
+            var supportHeight = new float[open ? n : 0];
+            if (open)
+                for (int i = 0; i < n; i++)
+                    foreach (var point in sk.PointsOf(i)) supportHeight[i] = Math.Max(supportHeight[i], point.Z);
             float refPixels = DendroCrownMesh.ReferencePixels(lod);
             float minRadius = 0.45f / refPixels;
+            // A long exposed pine bole must not become a thick pole merely because it is distant.
+            // Keep its simulated width; the existing per-LOD polygon count still applies.
+            if (open) minRadius = Math.Min(minRadius, form.BreastRadius * .5f);
             float exposure = form.Shrub ? 0.6f : spec.Species switch
             {
                 // Fraction of a first-order limb shown below/inside the crown surface.
@@ -39,8 +48,10 @@ namespace ForesTycoon.TreeModels
             };
             // In a lobed crown the limbs run on into the foliage masses they carry, stopping short of the surface.
             if (lobed) exposure = Math.Max(exposure, 0.65f);
+            if (open) exposure = .95f;
             if (leafed && form.Foliage < 1) exposure = Math.Min(1, exposure * 1.7f);
             int limbBudget = lod == ForestLod.Near ? (spec.Species == ForestSpecies.Oak || form.Shrub ? 8 : 6) + (lobed ? 2 : 0) : 3;
+            if (open) limbBudget = lod == ForestLod.Near ? 32 : lod == ForestLod.Medium ? 14 : 5;
 
             // Stems with a significant child keep that vertex so thick forks stay exact.
             var keep = new bool[sk.Points.Length];
@@ -64,7 +75,10 @@ namespace ForesTycoon.TreeModels
                 }
                 var order1 = new List<int>();
                 for (int i = 0; i < n; i++) if (sk.Stems[i].Level == 1 && !full[i]) order1.Add(i);
-                order1.Sort((a, b) => sk.Flow[sk.Stems[b].Start].CompareTo(sk.Flow[sk.Stems[a].Start]));
+                order1.Sort((a, b) => {
+                    int height = open ? supportHeight[b].CompareTo(supportHeight[a]) : 0;
+                    return height != 0 ? height : sk.Flow[sk.Stems[b].Start].CompareTo(sk.Flow[sk.Stems[a].Start]);
+                });
                 for (int i = 0; i < n; i++)
                 {
                     int level = sk.Stems[i].Level;
@@ -79,6 +93,10 @@ namespace ForesTycoon.TreeModels
                     if (form.RadiusOf(sk.Flow[sk.Stems[i].Start]) * refPixels < 0.4f && shown >= 3) continue;
                     fraction[i] = exposure; shown++;
                 }
+                if (open)
+                    for (int i = 0; i < n; i++)
+                        if (sk.Stems[i].Level == 2 && sk.Stems[i].Parent >= 0 && fraction[sk.Stems[i].Parent] >= .9f)
+                            fraction[i] = .85f;
             }
             else
             {
@@ -92,11 +110,21 @@ namespace ForesTycoon.TreeModels
             order.Sort((a, b) =>
             {
                 if (a == 0 || b == 0) return a == 0 ? (b == 0 ? 0 : -1) : 1; // the main stem always comes first
+                if (open)
+                {
+                    // Draw the scaffold before its twigs and retain upper supports before spending
+                    // the budget on long, thick basal branches hidden by the lower pads.
+                    int level = sk.Stems[a].Level.CompareTo(sk.Stems[b].Level);
+                    if (level != 0) return level;
+                    int height = sk.Stems[a].Level == 1 ? supportHeight[b].CompareTo(supportHeight[a]) : 0;
+                    if (height != 0) return height;
+                }
                 int c = sk.Flow[sk.Stems[b].Start].CompareTo(sk.Flow[sk.Stems[a].Start]);
                 return c != 0 ? c : a.CompareTo(b);
             });
 
             float crownLimit = leafed ? form.Height * (1 - form.CrownFraction * 0.45f) : float.MaxValue;
+            if (open) crownLimit = form.Height * (1 - form.CrownFraction * .08f);
             float limbLimit = leafed && !lobed ? form.Height * (1 - form.CrownFraction * 0.15f) : float.MaxValue;
             int used = 0, forks = 0;
             var points = new List<Vector3>(); var radii = new List<float>(); var pins = new List<bool>();
@@ -106,7 +134,7 @@ namespace ForesTycoon.TreeModels
                 bool root = stem.Parent < 0;
                 float limit = full[i] ? float.MaxValue : stem.Level == 0 ? crownLimit : limbLimit;
                 if (!Collect(form, i, fraction[i], limit, minRadius, keep, points, radii, pins)) continue;
-                var kept = Simplify(points, radii, pins, (lod == ForestLod.Near ? 0.30f : lod == ForestLod.Medium ? 0.5f : 0.8f) * (stem.Level == 0 ? 3f : 1f));
+                var kept = Simplify(points, radii, pins, (lod == ForestLod.Near ? 0.30f : lod == ForestLod.Medium ? 0.5f : 0.8f) * (stem.Level == 0 ? 3f : 1f), open && stem.Level > 0 ? .6f / refPixels : 0);
                 float maxRadius = 0;
                 foreach (float r in radii) maxRadius = Math.Max(maxRadius, r);
                 int sides = Sides(root && i == 0, stem.Level, maxRadius, lod, form.Shrub);
@@ -123,6 +151,38 @@ namespace ForesTycoon.TreeModels
                 Tube(points, radii, kept, sides, color, stem.Level == 0 ? trunk : branches, !(root && leafed));
             }
             if (lod == ForestLod.Near && !form.Shrub && spec.Phase >= TreeLifePhase.Mature) Roots(form, trunk);
+            if (leafed && spec.Species == ForestSpecies.Pine && spec.Phase >= TreeLifePhase.Mature && lod != ForestLod.Far)
+                PrunedStubs(form, lod, branches);
+        }
+
+        // Remnants of shed lower whorls follow the actual bole, including its curve and site warp.
+        // Reuse the wood tube mesher; they carry no foliage and create no extra draw call.
+        private static void PrunedStubs(TreeForm form, ForestLod lod, List<Vertex> branches)
+        {
+            int count = lod == ForestLod.Near ? 7 : 3;
+            var stem = form.Skeleton.PointsOf(0);
+            var points = new List<Vector3>(2); var radii = new List<float>(2);
+            var kept = new List<int> { 0, 1 };
+            for (int k = 0; k < count; k++)
+            {
+                float z = form.CrownBase * (.12f + .78f * (k + .3f) / count);
+                Vector3 anchor = form.ToFrame(stem[^1]);
+                for (int i = 1; i < stem.Length; i++)
+                {
+                    var a = form.ToFrame(stem[i - 1]); var b = form.ToFrame(stem[i]);
+                    if (b.Z < z || b.Z <= a.Z) continue;
+                    anchor = Vector3.Lerp(a, b, Math.Clamp((z - a.Z) / (b.Z - a.Z), 0, 1));
+                    break;
+                }
+                float angle = form.Spec.Yaw + MathF.Tau * ForestTreeVariation.Unit(form.Spec.Seed, 18100 + k);
+                float length = form.Height * ForestTreeVariation.Range(form.Spec.Seed, 18200 + k, .018f, .035f);
+                float rise = ForestTreeVariation.Range(form.Spec.Seed, 18300 + k, -.15f, .3f);
+                points.Clear(); radii.Clear();
+                points.Add(form.Warp.Apply(anchor));
+                points.Add(form.Warp.Apply(anchor + new Vector3(MathF.Cos(angle), MathF.Sin(angle), rise) * length));
+                radii.Add(form.BreastRadius * .18f); radii.Add(form.BreastRadius * .05f);
+                Tube(points, radii, kept, 3, form.DeadColor, branches, true);
+            }
         }
 
         private static int Sides(bool root, int level, float radius, ForestLod lod, bool shrub)
@@ -198,7 +258,7 @@ namespace ForesTycoon.TreeModels
         }
 
         /// <summary>Douglas-Peucker on the axis with a tolerance relative to the local radius.</summary>
-        private static List<int> Simplify(List<Vector3> p, List<float> r, List<bool> pins, float tolerance)
+        private static List<int> Simplify(List<Vector3> p, List<float> r, List<bool> pins, float tolerance, float absoluteTolerance = 0)
         {
             int n = p.Count;
             var flag = new bool[n]; flag[0] = flag[n - 1] = true;
@@ -212,7 +272,7 @@ namespace ForesTycoon.TreeModels
                 for (int k = a + 1; k < b; k++)
                 {
                     float t = length > 1e-14f ? Math.Clamp(Vector3.Dot(p[k] - p[a], ab) / length, 0, 1) : 0;
-                    float d = (p[a] + ab * t - p[k]).Length / Math.Max(1e-6f, tolerance * r[k]);
+                    float d = (p[a] + ab * t - p[k]).Length / Math.Max(Math.Max(1e-6f, absoluteTolerance), tolerance * r[k]);
                     if (d > worstRatio) { worstRatio = d; worst = k; }
                 }
                 if (worst < 0) continue;

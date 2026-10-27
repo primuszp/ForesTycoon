@@ -13,6 +13,20 @@ namespace ForesTycoon.Rendering
         internal IGraphicsBackend Backend;
         internal bool BackendLocked, Initialized, BackendReleased;
         internal readonly RenderTransformState Transforms = new();
+        private OpenTK.Mathematics.Matrix4 visibilityCamera = OpenTK.Mathematics.Matrix4.Identity;
+        private RenderVisibility visibility = new(OpenTK.Mathematics.Matrix4.Identity);
+        internal ref readonly RenderVisibility Visibility
+        {
+            get
+            {
+                if (visibilityCamera != Transforms.ViewProjection)
+                {
+                    visibilityCamera = Transforms.ViewProjection;
+                    visibility = new RenderVisibility(visibilityCamera);
+                }
+                return ref visibility;
+            }
+        }
         internal OpenTK.Mathematics.Vector2 LodRange = new(0, 1);
         internal ISurfaceVisuals Visuals;
         internal Action Disposing;

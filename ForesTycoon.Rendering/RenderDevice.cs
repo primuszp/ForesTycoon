@@ -16,6 +16,7 @@ namespace ForesTycoon.Rendering
         internal static IGraphicsBackend Backend { get { Environment.VerifyAccess(); backendLocked = true; Environment.BackendReleased = false; return backend; } }
         private static bool initialized { get => Environment.Initialized; set => Environment.Initialized = value; }
         public static Matrix4 ViewProjection => transforms.ViewProjection;
+        internal static ref readonly RenderVisibility Visibility => ref Environment.Visibility;
         public static Matrix4 Model => transforms.Model;
         internal static Vector2 LodRange { get => Environment.LodRange; set => Environment.LodRange = value; }
         internal static ISurfaceVisuals Visuals { get => Environment.Visuals; set => Environment.Visuals = value; }

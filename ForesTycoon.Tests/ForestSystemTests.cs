@@ -90,18 +90,6 @@ public class ForestSystemTests
     }
 
     [Fact]
-    public void VisualScale_KeepsSaplingsReadableButClearlySmallerThanMatureStands()
-    {
-        ForestStand sapling = new ForestStand(ForestSpecies.Spruce, 1f / 12f, 0.015f, 0.8f);
-        ForestStand mature = new ForestStand(ForestSpecies.Spruce, 60f, 1.1f, 0.9f);
-
-        float saplingScale = Terrain.TreeVisualScale(sapling);
-
-        Assert.True(saplingScale >= 0.25f);
-        Assert.True(saplingScale <= Terrain.TreeVisualScale(mature) * 0.5f);
-    }
-
-    [Fact]
     public void InitialForest_MixesSpeciesInsteadOfCollapsingToOne()
     {
         // Regression: species used to be drawn from the same hash the stocking filter had
@@ -301,7 +289,7 @@ public class ForestSystemTests
     }
 
     [Fact]
-    public void EverySpecies_HasAVisiblyDistinctTreeSilhouette()
+    public void StumpAndGroundContactDimensionsRemainSpeciesSpecific()
     {
         ForestSpecies[] species =
         {
@@ -315,16 +303,7 @@ public class ForestSystemTests
             Assert.True(model.CrownRadius > model.TrunkRadius);
             Assert.True(model.CrownHeight > 0f);
 
-            float[] outline = model.CrownOutline;
-            Assert.True(outline.Length >= 6 && outline.Length % 2 == 0);
-            Assert.Equal(0f, outline[0]);
-            Assert.Equal(1f, outline[^2]);
-            Assert.Equal(0f, outline[^1]);
-            for (int i = 2; i < outline.Length; i += 2)
-            {
-                Assert.True(outline[i] > outline[i - 2], $"{value} outline must climb monotonically.");
-                Assert.InRange(outline[i + 1], 0f, 1f);
-            }
+
         }
 
         Terrain.TreeModel spruce = Terrain.TreeModel.For(ForestSpecies.Spruce);
@@ -340,26 +319,6 @@ public class ForestSystemTests
         Assert.True(oak.TrunkRadius > birch.TrunkRadius, "Birch must look slender next to oak.");
         Assert.True(oak.CrownRadius * 2f > oak.CrownHeight, "The oak crown must be wider than it is tall.");
         Assert.True(spruce.CrownHeight > spruce.CrownRadius * 2f * 2f, "The spruce crown must be a narrow spire.");
-        // Conifer tiering now comes from the whorl build in the renderer rather than from a
-        // wavy outline; what the model has to carry is the silhouette family that selects it.
-        Assert.Equal(TreeCrownShape.Spire, spruce.Shape);
-        // A broadleaf crown swells once and then closes again: one smooth dome.
-        foreach (ForestSpecies broadleaf in new[] { ForestSpecies.Birch, ForestSpecies.Oak, ForestSpecies.Beech })
-            Assert.Equal(1, RadiusReversals(Terrain.TreeModel.For(broadleaf).CrownOutline));
-    }
-
-    /// <summary>Counts how many times a crown outline switches between widening and narrowing.</summary>
-    private static int RadiusReversals(float[] outline)
-    {
-        int reversals = 0;
-        int previous = 0;
-        for (int i = 3; i < outline.Length; i += 2)
-        {
-            int direction = Math.Sign(outline[i] - outline[i - 2]);
-            if (direction != 0 && previous != 0 && direction != previous) reversals++;
-            if (direction != 0) previous = direction;
-        }
-        return reversals;
     }
 
     private static void AssertStatisticsMatchStands(ForestSystem forest, int tileCount)

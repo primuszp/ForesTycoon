@@ -198,7 +198,7 @@ namespace ForesTycoon
                 }
                 Matrix4 placement = Placement(terrain.Map, point, heading, machine.Kind == ForestMachineKind.Forwarder ? 2.2f : 1.4f);
                 if (RenderDevice.Visuals?.ShadowPass != true &&
-                    !RenderVisibility.SphereVisible(placement.Row3.Xyz, 4f, RenderDevice.ViewProjection)) continue;
+                    !RenderDevice.Visibility.SphereVisible(placement.Row3.Xyz, 4f)) continue;
                 float articulation = machine.Kind == ForestMachineKind.Forwarder && machine.State is not (ForestMachineState.Loading or ForestMachineState.Unloading)
                     ? Articulation(terrain.Map, machine.Path, position, point, heading, tile) : 0;
                 Matrix4 trailer = TrailerFrame(placement, articulation);
