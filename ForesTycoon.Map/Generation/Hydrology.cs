@@ -15,7 +15,7 @@ namespace ForesTycoon.Map
 
         // ── Kimeneti állapot (a renderer ezeket olvassa) ─────────────────────
         public HashSet<int> RiverNodeIds { get; } = new HashSet<int>();
-        public HashSet<int> StandingWaterTileIds { get; } = new HashSet<int>();
+        public HashSet<int> StandingWaterTileIds { get; private set; } = new HashSet<int>();
         public float[] TileMoisture { get; private set; }
         public float[] NodeWaterDepth { get; private set; }
 
@@ -35,6 +35,20 @@ namespace ForesTycoon.Map
         public void Rebuild() => SimulationWork.Complete(RebuildWork());
 
         internal IEnumerable<int> RebuildWork()
+        {
+            // A sliced rebuild spans rendered frames. Keep the published water intact
+            // until every basin, moisture value and node depth has been calculated.
+            var next = new Hydrology(data, settings);
+            foreach (int id in RiverNodeIds) { next.RiverNodeIds.Add(id); yield return 1; }
+            // Moisture calculation historically reads the previous gravity-water result.
+            next.NodeWaterDepth = NodeWaterDepth;
+            foreach (int unit in next.RebuildCoreWork()) yield return unit;
+            StandingWaterTileIds = next.StandingWaterTileIds;
+            TileMoisture = next.TileMoisture;
+            NodeWaterDepth = next.NodeWaterDepth;
+        }
+
+        private IEnumerable<int> RebuildCoreWork()
         {
             Tile[] tiles = data.Tiles;
             StandingWaterTileIds.Clear();

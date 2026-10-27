@@ -74,6 +74,7 @@ namespace ForesTycoon
         private uint waterSampleVersion;
         private float waterSampleTime = float.NaN;
         private ulong waterSampleSurfaceVersion;
+        private float[] waterSampleDepths;
 
         private WaterNodeSample SampleWaterNode(Node node, float t)
         {
@@ -82,8 +83,9 @@ namespace ForesTycoon
                 waterNodeSamples = new WaterNodeSample[nodes.Length];
                 waterNodeSampleVersions = new uint[nodes.Length];
             }
-            if (t != waterSampleTime || waterSampleSurfaceVersion != map.SurfaceVersion)
+            if (t != waterSampleTime || waterSampleSurfaceVersion != map.SurfaceVersion || !ReferenceEquals(waterSampleDepths, nodeWaterDepth))
             {
+                waterSampleDepths = nodeWaterDepth;
                 waterSampleTime = t;
                 waterSampleSurfaceVersion = map.SurfaceVersion;
                 if (++waterSampleVersion == 0)
