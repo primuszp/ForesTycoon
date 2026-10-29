@@ -1006,8 +1006,8 @@ internal sealed partial class RuleEditorView
     /// <summary>Same map, same rain, two rule sets; trafficability of every unpaved tile at the end.</summary>
     internal static WorldTrialResult RunWorldTrial(RuleProject baseline, RuleProject edited, int intensity, int seconds)
     {
-        (double[] Traffic, double[] Water, bool[] Unpaved, double Mean, double Soft) Run(RuleProject project)
-        {
+        (double[] Traffic, double[] Water, bool[] Unpaved, double Mean, double Soft) Run(RuleProject project) =>
+            ForestSpeciesBook.WithContext<(double[] Traffic, double[] Water, bool[] Unpaved, double Mean, double Soft)>(null, () => {
             using var world = WorldLoader.CreateProject(project);
             if (intensity > 0) { world.QueueWeather(ForesTycoon.Ecology.WeatherPreset.Rain, intensity, seconds); world.ExecutePendingCommands(); }
             for (int i = 0; i < seconds * 30; i++) world.Update(1.0 / 30);
@@ -1015,12 +1015,14 @@ internal sealed partial class RuleEditorView
             var traffic = new double[n]; var water = new double[n]; var unpaved = new bool[n];
             for (int t = 0; t < n; t++) { unpaved[t] = world.IsUnpaved(t); traffic[t] = world.Trafficability(t); water[t] = world.TileSurfaceWater(t); }
             var open = Enumerable.Range(0, n).Where(t => unpaved[t]).ToArray();
-            return (traffic, water, unpaved, open.Average(t => traffic[t]), open.Count(t => traffic[t] < .5) / (double)Math.Max(1, open.Length));
-        }
+            return (traffic, water, unpaved, open.Length == 0 ? double.NaN : open.Average(t => traffic[t]),
+                open.Length == 0 ? double.NaN : open.Count(t => traffic[t] < .5) / (double)open.Length);
+        });
         int Flooded((double[] Traffic, double[] Water, bool[] Unpaved, double Mean, double Soft) r) => r.Water.Count(w => w > 50);
         var a = Run(baseline); var b = Run(edited);
-        string summary = $"Átlagos járhatóság: alap {a.Mean:0.00}, tiéd {b.Mean:0.00}\n"
-            + $"Nehezen járható (< 0,5) burkolatlan csempe: alap {a.Soft * 100:0}%, tiéd {b.Soft * 100:0}%\n"
+        static string Format(double value, string format) => double.IsNaN(value) ? "nincs burkolatlan csempe" : value.ToString(format);
+        string summary = $"Átlagos járhatóság: alap {Format(a.Mean, "0.00")}, tiéd {Format(b.Mean, "0.00")}\n"
+            + $"Nehezen járható (< 0,5) burkolatlan csempe: alap {Format(a.Soft * 100, "0'%'")}, tiéd {Format(b.Soft * 100, "0'%'")}\n"
             + $"Elöntött csempe (50 mm-nél több felszíni víz): alap {Flooded(a)}, tiéd {Flooded(b)}\n"
             + $"Eső: {intensity}, {seconds} s. A térképek a próba végét mutatják.";
         return new(a.Traffic, b.Traffic, b.Water, b.Unpaved, summary);

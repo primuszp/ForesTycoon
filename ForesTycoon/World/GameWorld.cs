@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Diagnostics;
+using System.Linq;
 using OpenTK.Mathematics;
 
 namespace ForesTycoon
@@ -25,6 +26,10 @@ namespace ForesTycoon
         private VehicleSystem vehicles;
         private WorldEffectSystem effects;
         private Ecosystem ecosystem;
+        // Immutable species snapshot used by this world's update and presentation.
+        private object worldSpecies;
+        private ForesTycoon.Rules.SpeciesDefinition[] worldSpeciesDefinitions;
+        internal T WithSpecies<T>(Func<T> action) => ForestSpeciesBook.WithContext(worldSpecies, action);
         private ForestSystem forest => ecosystem.Forest;
         private TimberCargoSystem timberCargo;
         private ulong worldTick;
@@ -84,22 +89,27 @@ namespace ForesTycoon
             this.map = map ?? throw new ArgumentNullException(nameof(map));
             // The initial forest is grown here, so it already reads the scene's zones and biomes.
             ruleProjectWorld = scene;
+            worldSpeciesDefinitions = scene?.Species?.ToArray();
+            worldSpecies = ForestSpeciesBook.Compose(SpeciesEdits(scene));
             BindWorldQueries();
             try
             {
-                ecosystem = preparedEcosystem ?? new Ecosystem(map, forestYearSeconds, soilModel, climate, initialResponses ?? behaviorPolicy.Responses);
+                ecosystem = preparedEcosystem ?? ForestSpeciesBook.WithContext(worldSpecies,
+                    () => new Ecosystem(map, forestYearSeconds, soilModel, climate, initialResponses ?? behaviorPolicy.Responses));
                 timberCargo = systems.Add(new TimberCargoSystem());
                 vehicles = systems.Add(new VehicleSystem(timberCargo, route => VehicleRoadRoute.Create(this.map, route)) { TimeScale = VehicleTimeScale });
                 vehicles.RoadRouteWorkFactory = (route, result) => VehicleRoadRoute.CreateWork(this.map, route, result);
                 effects = systems.Add(new WorldEffectSystem());
                 InitializeLogistics();
-                if (!deferRules) InitializeRuleProject();
+                if (!deferRules) WithSpecies(() => { InitializeRuleProject(); return 0; });
                 if (enableRendering) AttachRendering();
             }
             catch { Dispose(); throw; }
         }
 
-        internal void AttachRendering() => SimulationWork.Complete(AttachRenderingWork());
+        internal void AttachRendering() => ForestSpeciesBook.WithContext(worldSpecies, () => {
+            SimulationWork.Complete(AttachRenderingWork()); return 0;
+        });
 
         private IEnumerable<int> AttachRenderingWork()
         {
@@ -251,6 +261,9 @@ namespace ForesTycoon
 
         /// <summary>Runs at most budget deterministic work units. The logical tick commits only on completion.</summary>
         internal bool ContinueUpdate(double fixedDeltaSeconds, int budget = 64)
+            => ForestSpeciesBook.WithContext(worldSpecies, () => ContinueUpdateCore(fixedDeltaSeconds, budget));
+
+        private bool ContinueUpdateCore(double fixedDeltaSeconds, int budget)
         {
             EnsureAvailable(); terrainRenderer?.VerifyAccess();
             if (!double.IsFinite(fixedDeltaSeconds) || fixedDeltaSeconds < 0 || budget <= 0)
@@ -519,14 +532,19 @@ namespace ForesTycoon
         {
             EnsureAvailable();
             if (terrainRenderer == null) throw new InvalidOperationException("Attach rendering before drawing a headless world.");
-            terrainRenderer.Draw(context);
+            ForestSpeciesBook.WithContext(worldSpecies, () => { terrainRenderer.Draw(context); return 0; });
         }
         internal bool MapGeometryPrepared => terrainRenderer?.MapGeometryPrepared == true;
         internal System.Collections.Generic.IEnumerable<float> PrepareMapGeometry()
         {
             EnsureAvailable();
             if (terrainRenderer == null) throw new InvalidOperationException("Attach rendering before preparing a map.");
-            return terrainRenderer.PrepareMapGeometry();
+            return PrepareMapGeometryWithSpecies();
+        }
+        private IEnumerable<float> PrepareMapGeometryWithSpecies()
+        {
+            using var work = terrainRenderer.PrepareMapGeometry().GetEnumerator();
+            while (ForestSpeciesBook.WithContext(worldSpecies, () => work.MoveNext())) yield return work.Current;
         }
         public void GetWorldBounds(out Vector3 min, out Vector3 max) => map.GetWorldBounds(out min, out max);
         internal int TilesPerSide => map.TilesPerSide;
@@ -546,13 +564,13 @@ namespace ForesTycoon
 
         public void Regenerate(TerrainSettings settings) => Regenerate(settings, SoilLandscapeDefinition.Default);
         /// <summary>A new world from a seed and a soil model, for example a world-editor scenario with painted soil.</summary>
-        internal void Regenerate(TerrainSettings settings, SoilLandscapeDefinition soils, ForesTycoon.Rules.EcologyResponseProgram responseRules = null)
+        internal void Regenerate(TerrainSettings settings, SoilLandscapeDefinition soils, ForesTycoon.Rules.EcologyResponseProgram responseRules = null, WorldScenario scene = null)
         {
             SimulationWork.RequireSynchronousContext();
             EnsureAvailable(allowFaulted: true);
             terrainRenderer?.VerifyAccess();
             using var candidate = new GameWorld(settings, Graphics, EcologyTime.DefaultGameSecondsPerYear,
-                soils ?? SoilLandscapeDefinition.Default, ClimateDefinition.Default, responseRules: responseRules);
+                soils ?? SoilLandscapeDefinition.Default, ClimateDefinition.Default, responseRules: responseRules, scene: scene);
             candidate.ApplyTuning(Tuning);
             if (HasPresentation) candidate.AttachRendering();
             Adopt(candidate);
@@ -626,6 +644,8 @@ namespace ForesTycoon
             BindWorldQueries();
             ruleProjectName = candidate.ruleProjectName; ruleProjectWorld = candidate.ruleProjectWorld;
             algorithmGraphs = candidate.algorithmGraphs;
+            worldSpecies = candidate.worldSpecies;
+            worldSpeciesDefinitions = candidate.worldSpeciesDefinitions;
             ruleEngine = candidate.ruleEngine;
             dynamics = candidate.dynamics;
             behaviorPolicy = candidate.behaviorPolicy;

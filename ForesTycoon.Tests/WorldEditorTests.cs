@@ -171,13 +171,19 @@ public sealed class WorldPaintingTests
         using var world = Create(scenario);
         try {
             world.StartScenario(scenario);
-            Assert.Equal((float)(growth * 2), ForestSpeciesProfile.For(ForestSpecies.Oak).AnnualGrowthRate, 5);
-            Assert.Equal(99, ForestryLogistics.TimberPrice(ForestSpecies.Oak));
-            Assert.Equal(ForestSpeciesTraits.Builtin(ForestSpecies.Beech).Name, ForestSpeciesTraits.For(ForestSpecies.Beech).Name);
+            Assert.Equal((float)(growth * 2), world.WithSpecies(() => ForestSpeciesProfile.For(ForestSpecies.Oak).AnnualGrowthRate), 5);
+            Assert.Equal(99, world.WithSpecies(() => ForestryLogistics.TimberPrice(ForestSpecies.Oak)));
+            Assert.Equal(ForestSpeciesTraits.Builtin(ForestSpecies.Beech).Name, world.WithSpecies(() => ForestSpeciesTraits.For(ForestSpecies.Beech).Name));
             Assert.Single(GameWorld.SpeciesEdits(scenario));
             world.QueueRuleProject(GameWorld.DefaultRuleProject()); world.ExecutePendingCommands();
-            Assert.Equal((float)growth, ForestSpeciesProfile.For(ForestSpecies.Oak).AnnualGrowthRate, 5);
-            Assert.Equal(price, ForestryLogistics.TimberPrice(ForestSpecies.Oak));
+            Assert.Equal((float)(growth * 2), world.WithSpecies(() => ForestSpeciesProfile.For(ForestSpecies.Oak).AnnualGrowthRate), 5);
+            Assert.Equal(99, world.WithSpecies(() => ForestryLogistics.TimberPrice(ForestSpecies.Oak)));
+            var reset = GameWorld.DefaultRuleProject();
+            reset.World = world.RuleProjectDocument.World;
+            reset.World.Species.Clear();
+            world.QueueRuleProject(reset); world.ExecutePendingCommands();
+            Assert.Equal((float)growth, world.WithSpecies(() => ForestSpeciesProfile.For(ForestSpecies.Oak).AnnualGrowthRate), 5);
+            Assert.Equal(price, world.WithSpecies(() => ForestryLogistics.TimberPrice(ForestSpecies.Oak)));
         } finally { ForestSpeciesBook.Apply(null); }
     }
 

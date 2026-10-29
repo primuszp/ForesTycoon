@@ -127,11 +127,13 @@ namespace ForesTycoon
                 Adopt(candidate);
                 return;
             }
-            Regenerate(ScenarioSettings(scenario), SoilModel(scenario), ForesTycoon.Rules.EcologyResponseProgram.FromModel(project.Behaviors));
+            Regenerate(ScenarioSettings(scenario), SoilModel(scenario), ForesTycoon.Rules.EcologyResponseProgram.FromModel(project.Behaviors), project.World);
             InitializeProjectScene(project);
         }
 
-        internal void InitializeProjectScene(RuleProject project) => SimulationWork.Complete(InitializeProjectSceneWork(project));
+        internal void InitializeProjectScene(RuleProject project) => WithSpecies(() => {
+            SimulationWork.Complete(InitializeProjectSceneWork(project)); return 0;
+        });
 
         internal IEnumerable<int> InitializeProjectSceneWork(RuleProject project)
         {
@@ -146,6 +148,8 @@ namespace ForesTycoon
             // The painted map is the initial state: terrain (and so water) first, then the forest that grows on it.
             if (scenario != null) {
                 ForestSpeciesBook.Apply(SpeciesEdits(scenario));
+                worldSpecies = ForestSpeciesBook.CaptureContext();
+                worldSpeciesDefinitions = scenario.Species?.ToArray();
                 var changed = new WorkResult<int[]>();
                 foreach (int unit in map.ApplyHeightTargetsWork(scenario.HeightPaint, changed)) yield return unit;
                 foreach (int unit in forest.ClearTerrainTilesWork(changed.Value)) yield return unit;

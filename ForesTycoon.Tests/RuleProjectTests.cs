@@ -78,6 +78,25 @@ public class RuleProjectTests
         Assert.Equal(0, restored.ExecutePendingCommands()); Assert.Equal("next", restored.RuleProjectDocument.Name);
     }
     [Fact]
+    public void FileLinkRejectsProjectWithUnreadableAlgorithmBundleAsAWhole()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "forestycoon-stale-project-" + Guid.NewGuid());
+        Directory.CreateDirectory(directory);
+        try {
+            using var world = World();
+            string original = world.RuleProjectDocument.Name;
+            string file = Path.Combine(directory, "project.json");
+            var project = Project(); project.Name = "must not install";
+            project.Algorithms = new() { Revision = new string('a', 64), BundlePath = Path.Combine(directory, "missing.json"), WorkspaceRoot = directory };
+            RuleProject.WriteAtomic(file, project.ToJson());
+            var link = new RuleProjectLink(file, bootstrapAlgorithms: false);
+            link.Poll(world, 1);
+            Assert.Contains("nem lett alkalmazva", link.Error);
+            Assert.Equal(0, world.ExecutePendingCommands());
+            Assert.Equal(original, world.RuleProjectDocument.Name);
+        } finally { Directory.Delete(directory, true); }
+    }
+    [Fact]
     public void FileLinkWaitsForUnstartedInputWithoutExecutingItOnThePollingFrame()
     {
         string directory = Path.Combine(Path.GetTempPath(), "forestycoon-project-pending-" + Guid.NewGuid()); Directory.CreateDirectory(directory);

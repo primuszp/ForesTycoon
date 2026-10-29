@@ -82,8 +82,13 @@ namespace ForesTycoon.Editor
                 int forestTile = Enumerable.Range(0, world.Map.Tiles.Count).FirstOrDefault(id => world.DescribeTile(id).ContainsKey("forest.trees"));
                 var trialProject = editor.CollectProject(world); trialProject.Algorithms = null;
                 trialProject.World ??= GameWorld.DefaultScenario(world.Map.Settings.Seed);
+                // A trial may have different species settings from the editor's live world.
+                trialProject.World.Species[0].TimberPrice = 777;
+                var trialSpecies = Enum.Parse<ForestSpecies>(trialProject.World.Species[0].Id);
+                float? livePrice = world.WithSpecies(() => ForestSpeciesBook.TimberPrice(trialSpecies));
                 var trialBase = GameWorld.DefaultRuleProject(); trialBase.Algorithms = null; trialBase.World = trialProject.World;
                 var rainTrial = RuleEditorView.RunWorldTrial(trialBase, trialProject, 30, 40);
+                Require(world.WithSpecies(() => ForestSpeciesBook.TimberPrice(trialSpecies)) == livePrice, "The rain trial changed the editor world's species catalog.");
                 foreach (var screen in new (Action Show, string Name)[] {
                     (() => editor.ShowWorld(WorldTab.Map, MapLayer.Soil, forestTile), "world-map-soil"),
                     (() => { editor.AddSpring(world, forestTile, 20000, 12 * world.SecondsPerEnvironmentHour); editor.ShowWorld(WorldTab.Map, MapLayer.Water, forestTile); }, "world-map-water"),
@@ -282,19 +287,19 @@ namespace ForesTycoon.Editor
                 editor.ShowSpeciesColoursForTest(oakIndex, 1, 9); PreviewFrames();
                 FramebufferCapture.SavePng(Path.Combine(output, "species-colours-bark.png"), width, height);
                 editor.ApplyEditsForTest(world); world.ExecutePendingCommands(); Frames(4);
-                var oakColours = ForesTycoon.TreeModels.TreeForm.Colours(ForestSpecies.Oak);
-                Require(oakColours.Autumn.ToArgb() == System.Drawing.Color.FromArgb(0xB8, 0x32, 0x1E).ToArgb() && ForestSpeciesTraits.For(ForestSpecies.Oak).Pattern == 3,
+                var oakColours = world.WithSpecies(() => ForesTycoon.TreeModels.TreeForm.Colours(ForestSpecies.Oak));
+                Require(oakColours.Autumn.ToArgb() == System.Drawing.Color.FromArgb(0xB8, 0x32, 0x1E).ToArgb() && world.WithSpecies(() => ForestSpeciesTraits.For(ForestSpecies.Oak).Pattern) == 3,
                     "Authored colours did not reach the game.");
                 oak.Colours = null; editor.ApplyEditsForTest(world); world.ExecutePendingCommands(); Frames(4);
-                Require(ForestSpeciesBook.Look(ForestSpecies.Oak) == null, "Clearing the colours did not restore the built-in look.");
+                Require(world.WithSpecies(() => ForestSpeciesBook.Look(ForestSpecies.Oak)) == null, "Clearing the colours did not restore the built-in look.");
                 Require(GL.GetError() == ErrorCode.NoError, "Tree preview OpenGL error.");
                 editor.ApplyEditsForTest(world); world.ExecutePendingCommands(); Frames(4);
-                Require(ForesTycoon.TreeModels.TreeArchitecture.BaseParameters(ForestSpecies.Oak)["1Branches"] == 9
+                Require(world.WithSpecies(() => ForesTycoon.TreeModels.TreeArchitecture.BaseParameters(ForestSpecies.Oak)["1Branches"] == 9
                     && ForesTycoon.TreeModels.TreeArchitecture.EffectiveParameters(ForestSpecies.Oak, TreeLifePhase.Old, 2)["1DownAngle"] == 95
-                    && ForesTycoon.TreeModels.TreeArchitecture.EffectiveParameters(ForestSpecies.Oak, TreeLifePhase.Mature, 2)["1DownAngle"] != 95,
+                    && ForesTycoon.TreeModels.TreeArchitecture.EffectiveParameters(ForestSpecies.Oak, TreeLifePhase.Mature, 2)["1DownAngle"] != 95),
                     "Authored tree form did not reach the generator.");
                 oak.Shape = null; editor.ApplyEditsForTest(world); world.ExecutePendingCommands(); Frames(4);
-                Require(ForestSpeciesBook.Shape(ForestSpecies.Oak) == null, "Clearing the form did not restore the built-in tree.");
+                Require(world.WithSpecies(() => ForestSpeciesBook.Shape(ForestSpecies.Oak)) == null, "Clearing the form did not restore the built-in tree.");
                 editor.ShowMissions(); Frames(12);
                 int missions = editor.EditedScenario.Missions.Count;
                 editor.EditedScenario.Missions.Add(new MissionGoal { Id = "undo-proba", Title = "Visszavonási próba" }); Frames(12);

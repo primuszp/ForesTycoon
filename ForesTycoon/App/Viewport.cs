@@ -341,7 +341,7 @@ namespace ForesTycoon
                 performance.BeginSimulation();
                 TerrainMap frameMap = world.Map;
                 SimulationFrameResult result = ruleProjectLink.HandoffPending ? new(0, 0) : simulation.AdvanceWork(
-                    frameClock.DeltaTimeSeconds, () => world.ContinueCommands(), dt => world.ContinueUpdate(dt), () => world.ForegroundPending);
+                    frameClock.SimulationDeltaSeconds, () => world.ContinueCommands(), dt => world.ContinueUpdate(dt), () => world.ForegroundPending);
                 if (!ReferenceEquals(frameMap, world.Map)) {
                     currentMapTiles = world.MapTileColumns;
                     simulationClock.Reset(world.SimulationTick); frameClock.Reset();
@@ -568,8 +568,7 @@ namespace ForesTycoon
                 RenderLoadingFrame();
                 return;
             }
-            ruleProjectLink.Poll(world, e.Time);
-            RunFrame();
+            world.WithSpecies(() => { ruleProjectLink.Poll(world, e.Time); RunFrame(); return 0; });
             if (smokeTestFrameLimit.HasValue)
             {
                 RenderDevice.CheckErrors($"Game smoke test at frame {frameIndex}");

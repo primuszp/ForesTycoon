@@ -3,6 +3,16 @@ namespace ForesTycoon.Tests;
 public class AnimationTimelineTests
 {
     [Fact]
+    public void RejectsNonFinitePlaybackStateAndSampling()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new AnimationTimeline(double.MaxValue, AnimationPlayback.PingPong));
+        var loop = new AnimationTimeline(1, AnimationPlayback.Loop).Advance(double.MaxValue);
+        Assert.Throws<ArgumentOutOfRangeException>(() => loop.Advance(double.MaxValue));
+        Assert.Throws<ArgumentOutOfRangeException>(() => loop.SampleTime(float.NaN));
+        var longLoop = new AnimationTimeline(double.MaxValue, AnimationPlayback.Loop).Advance(double.MaxValue / 2);
+        Assert.Equal(double.MaxValue / 2, longLoop.SampleTime(1));
+    }
+    [Fact]
     public void Once_ClampsAndCompletes()
     {
         AnimationTimeline timeline = new AnimationTimeline(1.0).Advance(1.5);

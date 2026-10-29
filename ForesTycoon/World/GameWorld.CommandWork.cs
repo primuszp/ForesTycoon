@@ -152,6 +152,9 @@ sealed partial class GameWorld
     }
 
     internal int ContinueCommands(int budget = 16)
+        => WithSpecies(() => ContinueCommandsCore(budget));
+
+    private int ContinueCommandsCore(int budget)
     {
         EnsureAvailable(allowFaulted: GenerationPending); terrainRenderer?.VerifyAccess();
         if (UpdatePending || RulesBlockCommands) return 0;

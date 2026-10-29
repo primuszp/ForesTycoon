@@ -93,7 +93,10 @@ namespace ForesTycoon
                 RenderDevice.SetCamera(Matrix4.CreateScale(.1f)); world.Draw(context);
                 RenderMetrics.BeginFrame(); modelRenderer.Draw(pose, Matrix4.Identity, world.Graphics, sharedState: batch);
                 Require(RenderMetrics.DrawCalls > 0 && modelBackend.HasGpuResources, "Model fixture did not submit GPU draws.");
-                legacyTruck.Draw(Matrix4.Identity, 1, 0); GL.GetInteger(GetPName.ArrayBufferBinding, out legacyBuffer);
+                legacyTruck.Draw(Matrix4.Identity, 1, 0);
+                // The first draw uploads the truck and leaves its VBO bound. Subsequent draws bind only the VAO;
+                // GL_ARRAY_BUFFER can then belong to any other renderer and must not replace this handle.
+                if (legacyBuffer == 0) GL.GetInteger(GetPName.ArrayBufferBinding, out legacyBuffer);
                 rain.Draw(surface, weather, context, world.Graphics); clouds.Draw(surface, weather, world.Graphics);
                 Require(rain.Metrics.Particles > 0 && clouds.Metrics.CloudSteps > 0, "Weather fixture did not submit its effects.");
                 post.End(world.Graphics, 16, 1, 9);

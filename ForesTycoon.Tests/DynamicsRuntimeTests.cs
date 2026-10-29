@@ -4,6 +4,20 @@ namespace ForesTycoon.Tests;
 
 public class DynamicsRuntimeTests
 {
+    [Fact]
+    public void SlicedTickPublishesAllStocksTogether()
+    {
+        var runtime = Compile(new() { Stocks = new() {
+            new() { Id = "a", Initial = 10 }, new() { Id = "b" }
+        }, Flows = new() { Flow("transfer", "a", "b", 2) } });
+        using var work = runtime.StepWork(1, 0).GetEnumerator();
+        while (work.MoveNext()) {
+            Assert.Equal(10, runtime.Values["a"]);
+            Assert.Equal(0, runtime.Values["b"]);
+        }
+        Assert.Equal(8, runtime.Values["a"]);
+        Assert.Equal(2, runtime.Values["b"]);
+    }
     internal static DynamicsFlow Flow(string id, string from, string to, double rate) => new() {
         Id = id, Name = id, From = from, To = to,
         Rate = new() { Id = id, Hook = "flow." + id, Kind = "dynamics", Output = "rate",

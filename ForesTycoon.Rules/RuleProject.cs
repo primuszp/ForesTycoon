@@ -254,7 +254,9 @@ public sealed class DynamicsRuntime
         }
         for (int i = 0; i < model.Stocks.Count; i++) {
             yield return 1;
-            var stock = model.Stocks[i]; values[stock.Id] = Math.Clamp(values[stock.Id] + changes[i], stock.Minimum, stock.Maximum);
+            var stock = model.Stocks[i]; changes[i] = Math.Clamp(values[stock.Id] + changes[i], stock.Minimum, stock.Maximum);
         }
+        // Publish the complete tick without yielding between stock updates.
+        for (int i = 0; i < model.Stocks.Count; i++) values[model.Stocks[i].Id] = changes[i];
     }
 }

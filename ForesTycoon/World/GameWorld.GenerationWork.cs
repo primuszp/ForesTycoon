@@ -50,7 +50,7 @@ sealed partial class GameWorld
         generationWork?.Dispose();
         generationInputs.Clear(); generationCommitted = false;
         generationWork = work.GetEnumerator();
-        generationSpecies = ForestSpeciesBook.CaptureContext();
+        generationSpecies = worldSpecies;
         GenerationError = null; GenerationStage = "Pálya előkészítése";
     }
 
@@ -63,6 +63,9 @@ sealed partial class GameWorld
     }
 
     internal bool ContinueGeneration(int budget = 64)
+        => WithSpecies(() => ContinueGenerationCore(budget));
+
+    private bool ContinueGenerationCore(int budget)
     {
         EnsureAvailable(allowFaulted: true);
         if (budget <= 0) throw new ArgumentOutOfRangeException(nameof(budget));
@@ -120,6 +123,7 @@ sealed partial class GameWorld
         var preparingResponses = Task.Run(() => ForesTycoon.Rules.EcologyResponseProgram.FromModel(project?.Behaviors ?? WorldBehaviorPolicy.DefaultDocument()));
         while (!preparingResponses.IsCompleted) yield return 64;
         var responses = preparingResponses.GetAwaiter().GetResult();
+        ForestSpeciesBook.Apply(SpeciesEdits(project?.World));
         // The forest is grown with the ecosystem, before the candidate world exists: give it the scene's zones and biomes now.
         var scene = project?.World ?? BuiltinZones; var generated = terrainResult.Value;
         generated.LandscapeClass = id => Landscape(scene, generated, id);

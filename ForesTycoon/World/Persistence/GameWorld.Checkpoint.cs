@@ -15,13 +15,21 @@ namespace ForesTycoon
                 commands.Count, map.Capture(), ecosystem.Capture(), wildlife.Capture(), Logistics.Capture(), vehicles.Capture(),
                 timberCargo.Available, timberCargo.Delivered, effects.Capture(), lastForestryAction, lastForestryArea, Expenses,
                 Tuning.ToValues(), roadWeatherSeconds, BehaviorDocument, BehaviorStates,
-                dynamics.Document, dynamics.Capture(), ruleProjectName, AlgorithmSnapshot(), ruleEngine.Capture(), ruleEngine.CaptureStep(), pendingForestRateRefresh);
+                dynamics.Document, dynamics.Capture(), ruleProjectName, AlgorithmSnapshot(), ruleEngine.Capture(), ruleEngine.CaptureStep(), pendingForestRateRefresh,
+                worldSpeciesDefinitions != null && SpeciesEdits(new WorldScenario { Species = worldSpeciesDefinitions.ToList() }).Count > 0
+                    ? RuleProject.FromJson(new RuleProject { World = new WorldScenario { Species = worldSpeciesDefinitions.ToList() } }.ToJson()).World.Species.ToArray() : null);
         }
 
-        private void RestoreCheckpoint(WorldCheckpointData s) => SimulationWork.Complete(RestoreCheckpointWork(s));
+        private void RestoreCheckpoint(WorldCheckpointData s) => WithSpecies(() => { SimulationWork.Complete(RestoreCheckpointWork(s)); return 0; });
 
         private IEnumerable<int> RestoreCheckpointWork(WorldCheckpointData s)
         {
+            if (s.Species != null) {
+                var scene = DefaultScenario(); scene.Species = s.Species.ToList(); scene.Validate();
+                foreach (var species in scene.Species) _ = ShapeOverride(species);
+                worldSpeciesDefinitions = scene.Species.ToArray();
+                ForestSpeciesBook.Apply(SpeciesEdits(scene)); worldSpecies = ForestSpeciesBook.CaptureContext();
+            }
             var programs = Task.Run(() => PrepareCheckpointPrograms(s));
             CheckpointGuard.Require(Enum.IsDefined(s.LastAction) && s.LastArea.TileCount >= 0 && s.LastArea.Applied >= 0 &&
                 s.LastArea.Applied <= s.LastArea.TileCount, "forestry UI state");

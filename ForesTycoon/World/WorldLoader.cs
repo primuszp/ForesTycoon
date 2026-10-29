@@ -10,8 +10,6 @@ internal static partial class WorldLoader
     // Keep the established generator and its exact built-in soil values for the opening scene.
     internal static GameWorld CreateOpening(bool enableRendering = true)
     {
-        // Species overrides are process-wide today. A previous editor trial must not seed the reference forest.
-        ForestSpeciesBook.Apply(null);
         return new(TerrainSettings.Default, enableRendering: enableRendering);
     }
 

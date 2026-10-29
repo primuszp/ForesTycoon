@@ -118,14 +118,16 @@ sealed partial class GameWorld
         wildlife.InvalidateRules();
         // A rules-only project keeps the running scene (its map and missions); a project with a world replaces it.
         ruleProjectWorld = next.Document.World ?? ruleProjectWorld;
+        if (next.Document.World != null) worldSpeciesDefinitions = next.Document.World.Species?.ToArray();
         // Biomes and ground materials may have changed: the terrain recolours (the scene geometry is unchanged).
         terrain?.InvalidateGround();
         // Species numbers are world content the rules read; a project change installs them for the whole process.
         var previousSpecies = ForestSpeciesBook.CaptureContext();
-        ForestSpeciesBook.Apply(SpeciesEdits(next.Document.World));
+        ForestSpeciesBook.Apply(SpeciesEdits(ruleProjectWorld ?? (worldSpeciesDefinitions == null ? null : new WorldScenario { Species = worldSpeciesDefinitions.ToList() })));
+        worldSpecies = ForestSpeciesBook.CaptureContext();
         refresh |= !ReferenceEquals(previousSpecies, ForestSpeciesBook.CaptureContext());
         // Springs are part of the hydrology the rules run: a project change moves, adds or stops them at once.
-        Environment.Springs = next.Document.World?.Springs;
+        Environment.Springs = ruleProjectWorld?.Springs;
         algorithmGraphs = next.Document.Algorithms ?? AlgorithmBuild.CurrentReference;
         BindBehaviors(); ApplyTuning(next.Tuning);
         if (refresh) { pendingForestRateRefresh = true; Environment.InvalidateVegetation(); }

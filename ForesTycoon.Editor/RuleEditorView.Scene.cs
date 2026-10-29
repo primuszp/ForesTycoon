@@ -67,7 +67,7 @@ internal sealed partial class RuleEditorView
         if (sceneSaveTask != null) return;
         var project = CollectProject(world); project.Algorithms = null;
         string destination = Path.GetFullPath(scenePath);
-        object species = ForestSpeciesBook.CaptureContext();
+        object species = world.WithSpecies(ForestSpeciesBook.CaptureContext);
         sceneSaveTask = Task.Run(() => ForestSpeciesBook.WithContext(species, () => {
             using var check = WorldLoader.CreateProject(project);
             RuleProject.WriteAtomic(destination, project.ToJson()); return destination;

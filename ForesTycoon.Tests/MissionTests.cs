@@ -59,6 +59,9 @@ public sealed class SceneRulesTests
     {
         var scene = GameWorld.DefaultRuleProject(); scene.Algorithms = null;
         scene.World = GameWorld.DefaultScenario(11, 16);
+        scene.World.Springs[0] = 2;
+        scene.World.Species[0].TimberPrice = 777;
+        var species = Enum.Parse<ForestSpecies>(scene.World.Species[0].Id);
         scene.Tuning["DieselPrice"] = 1.5;
         using var world = WorldLoader.CreateProject(scene);
         Assert.Equal(1.5, world.Tuning[Tune.DieselPrice]);
@@ -79,6 +82,8 @@ public sealed class SceneRulesTests
             Assert.Equal(2, world.Tuning[Tune.DieselPrice]);
             // A rules-only publication keeps the running scene's map and missions.
             Assert.NotNull(world.RuleProjectDocument.World);
+            Assert.Equal(2, world.Environment.Springs[0]);
+            Assert.Equal(777, world.WithSpecies(() => ForestSpeciesBook.TimberPrice(species)));
         } finally { Directory.Delete(directory, true); }
     }
 }

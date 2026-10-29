@@ -27,6 +27,8 @@ namespace ForesTycoon.Engine
                 throw new ArgumentOutOfRangeException(nameof(durationSeconds));
             if (!Enum.IsDefined(playback))
                 throw new ArgumentOutOfRangeException(nameof(playback));
+            if (playback == AnimationPlayback.PingPong && !double.IsFinite(durationSeconds * 2))
+                throw new ArgumentOutOfRangeException(nameof(durationSeconds));
             DurationSeconds = durationSeconds;
             Playback = playback;
             PreviousElapsedSeconds = previousElapsedSeconds;
@@ -54,12 +56,14 @@ namespace ForesTycoon.Engine
             double next = Playback == AnimationPlayback.Once
                 ? Math.Min(DurationSeconds, ElapsedSeconds + deltaSeconds)
                 : ElapsedSeconds + deltaSeconds;
+            if (!double.IsFinite(next)) throw new ArgumentOutOfRangeException(nameof(deltaSeconds), "Animation time must remain finite.");
             return new AnimationTimeline(DurationSeconds, Playback, ElapsedSeconds, next);
         }
 
         public double SampleTime(float interpolationAlpha)
         {
             EnsureInitialized();
+            if (!float.IsFinite(interpolationAlpha)) throw new ArgumentOutOfRangeException(nameof(interpolationAlpha));
             double alpha = Math.Clamp(interpolationAlpha, 0f, 1f);
             double time = PreviousElapsedSeconds + (ElapsedSeconds - PreviousElapsedSeconds) * alpha;
             return Playback switch
@@ -74,8 +78,8 @@ namespace ForesTycoon.Engine
         public float SampleProgress(float interpolationAlpha) =>
             (float)(SampleTime(interpolationAlpha) / DurationSeconds);
 
-        private static double PositiveModulo(double value, double modulus) =>
-            ((value % modulus) + modulus) % modulus;
+        // Elapsed times are nonnegative. Adding the modulus here can overflow for long durations.
+        private static double PositiveModulo(double value, double modulus) => value % modulus;
 
         private void EnsureInitialized()
         {

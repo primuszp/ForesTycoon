@@ -107,12 +107,12 @@ namespace ForesTycoon.Editor
                     GL.Clear(ClearBufferMask.ColorBufferBit); ui.Render(); return;
                 }
             }
-            editor.AdvanceSandbox(sandbox, args.Time);
+            sandbox.WithSpecies(() => { editor.AdvanceSandbox(sandbox, args.Time); return 0; });
             Vec2 scale = new((float)FramebufferSize.X / Math.Max(1, ClientSize.X), (float)FramebufferSize.Y / Math.Max(1, ClientSize.Y));
             ui.Update(ClientSize.X, ClientSize.Y, FramebufferSize.X, FramebufferSize.Y, scale, (float)Math.Max(0.001, args.Time));
             ImGui.SetNextWindowPos(Vec2.Zero);
             ImGui.SetNextWindowSize(new Vec2(ClientSize.X, ClientSize.Y));
-            editor.Draw(sandbox, ref open, true);
+            sandbox.WithSpecies(() => { editor.Draw(sandbox, ref open, true); return 0; });
             GL.Viewport(0, 0, FramebufferSize.X, FramebufferSize.Y);
             GL.ClearColor(.08f, .1f, .12f, 1); GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
             ui.Render();
