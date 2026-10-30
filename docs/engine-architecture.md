@@ -679,3 +679,50 @@ Végső ellenőrzés: 1969/1969 teszt, editor-füstteszt, független ablakok
 életciklus-próbája és grafikus indulás/felszabadítás rendben. A 256×256-os
 mérés végére elfogyott a hátralék, de a havi határ körüli 3,2333 másodperces
 átmeneti szimulációs késés nyitott P1 tétel marad a review-ban.
+
+## Szimulációs skálázás mérése
+
+A `--rule-host-benchmark` közvetlenül `SimulationWorld` példányokat futtat, ablak és GPU nélkül.
+A rögzített magú, nagy vegyes erdőn esős időt és 900 másodperces erdőévet használ.
+A host a játék 4–12 ms-os munkakeretét követi. A jelentés tartalmazza a host CPU-idő
+p95/p99/max értékeit, az időhátralékot, a felzárkózási képkockákat és az eldobott időt.
+
+A folyamat teljes allokációja a háttérszálak munkáját is tartalmazza. A mérési intervallum
+kizárja a világ konstruktorát, de tartalmazza az időhátralék ledolgozását és a mérőkeret
+kis saját költségét. A GC 0/1/2 számok az intervallum alatti gyűjtéseket jelentik;
+az allokációs forgalom nem azonos a tartós vagy csúcsmemória-használattal.
+
+Release build után, PowerShellben például:
+
+```powershell
+$env:FORESTYCOON_HOST_SECONDS = '120'
+dotnet ForesTycoon/bin/Release/net8.0/ForesTycoon.dll --rule-host-benchmark 32 64 128
+```
+
+Az összehasonlításhoz azonos gépet, buildet és paramétereket kell használni, több ismétléssel.
+A CPU-képkockaidő korlátozott host munkát mér, nem egy teljes szimulációs tick költségét.
+A néhány másodperces futás csak funkcionális próba: nem bizonyítja a hosszú távú
+terhelhetőséget vagy a havi erdőfrissítések teljesítményét. A fenti 120 másodperc már
+átlép egy erdőhónap-határt; a jelentés időhátralékát is értékelni kell.
+
+### Szabályobjektum-index: első allokációs optimalizálás
+
+A `ClassObjects` frissítése megtartja a rendezett azonosító-indexet és újrahasznosítja a
+bejárás munkatárolóit. Változatlan tagságnál az elemtömb is megmarad. Az azonos azonosítóval
+érkező új példány felülírja a célobjektumot; a törölt azonosítók kikerülnek az indexből,
+a duplikált azonosítók továbbra is hibát okoznak. A bejárás és az eltávolítás szeletelhető.
+
+Egy 2026-10-30-i, profilozott, virtuális hosttal végzett páros mérés eredménye
+(120 szimulált másodperc, 900 s/év, hónapváltással; világkonstrukció nélkül, felzárkózással együtt):
+
+| Pálya | Allokáció előtte | Allokáció utána | Csökkenés |
+|---|---:|---:|---:|
+| 32×32 | 236 738 352 B | 172 352 248 B | 27,20% |
+| 64×64 | 616 917 528 B | 538 916 368 B | 12,64% |
+| 128×128 | 1 846 508 160 B | 1 752 112 104 B | 5,11% |
+
+Mindhárom esetben egyezett a teljes checkpoint SHA256 és a végső tick (3599),
+eldobott szimulációs idő nélkül. Ez egyetlen mérési pár, nem általános sebességígéret;
+a CPU-idő ingadozásából nem állítunk gyorsulást. A nagyobb térképen továbbra is a
+víz- és egyéb szimulációs munka dominál, ezért az allokációs megtakarítás aránya kisebb.
+A gépi összehasonlítás helyi eredménye: `artifacts/simulation-metrics/optimization-comparison.json`.

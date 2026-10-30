@@ -62,26 +62,40 @@ partial class SimulationWorld
         internal readonly Dictionary<int, object> Objects = new();
         internal int[] Elements = Array.Empty<int>();
         internal int Size;
+        private readonly SortedSet<int> ordered = new();
+        private readonly HashSet<int> seen = new();
+        private readonly List<int> removed = new();
+        private bool membershipChanged;
         internal void Refresh(SimulationWorld world)
         {
             foreach (int _ in RefreshWork(world)) { }
         }
         internal IEnumerable<int> RefreshWork(SimulationWorld world)
         {
-            Objects.Clear(); Size = 0;
-            var ordered = new SortedSet<int>();
+            seen.Clear(); removed.Clear(); Size = 0;
+            // Keep dirtiness across interrupted refreshes until the element snapshot is published.
             foreach (var source in sources)
                 foreach (var item in (IEnumerable)source.GetValue(world)) {
                     yield return 1;
                     if (!type.IsInstanceOfType(item)) continue;
                     if (item is not IRuleInstance identity || identity.RuleId < 0 || identity.RuleId >= 1_000_000)
                         throw new InvalidOperationException(type.Name + ": a szabályobjektumnak stabil, 0–999999 azonosító szükséges.");
-                    if (!Objects.TryAdd(identity.RuleId, item)) throw new InvalidOperationException(type.Name + ": ismétlődő objektumazonosító: " + identity.RuleId);
-                    ordered.Add(identity.RuleId);
+                    if (!seen.Add(identity.RuleId)) throw new InvalidOperationException(type.Name + ": ismétlődő objektumazonosító: " + identity.RuleId);
+                    Objects[identity.RuleId] = item;
+                    membershipChanged |= ordered.Add(identity.RuleId);
                     Size = Math.Max(Size, identity.RuleId + 1);
                 }
-            Elements = new int[ordered.Count]; int index = 0;
-            foreach (int id in ordered) { Elements[index++] = id; yield return 1; }
+            foreach (int id in ordered) {
+                if (!seen.Contains(id)) removed.Add(id);
+                yield return 1;
+            }
+            foreach (int id in removed) { Objects.Remove(id); ordered.Remove(id); membershipChanged = true; yield return 1; }
+            if (membershipChanged) {
+                var elements = new int[ordered.Count]; int index = 0;
+                foreach (int id in ordered) { elements[index++] = id; yield return 1; }
+                Elements = elements;
+                membershipChanged = false;
+            }
         }
     }
     private readonly Dictionary<Type, ClassObjects> classRuleObjects = new();

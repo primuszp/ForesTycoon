@@ -22,6 +22,37 @@ public sealed class AutomaticAnimalModelTests
     private static string State(GameWorld world) => JsonSerializer.Serialize(world.CaptureCheckpoint());
 
     [Fact]
+    public void RefreshedClassObjectsTrackReplacementRemovalAndDuplicateIdentities()
+    {
+        using var world = World();
+        world.Wildlife.Animals.Clear();
+        var scope = GameWorld.DiscoverScopes(Schema(), typeof(SimulationWorld).Assembly.GetTypes().Concat(typeof(SchemaFox).Assembly.GetTypes()))
+            .Single(s => s.Id == "schemaFox");
+        world.Wildlife.Animals.Add(new SchemaFox { Id = 7, Alertness = .25 });
+        Assert.Equal(new[] { 7 }, scope.Elements(world));
+        var field = scope.Fields.Single(f => f.Name == "alertness");
+        Assert.Equal(.25, field.Read(world, 7));
+        world.Wildlife.Animals[0] = new SchemaFox { Id = 7, Alertness = .75 };
+        Assert.Equal(new[] { 7 }, scope.Elements(world));
+        Assert.Equal(.75, field.Read(world, 7));
+        world.Wildlife.Animals.Add(new SchemaFox { Id = 3 });
+        using (var refresh = scope.PrepareElements(world).GetEnumerator()) {
+            Assert.True(refresh.MoveNext());
+            Assert.True(refresh.MoveNext());
+            Assert.True(refresh.MoveNext());
+        }
+        Assert.Equal(new[] { 3, 7 }, scope.Elements(world));
+        world.Wildlife.Animals.Clear();
+        world.Wildlife.Animals.Add(new SchemaFox { Id = 2 });
+        Assert.Equal(new[] { 2 }, scope.Elements(world));
+        Assert.Equal(3, scope.StateSize?.Invoke(world) ?? scope.Size(world));
+        world.Wildlife.Animals.Add(new SchemaFox { Id = 2 });
+        Assert.Throws<InvalidOperationException>(() => scope.Elements(world));
+        world.Wildlife.Animals.Clear();
+        Assert.Empty(scope.Elements(world));
+    }
+
+    [Fact]
     public void DerivedAnimalAndItsOwnPropertiesBecomeExecutableWithoutAnAdapter()
     {
         var schema = Schema(); var foxType = schema.Find("schemaFox");

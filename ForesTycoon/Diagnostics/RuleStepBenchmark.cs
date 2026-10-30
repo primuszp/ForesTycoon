@@ -18,8 +18,8 @@ namespace ForesTycoon
         internal static void RunHosts(params int[] sizes)
         {
             foreach (int size in sizes.Length == 0 ? new[] { 64, 128, 256 } : sizes) {
-                using var world = new GameWorld(TerrainSettings.Default.WithNodeSize(size + 1, 42).WithForestPattern(ForestPattern.LargeMixed),
-                    forestYearSeconds: 900, enableRendering: false);
+                using var world = new SimulationWorld(TerrainSettings.Default.WithNodeSize(size + 1, 42).WithForestPattern(ForestPattern.LargeMixed),
+                    forestYearSeconds: 900);
                 world.Environment.ForceWeather(WeatherPreset.Rain, 30, 600);
                 bool restored = System.Environment.GetEnvironmentVariable("FORESTYCOON_RESTORED_HOST") == "1";
                 if (restored) {
@@ -38,8 +38,8 @@ namespace ForesTycoon
         internal static void RunMonthProfile()
         {
             foreach (int size in new[] { 64, 128 }) {
-                using var world = new GameWorld(TerrainSettings.Default.WithNodeSize(size + 1, 42).WithForestPattern(ForestPattern.LargeMixed),
-                    forestYearSeconds: 120, enableRendering: false);
+                using var world = new SimulationWorld(TerrainSettings.Default.WithNodeSize(size + 1, 42).WithForestPattern(ForestPattern.LargeMixed),
+                    forestYearSeconds: 120);
                 world.Environment.ForceWeather(WeatherPreset.Rain, 30, 600);
                 world.Forest.ProfileMonthlyWork = true;
                 world.RuleBook.Profile = new(StringComparer.Ordinal);
@@ -65,8 +65,8 @@ namespace ForesTycoon
         private static void RunCase(int size, WeatherPreset preset)
         {
             var settings = TerrainSettings.Default.WithNodeSize(size + 1, 42).WithForestPattern(ForestPattern.LargeMixed);
-            using var whole = new GameWorld(settings, forestYearSeconds: 120, enableRendering: false);
-            using var sliced = new GameWorld(settings, forestYearSeconds: 120, enableRendering: false);
+            using var whole = new SimulationWorld(settings, forestYearSeconds: 120);
+            using var sliced = new SimulationWorld(settings, forestYearSeconds: 120);
             foreach (var world in new[] { whole, sliced }) world.Environment.ForceWeather(preset, 30, 600);
             var full = new List<double>(); var slices = new List<double>();
             const int warmup = 60, measured = 330;
@@ -94,7 +94,7 @@ namespace ForesTycoon
             MeasureHost(sliced, size, preset);
         }
 
-        private static void MeasureHost(GameWorld world, int size, WeatherPreset preset, int frameCount = 900)
+        private static void MeasureHost(SimulationWorld world, int size, WeatherPreset preset, int frameCount = 900)
         {
             var runner = ForesTycoon.Engine.SimulationFrameRunner.Interactive();
             runner.Clock.Reset(world.SimulationTick);
@@ -112,6 +112,9 @@ namespace ForesTycoon
                 return done;
             }
             // Virtual 60 Hz arrival rate; no GPU or sleeps. Both normal and accelerated forest years are measured.
+            // Process-wide counters include worker jobs; world construction is outside this interval.
+            long allocationStart = GC.GetTotalAllocatedBytes(precise: true);
+            int[] collections = Enumerable.Range(0, 3).Select(GC.CollectionCount).ToArray();
             for (int frame = 0; frame < frameCount; frame++) {
                 // Background query jobs also run between render frames. A tight virtual host is a conservative
                 // stress test; paced mode gives workers the same wall time as a real 60 Hz interactive host.
@@ -131,21 +134,26 @@ namespace ForesTycoon
                 if (++recovery > 100000) throw new InvalidOperationException("Simulation debt did not clear.");
                 runner.AdvanceWork(0, () => world.ContinueCommands(), Advance, () => world.ForegroundPending);
             }
+            long allocated = GC.GetTotalAllocatedBytes(precise: true) - allocationStart;
+            int[] collected = Enumerable.Range(0, 3).Select(generation => GC.CollectionCount(generation) - collections[generation]).ToArray();
             frames.Sort();
             double P(double q) => frames[Math.Min(frames.Count - 1, (int)(frames.Count * q))];
             Console.WriteLine($"{size}x{size} {preset} host 4–12ms/60Hz, paced {paced}, budget peak {maximumBudget:F3} ms: CPU frame p95/p99/max {P(.95):F3}/{P(.99):F3}/{frames[^1]:F3} ms; "
                 + $"debt peak/warm-peak/end {peakDebt:F4}/{warmPeakDebt:F4}/{debt:F4} simulation-s; {recovery} recovery frames without new time; "
                 + $"dropped {runner.Clock.DroppedSimulationSeconds:F4} s; final debt {runner.Clock.PendingSimulationSeconds:F4} s");
+            Console.WriteLine($"  host interval including debt recovery: process allocated {allocated} B; GC 0/1/2 {collected[0]}/{collected[1]}/{collected[2]}");
             if (world.ProfileUpdates) {
                 Console.WriteLine($"  profile environment/forest {environment:F3}, logistics/rules {logistics:F3}, wildlife {wildlife:F3}, other {other:F3} ms");
                 foreach (var rule in world.RuleBook.Profile.OrderByDescending(p => p.Value)) Console.WriteLine($"  rule {rule.Key}: {rule.Value:F3} ms");
                 foreach (var phase in world.EcologyWorkProfile) Console.WriteLine($"  ecology {phase.Key}: {phase.Value:F3} ms (elapsed, includes worker waits)");
             }
+            string checkpoint = System.Text.Json.JsonSerializer.Serialize(world.CaptureCheckpoint());
+            Console.WriteLine($"  final tick {world.SimulationTick}; checkpoint SHA256 {Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(checkpoint)))}");
             if (runner.Clock.DroppedSimulationSeconds != 0) throw new InvalidOperationException("Host discarded simulation time.");
         }
 
         /// <summary>A hash of every tile's water stores, the flow ledger and the road conditions, exact to the bit.</summary>
-        internal static string Fingerprint(GameWorld world)
+        internal static string Fingerprint(SimulationWorld world)
         {
             var bytes = new List<byte>();
             var env = world.Environment;
