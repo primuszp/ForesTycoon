@@ -22,6 +22,11 @@ internal sealed class RuleProjectLink
     private readonly Action closeOldRuntime;
     private readonly Func<AlgorithmBuildResult, string, string, string, Process> launchRuntime;
     private readonly bool bootstrapAlgorithms, adoptRunning;
+    private Task<string> exportSerialization;
+    private Task exportWriting;
+    private bool exportCapturing;
+    private TerrainMap exportMap;
+    internal bool ExportPending => exportCapturing || exportSerialization != null || exportWriting != null;
     internal bool HandoffPending => replacement != null;
     internal string Error { get; private set; }
     internal string Path => path;
@@ -38,6 +43,7 @@ internal sealed class RuleProjectLink
     }
     internal void Poll(GameWorld world, double elapsed)
     {
+        PollExport(world);
         if (world.BoundaryPending) return;
         if (replacement != null) {
             if (File.Exists(acknowledgement)) { closeOldRuntime(); return; }
@@ -118,24 +124,29 @@ internal sealed class RuleProjectLink
                 }
             } catch (Exception e) when (e is IOException or InvalidDataException or InvalidOperationException or UnauthorizedAccessException or System.Text.Json.JsonException or ArgumentException) { Error = e.Message; }
         }
-        if (publish <= 0) {
+        if (publish <= 0 && !ExportPending && !world.ForegroundPending && !world.BoundaryPending) {
             publish = 3;
-            try { RuleProject.WriteAtomic(path + ".world.json", world.ExportRuleWorld("Futó játék", Error).ToJson()); }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Error = e.Message; }
+            exportCapturing = true; exportMap = world.Map;
+            world.RequestRuleWorldExport("Futó játék", Error, task => { exportCapturing = false; exportSerialization = task; });
         }
     }
-}
 
-sealed partial class GameWorld
-{
-    internal RuleWorldCatalog ExportRuleWorld(string source, string error = null) => new() {
-        Source = source, Tick = SimulationTick, Seed = map.Settings.Seed,
-        AlgorithmRevision = algorithmGraphs?.Revision ?? "",
-        ProjectRevision = RuleProjectDocument.ContentRevision(),
-        ObjectModel = RuleModel,
-        PublishedUtc = DateTime.UtcNow.ToString("O"), ProjectName = ruleProjectName, Error = error ?? DynamicsError ?? BehaviorError,
-        Objects = RuleObjectKinds
-            .SelectMany(kind => BehaviorTargets(kind).Select(t => new RuleWorldObject(kind, t.Id, t.Label))).ToList(),
-        Hooks = WorldBehaviorPolicy.Hooks.ToList(), Fields = RuleWorldFields.ToDictionary(k => k, ReadWorldValue), Stocks = dynamics.Capture()
-    };
+    private void PollExport(GameWorld world)
+    {
+        if (exportCapturing && !ReferenceEquals(exportMap, world.Map)) exportCapturing = false;
+        if (exportWriting?.IsCompleted == true) {
+            try { exportWriting.GetAwaiter().GetResult(); }
+            catch (Exception e) { Error = e.Message; }
+            exportWriting = null;
+        }
+        if (exportSerialization?.IsCompleted == true) {
+            try {
+                string json = exportSerialization.GetAwaiter().GetResult();
+                if (ReferenceEquals(exportMap, world.Map))
+                    exportWriting = Task.Run(() => RuleProject.WriteAtomic(path + ".world.json", json));
+            }
+            catch (Exception e) { Error = e.Message; }
+            exportSerialization = null;
+        }
+    }
 }

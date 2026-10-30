@@ -16,6 +16,9 @@ namespace ForesTycoon
         public bool UseCargoStops { get; set; } = true;
         internal Func<Vehicle,float,float> SourceLoader;
         internal Action<Vehicle,float> DestinationReceiver;
+        // An attached logistics system counts mill receipts at its shared receiving boundary.
+        internal bool CountsDestinationReceipts { get; set; }
+        internal void ReceiveAtMill(float amount) => timberCargo.Deliver(amount);
         internal Func<Vehicle,bool> RouteValidator;
         internal Func<Vehicle, bool> BehaviorPause, BehaviorDepart;
         internal Func<Vehicle, float> SourceStock;
@@ -160,7 +163,8 @@ namespace ForesTycoon
                         break;
                     case VehicleTransportState.Unloading:
                         vehicle.Hold();float delivered=vehicle.TakeCargo((float)TransferRule(vehicle, "unloading.amount", dt));
-                        DestinationReceiver?.Invoke(vehicle,delivered);timberCargo.Deliver(delivered);
+                        DestinationReceiver?.Invoke(vehicle,delivered);
+                        if (!CountsDestinationReceipts) timberCargo.Deliver(delivered);
                         if(vehicle.CargoAmount<=0)vehicle.TransportState=VehicleTransportState.Returning;
                         break;
                     default:

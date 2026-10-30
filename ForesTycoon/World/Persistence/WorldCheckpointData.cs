@@ -54,5 +54,7 @@ namespace ForesTycoon
         [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
         bool PendingForestRateRefresh = false,
         [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-        ForesTycoon.Rules.SpeciesDefinition[] Species = null);
+        ForesTycoon.Rules.SpeciesDefinition[] Species = null,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        WorldScenario Scene = null);
 }

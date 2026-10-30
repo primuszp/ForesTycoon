@@ -38,6 +38,11 @@ namespace ForesTycoon
                 terrain.WarmIndividualForest(forest, settings);
                 Require(terrain.CheckForestLodConsistency(forest, settings) > 0, "Pixel fixture did not warm consistent LODs.");
                 using var renderer = new TerrainRenderer(terrain, vehicles, new WorldEffectSystem(), forest, settings);
+                // Interactive hosts finish this sliced resource preparation on their loading frames.
+                // Pixel comparisons need the same complete shaders/textures/shadow target before the baseline.
+                settings.Enhanced = true;
+                foreach (float _ in renderer.PrepareMapGeometry()) { }
+                settings.Enhanced = false;
                 terrain.StreamGeometry = false; // Retain the three explicitly warmed diagnostic LODs.
                 string output = Path.GetFullPath("artifacts/graphics-weather"); Directory.CreateDirectory(output);
                 GL.Enable(EnableCap.DepthTest); GL.Viewport(0, 0, 1100, 800);

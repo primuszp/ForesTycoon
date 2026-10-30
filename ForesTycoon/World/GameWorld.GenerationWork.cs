@@ -137,7 +137,7 @@ sealed partial class GameWorld
         {
             GenerationStage = "Jelenet szerkesztései";
             // A captured initial scene is restored before applying the editor's new paint.
-            if (snapshot != null) foreach (int unit in candidate.RestoreCheckpointWork(snapshot.Checkpoint)) yield return unit;
+            if (snapshot != null) foreach (int unit in candidate.RestoreCheckpointWork(snapshot.ReplayCheckpoint)) yield return unit;
             foreach (int unit in candidate.InitializeProjectSceneWork(project)) yield return unit;
         }
         GenerationStage = "Megjelenítés előkészítése";

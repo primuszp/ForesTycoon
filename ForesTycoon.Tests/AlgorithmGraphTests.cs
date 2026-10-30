@@ -101,7 +101,11 @@ public class AlgorithmGraphTests
             oldWorld.Update(.1);
             var link = new RuleProjectLink(projectPath, () => closed = true, (runtime, save, ready, path) => AlgorithmBuild.StartRuntime(runtime,
                 new[] { "--run-rule-project", path, "0", linkTrace, "--world", save, "--migrate", "--ack", ready }, path));
-            for (int i = 0; i < 1200 && !closed; i++) { link.Poll(oldWorld, .5); await Task.Delay(50); }
+            for (int i = 0; i < 1200 && !closed; i++) {
+                // A headless host must advance the same bounded foreground work as the viewport.
+                if (oldWorld.ForegroundPending) oldWorld.ContinueCommands(256);
+                link.Poll(oldWorld, .5); await Task.Delay(50);
+            }
             Assert.True(closed, link.Error); Assert.Equal(1UL, oldWorld.SimulationTick);
             using var handoff = JsonDocument.Parse(File.ReadAllText(linkTrace));
             Assert.Equal(123, handoff.RootElement.GetProperty("trace")[0].GetProperty("fields").GetProperty("world.balance").GetDouble());

@@ -19,9 +19,12 @@ namespace ForesTycoon
             {
                 int seed = FindSeed();
                 using var terrain = new Terrain(TerrainSettings.Default.WithNodeSize(17, seed), ForestVisualFixture.Height);
-                var forest = new ForestSystem(terrain.Map, ForestVisualFixture.CreateStands());
-                forest.UseEnvironmentTempo(900);
-                var environment = new EnvironmentSystem(terrain.Map, forest, 900, ClimateDefinition.Default);
+                using var world = new GameWorld(terrain.Map);
+                var initialForest = new ForestSystem(terrain.Map, ForestVisualFixture.CreateStands());
+                var forest = world.Forest;
+                forest.Restore(initialForest.Capture());
+                var environment = world.Environment;
+                environment.InvalidateVegetation();
                 var settings = new GraphicsSettings { AutomaticWeather = true, Wildlife = false };
                 Require(!settings.ExperimentalSnow, "Normal winter must not depend on the experimental preview switch.");
                 using var renderer = new TerrainRenderer(terrain, new VehicleSystem(), new WorldEffectSystem(), forest, settings, environment);
@@ -113,7 +116,8 @@ namespace ForesTycoon
                     GL.ReadPixels(0, 0, 1100, 800, PixelFormat.Rgba, PixelType.UnsignedByte, pixels);
                     return pixels;
                 }
-                void Advance(double seconds) { environment.Update(seconds); forest.Update(seconds); }
+                // Snow and the other water stocks are changed by the authored world rules, not Environment.Update alone.
+                void Advance(double seconds) => world.Update(seconds);
             }
             finally { RenderDevice.Dispose(); }
         }

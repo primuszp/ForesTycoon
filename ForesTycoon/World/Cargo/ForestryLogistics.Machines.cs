@@ -79,7 +79,8 @@ namespace ForesTycoon
         internal int Tile => Path[Math.Clamp((int)Math.Round(PathPosition), 0, Path.Length - 1)];
         internal bool Arrived => PathPosition >= Path.Length - 1 - 1e-9;
         internal float Capacity => Tuning.F(Kind == ForestMachineKind.Forwarder ? Tune.ForwarderCapacity : Tune.ProcessorCapacity);
-        internal float CargoFill => Cargo / Capacity;
+        // Existing loads survive capacity reductions; no new timber may be loaded until there is room.
+        internal float CargoFill => Math.Clamp(Cargo / Capacity, 0, 1);
         /// <summary>Processor: whether designated timber is still reachable from its stack (set at each decision).</summary>
         internal bool HasWork;
         internal bool Working => Source != null || (Kind == ForestMachineKind.Harvester && Target != null);

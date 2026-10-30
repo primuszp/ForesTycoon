@@ -50,7 +50,22 @@ namespace ForesTycoon
                 v8["checkpoint"]["ecology"]["environment"].AsObject().Remove("rainReceived");
                 using var historical = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(v8.ToJsonString()));
                 restored.Load(historical);
-                Equal(original, restored, "v8 snapshot migration");
+                // v8 did not store this aggregate. Reconstructing it by multiplication can round
+                // differently from today's ordered per-step sum; every stored field must remain exact.
+                var expectedV8 = original.CaptureCheckpoint(); var actualV8 = restored.CaptureCheckpoint();
+                double expectedRain = expectedV8.Ecology.Environment.RainReceived.Value;
+                Require(Math.Abs(expectedRain - actualV8.Ecology.Environment.RainReceived.Value) <= Math.Max(1, expectedRain) * 1e-12,
+                    "v8 reconstructed rain ledger changed beyond roundoff.");
+                var normalizedV8 = actualV8 with { Ecology = actualV8.Ecology with {
+                    Environment = actualV8.Ecology.Environment with { RainReceived = expectedRain } } };
+                Require(JsonSerializer.Serialize(expectedV8) == JsonSerializer.Serialize(normalizedV8), "v8 stored state changed during migration.");
+                using (var migrated = new GameWorld(settings)) {
+                    historical.Position = 0; migrated.Load(historical);
+                    for (int i = 0; i < 30; i++) { restored.Update(1.0 / 30); migrated.Update(1.0 / 30); }
+                    Equal(restored, migrated, "v8 exact future after migration");
+                }
+                // The following tail begins at the modern checkpoint's original, fully recorded ledger.
+                saved.Position = 0; restored.Load(saved);
                 // A snapshot followed by a command/tick tail must advance only that suffix.
                 for (int i = 0; i < 31; i++) { original.Update(1.0 / 30); restored.Update(1.0 / 30); }
                 original.QueueWeather(WeatherPreset.Sunny, 0, 20); original.ExecutePendingCommands();

@@ -46,7 +46,7 @@ namespace ForesTycoon
             if (before < m.LogGripPhase && after >= m.LogGripPhase)
             {
                 float amount = unloading ? Math.Min(LogVolume, m.Cargo - Math.Max(0, (Count(m.Cargo)-1)*LogVolume)) :
-                    Math.Min(LogVolume, m.Capacity - m.Cargo);
+                    Math.Min(LogVolume, Math.Max(0, m.Capacity - m.Cargo));
                 amount = Math.Min(amount, (float)m.Rule(unloading ? "unloading.amount" : "loading.amount", dt));
                 if (unloading) {
                     m.LogTransferVolume = amount; m.LogTransferValue = m.Cargo > 0 ? m.CargoValue * amount / m.Cargo : 0;

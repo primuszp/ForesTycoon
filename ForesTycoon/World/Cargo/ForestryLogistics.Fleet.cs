@@ -51,6 +51,7 @@ namespace ForesTycoon
             set {
                 vehicles = value;
                 if (value == null) return;
+                value.CountsDestinationReceipts = true;
                 value.BehaviorPause = v => { var truck = TruckOf(v); return truck != null && TruckWait(truck); };
                 value.BehaviorRule = TruckRule;
                 value.BehaviorDepart = null; // Departure is entirely evaluated by loading.depart, including controller requests.

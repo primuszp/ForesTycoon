@@ -64,16 +64,24 @@ sealed partial class GameWorld
         internal int Size;
         internal void Refresh(GameWorld world)
         {
+            foreach (int _ in RefreshWork(world)) { }
+        }
+        internal IEnumerable<int> RefreshWork(GameWorld world)
+        {
             Objects.Clear(); Size = 0;
+            var ordered = new SortedSet<int>();
             foreach (var source in sources)
                 foreach (var item in (IEnumerable)source.GetValue(world)) {
+                    yield return 1;
                     if (!type.IsInstanceOfType(item)) continue;
                     if (item is not IRuleInstance identity || identity.RuleId < 0 || identity.RuleId >= 1_000_000)
                         throw new InvalidOperationException(type.Name + ": a szabályobjektumnak stabil, 0–999999 azonosító szükséges.");
                     if (!Objects.TryAdd(identity.RuleId, item)) throw new InvalidOperationException(type.Name + ": ismétlődő objektumazonosító: " + identity.RuleId);
+                    ordered.Add(identity.RuleId);
                     Size = Math.Max(Size, identity.RuleId + 1);
                 }
-            Elements = Objects.Keys.Order().ToArray();
+            Elements = new int[ordered.Count]; int index = 0;
+            foreach (int id in ordered) { Elements[index++] = id; yield return 1; }
         }
     }
     private readonly Dictionary<Type, ClassObjects> classRuleObjects = new();
@@ -126,6 +134,7 @@ sealed partial class GameWorld
             }).ToArray())).ToArray();
         return new(entity.Id, entity.Name, entity.Element, w => { var b = Bound(w); b.Refresh(w); return b.Elements; },
             w => { var b = Bound(w); b.Refresh(w); return b.Size; }, fields.ToArray(), actions) {
+                PrepareElements = w => Bound(w).RefreshWork(w), PreparedElements = w => Bound(w).Elements,
                 Entity = entity.Id, ObjectType = entity.Type, Collections = collections,
                 Label = (w, id) => Target(w, id) is IRuleDisplay display ? display.RuleLabel : entity.Name + " #" + id };
     }

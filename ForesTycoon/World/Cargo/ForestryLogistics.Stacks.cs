@@ -92,6 +92,7 @@ namespace ForesTycoon
                 if (Array.IndexOf(mill.Footprint, tile) >= 0 || mill.TileId == tile)
                 {
                     mill.Received += volume; mill.Stock += volume; Income += Gameplay.Evaluate("economy.sale", value, Tuning[Tune.TimberPriceFactor], volume);
+                    Vehicles?.ReceiveAtMill(volume);
                     return;
                 }
             var stack = StackAt(tile);

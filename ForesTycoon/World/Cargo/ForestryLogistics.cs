@@ -31,7 +31,7 @@ namespace ForesTycoon
         /// <summary>Standing timber of a site still to fell, m³.</summary>
         internal float Volume(HarvestSite site){float result=0;foreach(int id in site.Tiles)result+=forest.AvailableTimber(id);return result;}
         /// <summary>Timber not yet at a mill: standing in the sites, in stacks and on the machines, m³.</summary>
-        internal float Remaining {get {float sum=0;foreach(var site in Sites)sum+=Volume(site);foreach(var s in Stacks)sum+=s.Volume;foreach(var m in Machines)sum+=m.Cargo+m.LogTransferVolume;return sum;}}
+        internal float Remaining {get {float sum=0;foreach(var site in Sites)sum+=Volume(site);foreach(var s in Stacks)sum+=s.Volume;foreach(var m in Machines)sum+=m.Cargo+m.LogTransferVolume;foreach(var t in Trucks)sum+=t.Vehicle?.CargoAmount??0;return sum;}}
         internal bool ContainsTile(int id){foreach(var site in Sites)if(Array.IndexOf(site.Tiles,id)>=0)return true;return false;}
         internal int Designate(ReadOnlySpan<int> ids)
         {
@@ -63,6 +63,7 @@ namespace ForesTycoon
             }
             foreach (var stack in Stacks) { sum += stack.Volume; yield return 1; }
             foreach (var machine in Machines) { sum += machine.Cargo + machine.LogTransferVolume; yield return 1; }
+            foreach (var truck in Trucks) { sum += truck.Vehicle?.CargoAmount ?? 0; yield return 1; }
             result.Value = sum;
         }
 
@@ -108,7 +109,7 @@ namespace ForesTycoon
                 truck.CargoValue-=value;if(vehicle.CargoAmount<=1e-6f)truck.CargoValue=0;
                 Receive(truck.Destination,amount,value);return;
             }
-            foreach(var mill in Mills)if(mill.TileId==vehicle.SawmillTileId){mill.Received+=amount;mill.Stock+=amount;return;}
+            foreach(var mill in Mills)if(mill.TileId==vehicle.SawmillTileId){mill.Received+=amount;mill.Stock+=amount;Vehicles?.ReceiveAtMill(amount);return;}
             throw new InvalidOperationException("Missing sawmill destination.");
         }
         internal void Update(double seconds) => SimulationWork.Complete(UpdateWork(seconds));

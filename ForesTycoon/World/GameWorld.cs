@@ -270,7 +270,7 @@ namespace ForesTycoon
                 throw new ArgumentOutOfRangeException(nameof(fixedDeltaSeconds));
             if (updateWork != null && fixedDeltaSeconds != updateDelta)
                 throw new InvalidOperationException("A pending tick must retain its time step.");
-            if (generationWork != null || commands.WorkPending) return false;
+            if (generationWork != null || commands.WorkPending || RuleExportPending) return false;
             updateDelta = fixedDeltaSeconds;
             if (updateWork == null) { Array.Clear(workCpu); workPhase = 0; updateWork = UpdateWork(fixedDeltaSeconds).GetEnumerator(); }
             LastUpdateWorkUnits = 0;
@@ -319,7 +319,9 @@ namespace ForesTycoon
             workPhase = 1;
             foreach (int unit in ecosystem.UpdateWork(fixedDeltaSeconds)) yield return unit;
             workPhase = 2;
-            foreach (int unit in Logistics.UpdateWork(fixedDeltaSeconds * Tuning[Tune.VehicleTimeScale])) yield return unit;
+            // Both fleets use the same sampled clock for this logical tick, including dynamic formula hooks.
+            vehicles.TimeScale = Tuning[Tune.VehicleTimeScale];
+            foreach (int unit in Logistics.UpdateWork(fixedDeltaSeconds * vehicles.TimeScale)) yield return unit;
             workPhase = 3;
             foreach (int unit in TrafficWork()) yield return unit;
             foreach (int unit in Environment.RefreshVegetationWork()) yield return unit;
@@ -337,6 +339,7 @@ namespace ForesTycoon
         {
             SimulationWork.RequireSynchronousContext();
             EnsureAvailable(); terrainRenderer?.VerifyAccess();
+            while (RuleExportPending) ContinueCommands(256);
             if (UpdatePending || RulesBlockCommands) return 0;
             if (generationWork != null) throw new InvalidOperationException("Use ContinueCommands while generating a world.");
             int completed = 0, count = commands.Count;
@@ -609,7 +612,7 @@ namespace ForesTycoon
             using var candidate = new GameWorld(settings, Graphics, save.ReplayForestYearSeconds, save.ReplaySoilModel, save.ReplayClimate);
             ulong startTick = save.Checkpoint?.Tick ?? 0;
             if (save.Checkpoint == null) candidate.Replay(save);
-            else { candidate.RestoreCheckpoint(save.Checkpoint); candidate.ReplayTail(save); }
+            else { candidate.RestoreCheckpoint(save.ReplayCheckpoint); candidate.ReplayTail(save); }
             if (allowAlgorithmMigration) candidate.algorithmGraphs = ForesTycoon.RuleCompiler.AlgorithmBuild.CurrentReference;
 
             foreach (var record in save.Commands) candidate.commandJournal.Add(save.ReplayCommand(record));
@@ -622,6 +625,7 @@ namespace ForesTycoon
 
         private void Adopt(GameWorld candidate, bool preserveBoundaryActions = false)
         {
+            CancelRuleExport();
             updateWork?.Dispose(); updateWork = null; if (!preserveBoundaryActions) tickBoundaryActions.Clear();
             (map, candidate.map) = (candidate.map, map);
             (terrain, candidate.terrain) = (candidate.terrain, terrain);
@@ -710,6 +714,7 @@ namespace ForesTycoon
         {
             if (disposed) yield break;
             terrainRenderer?.VerifyAccess();
+            CancelRuleExport();
             updateWork?.Dispose(); updateWork = null; tickBoundaryActions.Clear();
             generationWork?.Dispose(); generationWork = null; commands.Clear();
             backgroundJobs.Dispose();

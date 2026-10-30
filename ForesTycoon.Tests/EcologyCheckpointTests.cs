@@ -7,6 +7,28 @@ public class EcologyCheckpointTests
     private static readonly TerrainSettings Settings = TerrainSettings.Default.WithNodeSize(17, 42).WithForestPattern(ForestPattern.LargeMixed);
     private static string Json<T>(T state) => JsonSerializer.Serialize(state);
 
+    [Fact]
+    public void LegacyUniformRainLedgerIsReconstructedAndThenContinuesExactly()
+    {
+        var map = new TerrainMap(Settings);
+        var original = new Ecosystem(map, soils: SoilLandscapeDefinition.Default, climate: ClimateDefinition.Legacy);
+        original.Environment.ForceWeather(WeatherPreset.Storm, 32, 20); original.Update(30.1);
+        var state = original.Capture();
+        var legacy = state with { Environment = state.Environment with { RainReceived = null } };
+        var restored = new Ecosystem(new TerrainMap(Settings), soils: SoilLandscapeDefinition.Default, climate: ClimateDefinition.Legacy);
+        restored.Restore(legacy);
+        double reconstructed = state.Environment.Weather.TotalRain * map.Tiles.Count;
+        Assert.Equal(reconstructed, restored.Environment.RainReceived);
+        Assert.InRange(Math.Abs(state.Environment.RainReceived!.Value - reconstructed), 0,
+            Math.Max(1, reconstructed) * 1e-12);
+        var normalized = restored.Capture() with { Environment = restored.Capture().Environment with { RainReceived = state.Environment.RainReceived } };
+        Assert.Equal(Json(state), Json(normalized));
+        var clone = new Ecosystem(new TerrainMap(Settings), soils: SoilLandscapeDefinition.Default, climate: ClimateDefinition.Legacy);
+        clone.Restore(restored.Capture());
+        for (int i = 0; i < 60; i++) { restored.Update(1d / 30); clone.Update(1d / 30); }
+        Assert.Equal(Json(restored.Capture()), Json(clone.Capture()));
+    }
+
     [Theory]
     [InlineData(120, 9.733333)]
     [InlineData(1200, 99.966667)]

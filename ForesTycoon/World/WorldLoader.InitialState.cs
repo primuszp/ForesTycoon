@@ -21,16 +21,25 @@ internal static partial class WorldLoader
         var initial = new WorldSaveData {
             TickRate = source.TickRate, ForestYearSeconds = source.ForestYearSeconds,
             SoilModel = source.SoilModel, Climate = source.Climate, Tick = source.Tick, Terrain = source.Terrain,
-            Checkpoint = source.Checkpoint with { CommandCursor = 0, PendingCommands = 0, Algorithms = null }
+            // The outer scene owns authored content; keep the embedded state independent of it.
+            Checkpoint = source.Checkpoint with { CommandCursor = 0, PendingCommands = 0, Algorithms = null, Scene = null }
         };
         using var packed = new MemoryStream();
         using (var gzip = new GZipStream(packed, CompressionLevel.Optimal, leaveOpen: true)) WorldSaveSerializer.Write(gzip, initial);
-        var scenario = GameWorld.DefaultScenario(source.Terrain.Seed, source.Terrain.NodeColumns - 1);
+        var scenario = source.Checkpoint.Scene?.CloneContent() ?? GameWorld.DefaultScenario(source.Terrain.Seed, source.Terrain.NodeColumns - 1);
+        scenario.Seed = source.Terrain.Seed; scenario.Size = source.Terrain.NodeColumns - 1;
+        scenario.MaxHeight = source.Terrain.MaxHeight;
         scenario.Name = "Rögzített jelenet";
         scenario.InitialState = SnapshotPrefix + Convert.ToBase64String(packed.ToArray());
-        scenario.SoilTypes = GameWorld.EditableSoils(world.Soils.Definition.Catalog);
-        var previous = world.RuleProjectDocument.World;
-        if (previous != null) { scenario.Species = previous.Species; scenario.Springs = previous.Springs; }
+        // Paint and construction are already represented by the captured state, not startup operations to repeat.
+        scenario.SoilPaint.Clear(); scenario.HeightPaint.Clear(); scenario.ForestPaint.Clear();
+        scenario.Roads.Clear(); scenario.Sawmills.Clear(); scenario.Depots.Clear();
+        var soilTypes = GameWorld.EditableSoils(world.Soils.Definition.Catalog);
+        foreach (var soil in soilTypes) {
+            var authored = scenario.SoilTypes.Find(s => s.Id == soil.Id);
+            if (authored != null) soil.Horizons = authored.Horizons;
+        }
+        scenario.SoilTypes = soilTypes;
         scenario.Validate();
         return scenario;
     }

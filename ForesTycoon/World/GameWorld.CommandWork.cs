@@ -8,8 +8,8 @@ sealed partial class GameWorld
 {
     internal bool CommandPending => commands.WorkPending;
     private bool RulesBlockCommands => ruleEngine?.StepPending == true && !(CommandPending && (activePassage != null || growthRuleActive));
-    internal bool ForegroundPending => generationWork != null || commands.Count > 0 && !UpdatePending && !RulesBlockCommands;
-    internal bool BoundaryPending => UpdatePending || CommandPending || generationWork != null || trafficPassages.Count > 0;
+    internal bool ForegroundPending => generationWork != null || RuleExportPending || commands.Count > 0 && !UpdatePending && !RulesBlockCommands;
+    internal bool BoundaryPending => UpdatePending || CommandPending || generationWork != null || RuleExportPending || trafficPassages.Count > 0;
 
     // Synchronous adapter for replay, CLI fixtures and startup. Interactive hosts use ContinueCommands.
     private IEnumerable<int> ExecuteCommandWork(IWorldCommand command)
@@ -158,6 +158,7 @@ sealed partial class GameWorld
     {
         EnsureAvailable(allowFaulted: GenerationPending); terrainRenderer?.VerifyAccess();
         if (UpdatePending || RulesBlockCommands) return 0;
+        if (RuleExportPending) { ContinueRuleExport(budget); return 0; }
         if (generationWork != null) { ContinueGeneration(budget); return 0; }
         int completed;
         try { backgroundJobs.PublishCompleted(); completed = commands.Continue(this, ExecuteCommandWork, budget); }

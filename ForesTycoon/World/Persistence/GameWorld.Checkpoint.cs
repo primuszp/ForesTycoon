@@ -17,14 +17,23 @@ namespace ForesTycoon
                 Tuning.ToValues(), roadWeatherSeconds, BehaviorDocument, BehaviorStates,
                 dynamics.Document, dynamics.Capture(), ruleProjectName, AlgorithmSnapshot(), ruleEngine.Capture(), ruleEngine.CaptureStep(), pendingForestRateRefresh,
                 worldSpeciesDefinitions != null && SpeciesEdits(new WorldScenario { Species = worldSpeciesDefinitions.ToList() }).Count > 0
-                    ? RuleProject.FromJson(new RuleProject { World = new WorldScenario { Species = worldSpeciesDefinitions.ToList() } }.ToJson()).World.Species.ToArray() : null);
+                    ? RuleProject.FromJson(new RuleProject { World = new WorldScenario { Species = worldSpeciesDefinitions.ToList() } }.ToJson()).World.Species.ToArray() : null,
+                ruleProjectWorld?.CloneContent());
         }
 
         private void RestoreCheckpoint(WorldCheckpointData s) => WithSpecies(() => { SimulationWork.Complete(RestoreCheckpointWork(s)); return 0; });
 
         private IEnumerable<int> RestoreCheckpointWork(WorldCheckpointData s)
         {
-            if (s.Species != null) {
+            if (s.Scene != null) {
+                ruleProjectWorld = s.Scene.CloneContent();
+                ruleProjectWorld.Validate();
+                foreach (var species in ruleProjectWorld.Species) _ = ShapeOverride(species);
+                worldSpeciesDefinitions = ruleProjectWorld.Species.ToArray();
+                ForestSpeciesBook.Apply(SpeciesEdits(ruleProjectWorld)); worldSpecies = ForestSpeciesBook.CaptureContext();
+                Environment.Springs = ruleProjectWorld.Springs;
+            }
+            else if (s.Species != null) {
                 var scene = DefaultScenario(); scene.Species = s.Species.ToList(); scene.Validate();
                 foreach (var species in scene.Species) _ = ShapeOverride(species);
                 worldSpeciesDefinitions = scene.Species.ToArray();
@@ -93,6 +102,19 @@ namespace ForesTycoon
         private void ReplayTail(WorldSaveData save)
         {
             var s = save.Checkpoint;
+            // Older checkpoints omitted scene content. Recover the last applied scene from the journal,
+            // without executing its terrain edits, resetting tuning, or replaying historical simulation.
+            if (s.Scene == null) {
+                for (int i = s.CommandCursor - 1; i >= 0; i--) {
+                    if (save.Commands[i].Kind != WorldCommandKind.SetRuleProject) continue;
+                    var scene = RuleProject.FromJson(save.Commands[i].RuleJson).World;
+                    if (scene == null) continue;
+                    ruleProjectWorld = scene.CloneContent(); ruleProjectWorld.Validate();
+                    foreach (var species in ruleProjectWorld.Species) _ = ShapeOverride(species);
+                    Environment.Springs = ruleProjectWorld.Springs;
+                    break;
+                }
+            }
             int index = s.CommandCursor;
             for (int i = 0; i < s.PendingCommands; i++) commands.Enqueue(WorldCommandFactory.Create(save.Commands[index++]));
             // A checkpoint at the target tick restores pending input without applying it early.

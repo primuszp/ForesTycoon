@@ -625,6 +625,14 @@ public sealed class TreeColoursDefinition
 /// </summary>
 public sealed class WorldScenario
 {
+    /// <summary>Detached scene content without embedding an earlier world snapshot.</summary>
+    public WorldScenario CloneContent()
+    {
+        var content = (WorldScenario)MemberwiseClone();
+        content.InitialState = null;
+        return System.Text.Json.JsonSerializer.Deserialize<WorldScenario>(System.Text.Json.JsonSerializer.Serialize(content, RuleProject.JsonOptions), RuleProject.JsonOptions);
+    }
+
     public string Name { get; set; } = "Új pálya";
     public int Seed { get; set; } = 42;
     /// <summary>Tiles per side of the square map.</summary>

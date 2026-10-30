@@ -116,7 +116,7 @@ public class RuleProjectTests
         } finally { Directory.Delete(directory, true); }
     }
     [Fact]
-    public void FileLinkAppliesChangesOnceAndKeepsLastValidRuntimeOnInvalidFile()
+    public async Task FileLinkAppliesChangesOnceAndKeepsLastValidRuntimeOnInvalidFile()
     {
         string directory = Path.Combine(Path.GetTempPath(), "forestycoon-project-" + Guid.NewGuid()); Directory.CreateDirectory(directory);
         try {
@@ -128,6 +128,7 @@ public class RuleProjectTests
             Assert.NotNull(link.Error); Assert.Equal(0, world.ExecutePendingCommands()); world.Update(1); Assert.Equal(2, world.DynamicsValues["speed"]);
             var fixedProject = Project(); fixedProject.Name = "fixed"; RuleProject.WriteAtomic(file, fixedProject.ToJson());
             link.Poll(world, 1); world.ExecutePendingCommands(); Assert.Null(link.Error); Assert.Equal("fixed", world.RuleProjectDocument.Name);
+            await RuleWorldExportTests.FinishExport(world, link);
             var catalog = RuleWorldCatalog.FromJson(File.ReadAllText(file + ".world.json"));
             Assert.Contains(catalog.Objects, o => o.Kind == "tile" && o.Id == 0); Assert.Equal(WorldBehaviorPolicy.Hooks.Length, catalog.Hooks.Count);
         } finally { Directory.Delete(directory, true); }

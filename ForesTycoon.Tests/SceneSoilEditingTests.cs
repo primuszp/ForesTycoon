@@ -96,14 +96,17 @@ public sealed class SceneSoilEditingTests
     }
 
     [Fact]
-    public void PaintingTheExistingTypeIsAnExactNoOp()
+    public void PaintingTheExistingTypePreservesSimulationAndStoresTheAuthoredOverride()
     {
         var project = Project();
         using var world = WorldLoader.CreateProject(project);
-        string initial = Json(world.CaptureCheckpoint());
+        var initial = world.CaptureCheckpoint();
         project.World.SoilPaint[42] = world.Soils.Profile(42).Id;
         world.StartScenario(project.World, project);
-        Assert.Equal(initial, Json(world.CaptureCheckpoint()));
+        var after = world.CaptureCheckpoint();
+        Assert.Equal(Json(initial with { Scene = null }), Json(after with { Scene = null }));
+        var expectedScene = initial.Scene!.CloneContent(); expectedScene.SoilPaint[42] = world.Soils.Profile(42).Id;
+        Assert.Equal(Json(expectedScene), Json(after.Scene));
     }
 
     [Fact]

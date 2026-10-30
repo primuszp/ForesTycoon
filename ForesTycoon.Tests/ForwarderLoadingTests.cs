@@ -2,6 +2,27 @@ using OpenTK.Mathematics;
 namespace ForesTycoon.Tests;
 public class ForwarderLoadingTests
 {
+    [Theory]
+    [InlineData(1)]
+    [InlineData(3)]
+    public void CapacityReductionDuringCraneCyclePreservesEveryLog(double beforeReduction)
+    {
+        var m = Machine(20); m.Cargo = 3; m.CargoValue = 300;
+        float initial = m.Cargo + m.Source.Volume; double value = m.CargoValue + m.Source.Value;
+        ForwarderLoading.Step(m, beforeReduction, (_, _) => throw new Exception());
+        m.Tuning = GameTuning.FromOverrides(new Dictionary<string, double> { ["ForwarderCapacity"] = 1 });
+        bool done = false;
+        for (int i = 0; i < 300 && !done; i++) done = ForwarderLoading.Step(m, 1d / 30, (_, _) => throw new Exception());
+        Assert.True(done); Assert.Equal(0, m.LogTransferVolume);
+        Assert.Equal(initial, m.Cargo + m.Source.Volume, 4);
+        Assert.Equal(value, m.CargoValue + m.Source.Value, 4);
+        Assert.Equal(1, m.CargoFill);
+        m.State = ForestMachineState.Unloading;
+        float received = 0; double receivedValue = 0; done = false;
+        for (int i = 0; i < 3000 && !done; i++) done = ForwarderLoading.Step(m, 1d / 30, (amount, price) => { received += amount; receivedValue += price; });
+        Assert.True(done); Assert.Equal(initial, received + m.Source.Volume, 4);
+        Assert.Equal(value, receivedValue + m.Source.Value, 4);
+    }
     private static ForestMachine Machine(float logs) => new() {Kind=ForestMachineKind.Forwarder,State=ForestMachineState.Loading,
         Source=new TimberStack{Volume=logs*ForwarderLoading.LogVolume,Value=logs*100},Tuning=GameTuning.Default};
     [Theory] [InlineData(2)] [InlineData(3)] [InlineData(10)]

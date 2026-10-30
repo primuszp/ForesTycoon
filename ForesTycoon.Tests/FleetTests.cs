@@ -13,7 +13,7 @@ public partial class FleetTests
     private static readonly int[] Stand = { 136, 137, 152, 153 };         // tiles (8..9, 8..9)
     private const int Depot = 67, Mill = 195, ForestStack = 151, RoadStack = 147;
 
-    private sealed record Scene(TerrainMap Map, ForestSystem Forest, ForestryLogistics Logistics, VehicleSystem Vehicles, List<TrafficPassage> Passages);
+    private sealed record Scene(TerrainMap Map, ForestSystem Forest, ForestryLogistics Logistics, VehicleSystem Vehicles, List<TrafficPassage> Passages, TimberCargoSystem Cargo);
 
     // Road along v = 2, a skid trail (8, 3) → (8, 7) to the stand, a mill at (12, 3), the depot at (4, 3).
     private static Scene Build(bool stacks = true, bool mixedRoads = false, RoadPaving firstSurface = RoadPaving.Asphalt)
@@ -32,7 +32,8 @@ public partial class FleetTests
         else map.BuildRoadTilePath(34, 210, RoadPaving.Macadam);
         map.MarkSkidTrailPath(130, 135);
         var logistics = new ForestryLogistics(map, forest);
-        var vehicles = new VehicleSystem(new TimberCargoSystem(), route => VehicleRoadRoute.Create(map, route))
+        var cargo = new TimberCargoSystem();
+        var vehicles = new VehicleSystem(cargo, route => VehicleRoadRoute.Create(map, route))
         { SourceLoader = logistics.Load, DestinationReceiver = logistics.Deliver, RouteValidator = logistics.RouteConnected };
         vehicles.RoadRouteWorkFactory = (path, result) => VehicleRoadRoute.CreateWork(map, path, result);
         logistics.Vehicles = vehicles;
@@ -45,7 +46,7 @@ public partial class FleetTests
             Assert.True(logistics.PlaceStack(RoadStack), logistics.Status);
         }
         var passages = new List<TrafficPassage>(); logistics.Passage = passages.Add; vehicles.Passage = passages.Add;
-        return new Scene(map, forest, logistics, vehicles, passages);
+        return new Scene(map, forest, logistics, vehicles, passages, cargo);
     }
 
     private static void Run(Scene s, double seconds)
