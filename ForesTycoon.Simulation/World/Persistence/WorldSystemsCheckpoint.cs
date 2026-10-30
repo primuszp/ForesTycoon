@@ -1,0 +1,138 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+namespace ForesTycoon
+{
+    sealed partial class Vehicle
+    {
+        internal VehicleCheckpoint Capture() => new(Id, (int[])Route.Clone(), SpeedTilesPerSecond, CargoCapacity, useRoadPhysics,
+            RoadRoute?.Capture(), CurrentSpeed, RoutePosition, PreviousRoutePosition, CargoAmount, CargoStopsEnabled,
+            SourceTiles == null ? null : (int[])SourceTiles.Clone(), SawmillTileId, RouteBlocked, TransportState, TransferProgress,
+            FuelUsed, Distance, Transit, TransitArrived, Broken, wornTile);
+        internal static Vehicle Restore(VehicleCheckpoint s, int tileCount)
+        {
+            CheckpointGuard.Require(s != null && s.Id > 0 && s.Route != null && s.Route.Length >= 2 && Enum.IsDefined(s.State), "vehicle identity");
+            foreach (int id in s.Route) CheckpointGuard.Require((uint)id < (uint)tileCount, "vehicle route tile");
+            if (s.SourceTiles != null) {
+                CheckpointGuard.Require(s.SourceTiles.Length > 0 && (uint)s.Mill < (uint)tileCount, "vehicle source/mill");
+                foreach (int id in s.SourceTiles) CheckpointGuard.Require((uint)id < (uint)tileCount, "vehicle source tile");
+            }
+            foreach (double v in new[] { s.CurrentSpeed, s.Position, s.PreviousPosition, s.Cargo }) CheckpointGuard.NonNegative(v, "vehicle state");
+            CheckpointGuard.Require(s.PreviousPosition <= s.Position && s.Cargo <= s.Capacity, "vehicle cargo/position");
+            CheckpointGuard.Unit(s.TransferProgress, "vehicle transfer");
+            CheckpointGuard.Require(!s.Physics || s.RoadGeometry != null, "vehicle physics geometry");
+            var result = new Vehicle(s.Id, s.Route, s.Speed, s.Capacity,
+                s.RoadGeometry == null ? null : VehicleRoadRoute.Restore(s.RoadGeometry), s.Physics);
+            result.CurrentSpeed = s.CurrentSpeed; result.RoutePosition = s.Position; result.PreviousRoutePosition = s.PreviousPosition;
+            CheckpointGuard.Require(s.LastPassageTile == -1 || Array.IndexOf(s.Route, s.LastPassageTile) >= 0, "vehicle passage tile");
+            result.wornTile = s.LastPassageTile;
+            result.CargoAmount = s.Cargo; result.CargoStopsEnabled = s.CargoStops;
+            result.SourceTiles = s.SourceTiles == null ? null : (int[])s.SourceTiles.Clone(); result.SawmillTileId = s.Mill;
+            result.RouteBlocked = s.Blocked; result.TransportState = s.State; result.TransferProgress = s.TransferProgress;
+            CheckpointGuard.NonNegative(s.FuelUsed, "vehicle fuel"); CheckpointGuard.NonNegative(s.Distance, "vehicle distance");
+            result.FuelUsed = s.FuelUsed; result.Distance = s.Distance; result.Transit = s.Transit; result.TransitArrived = s.TransitArrived; result.Broken = s.Broken;
+            return result;
+        }
+    }
+    sealed partial class VehicleSystem
+    {
+        internal VehiclesCheckpoint Capture() => new(nextId, UseRoadPhysics, UseCargoStops, vehicles.Select(v => v.Capture()).ToArray());
+        internal void Restore(VehiclesCheckpoint s, int tileCount) => SimulationWork.Complete(RestoreWork(s, tileCount));
+
+        internal IEnumerable<int> RestoreWork(VehiclesCheckpoint s, int tileCount)
+        {
+            CheckpointGuard.Require(s != null && s.Vehicles != null && s.NextId > 0, "vehicle system");
+            var restored = new List<Vehicle>(); var ids = new HashSet<int>();
+            foreach (var v in s.Vehicles) { yield return 1;
+                CheckpointGuard.Require(v != null && v.Id < s.NextId && ids.Add(v.Id), "vehicle IDs");
+                var vehicle = Vehicle.Restore(v, tileCount); vehicle.SpecSource = this; restored.Add(vehicle);
+            }
+            vehicles.Clear(); vehicles.AddRange(restored); nextId = s.NextId;
+            UseRoadPhysics = s.RoadPhysics; UseCargoStops = s.CargoStops;
+        }
+    }
+    sealed partial class VehicleRoadRoute
+    {
+        internal RoadRouteCheckpoint Capture() => new(centers.Select(p => new CheckpointPosition(p)).ToArray(),
+            gradients.Select(p => new RoadGradientCheckpoint(p.X, p.Y)).ToArray());
+        internal static VehicleRoadRoute Restore(RoadRouteCheckpoint s)
+        {
+            CheckpointGuard.Require(s != null && s.Centers != null && s.Gradients != null &&
+                s.Centers.Length >= 2 && s.Centers.Length == s.Gradients.Length, "captured road geometry");
+            foreach (var p in s.Centers) p.Validate();
+            foreach (var p in s.Gradients) CheckpointGuard.Require(p != null && float.IsFinite(p.X) && float.IsFinite(p.Y), "captured road gradient");
+            return new(s.Centers.Select(p => p.Vector).ToArray(),
+                s.Gradients.Select(p => new OpenTK.Mathematics.Vector2(p.X, p.Y)).ToArray());
+        }
+    }
+    internal sealed partial class WildlifeSystem
+    {
+        internal WildlifeCheckpoint Capture() => new(Animals.Select(a => new AnimalCheckpoint(a.Id, a.TileId, a.TargetTile,
+            new(a.Position), new(a.PreviousPosition), new(a.Target), a.Yaw, a.PreviousYaw, a.Blend, a.Hunger, a.WanderNeed,
+            a.WalkTime, a.Age, a.Seed, a.PreviousWalkTime, a.PreviousAge, SimulationWorld.RuleObjects.Entities.Single(e => e.Type == a.GetType()).Id,
+            SimulationWorld.CaptureObjectFields(a), a.DistanceMoved)).ToArray(), forageTiles.Select(id => new ForageCheckpoint(id, forage[id].Depletion)).ToArray(), revision, surfaceRevision, NextAnimalId,
+            habitatReady ? spots.Select(s => new WildlifeHabitatCheckpoint(s.TileId, new(s.Position), s.Rank)).ToArray() : null,
+            AnimalTypes.Select(t => new AnimalTypeCheckpoint(t.Entity.Id, t.DesiredPopulation)).ToArray());
+        internal void Restore(WildlifeCheckpoint s, int tileCount) => SimulationWork.Complete(RestoreWork(s, tileCount));
+
+        internal IEnumerable<int> RestoreWork(WildlifeCheckpoint s, int tileCount)
+        {
+            CheckpointGuard.Require(s != null && s.Animals != null && s.Forage != null, "wildlife system");
+            var restored = new List<Animal>(); var ids = new HashSet<int>(); var food = new Dictionary<int, float>();
+            foreach (var a in s.Animals) { yield return 1;
+                CheckpointGuard.Require(a != null && a.Id is >= 0 and < 1_000_000 && ids.Add(a.Id) && (uint)a.Tile < (uint)tileCount && (uint)a.TargetTile < (uint)tileCount,
+                    "animal identity/tiles");
+                a.Position.Validate(); a.PreviousPosition.Validate(); a.Target.Validate();
+                CheckpointGuard.Require(float.IsFinite(a.Yaw) && float.IsFinite(a.PreviousYaw), "animal yaw");
+                CheckpointGuard.Unit(a.Blend, "animal gait"); CheckpointGuard.Unit(a.Hunger, "animal hunger"); CheckpointGuard.Unit(a.WanderNeed, "animal wander");
+                CheckpointGuard.NonNegative(a.WalkTime, "animal walk clock"); CheckpointGuard.NonNegative(a.Age, "animal age");
+                CheckpointGuard.NonNegative(a.DistanceMoved, "animal measured distance");
+                double previousWalk = a.PreviousWalkTime ?? a.WalkTime, previousAge = a.PreviousAge ?? a.Age;
+                CheckpointGuard.NonNegative(previousWalk, "previous animal walk clock");
+                CheckpointGuard.NonNegative(previousAge, "previous animal age");
+                CheckpointGuard.Require(previousWalk <= a.WalkTime, "animal interpolation clock");
+                var kind = SimulationWorld.RuleObjects.Find(a.Kind ?? "deer");
+                CheckpointGuard.Require(kind != null && !kind.Abstract && typeof(Animal).IsAssignableFrom(kind.Type), "animal type");
+                var animal = (Animal)Activator.CreateInstance(kind.Type, nonPublic: true);
+                animal.Id = a.Id; animal.TileId = a.Tile; animal.TargetTile = a.TargetTile; animal.Position = a.Position.Vector;
+                animal.PreviousPosition = a.PreviousPosition.Vector; animal.Target = a.Target.Vector; animal.Yaw = a.Yaw; animal.PreviousYaw = a.PreviousYaw;
+                animal.Blend = a.Blend; animal.Hunger = a.Hunger; animal.WanderNeed = a.WanderNeed; animal.WalkTime = a.WalkTime; animal.Age = a.Age;
+                animal.Seed = a.Seed; animal.PreviousWalkTime = previousWalk; animal.PreviousAge = previousAge; animal.System = this;
+                animal.DistanceMoved = a.DistanceMoved;
+                SimulationWorld.RestoreObjectFields(animal, a.Fields);
+                animal.PreviousYaw = a.PreviousYaw;
+                if (a.Fields?.ContainsKey("initialized") != true) animal.Initialized = true;
+                CheckpointGuard.Require(animal.Age == a.Age && animal.Hunger == a.Hunger && animal.WanderNeed == a.WanderNeed, "conflicting animal fields");
+                restored.Add(animal);
+            }
+            foreach (var f in s.Forage) { yield return 1;
+                CheckpointGuard.Require(f != null && (uint)f.Tile < (uint)tileCount && food.TryAdd(f.Tile, f.Depletion), "forage tile");
+                CheckpointGuard.Unit(f.Depletion, "forage depletion");
+            }
+            Animals.Clear(); Animals.AddRange(restored); forage.Clear(); forageTiles.Clear(); spots.Clear();
+            populationRequests.Clear(); populationRequested = false; animalTypes = null;
+            habitatReady = s.Habitat != null;
+            foreach (var spot in s.Habitat ?? Array.Empty<WildlifeHabitatCheckpoint>()) {
+                CheckpointGuard.Require((uint)spot.Tile < (uint)tileCount, "wildlife habitat tile"); spot.Position.Validate();
+                spots.Add(new(spot.Tile, spot.Position.Vector, spot.Rank)); yield return 1;
+            }
+            foreach (var type in s.Types ?? Array.Empty<AnimalTypeCheckpoint>()) {
+                var target = AnimalTypes.SingleOrDefault(t => t.Entity.Id == type.Kind);
+                CheckpointGuard.Require(target != null && type.DesiredPopulation is >= 0 and <= 1024, "wildlife type state");
+                target.DesiredPopulation = type.DesiredPopulation;
+            }
+            foreach (var f in food) { yield return 1;  forage.Add(f.Key, new() { Id = f.Key, Depletion = f.Value }); forageTiles.Add(f.Key); }
+            CheckpointGuard.Require(s.NextAnimalId is >= 1 and <= 1_000_000, "next animal identity");
+            NextAnimalId = Math.Max(s.NextAnimalId, restored.Count == 0 ? 1 : restored.Max(a => a.Id) + 1);
+            revision = s.ForestRevision; surfaceRevision = s.SurfaceRevision;
+        }
+    }
+    sealed partial class TimberCargoSystem
+    {
+        internal void Restore(float available, float delivered) {
+            CheckpointGuard.NonNegative(available, "available timber"); CheckpointGuard.NonNegative(delivered, "delivered timber");
+            Available = available; Delivered = delivered;
+        }
+    }
+}

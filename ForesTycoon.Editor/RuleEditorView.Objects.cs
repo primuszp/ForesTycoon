@@ -10,7 +10,7 @@ namespace ForesTycoon.Editor;
 
 /// <summary>
 /// The object library: the kinds of world objects the game exposes to rules, discovered from its code (see
-/// ForesTycoon/World/RuleEntities.cs). A kind inherits its parent's fields; the page shows where each field comes from,
+/// ForesTycoon.Simulation/World/RuleEntities.cs). A kind inherits its parent's fields; the page shows where each field comes from,
 /// what is attached to the object, what a rule may do to it, which rules already run on it — and gives a writable field
 /// a behaviour in one click. A new interface or field in the game appears here without editor code.
 /// </summary>

@@ -22,8 +22,8 @@ namespace ForesTycoon
             // While a new map replaces the old one the soil raster may still be the previous size.
             if (Soils == null || tile >= Soils.ProfileIndices.Length) return Array.Empty<SideLayer>();
             var catalog = Soils.Definition.Catalog;
-            if (sideLayers == null || !ReferenceEquals(sideLayersFor.Scene, ruleProjectWorld) || !ReferenceEquals(sideLayersFor.Catalog, catalog)) {
-                var scene = ruleProjectWorld ?? BuiltinZones;
+            if (sideLayers == null || !ReferenceEquals(sideLayersFor.Scene, PresentationScene) || !ReferenceEquals(sideLayersFor.Catalog, catalog)) {
+                var scene = PresentationScene ?? DefaultPresentationScene;
                 sideLayers = new SideLayer[catalog.Profiles.Length][];
                 for (int i = 0; i < sideLayers.Length; i++) {
                     var soil = catalog[i];
@@ -31,7 +31,7 @@ namespace ForesTycoon
                     var horizons = scene.SoilTypes.Find(s => s.Id == soil.Id)?.Profile() ?? SoilHorizon.Defaults(soil.Id, colour);
                     sideLayers[i] = horizons.ConvertAll(h => new SideLayer((float)(h.Depth * scene.ProfileScale), Hex(h.Color))).ToArray();
                 }
-                sideLayersFor = (ruleProjectWorld, catalog);
+                sideLayersFor = (PresentationScene, catalog);
             }
             int index = Soils.ProfileIndices[tile];
             return index < sideLayers.Length ? sideLayers[index] : Array.Empty<SideLayer>();

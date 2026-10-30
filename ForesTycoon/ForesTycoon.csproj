@@ -24,6 +24,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../ForesTycoon.Simulation/ForesTycoon.Simulation.csproj" />
     <ProjectReference Include="../ForesTycoon.RuleCompiler/ForesTycoon.RuleCompiler.csproj" />
     <ProjectReference Include="../ForesTycoon.Engine/ForesTycoon.Engine.csproj" />
     <ProjectReference Include="../ForesTycoon.Rules/ForesTycoon.Rules.csproj" />

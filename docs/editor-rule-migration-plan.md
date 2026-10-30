@@ -38,7 +38,7 @@ szabálymotor helyett egy szerkesztési és végrehajtási modell kell. A képle
 | Mentés és alkalmazás | Projektklónozás, validálás, parancson keresztüli alkalmazás és checkpoint létezik. | Erre épüljön a próbálás és a játékba átvétel. |
 
 Fő források: `ForesTycoon.Rules/RuleSchema.cs`, `WorldRules.cs`,
-`ForesTycoon/World/RuleEngine.cs`, `RuleEntities.cs`, `GameWorld.RuleProject.cs`,
+`ForesTycoon.Simulation/World/RuleEngine.cs`, `RuleEntities.cs`, `GameWorld.RuleProject.cs`,
 `GameWorld.cs`, `ForesTycoon.Editor/RuleEditorView.RuleBook.cs`.
 A korábbi tervek: [objektummodell](editor-object-model.md), [építőkövek](rule-building-blocks.md).
 

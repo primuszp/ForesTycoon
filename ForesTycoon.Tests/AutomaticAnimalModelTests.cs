@@ -18,7 +18,7 @@ internal sealed class SchemaFox : WildlifeSystem.Animal
 public sealed class AutomaticAnimalModelTests
 {
     private static GameWorld World() => new(TerrainSettings.Default.WithNodeSize(17, 42), enableRendering: false);
-    private static RuleSchema Schema() => RuleSchema.Discover(typeof(GameWorld).Assembly.GetTypes().Concat(typeof(SchemaFox).Assembly.GetTypes()), RuleEntityTexts.Hungarian);
+    private static RuleSchema Schema() => RuleSchema.Discover(typeof(SimulationWorld).Assembly.GetTypes().Concat(typeof(SchemaFox).Assembly.GetTypes()), RuleEntityTexts.Hungarian);
     private static string State(GameWorld world) => JsonSerializer.Serialize(world.CaptureCheckpoint());
 
     [Fact]
@@ -32,7 +32,7 @@ public sealed class AutomaticAnimalModelTests
         Assert.Contains(foxType.Relations, r => r.Name == "tile" && r.Target == "tile");
         Assert.Equal(foxType.Actions.Select(a => a.Name).Distinct(), foxType.Actions.Select(a => a.Name));
         Assert.Contains(foxType.Summaries, f => f.Name == "friends.avg.alertness");
-        var scopes = GameWorld.DiscoverScopes(schema, typeof(GameWorld).Assembly.GetTypes().Concat(typeof(SchemaFox).Assembly.GetTypes()));
+        var scopes = GameWorld.DiscoverScopes(schema, typeof(SimulationWorld).Assembly.GetTypes().Concat(typeof(SchemaFox).Assembly.GetTypes()));
         using var world = World(); var fox = new SchemaFox { Id = 7, TileId = 5, Hunger = .5f }; world.Wildlife.Animals.Add(fox);
         var rule = new WorldRule { Id = "fox", Name = "Róka ébersége", Scope = "schemaFox", Schedule = "wildlife",
             Effects = { new() { Target = "alertness", Mode = "set", Formula = "hunger * 2" }, new() { Target = "hunger", Mode = "set", Formula = "0.25" } } };
@@ -48,7 +48,7 @@ public sealed class AutomaticAnimalModelTests
     [Fact]
     public void DiscoveredClassRelationshipsSupportConservedFlowsAndPublishedDisplayNames()
     {
-        var schema = Schema(); var scopes = GameWorld.DiscoverScopes(schema, typeof(GameWorld).Assembly.GetTypes().Concat(typeof(SchemaFox).Assembly.GetTypes()));
+        var schema = Schema(); var scopes = GameWorld.DiscoverScopes(schema, typeof(SimulationWorld).Assembly.GetTypes().Concat(typeof(SchemaFox).Assembly.GetTypes()));
         using var world = World();
         var from = new SchemaFox { Id = 7, Alertness = 10 }; var to = new SchemaFox { Id = 9, Alertness = 1 };
         from.Friends.Add(to); world.Wildlife.Animals.AddRange(new[] { from, to });
@@ -71,7 +71,7 @@ public sealed class AutomaticAnimalModelTests
     [Fact]
     public void CustomStocksFollowIdentityInsteadOfPositionsInTheAnimalList()
     {
-        var schema = Schema(); var scopes = GameWorld.DiscoverScopes(schema, typeof(GameWorld).Assembly.GetTypes().Concat(typeof(SchemaFox).Assembly.GetTypes()));
+        var schema = Schema(); var scopes = GameWorld.DiscoverScopes(schema, typeof(SimulationWorld).Assembly.GetTypes().Concat(typeof(SchemaFox).Assembly.GetTypes()));
         using var world = World();
         world.Wildlife.Animals.Add(new SchemaFox { Id = 7, TileId = 5 }); world.Wildlife.Animals.Add(new SchemaFox { Id = 9, TileId = 6 });
         var rule = new WorldRule { Id = "memory", Name = "Emlékezet", Scope = "schemaFox", Schedule = "wildlife", Effects = { new() { Target = "saját.memory", Mode = "add", Formula = "1" } } };

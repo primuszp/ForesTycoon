@@ -47,7 +47,7 @@ Világobjektum (absztrakt)          IWorldObject
 `RuleSchema.Discover(assembly)` adja a fajták listáját: szülők, öröklött és saját mezők (melyik szintről jönnek),
 kapcsolatok és műveletek. Ez a `ForesTycoon.Rules` könyvtárban van, így a játék és az editor ugyanazt a modellt látja.
 
-### 2.2 A játék oldala (`ForesTycoon/World/RuleEntities.cs`)
+### 2.2 A játék oldala (`ForesTycoon.Simulation/World/RuleEntities.cs`)
 
 - Az interfészek mellett egy-egy **nézetosztály** (`TreeView`, `TruckView`, `TileView`) valósítja meg őket az élő
   világon; elemenként újra van kötve (`Bind(world, id)`), nem foglal memóriát elemenként.

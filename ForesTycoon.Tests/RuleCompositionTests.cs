@@ -105,7 +105,7 @@ public sealed class RuleCompositionTests
         using var w = World(); var p = w.RuleProjectDocument; p.Rules.Clear();
         w.QueueRuleProject(p); w.ExecutePendingCommands(); w.Wildlife.RequestPopulation();
         w.Wildlife.Update(0, w.Map, w.Forest, w.Environment); Assert.Empty(w.Wildlife.Animals);
-        var schema = RuleSchema.Discover(typeof(GameWorld).Assembly.GetTypes().Concat(typeof(SchemaFox).Assembly.GetTypes()), RuleEntityTexts.Hungarian);
+        var schema = RuleSchema.Discover(typeof(SimulationWorld).Assembly.GetTypes().Concat(typeof(SchemaFox).Assembly.GetTypes()), RuleEntityTexts.Hungarian);
         var fox = w.Wildlife.CreateTypes(schema).Single(t => t.Entity.Type == typeof(SchemaFox));
         Assert.True(fox.HabitatCount > 0); fox.DesiredPopulation = 2; fox.ApplyPopulation();
         w.Wildlife.Update(0, w.Map, w.Forest, w.Environment);

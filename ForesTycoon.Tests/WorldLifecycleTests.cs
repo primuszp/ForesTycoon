@@ -148,7 +148,7 @@ public class WorldLifecycleTests
     public void PartiallyFailedWorldCannotContinueOrSaveAndCanRecoverByLoading()
     {
         using var world = Create(); byte[] valid = Save(world);
-        var systems = (WorldSystemCollection)typeof(GameWorld).GetField("systems",
+        var systems = (WorldSystemCollection)typeof(SimulationWorld).GetField("systems",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(world)!;
         systems.Add(new FailingSystem());
         Assert.Throws<IOException>(() => world.Update(1.0 / 30)); Assert.True(world.IsFaulted);

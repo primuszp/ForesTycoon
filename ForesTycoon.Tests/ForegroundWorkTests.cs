@@ -222,7 +222,7 @@ public class ForegroundWorkTests
     public void InteractiveRegenerationCanRecoverAFaultedWorld()
     {
         using var world = World();
-        var systems = (WorldSystemCollection)typeof(GameWorld).GetField("systems",
+        var systems = (WorldSystemCollection)typeof(SimulationWorld).GetField("systems",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(world)!;
         systems.Add(new FailingSystem());
         Assert.Throws<IOException>(() => world.Update(1d / 30));

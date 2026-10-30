@@ -36,6 +36,7 @@ public sealed class AlgorithmBundle
 {
     public string Schema { get; set; } = "forest-algorithm-graphs";
     public int Version { get; set; } = 1;
+    public string BaseRevision { get; set; } = "";
     public List<AlgorithmFile> Files { get; set; } = new();
     private static readonly JsonSerializerOptions Options = new() {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase, PropertyNameCaseInsensitive = true,
@@ -90,7 +91,7 @@ public sealed class AlgorithmBundle
         }
         file.Root = Add(document.RootElement, ""); file.Entries.Add(new(file.Root, "Adatdefiníció")); return file;
     }
-    public static readonly string[] Projects = { "ForesTycoon", "ForesTycoon.Ecology", "ForesTycoon.Map", "ForesTycoon.Engine",
+    public static readonly string[] Projects = { "ForesTycoon", "ForesTycoon.Simulation", "ForesTycoon.Ecology", "ForesTycoon.Map", "ForesTycoon.Engine",
         "ForesTycoon.TreeModels", "ForesTycoon.Effects", "ForesTycoon.Models", "ForesTycoon.Rendering", "ForesTycoon.Rules" };
     public static AlgorithmBundle ImportWorkspace(string root)
     {
@@ -98,7 +99,21 @@ public sealed class AlgorithmBundle
         foreach (string relative in SourcePaths(root))
             bundle.Files.Add(relative.EndsWith(".cs") ? Import(relative, File.ReadAllText(System.IO.Path.Combine(root, relative)))
                 : ImportData(relative, File.ReadAllText(System.IO.Path.Combine(root, relative))));
+        bundle.BaseRevision = SourceRevision(bundle.RenderAll());
         return bundle;
+    }
+    internal static string WorkspaceRevision(string root) => SourceRevision(SourcePaths(root)
+        .Select(path => new KeyValuePair<string, string>(path, File.ReadAllText(System.IO.Path.Combine(root, path)))));
+
+    internal static string SourceRevision(IEnumerable<KeyValuePair<string, string>> sources)
+    {
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        foreach (var pair in sources.OrderBy(pair => pair.Key, StringComparer.Ordinal)) {
+            string text = pair.Key.EndsWith(".json", StringComparison.Ordinal) ? Render(ImportData(pair.Key, pair.Value)) : pair.Value;
+            string content = text.Replace("\r\n", "\n").TrimEnd();
+            hash.AppendData(Encoding.UTF8.GetBytes(pair.Key + "\0" + content + "\0"));
+        }
+        return Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
     }
     public static IEnumerable<string> SourcePaths(string root)
     {
@@ -108,8 +123,8 @@ public sealed class AlgorithmBundle
                 string relative = System.IO.Path.GetRelativePath(root, path).Replace('\\', '/');
                 if (relative.Split('/').Any(s => s is "obj" or "bin")) continue;
                 // The host, compiler and editor form the stable execution boundary.
-                if (project == "ForesTycoon" && !relative.StartsWith("ForesTycoon/World/", StringComparison.Ordinal)) continue;
-                if (relative.EndsWith("/RuleProjectLink.cs") || relative.EndsWith("/GameWorld.RuleProject.cs")) continue;
+                if (project == "ForesTycoon") continue;
+                if (relative.EndsWith("/RuleProjectLink.cs") || relative.EndsWith("/GameWorld.RuleProject.cs") || relative.EndsWith("/SimulationWorld.RuleProject.cs")) continue;
                 yield return relative;
             }
         }

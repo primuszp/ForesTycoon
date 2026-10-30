@@ -1,37 +1,22 @@
 # Architektúra: rétegek és modulok, egyirányú függőség
 
-```
- ┌────────────────────────────────────────────────────────────────────────────────────┐
- │ ForesTycoon  (a játék)                                                             │
- │  App · UI · Interaction · Camera │ World (GameWorld, parancsok, mentés, járművek)  │
- │  Terrain (a terep JELENETE: GPU) │ Rendering/* (jelenet, erdő-GPU, ragasztó)    │
- └──┬────────────┬───────────────┬──────────────┬───────────────┬─────────────────────┘
-    │            │               │              │               │
-    │     Map: a talaj (TerrainMap), Engine+Ecology fölött, GL nélkül – a játék köti
- ┌──▼──────────┐ │ ┌─────────────▼───┐ ┌────────▼──────────┐ ┌──▼──────────────────┐
- │ TreeModels  │ │ │ Effects         │ │ Models            │ │ (a játék közvetlenül│
- │ fajszintű   │ │ │ eső, hó, felhő, │ │ glTF/GLB betöltés,│ │  is használja)      │
- │ modell-     │ │ │ köd, villám,    │ │ animáció, kép-    │ └─────────────────────┘
- │ generálás   │ │ │ akciójelzők     │ │ és jelenet-eszköz │
- └──┬──────────┘ │ └──┬──────┬───────┘ └────────┬──────────┘
-    │            │    │      │                  │
- ┌──▼────────────▼─┐  │   ┌──▼──────────────────▼────────────┐
- │ Ecology         │  │   │ Rendering (GPU-mag)              │
- │ víz · talaj ·   │◄─┘   │ eszköz, shader, pass-ok, puffer, │
- │ időjárás · fajok│      │ batch, utófeldolgozás, mérők     │
- │ · erdő          │      └──┬───────────────────────────────┘
- └──┬──────────────┘         │
- ┌──▼────────────────────────▼───────────────────────────────────────────────────────┐
- │ Engine: fix lépéses idő, rendszerek, háttérmunkák, animáció-idő, csúcspont-formátum│
- └────────────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    Game["ForesTycoon: UI, GameWorld adapter, jelenet"] --> Simulation["ForesTycoon.Simulation: SimulationWorld"]
+    Game --> Visual["Rendering / Models / Effects"]
+    Simulation --> Map["Map"]
+    Simulation --> Trees["TreeModels: CPU alakvalidálás"]
+    Simulation --> Ecology["Ecology"]
+    Simulation --> Rules["Rules / RuleCompiler"]
+    Simulation --> Engine["Engine"]
+    Map --> Ecology
+    Trees --> Ecology
+    Ecology --> Engine
+    Visual --> Engine
 ```
 
-Az önálló `ForesTycoon.Rules` a tiszta, korlátozott gráffuttató és a szabálydokumentumok könyvtára. Az Ecology az Engine mellett ezt is használja a termőhelyi és vízstressz-válaszokhoz; a Rules nem hivatkozik sem a játékra, sem az Editorra vagy grafikai könyvtárra.
-
-A függőség csak lefelé mehet. Ezt a fordító (projekthivatkozások) és az `ArchitectureTests` is
-kikényszeríti: a szimulációs és modellezési könyvtárak (Engine, Ecology, TreeModels) nem használhatnak
-grafikai, ablakozó vagy UI csomagot; a render-modulok (Rendering, Models, Effects) GL-t igen, ablakot és
-UI-t nem, és nem hivatkozhatnak a játékra vagy egymás fölötti rétegre.
+A `Simulation` függőségi láncában nincs játék-, editor-, GPU-, ablak- vagy UI-modul.
+Ezt a `SimulationModuleTests` tranzitívan, az `ArchitectureTests` a forrásokon is ellenőrzi.
 
 | Szerelvény | Névtér | Felelőssége | Nem tudhat |
 |---|---|---|---|
@@ -41,8 +26,9 @@ UI-t nem, és nem hivatkozhatnak a játékra vagy egymás fölötti rétegre.
 | `ForesTycoon.Map` | `ForesTycoon.Map` | a talaj mint adat és szabály: magasságrács, generálás, hidrológia, utak, szerkesztés, picking (`TerrainMap`); az erdő élőhelye (`IForestHabitat`) | GL, render, jármű, játékvilág |
 | `ForesTycoon.Rendering` | `ForesTycoon.Rendering` | a render GPU-magja: `RenderDevice`, `GlProgram`, `RenderPipeline`/pass-ok, `VertexBuffer`, `DynamicPrimitiveBatch`, `DioramaPostProcess`, `RenderMetrics`, `ISurfaceVisuals` | erdő, terep, modellek, effektek |
 | `ForesTycoon.Models` | `ForesTycoon.Models` | modellbetöltés és -rajzolás: `AnimatedGlbModel` (glTF/GLB), `AnimatedModelRenderer`, `ImportedSceneAsset` | járművek, erdő, terep |
-| `ForesTycoon.Effects` | `ForesTycoon.Effects` | vizuális effektek: `WeatherRenderer`, `CloudRenderer`, `FogHabitat`, `WeatherVisualState`, `WorldEffectSystem` + `EffectRenderer` | terep, erdő (csak `IWeatherSurface`-en át látja a talajt) |
-| `ForesTycoon` | `ForesTycoon` | játékvilág, a terep jelenete (`Terrain`), jelenet-ragasztó, felület, diagnosztika | – |
+| `ForesTycoon.Effects` | `ForesTycoon.Effects` | vizuális effektek: `WeatherRenderer`, `CloudRenderer`, `FogHabitat`, `WeatherVisualState` | terep, erdő (csak `IWeatherSurface`-en át látja a talajt) |
+| `ForesTycoon.Simulation` | `ForesTycoon` (a meglévő belső típusnevek megőrzésével) | `SimulationWorld`, parancsok, logisztika, gazdaság, vadak, szabályfuttatás, mentés és akciójelző-állapot | render, ablak, UI, játékhost |
+| `ForesTycoon` | `ForesTycoon` | `GameWorld` megjelenítési adapter, a terep jelenete (`Terrain`), jelenet-ragasztó, felület, diagnosztika | – |
 
 A render-modulok a játékkal **interfészeken** csatlakoznak, amelyeket a játék valósít meg:
 `IShadingSettings` / `IPostProcessSettings` / `IWeatherSettings` (a `GraphicsSettings` mindhármat),
@@ -98,20 +84,69 @@ Részletek: [tree-shape-system.md](tree-shape-system.md), [arbaro-parameter-sets
   (`RenderLayer`, `RenderPipeline`), a puffer- és batch-kezelés és a kép utófeldolgozása. Más modul ide épít, ide nem ér vissza.
 * **Models:** csak azt tudja, hogyan lesz fájlból rajzolható modell: glTF/GLB elemzés, csontváz-animáció mintavétel,
   anyag- és alfa-mód, árnyék- és kontúr-rajzolás. Az eszközkiválasztás (melyik fához melyik modell) a játék dolga.
-* **Effects:** minden, ami „időjárás és visszajelzés”: eső/hó részecskék, felhő, köd-szabályok, villám, és az
-  akciójelző körök (`WorldEffectSystem`, az Engine `IWorldSystem`-je). Az időjárás állapotát az Ecology-ból olvassa
+* **Effects:** eső/hó részecskék, felhő, köd-szabályok és villám. Az akciójelzők időzített állapota
+  a Simulation modulban, az `EffectRenderer` a játékban van. Az időjárás állapotát az Ecology-ból olvassa
   (`WeatherPreset`, `EnvironmentSystem`), a talajt az `IWeatherSurface`-en át.
 Új effekt: egy új osztály az `Effects`-ben, a beállításai egy kis interfészen át; a játék köti be egy `RenderLayer`-re.
 
 ## 4. A játék – világ és megjelenítés
 
-* `World/`: `GameWorld` (a játékállapot határa), parancsok és visszajátszható mentés, járművek, rönkszállítás,
-  hatások, vadállomány. Itt vannak azok a szabályok, amelyek a terepet és a járműveket is ismerik.
+* `ForesTycoon.Simulation/World/`: `SimulationWorld`, parancsok és visszajátszható mentés, járművek,
+  rönkszállítás, gazdaság és vadállomány. A `SimulationLoader.CreateProject` önálló, grafika nélküli világot készít.
+* A játék `World/` mappájában a `GameWorld : SimulationWorld` megjelenítési adapter, a talajprofil
+  színezése és a projektfájlokat figyelő `RuleProjectLink` marad. A host kezeli a `GraphicsSettings`, `Terrain`
+  és `TerrainRenderer` erőforrásait. A szimuláció opcionális életciklus-hookokon át jelzi a pályacserét,
+  az ellenőrzést és a felszabadítást; ezek az önálló világban nem végeznek grafikai munkát.
+* A betöltés és generálás előbb külön jelölt világot épít, majd átadja az állapotot és a hozzá tartozó
+  megjelenítést. Hiba esetén a régi világ megmarad. A mentésformátum és a fix időlépés változatlan.
+* A modul a repository meglévő belső API-konvencióját követi (`InternalsVisibleTo` a hostnak, editornak
+  és teszteknek); ez még nem verziózott, nyilvános csomag-API.
 * `Terrain/Render` és `Terrain/Forest`: a terep **jelenete** (lásd az 5. pontot) – csak rajzol.
 * `Rendering/Gpu` (beállítások, ImGui-vezérlő), `Rendering/Forest` (fa-GPU állapot, LOD, régi/importált fa-modellek),
   `Rendering/Models` (jármű-modell), `Rendering/Scene` (jelenet-rajzolók, amelyek a modulokat összekötik).
 * A render csak olvas: `ForestSystem`-ből egyedeket, `TreeShapeSpec`-et épít (`TreeShapeSpec.From`), kéri a modellt, és
   feltölti. Soha nem módosítja a szimulációt. A fa újraépítése sávhatárhoz (`ShapeKey`) és fázis-/lombváltáshoz kötött.
+
+### A szabálymotor felelősségei
+
+A `ForesTycoon.Simulation/World` szabályfuttatója feladatonként tagolódik:
+
+| Rész | Felelősség |
+|---|---|
+| `RuleScope.cs` | Típusos objektumhalmazok, mezők, műveletek és kapcsolatok szerződése. |
+| `RuleEngine.Compilation.cs` | Kifejezések fordítása, olvasási tervek, hatások és áramlási slotok előkészítése. |
+| `RuleEngine.cs` | A logikai lépés sorrendje, munkakerete és saját, újrahasznált `RuleWorkBuffers` pufferei. |
+| `RuleNamedValues.cs` | Név szerinti bemenetek első olvasáskor rögzített értékei; élő előnézet és párhuzamos olvasás. |
+| `RuleFlowLedger.cs` | Átadott mennyiségek összesítése és determinisztikus publikálása. |
+| `RuleEngine.Flows.cs`, `RuleEngine.LocalFlows.cs` | Készletek közötti átadás; a saját cellás áramlások párhuzamos előkészítése. |
+| `RuleEngine.Preview.cs` | A hatások magyarázata a futó lépés értékeinek módosítása nélkül. |
+| `RuleEngine.State.cs` | Saját mezők, szabálykönyv és folyamatban levő lépés mentése, visszaállítása. |
+
+A fordított leírások csak a szabály metaadatait és a kiértékelőket tartják; a módosuló bemeneti
+és sajátmező-pufferek a futtatóhoz tartoznak. A kötött kiértékelők világonként, saját `RuleEngine`
+példányban készülnek, a név szerinti bemenetek olvasójával együtt.
+
+Egy logikai lépés egy névhez az első sikeres olvasás értékét használja. A közben kért előnézet
+az élő világot olvassa, a mentés pedig a lépés már rögzített bemeneteit viszi tovább.
+A párhuzamos áramlási lekérdezések ugyanazt az egyszer rögzített értéket kapják.
+Az áramlási főkönyv minden munkarészlet után publikál; a fordítási slotok és a már publikált
+kulcsok sorrendje megmarad. A korábban létező, időközben törölt áramlások összesítése is
+megmarad a mentésben. A JSON-adatszerkezetek és a szabályok végrehajtási sorrendje változatlan.
+
+A folyamatban levő szabálylépés visszaállítása az előkészített és eseményszűrt elemhalmazhoz
+ellenőrzi a mentett kurzort. Az előkészítés és a számlálás is szeletelhető; hibás kurzor esetén
+a jelölt világ betöltése megszakad, mielőtt átvenné a futó világ helyét.
+
+Az áramlási előnézet a `Transfer` átadási számítást elkülönített készletmásolatokon futtatja.
+Így a fogadó kapacitása és a szomszédok közötti elosztás is része az eredménynek;
+a következő hatás az előző hatás módosított másolatát látja. Az élő készletek és a főkönyv változatlanok.
+
+Az algoritmuscsomag és a rá mutató hivatkozás `BaseRevision` mezője az importáláskor használt
+forrásalapot rögzíti. A forráshash a fájlokat stabil sorrendben, egységes sorvégekkel kezeli.
+A szerkesztés és a klónozás megtartja ezt az eredetet. Megváltozott forrásalap esetén a korábbi
+csomag automatikus indítása és újrafordítása is elutasításra kerül: a szerkesztéseket az új
+forrásra kell átvezetni. A régi, eredetadat nélküli és a jelenlegi forrástól eltérő csomagokra
+ugyanez vonatkozik; a tárolt gráffájlok megmaradnak.
 
 ## 5. A terep felelősségi köre: `ForesTycoon.Map` és a `Terrain` jelenet
 
@@ -151,7 +186,7 @@ egy lekérdezést vagy eseményt – a térkép sosem hív rajzolót.
 ## Következő lépések
 * A rajzoló részek (`Terrain/Render`, `Terrain/Forest`, `Rendering/Scene`) külön `ForesTycoon.Scene` szerelvénybe
   vihetők; a térkép-oldali szétválasztás ehhez már megvan.
-* A parancs- és mentésréteg (`World/Commands`, `World/Persistence`) ugyanígy kivehető.
+* A szimuláció belső API-ja később szűk, nyilvános host API-vá alakítható.
 * A `GlbTruckModel` és a fa-GPU állapot (`Rendering/Forest`) általánosítható és a `Models`-be vihető.
 * Az `Ecosystem` mentés-pillanatképe (ellenőrzött snapshot + naplórészlet) a hosszú játékokhoz.
 

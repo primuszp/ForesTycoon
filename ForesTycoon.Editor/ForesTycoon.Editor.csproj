@@ -7,6 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- The editor hosts the game runtime for previews; the game never references the editor. -->
+    <ProjectReference Include="../ForesTycoon.Simulation/ForesTycoon.Simulation.csproj" />
     <ProjectReference Include="../ForesTycoon/ForesTycoon.csproj" />
     <ProjectReference Include="../ForesTycoon.Rules/ForesTycoon.Rules.csproj" />
     <Using Include="ForesTycoon.Engine" />

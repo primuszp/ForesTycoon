@@ -70,7 +70,7 @@ Az első javítási csomag ellenőrzése: 1509 sikeres Release teszt, teljes Rel
 
 ### P1 Az útöregedés időállapota elveszik betöltéskor
 
-Forrás: `ForesTycoon/World/GameWorld.cs:292`, `ForesTycoon/World/Persistence/GameWorld.Checkpoint.cs:7`, `ForesTycoon/World/Persistence/WorldCheckpointData.cs:44`.
+Forrás: `ForesTycoon.Simulation/World/SimulationWorld.cs:292`, `ForesTycoon.Simulation/World/Persistence/SimulationWorld.Checkpoint.cs:7`, `ForesTycoon.Simulation/World/Persistence/WorldCheckpointData.cs:44`.
 
 A `WeatherRoads` a `roadWeatherSeconds` részidőt gyűjti, és 0,5 másodpercnél alkalmazza az utak kopását és a közelítő nyomok öregedését. Ez az érték nem része a checkpointnak, és a `Load` sem veszi át a betöltéshez létrehozott világ értékét. Ezért a mentés folytatása eltér a megszakítás nélküli futástól. Meglévő világba betöltve még a korábbi világ maradékideje is megmaradhat.
 
@@ -80,7 +80,7 @@ Javítás: a részidő legyen verziózott és validált checkpointmező; a vilá
 
 ### P1 Új világban megmaradnak a régi kiadások
 
-Forrás: `ForesTycoon/World/GameWorld.cs:413`.
+Forrás: `ForesTycoon.Simulation/World/SimulationWorld.cs:413`.
 
 A `Regenerate` törli a rendszereket és a parancsnaplót, de nem nullázza az `Expenses` értékét. Az új logisztika bevétele és működési költsége újraindul, az építési kiadás viszont átjön az előző játékból. Így az új világ egyenlege hibás. A `roadWeatherSeconds` és a korábbi területművelet összesítése szintén megmarad.
 
@@ -90,7 +90,7 @@ Javítás: minden világállapot egyetlen, újonnan létrehozott állapotegység
 
 ### P2 Teherautóváltáskor kimarad üzemanyag a költségből
 
-Forrás: `ForesTycoon/World/Cargo/ForestryLogistics.Fleet.cs:113`, `:135`.
+Forrás: `ForesTycoon.Simulation/World/Cargo/ForestryLogistics.Fleet.cs:113`, `:135`.
 
 A telephelyről a munkához érkező járművet a `StartShuttle` új `Vehicle` példányra cseréli. Az új példány `FuelUsed` számlálója nulla, a flottateherautó `FuelCharged` értéke viszont a régi jármű fogyasztását őrzi. A különbség addig negatív, amíg az új jármű túl nem lépi a korábbi számlálót; ezalatt nincs üzemanyag-terhelés.
 
@@ -98,7 +98,7 @@ Célzott próba: a munkafázis indítása után az új jármű fogyasztása 0, a
 
 ### P2 A dokkok közötti útválasztás felülírja a súlyozott költséget
 
-Forrás: `ForesTycoon/World/Cargo/ForestryLogistics.Fleet.cs:77`, `ForesTycoon.Map/Terrain/TerrainMap.Network.cs:17`, `:79`.
+Forrás: `ForesTycoon.Simulation/World/Cargo/ForestryLogistics.Fleet.cs:77`, `ForesTycoon.Map/Terrain/TerrainMap.Network.cs:17`, `:79`.
 
 A `FindNetworkPath` súlyozott keresést végez: aszfalt 1, makadám 1,15, nyom legalább 3,5 egység. A `TruckRoute` az egyes dokkpárok eredményeit mégis csempeszám alapján hasonlítja össze. Több lehetséges dokk esetén így egy rövidebb, drága nyomvonal megelőzhet egy hosszabb, olcsóbb közúti útvonalat. Ez forráskódból igazolt döntési hiba; külön térképi reprodukció nem készült.
 
@@ -106,7 +106,7 @@ Javítás: a kereső adja vissza az út összköltségét is, és ezt használja
 
 ### P2 A regenerálás hibája használhatatlanná teheti az élő világot
 
-Forrás: `ForesTycoon/World/GameWorld.cs:413`, `:493`.
+Forrás: `ForesTycoon.Simulation/World/SimulationWorld.cs:413`, `:493`.
 
 A regenerálás előbb törli a parancsokat és rendszereket, majd a `ReplaceTerrain` felszabadítja a renderelőt és a terepet. Csak ezután ellenőrzi a null beállítást és építi az új világot. Ha a létrehozás hibát dob, a korábbi állapot már elveszett, és a mezők részben felszabadított objektumokra mutathatnak. A betöltés már izolált jelöltvilággal dolgozik; a regenerálásnál ugyanez a minta hiányzik.
 
@@ -124,7 +124,7 @@ Javasolt cél: először a látható chunkok távoli geometriája készüljön e
 
 ### A teljes játékállapot még grafikai környezethez kötött
 
-Forrás: `ForesTycoon/World/GameWorld.cs:16`, `:59`, `ForesTycoon/Rendering/Scene/TerrainRenderer.cs:33`.
+Forrás: `ForesTycoon.Simulation/World/SimulationWorld.cs:16`, `:59`, `ForesTycoon/Rendering/Scene/TerrainRenderer.cs:33`.
 
 A Map és Ecology külön is futtatható, de a `GameWorld` a térképet a `Terrain` jeleneten keresztül éri el, és mindig renderelőt, valamint feltöltött geometriát hoz létre. Ezért egy teljes játék mentésének és gazdaságának teszteléséhez jelenleg grafikai környezet is szükséges. A világ állapotának legyen közvetlen `TerrainMap` tulajdona, és az állapot létrehozása legyen elválasztva a megjelenítés csatlakoztatásától. Az Editor ugyanennek a grafika nélküli állapotnak egy külön nézetét használhatja.
 

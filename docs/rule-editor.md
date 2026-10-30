@@ -369,7 +369,7 @@ rakománya és (írható) kopása.
 A szerkesztő mindent magyarul, a tervező szavaival mutat: objektum (**Út**, **Közelítőnyom**,
 **Tönk**, **Fa**) és tulajdonság (**Állapot**, **Vályúmélység**, **Lebomlás**). A kódbeli név
 (`road.condition`) csak a buborékban, másodlagos jelzésként látszik. A nevek és súgók a
-`ForesTycoon/World/RuleEntityTexts.cs` táblából jönnek (kulcs: `objektum.mező`,
+`ForesTycoon.Simulation/World/RuleEntityTexts.cs` táblából jönnek (kulcs: `objektum.mező`,
 választós mezőnél `objektum.mező.érték`); ha egy új mezőnek még nincs sora, az angol kódnév látszik.
 
 1. **Mely objektumokon fusson?** Válaszd ki, például **Út** vagy **Fa**. Mellette látszik,

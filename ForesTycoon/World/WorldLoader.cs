@@ -75,11 +75,14 @@ internal static partial class WorldLoader
             new GameWorld(GameWorld.ScenarioSettings(copy.World), soils: GameWorld.SoilModel(copy.World), enableRendering: false, responseRules: ForesTycoon.Rules.EcologyResponseProgram.FromModel(copy.Behaviors), scene: copy.World);
         try
         {
-            if (copy.World?.InitialState != null) RestoreInitialState(world, copy.World);
+            if (copy.World?.InitialState != null) SimulationLoader.RestoreInitialState(world, copy.World);
             world.InitializeProjectScene(copy);
             if (enableRendering) world.AttachRendering();
             return world;
         }
         catch { world.Dispose(); throw; }
     }
+    internal static WorldScenario CaptureScenario(SimulationWorld world) => SimulationLoader.CaptureScenario(world);
+    internal static RuleProject OpeningProject() => SimulationLoader.OpeningProject();
+    internal static WorldSaveData ReadInitialState(WorldScenario scene) => SimulationLoader.ReadInitialState(scene);
 }

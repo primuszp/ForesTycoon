@@ -40,7 +40,7 @@ public sealed class RuleSchemaDrivenTests
     [Fact]
     public void ANewInterfaceAndViewAppearInTheSchemaAndScopesWithNoOtherChanges()
     {
-        var types = typeof(GameWorld).Assembly.GetTypes().Concat(typeof(RuleSchemaDrivenTests).Assembly.GetTypes()).ToArray();
+        var types = typeof(SimulationWorld).Assembly.GetTypes().Concat(typeof(RuleSchemaDrivenTests).Assembly.GetTypes()).ToArray();
         var schema = RuleSchema.Discover(types);
         var entity = schema.Find("sampleMarker");
         Assert.NotNull(entity);

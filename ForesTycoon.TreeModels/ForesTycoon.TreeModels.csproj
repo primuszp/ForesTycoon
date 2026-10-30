@@ -27,6 +27,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="ForesTycoon" />
+    <InternalsVisibleTo Include="ForesTycoon.Simulation" />
     <InternalsVisibleTo Include="ForesTycoon.Tests" />
     <InternalsVisibleTo Include="ForesTycoon.Editor" />
   </ItemGroup>

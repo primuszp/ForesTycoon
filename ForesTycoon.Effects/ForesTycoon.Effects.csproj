@@ -1,8 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Visual effects: rain and snow particles, clouds, fog habitat rules, lightning, and the timed
-    world-effect markers that give action feedback. Built on the GPU core; it reads the weather state
+    Visual effects: rain and snow particles, clouds, fog habitat rules, lightning. Action-feedback marker state belongs to Simulation; the game draws it. Built on the GPU core; it reads the weather state
     of the ecosystem and an abstract weather surface, never the terrain or forest directly.
   -->
   <PropertyGroup>

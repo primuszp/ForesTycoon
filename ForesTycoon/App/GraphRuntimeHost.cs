@@ -64,9 +64,9 @@ sealed partial class GameWorld
     {
         var fields = RuleWorldFields.ToDictionary(k => k, ReadRuleValue);
         double volume = 0, height = 0, diameter = 0, health = 0; int count = 0;
-        foreach (var patch in forest.IndividualTrees.Patches.Select(p => p.Value))
+        foreach (var patch in Forest.IndividualTrees.Patches.Select(p => p.Value))
             for (int i = 0; i < patch.Count; i++) {
-                var tree = patch.Trees[i]; var size = tree.At(forest.ForestYear);
+                var tree = patch.Trees[i]; var size = tree.At(Forest.ForestYear);
                 volume += ForestTree.Volume(size); height += size.Height; diameter += size.Diameter; health += tree.Health; count++;
             }
         fields["forest.totalVolume"] = volume;
@@ -74,7 +74,7 @@ sealed partial class GameWorld
             fields["forest.meanHeight"] = height / count; fields["forest.meanDiameter"] = diameter / count; fields["forest.meanHealth"] = health / count;
         }
         double condition = 0; int roads = 0;
-        for (int i = 0; i < map.Tiles.Count; i++) if (map.IsRoadTile(i)) { condition += map.GetRoadCondition(i); roads++; }
+        for (int i = 0; i < Map.Tiles.Count; i++) if (Map.IsRoadTile(i)) { condition += Map.GetRoadCondition(i); roads++; }
         if (roads > 0) fields["road.meanCondition"] = condition / roads;
         foreach (var stock in DynamicsValues) fields["stock." + stock.Key] = stock.Value;
         return fields;

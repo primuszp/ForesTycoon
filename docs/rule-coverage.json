@@ -542,7 +542,7 @@
     {
       "id": "missions",
       "status": "graph",
-      "source": "ForesTycoon/World/GameWorld.Missions.cs",
+      "source": "ForesTycoon.Simulation/World/SimulationWorld.Missions.cs",
       "symbol": "MissionStatus",
       "editor": "Küldetések",
       "remaining": "A teljesülés, lejárat és az egyidejű feltételek elsőbbsége projektgráf. A metrikák a felismert világmezőkből és összesítésekből készülnek; küszöb és határidő jelenetadat. Egyedi küldetésenkénti eseményhatás új funkcióként adható hozzá.",

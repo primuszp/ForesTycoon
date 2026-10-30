@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- World state, transport, economy, rules and persistence. No presentation dependency. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>ForesTycoon</RootNamespace>
+    <AssemblyName>ForesTycoon.Simulation</AssemblyName>
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+  <ItemGroup>
+    <Using Include="ForesTycoon.Engine" />
+    <Using Include="ForesTycoon.Ecology" />
+    <Using Include="ForesTycoon.Map" />
+    <Using Include="ForesTycoon.Rules" />
+    <Using Include="ForesTycoon.Effects" />
+    <ProjectReference Include="../ForesTycoon.Engine/ForesTycoon.Engine.csproj" />
+    <ProjectReference Include="../ForesTycoon.Ecology/ForesTycoon.Ecology.csproj" />
+    <ProjectReference Include="../ForesTycoon.TreeModels/ForesTycoon.TreeModels.csproj" />
+    <ProjectReference Include="../ForesTycoon.Map/ForesTycoon.Map.csproj" />
+    <ProjectReference Include="../ForesTycoon.Rules/ForesTycoon.Rules.csproj" />
+    <ProjectReference Include="../ForesTycoon.RuleCompiler/ForesTycoon.RuleCompiler.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="ForesTycoon" />
+    <InternalsVisibleTo Include="ForesTycoon.Editor" />
+    <InternalsVisibleTo Include="ForesTycoon.Tests" />
+  </ItemGroup>
+</Project>

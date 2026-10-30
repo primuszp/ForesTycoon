@@ -43,7 +43,7 @@ public static class AlgorithmBuild
         string layout = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(json)))[..16].ToLowerInvariant();
         string path = Path.Combine(folder, revision + "-" + layout + ".json");
         if (!File.Exists(path)) RuleProject.WriteAtomic(path, json);
-        return new() { Revision = revision, BundlePath = path, WorkspaceRoot = Path.GetFullPath(workspace) };
+        return new() { Revision = revision, BundlePath = path, WorkspaceRoot = Path.GetFullPath(workspace), BaseRevision = bundle.BaseRevision };
     }
     public static AlgorithmBundle Read(AlgorithmGraphReference reference)
     {
@@ -66,8 +66,10 @@ public static class AlgorithmBuild
             var sources = AlgorithmBundle.SourcePaths(workspace).ToArray();
             var missing = sources.Where(p => !rendered.ContainsKey(p)).ToArray();
             if (missing.Length > 0) return "régebbi a kódnál; hiányzik belőle: " + string.Join(", ", missing.Take(4)) + (missing.Length > 4 ? " …" : "");
-            static string Normal(string text) => text.Replace("\r\n", "\n").TrimEnd();
-            if (sources.All(p => Normal(rendered[p]) == Normal(File.ReadAllText(Path.Combine(workspace, p))))) return "a jelenlegi kód változatlan másolata";
+            string currentBase = AlgorithmBundle.WorkspaceRevision(workspace);
+            if (AlgorithmBundle.SourceRevision(rendered) == currentBase) return "a jelenlegi kód változatlan másolata";
+            if (string.IsNullOrEmpty(reference.BaseRevision) || reference.BaseRevision != currentBase)
+                return "az algoritmusmásolat alapjául szolgáló forrás megváltozott; újra kell alapozni a szerkesztéseket";
             return null;
         } catch (Exception e) when (e is IOException or InvalidDataException or UnauthorizedAccessException or System.Text.Json.JsonException) {
             return "nem olvasható: " + e.Message;
@@ -80,6 +82,9 @@ public static class AlgorithmBuild
         if (!File.Exists(Path.Combine(workspace, "ForesTycoon/ForesTycoon.csproj"))) throw new InvalidDataException("A fordításhoz hiányzik a ForesTycoon munkaterület.");
         var missing = AlgorithmBundle.SourcePaths(workspace).Where(p => !rendered.ContainsKey(p)).Take(8).ToArray();
         if (missing.Length > 0) throw new InvalidDataException("A teljes algoritmusprojektből gráfok hiányoznak: " + string.Join(", ", missing));
+        if (reference.Revision != CurrentRevision && (string.IsNullOrEmpty(reference.BaseRevision)
+            || reference.BaseRevision != AlgorithmBundle.WorkspaceRevision(workspace)))
+            throw new InvalidDataException("Az algoritmusmásolat forrásalapja hiányzik vagy megváltozott; újraalapozás szükséges.");
         // Host changes must rebuild even when gameplay graph semantics stay identical.
         using var hostHash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         foreach (string name in AlgorithmBundle.Projects.Append("ForesTycoon.RuleCompiler"))

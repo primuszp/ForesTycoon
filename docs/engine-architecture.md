@@ -1,6 +1,6 @@
 # Engine architecture
 
-> A szerelvényekre bontott, egyirányú rétegezést az [architecture.md](architecture.md) írja le (Engine ← Ecology ← TreeModels ← játék). Az alábbi szöveg a futási folyamatot és a teljesítménypolitikát tartalmazza; a `Simulation` mappa neve azóta `World`, az erdő/víz/időjárás a `ForesTycoon.Ecology` szerelvényben van.
+> A modulhatárokat az [architecture.md](architecture.md) írja le. A világállapot, logisztika, gazdaság és mentés a `ForesTycoon.Simulation` modulban él (`SimulationWorld`); a játék `GameWorld` osztálya a megjelenítési adapter. Az erdő/víz/időjárás a `ForesTycoon.Ecology` szerelvényben van.
 
 The engine is organized around one rule: simulation state is deterministic and independent from the window and renderer.
 
@@ -19,7 +19,7 @@ profilozás ellenőrzésre szolgál; nem teheti gépsebességtől függővé a v
 A szétosztás nem dobhat el szimulációs időt és nem változtathatja meg észrevétlenül
 a szabály jelentését vagy a fizika időlépését.
 
-A folyamatos szimuláció ezt most `GameWorld.ContinueUpdate` munkafolyamatként
+A folyamatos szimuláció ezt most `SimulationWorld.ContinueUpdate` munkafolyamatként
 valósítja meg: globális dinamika, ökológia, logisztika, szabálykönyv, vadak és
 regisztrált rendszerek. A raszterek, havi erdőmunka, objektumlista-előkészítés,
 egyedhatások, flotta, automatikus útkeresés és útvonalgeometria külön

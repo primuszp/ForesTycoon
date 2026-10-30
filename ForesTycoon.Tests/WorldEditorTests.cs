@@ -121,7 +121,7 @@ public sealed class StaleAlgorithmBundleTests
         try {
             string workspace = ForesTycoon.RuleCompiler.AlgorithmBuild.FindWorkspace()!;
             var bundle = new ForesTycoon.RuleCompiler.AlgorithmBundle();
-            bundle.Files.Add(ForesTycoon.RuleCompiler.AlgorithmBundle.Import("ForesTycoon/World/Economy.cs", File.ReadAllText(Path.Combine(workspace, "ForesTycoon/World/Economy.cs"))));
+            bundle.Files.Add(ForesTycoon.RuleCompiler.AlgorithmBundle.Import("ForesTycoon.Simulation/World/Economy.cs", File.ReadAllText(Path.Combine(workspace, "ForesTycoon.Simulation/World/Economy.cs"))));
             var reference = ForesTycoon.RuleCompiler.AlgorithmBuild.Store(bundle, workspace, Path.Combine(folder, "project.json"));
             string? reason = ForesTycoon.RuleCompiler.AlgorithmBuild.StaleReason(reference);
             Assert.NotNull(reason);

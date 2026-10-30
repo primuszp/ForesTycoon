@@ -72,7 +72,7 @@ public class AlgorithmGraphTests
     public async Task CompiledGraphsExecuteInternalAlgorithmEditsAndMigrateWorldState()
     {
         string workspace = AlgorithmBuild.FindWorkspace()!; var bundle = AlgorithmBundle.ImportWorkspace(workspace);
-        var file = bundle.Files.Single(f => f.Path == "ForesTycoon/World/GameWorld.cs"); var index = file.Index();
+        var file = bundle.Files.Single(f => f.Path == "ForesTycoon.Simulation/World/SimulationWorld.cs"); var index = file.Index();
         var balance = index[file.Entries.Single(e => e.Name == "Balance").Id];
         var arrow = balance.Children.Select(id => index[id]).Single(n => n.Kind == "ArrowExpressionClause");
         string expression = AlgorithmBundle.InsertTemplate(file, 0);

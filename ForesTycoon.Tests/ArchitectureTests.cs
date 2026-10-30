@@ -89,6 +89,7 @@ public class ArchitectureTests
     [InlineData("ForesTycoon.Ecology")]
     [InlineData("ForesTycoon.TreeModels")]
     [InlineData("ForesTycoon.Map")]
+    [InlineData("ForesTycoon.Simulation")]
     public void LibrarySourcesNeverUseGraphicsWindowingOrUi(string project)
     {
         string dir = Path.Combine(RepositoryRoot(), project);

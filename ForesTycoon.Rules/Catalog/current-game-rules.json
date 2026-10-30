@@ -24,7 +24,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/GameWorld.cs",
+          "file": "ForesTycoon.Simulation/World/SimulationWorld.cs",
           "symbol": "VehicleTimeScale"
         },
         {
@@ -112,7 +112,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/Commands/WorldCommandQueue.cs",
+          "file": "ForesTycoon.Simulation/World/Commands/WorldCommandQueue.cs",
           "symbol": "ExecutePending"
         }
       ],
@@ -148,7 +148,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/GameWorld.cs",
+          "file": "ForesTycoon.Simulation/World/SimulationWorld.cs",
           "symbol": "Load"
         }
       ],
@@ -174,7 +174,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/GameWorld.Behaviors.cs",
+          "file": "ForesTycoon.Simulation/World/SimulationWorld.Behaviors.cs",
           "symbol": "ExecuteBehaviors"
         }
       ],
@@ -238,7 +238,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/Cargo/ForestryLogistics.Behaviors.cs",
+          "file": "ForesTycoon.Simulation/World/Cargo/ForestryLogistics.Behaviors.cs",
           "symbol": "RouteCost"
         }
       ],
@@ -273,7 +273,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/Cargo/ForwarderLoading.cs",
+          "file": "ForesTycoon.Simulation/World/Cargo/ForwarderLoading.cs",
           "symbol": "ForwarderLoading"
         }
       ],
@@ -361,7 +361,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/GameWorld.cs",
+          "file": "ForesTycoon.Simulation/World/SimulationWorld.cs",
           "symbol": "ExecuteElevationEdit"
         }
       ],
@@ -2340,7 +2340,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/Cargo/ForestryLogistics.cs",
+          "file": "ForesTycoon.Simulation/World/Cargo/ForestryLogistics.cs",
           "symbol": "Designate"
         },
         {
@@ -2441,7 +2441,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/GameWorld.cs",
+          "file": "ForesTycoon.Simulation/World/SimulationWorld.cs",
           "symbol": "ExecuteRoadPath"
         },
         {
@@ -2495,7 +2495,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/GameWorld.cs",
+          "file": "ForesTycoon.Simulation/World/SimulationWorld.cs",
           "symbol": "ExecuteRoadRepair"
         },
         {
@@ -2642,7 +2642,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/GameWorld.cs",
+          "file": "ForesTycoon.Simulation/World/SimulationWorld.cs",
           "symbol": "ExecuteSkidTrailPath"
         },
         {
@@ -2754,7 +2754,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/Vehicles/VehicleDynamics.cs",
+          "file": "ForesTycoon.Simulation/World/Vehicles/VehicleDynamics.cs",
           "symbol": "Mass"
         }
       ],
@@ -2803,7 +2803,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/GameWorld.Rules.cs",
+          "file": "ForesTycoon.Simulation/World/SimulationWorld.Rules.cs",
           "symbol": "Trafficability"
         }
       ],
@@ -2836,7 +2836,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/Vehicles/VehicleDynamics.cs",
+          "file": "ForesTycoon.Simulation/World/Vehicles/VehicleDynamics.cs",
           "symbol": "Resistance"
         },
         {
@@ -2920,7 +2920,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/Vehicles/Vehicle.cs",
+          "file": "ForesTycoon.Simulation/World/Vehicles/Vehicle.cs",
           "symbol": "VehicleDynamics.Step"
         }
       ],
@@ -2986,7 +2986,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/Vehicles/VehicleDynamics.cs",
+          "file": "ForesTycoon.Simulation/World/Vehicles/VehicleDynamics.cs",
           "symbol": "FuelPerKilowattHour"
         }
       ],
@@ -3038,7 +3038,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/Vehicles/VehicleSystem.cs",
+          "file": "ForesTycoon.Simulation/World/Vehicles/VehicleSystem.cs",
           "symbol": "Update"
         }
       ],
@@ -3071,7 +3071,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/Cargo/VehicleUpkeep.cs",
+          "file": "ForesTycoon.Simulation/World/Cargo/VehicleUpkeep.cs",
           "symbol": "Operate"
         }
       ],
@@ -3118,7 +3118,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/Cargo/VehicleUpkeep.cs",
+          "file": "ForesTycoon.Simulation/World/Cargo/VehicleUpkeep.cs",
           "symbol": "FuelFactor"
         }
       ],
@@ -3168,7 +3168,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/Cargo/VehicleUpkeep.cs",
+          "file": "ForesTycoon.Simulation/World/Cargo/VehicleUpkeep.cs",
           "symbol": "RepairLeft"
         }
       ],
@@ -3235,7 +3235,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/Cargo/VehicleUpkeep.cs",
+          "file": "ForesTycoon.Simulation/World/Cargo/VehicleUpkeep.cs",
           "symbol": "Service"
         }
       ],
@@ -3287,7 +3287,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/Cargo/ForestryLogistics.Fleet.cs",
+          "file": "ForesTycoon.Simulation/World/Cargo/ForestryLogistics.Fleet.cs",
           "symbol": "PlaceDepotWork"
         }
       ],
@@ -3321,7 +3321,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/Cargo/ForestryLogistics.Fleet.cs",
+          "file": "ForesTycoon.Simulation/World/Cargo/ForestryLogistics.Fleet.cs",
           "symbol": "AssignTruck"
         }
       ],
@@ -3360,7 +3360,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/Cargo/ForestryLogistics.Machines.cs",
+          "file": "ForesTycoon.Simulation/World/Cargo/ForestryLogistics.Machines.cs",
           "symbol": "UpdateProcessor"
         }
       ],
@@ -3450,7 +3450,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/Cargo/ForestryLogistics.Machines.cs",
+          "file": "ForesTycoon.Simulation/World/Cargo/ForestryLogistics.Machines.cs",
           "symbol": "UpdateForwarder"
         }
       ],
@@ -3539,7 +3539,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/Cargo/ForwarderLoading.cs",
+          "file": "ForesTycoon.Simulation/World/Cargo/ForwarderLoading.cs",
           "symbol": "Step"
         }
       ],
@@ -3602,7 +3602,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/Cargo/ForestryLogistics.Machines.cs",
+          "file": "ForesTycoon.Simulation/World/Cargo/ForestryLogistics.Machines.cs",
           "symbol": "Advance"
         }
       ],
@@ -3659,7 +3659,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/Cargo/ForestryLogistics.Stacks.cs",
+          "file": "ForesTycoon.Simulation/World/Cargo/ForestryLogistics.Stacks.cs",
           "symbol": "Take"
         }
       ],
@@ -3690,7 +3690,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/Cargo/ForestryLogistics.Stacks.cs",
+          "file": "ForesTycoon.Simulation/World/Cargo/ForestryLogistics.Stacks.cs",
           "symbol": "Receive"
         },
         {
@@ -3737,7 +3737,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/Cargo/ForestryLogistics.cs",
+          "file": "ForesTycoon.Simulation/World/Cargo/ForestryLogistics.cs",
           "symbol": "PlaceMill"
         },
         {
@@ -3770,7 +3770,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/Cargo/ForestryLogistics.cs",
+          "file": "ForesTycoon.Simulation/World/Cargo/ForestryLogistics.cs",
           "symbol": "Processed"
         }
       ],
@@ -3799,7 +3799,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/Cargo/ForestryLogistics.Stacks.cs",
+          "file": "ForesTycoon.Simulation/World/Cargo/ForestryLogistics.Stacks.cs",
           "symbol": "Burn"
         },
         {
@@ -3842,7 +3842,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/GameWorld.cs",
+          "file": "ForesTycoon.Simulation/World/SimulationWorld.cs",
           "symbol": "Balance"
         },
         {
@@ -3886,7 +3886,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/WildlifeSystem.cs",
+          "file": "ForesTycoon.Simulation/World/WildlifeSystem.cs",
           "symbol": "CollectWildlifeSpots"
         },
         {
@@ -3920,7 +3920,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/WildlifeSystem.cs",
+          "file": "ForesTycoon.Simulation/World/WildlifeSystem.cs",
           "symbol": "Hunger"
         },
         {
@@ -3958,7 +3958,7 @@
       ],
       "sources": [
         {
-          "file": "ForesTycoon/World/WildlifeSystem.cs",
+          "file": "ForesTycoon.Simulation/World/WildlifeSystem.cs",
           "symbol": "TargetTile"
         },
         {

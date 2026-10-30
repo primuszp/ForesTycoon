@@ -126,6 +126,7 @@ public sealed class AlgorithmGraphReference
     public string BundlePath { get; set; } = "";
     public string WorkspaceRoot { get; set; } = "";
     public string HostVersion { get; set; } = "graph-host/1";
+    public string BaseRevision { get; set; } = "";
 }
 
 public sealed class DynamicsStock
