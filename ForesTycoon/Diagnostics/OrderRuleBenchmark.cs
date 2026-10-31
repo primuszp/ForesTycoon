@@ -42,6 +42,20 @@ internal static class OrderRuleBenchmark
             slices.Sort();
             Console.WriteLine($"{size}x{size}, long truck order including approach, route graph and vehicle geometry: whole {total:F3} ms; {slices.Count} slices of 64 units, p95/p99/max {slices[(int)(slices.Count * .95)]:F3}/{slices[(int)(slices.Count * .99)]:F3}/{slices[^1]:F3} ms; exact state equal: {equal}");
             if (!assigned || !result.Value || !equal) throw new InvalidOperationException("Order slicing failed.");
+            using var previews = new SlicedPreviewCache<int, int[]>(refreshFrames: int.MaxValue);
+            var previewSlices = new List<double>();
+            var truck = sliced.Logistics.Trucks.Single(); bool ready = false; int[] preview = null;
+            while (!ready) {
+                previews.BeginFrame(1);
+                ready = previews.Request(1, r => sliced.Logistics.PreviewTruckRouteWork(source, target, truck, r), out preview);
+                start = Stopwatch.GetTimestamp(); previews.Advance(64);
+                previewSlices.Add(Stopwatch.GetElapsedTime(start).TotalMilliseconds);
+                if (previewSlices.Count > 100000 || previews.LastWorkUnits > 64) throw new InvalidOperationException("Unbounded order preview.");
+            }
+            if (preview == null || !preview.SequenceEqual(sliced.Logistics.PreviewTruckRoute(source, target, truck)))
+                throw new InvalidOperationException("Preview cache differs from the synchronous route.");
+            previewSlices.Sort();
+            Console.WriteLine($"{size}x{size}, cached truck preview: {previewSlices.Count} frames, shared budget 64; p95/p99/max {previewSlices[(int)(previewSlices.Count * .95)]:F3}/{previewSlices[(int)(previewSlices.Count * .99)]:F3}/{previewSlices[^1]:F3} ms; exact route, {previews.Count} retained query.");
         }
     }
 }

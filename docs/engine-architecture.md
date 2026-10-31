@@ -1,8 +1,39 @@
-# Engine architecture
+﻿# Engine architecture
 
 > A modulhatárokat az [architecture.md](architecture.md) írja le. A világállapot, logisztika, gazdaság és mentés a `ForesTycoon.Simulation` modulban él (`SimulationWorld`); a játék `GameWorld` osztálya a megjelenítési adapter. Az erdő/víz/időjárás a `ForesTycoon.Ecology` szerelvényben van.
 
 The engine is organized around one rule: simulation state is deterministic and independent from the window and renderer.
+
+## Stabilitási javítások (2026-10-31)
+
+- A teherautó fizikai paraméterei minden logikai tick járműfázisának elején, a flotta léptetése előtt kapnak új mintát.
+  A v19 mentés a legutóbb használt fizikai specifikációt is tárolja és ellenőrzi; betöltés és világpublikálás nem
+  értékeli át ezt a mintát. A következő tick mindkét világon azonos módon mintavételez. A futtatóverzió
+  `forestycoon-simulation/2026-10-31.1`. A korábbi futtatók teljes, cél-ticknél készült állapotmentése importálható;
+  a megváltozott szemantikával történeti naplóvéget nem játszunk újra. Régi mentésben a nem tárolt fizikai mintát
+  az importált világ aktuális paramétereiből állítjuk elő.
+- A `tree` és `truck` saját szabálymezői stabil egyedazonosítóhoz tartoznak. Ritka tárolójuk csak a kezdeti értéktől
+  eltérő értékeket őrzi; tagságváltozáskor folytatható bejárás eltávolítja a megszűnt egyedeket. A fáknál nincs a
+  legnagyobb valaha kiosztott azonosítóval méretezett mezőtömb. A korábbi tömbös mezők betöltéskor, a flotta első
+  változása előtt alakulnak át. A növekedési rátafrissítéshez kötött fa-nézetet ez az előkészítés nem cserélheti le.
+- Hibás parancs után az interaktív világcsere közvetlenül elindulhat: nem vár a hibás munkával elérhetetlen határra.
+  Az új világ továbbra is izolált jelölt; csak sikeres elkészüléskor veszi át a régi helyét. Megszakítás vagy hiba
+  után a régi, hibás világ nem válik automatikusan futtathatóvá. A hibás állapotra váró mentési kérések elmaradnak.
+- Malom és telephely nem fedhet sarangot, üres sarangot sem; a megjelenítési előnézet ugyanezt a foglaltságot jelzi.
+- A járművek flotta-tulajdonosa közvetlen kapcsolat, a fizikai járművek azonosító szerinti keresése indexelt.
+  Mentésbetöltéskor a kapcsolatok szeletelve épülnek újra; ugyanazt a fizikai járművet két teherautó nem foglalhatja le.
+- A felület útvonal- és célpont-előnézetei közös, képkockánként 64 egységes munkakeretet kapnak. Legfeljebb 256
+  lekérdezés marad az LRU gyorsítótárban. Pálya-, hálózat-, szabály- és sarangváltozás érvénytelenít; a dinamikus
+  döntések kész eredménye legfeljebb 30 képkockáig használható újra. A már elkezdett keresést ez az időkorlát nem
+  indítja újra minden tickben. A már nem kért keresést a következő előnézeti munkakeret eldobja. Pályacsere és félkész
+  parancscsomag alatt az előnézet vár; a szimuláció szeletei között csak olvas, így folyamatos gyorsításkor sem éhezik ki.
+  A hálózat módosítása érvényteleníti a keresést; a parancs a tényleges állapotot továbbra is önállóan ellenőrzi.
+- Az erdészeti HUD a `PublishedRemaining` kész összesítését olvassa. Az összesítés a tick/parancs részeként, szeletelve
+  készül; a számláló olvasása nem járja be a kitermelési területeket vagy a flottát. Betöltéskor is újrapublikálódik.
+
+Regressziós ellenőrzések: `EngineFoundationTests`, `FoundationPersistenceTests`, `SlicedPreviewCacheTests`,
+`OrderPreviewWorkTests`. A `--orders-rule-benchmark` a 128×128 és 256×256 pályán a gyorsítótárazott előnézet
+64 egységes szeleteit és a szinkron referenciaútvonallal való egyezést is méri.
 
 ## Egyenletes szimulációs munkavégzés (2026-10-16)
 
@@ -757,3 +788,14 @@ világállapot-, főkönyv- és előnézet-egyezését.
 Ellenőrzés: 22 célzott teszt, majd a teljes 1609 tesztes csomag hibátlanul
 lefutott, kihagyás nélkül. A Release build 0 figyelmeztetést és 0 hibát adott;
 mind a 14 natív ellenőrzés, a szabályaudit és a diff-ellenőrzés sikeres.
+
+
+### Construction occupancy and timber access
+
+Terrain edits protect all affected corners, including neighbouring tiles, against roads, trails, buildings, stacks, living/dead trees, stumps, ground timber and current vehicle positions. Procedural starting-height definitions precede the initial forest; edits in captured scenes use the protected path. Planting rejects roads, trails, buildings, stacks, living trees, dead trees, ground timber and vehicles; existing stumps may remain during regeneration. Buildings require a clear entire footprint. Stack sites occupy free ground beside the network. Forwarder destinations reserve their stack site when the order is accepted.
+
+Road construction is the explicit forest-clearing exception. Before mutation it finds a roadside stack or a legal adjacent landing. The stroke and any newly cleared landing transfer all standing, dead and previously felled timber into that stack without sale income. No landing means no construction or charge. Repeating an unchanged road stroke is free. Initial authored structures remain a free starting estate; game construction charges the selected surface price for changed road tiles. Explicit editor felling (`ForestFelling`) leaves timber in the forest tile's depot for normal extraction; `ForestPaint` with an empty species remains a bare-land starting definition.
+
+Dirt, macadam and asphalt retain stable persisted enum values (asphalt 0, macadam 1, dirt 2). Rule projects migrate to version 6 with dirt price/weather controls and four independent buffer radii. New player skid-trail strokes must form a continuous traversable connection to a road, directly or through existing trails. Roads and trails share the navigation graph.
+
+`RoadTimberSurveyWork` estimates live standing timber within a horizontal, centre-to-centre metric radius of each network tile. Each road's result includes its own overlaps; the whole-network total counts each forest tile once. It does not reserve or automatically harvest timber, and does not model slope, rivers or extraction obstacles. Presentation advances the survey incrementally and displays its coverage in the editor structure map and the game's forestry overlay. Surface radii are editable under Burkolatok. The runtime version is `forestycoon-simulation/2026-10-31.2`; complete earlier snapshots can import, but historical command tails cannot replay under the changed construction rules.

@@ -46,7 +46,8 @@ namespace ForesTycoon
             foreach (int unit in map.RestoreWork(s.Terrain)) yield return unit;
             foreach (int unit in ecosystem.RestoreWork(s.Ecology)) yield return unit;
             foreach (int unit in Logistics.RestoreWork(s.Logistics)) yield return unit; timberCargo.Restore(s.AvailableTimber, s.DeliveredTimber);
-            foreach (int unit in vehicles.RestoreWork(s.Vehicles, map.Tiles.Count)) yield return unit; Logistics.BindVehicles(vehicles);
+            foreach (int unit in vehicles.RestoreWork(s.Vehicles, map.Tiles.Count)) yield return unit;
+            foreach (int unit in Logistics.BindVehiclesWork(vehicles)) yield return unit;
             foreach (int unit in wildlife.RestoreWork(s.Wildlife, map.Tiles.Count)) yield return unit; effects.Restore(s.Effects);
             foreach (var v in vehicles.Vehicles)
             {
@@ -62,6 +63,7 @@ namespace ForesTycoon
             while (!programs.IsCompleted) yield return 64;
             var compiled = programs.GetAwaiter().GetResult();
             dynamics = compiled.Dynamics; ruleEngine = compiled.Engine; behaviorPolicy = compiled.Policy;
+            foreach (int unit in ruleEngine.MigrateCustomValuesWork(this)) yield return unit;
             ruleProjectName = s.RuleProjectName ?? "ForesTycoon szabályrendszer";
             foreach (int unit in ruleEngine.RestoreStepWork(this, s.RuleStep)) yield return unit;
             algorithmGraphs = s.Algorithms;
@@ -73,6 +75,8 @@ namespace ForesTycoon
             }
             BindBehaviors();
             ApplyTuning(GameTuning.FromOverrides(s.Tuning));
+            if (s.Vehicles.Physics != null) { Tuning.RestoreTruck(s.Vehicles.Physics.Restore()); vehicles.Spec = Tuning.Truck; }
+            foreach (int unit in Logistics.PublishInventoryWork()) yield return unit;
         }
 
         /// <summary>The rule book and behaviors a checkpoint carries, brought to the current project version.</summary>
@@ -93,7 +97,7 @@ namespace ForesTycoon
             var rules = migration.Rules;
             var removed = s.RuleBook?.RemovedStarters ?? new();
             var engine = new RuleEngine(rules, s.RuleBook?.Fields ?? new(), runtime.Document.Stocks.Select(x => x.Id), ruleValues.ReadRule) { RemovedStarters = removed };
-            engine.Restore(s.RuleBook?.Values); engine.RestoreFlows(s.RuleBook?.FlowTotals);
+            engine.Restore(s.RuleBook?.Values); engine.RestoreKeyed(s.RuleBook?.KeyedValues); engine.RestoreFlows(s.RuleBook?.FlowTotals);
             var policy = new WorldBehaviorPolicy(migration.Behaviors, DynamicsRuntime.Keys(runtime.Document, RuleWorldFields), ruleValues.ReadRule);
             policy.Controllers.Restore(s.BehaviorStates ?? Array.Empty<BehaviorControllerSnapshot>());
             return (runtime, engine, policy);

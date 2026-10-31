@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -39,12 +39,12 @@ namespace ForesTycoon.Map
         }
 
         /// <summary>Rule-engine access: the trail is gone (overgrown), and routes can be refreshed.</summary>
-        public bool RemoveSkidTrail(int tileId) => skidTrails.Remove(tileId);
+        public bool RemoveSkidTrail(int tileId) { if (!skidTrails.Remove(tileId)) return false; NavigationVersion++; return true; }
 
         /// <summary>Forest floor a machine can drive on: no road, building or open water.</summary>
         public bool CanCarrySkidTrail(int tileId)
         {
-            if (!IsValidTileId(tileId) || roads.Has(tileId) || IsBuildingTile(tileId)) return false;
+            if (!IsValidTileId(tileId) || roads.Has(tileId) || IsBuildingTile(tileId) || HasGroundReservation(tileId) || HasMobileObject(tileId)) return false;
             Tile tile = tiles[tileId];
             return !ShouldDrawStandingWater(tile) && CountRiverCorners(tile) == 0;
         }
@@ -67,9 +67,43 @@ namespace ForesTycoon.Map
                 trail.Edges = merged;
                 trail.Idle = 0;
                 skidTrails[step.TileId] = trail;
+                NavigationVersion++;
                 changed.Add(step.TileId);
             }
             result.Value = changed.ToArray();
+        }
+
+        /// <summary>A player stroke must be continuous and reach a road, directly or through existing trails.</summary>
+        internal IEnumerable<int> MarkConnectedSkidTrailPathWork(int start, int end, WorkResult<int[]> result)
+        {
+            result.Value = Array.Empty<int>();
+            if (!IsValidTileId(start) || !IsValidTileId(end)) yield break;
+            var frontier = new Queue<int>(); var seen = new HashSet<int>(); var planned = new Dictionary<int, RoadEdge>();
+            foreach (var step in RoadPlanSteps(tiles[start], tiles[end])) {
+                yield return 1;
+                if (!IsRoadTile(step.TileId) && !CanCarrySkidTrail(step.TileId)) yield break;
+                planned[step.TileId] = step.Edges | GetNetworkEdges(step.TileId);
+                if (seen.Add(step.TileId)) frontier.Enqueue(step.TileId);
+            }
+            bool connected = false; var neighbours = new int[4];
+            while (frontier.Count > 0 && !connected) {
+                int tile = frontier.Dequeue(); yield return 1;
+                if (IsRoadTile(tile)) { connected = true; break; }
+                int count = GetTileNeighbours(tile, neighbours);
+                for (int i = 0; i < count; i++) {
+                    int next = neighbours[i];
+                    if (!IsNetworkTile(next) && !planned.ContainsKey(next)) continue;
+                    RoadEdge aEdge = EdgeToNeighbor(tile / (nodeRows - 1), tile % (nodeRows - 1), next / (nodeRows - 1), next % (nodeRows - 1));
+                    RoadEdge Edges(int id) => IsRoadTile(id) ? roads.GetEdges(id) : planned.TryGetValue(id, out var edge) ? edge : GetSkidTrailEdges(id);
+                    if (!Connects(IsRoadTile(tile), !IsRoadTile(tile), Edges(tile), aEdge,
+                        IsRoadTile(next), !IsRoadTile(next), Edges(next), Opposite(aEdge))) continue;
+                    if (IsRoadTile(next)) { connected = true; break; }
+                    if (seen.Add(next)) frontier.Enqueue(next);
+                    yield return 1;
+                }
+            }
+            if (!connected) yield break;
+            foreach (int unit in MarkSkidTrailPathWork(start, end, result)) yield return unit;
         }
 
         public int[] RemoveSkidTrailPath(int startTileId, int endTileId) { var result = new WorkResult<int[]>(); SimulationWork.Complete(RemoveSkidTrailPathWork(startTileId, endTileId, result)); return result.Value; }
@@ -79,7 +113,7 @@ namespace ForesTycoon.Map
             if (!IsValidTileId(startTileId) || !IsValidTileId(endTileId)) { result.Value = Array.Empty<int>(); yield break; }
             var removed = new List<int>();
             foreach (RoadPlanStep step in RoadPlanSteps(tiles[startTileId], tiles[endTileId]))
-            { yield return 1; if (skidTrails.Remove(step.TileId)) removed.Add(step.TileId); }
+            { yield return 1; if (RemoveSkidTrail(step.TileId)) removed.Add(step.TileId); }
             result.Value = removed.ToArray();
         }
 

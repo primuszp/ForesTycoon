@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using ForesTycoon.Rules;
 using ImGuiNET;
@@ -12,11 +12,14 @@ namespace ForesTycoon.Editor;
 /// </summary>
 internal sealed partial class RuleEditorView
 {
-    private enum StructureTool { Macadam, Asphalt, Sawmill, Depot }
+    private enum StructureTool { Macadam, Asphalt, Dirt, SkidTrail, Sawmill, Depot }
     private StructureTool structureTool;
     private int roadStart = -1;
     private string highlighted; // "road:i", "mill:i" or "depot:i" while its list row is hovered
     private (Vec2 At, float Cell, int Rows) mapGeometry;
+    private bool showStructureBuffers = true;
+    private readonly SlicedPreviewCache<int, RoadTimberSurvey> structureSurveys = new(1, 300);
+    private RoadTimberSurvey structureSurvey;
 
     private Vec2 TileCentre(int tile) => mapGeometry.At + new Vec2(tile / mapGeometry.Rows + .5f, tile % mapGeometry.Rows + .5f) * mapGeometry.Cell;
 
@@ -28,12 +31,23 @@ internal sealed partial class RuleEditorView
 
     private bool BuildingFits(GameWorld world, int tile, bool needsRoad) =>
         world.Map.TryGetSawmillFootprint(tile, out var footprint, out _)
-        && footprint.All(t => !world.Map.IsRoadTile(t) && !world.Map.IsBuildingTile(t))
+        && footprint.All(t => !world.Map.IsRoadTile(t) && !world.Map.IsBuildingTile(t) && !world.Forest.HasPhysicalObjects(t))
         && (!needsRoad || world.Map.FindRoadDocks(footprint).Count > 0);
 
     private void StructureCanvas(GameWorld world, int hovered)
     {
         var draw = ImGui.GetWindowDrawList();
+        structureSurveys.BeginFrame((world.Map, world.Map.NavigationVersion, world.Forest.EditRevision, world.Tuning));
+        if (showStructureBuffers) {
+            if (structureSurveys.Request(0, world.RoadTimberSurveyWork, out var survey)) structureSurvey = survey;
+            else structureSurvey = null;
+            structureSurveys.Advance(1024);
+            if (structureSurvey != null) for (int tile = 0; tile < structureSurvey.Overlay.Length; tile++) {
+                if (structureSurvey.Overlay[tile] == 0) continue;
+                Vec2 at = mapGeometry.At + new Vec2(tile / mapGeometry.Rows, tile % mapGeometry.Rows) * mapGeometry.Cell;
+                draw.AddRectFilled(at, at + new Vec2(mapGeometry.Cell), structureSurvey.Overlay[tile]);
+            }
+        }
         uint mill = EditorStyle.U(0.95f, 0.70f, 0.35f, 1), depot = EditorStyle.U(0.45f, 0.75f, 1f, 1), hot = EditorStyle.U(1, 1, 1, 1);
         uint end = EditorStyle.U(0.3f, 0.3f, 0.28f, 1);
         for (int i = 0; i < scenario.Roads.Count; i++) {
@@ -47,7 +61,7 @@ internal sealed partial class RuleEditorView
         for (int i = 0; i < scenario.Depots.Count; i++) { bool lit = highlighted == "depot:" + i; FootprintOutline(draw, scenario.Depots[i], lit ? hot : depot, lit ? 3 : 2); }
 
         if (ImGui.IsKeyPressed(ImGuiKey.Escape) || ImGui.IsMouseClicked(ImGuiMouseButton.Right)) roadStart = -1;
-        bool road = structureTool is StructureTool.Macadam or StructureTool.Asphalt;
+        bool road = structureTool is StructureTool.Macadam or StructureTool.Asphalt or StructureTool.Dirt or StructureTool.SkidTrail;
         if (road && roadStart >= 0) {
             draw.AddCircleFilled(TileCentre(roadStart), Math.Max(3, mapGeometry.Cell * .4f), EditorStyle.Selection);
             if (hovered >= 0) draw.AddLine(TileCentre(roadStart), TileCentre(hovered), EditorStyle.Selection, 2);
@@ -65,7 +79,7 @@ internal sealed partial class RuleEditorView
         if (road) {
             if (roadStart < 0) { roadStart = hovered; return; }
             if (hovered == roadStart) return;
-            scenario.Roads.Add(new RoadSegment { From = roadStart, To = hovered, Surface = structureTool == StructureTool.Asphalt ? "Asphalt" : "Macadam" });
+            scenario.Roads.Add(new RoadSegment { From = roadStart, To = hovered, Surface = structureTool.ToString() });
             int from = roadStart; roadStart = hovered; // the next click continues the road from here
             ApplyScenario(world, $"Út: #{from} → #{hovered}. Kattints tovább a folytatáshoz; jobb gomb vagy Esc: befejezés.");
         }
@@ -78,18 +92,23 @@ internal sealed partial class RuleEditorView
 
     private void StructurePanel(GameWorld world)
     {
+        ImGui.Checkbox("Faanyag-elérési pufferek", ref showStructureBuffers);
+        if (showStructureBuffers) ImGui.TextWrapped(structureSurvey == null ? "Elérhető készlet számítása…"
+            : $"Hálózatról elérhető élő faanyag: {structureSurvey.TotalTimber:F1} m³ (átfedések egyszer). A távolságok a Burkolatok lapon állíthatók.");
         EditorStyle.Section("Eszköz");
         foreach (var (tool, label, help) in new[] {
             (StructureTool.Macadam, "Makadámút", "Olcsóbb, gyorsabban kopik."), (StructureTool.Asphalt, "Aszfaltút", "Drágább, tartósabb."),
+            (StructureTool.Dirt, "Földút", "Olcsó épített út; esőben a talaj korlátozza."),
+            (StructureTool.SkidTrail, "Közelítőnyom", "Az úthálózatból az erdőbe vezető nyom."),
             (StructureTool.Sawmill, "Fűrészmalom", "Ide szállítják a fát; 2×2 hely."),
             (StructureTool.Depot, "Telephely", "A gépek otthona; az első a kezdő járműparkot adja. 2×2 hely út mellett.") }) {
             if (ImGui.Selectable(label, structureTool == tool)) { structureTool = tool; roadStart = -1; }
             if (ImGui.IsItemHovered()) ImGui.SetTooltip(help);
         }
         ImGui.PushTextWrapPos(0);
-        EditorStyle.Text(HudTheme.Muted, structureTool is StructureTool.Macadam or StructureTool.Asphalt
+        EditorStyle.Text(HudTheme.Muted, structureTool is StructureTool.Macadam or StructureTool.Asphalt or StructureTool.Dirt or StructureTool.SkidTrail
             ? "Kattints a kezdő-, majd a végcsempére; az utat a játék útkeresése vezeti. A további kattintások folytatják. Jobb gomb vagy Esc: befejezés."
-            : "Mutass a térképre: zöld keret – ide építhető, piros – nem. Az erdő a helyéről kiirtódik.");
+            : "Mutass a térképre: zöld keret – ide építhető, piros – nem. Az épület helyének szabadnak kell lennie.");
         EditorStyle.Text(HudTheme.Muted, "A kezdő építmények ingyen épülnek: a játék nulla egyenleggel indul.");
         ImGui.PopTextWrapPos();
 
@@ -107,7 +126,7 @@ internal sealed partial class RuleEditorView
         for (int i = 0; i < scenario.Depots.Count; i++) Row("depot", i, $"Telephely #{scenario.Depots[i]}" + (i == 0 ? " · járműpark" : ""));
         for (int i = 0; i < scenario.Sawmills.Count; i++) Row("mill", i, $"Fűrészmalom #{scenario.Sawmills[i]}");
         for (int i = 0; i < scenario.Roads.Count; i++)
-            Row("road", i, $"{(scenario.Roads[i].Surface == "Asphalt" ? "Aszfalt" : "Makadám")} #{scenario.Roads[i].From} → #{scenario.Roads[i].To}");
+            Row("road", i, $"{(scenario.Roads[i].Surface switch { "Asphalt" => "Aszfalt", "Macadam" => "Makadám", "Dirt" => "Földút", _ => "Közelítőnyom" })} #{scenario.Roads[i].From} → #{scenario.Roads[i].To}");
         if (scenario.Roads.Count + scenario.Sawmills.Count + scenario.Depots.Count == 0) {
             ImGui.PushTextWrapPos(0);
             EditorStyle.Text(HudTheme.Muted, scenario.InitialState != null ? "A rögzített jelenet meglévő útjai és épületei megmaradnak; itt az újakat veszed fel." : "Még nincs út vagy épület.");

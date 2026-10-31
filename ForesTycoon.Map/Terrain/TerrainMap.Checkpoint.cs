@@ -68,6 +68,7 @@ namespace ForesTycoon.Map
             hydro.StandingWaterTileIds.Clear(); hydro.StandingWaterTileIds.UnionWith(s.StandingWater);
             hydro.RiverNodeIds.Clear(); hydro.RiverNodeIds.UnionWith(s.RiverNodes);
             surfaceVisualVersion = s.SurfaceVersion;
+            NavigationVersion++;
             if (surfaceVisualVersions != null) Array.Fill(surfaceVisualVersions, ulong.MaxValue);
             foreach (var chunk in chunkIndex.Chunks) { yield return 1; chunk.MarkDirty(ChunkDirtyFlags.All); }
             EditsFlushed?.Invoke();

@@ -57,7 +57,7 @@ namespace ForesTycoon
         /// <summary>A stack stands on open ground beside the network (or on a trail): not on a road, building, water or felling.</summary>
         internal bool CanPlaceStack(int tile)
         {
-            if (!terrain.IsValidTileId(tile) || terrain.IsRoadTile(tile) || terrain.IsBuildingTile(tile) || ContainsTile(tile)) return false;
+            if (!terrain.IsValidTileId(tile) || terrain.IsNetworkTile(tile) || terrain.IsBuildingTile(tile) || forest.HasPhysicalObjects(tile) || terrain.HasMobileObject(tile)) return false;
             if (!terrain.IsSkidTrail(tile) && !terrain.CanCarrySkidTrail(tile)) return false;
             return terrain.IsSkidTrail(tile) || terrain.FindNetworkDocks(new[] { tile }).Count > 0;
         }
@@ -68,6 +68,7 @@ namespace ForesTycoon
             if (StackAt(tile) != null) { Status = "Itt már van sarang."; return false; }
             if (!CanPlaceStack(tile)) { Status = "A sarang nyom vagy út mellé, szabad talajra kerülhet."; return false; }
             Stacks.Add(new TimberStack { Id = nextStackId++, Tile = tile });
+            InvalidateOrderPreviews();
             Status = "Sarang helye kijelölve.";
             return true;
         }
@@ -81,6 +82,7 @@ namespace ForesTycoon
             if (Machines.Exists(m => m.Source == stack || m.Target == stack) || Trucks.Exists(t => t.Source == stack || t.Target == stack))
             { Status = "Ezzel a saranggal egy jármű dolgozik."; return false; }
             Stacks.Remove(stack);
+            InvalidateOrderPreviews();
             return true;
         }
 
@@ -96,7 +98,7 @@ namespace ForesTycoon
                     return;
                 }
             var stack = StackAt(tile);
-            if (stack == null) { stack = new TimberStack { Id = nextStackId++, Tile = tile }; Stacks.Add(stack); }
+            if (stack == null) { stack = new TimberStack { Id = nextStackId++, Tile = tile }; Stacks.Add(stack); InvalidateOrderPreviews(); }
             stack.Add(volume, value);
         }
 

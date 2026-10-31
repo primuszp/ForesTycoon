@@ -23,20 +23,25 @@ namespace ForesTycoon
         // The vehicle row under the mouse in the vehicles window ("m12" / "t3"), to draw its route strongly.
         private string hoveredFleetRow;
         // Route previews are searched when their ends change, not every frame.
-        private readonly Dictionary<(int, int, bool), int[]> routeCache = new();
-        private ulong routeCacheRevision;
+        private readonly record struct OrderPreviewKey(int Kind, int From, int To, bool Truck, int Actor, int MachineKind);
+        private readonly SlicedPreviewCache<OrderPreviewKey, object> orderPreviews = new();
         private (int Tile, string Reason) hoverCheck = (-1, null);
 
         private int[] CachedRoute(int from, int to, bool truck, ForestMachine machine = null, FleetTruck unit = null)
         {
             var logistics = world.Logistics;
-            if (logistics.Behaviors != null) return truck ? logistics.PreviewTruckRoute(from, to, unit ?? SendTruckUnit)
-                : logistics.PreviewMachinePath(from, to, machine ?? SendMachine);
-            ulong revision = (ulong)world.RoadCount * 7919 + (ulong)world.SkidTrailCount * 31 + (ulong)logistics.Stacks.Count;
-            if (revision != routeCacheRevision) { routeCache.Clear(); routeCacheRevision = revision; }
-            if (!routeCache.TryGetValue((from, to, truck), out var route))
-                routeCache[(from, to, truck)] = route = truck ? logistics.PreviewTruckRoute(from, to) : logistics.PreviewMachinePath(from, to);
-            return route;
+            machine ??= SendMachine; unit ??= SendTruckUnit;
+            var key = new OrderPreviewKey(0, from, to, truck, truck ? unit?.Id ?? -1 : machine?.Id ?? -1, (int?)machine?.Kind ?? -1);
+            return orderPreviews.Request(key, result => BoxPreview<int[]>(r => truck
+                ? logistics.PreviewTruckRouteWork(from, to, unit, r) : logistics.PreviewMachinePathWork(from, to, machine, r), result),
+                out var value) ? (int[])value : null;
+        }
+
+        private static IEnumerable<int> BoxPreview<T>(Func<WorkResult<T>, IEnumerable<int>> query, WorkResult<object> output)
+        {
+            var result = new WorkResult<T>();
+            foreach (int unit in query(result)) yield return unit;
+            output.Value = result.Value;
         }
 
         private ForestMachine SendMachine => sendTruck ? null : world.Logistics?.Machines.Find(m => m.Id == sendVehicleId);
@@ -57,15 +62,39 @@ namespace ForesTycoon
         /// <summary>Why the tile under the cursor is not a valid pick for the present step, or null.</summary>
         private string CheckPick(int tile)
         {
+            int source = sendSource, vehicleTile = SendVehicleTile(); bool needsDestination = sendNeedsDestination, truck = sendTruck;
+            var machine = SendMachine; var unit = SendTruckUnit;
+            var key = new OrderPreviewKey(needsDestination ? source < 0 ? 2 : 3 : 1, source < 0 ? vehicleTile : source, tile,
+                truck, sendVehicleId, (int?)machine?.Kind ?? -1);
+            return orderPreviews.Request(key, result => BoxPreview<string>(r =>
+                CheckPickWork(tile, source, needsDestination, truck, vehicleTile, machine, unit, r), result), out var reason)
+                ? (string)reason : "Útvonal ellenőrzése…";
+        }
+
+        private IEnumerable<int> CheckPickWork(int tile, int source, bool needsDestination, bool truck, int vehicleTile,
+            ForestMachine machine, FleetTruck unit, WorkResult<string> result)
+        {
             var logistics = world.Logistics;
-            if (tile < 0) return "";
-            if (!sendNeedsDestination) return SendMachine is { } m ? logistics.CheckProcessorStack(m, tile) : "";
-            if (sendSource < 0) return logistics.CheckSource(tile, sendTruck, SendVehicleTile(), SendMachine);
-            return logistics.CheckDestination(sendSource, tile, sendTruck, SendMachine, SendTruckUnit);
+            if (tile < 0 || !needsDestination && machine == null) { result.Value = ""; yield break; }
+            var work = !needsDestination ? logistics.CheckProcessorStackWork(machine, tile, result)
+                : source < 0 ? logistics.CheckSourceWork(tile, truck, vehicleTile, machine, result)
+                : logistics.CheckDestinationWork(source, tile, truck, machine, unit, result);
+            foreach (int step in work) yield return step;
         }
 
         /// <summary>Rebuilds what the ground shows for orders; called once per frame before the world is drawn.</summary>
         private void UpdateOrderOverlay()
+        {
+            orderPreviews.BeginFrame((world.Map, world.Map.NavigationVersion, world.Logistics.OrderSiteVersion, world.Tuning));
+            world.Orders.Clear();
+            // A fast-forward host may finish a tick and start another in the same frame. Read-only previews
+            // must keep progressing between simulation slices; edits and world replacement remain barriers.
+            if (world.CommandPending || world.GenerationPending || world.IsFaulted) return;
+            try { BuildOrderOverlay(); }
+            finally { orderPreviews.Advance(64); }
+        }
+
+        private void BuildOrderOverlay()
         {
             var o = world.Orders;
             o.Clear();
@@ -77,7 +106,7 @@ namespace ForesTycoon
                 foreach (var stack in logistics.Stacks) if (stack.Tile != sendSource) o.Candidates.Add(stack.Tile);
                 if (sendNeedsDestination && sendSource >= 0) foreach (var mill in logistics.Mills) o.Candidates.AddRange(mill.Footprint);
                 int hover = world.HoveredTileId;
-                if (hover != hoverCheck.Tile || logistics.Behaviors != null) hoverCheck = (hover, CheckPick(hover));
+                hoverCheck = (hover, CheckPick(hover));
                 o.Hover = hover; o.HoverValid = hover >= 0 && hoverCheck.Reason == null;
                 Color colour = sendTruck ? TruckColour : SendMachine?.Kind == ForestMachineKind.Harvester ? ProcessorColour : ForwarderColour;
                 if (sendSource >= 0)

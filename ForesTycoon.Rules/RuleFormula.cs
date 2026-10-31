@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -658,6 +658,8 @@ public sealed class WorldScenario
     public Dictionary<int, int> HeightPaint { get; set; } = new();
     /// <summary>Painted initial forest: species ID by tile ID; an empty ID clears the tile.</summary>
     public Dictionary<int, string> ForestPaint { get; set; } = new();
+    /// <summary>Explicit editor felling; recovered wood remains on the tile, unlike initial bare-land paint.</summary>
+    public List<int> ForestFelling { get; set; } = new();
     /// <summary>Springs: water added to a tile's surface, mm per environment hour. Streams and rivers start here.</summary>
     public Dictionary<int, double> Springs { get; set; } = new();
     /// <summary>The species of this world; empty means the built-in species unchanged.</summary>
@@ -759,7 +761,7 @@ public sealed class WorldScenario
                     || h.Color is not { Length: 7 } || h.Color[0] != '#' || !uint.TryParse(h.Color.AsSpan(1), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
                     throw new InvalidDataException($"{s.Name}: minden talajszintnek neve, 0–5 m vastagsága és #RRGGBB színe legyen.");
         }
-        HeightPaint ??= new(); ForestPaint ??= new(); Species ??= new(); Springs ??= new(); Missions ??= new();
+        HeightPaint ??= new(); ForestPaint ??= new(); ForestFelling ??= new(); Species ??= new(); Springs ??= new(); Missions ??= new();
         ElevationZones ??= ElevationZoneDefinition.Defaults();
         if (!(ProfileScale is >= 1 and <= 30)) throw new InvalidDataException("A talajszelvény nagyítása 1–30 legyen.");
         GroundMaterials ??= GroundMaterialDefinition.Defaults();
@@ -819,6 +821,8 @@ public sealed class WorldScenario
         }
         foreach (var (node, height) in HeightPaint)
             if (node < 0 || node >= (Size + 1) * (Size + 1) || height < 0) throw new InvalidDataException("A festett domborzat érvénytelen pontra vagy magasságra mutat.");
+        if (ForestFelling.Any(tile => tile < 0 || tile >= Size * Size) || ForestFelling.Distinct().Count() != ForestFelling.Count)
+            throw new InvalidDataException("A fakivágás érvénytelen vagy ismételt csempére mutat.");
         foreach (var (tile, kind) in ForestPaint)
             if (tile < 0 || tile >= Size * Size || kind == null || kind.Length > 0 && species.Count > 0 && !species.Contains(kind))
                 throw new InvalidDataException("A festett erdő ismeretlen fafajra vagy csempére mutat.");
@@ -857,7 +861,7 @@ public sealed class MissionGoal
 /// <summary>A road of the scene: the game's road path from one tile to another, with its surface.</summary>
 public sealed class RoadSegment
 {
-    public static readonly string[] Surfaces = { "Asphalt", "Macadam" };
+    public static readonly string[] Surfaces = { "Asphalt", "Macadam", "Dirt", "SkidTrail" };
     public int From { get; set; }
     public int To { get; set; }
     public string Surface { get; set; } = "Macadam";

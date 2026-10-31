@@ -9,7 +9,30 @@ namespace ForesTycoon
         RoadRouteCheckpoint RoadGeometry, double CurrentSpeed, double Position, double PreviousPosition, float Cargo,
         bool CargoStops, int[] SourceTiles, int Mill, bool Blocked, VehicleTransportState State, float TransferProgress,
         double FuelUsed = 0, double Distance = 0, bool Transit = false, bool TransitArrived = false, bool Broken = false, int LastPassageTile = -1);
-    internal sealed record VehiclesCheckpoint(int NextId, bool RoadPhysics, bool CargoStops, VehicleCheckpoint[] Vehicles);
+    internal sealed record VehiclesCheckpoint(int NextId, bool RoadPhysics, bool CargoStops, VehicleCheckpoint[] Vehicles,
+        TruckPhysicsCheckpoint Physics = null);
+    internal sealed record TruckPhysicsCheckpoint(float EmptyMass, float Power, float MaxTractiveForce, float DragArea,
+        float Drivetrain, float TimberDensity, float FuelPerKilowattHour, float IdleFuelPerHour, float Braking,
+        float RollingAsphalt, float RollingGravel, float RollingDirt, float RoughnessRolling)
+    {
+        internal static TruckPhysicsCheckpoint From(TruckSpec s) => new(s.EmptyMass, s.Power, s.MaxTractiveForce, s.DragArea,
+            s.Drivetrain, s.TimberDensity, s.FuelPerKilowattHour, s.IdleFuelPerHour, s.Braking,
+            s.RollingAsphalt, s.RollingGravel, s.RollingDirt, s.RoughnessRolling);
+        internal TruckSpec Restore()
+        {
+            void Check(float value, Tune key) {
+                var range = GameTuning.Spec(key);
+                CheckpointGuard.Require(float.IsFinite(value) && value >= (float)range.Min && value <= (float)range.Max, "sampled truck physics");
+            }
+            Check(EmptyMass, Tune.EmptyMass); Check(Power, Tune.Power); Check(MaxTractiveForce, Tune.MaxTractiveForce);
+            Check(DragArea, Tune.DragArea); Check(Drivetrain, Tune.Drivetrain); Check(TimberDensity, Tune.TimberDensity);
+            Check(FuelPerKilowattHour, Tune.FuelPerKilowattHour); Check(IdleFuelPerHour, Tune.IdleFuelPerHour); Check(Braking, Tune.Braking);
+            Check(RollingAsphalt, Tune.RollingAsphalt); Check(RollingGravel, Tune.RollingGravel);
+            Check(RollingDirt, Tune.RollingDirt); Check(RoughnessRolling, Tune.RoughnessRolling);
+            return new(EmptyMass, Power, MaxTractiveForce, DragArea, Drivetrain, TimberDensity, FuelPerKilowattHour, IdleFuelPerHour, Braking) {
+                RollingAsphalt = RollingAsphalt, RollingGravel = RollingGravel, RollingDirt = RollingDirt, RoughnessRolling = RoughnessRolling };
+        }
+    }
     internal sealed record AnimalCheckpoint(int Id, int Tile, int TargetTile, CheckpointPosition Position,
         CheckpointPosition PreviousPosition, CheckpointPosition Target, float Yaw, float PreviousYaw, float Blend,
         float Hunger, float WanderNeed, double WalkTime, double Age, uint Seed,

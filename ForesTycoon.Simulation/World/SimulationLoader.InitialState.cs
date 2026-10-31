@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.IO.Compression;
 using System.Text.Json;
@@ -32,7 +32,7 @@ internal static partial class SimulationLoader
         scenario.Name = "Rögzített jelenet";
         scenario.InitialState = SnapshotPrefix + Convert.ToBase64String(packed.ToArray());
         // Paint and construction are already represented by the captured state, not startup operations to repeat.
-        scenario.SoilPaint.Clear(); scenario.HeightPaint.Clear(); scenario.ForestPaint.Clear();
+        scenario.SoilPaint.Clear(); scenario.HeightPaint.Clear(); scenario.ForestPaint.Clear(); scenario.ForestFelling.Clear();
         scenario.Roads.Clear(); scenario.Sawmills.Clear(); scenario.Depots.Clear();
         var soilTypes = SimulationWorld.EditableSoils(world.Soils.Definition.Catalog);
         foreach (var soil in soilTypes) {

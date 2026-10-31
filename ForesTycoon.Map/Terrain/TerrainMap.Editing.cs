@@ -126,7 +126,7 @@ namespace ForesTycoon.Map
         private IEnumerable<int> ValidateRoadsAgainstPendingTerrainWork(Dictionary<int, int> pending, WorkResult<bool> result)
         {
             result.Value = true;
-            if (roads.Count == 0 && buildingTiles.Count == 0) yield break;
+            if (roads.Count == 0 && buildingTiles.Count == 0 && GroundReserved == null && VegetationOccupied == null && MobileOccupied == null) yield break;
 
             int HeightOf(Node nd) => pending.TryGetValue(nd.Id, out int v) ? v : nd.W;
             Tile[] nodeTiles = new Tile[4];
@@ -142,7 +142,7 @@ namespace ForesTycoon.Map
                     for (int i = 0; i < nodeTileCount; i++)
                     {
                         Tile tile = nodeTiles[i];
-                        if (roads.Has(tile.Id) || IsBuildingTile(tile.Id))
+                        if (IsTerrainEditBlocked(tile.Id))
                         { result.Value = false; yield break; }
                     }
                 }

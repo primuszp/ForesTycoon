@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
@@ -151,11 +151,12 @@ namespace ForesTycoon
                 worldSpecies = ForestSpeciesBook.CaptureContext();
                 worldSpeciesDefinitions = scenario.Species?.ToArray();
                 var changed = new WorkResult<int[]>();
-                foreach (int unit in map.ApplyHeightTargetsWork(scenario.HeightPaint, changed)) yield return unit;
+                foreach (int unit in map.ApplyHeightTargetsWork(scenario.HeightPaint, changed, initialDefinition: scenario.InitialState == null)) yield return unit;
                 foreach (int unit in forest.ClearTerrainTilesWork(changed.Value)) yield return unit;
                 foreach (int unit in forest.PaintInitialForestWork(scenario.ForestPaint.ToDictionary(p => p.Key,
                     p => p.Value.Length == 0 ? ForestSpecies.None : Enum.TryParse(p.Value, out ForestSpecies s) ? s : ForestSpecies.None),
                     preserveUnpainted: scenario.InitialState != null)) yield return unit;
+                foreach (int unit in forest.FellForEditorWork(scenario.ForestFelling)) yield return unit;
                 foreach (int unit in BuildSceneStructuresWork(scenario)) yield return unit;
             }
             var command = Task.Run(() => new SetRuleProjectCommand(project.ToJson()));
@@ -169,7 +170,7 @@ namespace ForesTycoon
 
         /// <summary>
         /// The scene's roads, sawmills and depots, built in that order like a player would, but free: they are the starting
-        /// estate, not spending. Forest under a building's footprint is cleared first.
+        /// estate, not spending. Building footprints must be clear.
         /// </summary>
 
 
@@ -178,22 +179,23 @@ namespace ForesTycoon
             SceneProblems.Clear();
             if (scenario.Roads.Count + scenario.Sawmills.Count + scenario.Depots.Count == 0) yield break;
             double expenses = Expenses; string status = Logistics?.Status;
-            foreach (var road in scenario.Roads) {
-                var surface = road.Surface == "Asphalt" ? RoadPaving.Asphalt : RoadPaving.Macadam;
+            foreach (var road in scenario.Roads.Where(r => r.Surface != "SkidTrail")) {
+                var surface = Enum.Parse<RoadPaving>(road.Surface);
                 int before = RoadCount;
                 foreach (int unit in RoadCommandWork(road.From, road.To, false, surface)) yield return unit;
                 if (RoadCount == before && !map.IsRoadTile(road.From)) SceneProblems.Add($"Az út #{road.From} → #{road.To} nem épülhetett meg (víz vagy meredek).");
             }
+            foreach (var trail in scenario.Roads.Where(r => r.Surface == "SkidTrail")) {
+                var changed = new WorkResult<int[]>();
+                foreach (int unit in map.MarkConnectedSkidTrailPathWork(trail.From, trail.To, changed)) yield return unit;
+                if (changed.Value.Length == 0) SceneProblems.Add($"Közelítőnyom #{trail.From} → #{trail.To}: nem csatlakozik járható úthálózathoz vagy foglalt.");
+            }
             foreach (int tile in scenario.Sawmills) {
-                if (map.TryGetSawmillFootprint(tile, out var footprint, out _))
-                    foreach (int unit in forest.PaintInitialForestWork(footprint.ToDictionary(t => t, _ => ForestSpecies.None), preserveUnpainted: true)) yield return unit;
                 var placed = new WorkResult<bool>();
                 if (Logistics != null) foreach (int unit in Logistics.PlaceMillWork(tile, placed)) yield return unit;
                 if (!placed.Value) SceneProblems.Add($"Fűrészmalom #{tile}: {Logistics?.Status ?? "nincs logisztika."}");
             }
             foreach (int tile in scenario.Depots) {
-                if (map.TryGetSawmillFootprint(tile, out var footprint, out _))
-                    foreach (int unit in forest.PaintInitialForestWork(footprint.ToDictionary(t => t, _ => ForestSpecies.None), preserveUnpainted: true)) yield return unit;
                 var placed = new WorkResult<bool>();
                 if (Logistics != null) foreach (int unit in Logistics.PlaceDepotWork(tile, placed)) yield return unit;
                 if (!placed.Value) SceneProblems.Add($"Telephely #{tile}: {Logistics?.Status ?? "nincs logisztika."}");

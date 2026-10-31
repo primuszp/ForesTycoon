@@ -17,7 +17,7 @@ namespace ForesTycoon.Map
     /// Running surface of a single-lane road. Asphalt costs more to build but lasts; water-bound macadam is cheap and
     /// wears quickly, above all when wet.
     /// </summary>
-    enum RoadPaving : byte { Asphalt, Macadam }
+    enum RoadPaving : byte { Asphalt, Macadam, Dirt }
 
     sealed class RoadNetwork
     {

@@ -56,7 +56,12 @@ public sealed class WorldLoaderTests
             File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "OpeningReference.json")))!;
         var actual = OpeningSceneReference.Fingerprints(restored);
         // Legacy saves lacked the now-explicit authored defaults and the new query bindings.
-        foreach (var pair in expected.Where(p => p.Key is not ("Tuning" or "RuleBook" or "Behaviors" or "Wildlife"))) Assert.Equal(pair.Value, actual[pair.Key]);
+        foreach (var pair in expected.Where(p => p.Key is not ("Tuning" or "RuleBook" or "Behaviors" or "Wildlife" or "Vehicles"))) Assert.Equal(pair.Value, actual[pair.Key]);
+        // The physical sample is new metadata; every previously captured vehicle field must still match the archive.
+        var vehicles = restored.CaptureCheckpoint().Vehicles;
+        Assert.NotNull(vehicles.Physics);
+        Assert.Equal(JsonSerializer.Serialize(recorded.Checkpoint.Vehicles),
+            JsonSerializer.Serialize(vehicles with { Physics = recorded.Checkpoint.Vehicles.Physics }));
         // New type/field metadata is additive; every captured physical animal/forage value must remain unchanged.
         var wildlife = restored.CaptureCheckpoint().Wildlife;
         var legacy = wildlife with { NextAnimalId = recorded.Checkpoint.Wildlife.NextAnimalId,

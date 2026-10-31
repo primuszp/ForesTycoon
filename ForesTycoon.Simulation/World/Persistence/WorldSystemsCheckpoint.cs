@@ -37,19 +37,22 @@ namespace ForesTycoon
     }
     sealed partial class VehicleSystem
     {
-        internal VehiclesCheckpoint Capture() => new(nextId, UseRoadPhysics, UseCargoStops, vehicles.Select(v => v.Capture()).ToArray());
+        internal VehiclesCheckpoint Capture() => new(nextId, UseRoadPhysics, UseCargoStops, vehicles.Select(v => v.Capture()).ToArray(), TruckPhysicsCheckpoint.From(Spec));
         internal void Restore(VehiclesCheckpoint s, int tileCount) => SimulationWork.Complete(RestoreWork(s, tileCount));
 
         internal IEnumerable<int> RestoreWork(VehiclesCheckpoint s, int tileCount)
         {
             CheckpointGuard.Require(s != null && s.Vehicles != null && s.NextId > 0, "vehicle system");
+            var physics = s.Physics?.Restore();
             var restored = new List<Vehicle>(); var ids = new HashSet<int>();
             foreach (var v in s.Vehicles) { yield return 1;
                 CheckpointGuard.Require(v != null && v.Id < s.NextId && ids.Add(v.Id), "vehicle IDs");
                 var vehicle = Vehicle.Restore(v, tileCount); vehicle.SpecSource = this; restored.Add(vehicle);
             }
             vehicles.Clear(); vehicles.AddRange(restored); nextId = s.NextId;
+            membership.Clear(); foreach (var vehicle in restored) { membership.Add(vehicle.Id, vehicle); yield return 1; } MembershipVersion++;
             UseRoadPhysics = s.RoadPhysics; UseCargoStops = s.CargoStops;
+            if (physics != null) Spec = physics with { Rules = Spec.Rules };
         }
     }
     sealed partial class VehicleRoadRoute

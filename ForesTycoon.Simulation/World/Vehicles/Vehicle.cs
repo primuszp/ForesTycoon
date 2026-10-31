@@ -27,6 +27,7 @@ namespace ForesTycoon
         public double CurrentSpeed { get; private set; }
         private TruckSpec spec = TruckSpec.Default;
         internal VehicleSystem SpecSource { get; set; }
+        internal FleetTruck FleetOwner { get; set; }
         internal TruckSpec Spec { get => SpecSource?.Spec ?? spec; set => spec = value; }
         internal Func<int, (RoadSurface Surface, float Condition)> RoadState;
         internal Action<TrafficPassage> Passage;

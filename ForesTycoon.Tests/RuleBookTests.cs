@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 
 namespace ForesTycoon.Tests;
 
@@ -11,7 +11,8 @@ public sealed class RuleBookTests
     private static int[] MarkTrail(GameWorld world)
     {
         int start = Enumerable.Range(0, 256).First(t => world.Map.CanCarrySkidTrail(t) && world.Map.CanCarrySkidTrail(t + 1) && world.Map.CanCarrySkidTrail(t + 2));
-        world.QueueSkidTrailPath(start, start + 2, false); world.ExecutePendingCommands();
+        // Isolated rule fixture; player trail commands require a road connection.
+        world.Map.MarkSkidTrailPath(start, start + 2);
         var tiles = world.Map.SkidTrailTiles.ToArray();
         Assert.NotEmpty(tiles);
         return tiles;

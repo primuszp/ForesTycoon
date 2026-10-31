@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using OpenTK.Graphics.OpenGL;
 using OpenTK.Mathematics;
@@ -23,7 +23,7 @@ namespace ForesTycoon
                 var map = terrain.Map;
                 map.BuildRoadTilePath(34, 82, RoadPaving.Asphalt);
                 map.BuildRoadTilePath(98, 130, RoadPaving.Macadam);
-                map.BuildRoadTilePath(146, 210, RoadPaving.Asphalt);
+                map.BuildRoadTilePath(146, 210, RoadPaving.Dirt);
                 map.BuildRoadTilePath(130, 135, RoadPaving.Macadam);
                 map.MarkSkidTrailPath(135, 199);
                 map.MarkSkidTrailPath(66, 71);

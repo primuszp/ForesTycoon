@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.IO;
 using OpenTK.Mathematics;
@@ -590,7 +590,7 @@ namespace ForesTycoon
             if (glResourcesDisposed) return;
             worldCreation?.Dispose(); worldCreation = null;
             mapPreparation?.Dispose(); mapPreparation = null;
-            imgui?.Dispose(); postProcess?.Dispose(); world?.Dispose();
+            roadSurveys.Dispose(); orderPreviews.Dispose(); imgui?.Dispose(); postProcess?.Dispose(); world?.Dispose();
             imgui = null; postProcess = null; world = null; isLoaded = false; glResourcesDisposed = true;
         }
 

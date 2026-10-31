@@ -252,6 +252,7 @@ namespace ForesTycoon
             workPhase = 2;
             // Both fleets use the same sampled clock for this logical tick, including dynamic formula hooks.
             vehicles.TimeScale = Tuning[Tune.VehicleTimeScale];
+            vehicles.Spec = Tuning.SampleTruck();
             foreach (int unit in Logistics.UpdateWork(fixedDeltaSeconds * vehicles.TimeScale)) yield return unit;
             workPhase = 3;
             foreach (int unit in TrafficWork()) yield return unit;
@@ -263,6 +264,7 @@ namespace ForesTycoon
             workPhase = 5;
             foreach (int unit in systems.UpdateWork(fixedDeltaSeconds)) yield return unit;
             foreach (int unit in TrafficWork()) yield return unit;
+            foreach (int unit in Logistics.PublishInventoryWork()) yield return unit;
             worldTick++;
         }
 
@@ -558,7 +560,7 @@ namespace ForesTycoon
             pendingForestRateRefresh = candidate.pendingForestRateRefresh;
             ClearRuleViews();
             BindRoadRules();
-            ApplyTuning(candidate.Tuning);
+            ApplyTuning(candidate.Tuning, preserveTruck: true);
             foreach (var vehicle in vehicles.Vehicles) { vehicle.RoadState = vehicles.RoadState; vehicle.Passage = vehicles.Passage; }
             worldTick = candidate.worldTick;
             lastForestryAction = candidate.lastForestryAction;

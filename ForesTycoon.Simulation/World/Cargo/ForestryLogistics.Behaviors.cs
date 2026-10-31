@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace ForesTycoon
 {
@@ -6,7 +6,7 @@ namespace ForesTycoon
     {
         private float RouteCost(string kind, int id, float cargo, float capacity, int from, int to, float unused)
         {
-            double surface = terrain.IsRoadTile(to) ? terrain.GetRoadPaving(to) == RoadPaving.Asphalt ? 1 : 2 : terrain.IsSkidTrail(to) ? 3 : 0;
+            double surface = terrain.IsRoadTile(to) ? terrain.GetRoadPaving(to) switch { RoadPaving.Asphalt => 1, RoadPaving.Macadam => 2, _ => 4 } : terrain.IsSkidTrail(to) ? 3 : 0;
             double damage = terrain.IsRoadTile(to) ? 1 - terrain.GetRoadCondition(to) : terrain.GetSkidTrailWear(to);
             var inputs = new LogisticsInputs(MachineCargo: cargo, MachineCapacity: capacity, RouteDamage: damage, RouteSurface: surface, RouteFrom: from, RouteTo: to);
             if (rules.Evaluate(Behaviors, "route.allow", kind, (ulong)id, inputs) < .5) return float.PositiveInfinity;

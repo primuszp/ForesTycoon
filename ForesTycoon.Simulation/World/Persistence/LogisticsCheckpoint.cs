@@ -133,13 +133,16 @@ namespace ForesTycoon
         // Fleet trucks refer to their road vehicles by id; vehicles are restored after the logistics.
         private readonly List<(FleetTruck Truck, int Vehicle)> pendingTruckVehicles = new();
 
-        internal void BindVehicles(VehicleSystem vehicles)
+        internal void BindVehicles(VehicleSystem vehicles) => SimulationWork.Complete(BindVehiclesWork(vehicles));
+        internal IEnumerable<int> BindVehiclesWork(VehicleSystem vehicles)
         {
             Vehicles = vehicles;
+            var assigned = new HashSet<int>();
             foreach (var (truck, id) in pendingTruckVehicles)
             {
-                truck.Vehicle = null;
-                foreach (var v in vehicles.Vehicles) if (v.Id == id) truck.Vehicle = v;
+                yield return 1;
+                CheckpointGuard.Require(assigned.Add(id), "duplicate fleet vehicle");
+                truck.Vehicle = vehicles.Find(id);
                 CheckpointGuard.Require(truck.Vehicle != null && truck.Vehicle.Transit == (truck.Phase != TruckPhase.Working), "fleet truck vehicle");
             }
             pendingTruckVehicles.Clear();

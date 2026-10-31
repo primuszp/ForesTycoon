@@ -1,4 +1,4 @@
-namespace ForesTycoon.Tests;
+﻿namespace ForesTycoon.Tests;
 
 // A kind of object only this test knows: an interface and a view are all it takes to become a rule scope.
 [RuleEntity("sampleMarker", Element = "marker", Help = "Test-only marker.")]
@@ -46,7 +46,7 @@ public sealed class RuleSchemaDrivenTests
         Assert.NotNull(entity);
         Assert.Equal(new[] { "World object", "Sample marker" }, schema.Lineage("sampleMarker").Select(e => e.Name));
         Assert.Equal(RuleFieldKind.Bool, entity.Fields.Single(f => f.Name == "lit").Kind);
-        Assert.Equal(new[] { "asphalt", "macadam" }, entity.Fields.Single(f => f.Name == "kind").Options.Select(o => o.Name));
+        Assert.Equal(new[] { "asphalt", "macadam", "dirt" }, entity.Fields.Single(f => f.Name == "kind").Options.Select(o => o.Name));
 
         var scope = Assert.Single(GameWorld.DiscoverScopes(schema, types), s => s.Id == "sampleMarker");
         Assert.Equal(new[] { "index", "level", "lit", "kind" }, scope.Fields.Select(f => f.Name));
@@ -106,7 +106,7 @@ public sealed class RuleSchemaDrivenTests
         int macadam = world.Map.RoadTiles.First(t => world.Map.GetRoadPaving(t) == RoadPaving.Macadam);
         var surface = GameWorld.RuleObjects.Find("road").Fields.Single(f => f.Name == "surface");
         Assert.Equal(RuleFieldKind.Enum, surface.Kind);
-        Assert.Equal(new[] { ("asphalt", 0d), ("macadam", 1d) }, surface.Options.Select(o => (o.Name, o.Value)));
+        Assert.Equal(new[] { ("asphalt", 0d), ("macadam", 1d), ("dirt", 2d) }, surface.Options.Select(o => (o.Name, o.Value)));
 
         var project = world.RuleProjectDocument; project.Algorithms = null;
         var rule = project.Rules.Single(r => r.Id == "road.weather");

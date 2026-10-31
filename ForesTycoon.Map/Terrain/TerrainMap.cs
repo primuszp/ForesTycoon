@@ -211,12 +211,15 @@ namespace ForesTycoon.Map
 
         bool IForestHabitat.CanSupportForest(int tileId)
         {
-            if (!IsValidTileId(tileId) || roads.Has(tileId) || IsBuildingTile(tileId)) return false;
+            if (!IsValidTileId(tileId) || roads.Has(tileId) || IsBuildingTile(tileId) || HasGroundReservation(tileId)) return false;
             Tile tile = tiles[tileId];
             return !data.IsBorderTile(tile)
                 && !ShouldDrawStandingWater(tile)
                 && CountRiverCorners(tile) < 2;
         }
+
+        bool IForestHabitat.CanPlantForest(int tileId) => ((IForestHabitat)this).CanSupportForest(tileId)
+            && !IsSkidTrail(tileId) && !HasMobileObject(tileId);
 
         float IForestHabitat.GetMoisture(int tileId) => hydro.TileMoisture[tileId];
         ForestPattern IForestHabitat.ForestPattern => settings.ForestPattern;

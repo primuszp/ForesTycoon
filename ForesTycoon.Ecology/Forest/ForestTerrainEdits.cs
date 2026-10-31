@@ -3,8 +3,52 @@ using System.Collections.Generic;
 
 namespace ForesTycoon.Ecology
 {
+    internal readonly record struct ForestClearance(int TileId, ForestSpecies Species, float Volume);
     sealed partial class ForestSystem
     {
+        internal bool HasPhysicalObjects(int id) => IndividualTrees.TryGet(id, out var patch)
+            && (patch.Count > 0 || patch.Depot > 0 || patch.Stumps?.Count > 0 || patch.DeadTrees?.Count > 0);
+
+        /// <summary>Editor felling leaves the recovered timber on site for the normal extraction chain.</summary>
+        internal IEnumerable<int> FellForEditorWork(IEnumerable<int> ids)
+        {
+            bool changed = false;
+            foreach (int id in ids) {
+                yield return 1;
+                if ((uint)id >= (uint)stands.Length) throw new ArgumentOutOfRangeException(nameof(ids));
+                if (!IndividualTrees.TryGet(id, out var patch) || patch.Count == 0 && patch.DeadTrees?.Count is not > 0) continue;
+                changed = true;
+                while (patch.Count > 0) { FellIndividual(patch, 0); yield return 1; }
+                if (patch.DeadTrees != null) {
+                    foreach (var dead in patch.DeadTrees) { patch.Depot += ForestTree.Volume(dead.Tree.Dimensions); yield return 1; }
+                    patch.DeadTrees.Clear();
+                }
+                stands[id] = default; MarkResourceArea(id);
+            }
+            if (!changed) yield break;
+            foreach (int unit in RefreshChangedResourceRatesWork(ForestYear, currentConditions: true)) yield return unit;
+            CompleteLocalEditRevision();
+        }
+
+        internal IEnumerable<int> ClearForConstructionWork(int[] ids, WorkResult<ForestClearance[]> result)
+        {
+            var wood = new List<ForestClearance>();
+            foreach (int id in ids) {
+                if ((uint)id >= (uint)stands.Length) throw new ArgumentOutOfRangeException(nameof(ids));
+                yield return 1;
+                if (!IndividualTrees.TryGet(id, out var patch)) continue;
+                if (patch.Depot > 0) wood.Add(new(id, patch.Count > 0 ? patch.Trees[0].Species
+                    : patch.Stumps?.Count > 0 ? patch.Stumps[0].Felled.Species : ForestSpecies.Spruce, patch.Depot));
+                for (int i = 0; i < patch.Count; i++) {
+                    var tree = patch.Trees[i]; wood.Add(new(id, tree.Species, ForestTree.Volume(tree.At(ForestYear)))); yield return 1;
+                }
+                if (patch.DeadTrees != null) foreach (var dead in patch.DeadTrees) {
+                    wood.Add(new(id, dead.Tree.Species, ForestTree.Volume(dead.Tree.Dimensions))); yield return 1;
+                }
+            }
+            foreach (int unit in ClearTerrainTilesWork(ids)) yield return unit;
+            result.Value = wood.ToArray();
+        }
         /// <summary>Road edits only remove forest on cells that actually became unavailable.</summary>
         internal void RefreshHabitat(ReadOnlySpan<int> changedTiles)
         {

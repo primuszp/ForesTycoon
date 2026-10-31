@@ -7,7 +7,7 @@ namespace ForesTycoon
     internal sealed class WorldBehaviorPolicy : IBehaviorPolicy
     {
         internal static readonly BehaviorHook[] Hooks = EcologyResponseProgram.Hooks.Concat(VehicleResponseRules.Hooks).Concat(LogisticsRules.Hooks).Concat(GameplayRules.Hooks).Concat(GameTuning.Specs.Select(s => new BehaviorHook("tuning." + s.Id, s.Name, "world", s.Unit, s.Min, s.Max,
-            "Nem használt", "Nem használt", "Paraméter lekérdezése; járműspecifikáció alkalmazáskor", false))).ToArray();
+            "Nem használt", "Nem használt", "Paraméter lekérdezése; járműspecifikáció a fix tick járműfázisának elején", false))).ToArray();
         private readonly CompiledBehaviorModel model;
         internal CompiledBehaviorControllers Controllers { get; }
         internal EcologyResponseProgram Responses { get; }

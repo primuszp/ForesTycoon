@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 
 namespace ForesTycoon.Tests;
 
@@ -9,7 +9,8 @@ public sealed class TrailGraphRuleTests
     private static int[] Trails(GameWorld world)
     {
         int start = Enumerable.Range(0, world.Map.Tiles.Count - 2).First(t => world.Map.CanCarrySkidTrail(t) && world.Map.CanCarrySkidTrail(t + 1) && world.Map.CanCarrySkidTrail(t + 2));
-        world.QueueSkidTrailPath(start, start + 2, false); world.ExecutePendingCommands();
+        // Rule fixtures may contain an isolated trail; player construction is tested separately.
+        Assert.NotEmpty(world.Map.MarkSkidTrailPath(start, start + 2));
         return world.Map.SkidTrailTiles.OrderBy(id => id).ToArray();
     }
 

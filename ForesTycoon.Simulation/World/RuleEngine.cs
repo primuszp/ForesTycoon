@@ -21,6 +21,14 @@ internal sealed partial class RuleEngine
 
     private readonly CompiledRule[] compiled;
     private readonly Dictionary<string, double[]> values = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Dictionary<int, double>> keyedValues = new(StringComparer.Ordinal);
+    private sealed class FieldValues(double initial, double[] dense = null, Dictionary<int, double> keyed = null)
+    {
+        internal double this[int key] {
+            get => keyed == null ? dense[key] : keyed.GetValueOrDefault(key, initial);
+            set { if (keyed == null) dense[key] = value; else if (value == initial) keyed.Remove(key); else keyed[key] = value; }
+        }
+    }
     private readonly RuleFlowLedger flowLedger = new();
     /// <summary>The flow ledger: what each named flow has moved so far, in its source's unit.</summary>
     internal IReadOnlyDictionary<string, double> FlowTotals => flowLedger.Totals;
@@ -45,7 +53,7 @@ internal sealed partial class RuleEngine
     private sealed class RuleWorkBuffers(int inputs, int customFields)
     {
         internal readonly double[] Inputs = new double[inputs];
-        internal readonly double[][] CustomValues = new double[customFields][];
+        internal readonly FieldValues[] CustomValues = new FieldValues[customFields];
     }
     private readonly RuleWorkBuffers[] ruleBuffers;
 
@@ -144,6 +152,10 @@ internal sealed partial class RuleEngine
 
     private IEnumerable<int> PrepareValuesWork(SimulationWorld world, RuleFieldDefinition field)
     {
+        if (UsesStableKeys(field)) {
+            foreach (int unit in PrepareKeyedValuesWork(world, field)) yield return unit;
+            yield break;
+        }
         var scope = FindScope(field.Scope); int size = (scope.StateSize ?? scope.Size)(world);
         if (values.TryGetValue(field.Name, out var previous) && previous.Length == size) yield break;
         var array = new double[size];
@@ -191,7 +203,8 @@ internal sealed partial class RuleEngine
             var custom = ruleBuffers[stepRule].CustomValues;
             for (int c = 0; c < custom.Length; c++) {
                 foreach (int unit in PrepareValuesWork(world, customDefs[c])) yield return unit;
-                custom[c] = values[customDefs[c].Name];
+                var f = customDefs[c];
+                custom[c] = UsesStableKeys(f) ? new(f.Initial, keyed: keyedValues[f.Name]) : new(f.Initial, dense: values[f.Name]);
             }
             var inputs = ruleBuffers[stepRule].Inputs;
             int[] reads = rule.Reads; var readers = rule.Readers; var effects = rule.Effects;

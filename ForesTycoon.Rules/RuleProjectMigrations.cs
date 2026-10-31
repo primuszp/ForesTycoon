@@ -10,10 +10,29 @@ public static class RuleProjectMigrations
     {
         UpgradeObjectSimulation(project);
         UpgradePopulationPolicies(project);
-        if (project.Version >= 5) return;
-        foreach (var graph in RuleProject.CreateDefault().Behaviors.Graphs.Where(g => g.Hook is "trail.drivingCondition" or "wildlife.timeScale"))
-            if (!project.Behaviors.Graphs.Any(g => g.Hook == graph.Hook && g.Kind == graph.Kind && !g.ObjectId.HasValue)) project.Behaviors.Graphs.Add(graph);
-        project.Version = 5;
+        if (project.Version < 5) {
+            foreach (var graph in RuleProject.CreateDefault().Behaviors.Graphs.Where(g => g.Hook is "trail.drivingCondition" or "wildlife.timeScale"))
+                if (!project.Behaviors.Graphs.Any(g => g.Hook == graph.Hook && g.Kind == graph.Kind && !g.ObjectId.HasValue)) project.Behaviors.Graphs.Add(graph);
+            project.Version = 5;
+        }
+        if (project.Version >= 6) return;
+        var defaults = RuleProject.CreateDefault();
+        string[] keys = { "DirtBuild", "DirtWeather", "DirtRainWeather", "AsphaltBufferMetres", "MacadamBufferMetres", "DirtBufferMetres", "TrailBufferMetres" };
+        foreach (string key in keys) {
+            project.Tuning.TryAdd(key, defaults.Tuning[key]);
+            foreach (var graph in defaults.Behaviors.Graphs.Where(g => g.Hook == "tuning." + key))
+                if (!project.Behaviors.Graphs.Any(g => g.Hook == graph.Hook && g.Kind == graph.Kind && !g.ObjectId.HasValue)) project.Behaviors.Graphs.Add(graph);
+        }
+        foreach (string id in new[] { "road.weather", "traffic.wear" }) {
+            var current = project.Rules.FirstOrDefault(r => r.Id == id);
+            var target = current?.Effects.FirstOrDefault(e => e.Target == (id == "road.weather" ? "condition" : "road.condition"))?.Influence;
+            if (target == null) continue;
+            string surface = id == "road.weather" ? "surface" : "road.surface";
+            if (target.Terms.Any(t => t.Conditions.Any(c => c.Field == surface && c.Value == 2))) continue;
+            foreach (var term in defaults.Rules.Single(r => r.Id == id).Effects[0].Influence.Terms
+                .Where(t => t.Conditions.Any(c => c.Field == surface && c.Value == 2))) target.Terms.Add(term);
+        }
+        project.Version = 6;
     }
     private static void UpgradePopulationPolicies(RuleProject project)
     {

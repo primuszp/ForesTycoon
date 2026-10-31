@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using ForesTycoon.Rules;
@@ -24,7 +24,7 @@ internal static class EditorCoverage
             ["Name"] = "Térkép · Pálya neve", ["Seed"] = "Térkép · Generálás", ["Size"] = "Térkép · Méret", ["MaxHeight"] = "Térkép · Domborzat magassága",
             ["InitialState"] = "Jelenet… · rögzített nyitójelenet", ["SoilTypes"] = "Talajtípusok", ["SoilPaint"] = "Térkép · Talaj réteg",
             ["ElevationZones"] = "Térkép · Magassági övek réteg", ["ProfileScale"] = "Talajtípusok · Rétegrend (nagyítás)", ["Biomes"] = "Biomok", ["GroundMaterials"] = "Biomok · Felszínanyagok", ["HeightPaint"] = "Térkép · Domborzat és Víz réteg",
-            ["ForestPaint"] = "Térkép · Erdő réteg", ["Springs"] = "Térkép · Víz réteg (forrás)", ["Species"] = "Fafajok",
+            ["ForestPaint"] = "Térkép · Erdő réteg", ["ForestFelling"] = "Térkép · Erdő réteg · Fakivágás", ["Springs"] = "Térkép · Víz réteg (forrás)", ["Species"] = "Fafajok",
             ["Roads"] = "Térkép · Utak és épületek", ["Sawmills"] = "Térkép · Utak és épületek", ["Depots"] = "Térkép · Utak és épületek",
             ["Missions"] = "Küldetések" },
         [typeof(ElevationZoneDefinition)] = new Dictionary<string, string> {

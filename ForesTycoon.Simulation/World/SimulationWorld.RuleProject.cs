@@ -103,13 +103,13 @@ partial class SimulationWorld
     {
         RequireAlgorithmRuntime(project.Algorithms);
         var next = PrepareRuleProject(project, ruleValues.ReadWorld, ruleValues.ReadRule);
+        SimulationWork.Complete(next.Engine.PreserveWork(ruleEngine, this));
         InstallRuleProject(next);
     }
 
     private void InstallRuleProject((RuleProject Document, GameTuning Tuning, DynamicsRuntime Dynamics, WorldBehaviorPolicy Policy, RuleEngine Engine) next)
     {
         if (UpdatePending) throw new InvalidOperationException("A rule project is applied at a complete tick boundary.");
-        next.Engine.Preserve(ruleEngine);
         if (dynamics != null) next.Dynamics.Preserve(dynamics);
         next.Policy.Controllers.PreserveUnchanged(behaviorPolicy.Controllers);
         bool refresh = ruleEngine == null || GrowthSignature(ruleEngine.Rules) != GrowthSignature(next.Engine.Rules)
@@ -143,7 +143,9 @@ partial class SimulationWorld
             return PrepareRuleProject(project, ruleValues.ReadWorld, ruleValues.ReadRule);
         });
         while (!preparing.IsCompleted) yield return 64;
-        InstallRuleProject(preparing.GetAwaiter().GetResult());
+        var next = preparing.GetAwaiter().GetResult();
+        foreach (int unit in next.Engine.PreserveWork(ruleEngine, this)) yield return unit;
+        InstallRuleProject(next);
     }
 
     private static string ResponseSignature(BehaviorModel model) => System.Text.Json.JsonSerializer.Serialize(model.Graphs.Where(g => EcologyResponseProgram.Hooks.Any(h => h.Id == g.Hook && h.Kind == g.Kind)));

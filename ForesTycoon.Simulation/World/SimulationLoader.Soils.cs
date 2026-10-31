@@ -44,6 +44,7 @@ internal static partial class SimulationLoader
             Forest = source.Forest with { Preparation = new ForestMonthlyPreparation().Capture() }
         };
         var replacement = new WorldSaveData {
+            Version = saved.Version, RuntimeRulesVersion = saved.RuntimeRulesVersion,
             TickRate = saved.TickRate, ForestYearSeconds = saved.ForestYearSeconds,
             SoilModel = SoilModelData.From(new SoilLandscapeDefinition(1, catalog, overrides)),
             Climate = saved.Climate, Tick = saved.Tick, Terrain = saved.Terrain,

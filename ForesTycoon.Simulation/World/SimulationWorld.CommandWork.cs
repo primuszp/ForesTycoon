@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using OpenTK.Mathematics;
 
@@ -57,7 +57,7 @@ partial class SimulationWorld
                 {
                     if (!record.Flag && !Fundable()) break;
                     var changed = new WorkResult<int[]>();
-                    var work = record.Flag ? map.RemoveSkidTrailPathWork(record.A, record.B, changed) : map.MarkSkidTrailPathWork(record.A, record.B, changed);
+                    var work = record.Flag ? map.RemoveSkidTrailPathWork(record.A, record.B, changed) : map.MarkConnectedSkidTrailPathWork(record.A, record.B, changed);
                     foreach (int unit in work) yield return unit;
                     if (changed.Value.Length == 0) break;
                     if (!record.Flag) Expenses += behaviorPolicy.Gameplay.Evaluate("trail.buildCost", changed.Value.Length, Tuning[Tune.TrailCost]);
@@ -128,6 +128,8 @@ partial class SimulationWorld
                 break;
             default: command.Execute(this); yield return 1; break;
         }
+        foreach (int unit in Logistics.PublishInventoryWork()) yield return unit;
+        Logistics.InvalidateOrderPreviews();
     }
 
     private int[] AreaTiles(int start, int end)
@@ -140,13 +142,33 @@ partial class SimulationWorld
     private IEnumerable<int> RoadCommandWork(int start, int end, bool remove, RoadPaving surface)
     {
         if (!remove && !Fundable()) yield break;
+        var stroke = new WorkResult<int[]>(); var landing = new WorkResult<int> { Value = -1 }; bool needsLanding = false;
+        if (!remove) {
+            foreach (int unit in map.RoadStrokeTilesWork(start, end, stroke)) yield return unit;
+            foreach (int tile in stroke.Value) {
+                needsLanding |= forest.AvailableTimber(tile) > 0 || forest.IndividualTrees.TryGet(tile, out var p) && p.DeadTrees?.Count > 0;
+                yield return 1;
+            }
+            if (needsLanding) {
+                foreach (int unit in Logistics.ConstructionLandingWork(stroke.Value, landing)) yield return unit;
+                if (landing.Value < 0) { Logistics.Status = "Az útépítéshez nincs szabad saranghely a nyomvonal mellett. A faanyag megőrzéséhez hagyj szabad területet."; yield break; }
+            }
+        }
         var changed = new WorkResult<int[]>();
         foreach (int unit in map.RoadPathWork(start, end, remove, surface, changed)) yield return unit;
         if (changed.Value.Length == 0) yield break;
         if (!remove) Expenses += behaviorPolicy.Gameplay.Evaluate("road.buildCost", changed.Value.Length, RoadCosts.Build(surface, Tuning), (int)surface);
         var unavailable = new List<int>();
         foreach (int id in changed.Value) { if (!((IForestHabitat)map).CanSupportForest(id)) unavailable.Add(id); yield return 1; }
-        foreach (int unit in forest.ClearTerrainTilesWork(unavailable.ToArray())) yield return unit;
+        if (!remove && needsLanding) {
+            if (Logistics.StackAt(landing.Value) == null && unavailable.Exists(t => forest.AvailableTimber(t) > 0
+                || forest.IndividualTrees.TryGet(t, out var p) && p.DeadTrees?.Count > 0)) unavailable.Add(landing.Value);
+            var cleared = new WorkResult<ForestClearance[]>();
+            foreach (int unit in forest.ClearForConstructionWork(unavailable.ToArray(), cleared)) yield return unit;
+            float recovered = 0;
+            foreach (var wood in cleared.Value) { Logistics.StoreConstructionTimber(landing.Value, wood); recovered += wood.Volume; yield return 1; }
+            if (recovered > 0) Logistics.Status = $"Útépítés: {recovered:F1} m³ faanyag a #{landing.Value} sarangon.";
+        } else foreach (int unit in forest.ClearTerrainTilesWork(unavailable.ToArray())) yield return unit;
         foreach (int unit in vehicles.RemoveInvalidRoutesWork(map.IsNetworkTile, map.AreNetworkNeighbours)) yield return unit;
         if (map.TryGetRoadTileCenter(end, out var position)) effects.Spawn(WorldEffectKind.RoadChanged, position);
     }
@@ -157,9 +179,9 @@ partial class SimulationWorld
     private int ContinueCommandsCore(int budget)
     {
         EnsureAvailable(allowFaulted: GenerationPending); VerifyPresentationAccess();
+        if (generationWork != null) { ContinueGeneration(budget); return 0; }
         if (UpdatePending || RulesBlockCommands) return 0;
         if (RuleExportPending) { ContinueRuleExport(budget); return 0; }
-        if (generationWork != null) { ContinueGeneration(budget); return 0; }
         int completed;
         try { backgroundJobs.PublishCompleted(); completed = commands.Continue(this, ExecuteCommandWork, budget); }
         catch { faulted = true; throw; }

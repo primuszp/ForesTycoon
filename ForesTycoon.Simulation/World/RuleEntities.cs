@@ -887,7 +887,8 @@ partial class SimulationWorld
                 if (cached?.World == w) System.Threading.Interlocked.CompareExchange(ref last, null, cached);
             },
             Entity = entity.Id, ObjectType = entity.Type, Collections = collections,
-            StateIndex = entity.Id == "tree" ? (w, id) => checked((int)((TreeView)Bound(w, id)).TreeId) : (_, id) => id,
+            StateIndex = entity.Id == "tree" ? (w, id) => checked((int)((TreeView)Bound(w, id)).TreeId)
+                : entity.Id == "truck" ? (w, id) => w.vehicles.Vehicles[id].Id : (_, id) => id,
             StateSize = entity.Id == "tree" ? w => w.forest.IndividualTrees.StateSize : null };
     }
 

@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 
 namespace ForesTycoon.Tests;
 
@@ -10,6 +10,8 @@ public sealed class SceneStructureTests
     {
         var project = GameWorld.DefaultRuleProject(); project.Algorithms = null;
         project.World = GameWorld.DefaultScenario(7, 32);
+        // Authored buildings require an explicitly cleared starting estate.
+        for (int tile = 0; tile < 32 * 32; tile++) project.World.ForestPaint[tile] = "";
         using var probe = WorldLoader.CreateProject(project);
         int rows = probe.TileGrid.Rows;
         // The longest dry run along one column becomes the road.

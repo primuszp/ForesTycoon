@@ -2422,7 +2422,7 @@
       "scope": "\u00DAtvonal cell\u00E1i",
       "schedule": "J\u00E1t\u00E9kosparancs",
       "execution": "EditableGraph",
-      "description": "\u00DAj \u00E9p\u00EDt\u00E9s csak a hitelkereten bel\u00FCli egyenlegn\u00E9l indul. Aszfalt/makad\u00E1m \u00FAt, r\u00F6gz\u00EDtett \u00FAttestmagass\u00E1g \u00E9s k\u00F6lcs\u00F6n\u00F6s csatlakoz\u00E1sok. Az \u00E9rintett n\u00F6v\u00E9nyzet azonnal t\u00F6rl\u0151dik, a l\u00E1tv\u00E1ny a k\u00F6vetkez\u0151 kirajzol\u00E1s el\u0151tt friss\u00FCl. Csak t\u00E9nylegesen l\u00E9trehozott vagy m\u00F3dos\u00EDtott \u00FAtcsemp\u00E9k n\u00F6velik az \u00E9p\u00EDt\u00E9si k\u00F6lts\u00E9get.",
+      "description": "\u00DAj \u00E9p\u00EDt\u00E9s csak a hitelkereten bel\u00FCli egyenlegn\u00E9l indul. Aszfalt-, makad\u00E1m- \u00E9s f\u00F6ld\u00FAt, r\u00F6gz\u00EDtett \u00FAttestmagass\u00E1g \u00E9s k\u00F6lcs\u00F6n\u00F6s csatlakoz\u00E1sok. A kiv\u00E1gott \u00E9l\u0151 \u00E9s holt f\u00E1k, valamint a helysz\u00EDni farak\u00E1s faanyaga az \u00FAt melletti sarangra ker\u00FCl; foglalt sarangra vagy \u00E9p\u00FCletre \u00FAt nem \u00E9p\u00FCl. A puffer sugara burkolatonk\u00E9nt \u00E1ll\u00EDthat\u00F3; a h\u00E1l\u00F3zati faanyagbecsl\u00E9s az \u00E1tfed\u00E9seket egyszer sz\u00E1molja. Csak t\u00E9nylegesen l\u00E9trehozott vagy m\u00F3dos\u00EDtott \u00FAtcsemp\u00E9k n\u00F6velik az \u00E9p\u00EDt\u00E9si k\u00F6lts\u00E9get.",
       "formula": "",
       "notes": "",
       "reads": [
@@ -2467,6 +2467,42 @@
           "min": 0,
           "max": 100000,
           "default": 200
+        },
+        {
+          "name": "F\u00F6ld\u00FAt",
+          "value": 70,
+          "unit": "eFt/csempe",
+          "key": "DirtBuild",
+          "min": 0,
+          "max": 100000,
+          "default": 70
+        },
+        {
+          "name": "Aszfalt\u00FAt pufferz\u00F3n\u00E1ja",
+          "value": 50,
+          "unit": "m",
+          "key": "AsphaltBufferMetres",
+          "min": 0,
+          "max": 500,
+          "default": 50
+        },
+        {
+          "name": "Makad\u00E1m\u00FAt pufferz\u00F3n\u00E1ja",
+          "value": 50,
+          "unit": "m",
+          "key": "MacadamBufferMetres",
+          "min": 0,
+          "max": 500,
+          "default": 50
+        },
+        {
+          "name": "F\u00F6ld\u00FAt pufferz\u00F3n\u00E1ja",
+          "value": 50,
+          "unit": "m",
+          "key": "DirtBufferMetres",
+          "min": 0,
+          "max": 500,
+          "default": 50
         }
       ],
       "x": 25,
@@ -2580,6 +2616,24 @@
           "min": 0,
           "max": 20,
           "default": 1.600000023841858
+        },
+        {
+          "name": "F\u00F6ld\u00FAt roml\u00E1sa sz\u00E1razon",
+          "value": 0.15,
+          "unit": "\u00E1llapot/erd\u0151\u00E9v",
+          "key": "DirtWeather",
+          "min": 0,
+          "max": 5,
+          "default": 0.15
+        },
+        {
+          "name": "F\u00F6ld\u00FAt roml\u00E1sa es\u0151ben",
+          "value": 2.4,
+          "unit": "\u00E1llapot/erd\u0151\u00E9v/es\u0151",
+          "key": "DirtRainWeather",
+          "min": 0,
+          "max": 20,
+          "default": 2.4
         }
       ],
       "x": 515,
@@ -2659,6 +2713,15 @@
           "min": 0,
           "max": 10000,
           "default": 30
+        },
+        {
+          "name": "K\u00F6zel\u00EDt\u0151nyom pufferz\u00F3n\u00E1ja",
+          "value": 25,
+          "unit": "m",
+          "key": "TrailBufferMetres",
+          "min": 0,
+          "max": 500,
+          "default": 25
         }
       ],
       "x": 270,

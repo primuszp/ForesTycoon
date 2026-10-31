@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using OpenTK.Mathematics;
 
@@ -40,9 +40,9 @@ namespace ForesTycoon
                     }
                 });
 
-                foreach (RoadPaving paving in new[] { RoadPaving.Asphalt, RoadPaving.Macadam })
+                foreach (RoadPaving paving in new[] { RoadPaving.Asphalt, RoadPaving.Macadam, RoadPaving.Dirt })
                 {
-                    if (RenderDevice.Visuals != null) RenderDevice.Visuals.Kind = paving == RoadPaving.Asphalt ? SurfaceKind.Road : SurfaceKind.Macadam;
+                    if (RenderDevice.Visuals != null) RenderDevice.Visuals.Kind = paving == RoadPaving.Asphalt ? SurfaceKind.Road : paving == RoadPaving.Macadam ? SurfaceKind.Macadam : SurfaceKind.SkidTrail;
                     DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () =>
                     {
                         foreach (Tile tile in visibleTiles)
@@ -161,7 +161,7 @@ namespace ForesTycoon
         /// <summary>Asphalt is grey, macadam a light gravel; both fade toward dusty earth as they wear.</summary>
         private Color RoadColor(int tileId)
         {
-            Color baseColor = roads.GetPaving(tileId) == RoadPaving.Asphalt ? RoadSurfaceColor : MacadamColor;
+            Color baseColor = roads.GetPaving(tileId) == RoadPaving.Asphalt ? RoadSurfaceColor : roads.GetPaving(tileId) == RoadPaving.Dirt ? Color.FromArgb(145, 108, 70) : MacadamColor;
             float damage = 1 - roads.GetCondition(tileId);
             if (damage <= 0) return baseColor;
             Color worn = roads.GetPaving(tileId) == RoadPaving.Asphalt ? Color.FromArgb(132, 128, 118) : Color.FromArgb(128, 108, 82);

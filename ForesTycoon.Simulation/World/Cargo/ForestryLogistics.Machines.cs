@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace ForesTycoon
@@ -223,6 +223,7 @@ namespace ForesTycoon
             yield return 1;
             if (rejection != null) { Status = rejection; yield break; }
             Release(machine);
+            if (!mill && StackAt(destination) == null && !PlaceStack(destination)) yield break;
             machine.Source = source; machine.Destination = destination;
             Restart(machine);
             Status = mill ? "A forwarder a malomba hordja a sarangot." : "A forwarder áthordja a sarangot.";

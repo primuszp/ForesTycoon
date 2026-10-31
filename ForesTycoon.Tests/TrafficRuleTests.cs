@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 
 namespace ForesTycoon.Tests;
 
@@ -11,7 +11,8 @@ public sealed class TrafficRuleTests
     {
         int start = Enumerable.Range(0, world.Map.Tiles.Count - 3).First(t => t / world.TileGrid.Rows == (t + 2) / world.TileGrid.Rows
             && Enumerable.Range(t, 3).All(world.Map.CanCarrySkidTrail));
-        if (trail) world.QueueSkidTrailPath(start, start + 2, false);
+        // Isolated rule fixture; interactive trail construction requires a road connection.
+        if (trail) Assert.NotEmpty(world.Map.MarkSkidTrailPath(start, start + 2));
         else world.QueueRoadPath(start, start + 2, false, RoadPaving.Macadam);
         world.ExecutePendingCommands();
         return Enumerable.Range(start, 3).ToArray();

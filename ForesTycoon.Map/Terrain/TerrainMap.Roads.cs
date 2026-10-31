@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using OpenTK.Mathematics;
 
@@ -71,7 +71,7 @@ namespace ForesTycoon.Map
 
         private RoadPlacement AnalyzeRoadPlacement(Tile t, RoadEdge requestedEdges, Func<Node, int> heightOf)
         {
-            if (t == null || IsBuildingTile(t.Id)) return RoadPlacement.Invalid;
+            if (t == null || IsBuildingTile(t.Id) || HasGroundReservation(t.Id) || !roads.Has(t.Id) && HasMobileObject(t.Id)) return RoadPlacement.Invalid;
             if (hydro.ShouldDrawStandingWater(t)) return RoadPlacement.Invalid;
 
             RoadEdge mergedEdges = requestedEdges | GetNetworkEdges(t.Id);
@@ -257,6 +257,7 @@ namespace ForesTycoon.Map
                 {
                     yield return 1;
                     changed.Add(step.TileId);
+                    InvalidateSurface();
                     chunkIndex.MarkTileAndNeighboursDirty(step.TileId, ChunkDirtyFlags.Roads);
                     continue;
                 }
@@ -331,6 +332,15 @@ namespace ForesTycoon.Map
             if (!IsValidTileId(start) || !IsValidTileId(end)) yield break;
             var work = remove ? RemoveRoadTilePathWork(tiles[start], tiles[end], result) : BuildRoadTilePathWork(tiles[start], tiles[end], surface, result);
             foreach (int unit in work) yield return unit;
+        }
+
+        internal IEnumerable<int> RoadStrokeTilesWork(int start, int end, WorkResult<int[]> result)
+        {
+            result.Value = Array.Empty<int>();
+            if (!IsValidTileId(start) || !IsValidTileId(end)) yield break;
+            var ids = new List<int>();
+            foreach (var step in RoadPlanSteps(tiles[start], tiles[end])) { ids.Add(step.TileId); yield return 1; }
+            result.Value = ids.ToArray();
         }
 
         internal IEnumerable<int> RepairRoadPathWork(int start, int end, WorkResult<(int Tile, float Damage)[]> result)

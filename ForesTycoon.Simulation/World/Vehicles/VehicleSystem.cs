@@ -6,6 +6,9 @@ namespace ForesTycoon
     sealed partial class VehicleSystem : IWorldSystem
     {
         private readonly List<Vehicle> vehicles = new List<Vehicle>();
+        private readonly Dictionary<int, Vehicle> membership = new();
+        internal ulong MembershipVersion { get; private set; }
+        private void AddVehicle(Vehicle vehicle) { vehicles.Add(vehicle); membership.Add(vehicle.Id, vehicle); MembershipVersion++; }
         private readonly TimberCargoSystem timberCargo;
         private int nextId = 1;
         internal Func<int[], VehicleRoadRoute> RoadRouteFactory { get; set; }
@@ -59,10 +62,11 @@ namespace ForesTycoon
                 vehicle.SourceTiles = (int[])sources.Clone(); vehicle.SawmillTileId = mill; vehicle.CargoStopsEnabled = true;
                 vehicle.TransportState = VehicleTransportState.Loading; vehicle.Hold();
             }
-            vehicles.Add(vehicle); result.Value = vehicle;
+            AddVehicle(vehicle); result.Value = vehicle;
         }
-        internal void Remove(Vehicle vehicle)=>vehicles.Remove(vehicle);
-        internal bool Contains(Vehicle vehicle)=>vehicles.Contains(vehicle);
+        internal void Remove(Vehicle vehicle) { if (Contains(vehicle)) { membership.Remove(vehicle.Id); vehicles.Remove(vehicle); MembershipVersion++; } }
+        internal bool Contains(Vehicle vehicle) => vehicle != null && membership.GetValueOrDefault(vehicle.Id) == vehicle;
+        internal Vehicle Find(int id) => membership.GetValueOrDefault(id);
 
         public VehicleSystem(TimberCargoSystem timberCargo = null, Func<int[], VehicleRoadRoute> roadRouteFactory = null)
         {
@@ -81,7 +85,7 @@ namespace ForesTycoon
             float initialCargo = timberCargo.Load(vehicle.CargoCapacity);
             if (vehicle.CargoStopsEnabled) vehicle.BeginLoading(initialCargo);
             else vehicle.Load(initialCargo);
-            vehicles.Add(vehicle);
+            AddVehicle(vehicle);
             return vehicle;
         }
 
@@ -197,6 +201,7 @@ namespace ForesTycoon
         public void Clear()
         {
             vehicles.Clear();
+            membership.Clear(); MembershipVersion++;
             nextId = 1;
         }
 
@@ -216,6 +221,7 @@ namespace ForesTycoon
                     if (!valid) vehicle.Hold();
                 } else if (!valid) {
                     timberCargo.AddHarvested(vehicle.Unload());
+                    membership.Remove(vehicle.Id); MembershipVersion++;
                     continue;
                 }
                 vehicles[keep++] = vehicle;
@@ -234,11 +240,13 @@ namespace ForesTycoon
                     if (!isRoadTile(vehicle.Route[i]))
                     {
                         timberCargo.AddHarvested(vehicle.Unload());
+                        membership.Remove(vehicle.Id); MembershipVersion++;
                         return true;
                     }
                 if (RouteValidator?.Invoke(vehicle) == false)
                 {
                     timberCargo.AddHarvested(vehicle.Unload());
+                    membership.Remove(vehicle.Id); MembershipVersion++;
                     return true;
                 }
                 return false;

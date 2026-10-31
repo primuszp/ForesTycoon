@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace ForesTycoon.Ecology
@@ -124,7 +124,10 @@ namespace ForesTycoon.Ecology
                 throw new ArgumentOutOfRangeException(nameof(species));
             if ((uint)tileId >= (uint)stands.Length) { result.Value = ForestryActionResult.InvalidTile; yield break; }
             if (!stands[tileId].IsEmpty) { result.Value = ForestryActionResult.TileOccupied; yield break; }
-            if (!habitat.CanSupportForest(tileId)) { result.Value = ForestryActionResult.UnsuitableTerrain; yield break; }
+            if (!habitat.CanPlantForest(tileId)) { result.Value = ForestryActionResult.UnsuitableTerrain; yield break; }
+            if (IndividualTrees.TryGet(tileId, out var occupied) && (occupied.Count > 0 || occupied.Depot > 0 || occupied.DeadTrees?.Count > 0)) {
+                result.Value = ForestryActionResult.TileOccupied; yield break;
+            }
 
             ForestSpeciesProfile profile = ForestSpeciesProfile.For(species);
             float suitability = Suitability(species, tileId);
@@ -244,6 +247,12 @@ namespace ForesTycoon.Ecology
         {
             if (paint == null || paint.Count == 0) yield break;
             if (preserveUnpainted) {
+                var allowed = new Dictionary<int, ForestSpecies>();
+                foreach (var (id, species) in paint) {
+                    if (species == ForestSpecies.None || !HasPhysicalObjects(id) && habitat.CanPlantForest(id)) allowed[id] = species;
+                    yield return 1;
+                }
+                paint = allowed;
                 var tiles = new List<int>(paint.Keys);
                 foreach (int unit in ClearTerrainTilesWork(tiles.ToArray())) yield return unit;
             }
@@ -252,7 +261,7 @@ namespace ForesTycoon.Ecology
             {
                 yield return 1;
                 if ((uint)tileId >= (uint)stands.Length) continue;
-                if (species == ForestSpecies.None || !habitat.CanSupportForest(tileId)) { stands[tileId] = default; continue; }
+                if (species == ForestSpecies.None || !habitat.CanPlantForest(tileId)) { stands[tileId] = default; continue; }
                 float moisture = habitat.GetMoisture(tileId), elevation = habitat.GetNormalizedElevation(tileId);
                 ForestSpeciesProfile profile = ForestSpeciesProfile.For(species);
                 float age = (float)Gameplay.Evaluate("forest.initialAge", 0, profile.MatureAgeYears, UnitFloat(Hash(habitat.Seed, tileId, 1)));

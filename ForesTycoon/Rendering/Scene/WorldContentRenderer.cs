@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using OpenTK.Mathematics;
@@ -43,7 +43,7 @@ namespace ForesTycoon
         {
             if(!enabled||terrain.Map.HoveredTile==null)return;
             bool valid=terrain.Map.TryGetSawmillFootprint(terrain.Map.HoveredTile.Id,out int[] footprint,out _);
-            foreach(int id in footprint)if(forest.TryGetStand(id,out _)||logistics?.ContainsTile(id)==true)valid=false;
+            foreach(int id in footprint)if(forest.HasPhysicalObjects(id)||logistics?.StackAt(id)!=null)valid=false;
             using var state=RenderDevice.CreateStateScope().AlphaBlend().DepthWrite(false);
             DynamicPrimitiveBatch.Draw(PrimitiveTopology.LineLoop,()=>{
                 DynamicPrimitiveBatch.Color4(valid?Color.FromArgb(120,245,120):Color.FromArgb(245,90,70));

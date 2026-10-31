@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using ImGuiNET;
@@ -331,7 +331,8 @@ namespace ForesTycoon.Editor
                 using (var trailWorld = new GameWorld(settings, enableRendering: false)) {
                     int trailStart = Enumerable.Range(0, trailWorld.Map.Tiles.Count - 2).First(id => trailWorld.Map.CanCarrySkidTrail(id)
                         && trailWorld.Map.CanCarrySkidTrail(id + 1) && trailWorld.Map.CanCarrySkidTrail(id + 2));
-                    trailWorld.QueueSkidTrailPath(trailStart, trailStart + 2, false); trailWorld.ExecutePendingCommands();
+                    // Graph-editing fixture, independent of player road-connectivity validation.
+                    trailWorld.Map.MarkSkidTrailPath(trailStart, trailStart + 2);
                     var trailIds = trailWorld.Map.SkidTrailTiles.OrderBy(id => id).ToArray();
                     foreach (int id in trailIds) trailWorld.Map.SetSkidTrailState(id, .8f, .5f);
                     var trailProject = trailWorld.RuleProjectDocument; trailProject.World = null; trailProject.Algorithms = null;

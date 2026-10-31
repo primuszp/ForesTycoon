@@ -99,6 +99,7 @@ namespace ForesTycoon.Ecology
         public (int Columns, int Rows) TileGrid => terrain.TileGrid;
         public ForestTileGeometry GetForestTileGeometry(int id) => terrain.GetForestTileGeometry(id);
         public bool CanSupportForest(int id) => terrain.CanSupportForest(id);
+        public bool CanPlantForest(int id) => terrain.CanPlantForest(id);
         public float GetMoisture(int id) => terrain.GetMoisture(id);
         public SoilProperties GetSoilProperties(int id) => soils.Profile(id).Properties;
         public bool IsImpervious(int id) => terrain.IsImpervious(id);

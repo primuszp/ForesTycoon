@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using OpenTK.Graphics.OpenGL;
 using OpenTK.Mathematics;
@@ -22,18 +22,17 @@ namespace ForesTycoon
                 try
                 {
                     int[] stand = { 136, 137, 138, 152, 153, 154 };
-                    var stands = new ForestStand[256];
-                    foreach (int id in stand) stands[id] = new ForestStand(ForestSpecies.Spruce, 60, 0.75f, 1);
-                    var forest = new ForestSystem(terrain.Map, stands);
+                    using var simulation = new SimulationWorld(terrain.Map);
+                    var forest = simulation.Forest; forest.Clear();
+                    var paint = new System.Collections.Generic.Dictionary<int, ForestSpecies>();
+                    foreach (int id in stand) paint[id] = ForestSpecies.Spruce;
+                    forest.PaintInitialForest(paint);
                     terrain.Map.BuildRoadTilePath(34, 210, RoadPaving.Macadam);
                     // A trail with a bend: up from the road, then across to the stand.
                     terrain.Map.MarkSkidTrailPath(115, 119); terrain.Map.MarkSkidTrailPath(119, 135);
                     terrain.Map.MarkSkidTrailPath(117, 85);   // a side branch: a T junction on the trail
-                    var logistics = new ForestryLogistics(terrain.Map, forest);
-                    var cargo = new TimberCargoSystem();
-                    var vehicles = new VehicleSystem(cargo, route => VehicleRoadRoute.Create(terrain.Map, route))
-                    { SourceLoader = logistics.Load, DestinationReceiver = logistics.Deliver, RouteValidator = logistics.RouteConnected };
-                    logistics.Vehicles = vehicles;
+                    var logistics = simulation.Logistics;
+                    var vehicles = logistics.Vehicles;
                     Require(logistics.PlaceMill(195), logistics.Status);
                     Require(logistics.PlaceDepot(67), logistics.Status);
                     logistics.Designate(stand);
@@ -44,7 +43,7 @@ namespace ForesTycoon
                     using var scene = new TerrainRenderer(terrain, vehicles, new WorldEffectSystem(), forest,
                         new GraphicsSettings { Fog = false, Weather = false, Wildlife = false }, logistics: logistics);
                     double time = 0;
-                    void Step(double seconds) { for (int i = 0; i < seconds * 30; i++) { logistics.Update(1.0 / 30); vehicles.Update(1.0 / 30); time += 1.0 / 30; } }
+                    void Step(double seconds) { for (int i = 0; i < seconds * 30; i++) { logistics.Update(1.0 / 30); vehicles.Update(1.0 / 30); SimulationWork.Complete(simulation.TrafficWork()); time += 1.0 / 30; } }
                     Capture(scene, terrain, "depot", time);
                     // The order tool's ground marks: target stacks glowing, the cursor tile, a forwarder and a truck route.
                     var orders = terrain.Orders;

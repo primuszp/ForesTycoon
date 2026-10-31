@@ -20,14 +20,21 @@ partial class SimulationWorld
     {
         EnsureAvailable(allowFaulted: true);
         ArgumentNullException.ThrowIfNull(settings);
-        AtTickBoundary(() => BeginGeneration(GenerateWorldWork(settings, soils ?? SoilLandscapeDefinition.Default, null)));
+        RequestReplacement(GenerateWorldWork(settings, soils ?? SoilLandscapeDefinition.Default, null));
     }
 
     internal void RequestScenario(WorldScenario scenario, RuleProject definition = null)
     {
         EnsureAvailable(allowFaulted: true);
         ArgumentNullException.ThrowIfNull(scenario);
-        AtTickBoundary(() => BeginGeneration(PrepareScenarioWork(scenario, definition)));
+        RequestReplacement(PrepareScenarioWork(scenario, definition));
+    }
+
+    private void RequestReplacement(IEnumerable<int> work)
+    {
+        // A failed operation cannot reach another valid boundary. Keep it isolated until a new world is published.
+        if (faulted) { tickBoundaryActions.Clear(); BeginGeneration(work); }
+        else AtTickBoundary(() => BeginGeneration(work));
     }
 
     private IEnumerable<int> PrepareScenarioWork(WorldScenario scenario, RuleProject definition)

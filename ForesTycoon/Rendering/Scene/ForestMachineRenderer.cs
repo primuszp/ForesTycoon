@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -351,6 +351,7 @@ namespace ForesTycoon
         // Stack sites (sarangok): an empty one shows its marking stakes, a filled one its round logs.
         private void DrawPiles(Terrain terrain, ForestryLogistics logistics, GraphicsSettings settings)
         {
+            terrain.DrawGroundTimber(logistics.Forest, (tile, volume) => Stack(terrain.Map, tile, volume, settings));
             foreach (var stack in logistics.Stacks)
             {
                 if (stack.Volume > 0.05f) Stack(terrain.Map, stack.Tile, stack.Volume, settings);

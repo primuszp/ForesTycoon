@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -170,6 +170,7 @@ internal sealed partial class RuleEditorView
             (scenario.SoilPaint.Count, "festett talajcsempe", () => scenario.SoilPaint.Clear()),
             (scenario.HeightPaint.Count, "festett terepsarok", () => scenario.HeightPaint.Clear()),
             (scenario.ForestPaint.Count, "festett erdőcsempe", () => scenario.ForestPaint.Clear()),
+            (scenario.ForestFelling.Count, "kivágott erdőcsempe", () => scenario.ForestFelling.Clear()),
             (scenario.Springs.Count, "forrás", () => scenario.Springs.Clear()) }) {
             if (count == 0) continue;
             ImGui.AlignTextToFramePadding(); ImGui.TextUnformatted($"{count} {label}"); ImGui.SameLine();
@@ -195,7 +196,7 @@ internal sealed partial class RuleEditorView
         int sizeIndex = Array.IndexOf(MapSizes, scenario.Size);
         ImGui.SetNextItemWidth(-1);
         if (ImGui.Combo("##size", ref sizeIndex, MapSizes.Select(n => $"{n} × {n} csempe").ToArray(), MapSizes.Length) && sizeIndex >= 0 && MapSizes[sizeIndex] != scenario.Size) {
-            scenario.Size = MapSizes[sizeIndex]; scenario.SoilPaint.Clear(); scenario.HeightPaint.Clear(); scenario.ForestPaint.Clear(); scenario.Springs.Clear();
+            scenario.Size = MapSizes[sizeIndex]; scenario.SoilPaint.Clear(); scenario.HeightPaint.Clear(); scenario.ForestPaint.Clear(); scenario.ForestFelling.Clear(); scenario.Springs.Clear();
             ApplyScenario(world, $"A pálya mérete {scenario.Size} × {scenario.Size}; a festés törlődött, mert a csempék újraszámozódtak.");
         }
         ImGui.EndDisabled();
@@ -278,11 +279,16 @@ internal sealed partial class RuleEditorView
         var section = world.DescribeTile(tile);
         if (!EditorStyle.BeginFacts("tile-facts")) return;
         foreach (var (key, label) in new[] {
-            ("forest.trees", "Növényzet"), ("forest.volume", "Fatérfogat"), ("forest.health", "Faegészség"),
+            ("forest.groundTimber", "Kivágott faanyag"), ("forest.trees", "Növényzet"), ("forest.volume", "Fatérfogat"), ("forest.health", "Faegészség"),
             ("road.condition", "Út"), ("trail.trafficability", "Járhatóság"), ("trail.wear", "Nyomvályú"),
             ("soil.profile", "Talaj"), ("soil.bearing", "Teherbírás"), ("soil.fertility", "Termékenység"),
             ("water.root", "Gyökérzónavíz"), ("water.deep", "Mélyvíz"), ("water.surface", "Felszíni víz") })
             if (section.TryGetValue(key, out var value)) EditorStyle.Fact(label, value);
+        if (world.Map.IsNetworkTile(tile)) {
+            EditorStyle.Fact("Elérési puffer", $"{world.RoadBufferMetres(tile):0.#} m");
+            EditorStyle.Fact("Elérhető élő faanyag", structureSurvey != null && structureSurvey.TimberByRoad.TryGetValue(tile, out double volume)
+                ? $"{volume:F1} m³" : "Számítás…");
+        }
         EditorStyle.Fact("Magasság", $"{world.TileLevel(tile)}. szint");
         EditorStyle.Fact("Magassági öv", scenario.ElevationZones[scenario.ZoneOf(world.TileLevel(tile))].Name);
         int biome = TileBiome(world, tile);
@@ -359,8 +365,13 @@ internal sealed partial class RuleEditorView
                 ApplyScenario(world, $"{tiles} csempe festve: {scenario.SoilTypes[brushSoil].Name}."); return;
             case MapLayer.Forest:
                 string species = brushSpecies < 0 ? "" : scenario.Species[brushSpecies].Id;
-                foreach (int tile in stroke) scenario.ForestPaint[tile] = species;
-                ApplyScenario(world, $"{tiles} csempe: " + (brushSpecies < 0 ? "irtás." : scenario.Species[brushSpecies].Name + " erdő.")); return;
+                foreach (int tile in stroke) {
+                    if (species.Length == 0) { if (!scenario.ForestFelling.Contains(tile)) scenario.ForestFelling.Add(tile); }
+                    else if (!world.Forest.HasPhysicalObjects(tile) && ((IForestHabitat)world.Map).CanPlantForest(tile)) {
+                        scenario.ForestFelling.Remove(tile); scenario.ForestPaint[tile] = species;
+                    }
+                }
+                ApplyScenario(world, $"{tiles} csempe: " + (brushSpecies < 0 ? "fakivágás; a faanyag a helyszínen marad." : scenario.Species[brushSpecies].Name + " erdő.")); return;
         }
         if (mapLayer == MapLayer.Water && waterTool >= 2) {
             foreach (int tile in stroke) if (waterTool == 2) scenario.Springs[tile] = Math.Round(springRate); else scenario.Springs.Remove(tile);
@@ -370,6 +381,7 @@ internal sealed partial class RuleEditorView
         }
         if (mapLayer == MapLayer.Water) {
             var targets = waterTool == 0 ? world.LakeTargets(stroke, scenario.HeightPaint) : world.LandTargets(stroke);
+            if (!world.Map.CanApplyHeightTargets(targets)) { message = "A terepmódosítás meglévő objektumot érintene."; return; }
             foreach (var (node, height) in targets) scenario.HeightPaint[node] = height;
             ApplyScenario(world, waterTool == 0 ? $"Tó: {tiles} csempe, parttal." : $"Szárazföld: {tiles} csempe a vízszint fölé.");
             return;
@@ -377,10 +389,13 @@ internal sealed partial class RuleEditorView
         // Terrain: the stroke's tile corners get absolute target heights from the current world.
         var corners = stroke.SelectMany(world.Map.TileCorners).Distinct().ToArray();
         int average = corners.Length == 0 ? 0 : (int)Math.Round(corners.Average(world.Map.NodeHeight));
+        var heightTargets = new Dictionary<int, int>();
         foreach (int node in corners) {
             int height = world.Map.NodeHeight(node);
-            scenario.HeightPaint[node] = elevationTool switch { 0 => Math.Min(world.Map.MaximumHeight, height + 1), 1 => Math.Max(0, height - 1), _ => average };
+            heightTargets[node] = elevationTool switch { 0 => Math.Min(world.Map.MaximumHeight, height + 1), 1 => Math.Max(0, height - 1), _ => average };
         }
+        if (!world.Map.CanApplyHeightTargets(heightTargets)) { message = "A terepmódosítás meglévő objektumot érintene."; return; }
+        foreach (var (node, height) in heightTargets) scenario.HeightPaint[node] = height;
         ApplyScenario(world, $"Domborzat: {tiles} csempe " + (elevationTool == 0 ? "emelve." : elevationTool == 1 ? "süllyesztve." : "simítva."));
     }
 
@@ -397,7 +412,8 @@ internal sealed partial class RuleEditorView
         MapLayer.Forest => tile => world.TileSpecies(tile) is var s && s != ForesTycoon.Ecology.ForestSpecies.None
             ? Mix(new(0.17f, 0.19f, 0.14f, 1), SpeciesColour(s.ToString()), 0.45f + 0.55f * (float)Math.Clamp(world.TileForest(tile) / 30, 0, 1))
             : world.IsWaterTile(tile) ? new(0.20f, 0.32f, 0.50f, 1) : new(0.17f, 0.19f, 0.14f, 1),
-        MapLayer.Tracks => tile => world.Map.IsRoadTile(tile) ? new(0.85f, 0.82f, 0.75f, 1) : world.Map.IsBuildingTile(tile) ? new(0.62f, 0.40f, 0.26f, 1) : world.Map.IsSkidTrail(tile) ? new(0.85f, 0.55f, 0.28f, 1)
+        MapLayer.Tracks => tile => world.Map.IsRoadTile(tile) ? world.Map.GetRoadPaving(tile) switch {
+            RoadPaving.Asphalt => new(0.45f, 0.46f, 0.47f, 1), RoadPaving.Macadam => new(0.85f, 0.82f, 0.75f, 1), _ => new(0.62f, 0.43f, 0.26f, 1) } : world.Map.IsBuildingTile(tile) ? new(0.62f, 0.40f, 0.26f, 1) : world.Map.IsSkidTrail(tile) ? new(0.85f, 0.55f, 0.28f, 1)
             : EditorStyle.Dim(SoilColour(world, tile), .45f),
         MapLayer.Trafficability => tile => world.IsUnpaved(tile) ? TrafficColour(world.Trafficability(tile)) : new(0.45f, 0.45f, 0.45f, 1),
         _ => tile => SoilColour(world, tile)
@@ -629,7 +645,7 @@ internal sealed partial class RuleEditorView
             var counts = new int[scenario.SoilTypes.Count];
             for (int t = 0; t < tiles; t++) { int s = world.SoilIndex(t); if (s < counts.Length) counts[s]++; }
             Legend(scenario.SoilTypes.Select((type, i) => (Colour(type.Color), $"{type.Name} · {Share(counts[i])}")));
-            if (mapLayer == MapLayer.Tracks) { EditorStyle.Text(HudTheme.Muted, "világos: út · barna: épület · narancs: közelítőnyom"); }
+            if (mapLayer == MapLayer.Tracks) { EditorStyle.Text(HudTheme.Muted, "szürke: aszfalt · világos: makadám · barna: földút/épület · narancs: közelítőnyom"); }
             return;
         }
         if (mapLayer == MapLayer.Ground) {
@@ -910,14 +926,15 @@ internal sealed partial class RuleEditorView
 
     private static readonly (string Name, string Help)[] SurfaceNames = {
         ("Aszfalt", "Burkolt út: drága, alig kopik és romlik."), ("Makadám", "Zúzottkő út: olcsóbb, esőben gyorsan romlik."),
-        ("Földút", "Burkolatlan terep: a járhatóságát a talaj és a talajvíz adja."), ("Közelítőnyom", "Ideiglenes nyom a gépeknek; a forgalom vájja, idővel benő.") };
+        ("Földút", "Épített földút: a járhatóságát a talaj és a talajvíz adja."), ("Közelítőnyom", "Ideiglenes nyom a gépeknek; a forgalom vájja, idővel benő.") };
     private static readonly (string Label, string Effect, string[] Keys)[] SurfaceRows = {
-        ("Építési költség (eFt/csempe)", "Gazdaság: kiadás építéskor.", new[] { "AsphaltBuild", "MacadamBuild", null, "TrailCost" }),
+        ("Építési költség (eFt/csempe)", "Gazdaság: kiadás építéskor.", new[] { "AsphaltBuild", "MacadamBuild", "DirtBuild", "TrailCost" }),
         ("Forgalmi kopás szorzója", "Útkopás: mennyit veszít az állapotából áthaladásonként (nyomnál az útkopás többszöröse).", new[] { "AsphaltFactor", "MacadamFactor", null, "TrailLoadMultiplier" }),
-        ("Romlás szárazon (állapot/év)", "Időjárási útromlás csapadék nélkül.", new[] { "AsphaltWeather", "MacadamWeather", null, null }),
-        ("Romlás esőben (állapot/év/eső)", "Időjárási útromlás az eső erősségével.", new[] { "AsphaltRainWeather", "MacadamRainWeather", null, null }),
+        ("Romlás szárazon (állapot/év)", "Időjárási útromlás csapadék nélkül.", new[] { "AsphaltWeather", "MacadamWeather", "DirtWeather", null }),
+        ("Romlás esőben (állapot/év/eső)", "Időjárási útromlás az eső erősségével.", new[] { "AsphaltRainWeather", "MacadamRainWeather", "DirtRainWeather", null }),
         ("Gördülési ellenállás (Crr)", "Jármű: menetellenállás és fogyasztás. A földút és a nyom közös értéke.", new[] { "RollingAsphalt", "RollingGravel", "RollingDirt", "RollingDirt" }),
-        ("Javítás az építési ár arányában", "Gazdaság: útjavítás költsége teljes kárnál (aszfalt és makadám közös).", new[] { "RoadRepairShare", "RoadRepairShare", null, null }),
+        ("Javítás az építési ár arányában", "Gazdaság: útjavítás költsége teljes kárnál (minden épített útnál közös).", new[] { "RoadRepairShare", "RoadRepairShare", "RoadRepairShare", null }),
+        ("Faanyag-elérési távolság (m)", "Vízszintes puffer: az elérhető lábonálló faanyag becslése, átfedésnél egyszer számolva.", new[] { "AsphaltBufferMetres", "MacadamBufferMetres", "DirtBufferMetres", "TrailBufferMetres" }),
         ("Benövési idő (erdőév)", "A használatlan nyom ennyi idő alatt nő be.", new[] { null, null, null, "SkidTrailOvergrowYears" }) };
 
     private void SurfacesTab(GameWorld world)

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using OpenTK.Mathematics;
 using OpenTK.Windowing.Common;
@@ -184,11 +184,14 @@ namespace ForesTycoon
                     ImGui.PopItemWidth();
                     break;
                 case TerrainEditTool.Road:
+                    SurfaceButton(RoadPaving.Dirt, GameIcon.Macadam, "Földút",
+                        $"Építés: {RoadCosts.Build(RoadPaving.Dirt, world.Tuning):0} eFt/csempe; esőben a talaj korlátozza.");
+                    ImGui.SameLine();
                     SurfaceButton(RoadPaving.Macadam, GameIcon.Macadam, "Makadám",
-                        $"Olcsó ({RoadCosts.Build(RoadPaving.Macadam):0} eFt/csempe), de gyorsan romlik, főleg esőben és vizes talajon.");
+                        $"Olcsó ({RoadCosts.Build(RoadPaving.Macadam, world.Tuning):0} eFt/csempe), de gyorsan romlik, főleg esőben és vizes talajon.");
                     ImGui.SameLine();
                     SurfaceButton(RoadPaving.Asphalt, GameIcon.Road, "Aszfalt",
-                        $"Drága ({RoadCosts.Build(RoadPaving.Asphalt):0} eFt/csempe), de sokáig bírja.");
+                        $"Drága ({RoadCosts.Build(RoadPaving.Asphalt, world.Tuning):0} eFt/csempe), de sokáig bírja.");
                     ImGui.SameLine();
                     ImGui.TextDisabled("Húzd az egeret a nyomvonalon.");
                     ImGui.SameLine();
@@ -321,7 +324,8 @@ namespace ForesTycoon
             bool planted = world.TryGetPlantationStatus(world.HoveredTileId, out var plot);
             bool road = world.IsRoadTile(world.HoveredTileId);
             bool trail = world.IsSkidTrail(world.HoveredTileId);
-            if (!hasStand && !planted && !road && !trail) return;
+            float groundTimber = world.Forest.IndividualTrees.TryGet(world.HoveredTileId, out var groundPatch) ? groundPatch.Depot : 0;
+            if (!hasStand && !planted && !road && !trail && groundTimber <= 0) return;
 
             ImGui.BeginTooltip();
             if (trail)
@@ -331,15 +335,17 @@ namespace ForesTycoon
                 HudTheme.KeyValue("Keréknyom", wear < 0.05f ? "még nem járt rajta gép" : wear < 0.4f ? $"sekély ({wear:P0})" : $"mély, sáros ({wear:P0})");
                 ImGui.Separator();
             }
+            if (road || world.Map.IsSkidTrail(world.HoveredTileId)) DrawRoadBufferInfo(world.HoveredTileId);
             if (road)
             {
                 bool asphalt = world.GetRoadPaving(world.HoveredTileId) == RoadPaving.Asphalt;
                 float condition = world.GetRoadCondition(world.HoveredTileId);
-                HudTheme.IconText(asphalt ? GameIcon.Road : GameIcon.Macadam, asphalt ? "Aszfaltút" : "Makadámút", HudTheme.AmberAccent);
+                HudTheme.IconText(asphalt ? GameIcon.Road : GameIcon.Macadam, RoadCosts.Name(world.GetRoadPaving(world.HoveredTileId)), HudTheme.AmberAccent);
                 HudTheme.KeyValue("Állapot", $"{condition:P0}" + (condition < 0.5f ? " · javítandó" : ""));
                 ImGui.EndTooltip();
                 return;
             }
+            if (groundTimber > 0) HudTheme.KeyValue("Kivágott faanyag", $"{groundTimber:F1} m³ · elszállításra vár");
             if (hasStand)
             {
                 HudTheme.IconText(SpeciesIcon(stand.Species), Capitalize(ForestSpeciesName(stand.Species)), HudTheme.AmberAccent);
@@ -618,12 +624,18 @@ namespace ForesTycoon
             HudTheme.Meter("Átlagos egészség", forest.AverageHealth, $"{forest.AverageHealth:P0}",
                 forest.AverageHealth > 0.6f ? null : HudTheme.Bad);
 
+            ImGui.SeparatorText("Úthálózat elérési puffere");
+            ImGui.Checkbox("Pufferzónák a térképen", ref showRoadBuffers);
+            HudTheme.KeyValue("Elérhető élő faanyag", roadSurvey == null ? "Számítás…" : $"{roadSurvey.TotalTimber:F1} m³");
+            ImGui.TextWrapped("Vízszintes távolság alapján becsült készlet; az átfedéseket egyszer számolja. Nem jelöl ki kitermelést.");
+
             ImGui.SeparatorText("Faanyag");
-            HudTheme.KeyValue("Kitermelt készlet", $"{world.TimberStockpile:F1} m³");
+            float remaining = world.Logistics.PublishedRemaining;
+            HudTheme.KeyValue("Elszállításra vár", $"{remaining:F1} m³");
             HudTheme.KeyValue("Leszállítva", $"{world.DeliveredTimber:F1} m³");
             if (world.Logistics != null)
             {
-                HudTheme.KeyValue("Kitermelési ter.", $"{world.Logistics.Sites.Count} db · {world.Logistics.Remaining:F1} m³ hátra");
+                HudTheme.KeyValue("Kitermelési ter.", $"{world.Logistics.Sites.Count} db · {remaining:F1} m³ hátra");
                 if (world.Logistics.Mills.Count > 0) ImGui.SeparatorText("Fűrészmalmok");
                 foreach (var mill in world.Logistics.Mills)
                     HudTheme.IconText(GameIcon.Sawmill, $"#{mill.TileId}: átvett {mill.Received:F1} m³ · feldolgozott {mill.Processed:F1} m³");
@@ -680,7 +692,8 @@ namespace ForesTycoon
         private void DrawManagementWindow()
         {
             bool projecting = showManagement && management.Project;
-            world.SetManagementOverlay(projecting ? management.OverlayColours(world) : null);
+            UpdateRoadSurvey();
+            world.SetManagementOverlay(projecting ? management.OverlayColours(world) : showRoadBuffers ? roadSurvey?.Overlay : null);
             world.Graphics.HideTrees = projecting && management.ModelTrees;
             if (projecting && management.Current == ManagementView.Lens.Todo) DrawManagementMarkers();
             if (!BeginGameWindow("Erdőgazdálkodás", ref showManagement, new NVec2(20, toolbarBottom + 10), 640)) return;

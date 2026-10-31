@@ -19,6 +19,7 @@ namespace ForesTycoon
         RollingAsphalt, RollingGravel, RollingDirt, RoughnessRolling, FuelPerKilowattHour, IdleFuelPerHour,
         TimberPriceFactor, CreditLimit,
         AsphaltWeather, AsphaltRainWeather, MacadamWeather, MacadamRainWeather,
+        DirtBuild, DirtWeather, DirtRainWeather, AsphaltBufferMetres, MacadamBufferMetres, DirtBufferMetres, TrailBufferMetres,
     }
 
     /// <summary>One tunable: which rule it belongs to, how it is shown and the range the game accepts.</summary>
@@ -96,6 +97,13 @@ namespace ForesTycoon
             new(Tune.AsphaltRainWeather, "road.weather", "Aszfalt romlása esőben", "állapot/erdőév/eső", RoadWeatherRule.AsphaltRainRate, 0, 20),
             new(Tune.MacadamWeather, "road.weather", "Makadám romlása szárazon", "állapot/erdőév", RoadWeatherRule.MacadamBaseRate, 0, 5),
             new(Tune.MacadamRainWeather, "road.weather", "Makadám romlása esőben", "állapot/erdőév/eső", RoadWeatherRule.MacadamRainRate, 0, 20),
+            new(Tune.DirtBuild, "road.build", "Földút", "eFt/csempe", RoadCosts.DirtBuild, 0, 100000),
+            new(Tune.DirtWeather, "road.weather", "Földút romlása szárazon", "állapot/erdőév", .15, 0, 5),
+            new(Tune.DirtRainWeather, "road.weather", "Földút romlása esőben", "állapot/erdőév/eső", 2.4, 0, 20),
+            new(Tune.AsphaltBufferMetres, "road.build", "Aszfaltút pufferzónája", "m", 50, 0, 500),
+            new(Tune.MacadamBufferMetres, "road.build", "Makadámút pufferzónája", "m", 50, 0, 500),
+            new(Tune.DirtBufferMetres, "road.build", "Földút pufferzónája", "m", 50, 0, 500),
+            new(Tune.TrailBufferMetres, "trail.build", "Közelítőnyom pufferzónája", "m", 25, 0, 500),
         };
 
         private static readonly Dictionary<string, TuningSpec> byId = Specs.ToDictionary(s => s.Id, StringComparer.Ordinal);
@@ -131,7 +139,9 @@ namespace ForesTycoon
         internal static TuningSpec Spec(Tune key) => Specs[(int)key];
 
         /// <summary>The truck physics built from the tunables, shared by every vehicle of the world.</summary>
-        internal TruckSpec Truck { get; }
+        internal TruckSpec Truck { get; private set; }
+        internal TruckSpec SampleTruck() => Truck = BuildTruck();
+        internal void RestoreTruck(TruckSpec state) => Truck = state with { Rules = vehicleRules };
         private TruckSpec BuildTruck() => new(F(Tune.EmptyMass), F(Tune.Power), F(Tune.MaxTractiveForce), F(Tune.DragArea), F(Tune.Drivetrain),
             F(Tune.TimberDensity), F(Tune.FuelPerKilowattHour), F(Tune.IdleFuelPerHour), F(Tune.Braking))
         {

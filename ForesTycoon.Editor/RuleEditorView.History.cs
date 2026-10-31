@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
@@ -55,6 +55,7 @@ internal sealed partial class RuleEditorView
             : J(a.SoilPaint) != J(b.SoilPaint) ? "talajfestés"
             : J(a.HeightPaint) != J(b.HeightPaint) ? "domborzat vagy víz festése"
             : J(a.ForestPaint) != J(b.ForestPaint) ? "erdőfestés"
+            : J(a.ForestFelling) != J(b.ForestFelling) ? "fakivágás"
             : J(a.Springs) != J(b.Springs) ? "forrás módosítása"
             : J(a.SoilTypes.Select(s => s.Horizons)) != J(b.SoilTypes.Select(s => s.Horizons)) || a.ProfileScale != b.ProfileScale ? "talajszelvény módosítása"
             : J(a.SoilTypes) != J(b.SoilTypes) ? "talajtípus módosítása"

@@ -8,7 +8,7 @@ internal sealed partial class RuleEngine
     /// Moves up to <paramref name="amount"/> along a flow: never more than the source holds above its minimum, nor more than
     /// the receivers have room for. What leaves one stock arrives in the other, so a closed model conserves its quantity.
     /// </summary>
-    private void Move(SimulationWorld world, RuleScope scope, int id, double[] inputs, double[][] custom, RuleFieldDefinition[] customDefs, CompiledFlow flow, double amount)
+    private void Move(SimulationWorld world, RuleScope scope, int id, double[] inputs, FieldValues[] custom, RuleFieldDefinition[] customDefs, CompiledFlow flow, double amount)
     {
         var stock = new Stocks(world, scope, id, inputs, custom, customDefs);
         flowLedger.Record(flow.Slot, Transfer(world, scope, id, ref stock, flow, amount));
@@ -53,10 +53,10 @@ internal sealed partial class RuleEngine
     private readonly ref struct Stocks
     {
         private readonly SimulationWorld world; private readonly RuleScope scope; private readonly int id;
-        private readonly double[] inputs; private readonly double[][] custom; private readonly RuleFieldDefinition[] customDefs;
+        private readonly double[] inputs; private readonly FieldValues[] custom; private readonly RuleFieldDefinition[] customDefs;
         private readonly LocalFlowPlan local;
         private readonly bool detached;
-        internal Stocks(SimulationWorld world, RuleScope scope, int id, double[] inputs, double[][] custom, RuleFieldDefinition[] customDefs)
+        internal Stocks(SimulationWorld world, RuleScope scope, int id, double[] inputs, FieldValues[] custom, RuleFieldDefinition[] customDefs)
         { this.world = world; this.scope = scope; this.id = id; this.inputs = inputs; this.custom = custom; this.customDefs = customDefs; local = null; detached = false; }
         internal Stocks(RuleScope scope, LocalFlowPlan local)
         { world = null; this.scope = scope; id = 0; inputs = local.Inputs; custom = null; customDefs = null; this.local = local; detached = false; }

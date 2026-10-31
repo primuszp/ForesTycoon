@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 
 namespace ForesTycoon
 {
@@ -13,9 +13,10 @@ namespace ForesTycoon
             Enqueue(new SetTuningCommand(GameTuning.FromOverrides(overrides).ToJson()));
         void IWorldCommandTarget.ExecuteTuning(string json) => ApplyTuning(GameTuning.FromJson(json));
 
-        private void ApplyTuning(GameTuning tuning)
+        private void ApplyTuning(GameTuning tuning, bool preserveTruck = false)
         {
             Tuning = (tuning ?? GameTuning.Default).WithBehaviors(behaviorPolicy.HasGraphs ? behaviorPolicy : null, behaviorPolicy.VehicleResponses);
+            if (preserveTruck) Tuning.RestoreTruck(tuning.Truck);
             if (Logistics != null) Logistics.Tuning = Tuning;
             vehicles.TimeScale = Tuning[Tune.VehicleTimeScale];
             vehicles.Spec = Tuning.Truck;
@@ -52,7 +53,8 @@ namespace ForesTycoon
             Logistics.Passage = RecordPassage;
         }
         internal (RoadSurface Surface, float Condition) DrivingSurface(int id) => map.IsRoadTile(id)
-            ? (map.GetRoadPaving(id) == RoadPaving.Asphalt ? RoadSurface.Asphalt : RoadSurface.Gravel, map.GetRoadCondition(id))
+            ? (map.GetRoadPaving(id) switch { RoadPaving.Asphalt => RoadSurface.Asphalt, RoadPaving.Macadam => RoadSurface.Gravel, _ => RoadSurface.Dirt },
+                map.GetRoadPaving(id) == RoadPaving.Dirt ? System.Math.Min(map.GetRoadCondition(id), Trafficability(id)) : map.GetRoadCondition(id))
             : (RoadSurface.Dirt, (float)behaviorPolicy.Gameplay.Evaluate("trail.drivingCondition", map.GetSkidTrailWear(id), Trafficability(id)));
         /// <summary>Soaked soil with low bearing capacity makes dirt tracks rough: lower condition, more rolling resistance.</summary>
         internal float Trafficability(int id)
@@ -85,7 +87,8 @@ namespace ForesTycoon
                 result["forest.health"] = stand.Health.ToString("0.00");
                 result["forest.volume"] = $"{ForestSystem.TimberCubicMetres(stand):0.#} m³";
             }
-            if (map.IsRoadTile(id)) result["road.condition"] = map.GetRoadCondition(id).ToString("0.00") + " · " + (map.GetRoadPaving(id) == RoadPaving.Asphalt ? "aszfalt" : "makadám");
+            if (forest.IndividualTrees.TryGet(id, out var patch) && patch.Depot > 0) result["forest.groundTimber"] = $"{patch.Depot:0.#} m³";
+            if (map.IsRoadTile(id)) result["road.condition"] = map.GetRoadCondition(id).ToString("0.00") + " · " + RoadCosts.Name(map.GetRoadPaving(id));
             else result["trail.trafficability"] = Trafficability(id).ToString("0.00") + (map.IsSkidTrail(id) ? " · közelítőnyom" : " · földfelszín");
             if (map.IsSkidTrail(id)) result["trail.wear"] = map.GetSkidTrailWear(id).ToString("0.00");
             return result;

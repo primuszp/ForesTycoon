@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using OpenTK.Mathematics;
 
@@ -15,7 +15,7 @@ namespace ForesTycoon.Map
 
         /// <summary>Relative travel cost of entering a tile: asphalt 1, macadam a little more, a skid trail much more.</summary>
         public float NetworkCost(int tileId) =>
-            ForesTycoon.Rules.LogisticsRules.NetworkCost(IsRoadTile(tileId) ? roads.GetPaving(tileId) == RoadPaving.Asphalt ? 1 : 2 : 3, GetSkidTrailWear(tileId));
+            ForesTycoon.Rules.LogisticsRules.NetworkCost(IsRoadTile(tileId) ? roads.GetPaving(tileId) switch { RoadPaving.Asphalt => 1, RoadPaving.Macadam => 2, _ => 4 } : 3, IsRoadTile(tileId) ? 1 - GetRoadCondition(tileId) : GetSkidTrailWear(tileId));
 
         /// <summary>Visible arms, including the reciprocal road exits at trail junctions.</summary>
         public RoadEdge GetNetworkEdges(int tileId)
@@ -58,13 +58,19 @@ namespace ForesTycoon.Map
             if (!(aRoad || aTrail) || !(bRoad || bTrail)) return false;
             RoadEdge aEdges = aRoad ? roads.GetEdges(a) : GetSkidTrailEdges(a);
             RoadEdge bEdges = bRoad ? roads.GetEdges(b) : GetSkidTrailEdges(b);
+            return Connects(aRoad, aTrail, aEdges, aEdge, bRoad, bTrail, bEdges, bEdge);
+        }
+
+        private static bool Connects(bool aRoad, bool aTrail, RoadEdge aEdges, RoadEdge aEdge,
+            bool bRoad, bool bTrail, RoadEdge bEdges, RoadEdge bEdge)
+        {
             if (aEdges == Opposite(aEdge) || bEdges == Opposite(bEdge)) return true;
-            if (aRoad && bRoad) return roads.HasEdge(a, aEdge) && roads.HasEdge(b, bEdge);
-            bool aHas = aRoad ? roads.HasEdge(a, aEdge) : aTrail && (GetSkidTrailEdges(a) & aEdge) != 0;
-            bool bHas = bRoad ? roads.HasEdge(b, bEdge) : bTrail && (GetSkidTrailEdges(b) & bEdge) != 0;
+            if (aRoad && bRoad) return (aEdges & aEdge) != 0 && (bEdges & bEdge) != 0;
+            bool aHas = (aRoad || aTrail) && (aEdges & aEdge) != 0;
+            bool bHas = (bRoad || bTrail) && (bEdges & bEdge) != 0;
             // A trail's loose end beside a road joins it too: the machines drive off the road onto it.
-            bool aLoose = aTrail && CountEdges(GetSkidTrailEdges(a)) <= 1 && bRoad;
-            bool bLoose = bTrail && CountEdges(GetSkidTrailEdges(b)) <= 1 && aRoad;
+            bool aLoose = aTrail && CountEdges(aEdges) <= 1 && bRoad;
+            bool bLoose = bTrail && CountEdges(bEdges) <= 1 && aRoad;
             return aRoad ? bHas || bLoose : bRoad ? aHas || aLoose : aHas && bHas;
         }
 

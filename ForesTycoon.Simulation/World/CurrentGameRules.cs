@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 
 namespace ForesTycoon
@@ -198,7 +198,7 @@ namespace ForesTycoon
 
             var build = Add("road.build", "Útépítés és hálózat", "Utak és nyomok", "Útvonal cellái", "Játékosparancs", game, "ExecuteRoadPath",
                 "commands|terrain.height|terrain.water|buildings.footprint|economy.result", "road.network|economy.expenses|forest.trees|water.routing",
-                "Új építés csak a hitelkereten belüli egyenlegnél indul. Aszfalt/makadám út, rögzített úttestmagasság és kölcsönös csatlakozások. Az érintett növényzet azonnal törlődik, a látvány a következő kirajzolás előtt frissül. Csak ténylegesen létrehozott vagy módosított útcsempék növelik az építési költséget.");
+                "Új építés csak a hitelkereten belüli egyenlegnél indul. Aszfalt-, makadám- és földút, rögzített úttestmagasság és kölcsönös csatlakozások. A kivágott élő és holt fák, valamint a helyszíni farakás faanyaga az út melletti sarangra kerül; foglalt sarangra vagy épületre út nem épül. A puffer sugara burkolatonként állítható; a hálózati faanyagbecslés az átfedéseket egyszer számolja. Csak ténylegesen létrehozott vagy módosított útcsempék növelik az építési költséget.");
             Add("road.repair", "Útjavítás", "Utak és nyomok", "Útvonal cellái", "Játékosparancs", game, "ExecuteRoadRepair",
                 "commands|road.condition|road.network|economy.result", "road.condition|economy.expenses",
                 "Csak a hitelkereten belüli egyenlegnél indul. A kopott útcsempék állapota 1-re áll; a költség a burkolat építési ára és a sérülés szerint számolódik.", "javítás = építési ár × 0,8 × sérülés");

@@ -1,6 +1,6 @@
 {
   "schema": "forest-rule-project",
-  "version": 5,
+  "version": 6,
   "name": "ForesTycoon szab\u00E1lyrendszer",
   "tuning": {
     "VehicleTimeScale": 4,
@@ -53,7 +53,14 @@
     "FuelCrane": 0.35,
     "TimberPriceFactor": 1,
     "DieselPrice": 0.62,
-    "CreditLimit": 1000000000
+    "CreditLimit": 1000000000,
+    "DirtBuild": 70,
+    "DirtWeather": 0.15,
+    "DirtRainWeather": 2.4,
+    "AsphaltBufferMetres": 50,
+    "MacadamBufferMetres": 50,
+    "DirtBufferMetres": 50,
+    "TrailBufferMetres": 25
   },
   "behaviors": {
     "schema": "forest-behaviors",
@@ -29684,6 +29691,160 @@
             "y": 30
           }
         ]
+      },
+      {
+        "id": "default.world.tuning.DirtBuild",
+        "name": "DirtBuild",
+        "hook": "tuning.DirtBuild",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Be\u00E9p\u00EDtett eredm\u00E9ny",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.DirtWeather",
+        "name": "DirtWeather",
+        "hook": "tuning.DirtWeather",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Be\u00E9p\u00EDtett eredm\u00E9ny",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.DirtRainWeather",
+        "name": "DirtRainWeather",
+        "hook": "tuning.DirtRainWeather",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Be\u00E9p\u00EDtett eredm\u00E9ny",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.AsphaltBufferMetres",
+        "name": "AsphaltBufferMetres",
+        "hook": "tuning.AsphaltBufferMetres",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Be\u00E9p\u00EDtett eredm\u00E9ny",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.MacadamBufferMetres",
+        "name": "MacadamBufferMetres",
+        "hook": "tuning.MacadamBufferMetres",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Be\u00E9p\u00EDtett eredm\u00E9ny",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.DirtBufferMetres",
+        "name": "DirtBufferMetres",
+        "hook": "tuning.DirtBufferMetres",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Be\u00E9p\u00EDtett eredm\u00E9ny",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.TrailBufferMetres",
+        "name": "TrailBufferMetres",
+        "hook": "tuning.TrailBufferMetres",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Be\u00E9p\u00EDtett eredm\u00E9ny",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
       }
     ],
     "controllers": []
@@ -29703,7 +29864,7 @@
       "template": "wildlife.initialize",
       "scope": "animal",
       "schedule": "birth",
-      "condition": "initialized \u003C 0.5",
+      "condition": "initialized < 0.5",
       "conditionGraph": null,
       "effects": [
         {
@@ -31178,6 +31339,48 @@
                     "valueCurve": null
                   }
                 ]
+              },
+              {
+                "name": "Teheraut\u00F3 a f\u00F6ld\u00FAton",
+                "enabled": true,
+                "decrease": true,
+                "amount": 0.003,
+                "amountField": "",
+                "amountScale": 1,
+                "factors": [
+                  {
+                    "source": "vehicle.mass",
+                    "shape": "linear",
+                    "inputLow": 0,
+                    "inputHigh": 1000000,
+                    "outputLow": 0,
+                    "outputHigh": 27.77777777777778,
+                    "breakpoints": null
+                  }
+                ],
+                "conditions": [
+                  {
+                    "field": "isRoad",
+                    "comparison": "equal",
+                    "value": 1,
+                    "valueField": "",
+                    "valueCurve": null
+                  },
+                  {
+                    "field": "vehicle.kind",
+                    "comparison": "equal",
+                    "value": 0,
+                    "valueField": "",
+                    "valueCurve": null
+                  },
+                  {
+                    "field": "road.surface",
+                    "comparison": "equal",
+                    "value": 2,
+                    "valueField": "",
+                    "valueCurve": null
+                  }
+                ]
               }
             ]
           },
@@ -31498,6 +31701,71 @@
                     "field": "surface",
                     "comparison": "equal",
                     "value": 1,
+                    "valueField": "",
+                    "valueCurve": null
+                  }
+                ]
+              },
+              {
+                "name": "F\u00F6ld\u00FAt: nedvess\u00E9g",
+                "enabled": true,
+                "decrease": true,
+                "amount": 0.1,
+                "amountField": "tuning.DirtWeather",
+                "amountScale": 1,
+                "factors": [
+                  {
+                    "source": "tile.moisture",
+                    "shape": "linear",
+                    "inputLow": 0,
+                    "inputHigh": 1,
+                    "outputLow": 1,
+                    "outputHigh": 3.5,
+                    "breakpoints": null
+                  }
+                ],
+                "conditions": [
+                  {
+                    "field": "surface",
+                    "comparison": "equal",
+                    "value": 2,
+                    "valueField": "",
+                    "valueCurve": null
+                  }
+                ]
+              },
+              {
+                "name": "F\u00F6ld\u00FAt: es\u0151 \u00E9s nedvess\u00E9g",
+                "enabled": true,
+                "decrease": true,
+                "amount": 0.1,
+                "amountField": "tuning.DirtRainWeather",
+                "amountScale": 1,
+                "factors": [
+                  {
+                    "source": "rainIntensity",
+                    "shape": "linear",
+                    "inputLow": 0,
+                    "inputHigh": 1,
+                    "outputLow": 0,
+                    "outputHigh": 1,
+                    "breakpoints": null
+                  },
+                  {
+                    "source": "tile.moisture",
+                    "shape": "linear",
+                    "inputLow": 0,
+                    "inputHigh": 1,
+                    "outputLow": 0.4,
+                    "outputHigh": 1.4,
+                    "breakpoints": null
+                  }
+                ],
+                "conditions": [
+                  {
+                    "field": "surface",
+                    "comparison": "equal",
+                    "value": 2,
                     "valueField": "",
                     "valueCurve": null
                   }
@@ -32157,7 +32425,7 @@
       "template": "wildlife.populationTarget",
       "scope": "animalType",
       "schedule": "population",
-      "condition": "habitatReady * (abs(typeId - 819580) \u003C 0.5)",
+      "condition": "habitatReady * (abs(typeId - 819580) < 0.5)",
       "conditionGraph": null,
       "effects": [
         {

@@ -10,7 +10,7 @@ namespace ForesTycoon.Rules;
 /// <summary>The single authoring and runtime contract shared by the game, editor and agents.</summary>
 public sealed class RuleProject
 {
-    public const int CurrentVersion = 5;
+    public const int CurrentVersion = 6;
     private static readonly Lazy<string> ShippedDocument = new(() => {
         using var stream = typeof(RuleProject).Assembly.GetManifestResourceStream("ForesTycoon.Rules.DefaultProject")
             ?? throw new InvalidDataException("Hiányzó, az Editorban létrehozott alap-szabályprojekt.");

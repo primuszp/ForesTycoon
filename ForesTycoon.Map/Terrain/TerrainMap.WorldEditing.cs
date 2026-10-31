@@ -27,11 +27,37 @@ namespace ForesTycoon.Map
         /// </summary>
         public int[] ApplyHeightTargets(IReadOnlyDictionary<int, int> targets) { var result = new WorkResult<int[]>(); SimulationWork.Complete(ApplyHeightTargetsWork(targets, result)); return result.Value; }
 
-        internal IEnumerable<int> ApplyHeightTargetsWork(IReadOnlyDictionary<int, int> targets, WorkResult<int[]> result)
+        internal bool CanApplyHeightTargets(IReadOnlyDictionary<int, int> targets)
+        {
+            var result = new WorkResult<bool>(); SimulationWork.Complete(CanApplyHeightTargetsWork(targets, result)); return result.Value;
+        }
+
+        /// <summary>Authoring preflight includes the full slope cascade beyond the painted corners.</summary>
+        internal IEnumerable<int> CanApplyHeightTargetsWork(IReadOnlyDictionary<int, int> targets, WorkResult<bool> result)
+        {
+            result.Value = false; var scratch = new TerrainElevationPlanner.Scratch();
+            foreach (var (node, height) in targets) {
+                yield return 1;
+                if ((uint)node >= (uint)nodes.Length) yield break;
+                int delta = Math.Clamp(height, 0, settings.MaxHeight) - nodes[node].W;
+                if (delta == 0) continue;
+                var planned = new WorkResult<Dictionary<int, int>>();
+                foreach (int unit in TerrainElevationPlanner.CreateWork(data, node, delta,
+                    settings.MaxHeight, planned, scratch)) yield return unit;
+                if (planned.Value == null) yield break;
+                var valid = new WorkResult<bool>();
+                foreach (int unit in ValidateRoadsAgainstPendingTerrainWork(planned.Value, valid)) yield return unit;
+                if (!valid.Value) yield break;
+            }
+            result.Value = true;
+        }
+
+        internal IEnumerable<int> ApplyHeightTargetsWork(IReadOnlyDictionary<int, int> targets, WorkResult<int[]> result, bool initialDefinition = false)
         {
             result.Value = Array.Empty<int>();
             if (targets == null || targets.Count == 0) yield break;
             var changedTiles = new HashSet<int>();
+            bool previousDefinition = initialTerrainDefinition; initialTerrainDefinition = initialDefinition;
             elevationEditTiles = changedTiles;
             suppressHydrologyRebuild = true;
             try
@@ -47,6 +73,7 @@ namespace ForesTycoon.Map
             finally
             {
                 suppressHydrologyRebuild = false;
+                initialTerrainDefinition = previousDefinition;
                 elevationEditTiles = null;
                 if (changedTiles.Count > 0) EditsFlushed?.Invoke();
             }

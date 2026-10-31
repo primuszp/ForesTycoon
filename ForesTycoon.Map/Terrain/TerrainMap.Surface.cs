@@ -142,7 +142,8 @@ namespace ForesTycoon.Map
         /// <summary>Bumped whenever the surface classification may have changed; renderers key caches on it.</summary>
         internal ulong SurfaceVersion => surfaceVisualVersion;
 
-        internal void InvalidateSurface() => surfaceVisualVersion++;
+        internal ulong NavigationVersion { get; private set; }
+        internal void InvalidateSurface() { surfaceVisualVersion++; NavigationVersion++; }
 
         internal bool SurfaceCacheMatchesFreshCalculation()
         {

@@ -22,6 +22,12 @@ namespace ForesTycoon
     {
         internal OrderOverlay Orders { get; } = new();
 
+        internal void DrawGroundTimber(ForestSystem forest, Action<int, float> draw)
+        {
+            foreach (var tile in visibleTiles)
+                if (forest.IndividualTrees.TryGet(tile.Id, out var patch) && patch.Depot > .05f) draw(tile.Id, patch.Depot);
+        }
+
         /// <summary>Stack sites: a levelled, gravelled yard with a timber-coloured frame, so the receiving tile reads at once.</summary>
         internal void DrawStackSites(ForestryLogistics logistics)
         {

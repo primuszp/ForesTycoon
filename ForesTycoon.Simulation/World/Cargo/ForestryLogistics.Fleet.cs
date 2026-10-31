@@ -24,7 +24,15 @@ namespace ForesTycoon
         internal int Id;
         internal Depot Home;
         internal TruckPhase Phase;
-        internal Vehicle Vehicle;
+        private Vehicle vehicle;
+        internal Vehicle Vehicle {
+            get => vehicle;
+            set {
+                if (vehicle?.FleetOwner == this) vehicle.FleetOwner = null;
+                vehicle = value;
+                if (value != null) value.FleetOwner = this;
+            }
+        }
         internal TimberStack Source;
         /// <summary>Destination tile: a sawmill tile, or a stack site.</summary>
         internal int Destination = -1;
@@ -71,7 +79,11 @@ namespace ForesTycoon
                 Status = "A telephelyhez 2×2 sík, száraz, szabad épülethely kell."; yield break;
             }
             bool trees = false, harvest = false;
-            foreach (int tile in footprint) { trees |= forest.TryGetStand(tile, out _); yield return 1; }
+            foreach (int tile in footprint) {
+                if (StackAt(tile) != null) { Status = "A területet sarang foglalja. Előbb szállítsd el a fát és szüntesd meg a sarangot."; yield break; }
+                if (forest.HasPhysicalObjects(tile)) { Status = "A telephely helyét fa, tuskó vagy faanyag foglalja."; yield break; }
+                trees |= forest.TryGetStand(tile, out _); yield return 1;
+            }
             foreach (var site in Sites) {
                 foreach (int tile in site.Tiles) {
                     harvest |= Array.IndexOf(footprint, tile) >= 0; yield return 1;
@@ -154,7 +166,7 @@ namespace ForesTycoon
             yield return 1;
             if (rejection != null) { Status = rejection; yield break; }
             truck.Source = source; truck.Destination = destination; truck.Target = mill ? null : StackAt(destination); truck.HomeRequested = false;
-            if (truck.Target == null && !mill) { truck.Target = new TimberStack { Id = nextStackId++, Tile = destination }; Stacks.Add(truck.Target); }
+            if (truck.Target == null && !mill) { truck.Target = new TimberStack { Id = nextStackId++, Tile = destination }; Stacks.Add(truck.Target); InvalidateOrderPreviews(); }
             if (approach.Length >= 2) {
                 var vehicle = new WorkResult<Vehicle>();
                 foreach (int unit in Vehicles.SpawnFleetWork(approach, null, -1, true, vehicle)) yield return unit;
@@ -181,7 +193,7 @@ namespace ForesTycoon
             Status = "A rönkszállító leadja a rakományt, és visszamegy a telephelyre.";
         }
 
-        private FleetTruck TruckOf(Vehicle vehicle) => Trucks.Find(t => t.Vehicle == vehicle);
+        private static FleetTruck TruckOf(Vehicle vehicle) => vehicle?.FleetOwner;
 
         private void ChargeTruckFuel(FleetTruck truck)
         {

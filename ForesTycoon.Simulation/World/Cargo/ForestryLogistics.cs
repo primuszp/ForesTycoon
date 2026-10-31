@@ -1,5 +1,6 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using OpenTK.Mathematics;
 namespace ForesTycoon
 {
@@ -26,12 +27,27 @@ namespace ForesTycoon
         private readonly ForestSystem forest;
         internal readonly List<HarvestSite> Sites=new();
         internal readonly List<Sawmill> Mills=new();
+        internal ForestSystem Forest => forest;
         internal string Status="Jelölj ki kitermelési területet, és helyezz el egy fűrészmalmot.";
-        internal ForestryLogistics(TerrainMap terrain,ForestSystem forest){this.terrain=terrain;this.forest=forest;}
+        internal ForestryLogistics(TerrainMap terrain,ForestSystem forest){
+            this.terrain=terrain;this.forest=forest;
+            terrain.GroundReserved = id => StackAt(id) != null;
+            terrain.VegetationOccupied = forest.HasPhysicalObjects;
+            terrain.MobileOccupied = id => Machines.Exists(m => m.Path is { Length: > 0 } && m.Tile == id)
+                || Vehicles?.Vehicles.Any(v => { v.GetSegment(v.RoutePosition, out int from, out int to, out float fraction); return (fraction < .5f ? from : to) == id; }) == true;
+        }
         /// <summary>Standing timber of a site still to fell, m³.</summary>
         internal float Volume(HarvestSite site){float result=0;foreach(int id in site.Tiles)result+=forest.AvailableTimber(id);return result;}
         /// <summary>Timber not yet at a mill: standing in the sites, in stacks and on the machines, m³.</summary>
         internal float Remaining {get {float sum=0;foreach(var site in Sites)sum+=Volume(site);foreach(var s in Stacks)sum+=s.Volume;foreach(var m in Machines)sum+=m.Cargo+m.LogTransferVolume;foreach(var t in Trucks)sum+=t.Vehicle?.CargoAmount??0;return sum;}}
+        /// <summary>Last complete inventory publication. Presentation reads this without traversing the world.</summary>
+        internal float PublishedRemaining { get; private set; }
+        internal IEnumerable<int> PublishInventoryWork()
+        {
+            var result = new WorkResult<float>();
+            foreach (int unit in RemainingWork(result)) yield return unit;
+            PublishedRemaining = result.Value;
+        }
         internal bool ContainsTile(int id){foreach(var site in Sites)if(Array.IndexOf(site.Tiles,id)>=0)return true;return false;}
         internal int Designate(ReadOnlySpan<int> ids)
         {
@@ -80,7 +96,8 @@ namespace ForesTycoon
             }
             foreach (int tile in footprint) {
                 yield return 1;
-                if (forest.TryGetStand(tile, out _) || ContainsTile(tile)) { Status = "A malom helyét erdő vagy kitermelés foglalja."; yield break; }
+                if (StackAt(tile) != null) { Status = "A területet sarang foglalja. Előbb szállítsd el a fát és szüntesd meg a sarangot."; yield break; }
+                if (forest.HasPhysicalObjects(tile)) { Status = "A malom helyét fa, tuskó vagy faanyag foglalja."; yield break; }
                 foreach (var mill in Mills) {
                     yield return 1;
                     if (Array.IndexOf(mill.Footprint, tile) >= 0) { Status = "Itt már áll egy malom."; yield break; }
