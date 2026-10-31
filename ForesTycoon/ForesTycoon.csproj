@@ -42,7 +42,10 @@
     <Content Include="Assets/Wildlife/elk.glb" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets/Vehicles/log-truck.glb" CopyToOutputDirectory="PreserveNewest" />
     <!-- Locally installed purchased models (git-ignored); optional, the game falls back without them. -->
-    <Content Include="Assets/Licensed/**" CopyToOutputDirectory="PreserveNewest" Condition="Exists('Assets/Licensed')" />
+    <Content Include="Assets/Licensed/**" Exclude="Assets/Licensed/Audio/**" CopyToOutputDirectory="PreserveNewest" Condition="Exists('Assets/Licensed')" />
+    <Content Include="Assets/Licensed/Audio/*.wav" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Assets/Licensed/Audio/manifest.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Condition="Exists('Assets/Licensed/Audio/manifest.json')" />
+    <PackageReference Include="OpenTK.Audio.OpenAL" Version="4.9.4" />
     <PackageReference Include="OpenTK.Graphics" Version="4.9.4" />
     <PackageReference Include="OpenTK.Mathematics" Version="4.9.4" />
     <PackageReference Include="OpenTK.Windowing.Desktop" Version="4.9.4" />

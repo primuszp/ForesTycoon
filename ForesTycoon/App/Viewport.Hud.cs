@@ -656,6 +656,7 @@ namespace ForesTycoon
             if (environment == null) return;
             if (!BeginGameWindow("Környezet", ref showEnvironment, new NVec2(Width - 360, toolbarBottom + 10), 340)) return;
 
+            DrawAudioControls();
             HudTheme.IconText(WeatherIcon(environment.Preset),
                 $"{WeatherName(environment.Preset)} · még {Math.Max(0, environment.EventEnd - environment.Time):0} s", HudTheme.AmberAccent);
             HudTheme.KeyValue("Háttércsapadék", $"{environment.RainRate:0.0} mm/óra");

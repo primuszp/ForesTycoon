@@ -6,6 +6,7 @@ namespace ForesTycoon
     {
         static void Main(string[] args)
         {
+            if (args.Length == 1 && args[0] == "--audio-smoke-test") { AudioSmokeTest.Run(); return; }
             if (args.Length == 1 && args[0] == "--startup-smoke-test") { StartupSmokeTest.Run(); return; }
             if (args.Length == 1 && args[0] == "--orders-rule-benchmark") { OrderRuleBenchmark.Run(); return; }
             if (args.Length == 1 && args[0] == "--depot-rule-benchmark") { DepotRuleBenchmark.Run(); return; }

@@ -1,0 +1,10 @@
+{
+  "Wind": "Forest/wind-loop.wav",
+  "Rain": "Weather/rain-loop.wav",
+  "Spring": "Forest/spring-birds-loop.wav",
+  "Summer": "Forest/summer-insects-loop.wav",
+  "Autumn": "Forest/autumn-loop.wav",
+  "Winter": "Forest/winter-loop.wav",
+  "Thunder": "Weather/thunder-one-shot.wav",
+  "Deer": "Animals/deer-one-shot.wav"
+}
