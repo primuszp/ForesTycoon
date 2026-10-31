@@ -10,6 +10,9 @@ namespace ForesTycoon
         float Width { get; }
         float Wheelbase { get; }
         float AxleMidpoint { get; }
+        float WheelTrack => Width * .82f;
+        float WheelRadius => .23f;
+        float KingpinHeight => WheelRadius * 2;
         /// <summary>Model X of the kingpin and of the semi-trailer's axle group; equal when the model is rigid.</summary>
         float Kingpin => 0;
         float TrailerAxle => 0;
@@ -17,7 +20,7 @@ namespace ForesTycoon
         /// <param name="articulation">Trailer yaw relative to the tractor about the kingpin, radians (+ = to the left).</param>
         /// <param name="trailerPitch">Trailer pitch relative to the tractor, radians (+ = kingpin above the trailer axle).</param>
         void Draw(Matrix4 transform, float cargoFill, float wheelAngle, float curvature = 0, float scale = 1,
-            Matrix4? suspension = null, float outlineWidth = 0, float articulation = 0, float trailerPitch = 0);
+            Matrix4? suspension = null, float outlineWidth = 0, float articulation = 0, float trailerPitch = 0, RigModelFrames rigFrames = null);
     }
 
     /// <summary>
@@ -43,6 +46,9 @@ namespace ForesTycoon
         public float Width { get; }
         public float Wheelbase { get; }
         public float AxleMidpoint { get; }
+        public float WheelTrack { get; }
+        public float WheelRadius { get; }
+        public float KingpinHeight { get; }
         public float Kingpin { get; }
         public float TrailerAxle { get; }
 
@@ -63,7 +69,7 @@ namespace ForesTycoon
             rest = (Matrix4[])pose.World.Clone();
             kinds = new Kind[model.Nodes.Length];
             var cargo = new System.Collections.Generic.List<int>();
-            float front = 0, rear = 0, trailerAxle = 0, kingpin = 0; int frontCount = 0, rearCount = 0, trailerCount = 0;
+            float front = 0, rear = 0, trailerAxle = 0, kingpin = 0, frontSide = 0, frontHeight = 0; int frontCount = 0, rearCount = 0, trailerCount = 0;
             bool trailer = false;
             for (int i = 0; i < kinds.Length; i++)
             {
@@ -74,7 +80,7 @@ namespace ForesTycoon
                     : name == "trailer" ? Kind.Trailer
                     : name.StartsWith("cargo_", StringComparison.Ordinal) ? Kind.Cargo : Kind.Body;
                 float x = rest[i].Row3.X;
-                if (kinds[i] == Kind.FrontWheel) { front += x; frontCount++; }
+                if (kinds[i] == Kind.FrontWheel) { front += x; frontSide += Math.Abs(rest[i].Row3.Y); frontHeight += rest[i].Row3.Z; frontCount++; }
                 else if (kinds[i] == Kind.TrailerWheel) { trailerAxle += x; trailerCount++; }
                 else if (kinds[i] == Kind.Trailer) { kingpin = x; trailer = true; }
                 else if (kinds[i] == Kind.RearWheel) { rear += x; rearCount++; }
@@ -85,20 +91,25 @@ namespace ForesTycoon
             cargoCount = cargoOrder.Length;
             front /= frontCount; rear /= rearCount;
             Wheelbase = front - rear; AxleMidpoint = (front + rear) * 0.5f;
+            WheelTrack = frontSide * 2 / frontCount;
+            WheelRadius = frontHeight > .001f ? frontHeight / frontCount : .23f;
             if (trailer && trailerCount > 0 && trailerAxle / trailerCount < kingpin) { Kingpin = kingpin; TrailerAxle = trailerAxle / trailerCount; }
-            float minY = float.MaxValue, maxY = float.MinValue, radius = 0;
+            float minY = float.MaxValue, maxY = float.MinValue, radius = 0, couplingHeight = 0;
             foreach (var mesh in model.Meshes)
                 for (int v = 0; v < mesh.Vertices.Length; v += 16)
                 {
                     var p = Vector3.TransformPosition(new Vector3(mesh.Vertices[v], mesh.Vertices[v + 1], mesh.Vertices[v + 2]), rest[mesh.Node]);
                     minY = Math.Min(minY, p.Y); maxY = Math.Max(maxY, p.Y); radius = Math.Max(radius, p.Length);
+                    if (kinds[mesh.Node] == Kind.Body && Math.Abs(p.X - Kingpin) < Wheelbase * .12f && Math.Abs(p.Y) < WheelTrack * .4f)
+                        couplingHeight = Math.Max(couplingHeight, p.Z);
                 }
             Width = maxY - minY; Radius = radius;
+            KingpinHeight = couplingHeight > WheelRadius ? couplingHeight : WheelRadius * 2;
             if (!float.IsFinite(Width) || Width <= 0) throw new System.IO.InvalidDataException("Invalid truck width.");
         }
 
         public void Draw(Matrix4 transform, float cargoFill, float wheelAngle, float curvature = 0, float scale = 1,
-            Matrix4? suspension = null, float outlineWidth = 0, float articulation = 0, float trailerPitch = 0)
+            Matrix4? suspension = null, float outlineWidth = 0, float articulation = 0, float trailerPitch = 0, RigModelFrames rigFrames = null)
         {
             int visible = (int)MathF.Ceiling(Math.Clamp(cargoFill, 0, 1) * cargoCount);
             var body = suspension ?? Matrix4.Identity;
@@ -127,6 +138,14 @@ namespace ForesTycoon
                     default:
                         pose.World[i] = rest[i] * body;
                         break;
+                }
+            }
+            if (rigFrames != null) {
+                for (int i = 0; i < kinds.Length; i++) {
+                    bool wheel = kinds[i] is Kind.FrontWheel or Kind.RearWheel or Kind.TrailerWheel;
+                    bool trailer = kinds[i] is Kind.Trailer or Kind.Cargo;
+                    pose.World[i] = wheel || trailer && !rigFrames.HasTrailer ? Matrix4.CreateScale(0) :
+                        rest[i] * (trailer ? rigFrames.Trailer : rigFrames.Tractor);
                 }
             }
             // Logs beyond the current load collapse to a point instead of being drawn.

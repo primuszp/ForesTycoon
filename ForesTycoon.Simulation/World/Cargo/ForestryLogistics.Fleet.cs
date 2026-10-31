@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using OpenTK.Mathematics;
 
@@ -119,8 +119,6 @@ namespace ForesTycoon
             result.Value = true;
         }
 
-        private int DepotDock(Depot depot) { var docks = terrain.FindRoadDocks(depot.Footprint); return docks.Count > 0 ? docks[0] : -1; }
-
         /// <summary>The cheapest network route between any dock of the source and any dock of the destination.</summary>
         private int[] TruckRoute(FleetTruck truck, int sourceTile, int destination)
         {
@@ -129,19 +127,11 @@ namespace ForesTycoon
             return result.Value;
         }
 
-        private IEnumerable<int> TruckRouteWork(FleetTruck truck, int sourceTile, int destination, WorkResult<int[]> result)
+        private IEnumerable<int> TruckRouteWork(FleetTruck truck, int sourceTile, int destination, WorkResult<int[]> result, int fixedSource = -1)
         {
-            var mill = MillAt(destination);
-            var ends = terrain.FindNetworkDocks(mill != null ? mill.Footprint : new[] { destination });
-            float bestCost = float.PositiveInfinity;
-            foreach (int start in terrain.FindNetworkDocks(new[] { sourceTile }))
-                foreach (int end in ends) {
-                    var path = new WorkResult<(int[] Path, float Cost)>();
-                    foreach (int unit in TruckPathWork(truck, start, end, path)) yield return unit;
-                    if (path.Value.Path.Length >= 2 && path.Value.Cost < bestCost) {
-                        result.Value = path.Value.Path; bestCost = path.Value.Cost;
-                    }
-                }
+            var plan = new WorkResult<TruckJourney>();
+            foreach (int unit in TruckJourneyWork(truck, sourceTile, destination, plan, fixedSource)) yield return unit;
+            result.Value = plan.Value.Route;
         }
 
         /// <summary>Gives a parked truck its order: load at <paramref name="source"/>, unload at <paramref name="destination"/> (a mill or a stack site).</summary>
@@ -153,15 +143,10 @@ namespace ForesTycoon
             if (truck.Phase != TruckPhase.Parked) { Status = "A rönkszállító épp úton van: előbb hívd haza."; yield break; }
             bool mill = MillAt(destination) != null;
             if (!mill && StackAt(destination) == null && !CanPlaceStack(destination)) { Status = "Ide nem rakható le a fa."; yield break; }
-            var routeResult = new WorkResult<int[]>();
-            foreach (int unit in TruckRouteWork(truck, source.Tile, destination, routeResult)) yield return unit;
-            int[] route = routeResult.Value;
-            if (route == null) { Status = "A sarangtól nem vezet út a célig: a teherautó csak úton és nyomon jár."; yield break; }
-            int dock = DepotDock(truck.Home);
-            var approachResult = new WorkResult<(int[] Path, float Cost)> { Value = (Array.Empty<int>(), 0) };
-            if (dock >= 0) foreach (int unit in TruckPathWork(truck, dock, route[0], approachResult)) yield return unit;
-            int[] approach = approachResult.Value.Path;
-            if (dock != route[0] && approach.Length < 2) { Status = "A telephelyről nem vezet út a sarangig."; yield break; }
+            var plan = new WorkResult<TruckJourney>();
+            foreach (int unit in TruckJourneyWork(truck, source.Tile, destination, plan)) yield return unit;
+            int[] route = plan.Value.Route, approach = plan.Value.Approach;
+            if (route == null) { Status = "A telephely, a forrás és a cél között nincs közös, engedélyezett útvonal."; yield break; }
             string rejection = TruckOrderRejection(truck, source, mill);
             yield return 1;
             if (rejection != null) { Status = rejection; yield break; }
@@ -178,10 +163,15 @@ namespace ForesTycoon
         private IEnumerable<int> StartShuttleWork(FleetTruck truck, int[] route)
         {
             ChargeTruckFuel(truck);
+            var steering = truck.Vehicle?.SteeringDriver;
+            var presentation = truck.Vehicle?.Presentation;
             if (truck.Vehicle != null) Vehicles.Remove(truck.Vehicle);
             var result = new WorkResult<Vehicle>();
             foreach (int unit in Vehicles.SpawnFleetWork(route, new[] { truck.Source.Tile }, truck.Destination, false, result)) yield return unit;
             truck.Vehicle = result.Value;
+            truck.Vehicle.SteeringDriver = steering;
+            if (presentation != null) truck.Vehicle.Presentation = presentation;
+            steering?.NewLeg();
             truck.FuelCharged = 0;
             truck.Phase = TruckPhase.Working;
         }
@@ -236,6 +226,8 @@ namespace ForesTycoon
                 if (wait) continue;
                 var v = truck.Vehicle;
                 if (v == null) continue;
+                if (v.SteeringBlockedReason != null) Status = v.SteeringBlockedReason;
+                foreach (int unit in RefreshTruckNavigationWork(truck)) yield return unit;
                 var fed = new WorkResult<bool>();
                 if (truck.Phase == TruckPhase.Working) foreach (int unit in BeingFedWork(truck.Source, fed, supply)) yield return unit;
                 var input = new LogisticsInputs(StepSeconds: seconds, MachineKind: 2, MachineState: (int)truck.Phase,
@@ -250,7 +242,7 @@ namespace ForesTycoon
                     case 1 when truck.Source != null && v.Transit && v.TransitArrived && v.CargoAmount <= .0001f:
                     {
                         var result = new WorkResult<int[]>();
-                        foreach (int unit in TruckRouteWork(truck, truck.Source.Tile, truck.Destination, result)) yield return unit;
+                        foreach (int unit in TruckRouteWork(truck, truck.Source.Tile, truck.Destination, result, v.Route[^1])) yield return unit;
                         int[] route = result.Value;
                         if (route == null) { foreach (int unit in ReturnWork(truck, truck.Vehicle.Route[^1])) yield return unit; break; }
                         if (route[0] != v.Route[^1]) break; // A new route must begin where the physical truck actually stands.
@@ -260,7 +252,7 @@ namespace ForesTycoon
                     case 2:
                         foreach (int unit in ReturnWork(truck, truck.Phase == TruckPhase.Working ? v.Route[0] : v.Route[^1])) yield return unit;
                         break;
-                    case 3 when v.TransitArrived && v.CargoAmount <= .0001f && v.Route[^1] == DepotDock(truck.Home):
+                    case 3 when v.TransitArrived && v.CargoAmount <= .0001f && terrain.FindNetworkDocks(truck.Home.Footprint).Contains(v.Route[^1]):
                         Park(truck); // Releasing a physical vehicle cannot discard timber or teleport it.
                         break;
                 }
@@ -272,18 +264,21 @@ namespace ForesTycoon
             if (truck.Vehicle is { } loaded && (loaded.CargoAmount > .0001f || loaded.Transit && !loaded.TransitArrived ||
                 truck.Phase == TruckPhase.Working && loaded.TransportState is not (VehicleTransportState.Loading or VehicleTransportState.Waiting))) yield break;
             ChargeTruckFuel(truck);
-            int dock = DepotDock(truck.Home);
-            var result = new WorkResult<(int[] Path, float Cost)> { Value = (Array.Empty<int>(), float.PositiveInfinity) };
-            if (dock >= 0) foreach (int unit in TruckPathWork(truck, from, dock, result)) yield return unit;
+            var result = new WorkResult<(int[] Path, float Cost)>();
+            foreach (int unit in BestTruckPathWork(truck, from, terrain.FindNetworkDocks(truck.Home.Footprint), result)) yield return unit;
             int[] path = result.Value.Path;
-            // No route means wait at the current location, not teleport to the depot.
-            if (dock != from && path.Length < 2) { Status = "A teherautó nem talál engedélyezett hazautat."; yield break; }
+            if (path.Length == 0) { Status = "A teherautó nem talál engedélyezett hazautat."; yield break; }
+            var steering = truck.Vehicle?.SteeringDriver;
+            var presentation = truck.Vehicle?.Presentation;
             if (truck.Vehicle != null) Vehicles.Remove(truck.Vehicle);
             truck.Vehicle = null; truck.FuelCharged = 0;
             if (path.Length < 2) { Park(truck); yield break; }
             var spawned = new WorkResult<Vehicle>();
             foreach (int unit in Vehicles.SpawnFleetWork(path, null, -1, true, spawned)) yield return unit;
             truck.Vehicle = spawned.Value;
+            truck.Vehicle.SteeringDriver = steering;
+            if (presentation != null) truck.Vehicle.Presentation = presentation;
+            steering?.NewLeg();
             truck.Phase = TruckPhase.ToHome;
         }
 

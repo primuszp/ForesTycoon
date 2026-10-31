@@ -6,6 +6,9 @@ namespace ForesTycoon
 {
     partial class Terrain
     {
+        internal float SkidTrailTrackWidthWorld { get; set; } = 2.5f * ForestMachineRenderer.MetreScale;
+        internal static float RutGaugeFraction(float wheelTrackWorld, float tileSpanWorld) =>
+            Math.Clamp(wheelTrackWorld / (2 * Math.Max(.01f, tileSpanWorld)), .01f, .4f);
         /// <summary>
         /// Skid trails are only wheel ruts in the soil: two dark strips along the trail whose depth (opacity and width)
         /// follows the wear. A freshly marked, still unused trail shows as a faint pair of lines.
@@ -49,19 +52,19 @@ namespace ForesTycoon
             TrailCorners(tile, out Vector3 W, out Vector3 S, out Vector3 E, out Vector3 N);
             if (edges == RoadEdge.None) edges = RoadEdge.WS | RoadEdge.EN;
             DynamicPrimitiveBatch.Color4(colour);
-            const float Gauge = 0.14f;   // half the track width, in tile fractions
             void Arm(float eu, float ev)
             {
                 // (eu, ev) is the edge midpoint in tile (u, v) coordinates; ruts run parallel to centre → edge.
                 float du = eu - 0.5f, dv = ev - 0.5f;
                 float pu = -dv * 2, pv = du * 2;      // unit perpendicular in tile coordinates
-                foreach (float side in new[] { -Gauge, Gauge })
+                float gauge = RutGaugeFraction(SkidTrailTrackWidthWorld, pu != 0 ? DistXY(W, S) : DistXY(W, N));
+                foreach (float side in new[] { -gauge, gauge })
                 {
                     float w = widthFraction * 0.5f;
                     float a0u = 0.5f + pu * (side - w), a0v = 0.5f + pv * (side - w);
                     float a1u = 0.5f + pu * (side + w), a1v = 0.5f + pv * (side + w);
                     // Run slightly past the centre so straight and bending trails close without gaps.
-                    float back = Gauge + w;
+                    float back = gauge + w;
                     Quad(TileUV(W, S, E, N, a0u - du * 2 * back, a0v - dv * 2 * back), TileUV(W, S, E, N, a1u - du * 2 * back, a1v - dv * 2 * back),
                         TileUV(W, S, E, N, a1u + du, a1v + dv), TileUV(W, S, E, N, a0u + du, a0v + dv));
                 }
@@ -72,8 +75,9 @@ namespace ForesTycoon
                 float cu = startDeg < 90f ? 0f : startDeg < 270f ? 1f : 0f;
                 float cv = startDeg < 180f ? 0f : 1f;
                 float w = widthFraction * 0.5f;
+                float gauge = RutGaugeFraction(SkidTrailTrackWidthWorld, Math.Min(DistXY(W, S), DistXY(W, N)));
                 const int Segments = 8;
-                foreach (float side in new[] { -Gauge, Gauge })
+                foreach (float side in new[] { -gauge, gauge })
                 {
                     float inner = 0.5f + side - w, outer = 0.5f + side + w;
                     for (int i = 0; i < Segments; i++)

@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System;
 
 namespace ForesTycoon
@@ -57,7 +57,7 @@ namespace ForesTycoon
             if (RoadRouteWorkFactory != null) {
                 foreach (int unit in RoadRouteWorkFactory(route, geometry)) yield return unit;
             } else geometry.Value = RoadRouteFactory?.Invoke(route);
-            var vehicle = new Vehicle(nextId++, route, 1.5, roadRoute: geometry.Value, roadPhysics: UseRoadPhysics) { Transit = transit, SpecSource = this };
+            var vehicle = new Vehicle(nextId++, route, 1.5, roadRoute: geometry.Value, roadPhysics: UseRoadPhysics, stationary: !transit) { Transit = transit, SpecSource = this };
             if (!transit) {
                 vehicle.SourceTiles = (int[])sources.Clone(); vehicle.SawmillTileId = mill; vehicle.CargoStopsEnabled = true;
                 vehicle.TransportState = VehicleTransportState.Loading; vehicle.Hold();
@@ -100,7 +100,9 @@ namespace ForesTycoon
                 Vehicle vehicle = vehicles[i];
                 // A tick runs in several substeps; drawing interpolates across the whole tick, not just the last substep.
                 double before = vehicle.RoutePosition;
+                var rigBefore = vehicle.Kinematics?.CapturePresentation();
                 UpdateVehicle(vehicle, deltaSeconds);
+                if (rigBefore != null) vehicle.PreviousRigPose = rigBefore;
                 vehicle.PreviousRoutePosition = Math.Min(before, vehicle.RoutePosition);
             }
         }
@@ -172,6 +174,11 @@ namespace ForesTycoon
                         if(vehicle.CargoAmount<=0)vehicle.TransportState=VehicleTransportState.Returning;
                         break;
                     default:
+                        if (vehicle.Route.Length == 1) {
+                            vehicle.Hold(); vehicle.TransportState = vehicle.TransportState == VehicleTransportState.Hauling
+                                ? VehicleTransportState.Unloading : VehicleTransportState.Loading;
+                            break;
+                        }
                         vehicle.Update(dt);
                         int last=vehicle.Route.Length-1;
                         long before=(long)Math.Floor(vehicle.PreviousRoutePosition/last),after=(long)Math.Floor(vehicle.RoutePosition/last);

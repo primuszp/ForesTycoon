@@ -85,7 +85,7 @@ public partial class FleetTests
         var processor = Processor(s);
         Assert.True(s.Logistics.AssignProcessor(processor, s.Logistics.StackAt(ForestStack)!), s.Logistics.Status);
         Run(s, 60);
-        Assert.True(s.Logistics.StackAt(ForestStack)!.Volume > 0, "The processor did not reach the felling and deliver timber.");
+        Assert.True(s.Logistics.StackAt(ForestStack)!.Volume > 0, $"The processor did not reach the felling and deliver timber. {s.Logistics.Status}; path={string.Join(',', processor.Path)}, position={processor.PathPosition}, rig={processor.Kinematics?.Units[0]}, blocked={processor.SteeringDriver?.BlockedReason}");
         Assert.True(processor.FuelUsed > 0);
         Assert.Equal(0, s.Logistics.StackAt(RoadStack)!.Volume);
     }
@@ -110,7 +110,8 @@ public partial class FleetTests
         Assert.False(s.Logistics.PlaceStack(Mill), "A stack on the mill was accepted.");
         Assert.True(s.Logistics.AssignProcessor(Processor(s), s.Logistics.StackAt(ForestStack)!), s.Logistics.Status);
         Assert.Same(s.Logistics.StackAt(ForestStack), Processor(s).Target);
-        Run(s, 60);
+        // Steering and worksite manoeuvres take physical time; this checks the selected destination, not throughput.
+        for (int i = 0; i < 180 * 30 && s.Logistics.StackAt(ForestStack).Volume <= 1; i++) Run(s, 1d / 30);
         var stack = s.Logistics.StackAt(ForestStack);
         Assert.True(stack.Volume > 1, "The processor did not stack any wood.");
         Assert.Equal(55, stack.UnitValue, 3);                               // oak price per m³

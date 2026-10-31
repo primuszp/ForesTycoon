@@ -15,6 +15,7 @@ public static class RuleProjectMigrations
                 if (!project.Behaviors.Graphs.Any(g => g.Hook == graph.Hook && g.Kind == graph.Kind && !g.ObjectId.HasValue)) project.Behaviors.Graphs.Add(graph);
             project.Version = 5;
         }
+        UpgradeGeometry(project);
         if (project.Version >= 6) return;
         var defaults = RuleProject.CreateDefault();
         string[] keys = { "DirtBuild", "DirtWeather", "DirtRainWeather", "AsphaltBufferMetres", "MacadamBufferMetres", "DirtBufferMetres", "TrailBufferMetres" };
@@ -33,6 +34,19 @@ public static class RuleProjectMigrations
                 .Where(t => t.Conditions.Any(c => c.Field == surface && c.Value == 2))) target.Terms.Add(term);
         }
         project.Version = 6;
+        UpgradeGeometry(project);
+    }
+    private static void UpgradeGeometry(RuleProject project)
+    {
+        if (project.Version < 6 || project.Version >= 7) return;
+        var defaults = RuleProject.CreateDefault();
+        string[] keys = { "TruckWheelbase", "TruckTrack", "TruckWheelRadius", "TruckMaxSteer", "TruckSteerRate", "TruckRearAxles", "TruckAxleSpacing", "TruckTrailerLayout", "TruckHitchOffset", "TruckDrawbarLength", "TruckTrailerLength", "TruckTrailerAxles", "TruckTrailerAxleSpacing", "TruckTrailerMaxAngle", "ForwarderFrontLength", "ForwarderRearLength", "ForwarderTrack", "ForwarderWheelRadius", "ForwarderMaxSteer", "ForwarderSteerRate", "ForwarderFrontAxles", "ForwarderRearAxles", "ForwarderAxleSpacing", "ProcessorFrontLength", "ProcessorRearLength", "ProcessorTrack", "ProcessorWheelRadius", "ProcessorMaxSteer", "ProcessorSteerRate", "ProcessorFrontAxles", "ProcessorRearAxles", "ProcessorAxleSpacing", "ProcessorSteeringModel", "ProcessorWheelbase" };
+        foreach (string key in keys) {
+            project.Tuning.TryAdd(key, defaults.Tuning[key]);
+            foreach (var graph in defaults.Behaviors.Graphs.Where(g => g.Hook == "tuning." + key))
+                if (!project.Behaviors.Graphs.Any(g => g.Hook == graph.Hook && g.Kind == graph.Kind && !g.ObjectId.HasValue)) project.Behaviors.Graphs.Add(graph);
+        }
+        project.Version = 7;
     }
     private static void UpgradePopulationPolicies(RuleProject project)
     {

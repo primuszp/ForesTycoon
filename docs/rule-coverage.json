@@ -536,6 +536,21 @@
         "ForesTycoon.Tests/SimulationPolicyTests.cs",
         "ForesTycoon.Tests/ForegroundWorkTests.cs"
       ]
+    },
+    {
+      "status": "data",
+      "ids": [
+        "vehicle.geometry",
+        "machine.geometry.forwarder",
+        "machine.geometry.processor"
+      ],
+      "editor": "Járművek → tengely- és csuklógeometria; kanyarodási pályapróba.",
+      "remaining": "Típusonként mentett geometria; kinematikai integrálás motorprimitív. A teljes karosszéria ütközésvizsgálata és automatikus többpontos megfordulás további munka.",
+      "tests": [
+        "ForesTycoon.Tests/VehicleKinematicsTests.cs",
+        "ForesTycoon.Tests/FleetKinematicsTests.cs",
+        "ForesTycoon.Tests/FleetTests.cs"
+      ]
     }
   ],
   "outsideCatalog": [

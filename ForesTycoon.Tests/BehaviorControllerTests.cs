@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Nodes;
 using ForesTycoon.Rules;
 
@@ -94,9 +94,10 @@ public class BehaviorControllerTests
     public void WaitingMidGrapplePreservesWoodAndFuelThenResumesLoading()
     {
         var map = new TerrainMap(TerrainSettings.Default.WithNodeSize(9, 42), (_, _) => 4);
+        map.BuildRoadTilePath(0, 2);
         var logistics = new ForestryLogistics(map, new ForestSystem(map));
         var machine = new ForestMachine { Id = 1, Kind = ForestMachineKind.Forwarder, Path = new[] { 0 }, State = ForestMachineState.Loading,
-            Source = new() { Volume = 10, Value = 100 }, Upkeep = new(1) };
+            Source = new() { Tile = 8, Volume = 10, Value = 100 }, Upkeep = new(1) };
         logistics.Machines.Add(machine);
         ForwarderLoading.Step(machine, 3, (_, _) => throw new Exception());
         Assert.True(machine.LogTransferVolume > 0);
@@ -124,10 +125,12 @@ public class BehaviorControllerTests
     {
         var settings = TerrainSettings.Default.WithNodeSize(9, 42);
         using var world = new GameWorld(settings, enableRendering: false);
-        // Install a valid checkpoint fixture with a loading forwarder and a stable stack identity.
+        // Install a loading forwarder at a real network dock beside its stack.
+        var flat = new TerrainMap(settings, (_, _) => 4); flat.BuildRoadTilePath(0, 2);
+        world.Map.Restore(flat.Capture()); world.Forest.Clear();
         var checkpoint = world.CaptureCheckpoint();
         world.Logistics.Restore(checkpoint.Logistics with {
-            NextMachineId = 2, NextStackId = 2, Stacks = new[] { new StackCheckpoint(1, 0, 10, 100) },
+            NextMachineId = 2, NextStackId = 2, Stacks = new[] { new StackCheckpoint(1, 8, 10, 100) },
             Machines = new[] { new ForestMachineCheckpoint(1, ForestMachineKind.Forwarder, -1, new[] { 0 }, 0, 0, ForestMachineState.Loading,
                 ForestMachineState.Loading, 0, 0, Source: 1) }
         });

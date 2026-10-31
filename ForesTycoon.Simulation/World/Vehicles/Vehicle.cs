@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace ForesTycoon
 {
@@ -7,9 +7,9 @@ namespace ForesTycoon
     sealed partial class Vehicle
     {
         public Vehicle(int id, int[] route, double speedTilesPerSecond, float cargoCapacity = 25f,
-            VehicleRoadRoute roadRoute = null, bool roadPhysics = true)
+            VehicleRoadRoute roadRoute = null, bool roadPhysics = true, bool stationary = false)
         {
-            if (route == null || route.Length < 2) throw new ArgumentException("A vehicle route needs at least two tiles.", nameof(route));
+            if (route == null || route.Length < (stationary ? 1 : 2)) throw new ArgumentException("A vehicle route needs at least two tiles.", nameof(route));
             if (!double.IsFinite(speedTilesPerSecond) || speedTilesPerSecond <= 0.0) throw new ArgumentOutOfRangeException(nameof(speedTilesPerSecond));
             if (!float.IsFinite(cargoCapacity) || cargoCapacity <= 0f) throw new ArgumentOutOfRangeException(nameof(cargoCapacity));
             if (roadRoute != null && roadRoute.Last != route.Length - 1) throw new ArgumentException("Road geometry does not match the route.", nameof(roadRoute));
@@ -23,7 +23,7 @@ namespace ForesTycoon
         }
 
         private readonly bool useRoadPhysics;
-        public VehicleRoadRoute RoadRoute { get; }
+        public VehicleRoadRoute RoadRoute { get; private set; }
         public double CurrentSpeed { get; private set; }
         private TruckSpec spec = TruckSpec.Default;
         internal VehicleSystem SpecSource { get; set; }
@@ -34,6 +34,11 @@ namespace ForesTycoon
         /// <summary>Wear of the road under the truck (0 new … 1 ruined): it slows the truck and shakes it.</summary>
         public float RoadDamage { get; private set; }
         private int wornTile = -1;
+        internal RigPathFollower SteeringDriver;
+        internal VehicleKinematics Kinematics => SteeringDriver?.Rig;
+        internal string SteeringBlockedReason => SteeringDriver?.BlockedReason;
+        internal RigState PreviousRigPose;
+        internal RigPresentation Presentation = new();
         /// <summary>Diesel burnt so far, litres.</summary>
         public double FuelUsed { get; private set; }
         /// <summary>Distance driven so far, metres.</summary>
@@ -46,7 +51,7 @@ namespace ForesTycoon
         internal double MetresPerTile => RoadRoute == null ? 1 : RoadRoute.TileLength / Engine.WorldScale.MetresToWorld;
 
         public int Id { get; }
-        public int[] Route { get; }
+        public int[] Route { get; private set; }
         public double SpeedTilesPerSecond { get; }
         public double PreviousRoutePosition { get; internal set; }
         public double RoutePosition { get; private set; }
@@ -71,6 +76,16 @@ namespace ForesTycoon
         {
             PreviousRoutePosition = RoutePosition;
             CurrentSpeed = 0;
+        }
+
+        internal void ReplaceRoute(int[] route, VehicleRoadRoute geometry, double position)
+        {
+            if (route == null || route.Length < (LocalCargo ? 1 : 2) || geometry != null && geometry.Last != route.Length - 1)
+                throw new ArgumentException("Replacement route geometry does not match.");
+            Route = route; RoadRoute = geometry;
+            SteeringDriver?.NewLeg((long)Math.Floor(position / Math.Max(1, route.Length - 1)));
+            RoutePosition = PreviousRoutePosition = position;
+            RouteBlocked = false; wornTile = -1; Hold();
         }
         internal void BeginLoading(float amount)
         {
@@ -108,11 +123,50 @@ namespace ForesTycoon
 
         public void Update(double deltaSeconds)
         {
+            if (RoadRoute == null || Spec.Geometry == null || Route.Length < 2) { UpdateLongitudinal(deltaSeconds); return; }
+            if (!double.IsFinite(deltaSeconds) || deltaSeconds < 0) throw new ArgumentOutOfRangeException(nameof(deltaSeconds));
+            double before = RoutePosition, distanceBefore = Distance;
+            EnsureSteeringDriver();
+            PreviousRigPose = Kinematics.CapturePresentation();
+            UpdateLongitudinal(deltaSeconds);
+            double planned = RoutePosition;
+            double end = (Math.Floor(before / (Route.Length - 1)) + 1) * (Route.Length - 1);
+            RoutePosition = SteeringDriver.Advance(GuidePoint, before, end, MetresPerTile,
+                (planned - before) * MetresPerTile, deltaSeconds);
+            PreviousRoutePosition = before;
+            Distance = distanceBefore + SteeringDriver.TravelledDistance;
+            CurrentSpeed = SteeringBlockedReason != null || RoutePosition == end ? 0 : SteeringDriver.AppliedSpeed / MetresPerTile;
+        }
+
+        private PlanPoint GuidePoint(double position)
+        {
+            double directed = VehicleRoadRoute.Directed(position, RoadRoute.Last, out _);
+            var p = RoadRoute.Sample(directed);
+            return new(p.X / Engine.WorldScale.MetresToWorld, p.Y / Engine.WorldScale.MetresToWorld);
+        }
+        private void EnsureSteeringDriver()
+        {
+            long leg = (long)Math.Floor(RoutePosition / (Route.Length - 1));
+            if (SteeringDriver != null) { if (SteeringDriver.Leg != leg) SteeringDriver.NewLeg(leg); return; }
+            double d = VehicleRoadRoute.Directed(RoutePosition, RoadRoute.Last, out int sign);
+            var a = RoadRoute.Sample(d - sign * .001); var b = RoadRoute.Sample(d + sign * .001);
+            SteeringDriver = new(new VehicleKinematics(Spec.Geometry, GuidePoint(RoutePosition), Math.Atan2(b.Y - a.Y, b.X - a.X)));
+            SteeringDriver.NewLeg(leg);
+        }
+
+        private void UpdateLongitudinal(double deltaSeconds)
+        {
             if (!double.IsFinite(deltaSeconds) || deltaSeconds < 0) throw new ArgumentOutOfRangeException(nameof(deltaSeconds));
             PreviousRoutePosition = RoutePosition;
+            if (Route.Length == 1) { Hold(); return; }
             if (!useRoadPhysics)
             {
-                RoutePosition += SpeedTilesPerSecond * deltaSeconds;
+                double travel = SpeedTilesPerSecond * deltaSeconds;
+                if (CargoStopsEnabled || Transit) {
+                    double last = Route.Length - 1;
+                    double boundary = (Math.Floor(RoutePosition / last) + 1) * last;
+                    RoutePosition = Math.Min(boundary, RoutePosition + travel);
+                } else RoutePosition += travel;
                 return;
             }
             // Bounded integration steps keep acceleration stable at different tick rates.
@@ -168,6 +222,7 @@ namespace ForesTycoon
         public void GetSegment(double position, out int fromTileId, out int toTileId, out float amount)
         {
             int last = Route.Length - 1;
+            if (last == 0) { fromTileId = toTileId = Route[0]; amount = 0; return; }
             double cycleLength = last * 2.0;
             position = ((position % cycleLength) + cycleLength) % cycleLength;
             double directed = position <= last ? position : cycleLength - position;

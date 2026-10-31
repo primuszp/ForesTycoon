@@ -46,6 +46,8 @@ namespace ForesTycoon
         public float Width { get; private set; }
         public float Wheelbase { get; private set; }
         public float AxleMidpoint { get; private set; }
+        public float WheelTrack { get; private set; }
+        public float WheelRadius { get; private set; } = .23f;
         internal static GlbTruckModel Load(string path)
         {
             using var document = GlbDocument.Load(path);
@@ -110,24 +112,27 @@ namespace ForesTycoon
             }
             model.Width=maxY-minY;
             if(!float.IsFinite(model.Width)||model.Width<=0)throw new InvalidDataException("Invalid vehicle width.");
-            float front=0,rear=0;int frontCount=0,rearCount=0;
+            float front=0,rear=0,frontSide=0,frontHeight=0;int frontCount=0,rearCount=0;
             foreach(var part in model.Parts)if(part.Category=="wheel"){
-                if(part.Name.Contains("Front")){front+=part.Pivot.X;frontCount++;}
+                if(part.Name.Contains("Front")){front+=part.Pivot.X;frontSide+=Math.Abs(part.Pivot.Y);frontHeight+=part.Pivot.Z;frontCount++;}
                 else{rear+=part.Pivot.X;rearCount++;}
             }
             if(frontCount==0||rearCount==0)throw new InvalidDataException("Vehicle has no axle geometry.");
             front/=frontCount;rear/=rearCount;
             model.Wheelbase=front-rear;model.AxleMidpoint=(front+rear)*0.5f;
+            model.WheelTrack=frontSide*2/frontCount;
+            if(frontHeight>.001f)model.WheelRadius=frontHeight/frontCount;
             model.BuildDrawGroups();
             return model;
         }
         private static bool Finite(Vector3 value) => float.IsFinite(value.X) && float.IsFinite(value.Y) && float.IsFinite(value.Z);
-        public void Draw(Matrix4 transform,float cargoFill,float wheelAngle,float curvature=0,float scale=1,Matrix4? suspension=null,float outlineWidth=0,float articulation=0,float trailerPitch=0)
+        public void Draw(Matrix4 transform,float cargoFill,float wheelAngle,float curvature=0,float scale=1,Matrix4? suspension=null,float outlineWidth=0,float articulation=0,float trailerPitch=0,RigModelFrames rigFrames=null)
         {
             ObjectDisposedException.ThrowIf(disposed, this);
             owner.Check();
             int visibleCargo=(int)MathF.Ceiling(Math.Clamp(cargoFill,0,1)*cargoCount),cargoIndex=0;
             foreach(var part in drawParts){
+                if (rigFrames != null && part.Category == "wheel") continue;
                 if(part.Category=="cargo" && cargoIndex++>=visibleCargo)continue;
                 if(part.Buffer==null){
                     var candidate = new VertexBuffer(PrimitiveTopology.Triangles);
@@ -141,7 +146,7 @@ namespace ForesTycoon
                     Matrix4 local=part.Category=="wheel"?
                         Matrix4.CreateTranslation(-part.Pivot)*Matrix4.CreateRotationY(-wheelAngle)*Matrix4.CreateRotationZ(steer)*Matrix4.CreateTranslation(part.Pivot):
                         suspension ?? Matrix4.Identity;
-                    RenderDevice.SetModel(local*transform);
+                    RenderDevice.SetModel(local*(rigFrames?.Tractor ?? transform));
                     var visuals = RenderDevice.Visuals;
                     SurfaceKind previousKind = visuals?.Kind ?? SurfaceKind.Vehicle;
                     if (visuals != null) visuals.Kind = part.Category == "cargo" ? SurfaceKind.LogCargo : part.Category == "wheel" ? SurfaceKind.Rubber : SurfaceKind.Vehicle;

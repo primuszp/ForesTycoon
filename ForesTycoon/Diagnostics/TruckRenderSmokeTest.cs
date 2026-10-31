@@ -27,6 +27,7 @@ namespace ForesTycoon
                 Directory.CreateDirectory(output);
                 // Vehicle scaling follows the terrain's lane width, including isolated road fixtures.
                 using var previewTerrain = new Terrain(TerrainSettings.Default.WithNodeSize(17, 42), (u, v) => 2);
+                CheckPhysicalRig(previewTerrain, output);
                 foreach (var (name, grade, load) in new[] { ("loaded-uphill", 0.25f, 25f), ("loaded-downhill", -0.25f, 25f), ("empty-flat", 0f, 0f) })
                 {
                     var road = new VehicleRoadRoute(new[] { new Vector3(-10, 0, -10 * grade), Vector3.Zero, new Vector3(10, 0, 10 * grade) },
@@ -138,6 +139,44 @@ namespace ForesTycoon
                 Console.WriteLine("Real road: grade, centerline, frozen foundation and vehicle draw passed.");
             }
             finally { terrain.Dispose(); }
+        }
+
+        private static void CheckPhysicalRig(Terrain terrain, string output)
+        {
+            string path = VehicleRenderer.ModelPath();
+            using ITruckModel model = path.EndsWith("-textured.glb", StringComparison.Ordinal) ? new TexturedTruckModel(path) : GlbTruckModel.Load(path);
+            float scale = terrain.RoadLaneWidth * DioramaScale.TruckLaneFill / model.Width;
+            Console.WriteLine($"Physical rig model: {Path.GetFileName(path)}, wheel radius={model.WheelRadius:F3}, fifth-wheel height={model.KingpinHeight:F3}, scale={scale:F3}");
+            foreach (bool crest in new[] { true, false }) {
+                float Height(float x, float y) => (crest ? -1 : 1) * Math.Abs(x) * .3f + y * .08f;
+                float worst = 0;
+                for (int sample = 0; sample <= 40; sample++) {
+                    var rig = new VehicleKinematics(VehicleGeometryProfiles.Truck(GameTuning.Default), new((sample - 20) * .1 / Engine.WorldScale.MetresToWorld, 0), 0);
+                    var frames = RigRenderer.TruckFrames(rig, model, scale, Height);
+                    var frontHitch = Vector3.TransformPosition(new Vector3(model.Kingpin, 0, model.KingpinHeight), frames.Tractor);
+                    var rearHitch = Vector3.TransformPosition(new Vector3(model.Kingpin, 0, model.KingpinHeight), frames.Trailer);
+                    if (model.Articulated && (frontHitch - rearHitch).Length > .001f) throw new InvalidOperationException("Physical fifth wheel disconnected.");
+                    var rear = Vector3.TransformPosition(new Vector3(model.TrailerAxle, 0, model.WheelRadius), frames.Trailer);
+                    if (model.Articulated) worst = Math.Max(worst, Math.Abs(rear.Z - Height(rear.X, rear.Y) - model.WheelRadius * scale - .025f));
+                    if (sample != 20) continue;
+                    RenderDevice.SetCamera(Matrix4.CreateTranslation(2, 0, .3f) * Matrix4.CreateRotationZ(-.22f) * Matrix4.CreateRotationX(-1.24f) * Matrix4.CreateOrthographic(14, 9.33f, -100, 100));
+                    GL.ClearColor(.39f, .46f, .29f, 1); GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
+                    using (RenderDevice.CreateStateScope().Disable(RenderCapability.CullFace))
+                    DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads, () => {
+                        DynamicPrimitiveBatch.Color3(System.Drawing.Color.FromArgb(104, 107, 107));
+                        for (float x = -10; x < 10; x += .1f) {
+                            DynamicPrimitiveBatch.Vertex3(x, -1.5f, Height(x, -1.5f)); DynamicPrimitiveBatch.Vertex3(x + .1f, -1.5f, Height(x + .1f, -1.5f));
+                            DynamicPrimitiveBatch.Vertex3(x + .1f, 1.5f, Height(x + .1f, 1.5f)); DynamicPrimitiveBatch.Vertex3(x, 1.5f, Height(x, 1.5f));
+                        }
+                    });
+                    model.Draw(Matrix4.Identity, 1, 0, rigFrames: frames);
+                    RigRenderer.Wheels(rig, terrain.Map, frames.Visual, model.Articulated ? int.MaxValue : 1, Height);
+                    GL.Finish();
+                    FramebufferCapture.SavePng(Path.Combine(output, crest ? "physical-crest.png" : "physical-sag.png"), 960, 640);
+                }
+                Console.WriteLine($"Physical {(crest ? "crest" : "sag")}: largest support error={worst:F5}");
+                if (worst > .005f || GL.GetError() != ErrorCode.NoError) throw new InvalidOperationException("Physical trailer support failed.");
+            }
         }
     }
 }

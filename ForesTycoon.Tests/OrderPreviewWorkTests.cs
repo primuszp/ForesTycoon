@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 
 namespace ForesTycoon.Tests;
 
@@ -41,7 +41,8 @@ public partial class FleetTests
         var source = scene.Logistics.StackAt(RoadStack); source.Add(10, 100);
         Assert.True(scene.Logistics.AssignTruck(truck, source, Mill));
         var previous = truck.Vehicle;
-        var replacement = scene.Vehicles.SpawnTransit(previous.Route);
+        // The replacement is physically at the source dock, ready to load.
+        var replacement = scene.Vehicles.SpawnTransit(scene.Map.FindNetworkPath(146, 194));
         truck.Vehicle = replacement;
         Assert.Equal(0, scene.Logistics.Load(previous, 2));
         Assert.Equal(2, scene.Logistics.Load(replacement, 2));

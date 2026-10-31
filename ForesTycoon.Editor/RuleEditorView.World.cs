@@ -692,6 +692,7 @@ internal sealed partial class RuleEditorView
         EditorStyle.Text(HudTheme.Muted, "Tömeg, teljesítmény, vonóerő, menetellenállás, fogyasztás, kapacitás, sebesség és karbantartás. "
             + "A szabályok járművenként is olvassák őket (Rönkszállító, Erdészeti gép objektum).");
         ImGui.PopTextWrapPos();
+        currentRules.DrawVehicleGeometryPreview(world);
         currentRules.DrawTuning(world, IsVehicleRule);
         if (currentRules.UnappliedTuning(world) > 0 && EditorStyle.PrimaryButton("Járműadatok alkalmazása")) Try(() => ApplyProject(world, false));
         EditorStyle.EndPanel();

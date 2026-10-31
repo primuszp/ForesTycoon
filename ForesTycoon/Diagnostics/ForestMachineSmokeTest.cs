@@ -68,6 +68,12 @@ namespace ForesTycoon
                         Step(10);
                     }
                     Capture(scene, terrain, "finished", time);
+                    if (!logistics.Machines.TrueForAll(m => !m.Working && m.Tile == 67)) {
+                        Console.WriteLine(logistics.Status);
+                        foreach (var m in logistics.Machines)
+                            Console.WriteLine($"{m.Kind}: {m.State}, cargo={m.Cargo}, path={string.Join(',', m.Path)}, position={m.PathPosition:R}, pose={m.Kinematics?.Units[0]}, steering={m.Kinematics?.Steer}, gear={m.SteeringDriver?.Capture().DriveGear}, blocked={m.SteeringDriver?.BlockedReason}");
+                        foreach (var t in logistics.Trucks) Console.WriteLine($"Truck {t.Id}: {t.Phase}, cargo={t.Vehicle?.CargoAmount}, blocked={t.Vehicle?.SteeringBlockedReason}");
+                    }
                     Require(logistics.Machines.TrueForAll(m => !m.Working && m.Tile == 67), "Machines did not return to the depot.");
                     Require(logistics.Trucks[0].Phase == TruckPhase.Parked, "The truck did not return to the depot.");
                     Require(logistics.Remaining < 0.01f, "Timber was left behind when the fleet went home.");

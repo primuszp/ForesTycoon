@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace ForesTycoon
@@ -51,24 +51,35 @@ namespace ForesTycoon
             var stack = StackAt(tile);
             if (stack == null) { result.Value = "Ez nem sarang. A processzort egy sarang helyére küldd: oda hordja a fát."; yield break; }
             var path = new WorkResult<int[]>();
-            foreach (int unit in PreviewMachinePathWork(machine.Tile, tile, machine, path)) yield return unit;
+            foreach (int unit in PreviewMachinePathWork(OrderOrigin(machine), tile, machine, path)) yield return unit;
             if (path.Value == null) { result.Value = "A processzor nem jut el ide: nincs engedélyezett út vagy nyom."; yield break; }
             foreach (int unit in FindPathWork(null, tile, t => ContainsTile(t) && forest.AvailableTimber(t) > .001f, path, agent: machine)) yield return unit;
             result.Value = MachineOrderRejection(machine, stack, hasTimber: path.Value != null);
         }
 
-        internal string CheckSource(int tile, bool truck, int vehicleTile, ForestMachine machine = null)
+        internal string CheckSource(int tile, bool truck, int vehicleTile, ForestMachine machine = null, FleetTruck unit = null)
         {
-            var result = new WorkResult<string>(); SimulationWork.Complete(CheckSourceWork(tile, truck, vehicleTile, machine, result)); return result.Value;
+            var result = new WorkResult<string>(); SimulationWork.Complete(CheckSourceWork(tile, truck, vehicleTile, machine, result, unit)); return result.Value;
         }
-        internal IEnumerable<int> CheckSourceWork(int tile, bool truck, int vehicleTile, ForestMachine machine, WorkResult<string> result)
+        internal IEnumerable<int> CheckSourceWork(int tile, bool truck, int vehicleTile, ForestMachine machine, WorkResult<string> result, FleetTruck unit = null)
         {
             var stack = StackAt(tile);
             if (stack == null) { result.Value = "A forrás egy sarang legyen."; yield break; }
             if (truck && terrain.FindNetworkDocks(new[] { tile }).Count == 0) { result.Value = "A teherautó csak úthoz vagy nyomhoz közeli sarangnál rakodhat."; yield break; }
+            if (truck && vehicleTile >= 0) {
+                if (unit != null && unit.Phase != TruckPhase.Parked) { result.Value = "A rönkszállító épp úton van: előbb hívd haza."; yield break; }
+                var starts = terrain.IsNetworkTile(vehicleTile) ? new System.Collections.Generic.List<int> { vehicleTile } : DestinationDocks(vehicleTile);
+                var ends = DestinationDocks(tile); bool reachable = false;
+                foreach (int start in starts) {
+                    var approach = new WorkResult<(int[] Path, float Cost)>();
+                    foreach (int step in BestTruckPathWork(unit, start, ends, approach)) yield return step;
+                    if (approach.Value.Path.Length > 0) { reachable = true; break; }
+                }
+                if (!reachable) result.Value = "A telephelyről nem vezet engedélyezett út vagy nyom ehhez a saranghoz.";
+            }
             if (!truck) {
                 var path = new WorkResult<int[]>();
-                foreach (int unit in PreviewMachinePathWork(vehicleTile, tile, machine, path)) yield return unit;
+                foreach (int step in ForwarderPathWork(machine, vehicleTile, tile, path)) yield return step;
                 if (path.Value == null) result.Value = "A forwarder nem jut el ehhez a saranghoz.";
             }
         }
@@ -89,7 +100,9 @@ namespace ForesTycoon
                 result.Value = path.Value == null ? "Nincs engedélyezett út vagy nyom a forrástól idáig." : TruckOrderRejection(unit, StackAt(source), mill);
                 yield break;
             }
-            foreach (int work in PreviewMachinePathWork(source, tile, machine, path)) yield return work;
+            var destinationWork = machine?.Kind == ForestMachineKind.Forwarder
+                ? ForwarderOrderPathWork(machine, source, tile, path) : ForwarderPathWork(machine, source, tile, path);
+            foreach (int work in destinationWork) yield return work;
             result.Value = path.Value == null ? "A forwarder nem jut el a forrástól idáig." : MachineOrderRejection(machine, StackAt(source), mill);
         }
     }

@@ -104,7 +104,7 @@ public sealed class EditorConstructionTests
         }
         RuleProjectMigrations.UpgradeProject(project); string upgraded = project.ToJson();
         RuleProjectMigrations.UpgradeProject(project); Assert.Equal(upgraded, project.ToJson());
-        Assert.Equal(6, project.Version); Assert.Equal(70, project.Tuning["DirtBuild"]);
+        Assert.Equal(RuleProject.CurrentVersion, project.Version); Assert.Equal(70, project.Tuning["DirtBuild"]);
         using var world = EmptyWorld();
         world.Map.BuildRoadTilePath(34, 66, RoadPaving.Dirt);
         world.RuleBook.Run(world, 1, 0);

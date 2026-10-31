@@ -14,7 +14,7 @@ namespace ForesTycoon.Editor
     /// Overview of the game's rules: a sidebar of systems grouped by domain, a map (all systems, or one system's rules
     /// with their outside producers and consumers) and an inspector for the selected rule.
     /// </summary>
-    internal sealed class CurrentRulesView
+    internal sealed partial class CurrentRulesView
     {
         private sealed record Domain(string Name, Vec4 Colour, string[] Modules);
 
@@ -733,7 +733,19 @@ namespace ForesTycoon.Editor
                 float speed = (float)Math.Max(Math.Abs(p.Value) * 0.005, (p.Max - p.Min) * 0.0005);
                 ImGui.SetNextItemWidth(-1);
                 if (p.Changed) ImGui.PushStyleColor(ImGuiCol.Text, HudTheme.AmberAccent);
-                if (ImGui.DragFloat("##" + rule.Id + p.Key, ref value, speed, (float)p.Min, (float)p.Max, Format(p), ImGuiSliderFlags.AlwaysClamp))
+                if (p.Key == "TruckTrailerLayout") {
+                    int layout = (int)Math.Round(p.Value);
+                    if (ImGui.Combo("##" + rule.Id + p.Key, ref layout, "Szóló tehergépkocsi\0Nyerges / középtengelyes pótkocsi\0Vonórudas, forgózsámolyos pótkocsi\0"))
+                        rule.Parameters[index] = p with { Value = layout };
+                } else if (p.Key == "ProcessorSteeringModel") {
+                    int model = (int)Math.Round(p.Value);
+                    if (ImGui.Combo("##" + rule.Id + p.Key, ref model, "Kerékkormányzás\0Alvázcsuklós kormányzás\0"))
+                        rule.Parameters[index] = p with { Value = model };
+                } else if (p.Unit == "db") {
+                    int count = (int)Math.Round(p.Value);
+                    if (ImGui.DragInt("##" + rule.Id + p.Key, ref count, .03f, (int)p.Min, (int)p.Max, "%d", ImGuiSliderFlags.AlwaysClamp))
+                        rule.Parameters[index] = p with { Value = count };
+                } else if (ImGui.DragFloat("##" + rule.Id + p.Key, ref value, speed, (float)p.Min, (float)p.Max, Format(p), ImGuiSliderFlags.AlwaysClamp))
                     rule.Parameters[index] = p with { Value = value == (float)p.Default ? p.Default : Math.Clamp(value, p.Min, p.Max) };
                 if (p.Changed) ImGui.PopStyleColor();
             }

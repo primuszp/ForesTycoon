@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -9,10 +9,10 @@ namespace ForesTycoon
         internal VehicleCheckpoint Capture() => new(Id, (int[])Route.Clone(), SpeedTilesPerSecond, CargoCapacity, useRoadPhysics,
             RoadRoute?.Capture(), CurrentSpeed, RoutePosition, PreviousRoutePosition, CargoAmount, CargoStopsEnabled,
             SourceTiles == null ? null : (int[])SourceTiles.Clone(), SawmillTileId, RouteBlocked, TransportState, TransferProgress,
-            FuelUsed, Distance, Transit, TransitArrived, Broken, wornTile);
+            FuelUsed, Distance, Transit, TransitArrived, Broken, wornTile, SteeringDriver?.Capture());
         internal static Vehicle Restore(VehicleCheckpoint s, int tileCount)
         {
-            CheckpointGuard.Require(s != null && s.Id > 0 && s.Route != null && s.Route.Length >= 2 && Enum.IsDefined(s.State), "vehicle identity");
+            CheckpointGuard.Require(s != null && s.Id > 0 && s.Route != null && s.Route.Length >= (s.SourceTiles != null && !s.Transit ? 1 : 2) && Enum.IsDefined(s.State), "vehicle identity");
             foreach (int id in s.Route) CheckpointGuard.Require((uint)id < (uint)tileCount, "vehicle route tile");
             if (s.SourceTiles != null) {
                 CheckpointGuard.Require(s.SourceTiles.Length > 0 && (uint)s.Mill < (uint)tileCount, "vehicle source/mill");
@@ -23,7 +23,7 @@ namespace ForesTycoon
             CheckpointGuard.Unit(s.TransferProgress, "vehicle transfer");
             CheckpointGuard.Require(!s.Physics || s.RoadGeometry != null, "vehicle physics geometry");
             var result = new Vehicle(s.Id, s.Route, s.Speed, s.Capacity,
-                s.RoadGeometry == null ? null : VehicleRoadRoute.Restore(s.RoadGeometry), s.Physics);
+                s.RoadGeometry == null ? null : VehicleRoadRoute.Restore(s.RoadGeometry), s.Physics, stationary: s.SourceTiles != null && !s.Transit);
             result.CurrentSpeed = s.CurrentSpeed; result.RoutePosition = s.Position; result.PreviousRoutePosition = s.PreviousPosition;
             CheckpointGuard.Require(s.LastPassageTile == -1 || Array.IndexOf(s.Route, s.LastPassageTile) >= 0, "vehicle passage tile");
             result.wornTile = s.LastPassageTile;
@@ -32,6 +32,7 @@ namespace ForesTycoon
             result.RouteBlocked = s.Blocked; result.TransportState = s.State; result.TransferProgress = s.TransferProgress;
             CheckpointGuard.NonNegative(s.FuelUsed, "vehicle fuel"); CheckpointGuard.NonNegative(s.Distance, "vehicle distance");
             result.FuelUsed = s.FuelUsed; result.Distance = s.Distance; result.Transit = s.Transit; result.TransitArrived = s.TransitArrived; result.Broken = s.Broken;
+            if (s.Rig != null) result.SteeringDriver = new(VehicleKinematics.Restore(s.Rig), s.Rig.DriveGear, s.Rig.DriveLeg);
             return result;
         }
     }
@@ -62,7 +63,7 @@ namespace ForesTycoon
         internal static VehicleRoadRoute Restore(RoadRouteCheckpoint s)
         {
             CheckpointGuard.Require(s != null && s.Centers != null && s.Gradients != null &&
-                s.Centers.Length >= 2 && s.Centers.Length == s.Gradients.Length, "captured road geometry");
+                s.Centers.Length >= 1 && s.Centers.Length == s.Gradients.Length, "captured road geometry");
             foreach (var p in s.Centers) p.Validate();
             foreach (var p in s.Gradients) CheckpointGuard.Require(p != null && float.IsFinite(p.X) && float.IsFinite(p.Y), "captured road gradient");
             return new(s.Centers.Select(p => p.Vector).ToArray(),

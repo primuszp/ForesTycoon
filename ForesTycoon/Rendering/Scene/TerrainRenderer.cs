@@ -16,6 +16,7 @@ namespace ForesTycoon
         internal System.Collections.Generic.IEnumerable<float> PrepareMapGeometry()
         {
             VerifyAccess();
+            terrain.SkidTrailTrackWidthWorld = machines.ForwarderTrackWidthWorld(logistics);
             foreach (int unit in surfaces.PrepareWork()) yield return 0;
             foreach (float progress in terrain.PrepareMapGeometry(forest, graphics)) yield return progress;
             MapGeometryPrepared = true;
@@ -121,13 +122,13 @@ namespace ForesTycoon
                             context.FrameIndex, context.SimulationTimeSeconds, context.SimulationTick, context.InterpolationAlpha,
                             false, false, 1, context.CameraTilt, context.CameraYaw,
                             context.ViewMinX - 40, context.ViewMinY - 40, context.ViewMaxX + 40, context.ViewMaxY + 40,
-                            context.PixelsPerWorldUnit);
+                            context.PixelsPerWorldUnit, context.MotionInterpolationAlpha);
                         terrain.UpdateVisibleTiles(shadowContext);
                         terrain.DrawTerrainBase();
                         terrain.DrawTrees(forest, shadowContext, graphics);
                         content.DrawMills(terrain, logistics, graphics);
                         wildlife.Draw(terrain, forest, graphics, context);
-                        VehicleRenderer.Draw(vehicles, terrain, context.InterpolationAlpha);
+                        VehicleRenderer.Draw(vehicles, terrain, context.MotionInterpolationAlpha);
                     });
                 }
                 finally { RenderPipeline.PassProbe?.Invoke("shadow-map", false); }
@@ -179,9 +180,9 @@ namespace ForesTycoon
             pipeline.Add(RenderLayer.Buildings, "buildings", _ => content.DrawMills(terrain, logistics, graphics));
             pipeline.Add(RenderLayer.Wildlife, "wildlife", context => wildlife.Draw(terrain, forest, graphics, context));
             pipeline.Add(RenderLayer.Vehicles, "vehicles", context =>
-                DrawSurface(SurfaceKind.Vehicle, () => VehicleRenderer.Draw(vehicles, terrain, context.InterpolationAlpha)));
+                DrawSurface(SurfaceKind.Vehicle, () => VehicleRenderer.Draw(vehicles, terrain, context.MotionInterpolationAlpha)));
             pipeline.Add(RenderLayer.Vehicles, "forest-machines", context =>
-                DrawSurface(SurfaceKind.Vehicle, () => machines.Draw(terrain, logistics, graphics, (float)context.InterpolationAlpha)));
+                DrawSurface(SurfaceKind.Vehicle, () => machines.Draw(terrain, logistics, graphics, context.MotionInterpolationAlpha)));
             pipeline.Add(RenderLayer.Effects, "order-overlay", context =>
                 DrawSurface(SurfaceKind.Plain, () => terrain.DrawOrderOverlay(context.SimulationTimeSeconds)));
             pipeline.Add(RenderLayer.Effects, "world-effects", context =>

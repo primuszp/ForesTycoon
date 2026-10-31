@@ -112,6 +112,7 @@ namespace ForesTycoon
         {
             var truck=TruckOf(vehicle);
             if(truck!=null){
+                if (!AtDock(vehicle, terrain.FindNetworkDocks(new[] { truck.Source.Tile }))) return 0;
                 var (taken,value)=truck.Source.Take(requested);truck.CargoValue+=value;return taken;
             }
             return 0;
@@ -120,6 +121,9 @@ namespace ForesTycoon
         {
             var truck=TruckOf(vehicle);
             if(truck!=null){
+                if (!AtDock(vehicle, DestinationDocks(truck.Destination))) {
+                    vehicle.Load(amount); vehicle.RouteBlocked = true; return;
+                }
                 // The share of the value goes with the share of the load (the vehicle already handed this amount over).
                 float carried=vehicle.CargoAmount+amount;
                 double value=carried>1e-6f?truck.CargoValue*amount/carried:truck.CargoValue;

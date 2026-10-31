@@ -41,6 +41,8 @@ namespace ForesTycoon.Engine
         public ulong Tick { get; private set; }
         public double SimulationTimeSeconds => Tick * StepSeconds;
         public float InterpolationAlpha => (float)Math.Clamp(accumulatorSeconds / StepSeconds, 0, 1);
+        /// <summary>Vehicle presentation may predict at most one tick while cooperative work finishes.</summary>
+        public float MotionInterpolationAlpha => (float)Math.Clamp(accumulatorSeconds / StepSeconds, 0, 2);
         /// <summary>Simulated time discarded by the catch-up cap or host work budget.</summary>
         public double DroppedSimulationSeconds { get; private set; }
         public double LastDroppedSimulationSeconds { get; private set; }

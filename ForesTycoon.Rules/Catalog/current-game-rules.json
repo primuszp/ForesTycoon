@@ -2775,7 +2775,7 @@
       "scope": "H\u00E1l\u00F3zat / forr\u00E1s \u00E9s c\u00E9l",
       "schedule": "Utas\u00EDt\u00E1s / h\u00E1l\u00F3zatv\u00E1ltoz\u00E1s",
       "execution": "NativeCode",
-      "description": "K\u00F6z\u00F6s \u00FAt- \u00E9s nyomh\u00E1l\u00F3zat, k\u00F6lcs\u00F6n\u00F6s csatlakoz\u00E1sok, burkolat \u00E9s nyomv\u00E1ly\u00FA szerinti k\u00F6lts\u00E9g. A flott\u00E1ban a dokkp\u00E1rok \u00FAtvonalai k\u00F6z\u00FCl a legkisebb \u00F6sszes\u00EDtett k\u00F6lts\u00E9g\u0171 nyer; azonos k\u00F6lts\u00E9gn\u00E9l a rendezett dokksorrend d\u00F6nt.",
+      "description": "K\u00F6z\u00F6s \u00FAt- \u00E9s nyomh\u00E1l\u00F3zat, k\u00F6lcs\u00F6n\u00F6s csatlakoz\u00E1sok, burkolat \u00E9s nyomv\u00E1ly\u00FA szerinti k\u00F6lts\u00E9g. A teheraut\u00F3 a telephely megk\u00F6zel\u00EDt\u00E9si \u00FAtj\u00E1val egy\u00FCtt v\u00E1laszt el\u00E9rhet\u0151 dokkp\u00E1rt; a forwarder el\u0151n\u00E9zete ugyanazt a t\u00E9nyleges forr\u00E1sdokkot haszn\u00E1lja, mint a v\u00E9grehajt\u00E1s. \u00DAtmegszakad\u00E1skor szeletelten \u00FAjraterveznek, a rakom\u00E1ny \u00E9s a g\u00E9p helye megmarad. Azonos k\u00F6lts\u00E9gn\u00E9l a rendezett dokksorrend d\u00F6nt.",
       "formula": "",
       "notes": "",
       "reads": [
@@ -4362,6 +4362,399 @@
       ],
       "parameters": [],
       "x": 270,
+      "y": 420
+    },
+    {
+      "id": "vehicle.geometry",
+      "name": "Teherg\u00E9pkocsi \u00E9s p\u00F3tkocsi tengelygeometri\u00E1ja",
+      "module": "J\u00E1rm\u0171vek",
+      "scope": "J\u00E1rm\u0171t\u00EDpus",
+      "schedule": "Mozg\u00E1si al-l\u00E9p\u00E9s",
+      "execution": "NativeCode",
+      "description": "SI-m\u00E9rt\u00E9k\u0171 tengelycsoportok, ker\u00E9k- vagy alv\u00E1zcsukl\u00F3s korm\u00E1nyz\u00E1s, korm\u00E1nyz\u00E1si sebess\u00E9g \u00E9s passz\u00EDv p\u00F3tkocsil\u00E1nc. A s\u00EDkbeli geometria a megjelen\u00EDt\u00E9st\u0151l f\u00FCggetlen \u00E1llapot.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "vehicle.route",
+        "rules.behaviors"
+      ],
+      "writes": [
+        "vehicle.pose",
+        "vehicle.wheels"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Simulation/World/Vehicles/VehicleKinematics.cs",
+          "symbol": "VehicleKinematics"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "Tengelyt\u00E1v",
+          "value": 4,
+          "unit": "m",
+          "key": "TruckWheelbase",
+          "min": 1,
+          "max": 12,
+          "default": 4
+        },
+        {
+          "name": "Nyomt\u00E1v",
+          "value": 2,
+          "unit": "m",
+          "key": "TruckTrack",
+          "min": 1,
+          "max": 3,
+          "default": 2
+        },
+        {
+          "name": "Ker\u00E9ksug\u00E1r",
+          "value": 0.5,
+          "unit": "m",
+          "key": "TruckWheelRadius",
+          "min": 0.2,
+          "max": 1.2,
+          "default": 0.5
+        },
+        {
+          "name": "Legnagyobb ker\u00E9kkorm\u00E1nysz\u00F6g",
+          "value": 40,
+          "unit": "\u00B0",
+          "key": "TruckMaxSteer",
+          "min": 10,
+          "max": 65,
+          "default": 40
+        },
+        {
+          "name": "Korm\u00E1nyz\u00E1si sebess\u00E9g",
+          "value": 35,
+          "unit": "\u00B0/s",
+          "key": "TruckSteerRate",
+          "min": 1,
+          "max": 120,
+          "default": 35
+        },
+        {
+          "name": "H\u00E1ts\u00F3 tengelyek sz\u00E1ma",
+          "value": 2,
+          "unit": "db",
+          "key": "TruckRearAxles",
+          "min": 1,
+          "max": 3,
+          "default": 2
+        },
+        {
+          "name": "H\u00E1ts\u00F3 tengelyoszt\u00E1s",
+          "value": 1.3,
+          "unit": "m",
+          "key": "TruckAxleSpacing",
+          "min": 0.5,
+          "max": 2,
+          "default": 1.3
+        },
+        {
+          "name": "P\u00F3tkocsi kialak\u00EDt\u00E1sa",
+          "value": 1,
+          "unit": "t\u00EDpus",
+          "key": "TruckTrailerLayout",
+          "min": 0,
+          "max": 2,
+          "default": 1
+        },
+        {
+          "name": "Von\u00F3horog helye a h\u00E1ts\u00F3 tengelycsoporthoz k\u00E9pest",
+          "value": -1.5,
+          "unit": "m",
+          "key": "TruckHitchOffset",
+          "min": -5,
+          "max": 2,
+          "default": -1.5
+        },
+        {
+          "name": "Von\u00F3r\u00FAd hossza",
+          "value": 2.5,
+          "unit": "m",
+          "key": "TruckDrawbarLength",
+          "min": 0.5,
+          "max": 8,
+          "default": 2.5
+        },
+        {
+          "name": "P\u00F3tkocsi tengelyt\u00E1v / kir\u00E1lycsap\u2013tengelycsoport",
+          "value": 6,
+          "unit": "m",
+          "key": "TruckTrailerLength",
+          "min": 1,
+          "max": 16,
+          "default": 6
+        },
+        {
+          "name": "P\u00F3tkocsi h\u00E1ts\u00F3 tengelyei",
+          "value": 2,
+          "unit": "db",
+          "key": "TruckTrailerAxles",
+          "min": 1,
+          "max": 3,
+          "default": 2
+        },
+        {
+          "name": "P\u00F3tkocsi tengelyoszt\u00E1s",
+          "value": 1.3,
+          "unit": "m",
+          "key": "TruckTrailerAxleSpacing",
+          "min": 0.5,
+          "max": 2,
+          "default": 1.3
+        },
+        {
+          "name": "Passz\u00EDv csukl\u00F3 sz\u00F6ghat\u00E1ra",
+          "value": 75,
+          "unit": "\u00B0",
+          "key": "TruckTrailerMaxAngle",
+          "min": 20,
+          "max": 85,
+          "default": 75
+        }
+      ],
+      "x": 270,
+      "y": 290
+    },
+    {
+      "id": "machine.geometry.forwarder",
+      "name": "Forwarder csukl\u00F3- \u00E9s tengelygeometri\u00E1ja",
+      "module": "J\u00E1rm\u0171vek",
+      "scope": "J\u00E1rm\u0171t\u00EDpus",
+      "schedule": "Mozg\u00E1si al-l\u00E9p\u00E9s",
+      "execution": "NativeCode",
+      "description": "SI-m\u00E9rt\u00E9k\u0171 tengelycsoportok, ker\u00E9k- vagy alv\u00E1zcsukl\u00F3s korm\u00E1nyz\u00E1s, korm\u00E1nyz\u00E1si sebess\u00E9g \u00E9s passz\u00EDv p\u00F3tkocsil\u00E1nc. A s\u00EDkbeli geometria a megjelen\u00EDt\u00E9st\u0151l f\u00FCggetlen \u00E1llapot.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "vehicle.route",
+        "rules.behaviors"
+      ],
+      "writes": [
+        "vehicle.pose",
+        "vehicle.wheels"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Simulation/World/Vehicles/VehicleKinematics.cs",
+          "symbol": "VehicleKinematics"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "Els\u0151 tengelycsoport\u2013csukl\u00F3",
+          "value": 2.2,
+          "unit": "m",
+          "key": "ForwarderFrontLength",
+          "min": 0.5,
+          "max": 10,
+          "default": 2.2
+        },
+        {
+          "name": "Csukl\u00F3\u2013h\u00E1ts\u00F3 tengelycsoport",
+          "value": 4.8,
+          "unit": "m",
+          "key": "ForwarderRearLength",
+          "min": 0.5,
+          "max": 12,
+          "default": 4.8
+        },
+        {
+          "name": "Nyomt\u00E1v",
+          "value": 2.5,
+          "unit": "m",
+          "key": "ForwarderTrack",
+          "min": 1,
+          "max": 3.5,
+          "default": 2.5
+        },
+        {
+          "name": "Ker\u00E9ksug\u00E1r",
+          "value": 0.7,
+          "unit": "m",
+          "key": "ForwarderWheelRadius",
+          "min": 0.2,
+          "max": 1.2,
+          "default": 0.7
+        },
+        {
+          "name": "Legnagyobb csukl\u00F3sz\u00F6g",
+          "value": 42,
+          "unit": "\u00B0",
+          "key": "ForwarderMaxSteer",
+          "min": 10,
+          "max": 60,
+          "default": 42
+        },
+        {
+          "name": "Csukl\u00F3korm\u00E1nyz\u00E1s sebess\u00E9ge",
+          "value": 30,
+          "unit": "\u00B0/s",
+          "key": "ForwarderSteerRate",
+          "min": 1,
+          "max": 120,
+          "default": 30
+        },
+        {
+          "name": "Els\u0151 tengelyek sz\u00E1ma",
+          "value": 2,
+          "unit": "db",
+          "key": "ForwarderFrontAxles",
+          "min": 1,
+          "max": 3,
+          "default": 2
+        },
+        {
+          "name": "H\u00E1ts\u00F3 tengelyek sz\u00E1ma",
+          "value": 2,
+          "unit": "db",
+          "key": "ForwarderRearAxles",
+          "min": 1,
+          "max": 3,
+          "default": 2
+        },
+        {
+          "name": "Bogi tengelyoszt\u00E1s",
+          "value": 1.4,
+          "unit": "m",
+          "key": "ForwarderAxleSpacing",
+          "min": 0.5,
+          "max": 2.5,
+          "default": 1.4
+        }
+      ],
+      "x": 515,
+      "y": 290
+    },
+    {
+      "id": "machine.geometry.processor",
+      "name": "Processzor csukl\u00F3- \u00E9s tengelygeometri\u00E1ja",
+      "module": "J\u00E1rm\u0171vek",
+      "scope": "J\u00E1rm\u0171t\u00EDpus",
+      "schedule": "Mozg\u00E1si al-l\u00E9p\u00E9s",
+      "execution": "NativeCode",
+      "description": "SI-m\u00E9rt\u00E9k\u0171 tengelycsoportok, ker\u00E9k- vagy alv\u00E1zcsukl\u00F3s korm\u00E1nyz\u00E1s, korm\u00E1nyz\u00E1si sebess\u00E9g \u00E9s passz\u00EDv p\u00F3tkocsil\u00E1nc. A s\u00EDkbeli geometria a megjelen\u00EDt\u00E9st\u0151l f\u00FCggetlen \u00E1llapot.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "vehicle.route",
+        "rules.behaviors"
+      ],
+      "writes": [
+        "vehicle.pose",
+        "vehicle.wheels"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Simulation/World/Vehicles/VehicleKinematics.cs",
+          "symbol": "VehicleKinematics"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "Els\u0151 tengelycsoport\u2013csukl\u00F3",
+          "value": 2.8,
+          "unit": "m",
+          "key": "ProcessorFrontLength",
+          "min": 0.5,
+          "max": 10,
+          "default": 2.8
+        },
+        {
+          "name": "Csukl\u00F3\u2013h\u00E1ts\u00F3 tengelycsoport",
+          "value": 3.2,
+          "unit": "m",
+          "key": "ProcessorRearLength",
+          "min": 0.5,
+          "max": 12,
+          "default": 3.2
+        },
+        {
+          "name": "Nyomt\u00E1v",
+          "value": 2.5,
+          "unit": "m",
+          "key": "ProcessorTrack",
+          "min": 1,
+          "max": 3.5,
+          "default": 2.5
+        },
+        {
+          "name": "Ker\u00E9ksug\u00E1r",
+          "value": 0.7,
+          "unit": "m",
+          "key": "ProcessorWheelRadius",
+          "min": 0.2,
+          "max": 1.2,
+          "default": 0.7
+        },
+        {
+          "name": "Legnagyobb csukl\u00F3sz\u00F6g",
+          "value": 42,
+          "unit": "\u00B0",
+          "key": "ProcessorMaxSteer",
+          "min": 10,
+          "max": 60,
+          "default": 42
+        },
+        {
+          "name": "Csukl\u00F3korm\u00E1nyz\u00E1s sebess\u00E9ge",
+          "value": 30,
+          "unit": "\u00B0/s",
+          "key": "ProcessorSteerRate",
+          "min": 1,
+          "max": 120,
+          "default": 30
+        },
+        {
+          "name": "Els\u0151 tengelyek sz\u00E1ma",
+          "value": 1,
+          "unit": "db",
+          "key": "ProcessorFrontAxles",
+          "min": 1,
+          "max": 3,
+          "default": 1
+        },
+        {
+          "name": "H\u00E1ts\u00F3 tengelyek sz\u00E1ma",
+          "value": 1,
+          "unit": "db",
+          "key": "ProcessorRearAxles",
+          "min": 1,
+          "max": 3,
+          "default": 1
+        },
+        {
+          "name": "Bogi tengelyoszt\u00E1s",
+          "value": 1.4,
+          "unit": "m",
+          "key": "ProcessorAxleSpacing",
+          "min": 0.5,
+          "max": 2.5,
+          "default": 1.4
+        },
+        {
+          "name": "Processzor korm\u00E1nyz\u00E1si rendszere",
+          "value": 0,
+          "unit": "t\u00EDpus",
+          "key": "ProcessorSteeringModel",
+          "min": 0,
+          "max": 1,
+          "default": 0
+        },
+        {
+          "name": "Tengelyt\u00E1v ker\u00E9kkorm\u00E1nyz\u00E1sn\u00E1l",
+          "value": 3.2326,
+          "unit": "m",
+          "key": "ProcessorWheelbase",
+          "min": 1,
+          "max": 12,
+          "default": 3.2326
+        }
+      ],
+      "x": 25,
       "y": 420
     }
   ],

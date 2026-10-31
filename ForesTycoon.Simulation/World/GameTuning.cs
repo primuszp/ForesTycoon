@@ -20,6 +20,8 @@ namespace ForesTycoon
         TimberPriceFactor, CreditLimit,
         AsphaltWeather, AsphaltRainWeather, MacadamWeather, MacadamRainWeather,
         DirtBuild, DirtWeather, DirtRainWeather, AsphaltBufferMetres, MacadamBufferMetres, DirtBufferMetres, TrailBufferMetres,
+        TruckWheelbase, TruckTrack, TruckWheelRadius, TruckMaxSteer, TruckSteerRate, TruckRearAxles, TruckAxleSpacing, TruckTrailerLayout, TruckHitchOffset, TruckDrawbarLength, TruckTrailerLength, TruckTrailerAxles, TruckTrailerAxleSpacing, TruckTrailerMaxAngle, ForwarderFrontLength, ForwarderRearLength, ForwarderTrack, ForwarderWheelRadius, ForwarderMaxSteer, ForwarderSteerRate, ForwarderFrontAxles, ForwarderRearAxles, ForwarderAxleSpacing, ProcessorFrontLength, ProcessorRearLength, ProcessorTrack, ProcessorWheelRadius, ProcessorMaxSteer, ProcessorSteerRate, ProcessorFrontAxles, ProcessorRearAxles, ProcessorAxleSpacing,
+        ProcessorSteeringModel, ProcessorWheelbase,
     }
 
     /// <summary>One tunable: which rule it belongs to, how it is shown and the range the game accepts.</summary>
@@ -104,6 +106,40 @@ namespace ForesTycoon
             new(Tune.MacadamBufferMetres, "road.build", "Makadámút pufferzónája", "m", 50, 0, 500),
             new(Tune.DirtBufferMetres, "road.build", "Földút pufferzónája", "m", 50, 0, 500),
             new(Tune.TrailBufferMetres, "trail.build", "Közelítőnyom pufferzónája", "m", 25, 0, 500),
+            new(Tune.TruckWheelbase, "vehicle.geometry", "Tengelytáv", "m", 4, 1, 12),
+            new(Tune.TruckTrack, "vehicle.geometry", "Nyomtáv", "m", 2, 1, 3),
+            new(Tune.TruckWheelRadius, "vehicle.geometry", "Keréksugár", "m", 0.5, 0.2, 1.2),
+            new(Tune.TruckMaxSteer, "vehicle.geometry", "Legnagyobb kerékkormányszög", "°", 40, 10, 65),
+            new(Tune.TruckSteerRate, "vehicle.geometry", "Kormányzási sebesség", "°/s", 35, 1, 120),
+            new(Tune.TruckRearAxles, "vehicle.geometry", "Hátsó tengelyek száma", "db", 2, 1, 3),
+            new(Tune.TruckAxleSpacing, "vehicle.geometry", "Hátsó tengelyosztás", "m", 1.3, 0.5, 2),
+            new(Tune.TruckTrailerLayout, "vehicle.geometry", "Pótkocsi kialakítása", "típus", 1, 0, 2),
+            new(Tune.TruckHitchOffset, "vehicle.geometry", "Vonóhorog helye a hátsó tengelycsoporthoz képest", "m", -1.5, -5, 2),
+            new(Tune.TruckDrawbarLength, "vehicle.geometry", "Vonórúd hossza", "m", 2.5, 0.5, 8),
+            new(Tune.TruckTrailerLength, "vehicle.geometry", "Pótkocsi tengelytáv / királycsap–tengelycsoport", "m", 6, 1, 16),
+            new(Tune.TruckTrailerAxles, "vehicle.geometry", "Pótkocsi hátsó tengelyei", "db", 2, 1, 3),
+            new(Tune.TruckTrailerAxleSpacing, "vehicle.geometry", "Pótkocsi tengelyosztás", "m", 1.3, 0.5, 2),
+            new(Tune.TruckTrailerMaxAngle, "vehicle.geometry", "Passzív csukló szöghatára", "°", 75, 20, 85),
+            new(Tune.ForwarderFrontLength, "machine.geometry.forwarder", "Első tengelycsoport–csukló", "m", 2.2, 0.5, 10),
+            new(Tune.ForwarderRearLength, "machine.geometry.forwarder", "Csukló–hátsó tengelycsoport", "m", 4.8, 0.5, 12),
+            new(Tune.ForwarderTrack, "machine.geometry.forwarder", "Nyomtáv", "m", 2.5, 1, 3.5),
+            new(Tune.ForwarderWheelRadius, "machine.geometry.forwarder", "Keréksugár", "m", 0.7, 0.2, 1.2),
+            new(Tune.ForwarderMaxSteer, "machine.geometry.forwarder", "Legnagyobb csuklószög", "°", 42, 10, 60),
+            new(Tune.ForwarderSteerRate, "machine.geometry.forwarder", "Csuklókormányzás sebessége", "°/s", 30, 1, 120),
+            new(Tune.ForwarderFrontAxles, "machine.geometry.forwarder", "Első tengelyek száma", "db", 2, 1, 3),
+            new(Tune.ForwarderRearAxles, "machine.geometry.forwarder", "Hátsó tengelyek száma", "db", 2, 1, 3),
+            new(Tune.ForwarderAxleSpacing, "machine.geometry.forwarder", "Bogi tengelyosztás", "m", 1.4, 0.5, 2.5),
+            new(Tune.ProcessorFrontLength, "machine.geometry.processor", "Első tengelycsoport–csukló", "m", 2.8, 0.5, 10),
+            new(Tune.ProcessorRearLength, "machine.geometry.processor", "Csukló–hátsó tengelycsoport", "m", 3.2, 0.5, 12),
+            new(Tune.ProcessorTrack, "machine.geometry.processor", "Nyomtáv", "m", 2.5, 1, 3.5),
+            new(Tune.ProcessorWheelRadius, "machine.geometry.processor", "Keréksugár", "m", 0.7, 0.2, 1.2),
+            new(Tune.ProcessorMaxSteer, "machine.geometry.processor", "Legnagyobb csuklószög", "°", 42, 10, 60),
+            new(Tune.ProcessorSteerRate, "machine.geometry.processor", "Csuklókormányzás sebessége", "°/s", 30, 1, 120),
+            new(Tune.ProcessorFrontAxles, "machine.geometry.processor", "Első tengelyek száma", "db", 1, 1, 3),
+            new(Tune.ProcessorRearAxles, "machine.geometry.processor", "Hátsó tengelyek száma", "db", 1, 1, 3),
+            new(Tune.ProcessorAxleSpacing, "machine.geometry.processor", "Bogi tengelyosztás", "m", 1.4, 0.5, 2.5),
+            new(Tune.ProcessorSteeringModel, "machine.geometry.processor", "Processzor kormányzási rendszere", "típus", 0, 0, 1),
+            new(Tune.ProcessorWheelbase, "machine.geometry.processor", "Tengelytáv kerékkormányzásnál", "m", 3.2326, 1, 12),
         };
 
         private static readonly Dictionary<string, TuningSpec> byId = Specs.ToDictionary(s => s.Id, StringComparer.Ordinal);
@@ -141,12 +177,12 @@ namespace ForesTycoon
         /// <summary>The truck physics built from the tunables, shared by every vehicle of the world.</summary>
         internal TruckSpec Truck { get; private set; }
         internal TruckSpec SampleTruck() => Truck = BuildTruck();
-        internal void RestoreTruck(TruckSpec state) => Truck = state with { Rules = vehicleRules };
+        internal void RestoreTruck(TruckSpec state) => Truck = state with { Rules = vehicleRules, Geometry = state.Geometry ?? VehicleGeometryProfiles.Truck(this) };
         private TruckSpec BuildTruck() => new(F(Tune.EmptyMass), F(Tune.Power), F(Tune.MaxTractiveForce), F(Tune.DragArea), F(Tune.Drivetrain),
             F(Tune.TimberDensity), F(Tune.FuelPerKilowattHour), F(Tune.IdleFuelPerHour), F(Tune.Braking))
         {
             RollingAsphalt = F(Tune.RollingAsphalt), RollingGravel = F(Tune.RollingGravel), RollingDirt = F(Tune.RollingDirt),
-            RoughnessRolling = F(Tune.RoughnessRolling), Rules = vehicleRules
+            RoughnessRolling = F(Tune.RoughnessRolling), Rules = vehicleRules, Geometry = VehicleGeometryProfiles.Truck(this)
         };
 
         internal bool IsDefault => Specs.All(s => values[(int)s.Key] == s.Default);
@@ -167,6 +203,8 @@ namespace ForesTycoon
                 var spec = Spec(id) ?? throw new ArgumentException($"Ismeretlen hangolási paraméter: {id}.");
                 if (!double.IsFinite(value) || value < spec.Min || value > spec.Max)
                     throw new ArgumentException($"{spec.Name} ({id}) a {spec.Min:G6}–{spec.Max:G6} tartományon kívül esik: {value:G6}.");
+                if ((spec.Unit == "db" || spec.Key is Tune.TruckTrailerLayout or Tune.ProcessorSteeringModel) && value != Math.Round(value))
+                    throw new ArgumentException($"{spec.Name} ({id}) csak egész szám lehet.");
                 next[(int)spec.Key] = value;
             }
             return new GameTuning(next);

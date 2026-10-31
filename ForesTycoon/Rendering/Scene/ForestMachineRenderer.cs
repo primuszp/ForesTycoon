@@ -26,6 +26,9 @@ namespace ForesTycoon
             internal ForwarderCraneRig Rig;
             internal int[] Wheels;
             internal bool[] LeftWheel;
+            internal bool[] RearNodes;
+            internal Vector3 SourceJoint;
+            internal float FrontAxleX, RearAxleX, Track = 2.5f, WheelRadius = .7f;
             internal int Crane = -1, Boom = -1, Trailer = -1;
             internal void Dispose() => Renderer?.Dispose();
             void IDisposable.Dispose() => Dispose();
@@ -49,8 +52,45 @@ namespace ForesTycoon
                 else if (name == "knee_2") boom = i;
                 else if (name == "trailer") trailer = i;
             }
-            return new MachineModel { Model = model, Renderer = new AnimatedModelRenderer(model), Pose = model.CreatePose(),
-                Rig = new ForwarderCraneRig(model), Wheels = wheels.ToArray(), LeftWheel = left.ToArray(), Crane = crane, Boom = boom, Trailer = trailer };
+            var result = new MachineModel { Model = model, Renderer = new AnimatedModelRenderer(model), Pose = model.CreatePose(),
+                Rig = new ForwarderCraneRig(model), Wheels = wheels.ToArray(), LeftWheel = left.ToArray(), Crane = crane, Boom = boom, Trailer = trailer,
+                RearNodes = new bool[model.Nodes.Length] };
+            result.Pose.Evaluate(null, 0);
+            if (trailer >= 0) result.SourceJoint = result.Pose.World[trailer].Row3.Xyz;
+            for (int i = 0; i < model.Nodes.Length; i++)
+                for (int p = i; p >= 0; p = model.Nodes[p].Parent)
+                    if (p == trailer && trailer >= 0) { result.RearNodes[i] = true; break; }
+            float front = 0, rear = 0, track = 0, height = 0; int fronts = 0, rears = 0;
+            foreach (int wheel in wheels) {
+                Vector3 at = result.Pose.World[wheel].Row3.Xyz;
+                track = Math.Max(track, Math.Abs(at.Z) * 2); height += at.Y;
+                if (result.RearNodes[wheel]) { rear += at.X; rears++; } else { front += at.X; fronts++; }
+            }
+            if (fronts > 0) result.FrontAxleX = front / fronts;
+            if (rears > 0) result.RearAxleX = rear / rears;
+            if (track > .1f) result.Track = track;
+            if (wheels.Count > 0 && height > 0) result.WheelRadius = height / wheels.Count;
+            return result;
+        }
+
+        private static RigAppearance Appearance(VehicleKinematics rig, ForestMachineKind kind, MachineModel model)
+        {
+            float frontBias = 0, rearBias = 0;
+            if (model?.Trailer >= 0 && rig.Profile.Steering == SteeringGeometry.Articulated) {
+                float defaultFront = kind == ForestMachineKind.Forwarder ? 2.2f : 2.8f;
+                float defaultRear = kind == ForestMachineKind.Forwarder ? 4.8f : 3.2f;
+                frontBias = (model.FrontAxleX - model.SourceJoint.X - defaultFront) * MetreScale;
+                rearBias = (model.SourceJoint.X - model.RearAxleX - defaultRear) * MetreScale;
+            }
+            return new(MetreScale, MetreScale, (model?.Track ?? 2.5f) * MetreScale / 2.5f,
+                (model?.WheelRadius ?? .7f) * MetreScale / .7f, FrontLengthBias: frontBias, RearLengthBias: rearBias);
+        }
+
+        internal float ForwarderTrackWidthWorld(ForestryLogistics logistics)
+        {
+            var machine = logistics?.Machines.Find(m => m.Kind == ForestMachineKind.Forwarder);
+            double track = machine?.Kinematics?.Profile.Axles[0].Track ?? logistics?.Tuning[Tune.ForwarderTrack] ?? 2.5;
+            return (float)track * (models[(int)ForestMachineKind.Forwarder]?.Track ?? 2.5f) * MetreScale / 2.5f;
         }
 
         // Stack (sarang) models, smallest first, with the timber volume each one shows.
@@ -172,18 +212,29 @@ namespace ForesTycoon
                 models[(int)ForestMachineKind.Forwarder] = Load("forwarder.glb");
             }
             float tile = terrain.Map.TileWidth;
-            alpha = Math.Clamp(alpha, 0, 1);
+            float poseAlpha = alpha; alpha = Math.Clamp(alpha, 0, 1);
             foreach (var machine in logistics.Machines)
             {
+                var visualRig = machine.Kinematics == null ? null :
+                    machine.Presentation.Sample(poseAlpha) ?? machine.Kinematics.Interpolated(machine.PreviousRigPose, alpha);
+                var model = models[(int)machine.Kind];
+                var displayPose = visualRig == null ? null : new RigVisualPose(visualRig, Appearance(visualRig, machine.Kind, model));
                 double position = machine.PreviousPathPosition + (machine.PathPosition - machine.PreviousPathPosition) * alpha;
                 if (!TrySample(terrain.Map, machine.Path, position, out Vector2 point, out Vector2 heading)) continue;
-                if (machine.Site == null && machine.Home != null && machine.State == ForestMachineState.Parked && machine.Tile == machine.Home.TileId)
+                if (visualRig != null) {
+                    var unit = displayPose.Units[0];
+                    point = new Vector2((float)unit.Axle.X, (float)unit.Axle.Y);
+                    heading = new Vector2((float)Math.Cos(unit.Yaw), (float)Math.Sin(unit.Yaw));
+                    if (visualRig.Profile.Steering == SteeringGeometry.Axle)
+                        point += heading * (float)(visualRig.Profile.FrontLength * .5) * MetreScale;
+                }
+                if (visualRig == null && machine.Site == null && machine.Home != null && machine.State == ForestMachineState.Parked && machine.Tile == machine.Home.TileId)
                 {
                     // At home: in its bay in the yard, facing the hall.
                     point = ParkingBay(terrain, machine.Home, machine.Kind == ForestMachineKind.Harvester ? 0 : 1).Xy;
                     heading = Vector2.UnitY;
                 }
-                if (machine.Kind == ForestMachineKind.Forwarder && machine.State is ForestMachineState.Loading or ForestMachineState.Unloading)
+                if (visualRig == null && machine.Kind == ForestMachineKind.Forwarder && machine.State is ForestMachineState.Loading or ForestMachineState.Unloading)
                 {
                     int stackTile = machine.State == ForestMachineState.Loading ? machine.Source.Tile : machine.Destination;
                     StackPlace(terrain.Map, stackTile, out Vector2 stackAt, out heading);
@@ -201,10 +252,13 @@ namespace ForesTycoon
                     !RenderDevice.Visibility.SphereVisible(placement.Row3.Xyz, 4f)) continue;
                 float articulation = machine.Kind == ForestMachineKind.Forwarder && machine.State is not (ForestMachineState.Loading or ForestMachineState.Unloading)
                     ? Articulation(terrain.Map, machine.Path, position, point, heading, tile) : 0;
-                Matrix4 trailer = TrailerFrame(placement, articulation);
-                var model = models[(int)machine.Kind];
-                if (model != null) DrawModel(model, machine, position, placement, articulation, settings, terrain, logistics);
+                if (visualRig?.Units.Count > 1) articulation = (float)VehicleKinematics.Wrap(visualRig.Units[1].Yaw - visualRig.Units[0].Yaw);
+                Matrix4 trailer = visualRig == null || visualRig.Units.Count < 2 ? TrailerFrame(placement, articulation) :
+                    Matrix4.CreateTranslation((ForwarderJoint + ForwarderBogie) * MetreScale, 0, 0) * RigRenderer.Frame(displayPose.Units[1], terrain.Map, 1);
+                if (model != null && !(machine.Kind == ForestMachineKind.Harvester && visualRig?.Profile.Steering == SteeringGeometry.Articulated))
+                    DrawModel(model, machine, position, placement, articulation, settings, terrain, logistics, displayPose);
                 else DrawStandIn(machine, placement, trailer);
+                if (visualRig != null) RigRenderer.Wheels(visualRig, terrain.Map, displayPose);
                 if (machine.Upkeep.Broken) BreakdownSign(placement.Row3.Xyz, (float)machine.Upkeep.RepairLeft);
                 if (machine.Kind == ForestMachineKind.Forwarder && machine.Cargo > 0.05f) DrawLoad(machine, trailer);
             }
@@ -246,7 +300,7 @@ namespace ForesTycoon
             return Matrix4.CreateTranslation(-joint, 0, 0) * Matrix4.CreateRotationZ(articulation) * Matrix4.CreateTranslation(joint, 0, 0) * placement;
         }
 
-        private void DrawModel(MachineModel m, ForestMachine machine, double position, Matrix4 placement, float articulation, GraphicsSettings settings, Terrain terrain, ForestryLogistics logistics)
+        private void DrawModel(MachineModel m, ForestMachine machine, double position, Matrix4 placement, float articulation, GraphicsSettings settings, Terrain terrain, ForestryLogistics logistics, RigVisualPose displayPose)
         {
             var model = m.Model;
             // Rest pose, then extra local rotations: wheels roll with the distance driven, the crane works while felling or loading.
@@ -259,18 +313,26 @@ namespace ForesTycoon
                 var node = model.Nodes[i];
                 Matrix4 local = node.Matrix ?? Matrix4.CreateScale(node.Scale) * Matrix4.CreateFromQuaternion(node.Rotation) * Matrix4.CreateTranslation(node.Translation);
                 int wheel = Array.IndexOf(m.Wheels, i);
-                if (wheel >= 0) local = Matrix4.CreateRotationY(m.LeftWheel[wheel] ? -roll : roll) * local;
+                if (wheel >= 0) local = machine.Kinematics != null ? Matrix4.CreateScale(0) : Matrix4.CreateRotationY(m.LeftWheel[wheel] ? -roll : roll) * local;
                 else if (i == m.Crane) local = Matrix4.CreateRotationY(swing) * local;
                 else if (i == m.Boom) local = Matrix4.CreateRotationZ(lift) * local;
                 else if (i == m.Trailer)
                     // Turn the rear unit about the up axis of its parent (the front frame) at the joint.
                     local = Matrix4.CreateScale(node.Scale) * Matrix4.CreateFromQuaternion(node.Rotation)
-                        * Matrix4.CreateRotationY(articulation) * Matrix4.CreateTranslation(node.Translation);
+                        * Matrix4.CreateRotationY(displayPose == null ? articulation : 0) * Matrix4.CreateTranslation(node.Translation);
                 m.Pose.World[i] = node.Parent < 0 ? local : local * m.Pose.World[node.Parent];
             }
             if (machine.Kind == ForestMachineKind.Forwarder && machine.State is ForestMachineState.Loading or ForestMachineState.Unloading)
                 DrawCraneTransfer(m, machine, placement, terrain, logistics, settings);
-            m.Renderer.Draw(m.Pose, Axis * Matrix4.CreateScale(MetreScale) * placement, settings,
+            Matrix4 root = Axis * Matrix4.CreateScale(MetreScale) * placement;
+            if (displayPose != null && m.Trailer >= 0 && machine.Kinematics.Profile.Steering == SteeringGeometry.Articulated) {
+                Matrix4 AtJoint(double yaw) => Matrix4.CreateTranslation(-m.SourceJoint) * Axis * Matrix4.CreateScale(MetreScale) *
+                    Matrix4.CreateTranslation(0, 0, m.SourceJoint.Y * MetreScale) * RigRenderer.Frame(new(displayPose.Hitches[0], yaw), terrain.Map, 1);
+                Matrix4 front = AtJoint(displayPose.Units[0].Yaw), rear = AtJoint(displayPose.Units[1].Yaw);
+                for (int i = 0; i < m.Pose.World.Length; i++) m.Pose.World[i] *= m.RearNodes[i] ? rear : front;
+                root = Matrix4.Identity;
+            }
+            m.Renderer.Draw(m.Pose, root, settings,
                 VehicleRenderer.TakeOutline(), sourceMaterial: true);
         }
 
@@ -286,7 +348,7 @@ namespace ForesTycoon
                 Box(placement, new Vector3(-2.0f, -1.2f, 0.6f) * s, new Vector3(2.6f, 1.2f, 1.5f) * s, body);
                 Box(placement, new Vector3(0.2f, -1.0f, 1.5f) * s, new Vector3(2.2f, 1.0f, 3.3f) * s, Color.FromArgb(60, 64, 70));
                 Box(placement, new Vector3(-1.2f, -0.3f, 1.5f) * s, new Vector3(-0.6f, 0.3f, 3.6f) * s, Color.FromArgb(200, 200, 196));
-                foreach (float x in new[] { 1.6f, -0.8f })
+                if (machine.Kinematics == null) foreach (float x in new[] { 1.6f, -0.8f })
                     foreach (float y in new[] { -1.3f, 1.3f }) Wheel(placement, new Vector3(x, y, 0.65f) * s, 0.65f * s, 0.35f * s, tyre);
                 if (harvester)
                 {
@@ -298,7 +360,7 @@ namespace ForesTycoon
                 foreach (float x in new[] { -7.2f, -4.9f, -2.6f })
                     foreach (float y in new[] { -1.15f, 1.15f })
                         Box(trailer, new Vector3(x - 0.08f, y - 0.08f, 1.4f) * s, new Vector3(x + 0.08f, y + 0.08f, 3.3f) * s, Color.FromArgb(52, 54, 58));
-                foreach (float x in new[] { -6.2f, -4.8f })
+                if (machine.Kinematics == null) foreach (float x in new[] { -6.2f, -4.8f })
                     foreach (float y in new[] { -1.3f, 1.3f }) Wheel(trailer, new Vector3(x, y, 0.65f) * s, 0.65f * s, 0.35f * s, tyre);
             });
         }

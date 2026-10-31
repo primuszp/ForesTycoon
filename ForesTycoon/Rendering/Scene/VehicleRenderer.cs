@@ -40,6 +40,13 @@ namespace ForesTycoon
             {
                 foreach (Vehicle vehicle in vehicles.Vehicles)
                 {
+                    if (vehicle.Kinematics != null) {
+                        var pose = vehicle.Presentation.Sample(interpolationAlpha) ?? vehicle.Kinematics.Interpolated(vehicle.PreviousRigPose, interpolationAlpha);
+                        var frames = RigRenderer.TruckFrames(pose, importedModel, terrain.Map, scale);
+                        importedModel.Draw(Matrix4.Identity, vehicle.VisualCargoFill, 0, rigFrames: frames);
+                        RigRenderer.Wheels(pose, terrain.Map, frames.Visual, importedModel.Articulated ? int.MaxValue : 1);
+                        continue;
+                    }
                     double routePosition = vehicle.InterpolatedRoutePosition(interpolationAlpha);
                     if (vehicle.RoadRoute != null)
                     {

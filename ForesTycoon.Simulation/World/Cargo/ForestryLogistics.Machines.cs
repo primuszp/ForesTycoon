@@ -30,6 +30,12 @@ namespace ForesTycoon
         internal bool HomeRequested;
         internal int[] Path;
         internal double PathPosition, PreviousPathPosition;
+        internal RigPathFollower SteeringDriver;
+        internal VehicleKinematics Kinematics => SteeringDriver?.Rig;
+        internal RigState PreviousRigPose;
+        internal readonly RigPresentation Presentation = new();
+        internal int[] SteeringPath;
+        internal VehicleRoadRoute SteeringRoad;
         internal ForestMachineState State;
         /// <summary>What the machine does on reaching the end of its path.</summary>
         internal ForestMachineState Goal;
@@ -115,15 +121,13 @@ namespace ForesTycoon
         // Network-to-network travel follows its actual arms. Worksites and yards still allow manoeuvring.
         private int[] ForwarderPath(ForestMachine machine, int from, int target)
         {
-            var mill = MillAt(target);
-            var docks = terrain.FindNetworkDocks(mill != null ? mill.Footprint : new[] { target });
+            var docks = DestinationDocks(target);
             return FindPath(null, from, t => terrain.IsNetworkTile(t) && docks.Contains(t), networkOnly: true, agent: machine);
         }
 
         private IEnumerable<int> ForwarderPathWork(ForestMachine machine, int from, int target, WorkResult<int[]> result)
         {
-            var mill = MillAt(target);
-            var docks = terrain.FindNetworkDocks(mill != null ? mill.Footprint : new[] { target });
+            var docks = DestinationDocks(target);
             foreach (int unit in FindPathWork(null, from, t => terrain.IsNetworkTile(t) && docks.Contains(t), result, networkOnly: true, agent: machine)) yield return unit;
         }
 
@@ -145,6 +149,8 @@ namespace ForesTycoon
             int extra = -1, bool networkOnly = false, ForestMachine agent = null)
         {
             result.Value = null;
+            if (!terrain.IsValidTileId(from) || !Passable(site, from) && from != extra) yield break;
+            if (networkOnly && !terrain.IsNetworkTile(from) && !IsDepotTile(from) && StackAt(from) == null) yield break;
             var previous = new Dictionary<int, int> { [from] = -1 };
             var costs = new Dictionary<int, float> { [from] = 0 }; long sequence = 0;
             var queue = new PriorityQueue<int, (float Cost, long Order)>(); queue.Enqueue(from, (0, sequence++));
@@ -187,7 +193,7 @@ namespace ForesTycoon
         internal IEnumerable<int> AssignProcessorWork(ForestMachine machine, TimberStack stack, WorkResult<bool> result)
         {
             var path = new WorkResult<int[]>();
-            foreach (int unit in FindPathWork(null, machine.Tile, t => t == stack.Tile, path, agent: machine)) yield return unit;
+            foreach (int unit in FindPathWork(null, OrderOrigin(machine), t => t == stack.Tile, path, agent: machine)) yield return unit;
             if (path.Value == null) { Status = "A processzor nem jut el ehhez a saranghoz."; yield break; }
             foreach (int unit in FindPathWork(null, stack.Tile, t => ContainsTile(t) && forest.AvailableTimber(t) > .001f, path, agent: machine)) yield return unit;
             bool hasTimber = path.Value != null;
@@ -215,7 +221,7 @@ namespace ForesTycoon
             bool mill = MillAt(destination) != null;
             if (!mill && StackAt(destination) == null && !CanPlaceStack(destination)) { Status = "Ide nem rakható sarang."; yield break; }
             var path = new WorkResult<int[]>();
-            foreach (int unit in ForwarderPathWork(machine, machine.Tile, source.Tile, path)) yield return unit;
+            foreach (int unit in ForwarderPathWork(machine, OrderOrigin(machine), source.Tile, path)) yield return unit;
             if (path.Value == null) { Status = "A forwarder nem talál utat a forrás saranghoz."; yield break; }
             foreach (int unit in ForwarderPathWork(machine, path.Value[^1], destination, path)) yield return unit;
             if (path.Value == null) { Status = "A forrás sarangtól nem vezet út a célig."; yield break; }
@@ -237,10 +243,20 @@ namespace ForesTycoon
             machine.Site = null; machine.Source = null; machine.Target = null; machine.Destination = -1; machine.HomeRequested = false;
         }
 
+        private static int OrderOrigin(ForestMachine machine) => machine.Path[Math.Clamp((int)Math.Ceiling(machine.PathPosition), 0, machine.Path.Length - 1)];
+
         private static void Restart(ForestMachine machine)
         {
+            if (machine.State == ForestMachineState.Parked && machine.Home != null && machine.Tile == machine.Home.TileId) {
+                machine.SteeringDriver = null; machine.PreviousRigPose = null; machine.Presentation.Reset();
+            }
             if (machine.State != ForestMachineState.Driving) machine.State = ForestMachineState.Parked;
-            else machine.Goal = ForestMachineState.Parked;   // finish the present move, then take up the new work
+            else {
+                // Finish only the current segment, then plan the new job from its physical endpoint.
+                int last = Math.Clamp((int)Math.Ceiling(machine.PathPosition), 0, machine.Path.Length - 1);
+                Array.Resize(ref machine.Path, last + 1);
+                machine.Goal = ForestMachineState.Parked;
+            }
         }
 
         /// <summary>Is wood still on its way to this stack (a processor, forwarder or truck will bring more)?</summary>
@@ -322,7 +338,7 @@ namespace ForesTycoon
         private System.Collections.Generic.IEnumerable<int> UpdateMachinesWork(double seconds, Dictionary<int, List<SupplyEdge>> supply)
         {
             // Drawing interpolates across the whole tick (all substeps); a new path resets the start to 0.
-            foreach (var machine in Machines) { machine.PreviousPathPosition = machine.PathPosition; yield return 1; }
+            foreach (var machine in Machines) { machine.PreviousPathPosition = machine.PathPosition; machine.PreviousRigPose = machine.Kinematics?.CapturePresentation(); yield return 1; }
             while (seconds > 1e-9)
             {
                 double dt = Math.Min(seconds, 1.0 / 30); seconds -= dt;
@@ -378,16 +394,50 @@ namespace ForesTycoon
             do {
                 yield return 1;
                 int segment = Math.Min((int)Math.Floor(machine.PathPosition), machine.Path.Length - 2);
-                if (segment >= 0 && ((!Passable(machine.Site, machine.Path[segment + 1]) && machine.Path[segment + 1] != machine.Destination)
-                    || !CanDriveBetween(machine.Path[segment], machine.Path[segment + 1]))) {
-                    Status = "Az útvonal megszakadt. Állítsd helyre az úthálózatot a gép továbbhaladásához.";
+                if (segment >= 0 && !CanMachineTraverse(machine, machine.Path[segment], machine.Path[segment + 1])) {
+                    // Never move across a missing edge or snap a machine out of a broken segment.
+                    if (Math.Abs(machine.PathPosition - Math.Round(machine.PathPosition)) < 1e-8) {
+                        var replacement = new WorkResult<int[]>();
+                        foreach (int unit in MachineContinuationWork(machine, machine.Tile, replacement)) yield return unit;
+                        if (replacement.Value != null) { Drive(machine, replacement.Value, machine.Goal); yield break; }
+                    }
+                    Status = "Az útvonal megszakadt; a gép rakománnyal együtt vár az úthálózat helyreállítására.";
                     yield break;
                 }
                 if (!charged) { Fuel(machine, machine.Rule("machine.fuel", dt)); charged = true; }
                 if (machine.Arrived || remaining <= 0) break;
-                double distance = Math.Min(remaining, segment + 1 - machine.PathPosition);
+                double toBoundary = segment + 1 - machine.PathPosition;
+                // Projection may approach a waypoint to floating-point precision. Spend real time settling the
+                // physical axle there instead of looping forever on an unrepresentably small logical distance.
+                double distance = Math.Min(remaining, toBoundary < 1e-6 ? remaining : toBoundary);
                 int before = machine.Tile;
-                machine.PathPosition += distance; remaining -= distance;
+                if (machine.SteeringPath != machine.Path || machine.SteeringRoad == null) {
+                    var centres = new OpenTK.Mathematics.Vector3[machine.Path.Length];
+                    var gradients = new OpenTK.Mathematics.Vector2[machine.Path.Length];
+                    for (int i = 0; i < centres.Length; i++) terrain.TryGetTileCenter(machine.Path[i], out centres[i]);
+                    machine.SteeringRoad = new(centres, gradients);
+                    if (machine.SteeringPath != machine.Path) machine.SteeringDriver?.NewLeg();
+                    machine.SteeringPath = machine.Path;
+                }
+                PlanPoint Guide(double at) {
+                    var p = machine.SteeringRoad.Sample(at);
+                    return new(p.X / Engine.WorldScale.MetresToWorld, p.Y / Engine.WorldScale.MetresToWorld);
+                }
+                if (machine.SteeringDriver == null) {
+                    var a = Guide(machine.PathPosition); var b = Guide(machine.PathPosition + .001);
+                    machine.SteeringDriver = new(new VehicleKinematics(VehicleGeometryProfiles.Machine(machine.Tuning, machine.Kind), a, Math.Atan2(b.Y - a.Y, b.X - a.X)));
+                    machine.PreviousRigPose = machine.Kinematics.CapturePresentation();
+                }
+                double oldPosition = machine.PathPosition;
+                machine.PathPosition = machine.SteeringDriver.Advance(Guide, oldPosition, machine.Path.Length - 1,
+                    machine.SteeringRoad.TileLength / Engine.WorldScale.MetresToWorld,
+                    distance * machine.SteeringRoad.TileLength / Engine.WorldScale.MetresToWorld, speed > 0 ? distance / speed : 0, segment + 1,
+                    machine.Kind == ForestMachineKind.Harvester ? machine.Kinematics.Profile.MinimumRadius * 2 +
+                        machine.Kinematics.Profile.FrontLength + machine.Kinematics.Profile.RearLength : 0);
+                remaining -= distance;
+                if (machine.SteeringDriver.BlockedReason != null) { Status = machine.SteeringDriver.BlockedReason; yield break; }
+                if (Math.Round(machine.PathPosition) < machine.Path.Length - 1 && Math.Abs(machine.PathPosition - Math.Round(machine.PathPosition)) < 1e-5)
+                    machine.PathPosition = Math.Round(machine.PathPosition);
                 int after = machine.Tile;
                 if (after != before) Passage?.Invoke(new(after,
                     machine.Kind == ForestMachineKind.Harvester ? TrafficVehicleKind.Processor : TrafficVehicleKind.Forwarder,
@@ -465,6 +515,10 @@ namespace ForesTycoon
             var source = machine.Source;
             if (machine.State is ForestMachineState.Loading or ForestMachineState.Unloading)
             {
+                int transferTile = machine.State == ForestMachineState.Loading ? source.Tile : machine.Destination;
+                if (!terrain.IsNetworkTile(machine.Tile) || !DestinationDocks(transferTile).Contains(machine.Tile)) {
+                    Status = "A forwarder rakodóhelye nem elérhető; a faanyag a gépnél marad."; yield break;
+                }
                 bool done = ForwarderLoading.Step(machine, dt, (amount, value) => Receive(machine.Destination, amount, value));
                 Fuel(machine, machine.Rule("machine.fuel", dt));
                 if (!done) yield break;

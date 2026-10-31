@@ -1,4 +1,4 @@
-using ForesTycoon;
+﻿using ForesTycoon;
 using ForesTycoon.Rules;
 
 namespace ForesTycoon.Tests;
@@ -89,10 +89,11 @@ public class BehaviorModelTests
     public void StoppedMachineDoesNotChangeAnotherMachinesTimeStep()
     {
         var map = new TerrainMap(TerrainSettings.Default.WithNodeSize(9, 42), (_, _) => 4);
+        map.BuildRoadTilePath(0, 2);
         var logistics = new ForestryLogistics(map, new ForestSystem(map));
         for (int i = 1; i <= 2; i++) logistics.Machines.Add(new() {
             Id = i, Kind = ForestMachineKind.Forwarder, Path = new[] { 0 }, State = ForestMachineState.Loading,
-            Source = new TimberStack { Volume = 10, Value = 100 }, Upkeep = new VehicleUpkeep((uint)i)
+            Source = new TimberStack { Tile = 8, Volume = 10, Value = 100 }, Upkeep = new VehicleUpkeep((uint)i)
         });
         logistics.Behaviors = new WorldBehaviorPolicy(new() { Graphs = new() { Constant("machine.pace", "logisticsForwarder", 0, 1) }});
         logistics.Update(1.0 / 30);

@@ -1,6 +1,6 @@
 {
   "schema": "forest-rule-project",
-  "version": 6,
+  "version": 7,
   "name": "ForesTycoon szab\u00E1lyrendszer",
   "tuning": {
     "VehicleTimeScale": 4,
@@ -60,7 +60,41 @@
     "AsphaltBufferMetres": 50,
     "MacadamBufferMetres": 50,
     "DirtBufferMetres": 50,
-    "TrailBufferMetres": 25
+    "TrailBufferMetres": 25,
+    "TruckWheelbase": 4,
+    "TruckTrack": 2,
+    "TruckWheelRadius": 0.5,
+    "TruckMaxSteer": 40,
+    "TruckSteerRate": 35,
+    "TruckRearAxles": 2,
+    "TruckAxleSpacing": 1.3,
+    "TruckTrailerLayout": 1,
+    "TruckHitchOffset": -1.5,
+    "TruckDrawbarLength": 2.5,
+    "TruckTrailerLength": 6,
+    "TruckTrailerAxles": 2,
+    "TruckTrailerAxleSpacing": 1.3,
+    "TruckTrailerMaxAngle": 75,
+    "ForwarderFrontLength": 2.2,
+    "ForwarderRearLength": 4.8,
+    "ForwarderTrack": 2.5,
+    "ForwarderWheelRadius": 0.7,
+    "ForwarderMaxSteer": 42,
+    "ForwarderSteerRate": 30,
+    "ForwarderFrontAxles": 2,
+    "ForwarderRearAxles": 2,
+    "ForwarderAxleSpacing": 1.4,
+    "ProcessorFrontLength": 2.8,
+    "ProcessorRearLength": 3.2,
+    "ProcessorTrack": 2.5,
+    "ProcessorWheelRadius": 0.7,
+    "ProcessorMaxSteer": 42,
+    "ProcessorSteerRate": 30,
+    "ProcessorFrontAxles": 1,
+    "ProcessorRearAxles": 1,
+    "ProcessorAxleSpacing": 1.4,
+    "ProcessorSteeringModel": 0,
+    "ProcessorWheelbase": 3.2326
   },
   "behaviors": {
     "schema": "forest-behaviors",
@@ -29835,6 +29869,754 @@
           {
             "id": "native",
             "name": "Be\u00E9p\u00EDtett eredm\u00E9ny",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.TruckWheelbase",
+        "name": "Tengelytáv",
+        "hook": "tuning.TruckWheelbase",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.TruckTrack",
+        "name": "Nyomtáv",
+        "hook": "tuning.TruckTrack",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.TruckWheelRadius",
+        "name": "Keréksugár",
+        "hook": "tuning.TruckWheelRadius",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.TruckMaxSteer",
+        "name": "Legnagyobb kerékkormányszög",
+        "hook": "tuning.TruckMaxSteer",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.TruckSteerRate",
+        "name": "Kormányzási sebesség",
+        "hook": "tuning.TruckSteerRate",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.TruckRearAxles",
+        "name": "Hátsó tengelyek száma",
+        "hook": "tuning.TruckRearAxles",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.TruckAxleSpacing",
+        "name": "Hátsó tengelyosztás",
+        "hook": "tuning.TruckAxleSpacing",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.TruckTrailerLayout",
+        "name": "Pótkocsi kialakítása",
+        "hook": "tuning.TruckTrailerLayout",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.TruckHitchOffset",
+        "name": "Vonóhorog helye a hátsó tengelycsoporthoz képest",
+        "hook": "tuning.TruckHitchOffset",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.TruckDrawbarLength",
+        "name": "Vonórúd hossza",
+        "hook": "tuning.TruckDrawbarLength",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.TruckTrailerLength",
+        "name": "Pótkocsi tengelytáv / királycsap–tengelycsoport",
+        "hook": "tuning.TruckTrailerLength",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.TruckTrailerAxles",
+        "name": "Pótkocsi hátsó tengelyei",
+        "hook": "tuning.TruckTrailerAxles",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.TruckTrailerAxleSpacing",
+        "name": "Pótkocsi tengelyosztás",
+        "hook": "tuning.TruckTrailerAxleSpacing",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.TruckTrailerMaxAngle",
+        "name": "Passzív csukló szöghatára",
+        "hook": "tuning.TruckTrailerMaxAngle",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.ForwarderFrontLength",
+        "name": "Első tengelycsoport–csukló",
+        "hook": "tuning.ForwarderFrontLength",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.ForwarderRearLength",
+        "name": "Csukló–hátsó tengelycsoport",
+        "hook": "tuning.ForwarderRearLength",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.ForwarderTrack",
+        "name": "Nyomtáv",
+        "hook": "tuning.ForwarderTrack",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.ForwarderWheelRadius",
+        "name": "Keréksugár",
+        "hook": "tuning.ForwarderWheelRadius",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.ForwarderMaxSteer",
+        "name": "Legnagyobb csuklószög",
+        "hook": "tuning.ForwarderMaxSteer",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.ForwarderSteerRate",
+        "name": "Csuklókormányzás sebessége",
+        "hook": "tuning.ForwarderSteerRate",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.ForwarderFrontAxles",
+        "name": "Első tengelyek száma",
+        "hook": "tuning.ForwarderFrontAxles",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.ForwarderRearAxles",
+        "name": "Hátsó tengelyek száma",
+        "hook": "tuning.ForwarderRearAxles",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.ForwarderAxleSpacing",
+        "name": "Bogi tengelyosztás",
+        "hook": "tuning.ForwarderAxleSpacing",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.ProcessorFrontLength",
+        "name": "Első tengelycsoport–csukló",
+        "hook": "tuning.ProcessorFrontLength",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.ProcessorRearLength",
+        "name": "Csukló–hátsó tengelycsoport",
+        "hook": "tuning.ProcessorRearLength",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.ProcessorTrack",
+        "name": "Nyomtáv",
+        "hook": "tuning.ProcessorTrack",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.ProcessorWheelRadius",
+        "name": "Keréksugár",
+        "hook": "tuning.ProcessorWheelRadius",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.ProcessorMaxSteer",
+        "name": "Legnagyobb csuklószög",
+        "hook": "tuning.ProcessorMaxSteer",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.ProcessorSteerRate",
+        "name": "Csuklókormányzás sebessége",
+        "hook": "tuning.ProcessorSteerRate",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.ProcessorFrontAxles",
+        "name": "Első tengelyek száma",
+        "hook": "tuning.ProcessorFrontAxles",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.ProcessorRearAxles",
+        "name": "Hátsó tengelyek száma",
+        "hook": "tuning.ProcessorRearAxles",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.ProcessorAxleSpacing",
+        "name": "Bogi tengelyosztás",
+        "hook": "tuning.ProcessorAxleSpacing",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.ProcessorSteeringModel",
+        "name": "ProcessorSteeringModel",
+        "hook": "tuning.ProcessorSteeringModel",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.ProcessorWheelbase",
+        "name": "ProcessorWheelbase",
+        "hook": "tuning.ProcessorWheelbase",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
             "operation": "Native",
             "value": 0,
             "key": "",

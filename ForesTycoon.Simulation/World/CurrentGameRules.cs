@@ -217,7 +217,7 @@ namespace ForesTycoon
                 "kopás = max(0; kopás − 0,4 × lépés); tétlenség += lépés; megszűnik, ha tétlenség ≥ benövés és kopás ≤ 0,001", GameRuleExecution.EditableExpressions);
             Add("route.find", "Hálózati útvonalkeresés", "Járművek", "Hálózat / forrás és cél", "Utasítás / hálózatváltozás",
                 "ForesTycoon.Map/Terrain/TerrainMap.Network.cs", "FindNetworkPath", "road.network|trail.network|trail.wear|buildings.footprint|timber.stacks", "vehicle.route",
-                "Közös út- és nyomhálózat, kölcsönös csatlakozások, burkolat és nyomvályú szerinti költség. A flottában a dokkpárok útvonalai közül a legkisebb összesített költségű nyer; azonos költségnél a rendezett dokksorrend dönt.");
+                "Közös út- és nyomhálózat, kölcsönös csatlakozások, burkolat és nyomvályú szerinti költség. A teherautó a telephely megközelítési útjával együtt választ elérhető dokkpárt; a forwarder előnézete ugyanazt a tényleges forrásdokkot használja, mint a végrehajtás. Útmegszakadáskor szeletelten újraterveznek, a rakomány és a gép helye megmarad. Azonos költségnél a rendezett dokksorrend dönt.");
             var mass = Add("vehicle.mass", "Rakomány és össztömeg", "Járművek", "Teherautó", "Mozgási lépés", dynamics, "Mass",
                 "vehicle.cargo", "vehicle.mass", "A rakomány térfogatból a rögzített frissfa-sűrűség alapján tömeg lesz. Ez a sűrűség jelenleg nem fajfüggő.", "tömeg = üres tömeg + m³ × fasűrűség", execution: GameRuleExecution.EditableGraph);
             Add("trail.trafficability", "Földút járhatósága", "Utak és nyomok", "Burkolatlan csempe", "Jármű haladásakor",
@@ -332,6 +332,15 @@ namespace ForesTycoon
                 rule.Sources.Add(new("ForesTycoon.Editor/GameRules/default.project.json", entry.Value[0]));
                 rule.Reads = rule.Reads.Append("rules.behaviors").Distinct().ToArray();
             }
+            Add("vehicle.geometry", "Tehergépkocsi és pótkocsi tengelygeometriája", "Járművek", "Járműtípus", "Mozgási al-lépés",
+                "ForesTycoon.Simulation/World/Vehicles/VehicleKinematics.cs", "VehicleKinematics", "vehicle.route|rules.behaviors", "vehicle.pose|vehicle.wheels",
+                "SI-mértékű tengelycsoportok, kerék- vagy alvázcsuklós kormányzás, kormányzási sebesség és passzív pótkocsilánc. A síkbeli geometria a megjelenítéstől független állapot.");
+            Add("machine.geometry.forwarder", "Forwarder csukló- és tengelygeometriája", "Járművek", "Járműtípus", "Mozgási al-lépés",
+                "ForesTycoon.Simulation/World/Vehicles/VehicleKinematics.cs", "VehicleKinematics", "vehicle.route|rules.behaviors", "vehicle.pose|vehicle.wheels",
+                "SI-mértékű tengelycsoportok, kerék- vagy alvázcsuklós kormányzás, kormányzási sebesség és passzív pótkocsilánc. A síkbeli geometria a megjelenítéstől független állapot.");
+            Add("machine.geometry.processor", "Processzor csukló- és tengelygeometriája", "Járművek", "Járműtípus", "Mozgási al-lépés",
+                "ForesTycoon.Simulation/World/Vehicles/VehicleKinematics.cs", "VehicleKinematics", "vehicle.route|rules.behaviors", "vehicle.pose|vehicle.wheels",
+                "SI-mértékű tengelycsoportok, kerék- vagy alvázcsuklós kormányzás, kormányzási sebesség és passzív pótkocsilánc. A síkbeli geometria a megjelenítéstől független állapot.");
             // Every tunable number appears at its rule, editable in the editor and applied to the world as one journaled change.
             foreach (var spec in GameTuning.Specs)
             {

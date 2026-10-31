@@ -286,7 +286,7 @@ namespace ForesTycoon
                 screenY,
                 screenX + Width / zoom,
                 screenY + Height / zoom,
-                zoom * FramebufferWidth / Math.Max(1, Width));
+                zoom * FramebufferWidth / Math.Max(1, Width), simulationClock.MotionInterpolationAlpha);
 
             world.Draw(renderContext);
             if (diorama)

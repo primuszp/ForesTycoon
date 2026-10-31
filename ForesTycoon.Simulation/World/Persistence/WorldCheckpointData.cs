@@ -8,16 +8,18 @@ namespace ForesTycoon
     internal sealed record VehicleCheckpoint(int Id, int[] Route, double Speed, float Capacity, bool Physics,
         RoadRouteCheckpoint RoadGeometry, double CurrentSpeed, double Position, double PreviousPosition, float Cargo,
         bool CargoStops, int[] SourceTiles, int Mill, bool Blocked, VehicleTransportState State, float TransferProgress,
-        double FuelUsed = 0, double Distance = 0, bool Transit = false, bool TransitArrived = false, bool Broken = false, int LastPassageTile = -1);
+        double FuelUsed = 0, double Distance = 0, bool Transit = false, bool TransitArrived = false, bool Broken = false, int LastPassageTile = -1,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        RigState Rig = null);
     internal sealed record VehiclesCheckpoint(int NextId, bool RoadPhysics, bool CargoStops, VehicleCheckpoint[] Vehicles,
         TruckPhysicsCheckpoint Physics = null);
     internal sealed record TruckPhysicsCheckpoint(float EmptyMass, float Power, float MaxTractiveForce, float DragArea,
         float Drivetrain, float TimberDensity, float FuelPerKilowattHour, float IdleFuelPerHour, float Braking,
-        float RollingAsphalt, float RollingGravel, float RollingDirt, float RoughnessRolling)
+        float RollingAsphalt, float RollingGravel, float RollingDirt, float RoughnessRolling, RigProfile Geometry = null)
     {
         internal static TruckPhysicsCheckpoint From(TruckSpec s) => new(s.EmptyMass, s.Power, s.MaxTractiveForce, s.DragArea,
             s.Drivetrain, s.TimberDensity, s.FuelPerKilowattHour, s.IdleFuelPerHour, s.Braking,
-            s.RollingAsphalt, s.RollingGravel, s.RollingDirt, s.RoughnessRolling);
+            s.RollingAsphalt, s.RollingGravel, s.RollingDirt, s.RoughnessRolling, s.Geometry);
         internal TruckSpec Restore()
         {
             void Check(float value, Tune key) {
@@ -29,8 +31,10 @@ namespace ForesTycoon
             Check(FuelPerKilowattHour, Tune.FuelPerKilowattHour); Check(IdleFuelPerHour, Tune.IdleFuelPerHour); Check(Braking, Tune.Braking);
             Check(RollingAsphalt, Tune.RollingAsphalt); Check(RollingGravel, Tune.RollingGravel);
             Check(RollingDirt, Tune.RollingDirt); Check(RoughnessRolling, Tune.RoughnessRolling);
+            Geometry?.Validate();
             return new(EmptyMass, Power, MaxTractiveForce, DragArea, Drivetrain, TimberDensity, FuelPerKilowattHour, IdleFuelPerHour, Braking) {
-                RollingAsphalt = RollingAsphalt, RollingGravel = RollingGravel, RollingDirt = RollingDirt, RoughnessRolling = RoughnessRolling };
+                RollingAsphalt = RollingAsphalt, RollingGravel = RollingGravel, RollingDirt = RollingDirt, RoughnessRolling = RoughnessRolling,
+                Geometry = Geometry?.Copy() };
         }
     }
     internal sealed record AnimalCheckpoint(int Id, int Tile, int TargetTile, CheckpointPosition Position,
@@ -50,7 +54,9 @@ namespace ForesTycoon
         ForestMachineState State, ForestMachineState Goal, float Cargo, double WorkTime, int Home = -1, bool HomeRequested = false,
         int Source = -1, int Target = -1, int Destination = -1, double CargoValue = 0, double FuelUsed = 0, double UnitPrice = 0,
         UpkeepCheckpoint Upkeep = null, bool HasWork = false, float LogTransferVolume = 0, double LogTransferValue = 0, double LogCycleDuration = 0,
-        double LogGripPhase = ForwarderLoading.Grip, double LogReleasePhase = ForwarderLoading.Release);
+        double LogGripPhase = ForwarderLoading.Grip, double LogReleasePhase = ForwarderLoading.Release,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        RigState Rig = null);
     internal sealed record UpkeepCheckpoint(float Wear, bool Broken, float RepairLeft, uint Seed, int Breakdowns);
     internal sealed record DepotCheckpoint(int TileId, int[] Footprint, CheckpointPosition Position);
     internal sealed record TruckCheckpoint(int Id, int Home, TruckPhase Phase, int Vehicle, int Source, int Destination, bool HomeRequested,

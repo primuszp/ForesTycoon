@@ -470,6 +470,23 @@ namespace ForesTycoon.Editor
                 }
                 Require(GL.GetError() == ErrorCode.NoError, "Tuning list OpenGL error.");
                 FramebufferCapture.SavePng(Path.Combine(output, "tuning.png"), width, height);
+                foreach (int kind in new[] { 0, 1, 2 })
+                foreach (var manoeuvre in new[] { StudyManoeuvre.QuarterTurn, StudyManoeuvre.SCurve }) {
+                catalogView.SelectGeometryStudyForTest(kind, manoeuvre);
+                for (int frame = 0; frame < 2; frame++) {
+                    ui.Update(width, height, width, height, Vec2.One, 1f / 60);
+                    ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 920));
+                    ImGui.Begin("Járműgeometria", ImGuiWindowFlags.NoSavedSettings);
+                    ImGui.SetNextItemOpen(true, ImGuiCond.Always);
+                    catalogView.DrawVehicleGeometryPreview(world); ImGui.End();
+                    GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit); ui.Render(); GL.Finish();
+                }
+                Require(GL.GetError() == ErrorCode.NoError, "Vehicle geometry preview OpenGL error.");
+                Require(catalogView.GeometryStudyForTest?.Failure == null && catalogView.GeometryStudyForTest?.Samples.Length > 100, "Vehicle path study failed.");
+                string studyName = $"vehicle-geometry-{kind}-{manoeuvre}";
+                FramebufferCapture.SavePng(Path.Combine(output, studyName + ".png"), width, height);
+                File.WriteAllText(Path.Combine(output, studyName + ".svg"), catalogView.GeometryStudyForTest.ToSvg(3.5));
+                }
                 Require(catalogView.UnappliedTuning(world) == 2, "Tuning edits were not tracked.");
                 world.QueueTuning(catalogView.TuningOverrides(world));
                 Require(world.Tuning[Tune.DieselPrice] == ForestryLogistics.DieselPrice, "Tuning applied before its tick.");

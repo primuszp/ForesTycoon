@@ -6,7 +6,7 @@ namespace ForesTycoon.Rendering
             double simulationTimeSeconds, ulong simulationTick, float interpolationAlpha,
             bool showNodeMarker, bool showTileHighlight, float nodeMarkerRadius,
             float cameraTilt, float cameraYaw, double viewMinX, double viewMinY, double viewMaxX, double viewMaxY,
-            float pixelsPerWorldUnit = 8f)
+            float pixelsPerWorldUnit = 8f, float motionInterpolationAlpha = -1)
         {
             TotalTimeSeconds = totalTimeSeconds;
             DeltaTimeSeconds = deltaTimeSeconds;
@@ -14,6 +14,7 @@ namespace ForesTycoon.Rendering
             SimulationTimeSeconds = simulationTimeSeconds;
             SimulationTick = simulationTick;
             InterpolationAlpha = interpolationAlpha;
+            MotionInterpolationAlpha = motionInterpolationAlpha < 0 ? interpolationAlpha : motionInterpolationAlpha;
             ShowNodeMarker = showNodeMarker;
             ShowTileHighlight = showTileHighlight;
             NodeMarkerRadius = nodeMarkerRadius;
@@ -32,6 +33,7 @@ namespace ForesTycoon.Rendering
         public double SimulationTimeSeconds { get; }
         public ulong SimulationTick { get; }
         public float InterpolationAlpha { get; }
+        public float MotionInterpolationAlpha { get; }
         public bool ShowNodeMarker { get; }
         public bool ShowTileHighlight { get; }
         public float NodeMarkerRadius { get; }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using OpenTK.Mathematics;
 
 namespace ForesTycoon
@@ -39,16 +39,17 @@ namespace ForesTycoon
 
         public VehicleRoadRoute(Vector3[] centers, Vector2[] gradients)
         {
-            if (centers == null || centers.Length < 2 || gradients?.Length != centers.Length)
+            if (centers == null || centers.Length < 1 || gradients?.Length != centers.Length)
                 throw new ArgumentException("Road geometry needs matching centers and gradients.");
             this.centers = (Vector3[])centers.Clone();
             this.gradients = (Vector2[])gradients.Clone();
-            TileLength = (centers[1] - centers[0]).Xy.Length;
+            TileLength = centers.Length == 1 ? 1 : (centers[1] - centers[0]).Xy.Length;
             if (TileLength < 0.001f) throw new ArgumentException("Road centers must be distinct.");
         }
 
         public Vector3 Sample(double directedPosition)
         {
+            if (Last == 0) return centers[0] + new Vector3((float)directedPosition * TileLength, 0, (float)directedPosition * TileLength * gradients[0].X);
             // Extend the terminal road plane for axle sampling, without extending travel.
             int i = Math.Clamp((int)Math.Floor(directedPosition + 0.5), 0, Last);
             float t = (float)(directedPosition - i + 0.5);
@@ -74,6 +75,7 @@ namespace ForesTycoon
 
         public static double Directed(double position, int last, out int sign)
         {
+            if (last == 0) { sign = 1; return 0; }
             double cycle = position % (last * 2.0);
             if (cycle < 0) cycle += last * 2.0;
             sign = cycle < last ? 1 : -1;

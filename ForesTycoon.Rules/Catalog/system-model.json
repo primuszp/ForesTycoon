@@ -1080,6 +1080,26 @@
       "observe": "",
       "layer": "surface",
       "description": "1 = száraz, jól járható; átázott, gyenge teherbírású talajon csökken, és nő a jármű menetellenállása."
+    },
+    {
+      "id": "vehicle.pose",
+      "name": "Járműegységek fizikai helyzete",
+      "subsystem": "roads",
+      "kind": "Stock",
+      "unit": "m, rad",
+      "observe": "",
+      "description": "Mentett tengelypozíciók, testirányok és aktív/passzív csuklóállapotok.",
+      "layer": "management"
+    },
+    {
+      "id": "vehicle.wheels",
+      "name": "Kerekek kormányszöge és gördülése",
+      "subsystem": "roads",
+      "kind": "Stock",
+      "unit": "rad",
+      "observe": "",
+      "description": "Szerkesztett tengelyelrendezésből és a tényleges síkbeli sebességből számított kerékállapot.",
+      "layer": "management"
     }
   ]
 }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace ForesTycoon
@@ -78,8 +78,8 @@ namespace ForesTycoon
         {
             var stack = StackAt(tile);
             if (stack == null) return false;
-            if (stack.Volume > 0.01f) { Status = "Teli sarangot nem lehet törölni: előbb szállítsd el a fát."; return false; }
-            if (Machines.Exists(m => m.Source == stack || m.Target == stack) || Trucks.Exists(t => t.Source == stack || t.Target == stack))
+            if (stack.Volume > 0f) { Status = "Teli sarangot nem lehet törölni: előbb szállítsd el a fát."; return false; }
+            if (Machines.Exists(m => m.Source == stack || m.Target == stack || m.Working && m.Destination == tile) || Trucks.Exists(t => t.Source == stack || t.Target == stack))
             { Status = "Ezzel a saranggal egy jármű dolgozik."; return false; }
             Stacks.Remove(stack);
             InvalidateOrderPreviews();
