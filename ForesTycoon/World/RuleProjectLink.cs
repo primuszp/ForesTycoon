@@ -25,6 +25,7 @@ internal sealed class RuleProjectLink
     private Task<string> exportSerialization;
     private Task exportWriting;
     private bool exportCapturing;
+    private bool exportRequested;
     private TerrainMap exportMap;
     internal bool ExportPending => exportCapturing || exportSerialization != null || exportWriting != null;
     internal bool HandoffPending => replacement != null;
@@ -41,7 +42,7 @@ internal sealed class RuleProjectLink
         this.handoffTimeout = handoffTimeout ?? TimeSpan.FromMinutes(2);
         if (this.handoffTimeout <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(handoffTimeout));
     }
-    internal void Poll(GameWorld world, double elapsed)
+    internal void Poll(GameWorld world, double elapsed, bool allowAutomaticWorldExport = true)
     {
         PollExport(world);
         if (world.BoundaryPending) return;
@@ -87,6 +88,9 @@ internal sealed class RuleProjectLink
         if (poll <= 0) {
             poll = .5;
             try {
+                if (File.Exists(path + ".world.request")) {
+                    File.Delete(path + ".world.request"); exportRequested = true;
+                }
                 // No published project yet: publish the running one, which is installed by definition.
                 if (!File.Exists(path)) { installed = world.RuleProjectDocument.ToJson(); RuleProject.WriteAtomic(path, installed); }
                 string json = File.ReadAllText(path);
@@ -124,8 +128,11 @@ internal sealed class RuleProjectLink
                 }
             } catch (Exception e) when (e is IOException or InvalidDataException or InvalidOperationException or UnauthorizedAccessException or System.Text.Json.JsonException or ArgumentException) { Error = e.Message; }
         }
-        if (publish <= 0 && !ExportPending && !world.ForegroundPending && !world.BoundaryPending) {
+        // Capturing the entire object catalog owns a world boundary. Never do that periodically
+        // during gameplay: it stalls every simulated animation, even when no editor is open.
+        if ((exportRequested || allowAutomaticWorldExport && publish <= 0) && !ExportPending && !world.ForegroundPending && !world.BoundaryPending) {
             publish = 3;
+            exportRequested = false;
             exportCapturing = true; exportMap = world.Map;
             world.RequestRuleWorldExport("Futó játék", Error, task => { exportCapturing = false; exportSerialization = task; });
         }

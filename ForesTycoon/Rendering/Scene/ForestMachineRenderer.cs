@@ -256,7 +256,8 @@ namespace ForesTycoon
                 Matrix4 trailer = visualRig == null || visualRig.Units.Count < 2 ? TrailerFrame(placement, articulation) :
                     Matrix4.CreateTranslation((ForwarderJoint + ForwarderBogie) * MetreScale, 0, 0) * RigRenderer.Frame(displayPose.Units[1], terrain.Map, 1);
                 if (model != null && !(machine.Kind == ForestMachineKind.Harvester && visualRig?.Profile.Steering == SteeringGeometry.Articulated))
-                    DrawModel(model, machine, position, placement, articulation, settings, terrain, logistics, displayPose);
+                    DrawModel(model, machine, position, placement, articulation, settings, terrain, logistics, displayPose,
+                        machine.WorkPresentation.Sample(machine.WorkTime, alpha));
                 else DrawStandIn(machine, placement, trailer);
                 if (visualRig != null) RigRenderer.Wheels(visualRig, terrain.Map, displayPose);
                 if (machine.Upkeep.Broken) BreakdownSign(placement.Row3.Xyz, (float)machine.Upkeep.RepairLeft);
@@ -300,14 +301,14 @@ namespace ForesTycoon
             return Matrix4.CreateTranslation(-joint, 0, 0) * Matrix4.CreateRotationZ(articulation) * Matrix4.CreateTranslation(joint, 0, 0) * placement;
         }
 
-        private void DrawModel(MachineModel m, ForestMachine machine, double position, Matrix4 placement, float articulation, GraphicsSettings settings, Terrain terrain, ForestryLogistics logistics, RigVisualPose displayPose)
+        private void DrawModel(MachineModel m, ForestMachine machine, double position, Matrix4 placement, float articulation, GraphicsSettings settings, Terrain terrain, ForestryLogistics logistics, RigVisualPose displayPose, double workTime)
         {
             var model = m.Model;
             // Rest pose, then extra local rotations: wheels roll with the distance driven, the crane works while felling or loading.
             float roll = (float)(position * 5.0 / (0.7 * MetreScale) / 5.0);
             bool working = machine.State is ForestMachineState.Felling or ForestMachineState.Loading or ForestMachineState.Unloading;
-            float swing = working ? 0.6f * MathF.Sin((float)machine.WorkTime * 1.3f) : 0;
-            float lift = working ? 0.25f * MathF.Sin((float)machine.WorkTime * 2.1f) : 0;
+            float swing = working ? 0.6f * MathF.Sin((float)workTime * 1.3f) : 0;
+            float lift = working ? 0.25f * MathF.Sin((float)workTime * 2.1f) : 0;
             foreach (int i in model.Order)
             {
                 var node = model.Nodes[i];
@@ -323,7 +324,7 @@ namespace ForesTycoon
                 m.Pose.World[i] = node.Parent < 0 ? local : local * m.Pose.World[node.Parent];
             }
             if (machine.Kind == ForestMachineKind.Forwarder && machine.State is ForestMachineState.Loading or ForestMachineState.Unloading)
-                DrawCraneTransfer(m, machine, placement, terrain, logistics, settings);
+                DrawCraneTransfer(m, machine, placement, terrain, logistics, settings, workTime);
             Matrix4 root = Axis * Matrix4.CreateScale(MetreScale) * placement;
             if (displayPose != null && m.Trailer >= 0 && machine.Kinematics.Profile.Steering == SteeringGeometry.Articulated) {
                 Matrix4 AtJoint(double yaw) => Matrix4.CreateTranslation(-m.SourceJoint) * Axis * Matrix4.CreateScale(MetreScale) *
@@ -379,10 +380,10 @@ namespace ForesTycoon
             if(logRenderer!=null) logRenderer.Draw(logPose,Axis*Matrix4.CreateScale(MetreScale)*Matrix4.CreateTranslation(slot*MetreScale)*frame,frameSettings,sourceMaterial:true);
             else DynamicPrimitiveBatch.Draw(PrimitiveTopology.Quads,()=>RoundLog(frame,(slot-new Vector3(2.5f,0,0))*MetreScale,(slot+new Vector3(2.5f,0,0))*MetreScale,.2f*MetreScale,0));
         }
-        private void DrawCraneTransfer(MachineModel m, ForestMachine machine, Matrix4 placement, Terrain terrain, ForestryLogistics logistics, GraphicsSettings settings)
+        private void DrawCraneTransfer(MachineModel m, ForestMachine machine, Matrix4 placement, Terrain terrain, ForestryLogistics logistics, GraphicsSettings settings, double workTime)
         {
             bool unloading=machine.State==ForestMachineState.Unloading;
-            double phase=ForwarderLoading.Phase(machine);
+            double phase=ForwarderLoading.Phase(machine, workTime);
             int tile=unloading?machine.Destination:machine.Source.Tile;
             StackPlace(terrain.Map,tile,out Vector2 at,out Vector2 heading);
             Matrix4 stackFrame=Placement(terrain.Map,at,heading,.8f);
@@ -395,7 +396,7 @@ namespace ForesTycoon
             Vector3 bunk=Vector3.TransformPosition(ForwarderLoading.Slot(cargoIndex,true)*MetreScale,placement);
             Matrix4 modelFrame=Axis*Matrix4.CreateScale(MetreScale)*placement;
             Vector3 ToModel(Vector3 world) {var g=Vector3.TransformPosition(world,placement.Inverted())/MetreScale;return g;}
-            Vector3 target=ForwarderLoading.Target(ToModel(unloading?bunk:ground),ToModel(unloading?ground:bunk),ForwarderLoading.AnimationPhase(machine),out float jaw);
+            Vector3 target=ForwarderLoading.Target(ToModel(unloading?bunk:ground),ToModel(unloading?ground:bunk),ForwarderLoading.AnimationPhase(machine, workTime),out float jaw);
             Vector3 actual=m.Rig.Solve(m.Pose,new Vector3(target.X,target.Z,-target.Y),jaw,machine.Id);
             if(held) {
                 Vector3 world=Vector3.TransformPosition(actual,modelFrame);

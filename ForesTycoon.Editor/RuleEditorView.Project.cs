@@ -70,7 +70,7 @@ internal sealed partial class RuleEditorView
                     if (catalog?.Schema != "forest-rule-world" || catalog.Version != 1 || catalog.Objects == null)
                         throw new InvalidDataException("Érvénytelen játékobjektum-katalógus.");
                     liveObjects = catalog; liveStatus = $"{catalog.Source}: {catalog.Objects.Count} objektum · tick {catalog.Tick}";
-                    if (DateTime.TryParse(catalog.PublishedUtc, out var published) && DateTime.UtcNow - published.ToUniversalTime() > TimeSpan.FromSeconds(15)) liveStatus += " · a játék kapcsolata szünetel";
+                    if (DateTime.TryParse(catalog.PublishedUtc, out var published) && DateTime.UtcNow - published.ToUniversalTime() > TimeSpan.FromSeconds(15)) liveStatus += " · korábbi pillanatkép; frissítés kérhető";
                     if (catalog.Error != null) liveStatus += " · " + catalog.Error;
                 } else { liveObjects = null; liveStatus = "Nincs élő játék-katalógus. A tesztvilág forrása külön választható."; }
             } catch (Exception e) { liveObjects = null; liveStatus = e.Message; }

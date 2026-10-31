@@ -3,6 +3,20 @@ namespace ForesTycoon.Tests;
 public class FixedStepClockTests
 {
     [Fact]
+    public void PresentationTimeAdvancesEveryRenderFrameAtTheSlowGameplayPaceAndFreezesWhenPaused()
+    {
+        var clock = new FixedStepClock(30) { Speed = .25 };
+        double previous = 0;
+        for (int frame = 0; frame < 600; frame++) {
+            clock.AdvanceWork(1d / 60, _ => true);
+            double now = clock.PresentationTimeSeconds;
+            if (frame > 9) Assert.Equal(.25 / 60, now - previous, 10);
+            previous = now;
+        }
+        clock.IsPaused = true; clock.AdvanceWork(1, _ => true);
+        Assert.Equal(previous, clock.PresentationTimeSeconds);
+    }
+    [Fact]
     public void DroppedTimeAccountsForCapAndWorkBudgetAndReset()
     {
         var clock = new FixedStepClock(10, 8);

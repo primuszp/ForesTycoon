@@ -40,6 +40,8 @@ namespace ForesTycoon.Engine
         public bool IsPaused { get; set; }
         public ulong Tick { get; private set; }
         public double SimulationTimeSeconds => Tick * StepSeconds;
+        /// <summary>Same tick interval as pose interpolation, advancing between completed ticks too.</summary>
+        public double PresentationTimeSeconds => Math.Max(0, SimulationTimeSeconds - StepSeconds + Math.Min(accumulatorSeconds, StepSeconds * 2));
         public float InterpolationAlpha => (float)Math.Clamp(accumulatorSeconds / StepSeconds, 0, 1);
         /// <summary>Vehicle presentation may predict at most one tick while cooperative work finishes.</summary>
         public float MotionInterpolationAlpha => (float)Math.Clamp(accumulatorSeconds / StepSeconds, 0, 2);
