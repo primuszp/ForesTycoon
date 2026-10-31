@@ -19,7 +19,12 @@ internal sealed partial class RuleEngine
         if (flow.From >= 0) amount = Math.Min(amount, Math.Max(0, stock.Read(flow.From) - Math.Max(0, stock.Min(flow.From))));
         double moved = 0;
         if (flow.Spread != null) {
-            var members = flow.Spread.Members(world, id);
+            var buffered = flow.Spread.BufferedMembers;
+            // Keep the stack bound independent of extension scopes' declared collection size.
+            Span<int> memberBuffer = buffered == null ? Span<int>.Empty
+                : buffered.Capacity <= 16 ? stackalloc int[buffered.Capacity] : new int[buffered.Capacity];
+            ReadOnlySpan<int> members = buffered == null ? flow.Spread.Members(world, id)
+                : memberBuffer[..buffered.Read(world, id, memberBuffer)];
             var into = flow.SpreadScope.Fields[flow.SpreadField];
             double self = flow.Downhill ? scope.Fields[flow.OwnLevel].Read(world, id) : 0, total = 0;
             Span<double> weights = members.Length <= 16 ? stackalloc double[members.Length] : new double[members.Length];

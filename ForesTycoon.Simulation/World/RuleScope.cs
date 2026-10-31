@@ -37,4 +37,10 @@ internal sealed record RuleScope(string Id, string Name, string Element, Func<Si
 
 }
 /// <summary>A collection of a scope's element (“neighbours”) whose members are elements of scope <paramref name="Target"/>.</summary>
-internal sealed record RuleScopeCollection(string Name, string Target, Func<SimulationWorld, int, int[]> Members);
+internal sealed record RuleScopeCollection(string Name, string Target, Func<SimulationWorld, int, int[]> Members)
+{
+    /// <summary>Optional bounded reader; writes members in the same order as <see cref="Members"/>.</summary>
+    public RuleScopeBufferedMembers BufferedMembers { get; init; }
+}
+internal delegate int RuleScopeMemberReader(SimulationWorld world, int id, Span<int> destination);
+internal sealed record RuleScopeBufferedMembers(int Capacity, RuleScopeMemberReader Read);

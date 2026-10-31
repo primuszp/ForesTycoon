@@ -14,6 +14,50 @@ public class ParallelFlowTests
     }
     private static string State(GameWorld world) => JsonSerializer.Serialize(world.CaptureCheckpoint());
 
+    [Theory]
+    [InlineData(5)]
+    [InlineData(17)]
+    public void BufferedNeighboursPreserveOrderAtEdgesAndForInvalidTiles(int nodes)
+    {
+        using var world = new GameWorld(TerrainSettings.Default.WithNodeSize(nodes, 42), enableRendering: false);
+        var neighbours = RuleEngine.Scope("tile").Collections.Single(c => c.Name == "neighbours");
+        var buffered = Assert.IsType<RuleScopeBufferedMembers>(neighbours.BufferedMembers);
+        var destination = new int[buffered.Capacity];
+        foreach (int id in Enumerable.Range(0, world.Map.Tiles.Count).Concat(new[] { -1, world.Map.Tiles.Count, int.MaxValue })) {
+            Array.Fill(destination, -123);
+            int count = buffered.Read(world, id, destination);
+            Assert.Equal(neighbours.Members(world, id), destination.Take(count));
+        }
+    }
+
+    [Fact]
+    public void BufferedRunoffMatchesArrayReaderIncludingPreviewAndLedger()
+    {
+        using var buffered = new GameWorld(TerrainSettings.Default.WithNodeSize(17, 42), enableRendering: false);
+        using var arrays = new GameWorld(TerrainSettings.Default.WithNodeSize(17, 42), enableRendering: false);
+        var tile = RuleEngine.Scope("tile");
+        var surface = tile.Fields.Single(f => f.Name == "surfaceWater");
+        foreach (var world in new[] { buffered, arrays })
+            for (int id = 0; id < world.Map.Tiles.Count; id++) surface.Write(world, id, id % 7 * 25);
+        RuleEngine Engine(GameWorld world, bool useBuffer) => new(
+            RuleEngine.StarterRules().Where(r => r.Id == "water.runoff").ToList(), new(), Array.Empty<string>(), world.ReadRuleValue,
+            scopes: RuleEngine.Scopes.Select(s => s.Id != "tile" || useBuffer ? s : s with {
+                Collections = s.Collections.Select(c => c with { BufferedMembers = null }).ToArray()
+            }));
+        var fast = Engine(buffered, true); var reference = Engine(arrays, false);
+        string before = State(buffered);
+        for (int id = 0; id < buffered.Map.Tiles.Count; id++)
+            Assert.Equal(JsonSerializer.Serialize(reference.PreviewInfluences(arrays, "water.runoff", id, .001)),
+                JsonSerializer.Serialize(fast.PreviewInfluences(buffered, "water.runoff", id, .001)));
+        Assert.Equal(before, State(buffered));
+        for (int step = 0; step < 10; step++) {
+            fast.Run(buffered, .001, step * .001);
+            reference.Run(arrays, .001, step * .001);
+            Assert.Equal(State(arrays), State(buffered));
+            Assert.Equal(reference.FlowTotals.OrderBy(p => p.Key), fast.FlowTotals.OrderBy(p => p.Key));
+        }
+    }
+
     [Fact]
     public void MembershipCachesInvalidateOnRemovalAndSameStoreRestore()
     {

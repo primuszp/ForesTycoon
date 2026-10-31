@@ -432,6 +432,9 @@ partial class SimulationWorld
             return ids[..count].ToArray();
         };
 
+        internal static RuleScopeBufferedMembers DirectBufferedMembers(string property) => property != nameof(Neighbours) ? null
+            : new(4, (w, id, destination) => w.Map.IsValidTileId(id) ? w.Map.GetTileNeighbours(id, destination) : 0);
+
         // Collections hand out views of their own, so reading them never rebinds the view a rule is visiting.
         private TileView neighbour; private TreeView trees; private StumpView stumps;
         public IEnumerable<ITile> Neighbours
@@ -873,7 +876,9 @@ partial class SimulationWorld
         var collections = entity.Collections.Where(c => c.Addressable).Select(c => {
             var items = c.Property.GetMethod;
             return new RuleScopeCollection(c.Name, c.Target, Direct<Func<SimulationWorld, int, int[]>>("DirectMembers", c.Property.Name)
-                ?? ((w, id) => ((IEnumerable<object>)items.Invoke(Bound(w, id), null)).Select(m => m is IRuleInstance live ? live.RuleId : (int)((RuleView)m).Index).ToArray()));
+                ?? ((w, id) => ((IEnumerable<object>)items.Invoke(Bound(w, id), null)).Select(m => m is IRuleInstance live ? live.RuleId : (int)((RuleView)m).Index).ToArray())) {
+                    BufferedMembers = (RuleScopeBufferedMembers)viewType.GetMethod("DirectBufferedMembers", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)?.Invoke(null, new object[] { c.Property.Name })
+                };
         }).ToArray();
         return new(entity.Id, entity.Name, entity.Element, w => View(w, viewType).Elements(), w => View(w, viewType).Size(), fields.ToArray(), actions) {
             PrepareElements = w => Bound(w, 0).PrepareElementsWork(), PreparedElements = w => Bound(w, 0).PreparedElements,

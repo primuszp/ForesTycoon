@@ -726,3 +726,34 @@ eldobott szimulációs idő nélkül. Ez egyetlen mérési pár, nem általános
 a CPU-idő ingadozásából nem állítunk gyorsulást. A nagyobb térképen továbbra is a
 víz- és egyéb szimulációs munka dominál, ezért az allokációs megtakarítás aránya kisebb.
 A gépi összehasonlítás helyi eredménye: `artifacts/simulation-metrics/optimization-comparison.json`.
+
+### Lefolyás: szomszédlista tömballokáció nélkül
+
+A szabálygyűjtemények opcionális, korlátos pufferes olvasót is kínálhatnak.
+A csempeszomszédok olvasója a hívó legfeljebb négy azonosítónak fenntartott
+munkapufferét tölti ki; az általános, tömböt visszaadó olvasó továbbra is elérhető.
+Az áramlási kernel a pufferes képességet használja, ha van, különben a régi utat.
+A kis pufferek a veremben vannak, a nagyobb bővítési gyűjtemények nem növelik
+korlátlanul a veremhasználatot. Nincs megosztott, felülírható szomszédtömb.
+A szomszédok bejárási sorrendje és a vízátadás számításai változatlanok.
+
+Egy 2026-10-30-i páros mérés, ugyanazzal a fenti 120 másodperces, profilozott,
+virtuális hostprotokollal:
+
+| Pálya | Allokáció előtte | Allokáció utána | Csökkenés |
+|---|---:|---:|---:|
+| 64×64 | 519 886 624 B | 470 441 832 B | 9,51% |
+| 128×128 | 1 800 022 320 B | 1 632 665 816 B | 9,30% |
+
+Mindkét végállapot teljes checkpoint SHA256 értéke egyezik az előző táblázathoz
+tartozó állapottal is; a végső tick 3599, az eldobott idő nulla. A futás végén
+megmaradó 0,0333 másodperc a virtuális host tört tickje, nem eldobott idő.
+A CPU-idők ebből az egy mérési párból nem igazolnak gyorsulást.
+A helyi mérési naplók és gépi összehasonlítás az `artifacts/flow-buffer-metrics/`
+könyvtárban vannak. A regressziók ellenőrzik minden csempe szomszédsorrendjét,
+az érvénytelen azonosítókat, valamint a pufferes és tömbös kernel pontos
+világállapot-, főkönyv- és előnézet-egyezését.
+
+Ellenőrzés: 22 célzott teszt, majd a teljes 1609 tesztes csomag hibátlanul
+lefutott, kihagyás nélkül. A Release build 0 figyelmeztetést és 0 hibát adott;
+mind a 14 natív ellenőrzés, a szabályaudit és a diff-ellenőrzés sikeres.
