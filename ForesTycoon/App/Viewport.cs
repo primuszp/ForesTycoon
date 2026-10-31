@@ -565,10 +565,12 @@ namespace ForesTycoon
             // on the loading screen for good whenever that last pass needed more than one 4 ms slice.
             if (world == null || !isLoaded || !world.MapGeometryPrepared)
             {
+                UpdateAudio(e.Time, ready: false);
                 RenderLoadingFrame();
                 return;
             }
             world.WithSpecies(() => { ruleProjectLink.Poll(world, e.Time); RunFrame(); return 0; });
+            UpdateAudio(e.Time);
             if (smokeTestFrameLimit.HasValue)
             {
                 RenderDevice.CheckErrors($"Game smoke test at frame {frameIndex}");
@@ -588,6 +590,7 @@ namespace ForesTycoon
         private void DisposeGlResources()
         {
             if (glResourcesDisposed) return;
+            soundscape?.Dispose(); soundscape = null;
             worldCreation?.Dispose(); worldCreation = null;
             mapPreparation?.Dispose(); mapPreparation = null;
             roadSurveys.Dispose(); orderPreviews.Dispose(); imgui?.Dispose(); postProcess?.Dispose(); world?.Dispose();

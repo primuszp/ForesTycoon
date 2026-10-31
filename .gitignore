@@ -26,5 +26,9 @@ images/current_state.gif
 # Dear ImGui runtime layout
 imgui.ini
 
-# Purchased model packs (licence forbids redistribution; repo is public)
+# Purchased model and audio packs (licence forbids redistribution; repo is public)
 ForesTycoon/Assets/Licensed/
+
+# Downloaded Nature Sound FX archives must also stay private.
+**/[Nn]ature*[Ss]ound*[Ff][Xx]*.zip
+**/[Nn]ature*[Ss]ound*[Ff][Xx]*.unitypackage
