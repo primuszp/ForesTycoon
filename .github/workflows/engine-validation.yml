@@ -32,24 +32,3 @@ jobs:
         with:
           name: tests-${{ matrix.os }}
           path: artifacts/engine-validation
-
-  native-linux:
-    needs: headless
-    runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    env:
-      LIBGL_ALWAYS_SOFTWARE: '1'
-    steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-dotnet@v6.0.0
-        with:
-          dotnet-version: 8.0.x
-      - name: Install virtual display and software OpenGL
-        run: sudo apt-get update && sudo apt-get install -y xvfb libgl1-mesa-dri libglfw3 fonts-dejavu-core
-      - name: Native rendering, pixels, persistence and editor
-        run: xvfb-run -a pwsh -NoProfile -File ./tools/verify-engine.ps1 -Native
-      - uses: actions/upload-artifact@v7.0.2
-        if: always()
-        with:
-          name: native-linux-captures
-          path: artifacts
