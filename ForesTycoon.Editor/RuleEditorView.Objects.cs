@@ -49,6 +49,9 @@ internal sealed partial class RuleEditorView
     // ── The workspace ────────────────────────────────────────────────────
     private void ObjectsTab(GameWorld world)
     {
+        if (EditorStyle.QuietButton("Futó játék adatainak frissítése", "Egyszeri pillanatképet kér a játéktól. Automatikus frissítés szüneteltetett játékban történik."))
+            Try(() => { ForesTycoon.Rules.RuleProject.WriteAtomic(projectPath + ".world.request", "refresh"); message = "Játékpillanatkép kérése elküldve."; });
+        ImGui.TextWrapped(liveStatus);
         selectedObject ??= Objects.Entities.FirstOrDefault(e => RuleEngine.Scope(e.Id) != null)?.Id ?? Objects.Entities.FirstOrDefault()?.Id;
         var rules = RuleBookRules(world);
         var uses = FieldUses(rules).ToDictionary(u => u.Key, StringComparer.Ordinal);

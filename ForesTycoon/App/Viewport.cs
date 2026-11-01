@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.IO;
 using OpenTK.Mathematics;
@@ -274,7 +274,7 @@ namespace ForesTycoon
                 frameClock.TotalTimeSeconds,
                 frameClock.DeltaTimeSeconds,
                 frameIndex,
-                simulationClock.SimulationTimeSeconds,
+                simulationClock.PresentationTimeSeconds,
                 simulationClock.Tick,
                 simulationClock.InterpolationAlpha,
                 isTerrainEditTool,
@@ -569,7 +569,7 @@ namespace ForesTycoon
                 RenderLoadingFrame();
                 return;
             }
-            world.WithSpecies(() => { ruleProjectLink.Poll(world, e.Time); RunFrame(); return 0; });
+            world.WithSpecies(() => { ruleProjectLink.Poll(world, e.Time, allowAutomaticWorldExport: simulationClock.IsPaused); RunFrame(); return 0; });
             UpdateAudio(e.Time);
             if (smokeTestFrameLimit.HasValue)
             {

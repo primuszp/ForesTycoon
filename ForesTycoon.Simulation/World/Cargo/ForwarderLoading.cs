@@ -20,10 +20,10 @@ namespace ForesTycoon
                 (cargo ? 2.2f : .2f) + layer * .2f * MathF.Sqrt(3));
         }
         internal static double Duration(ForestMachine m) => m.LogCycleDuration > 0 ? m.LogCycleDuration : m.Rule("loading.cycleSeconds");
-        internal static double Phase(ForestMachine m) => Math.Clamp(m.WorkTime / Duration(m), 0, 1);
-        internal static float AnimationPhase(ForestMachine m)
+        internal static double Phase(ForestMachine m, double? workTime = null) => Math.Clamp((workTime ?? m.WorkTime) / Duration(m), 0, 1);
+        internal static float AnimationPhase(ForestMachine m, double? workTime = null)
         {
-            double phase = Phase(m), grip = m.LogGripPhase, release = m.LogReleasePhase;
+            double phase = Phase(m, workTime), grip = m.LogGripPhase, release = m.LogReleasePhase;
             return (float)(phase <= grip ? phase / grip * Grip : phase <= release ? Grip + (phase - grip) / (release - grip) * (Release - Grip)
                 : Release + (phase - release) / (1 - release) * (1 - Release));
         }

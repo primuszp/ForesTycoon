@@ -33,10 +33,10 @@ vec2 forestSeason(vec4 c){
 }
 // Fresh leaves: full spring colour while the leaves unfold, fading to the summer colour by full leaf.
 float forestSpring(vec4 c){
-    if(!forestCrown(c)) return 0;
+    if(!forestCrown(c)) return 0.0;
     int slot=int(forest_tree)*4;
     float start=texelFetch(forest_state,slot+2).w;
-    if(start<0 || fract(forest_year)>=0.75) return 0;
+    if(start<0 || fract(forest_year)>=0.75) return 0.0;
     vec4 bounds=texelFetch(forest_state,slot+3);
     return 1.0-smoothstep(bounds.x,bounds.y,fract(forest_year-start));
 }

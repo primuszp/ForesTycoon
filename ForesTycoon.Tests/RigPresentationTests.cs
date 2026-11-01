@@ -3,6 +3,18 @@ namespace ForesTycoon.Tests;
 public class RigPresentationTests
 {
     [Fact]
+    public void CraneAnimationInterpolatesOnlyPublishedWorkAndRestartsAtACycleBoundary()
+    {
+        var work = new WorkAnimationPresentation();
+        work.Publish(new(1, ForestMachineState.Loading)); work.Publish(new(2, ForestMachineState.Loading));
+        Assert.Equal(1.5, work.Sample(2.8, .5f));
+        Assert.Equal(2, work.Sample(2.8, 2));
+        work.Publish(new(.2, ForestMachineState.Loading));
+        Assert.Equal(.1, work.Sample(5, .5f));
+        work.Publish(new(.4, ForestMachineState.Unloading));
+        Assert.Equal(.2, work.Sample(5, .5f));
+    }
+    [Fact]
     public void UnfinishedCooperativeTicksNeverLeakIntoThePublishedMotion()
     {
         var map = new TerrainMap(TerrainSettings.Default.WithNodeSize(17, 42), (_, _) => 4);

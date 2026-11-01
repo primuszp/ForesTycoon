@@ -26,6 +26,10 @@ A söpört terület a szerkeszthető téglalap-karosszériakontúrok, kerekek é
 
 ### Folyamatos mozgás és terepi alátámasztás
 
+A játék futása közben nem készül időzített teljes editor-világkatalógus. A korábbi hárommásodperces publikálás a kooperatív másolás teljes idejére birtokolta a világhatárt, ezért minden szimulált animáció periodikusan megállhatott. Automatikus katalógusfrissítés csak szüneteltetett játékban történik; az editor Objektumok lapjáról külön egyszeri kérés küldhető (`.world.request`). Ez a kérés továbbra is konzisztens, lezárt pillanatképet készít.
+
+A vizuális szimulációs idő a pozícióinterpolációval azonos tickközben képkockánként halad (`PresentationTimeSeconds`), így a halak és az időből számított látványanimációk nem csak tickhatáron lépnek. A daru munkafázisa külön lezárt időmintákból interpolálódik; a renderer nem változtatja meg a rakodás fizikai időzítését, készletét vagy munkaciklusát.
+
 A renderer csak a teljesen lezárt világ-tickben publikált mechanikai pillanatképekből interpolál (`RigPresentation`). Egy több képkockára bontott tick köztes járműmozgatása nem válik idő előtt láthatóvá. A mozgási alfa legfeljebb egy ticknyi előrejelzést enged, amíg a kooperatív munka elkészül; a megállt jármű nem extrapolálódik. A csuklók a kirajzolt köztes állapotokban is pontosan zártak. Ezek a megjelenítési pillanatképek nem változtatják meg a mentett szimulációs állapotot.
 
 A kamion 3D testhelyzetét a tényleges vizuális tengelytáv és a terepi keréktámaszok adják. A vontató első/hátsó támasza meghatározza a bólintást, a bal/jobb támasz a dőlést. A pótkocsi az alvázon levő, magassággal rendelkező valódi nyeregponthoz csatlakozik; ettől a ponttól merev távolsággal keressük a hátsó keréktámaszt. Dombtetőn és völgyben ezért a vontató és a pótkocsi eltérően bólint, a kapcsolópont zárt marad, a testeket nem nyújtjuk. Ez geometriai alátámasztás, nem dinamikus rugózás vagy tehetetlenségi modell.

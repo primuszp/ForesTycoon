@@ -266,16 +266,19 @@ namespace ForesTycoon
             foreach (int unit in TrafficWork()) yield return unit;
             foreach (int unit in Logistics.PublishInventoryWork()) yield return unit;
             var motion = new System.Collections.Generic.List<(RigPresentation Target, RigPresentationSample Sample)>();
+            var workAnimations = new System.Collections.Generic.List<(WorkAnimationPresentation Target, WorkAnimationSample Sample)>();
             foreach (var v in vehicles.Vehicles) {
                 if (v.Kinematics != null) motion.Add((v.Presentation, new(v.Kinematics.CapturePresentation(), v.CurrentSpeed > .0001 && !v.RouteBlocked && !v.Broken)));
                 yield return 1;
             }
             foreach (var m in Logistics.Machines) {
+                workAnimations.Add((m.WorkPresentation, new(m.WorkTime, m.State)));
                 if (m.Kinematics != null) motion.Add((m.Presentation, new(m.Kinematics.CapturePresentation(), m.State == ForestMachineState.Driving && !m.Upkeep.Broken)));
                 yield return 1;
             }
             // The entire set is committed without a yield, before the host advances its logical tick.
             foreach (var item in motion) item.Target.Publish(item.Sample);
+            foreach (var item in workAnimations) item.Target.Publish(item.Sample);
             worldTick++;
         }
 

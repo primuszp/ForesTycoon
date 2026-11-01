@@ -8,6 +8,32 @@ public sealed class RuleWorldExportTests
     private static GameWorld World() => new(TerrainSettings.Default.WithNodeSize(17, 42), enableRendering: false);
 
     [Fact]
+    public async Task GameplayDoesNotPeriodicallyTakeWorldOwnershipButAnExplicitEditorRequestStillWorks()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "forestycoon-running-export-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try {
+            using var world = World(); string path = Path.Combine(directory, "project.json");
+            RuleProject.WriteAtomic(path, world.RuleProjectDocument.ToJson());
+            var link = new RuleProjectLink(path, adoptRunning: true, bootstrapAlgorithms: false);
+            // Cross several of the old three-second automatic export deadlines.
+            for (int second = 0; second < 12; second++) {
+                link.Poll(world, 1, allowAutomaticWorldExport: false);
+                Assert.False(world.ForegroundPending); Assert.False(world.BoundaryPending); Assert.False(link.ExportPending);
+                world.Update(1d / 30);
+            }
+            Assert.Equal(12UL, world.SimulationTick); Assert.False(File.Exists(path + ".world.json"));
+            File.WriteAllText(path + ".world.request", "refresh");
+            link.Poll(world, 1, allowAutomaticWorldExport: false);
+            Assert.True(world.RuleExportPending); Assert.False(File.Exists(path + ".world.request"));
+            await FinishExport(world, link);
+            var exported = RuleWorldCatalog.FromJson(File.ReadAllText(path + ".world.json"));
+            Assert.Equal(12UL, exported.Tick);
+            link.Poll(world, 4, allowAutomaticWorldExport: false); Assert.False(link.ExportPending);
+        } finally { Directory.Delete(directory, true); }
+    }
+
+    [Fact]
     public async Task SlicedSnapshotIsBoundedAndRemainsIndependentOfLaterCommandsAndTicks()
     {
         using var world = World();

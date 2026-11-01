@@ -34,6 +34,7 @@ namespace ForesTycoon
         internal VehicleKinematics Kinematics => SteeringDriver?.Rig;
         internal RigState PreviousRigPose;
         internal readonly RigPresentation Presentation = new();
+        internal readonly WorkAnimationPresentation WorkPresentation = new();
         internal int[] SteeringPath;
         internal VehicleRoadRoute SteeringRoad;
         internal ForestMachineState State;
