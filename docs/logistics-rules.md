@@ -256,3 +256,19 @@ felülírható kijelölt-fa feltétel; valódi forráskészlet, cél és kopás,
 a markolóban tartott rakomány; hiányzó út és azonos forrás/cél motorvédelme;
 mindhárom elfogadott parancs pontos szeletelt állapotegyezése; megkezdett
 parancs mentési határa, visszatöltése és eltérő szeletméretű folytatása.
+
+## Esős fuvarozás összehasonlítása grafika nélkül
+
+```sh
+dotnet build ForesTycoon/ForesTycoon.csproj -c Release
+dotnet ForesTycoon/bin/Release/net8.0/ForesTycoon.dll --rain-haulage-scenario > rain-haulage.csv
+```
+
+A három futás azonos térképről, 65%-os kezdeti makadámút-állapotról és
+48 m³ út menti fakészlettel indul. A teherautó az eső elején, az eső
+végén vagy az eső előtti útjavítás után kapja meg a fuvarmegbízást.
+A szimuláció 90 másodperc esőt, majd 150 másodperc száraz időt futtat.
+A CSV öt másodpercenként közli a csapadékintenzitást, az átlagos
+útállapotot (0–1), a rakodón maradt és a malomba beszállított mennyiséget
+(m³), valamint az egyenleget (eFt). A rakodó előre feltöltött, így a
+mérés az út, a fuvar és a javítás kölcsönhatására szorítkozik.
