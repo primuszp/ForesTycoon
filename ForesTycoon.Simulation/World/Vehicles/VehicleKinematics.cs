@@ -47,6 +47,30 @@ internal sealed record RigProfile(SteeringGeometry Steering, double FrontLength,
                 !Positive(t.MaxAngle) || t.MaxAngle >= Math.PI / 2)
                 throw new ArgumentException("Invalid vehicle hitch.");
     }
+    /// <summary>A profile can be valid to integrate and still be no vehicle: these are the designer's warnings, in plain words.</summary>
+    internal string[] Warnings()
+    {
+        var result = new List<string>();
+        foreach (var group in Axles.GroupBy(a => VehiclePathStudy.AxleGroup(a.Id)).Where(g => g.Count() > 1)) {
+            var axles = group.OrderBy(a => a.X).ToArray();
+            for (int i = 1; i < axles.Length; i++)
+                if (axles[i].X - axles[i - 1].X < axles[i].Radius + axles[i - 1].Radius - 1e-9) {
+                    result.Add($"{VehiclePathStudy.AxleName(axles[i].Id)}: a szomszédos kerekek átfedik egymást; a tengelyosztás legalább {axles[i].Radius + axles[i - 1].Radius:F2} m legyen.");
+                    break;
+                }
+        }
+        var body = Axles.Where(a => a.Unit == 0).ToArray();
+        if (Steering == SteeringGeometry.Axle) {
+            double steered = body.Where(a => a.Steered).Min(a => a.X), fixedAxle = body.Where(a => !a.Steered).Max(a => a.X);
+            if (steered - fixedAxle < body[0].Radius * 2) result.Add("A kormányzott és a merev tengelycsoport egymásba ér; növeld a tengelytávot vagy csökkentsd a tengelyosztást.");
+            if (Trailers.Length > 0 && Trailers[0].HitchX >= steered) result.Add("A vonópont a kormányzott tengely elé került.");
+        }
+        foreach (var (trailer, i) in Trailers.Select((t, i) => (t, i))) {
+            var group = Axles.Where(a => a.Unit == i + (Steering == SteeringGeometry.Articulated ? 2 : 1)).ToArray();
+            if (group.Max(a => a.X) + group[0].Radius > trailer.Length) result.Add("A pótkocsi tengelycsoportja eléri a kapcsolópontot; növeld a pótkocsi hosszát.");
+        }
+        return result.ToArray();
+    }
     internal RigProfile Copy() => this with { Axles = (RigAxle[])Axles.Clone(), Trailers = (RigTrailer[])Trailers.Clone() };
     internal double MinimumRadius => Steering == SteeringGeometry.Axle ?
         Axles.Where(a => a.Unit == 0 && a.Steered).Max(a => Math.Abs(a.X) / Math.Tan(MaxSteer) + a.Track * .5) :
@@ -181,6 +205,8 @@ internal sealed class VehicleKinematics
     {
         if (previous == null || previous.Units.Length != units.Length || previous.Rolls.Length != rolls.Length) return this;
         alpha = Math.Clamp(alpha, 0, maximumAlpha);
+        // The published state is exact: re-closing its joints would only add rounding to a vehicle at rest.
+        if (alpha == 1) return this;
         double Angle(double a, double b) => Wrap(a + Wrap(b - a) * alpha);
         var result = new VehicleKinematics(new RigState(Profile, new RigUnitPose[units.Length], 0, new double[rolls.Length]));
         result.Steer = Math.Clamp(previous.Steer + (Steer - previous.Steer) * alpha, -Profile.EquivalentSteerLimit, Profile.EquivalentSteerLimit);

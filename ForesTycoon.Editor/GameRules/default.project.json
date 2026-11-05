@@ -1,6 +1,6 @@
 {
   "schema": "forest-rule-project",
-  "version": 7,
+  "version": 8,
   "name": "ForesTycoon szab\u00E1lyrendszer",
   "tuning": {
     "VehicleTimeScale": 4,
@@ -94,7 +94,20 @@
     "ProcessorRearAxles": 1,
     "ProcessorAxleSpacing": 1.4,
     "ProcessorSteeringModel": 0,
-    "ProcessorWheelbase": 3.2326
+    "ProcessorWheelbase": 3.2326,
+    "TruckModelWheelbase": 4,
+    "TruckModelTrack": 2,
+    "TruckModelWheelRadius": 0.5,
+    "TruckModelHitch": -1.5,
+    "TruckModelTrailerLength": 6,
+    "ForwarderModelFrontLength": 2.2,
+    "ForwarderModelRearLength": 4.8,
+    "ForwarderModelTrack": 2.5,
+    "ForwarderModelWheelRadius": 0.7,
+    "ProcessorModelFrontLength": 2.8,
+    "ProcessorModelRearLength": 3.2,
+    "ProcessorModelTrack": 2.5,
+    "ProcessorModelWheelRadius": 0.7
   },
   "behaviors": {
     "schema": "forest-behaviors",
@@ -30610,6 +30623,292 @@
         "id": "default.world.tuning.ProcessorWheelbase",
         "name": "ProcessorWheelbase",
         "hook": "tuning.ProcessorWheelbase",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.TruckModelWheelbase",
+        "name": "TruckModelWheelbase",
+        "hook": "tuning.TruckModelWheelbase",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.TruckModelTrack",
+        "name": "TruckModelTrack",
+        "hook": "tuning.TruckModelTrack",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.TruckModelWheelRadius",
+        "name": "TruckModelWheelRadius",
+        "hook": "tuning.TruckModelWheelRadius",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.TruckModelHitch",
+        "name": "TruckModelHitch",
+        "hook": "tuning.TruckModelHitch",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.TruckModelTrailerLength",
+        "name": "TruckModelTrailerLength",
+        "hook": "tuning.TruckModelTrailerLength",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.ForwarderModelFrontLength",
+        "name": "ForwarderModelFrontLength",
+        "hook": "tuning.ForwarderModelFrontLength",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.ForwarderModelRearLength",
+        "name": "ForwarderModelRearLength",
+        "hook": "tuning.ForwarderModelRearLength",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.ForwarderModelTrack",
+        "name": "ForwarderModelTrack",
+        "hook": "tuning.ForwarderModelTrack",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.ForwarderModelWheelRadius",
+        "name": "ForwarderModelWheelRadius",
+        "hook": "tuning.ForwarderModelWheelRadius",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.ProcessorModelFrontLength",
+        "name": "ProcessorModelFrontLength",
+        "hook": "tuning.ProcessorModelFrontLength",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.ProcessorModelRearLength",
+        "name": "ProcessorModelRearLength",
+        "hook": "tuning.ProcessorModelRearLength",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.ProcessorModelTrack",
+        "name": "ProcessorModelTrack",
+        "hook": "tuning.ProcessorModelTrack",
+        "kind": "world",
+        "objectId": null,
+        "output": "native",
+        "nodes": [
+          {
+            "id": "native",
+            "name": "Beépített eredmény",
+            "operation": "Native",
+            "value": 0,
+            "key": "",
+            "a": "",
+            "b": "",
+            "c": "",
+            "x": 30,
+            "y": 60
+          }
+        ]
+      },
+      {
+        "id": "default.world.tuning.ProcessorModelWheelRadius",
+        "name": "ProcessorModelWheelRadius",
+        "hook": "tuning.ProcessorModelWheelRadius",
         "kind": "world",
         "objectId": null,
         "output": "native",

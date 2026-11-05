@@ -39,7 +39,7 @@ internal sealed partial class RuleEditorView
         }),
         ("Játékmenet", new NavEntry[] {
             new(EditorPage.Missions, "Küldetések", GameIcon.Calendar, "A pálya céljai: amit a játék a futó világ értékeiből ellenőriz."),
-            new(EditorPage.Vehicles, "Járművek", GameIcon.Truck, "Rönkszállító, processzor és forwarder műszaki adatai, fogyasztása és karbantartása."),
+            new(EditorPage.Vehicles, "Járművek", GameIcon.Truck, "Tengelyelrendezés, modellkötés és pályapróba; a rönkszállító, a processzor és a forwarder üzemi adatai."),
             new(EditorPage.Parameters, "Játékparaméterek", GameIcon.Speedometer, "Gazdaság, utak és egyéb alapértékek."),
         }),
         ("Szabályrendszer", new NavEntry[] {

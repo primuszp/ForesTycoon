@@ -73,24 +73,23 @@ namespace ForesTycoon
             return result;
         }
 
-        private static RigAppearance Appearance(VehicleKinematics rig, ForestMachineKind kind, MachineModel model)
+        private static RigAppearance Appearance(VehicleKinematics rig, RigModelBinding binding, MachineModel model)
         {
             float frontBias = 0, rearBias = 0;
             if (model?.Trailer >= 0 && rig.Profile.Steering == SteeringGeometry.Articulated) {
-                float defaultFront = kind == ForestMachineKind.Forwarder ? 2.2f : 2.8f;
-                float defaultRear = kind == ForestMachineKind.Forwarder ? 4.8f : 3.2f;
-                frontBias = (model.FrontAxleX - model.SourceJoint.X - defaultFront) * MetreScale;
-                rearBias = (model.SourceJoint.X - model.RearAxleX - defaultRear) * MetreScale;
+                frontBias = (model.FrontAxleX - model.SourceJoint.X - (float)binding.FrontLength) * MetreScale;
+                rearBias = (model.SourceJoint.X - model.RearAxleX - (float)binding.RearLength) * MetreScale;
             }
-            return new(MetreScale, MetreScale, (model?.Track ?? 2.5f) * MetreScale / 2.5f,
-                (model?.WheelRadius ?? .7f) * MetreScale / .7f, FrontLengthBias: frontBias, RearLengthBias: rearBias);
+            return new(MetreScale, MetreScale, (model?.Track ?? 2.5f) * MetreScale / (float)binding.Track,
+                (model?.WheelRadius ?? .7f) * MetreScale / (float)binding.WheelRadius, FrontLengthBias: frontBias, RearLengthBias: rearBias);
         }
 
         internal float ForwarderTrackWidthWorld(ForestryLogistics logistics)
         {
             var machine = logistics?.Machines.Find(m => m.Kind == ForestMachineKind.Forwarder);
             double track = machine?.Kinematics?.Profile.Axles[0].Track ?? logistics?.Tuning[Tune.ForwarderTrack] ?? 2.5;
-            return (float)track * (models[(int)ForestMachineKind.Forwarder]?.Track ?? 2.5f) * MetreScale / 2.5f;
+            var binding = VehicleGeometryProfiles.MachineBinding(logistics?.Tuning ?? GameTuning.Default, ForestMachineKind.Forwarder);
+            return (float)track * (models[(int)ForestMachineKind.Forwarder]?.Track ?? 2.5f) * MetreScale / (float)binding.Track;
         }
 
         // Stack (sarang) models, smallest first, with the timber volume each one shows.
@@ -218,7 +217,7 @@ namespace ForesTycoon
                 var visualRig = machine.Kinematics == null ? null :
                     machine.Presentation.Sample(poseAlpha) ?? machine.Kinematics.Interpolated(machine.PreviousRigPose, alpha);
                 var model = models[(int)machine.Kind];
-                var displayPose = visualRig == null ? null : new RigVisualPose(visualRig, Appearance(visualRig, machine.Kind, model));
+                var displayPose = visualRig == null ? null : new RigVisualPose(visualRig, Appearance(visualRig, VehicleGeometryProfiles.MachineBinding(machine.Tuning, machine.Kind), model));
                 double position = machine.PreviousPathPosition + (machine.PathPosition - machine.PreviousPathPosition) * alpha;
                 if (!TrySample(terrain.Map, machine.Path, position, out Vector2 point, out Vector2 heading)) continue;
                 if (visualRig != null) {

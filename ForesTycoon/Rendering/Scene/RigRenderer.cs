@@ -24,19 +24,20 @@ internal static class RigRenderer
         return new(new Vector4(forward, 0), new Vector4(left, 0), new Vector4(up, 0), new Vector4(x, y, z + .025f, 1));
     }
 
-    internal static RigModelFrames TruckFrames(VehicleKinematics rig, ITruckModel model, TerrainMap map, float legacyScale)
-        => TruckFrames(rig, model, legacyScale, (x, y) => { map.TryGetDrivingSurfaceZ(x, y, out float z); return z; });
+    internal static RigModelFrames TruckFrames(VehicleKinematics rig, ITruckModel model, TerrainMap map, float legacyScale, RigModelBinding binding = null)
+        => TruckFrames(rig, model, legacyScale, (x, y) => { map.TryGetDrivingSurfaceZ(x, y, out float z); return z; }, binding);
 
-    internal static RigModelFrames TruckFrames(VehicleKinematics rig, ITruckModel model, float legacyScale, Func<float, float, float> height)
+    internal static RigModelFrames TruckFrames(VehicleKinematics rig, ITruckModel model, float legacyScale, Func<float, float, float> height, RigModelBinding binding = null)
     {
+        binding ??= VehicleGeometryProfiles.TruckBinding(GameTuning.Default);
         float rear = model.AxleMidpoint - model.Wheelbase * .5f;
-        float longScale = model.Wheelbase * legacyScale / 4;
-        var appearance = new RigAppearance(legacyScale, longScale, model.WheelTrack * legacyScale / 2,
-            model.WheelRadius * legacyScale / .5f,
-            model.Articulated ? (model.Kingpin - model.TrailerAxle) * legacyScale / 6 : longScale,
-            model.Articulated ? (model.Kingpin - rear) * legacyScale + 1.5f * longScale : 0);
+        float longScale = model.Wheelbase * legacyScale / (float)binding.FrontLength;
+        var appearance = new RigAppearance(legacyScale, longScale, model.WheelTrack * legacyScale / (float)binding.Track,
+            model.WheelRadius * legacyScale / (float)binding.WheelRadius,
+            model.Articulated ? (model.Kingpin - model.TrailerAxle) * legacyScale / (float)binding.TrailerLength : longScale,
+            model.Articulated ? (model.Kingpin - rear) * legacyScale - (float)binding.Hitch * longScale : 0);
         var visual = new RigVisualPose(rig, appearance);
-        return TruckGroundAlignment.Align(rig, model, appearance, visual, height);
+        return TruckGroundAlignment.Align(rig, model, appearance, visual, height, binding);
     }
 
     internal static void Wheels(VehicleKinematics rig, TerrainMap map, RigVisualPose visualPose, int visibleUnits = int.MaxValue,

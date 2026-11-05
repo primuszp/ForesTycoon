@@ -7,6 +7,9 @@ namespace ForesTycoon;
 internal enum StudyManoeuvre { QuarterTurn, SCurve, SteadyCircle }
 internal readonly record struct StudyGuide(PlanPoint Point, double Yaw, double Curvature);
 internal sealed record StudyArc(PlanPoint Centre, double Radius, double Start, double End);
+internal readonly record struct StudyProjection(double Station, double Offset);
+/// <summary>Outermost reach of the whole rig beside the road at one station, metres to the left and right of the axis.</summary>
+internal readonly record struct StudyEnvelopePoint(double Station, double Left, double Right);
 
 /// <summary>Metric construction line followed by the first axle (or front equivalent bogie).</summary>
 internal sealed class StudyRoad
@@ -56,18 +59,32 @@ internal sealed class StudyRoad
         return new(new(x, Hand * y), Hand * yaw, Hand * curvature);
     }
 
-    internal double SignedOffset(PlanPoint point)
+    /// <summary>The road continued straight past both ends, where the rig stands before and after the manoeuvre.</summary>
+    internal StudyGuide At(double station)
     {
-        double best = double.PositiveInfinity, offset = 0;
+        double beyond = station < 0 ? station : Math.Max(0, station - Length);
+        var guide = Sample(station);
+        return beyond == 0 ? guide : guide with { Point = guide.Point + PlanPoint.Forward(guide.Yaw) * beyond };
+    }
+
+    internal double SignedOffset(PlanPoint point) => Project(point).Offset;
+
+    internal StudyProjection Project(PlanPoint point)
+    {
+        double best = double.PositiveInfinity, offset = 0, station = 0;
         void Consider(double at) {
-            var p = Sample(at); var delta = point - p.Point;
-            if (delta.Length < best) { best = delta.Length; offset = delta.Dot(PlanPoint.Left(p.Yaw)); }
+            var p = At(at); var delta = point - p.Point;
+            if (delta.Length < best) { best = delta.Length; offset = delta.Dot(PlanPoint.Left(p.Yaw)); station = at; }
         }
-        void Line(double a, double b) {
+        void Line(double a, double b, bool open) {
             var first = Sample(a); double t = (point - first.Point).Dot(PlanPoint.Forward(first.Yaw));
-            Consider(a + Math.Clamp(t, 0, b - a));
+            Consider(a + (open ? Math.Min(t, b - a) : Math.Clamp(t, 0, b - a)));
         }
-        Line(0, Lead);
+        void Exit() {
+            var first = Sample(Length - Lead); double t = (point - first.Point).Dot(PlanPoint.Forward(first.Yaw));
+            Consider(Length - Lead + Math.Max(t, 0));
+        }
+        Line(0, Lead, true);
         foreach (var arc in Arcs) {
             double angle = Math.Atan2((point.Y - arc.Centre.Y) * Hand, point.X - arc.Centre.X);
             double local = arc == Arcs[0] ? angle + Math.PI * .5 : Math.PI - angle;
@@ -75,9 +92,9 @@ internal sealed class StudyRoad
             Consider(arc.Start + Math.Clamp(local * Radius, 0, arc.End - arc.Start));
             Consider(arc.Start); Consider(arc.End);
         }
-        if (Manoeuvre == StudyManoeuvre.SCurve) Line(FirstArcEnd, FirstArcEnd + Gap);
-        Line(Length - Lead, Length);
-        return offset;
+        if (Manoeuvre == StudyManoeuvre.SCurve) Line(FirstArcEnd, FirstArcEnd + Gap, false);
+        Exit();
+        return new(station, offset);
     }
 }
 
@@ -123,10 +140,15 @@ internal sealed partial class VehiclePathStudy
     internal StudySample[] Samples { get; }
     internal PlanPoint[][] Sweeps { get; }
     internal StudyRadius[] Radii { get; }
+    /// <summary>Swept band along the road: a few hundred points that replace redrawing every hull each frame.</summary>
+    internal StudyEnvelopePoint[] Envelope { get; }
+    /// <summary>Metres beyond the road axis at each sample: where and when the widest reach happens.</summary>
+    internal double[] SampleLeft { get; }
+    internal double[] SampleRight { get; }
     internal string Failure { get; }
     internal double LeftExtent { get; }
     internal double RightExtent { get; }
-    internal const double Step = .05;
+    internal const double Step = .05, EnvelopeStep = .5;
     internal double SamplingStep { get; }
 
     internal VehiclePathStudy(RigProfile profile, StudyRoad road, StudyBody[] bodies, double speed = 1)
@@ -140,6 +162,8 @@ internal sealed partial class VehiclePathStudy
         var samples = new List<StudySample>(); var sweeps = new List<PlanPoint[]>();
         double[] yaw = new double[count]; double priorSteer = 0;
         double left = 0, right = 0;
+        var sampleLeft = new List<double>(); var sampleRight = new List<double>();
+        var bins = new SortedDictionary<int, (double Left, double Right)>();
         for (int step = 0; ; step++) {
             double at = Math.Min(road.Length, step * SamplingStep);
             if (road.Length - at < 1e-8) at = road.Length;
@@ -174,17 +198,26 @@ internal sealed partial class VehiclePathStudy
                 footprints.Add(Rectangle(units[j].Axle, units[j].Yaw, 0, t.Length, .15));
             }
             var frame = new StudySample(at, units, steer, axles, wheels, footprints.ToArray());
+            double reachLeft = 0, reachRight = 0;
             for (int i = 0; i < frame.Footprints.Length; i++) {
                 var polygon = samples.Count == 0 ? frame.Footprints[i] : Hull(samples[^1].Footprints[i].Concat(frame.Footprints[i]));
                 sweeps.Add(polygon);
                 foreach (var p in polygon) {
-                    double offset = road.SignedOffset(p); left = Math.Max(left, offset); right = Math.Max(right, -offset);
+                    var projected = road.Project(p);
+                    reachLeft = Math.Max(reachLeft, projected.Offset); reachRight = Math.Max(reachRight, -projected.Offset);
+                    int bin = (int)Math.Round(projected.Station / EnvelopeStep);
+                    bins[bin] = bins.TryGetValue(bin, out var known) ? (Math.Max(known.Left, projected.Offset), Math.Max(known.Right, -projected.Offset)) :
+                        (Math.Max(0, projected.Offset), Math.Max(0, -projected.Offset));
                 }
             }
+            left = Math.Max(left, reachLeft); right = Math.Max(right, reachRight);
+            sampleLeft.Add(reachLeft); sampleRight.Add(reachRight);
             samples.Add(frame); priorSteer = steer;
             if (at >= road.Length) break;
         }
         Samples = samples.ToArray(); Sweeps = sweeps.ToArray(); LeftExtent = left; RightExtent = right;
+        SampleLeft = sampleLeft.ToArray(); SampleRight = sampleRight.ToArray();
+        Envelope = bins.Select(b => new StudyEnvelopePoint(b.Key * EnvelopeStep, b.Value.Left, b.Value.Right)).ToArray();
         Radii = BuildRadii();
     }
 
@@ -261,6 +294,10 @@ internal sealed partial class VehiclePathStudy
         double cross = Math.Abs(ab.X * ac.Y - ab.Y * ac.X);
         return cross < 1e-12 ? double.PositiveInfinity : ab.Length * (c - b).Length * ac.Length / (2 * cross);
     }
+    /// <summary>The smallest guide radius the first axle can drive: the textbook limit from the steering stops.</summary>
+    internal static double SmallestRoadRadius(RigProfile profile) => profile.Steering == SteeringGeometry.Axle ?
+        Math.Sqrt(profile.MinimumRadius * profile.MinimumRadius + profile.FrontLength * profile.FrontLength) : profile.MinimumRadius;
+
     private static double Root(double square) => square < 0 || !double.IsFinite(square) ? double.NaN : Math.Sqrt(square);
     internal static PlanPoint[] Rectangle(PlanPoint origin, double yaw, double rear, double front, double width)
     {
@@ -278,11 +315,17 @@ internal sealed partial class VehiclePathStudy
         for (int i = sorted.Length - 2; i >= 0; i--) { var p = sorted[i]; while (hull.Count > bottom && Cross(hull[^2], hull[^1], p) <= 0) hull.RemoveAt(hull.Count - 1); hull.Add(p); }
         hull.RemoveAt(hull.Count - 1); return hull.ToArray();
     }
+    /// <summary>Axles of one tandem or bogie share a group: "truck.rear.1" belongs to "truck.rear".</summary>
+    internal static string AxleGroup(string id)
+    {
+        int dot = id.LastIndexOf('.');
+        return dot > 0 && int.TryParse(id[(dot + 1)..], out _) ? id[..dot] : id;
+    }
     internal static string AxleName(string id)
     {
         string name = id.StartsWith("truck.front") ? "Teherautó első" : id.StartsWith("truck.rear") ? "Teherautó hátsó" :
             id.StartsWith("trailer.turntable") ? "Forgózsámoly" : id.StartsWith("trailer.rear") ? "Pótkocsi hátsó" :
-            id.StartsWith("front") ? "Első váz" : "Hátsó váz";
+            id.StartsWith("front") ? "Első" : "Hátsó";
         return int.TryParse(id.Split('.')[^1], out int index) ? name + " " + (index + 1) : name;
     }
 }

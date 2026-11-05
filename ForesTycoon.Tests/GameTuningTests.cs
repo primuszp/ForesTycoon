@@ -15,7 +15,7 @@ public class GameTuningTests
         Assert.Empty(t.ToOverrides());
         Assert.Equal(ForestMachine.ForwarderCapacity, t.F(Tune.ForwarderCapacity));
         Assert.Equal(ForestryLogistics.DieselPrice, t[Tune.DieselPrice]);
-        Assert.Equal(TruckSpec.Default, t.Truck with { Geometry = null });
+        Assert.Equal(TruckSpec.Default, t.Truck with { Geometry = null, ModelBinding = null });
         t.Truck.Geometry.Validate();
         Assert.Equal(RoadCosts.Build(RoadPaving.Asphalt), RoadCosts.Build(RoadPaving.Asphalt, t));
         // Every spec's default lies in its own range and belongs to a rule of the catalog.

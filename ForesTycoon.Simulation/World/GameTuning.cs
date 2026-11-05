@@ -22,6 +22,9 @@ namespace ForesTycoon
         DirtBuild, DirtWeather, DirtRainWeather, AsphaltBufferMetres, MacadamBufferMetres, DirtBufferMetres, TrailBufferMetres,
         TruckWheelbase, TruckTrack, TruckWheelRadius, TruckMaxSteer, TruckSteerRate, TruckRearAxles, TruckAxleSpacing, TruckTrailerLayout, TruckHitchOffset, TruckDrawbarLength, TruckTrailerLength, TruckTrailerAxles, TruckTrailerAxleSpacing, TruckTrailerMaxAngle, ForwarderFrontLength, ForwarderRearLength, ForwarderTrack, ForwarderWheelRadius, ForwarderMaxSteer, ForwarderSteerRate, ForwarderFrontAxles, ForwarderRearAxles, ForwarderAxleSpacing, ProcessorFrontLength, ProcessorRearLength, ProcessorTrack, ProcessorWheelRadius, ProcessorMaxSteer, ProcessorSteerRate, ProcessorFrontAxles, ProcessorRearAxles, ProcessorAxleSpacing,
         ProcessorSteeringModel, ProcessorWheelbase,
+        TruckModelWheelbase, TruckModelTrack, TruckModelWheelRadius, TruckModelHitch, TruckModelTrailerLength,
+        ForwarderModelFrontLength, ForwarderModelRearLength, ForwarderModelTrack, ForwarderModelWheelRadius,
+        ProcessorModelFrontLength, ProcessorModelRearLength, ProcessorModelTrack, ProcessorModelWheelRadius,
     }
 
     /// <summary>One tunable: which rule it belongs to, how it is shown and the range the game accepts.</summary>
@@ -140,6 +143,20 @@ namespace ForesTycoon
             new(Tune.ProcessorAxleSpacing, "machine.geometry.processor", "Bogi tengelyosztás", "m", 1.4, 0.5, 2.5),
             new(Tune.ProcessorSteeringModel, "machine.geometry.processor", "Processzor kormányzási rendszere", "típus", 0, 0, 1),
             new(Tune.ProcessorWheelbase, "machine.geometry.processor", "Tengelytáv kerékkormányzásnál", "m", 3.2326, 1, 12),
+            // What the mesh depicts in physical metres. Presentation only: a binding never changes a planned path.
+            new(Tune.TruckModelWheelbase, "vehicle.modelBinding", "Teherautó-modell: ábrázolt tengelytáv", "m", 4, 1, 12),
+            new(Tune.TruckModelTrack, "vehicle.modelBinding", "Teherautó-modell: ábrázolt nyomtáv", "m", 2, 1, 3),
+            new(Tune.TruckModelWheelRadius, "vehicle.modelBinding", "Teherautó-modell: ábrázolt keréksugár", "m", 0.5, 0.2, 1.2),
+            new(Tune.TruckModelHitch, "vehicle.modelBinding", "Teherautó-modell: ábrázolt vonóhorog", "m", -1.5, -5, 2),
+            new(Tune.TruckModelTrailerLength, "vehicle.modelBinding", "Teherautó-modell: ábrázolt pótkocsihossz", "m", 6, 1, 16),
+            new(Tune.ForwarderModelFrontLength, "vehicle.modelBinding", "Forwarder-modell: első tengelycsoport–csukló", "m", 2.2, 0.5, 10),
+            new(Tune.ForwarderModelRearLength, "vehicle.modelBinding", "Forwarder-modell: csukló–hátsó tengelycsoport", "m", 4.8, 0.5, 12),
+            new(Tune.ForwarderModelTrack, "vehicle.modelBinding", "Forwarder-modell: ábrázolt nyomtáv", "m", 2.5, 1, 3.5),
+            new(Tune.ForwarderModelWheelRadius, "vehicle.modelBinding", "Forwarder-modell: ábrázolt keréksugár", "m", 0.7, 0.2, 1.2),
+            new(Tune.ProcessorModelFrontLength, "vehicle.modelBinding", "Processzormodell: első tengelycsoport–csukló", "m", 2.8, 0.5, 10),
+            new(Tune.ProcessorModelRearLength, "vehicle.modelBinding", "Processzormodell: csukló–hátsó tengelycsoport", "m", 3.2, 0.5, 12),
+            new(Tune.ProcessorModelTrack, "vehicle.modelBinding", "Processzormodell: ábrázolt nyomtáv", "m", 2.5, 1, 3.5),
+            new(Tune.ProcessorModelWheelRadius, "vehicle.modelBinding", "Processzormodell: ábrázolt keréksugár", "m", 0.7, 0.2, 1.2),
         };
 
         private static readonly Dictionary<string, TuningSpec> byId = Specs.ToDictionary(s => s.Id, StringComparer.Ordinal);
@@ -177,12 +194,13 @@ namespace ForesTycoon
         /// <summary>The truck physics built from the tunables, shared by every vehicle of the world.</summary>
         internal TruckSpec Truck { get; private set; }
         internal TruckSpec SampleTruck() => Truck = BuildTruck();
-        internal void RestoreTruck(TruckSpec state) => Truck = state with { Rules = vehicleRules, Geometry = state.Geometry ?? VehicleGeometryProfiles.Truck(this) };
+        internal void RestoreTruck(TruckSpec state) => Truck = state with { Rules = vehicleRules, Geometry = state.Geometry ?? VehicleGeometryProfiles.Truck(this), ModelBinding = VehicleGeometryProfiles.TruckBinding(this) };
         private TruckSpec BuildTruck() => new(F(Tune.EmptyMass), F(Tune.Power), F(Tune.MaxTractiveForce), F(Tune.DragArea), F(Tune.Drivetrain),
             F(Tune.TimberDensity), F(Tune.FuelPerKilowattHour), F(Tune.IdleFuelPerHour), F(Tune.Braking))
         {
             RollingAsphalt = F(Tune.RollingAsphalt), RollingGravel = F(Tune.RollingGravel), RollingDirt = F(Tune.RollingDirt),
-            RoughnessRolling = F(Tune.RoughnessRolling), Rules = vehicleRules, Geometry = VehicleGeometryProfiles.Truck(this)
+            RoughnessRolling = F(Tune.RoughnessRolling), Rules = vehicleRules, Geometry = VehicleGeometryProfiles.Truck(this),
+            ModelBinding = VehicleGeometryProfiles.TruckBinding(this)
         };
 
         internal bool IsDefault => Specs.All(s => values[(int)s.Key] == s.Default);

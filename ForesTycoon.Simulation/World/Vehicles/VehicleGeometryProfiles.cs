@@ -3,8 +3,22 @@ using System.Collections.Generic;
 
 namespace ForesTycoon;
 
+/// <summary>What a model depicts, in physical metres. The renderer maps these onto the mesh, so a profile equal to its
+/// binding puts every axle exactly under the model's own wheels; the simulation never reads it.</summary>
+internal sealed record RigModelBinding(double FrontLength, double RearLength, double Track, double WheelRadius, double Hitch = 0, double TrailerLength = 0);
+
 internal static class VehicleGeometryProfiles
 {
+    internal static RigModelBinding TruckBinding(GameTuning tuning) => new(tuning[Tune.TruckModelWheelbase], 0, tuning[Tune.TruckModelTrack],
+        tuning[Tune.TruckModelWheelRadius], tuning[Tune.TruckModelHitch], tuning[Tune.TruckModelTrailerLength]);
+    internal static RigModelBinding MachineBinding(GameTuning tuning, ForestMachineKind kind)
+    {
+        bool forwarder = kind == ForestMachineKind.Forwarder;
+        double V(Tune f, Tune p) => tuning[forwarder ? f : p];
+        return new(V(Tune.ForwarderModelFrontLength, Tune.ProcessorModelFrontLength), V(Tune.ForwarderModelRearLength, Tune.ProcessorModelRearLength),
+            V(Tune.ForwarderModelTrack, Tune.ProcessorModelTrack), V(Tune.ForwarderModelWheelRadius, Tune.ProcessorModelWheelRadius));
+    }
+
     private const double Degrees = Math.PI / 180;
     internal static RigProfile Truck(GameTuning tuning)
     {

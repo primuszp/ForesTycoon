@@ -146,4 +146,29 @@ public class VehicleKinematicsTests
             System.Linq.Enumerable.SequenceEqual(a.Units, b.Units) && System.Linq.Enumerable.SequenceEqual(a.Rolls, b.Rolls);
         public int GetHashCode(RigState value) => value.Steer.GetHashCode();
     }
+
+    public static TheoryData<string, int, double> ConfiguredRigs => new() {
+        { "TruckTrailerLayout=0", 0, 25 }, { "TruckTrailerLayout=1", 0, 25 }, { "TruckTrailerLayout=2", 0, 25 },
+        { "TruckTrailerLayout=1;TruckRearAxles=1;TruckTrailerAxles=3;TruckTrailerLength=7.7;TruckHitchOffset=0.3", 0, 25 },
+        { "ForwarderRearAxles=3", 1, 25 }, { "ProcessorSteeringModel=0", 2, 25 }, { "ProcessorSteeringModel=1;ProcessorFrontAxles=2;ProcessorRearAxles=2", 2, 25 },
+    };
+
+    /// <summary>The gameplay controller, not the textbook construction: pure pursuit with the same limits the fleet drives under.</summary>
+    [Theory]
+    [MemberData(nameof(ConfiguredRigs))]
+    public void EveryConfiguredRigFollowsARoadBendWithClosedJointsAndNoBlockage(string overrides, int kind, double radius)
+    {
+        var tuning = GameTuning.FromOverrides(overrides.Split(';').Select(p => p.Split('=')).ToDictionary(p => p[0], p => double.Parse(p[1], System.Globalization.CultureInfo.InvariantCulture)));
+        var profile = kind == 0 ? VehicleGeometryProfiles.Truck(tuning) : VehicleGeometryProfiles.Machine(tuning, kind == 1 ? ForestMachineKind.Forwarder : ForestMachineKind.Harvester);
+        var road = new StudyRoad(StudyManoeuvre.SCurve, radius, 30, 12);
+        var driver = new RigPathFollower(new VehicleKinematics(profile, road.Sample(0).Point, 0));
+        double position = 0; const double speed = 2, step = 1d / 30;
+        for (int tick = 0; tick < 12000 && position < road.Length; tick++) {
+            position = driver.Advance(s => road.Sample(s).Point, position, road.Length, 1, speed * step, step, manoeuvreRoom: 6);
+            Assert.Null(driver.BlockedReason);
+            Assert.InRange(Math.Abs(road.SignedOffset(driver.Rig.Units[0].Axle)), 0, 1.2);
+            if (tick % 30 == 0) VehicleKinematics.Restore(driver.Rig.Capture());
+        }
+        Assert.Equal(road.Length, position, 3);
+    }
 }

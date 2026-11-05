@@ -107,4 +107,57 @@ public class VehiclePathStudyTests
             Assert.InRange((frontJoint - rearJoint).Length, 0, 1e-9);
         });
     }
+
+    [Theory]
+    [InlineData(StudyManoeuvre.QuarterTurn, false)]
+    [InlineData(StudyManoeuvre.QuarterTurn, true)]
+    [InlineData(StudyManoeuvre.SCurve, false)]
+    [InlineData(StudyManoeuvre.SteadyCircle, false)]
+    internal void EnvelopeCarriesTheWholeSweptWidthInAFewHundredPoints(StudyManoeuvre manoeuvre, bool right)
+    {
+        var profile = Truck;
+        var study = new VehiclePathStudy(profile, new(manoeuvre, 20, right: right), StudyBody.Defaults(profile));
+        Assert.Equal(study.LeftExtent, study.Envelope.Max(e => e.Left), 9);
+        Assert.Equal(study.RightExtent, study.Envelope.Max(e => e.Right), 9);
+        Assert.Equal(study.LeftExtent, study.SampleLeft.Max(), 9);
+        Assert.Equal(study.Samples.Length, study.SampleRight.Length);
+        Assert.True(study.Envelope.Length * 40 < study.Sweeps.Length);
+        Assert.Contains(study.Envelope, e => e.Station < 0); // the rig starts behind the guide point, on the run-in
+    }
+
+    [Fact]
+    public void RoadContinuesStraightPastBothEndsAndProjectionFindsThoseStations()
+    {
+        var road = new StudyRoad(StudyManoeuvre.QuarterTurn, 20, 10);
+        Assert.Equal(new PlanPoint(-7, 0), road.At(-7).Point);
+        var end = road.At(road.Length + 5);
+        Assert.Equal(road.Sample(road.Length).Point.Y + 5, end.Point.Y, 9);
+        var before = road.Project(new(-7, 1.5));
+        Assert.Equal(-7, before.Station, 9); Assert.Equal(1.5, before.Offset, 9);
+        var after = road.Project(road.At(road.Length + 5).Point);
+        Assert.Equal(road.Length + 5, after.Station, 9);
+    }
+
+    [Fact]
+    public void WarningsNameAnAxleArrangementThatCannotBeBuiltAndStaySilentForTheDefaults()
+    {
+        Assert.Empty(VehicleGeometryProfiles.Truck(GameTuning.Default).Warnings());
+        Assert.Empty(VehicleGeometryProfiles.Machine(GameTuning.Default, ForestMachineKind.Forwarder).Warnings());
+        Assert.Empty(VehicleGeometryProfiles.Machine(GameTuning.Default, ForestMachineKind.Harvester).Warnings());
+        var cramped = GameTuning.FromOverrides(new Dictionary<string, double> { ["TruckAxleSpacing"] = .5, ["TruckWheelbase"] = 1.2, ["TruckRearAxles"] = 3 });
+        var warnings = VehicleGeometryProfiles.Truck(cramped).Warnings();
+        Assert.Contains(warnings, w => w.Contains("átfedik")); Assert.Contains(warnings, w => w.Contains("egymásba ér"));
+    }
+
+    [Fact]
+    public void SmallestRoadRadiusIsTheLimitOfWhatTheStudyCanDrive()
+    {
+        var solo = GameTuning.FromOverrides(new Dictionary<string, double> { ["TruckTrailerLayout"] = 0 });
+        foreach (var profile in new[] { VehicleGeometryProfiles.Truck(solo), VehicleGeometryProfiles.Machine(GameTuning.Default, ForestMachineKind.Forwarder) }) {
+            double limit = VehiclePathStudy.SmallestRoadRadius(profile);
+            var bodies = StudyBody.Defaults(profile);
+            Assert.Null(new VehiclePathStudy(profile, new(StudyManoeuvre.SteadyCircle, limit + .1), bodies, .2).Failure);
+            Assert.NotNull(new VehiclePathStudy(profile, new(StudyManoeuvre.SteadyCircle, limit - .3), bodies, .2).Failure);
+        }
+    }
 }

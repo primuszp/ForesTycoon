@@ -16,6 +16,7 @@ public static class RuleProjectMigrations
             project.Version = 5;
         }
         UpgradeGeometry(project);
+        UpgradeModelBinding(project);
         if (project.Version >= 6) return;
         var defaults = RuleProject.CreateDefault();
         string[] keys = { "DirtBuild", "DirtWeather", "DirtRainWeather", "AsphaltBufferMetres", "MacadamBufferMetres", "DirtBufferMetres", "TrailBufferMetres" };
@@ -35,6 +36,7 @@ public static class RuleProjectMigrations
         }
         project.Version = 6;
         UpgradeGeometry(project);
+        UpgradeModelBinding(project);
     }
     private static void UpgradeGeometry(RuleProject project)
     {
@@ -47,6 +49,18 @@ public static class RuleProjectMigrations
                 if (!project.Behaviors.Graphs.Any(g => g.Hook == graph.Hook && g.Kind == graph.Kind && !g.ObjectId.HasValue)) project.Behaviors.Graphs.Add(graph);
         }
         project.Version = 7;
+    }
+    private static void UpgradeModelBinding(RuleProject project)
+    {
+        if (project.Version != 7) return;
+        var defaults = RuleProject.CreateDefault();
+        string[] keys = { "TruckModelWheelbase", "TruckModelTrack", "TruckModelWheelRadius", "TruckModelHitch", "TruckModelTrailerLength", "ForwarderModelFrontLength", "ForwarderModelRearLength", "ForwarderModelTrack", "ForwarderModelWheelRadius", "ProcessorModelFrontLength", "ProcessorModelRearLength", "ProcessorModelTrack", "ProcessorModelWheelRadius" };
+        foreach (string key in keys) {
+            project.Tuning.TryAdd(key, defaults.Tuning[key]);
+            foreach (var graph in defaults.Behaviors.Graphs.Where(g => g.Hook == "tuning." + key))
+                if (!project.Behaviors.Graphs.Any(g => g.Hook == graph.Hook && g.Kind == graph.Kind && !g.ObjectId.HasValue)) project.Behaviors.Graphs.Add(graph);
+        }
+        project.Version = 8;
     }
     private static void UpgradePopulationPolicies(RuleProject project)
     {

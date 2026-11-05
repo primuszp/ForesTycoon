@@ -47,7 +47,7 @@ internal static class TruckGroundAlignment
     }
 
     internal static RigModelFrames Align(VehicleKinematics rig, ITruckModel model, RigAppearance appearance,
-        RigVisualPose visual, Func<float, float, float> height)
+        RigVisualPose visual, Func<float, float, float> height, RigModelBinding binding)
     {
         float scale = appearance.BodyScale;
         float sourceRear = model.AxleMidpoint - model.Wheelbase * .5f;
@@ -66,7 +66,7 @@ internal static class TruckGroundAlignment
         PositionWheels(0, rear, tractorBasis);
         bool hasTrailer = rig.Profile.Trailers.Length > 0;
         Matrix4 trailer = tractor;
-        float hitchX = model.Kingpin + (hasTrailer ? ((float)rig.Profile.Trailers[0].HitchX + 1.5f) * appearance.LongScale / scale : 0);
+        float hitchX = model.Kingpin + (hasTrailer ? (float)(rig.Profile.Trailers[0].HitchX - binding.Hitch) * appearance.LongScale / scale : 0);
         Vector3 hitch = Vector3.TransformPosition(new Vector3(hitchX, 0, model.KingpinHeight), tractor);
         for (int i = 0; i < rig.Profile.Trailers.Length; i++) {
             int unit = i + 1; var data = rig.Profile.Trailers[i];

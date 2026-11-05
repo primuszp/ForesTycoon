@@ -26,6 +26,7 @@ namespace ForesTycoon
         internal float RollingDirt { get; init; } = VehicleDynamics.DefaultRollingDirt;
         internal float RoughnessRolling { get; init; } = VehicleDynamics.DefaultRoughnessRolling;
         internal RigProfile Geometry { get; init; }
+        internal RigModelBinding ModelBinding { get; init; }
     }
 
     /// <summary>

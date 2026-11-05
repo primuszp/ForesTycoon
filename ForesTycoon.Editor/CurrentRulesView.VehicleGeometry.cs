@@ -1,129 +1,145 @@
 using System;
 using System.Linq;
-using System.Text.Json;
+using ForesTycoon.Rules;
 using ImGuiNET;
+using Vec2 = System.Numerics.Vector2;
 using Vec4 = System.Numerics.Vector4;
 
 namespace ForesTycoon.Editor;
 
+/// <summary>
+/// The vehicle page, in the order a designer works: lay out the axles, tie them to the model, then watch the rig drive.
+/// Every field here is the same tunable the rule project saves; nothing reaches the world before it is applied.
+/// </summary>
 internal sealed partial class CurrentRulesView
 {
-    private int geometryPreviewKind, geometryManoeuvre, geometryRadiusAxle;
-    private float geometryRadius = 20, geometryLead = 20, geometryGap = 10, geometrySpeed = 1, geometryLane = 3.5f, geometryTime = .65f;
-    private bool geometryRight, geometryAxles = true, geometryWheels = true, geometrySweep = true, geometryRoad = true;
-    private readonly StudyBody[][] geometryBodies = new StudyBody[3][];
-    private readonly bool[] geometryCustomBodies = new bool[3];
-    private readonly string[] geometryBodyKeys = new string[3];
-    private VehiclePathStudy geometryStudy;
-    private string geometryStudyKey, geometryExportMessage;
+    internal const int GeometryLayoutTab = 0, GeometryBindingTab = 1, GeometryTrialTab = 2, GeometryOperatingTab = 3;
+    private static readonly string[] GeometryKinds = { "Tehergépkocsi", "Forwarder", "Harvester / processzor" };
+    private static readonly string[] GeometryTabs = { "1 · Tengelyelrendezés", "2 · Modellkötés", "3 · Pályapróba", "Üzemi adatok" };
+    private int geometryPreviewKind, geometryTab;
     private static readonly Vec4[] GeometryColours = {
         new(.42f,.76f,1,1), new(1,.72f,.28f,1), new(.62f,.88f,.47f,1), new(.85f,.58f,.95f,1),
         new(1,.5f,.44f,1), new(.45f,.9f,.85f,1), new(.91f,.83f,.58f,1), new(.72f,.75f,1,1) };
 
-    internal void SelectGeometryStudyForTest(int kind, StudyManoeuvre manoeuvre)
-    {
-        geometryPreviewKind = kind; geometryManoeuvre = (int)manoeuvre;
-    }
-    internal VehiclePathStudy GeometryStudyForTest => geometryStudy;
+    internal void SelectGeometryTabForTest(int kind, int tab) { geometryPreviewKind = kind; geometryTab = tab; geometrySurveys[kind] = null; geometrySurveyed[kind] = false; }
 
-    internal void DrawVehicleGeometryPreview(GameWorld world)
+    internal void DrawVehicleGeometryPreview(GameWorld world) => DrawVehicleWorkspace(world, _ => true, null);
+
+    internal void DrawVehicleWorkspace(GameWorld world, Func<string, bool> operatingRules, Action apply)
     {
-        if (catalog == null) Load(world.DescribeCurrentRules());
-        if (!ImGui.CollapsingHeader("Tankönyvi pályavizsgálat – tengelyek, kerekek és söpört terület")) return;
-        ImGui.SetNextItemWidth(190);
-        ImGui.Combo("##geometry-kind", ref geometryPreviewKind, "Tehergépkocsi\0Forwarder\0Harvester / processzor\0"); ImGui.SameLine();
-        ImGui.SetNextItemWidth(235);
-        ImGui.Combo("##geometry-manoeuvre", ref geometryManoeuvre, "90°-os ív\0S-kanyar (90° + ellenív)\0Állandósult körpálya (3 kör)\0"); ImGui.SameLine();
-        ImGui.Checkbox("Jobbra kezd", ref geometryRight);
-        ImGui.SetNextItemWidth(160); ImGui.DragFloat("Ívsugár (m)", ref geometryRadius, .2f, 2, 100, "%.1f", ImGuiSliderFlags.AlwaysClamp); ImGui.SameLine();
-        ImGui.SetNextItemWidth(145); ImGui.DragFloat("Be-/kivezető (m)", ref geometryLead, .2f, 5, 80, "%.1f", ImGuiSliderFlags.AlwaysClamp); ImGui.SameLine();
-        ImGui.SetNextItemWidth(115); ImGui.DragFloat("Próbasebesség (m/s)", ref geometrySpeed, .02f, .1f, 5, "%.2f", ImGuiSliderFlags.AlwaysClamp);
-        if (geometryManoeuvre == 1) { ImGui.SetNextItemWidth(160); ImGui.DragFloat("Közbenső egyenes (m)", ref geometryGap, .2f, 0, 60, "%.1f", ImGuiSliderFlags.AlwaysClamp); ImGui.SameLine(); }
-        ImGui.SetNextItemWidth(145); ImGui.DragFloat("Egy sáv szélessége (m)", ref geometryLane, .05f, 2, 12, "%.2f", ImGuiSliderFlags.AlwaysClamp);
-        ImGui.TextWrapped("Az első tengely / első bogiecsoport követi az előírt úttengelyt. A számítás méteres, síkbeli gördülési modell; a játékbeli járműméreteket nem változtatja meg.");
-        try {
-            var values = catalog.Rules.SelectMany(r => r.Parameters).Where(p => p.Tunable).ToDictionary(p => p.Key, p => p.Value);
-            var tuning = GameTuning.FromOverrides(values);
-            var profile = geometryPreviewKind == 0 ? VehicleGeometryProfiles.Truck(tuning) :
-                VehicleGeometryProfiles.Machine(tuning, geometryPreviewKind == 1 ? ForestMachineKind.Forwarder : ForestMachineKind.Harvester);
-            profile.Validate();
-            string profileKey = JsonSerializer.Serialize(profile);
-            int units = (profile.Steering == SteeringGeometry.Articulated ? 2 : 1) + profile.Trailers.Length;
-            if (geometryBodies[geometryPreviewKind] == null || geometryBodies[geometryPreviewKind].Length != units ||
-                !geometryCustomBodies[geometryPreviewKind] && geometryBodyKeys[geometryPreviewKind] != profileKey) {
-                geometryBodies[geometryPreviewKind] = StudyBody.Defaults(profile); geometryBodyKeys[geometryPreviewKind] = profileKey;
-            }
-            DrawStudyContours(profile);
-            var bodies = geometryBodies[geometryPreviewKind];
-            string key = JsonSerializer.Serialize(new { profile, bodies, geometryManoeuvre, geometryRadius, geometryLead, geometryGap, geometrySpeed, geometryRight });
-            if (key != geometryStudyKey && (!ImGui.IsAnyItemActive() || geometryStudy == null)) {
-                geometryStudy = new(profile, new((StudyManoeuvre)geometryManoeuvre, geometryRadius, geometryLead, geometryGap, geometryRight), bodies, geometrySpeed);
-                geometryStudyKey = key; geometryExportMessage = null;
-            }
-            if (key != geometryStudyKey) EditorStyle.Text(HudTheme.Muted, "Az új számítás a mező elengedésekor készül el.");
-            var study = geometryStudy; if (study == null) return;
-            ImGui.Checkbox("Tengelypályák", ref geometryAxles); ImGui.SameLine();
-            ImGui.Checkbox("Keréknyomok", ref geometryWheels); ImGui.SameLine();
-            ImGui.Checkbox("Söpört terület", ref geometrySweep); ImGui.SameLine(); ImGui.Checkbox("Sávszegélyek", ref geometryRoad);
-            ImGui.SetNextItemWidth(190);
-            geometryRadiusAxle = Math.Clamp(geometryRadiusAxle, 0, study.Profile.Axles.Length - 1);
-            ImGui.Combo("Kiemelt tengely sugara", ref geometryRadiusAxle, study.Profile.Axles.Select(a => VehiclePathStudy.AxleName(a.Id)).ToArray(), study.Profile.Axles.Length);
-            ImGui.SameLine(); ImGui.SetNextItemWidth(180); ImGui.SliderFloat("Jármű helyzete", ref geometryTime, 0, 1, "%.2f");
-            if (study.Failure != null) EditorStyle.Text(HudTheme.AmberAccent, study.Failure);
-            float total = (float)(study.LeftExtent + study.RightExtent);
-            EditorStyle.Text(total > geometryLane ? HudTheme.AmberAccent : HudTheme.Muted,
-                $"Söpört szélesség: balra {study.LeftExtent:F2} + jobbra {study.RightExtent:F2} = {total:F2} m · mintalépés: {study.SamplingStep:F3} m");
-            ImGui.TextWrapped("Zöld: karosszériák, kerekek és vonórudak söpört uniója. Tengely: folytonos; bal kerék: vékony folytonos; jobb kerék: szaggatott. Az átmeneti ívsugár eltérhet az állandósult értéktől.");
-            DrawStudyChart(study);
-            if (EditorStyle.QuietButton("Pályarajz mentése SVG-be", "Méretezett vektoros rajz a tengely-, kerékpályákkal és ívsugártáblával.")) {
-                try {
-                string dir = System.IO.Path.GetFullPath("artifacts/path-studies"); System.IO.Directory.CreateDirectory(dir);
-                string file = System.IO.Path.Combine(dir, $"palya-{geometryPreviewKind}-{geometryManoeuvre}-{DateTime.Now:yyyyMMdd-HHmmssfff}.svg");
-                System.IO.File.WriteAllText(file, study.ToSvg(geometryLane)); geometryExportMessage = file;
-                } catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException) {
-                    geometryExportMessage = "Nem sikerült menteni: " + ex.Message;
-                }
-            }
-            if (geometryExportMessage != null) ImGui.TextWrapped(geometryExportMessage);
-            DrawStudyRadii(study);
-        } catch (ArgumentException ex) { ImGui.TextWrapped(ex.Message); }
-        ImGui.Spacing();
+        EnsureCatalog(world);
+        DrawGeometryHeader(world, apply);
+        if (geometryTab == GeometryOperatingTab) { DrawTuning(world, operatingRules); return; }
+        var tuning = GeometryTuning(out string problem);
+        RigProfile profile = null;
+        if (tuning != null) try { profile = GeometryProfile(tuning); profile.Validate(); }
+            catch (ArgumentException ex) { problem = ex.Message; profile = null; }
+        if (geometryTab == GeometryLayoutTab) DrawGeometryLayout(profile, problem);
+        else if (profile == null) { ImGui.PushTextWrapPos(); EditorStyle.Text(HudTheme.Bad, problem); ImGui.PopTextWrapPos(); }
+        else if (geometryTab == GeometryBindingTab) DrawGeometryBinding(profile, tuning);
+        else DrawGeometryTrial(profile);
     }
 
-    private void DrawStudyContours(RigProfile profile)
+    private void DrawGeometryHeader(GameWorld world, Action apply)
     {
-        if (!ImGui.CollapsingHeader("Vizsgálati karosszéria-kontúrok és túlnyúlások")) return;
-        ImGui.TextWrapped("Téglalap-kontúrok a tengelycsoporthoz képest, méterben. Ezek a pályavizsgálat adatai; nem méretezik át a játék modelljeit. Rakománytúlnyúlás a kontúr kiterjesztésével vizsgálható.");
-        var bodies = geometryBodies[geometryPreviewKind];
-        if (EditorStyle.QuietButton("Kontúrok a tengelyadatokból", "Újra felveszi a tengelyekből és csuklókból származó kezdeti kontúrokat.")) {
-            geometryBodies[geometryPreviewKind] = bodies = StudyBody.Defaults(profile); geometryCustomBodies[geometryPreviewKind] = false;
+        for (int i = 0; i < GeometryKinds.Length; i++) {
+            if (i > 0) ImGui.SameLine(0, 4);
+            bool active = i == geometryPreviewKind;
+            if (active) ImGui.PushStyleColor(ImGuiCol.Button, EditorStyle.Fade(HudTheme.AmberAccent, .3f));
+            if (ImGui.Button(GeometryKinds[i] + "##kind")) geometryPreviewKind = i;
+            if (active) ImGui.PopStyleColor();
         }
-        if (!ImGui.BeginTable("study-bodies", 4, ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp)) return;
-        foreach (string label in new[] { "Egység", "Hátsó vég X (m)", "Első vég X (m)", "Szélesség (m)" }) ImGui.TableSetupColumn(label);
-        ImGui.TableHeadersRow();
-        for (int i = 0; i < bodies.Length; i++) {
-            ImGui.TableNextRow(); ImGui.TableNextColumn(); ImGui.TextUnformatted($"{i + 1}. egység");
-            float rear = (float)bodies[i].Rear, front = (float)bodies[i].Front, width = (float)bodies[i].Width;
-            ImGui.TableNextColumn(); ImGui.SetNextItemWidth(-1); bool changed = ImGui.DragFloat("##body-rear" + i, ref rear, .05f, -40, front - .1f, "%.2f", ImGuiSliderFlags.AlwaysClamp);
-            ImGui.TableNextColumn(); ImGui.SetNextItemWidth(-1); changed |= ImGui.DragFloat("##body-front" + i, ref front, .05f, rear + .1f, 40, "%.2f", ImGuiSliderFlags.AlwaysClamp);
-            ImGui.TableNextColumn(); ImGui.SetNextItemWidth(-1); changed |= ImGui.DragFloat("##body-width" + i, ref width, .02f, .2f, 10, "%.2f", ImGuiSliderFlags.AlwaysClamp);
-            if (changed) { bodies[i] = new(rear, front, width); geometryCustomBodies[geometryPreviewKind] = true; }
+        int unapplied = UnappliedTuning(world);
+        if (unapplied > 0) {
+            ImGui.SameLine(0, 18); ImGui.AlignTextToFramePadding();
+            EditorStyle.Text(HudTheme.Info, $"{unapplied} módosítás még nincs alkalmazva");
+            if (apply != null) { ImGui.SameLine(0, 10); if (EditorStyle.PrimaryButton("Alkalmazás a tesztvilágban")) apply(); }
+            if (ImGui.IsItemHovered()) ImGui.SetTooltip("A modellkötés azonnal látszik. Az új tengelyelrendezést a jármű\na következő szolgálatba álláskor kapja meg; a mozgó szerelvény nem alakul át menet közben.");
         }
-        ImGui.EndTable();
+        EditorStyle.Tabs("geometry-tab", GeometryTabs, ref geometryTab);
     }
 
-    private static void DrawStudyRadii(VehiclePathStudy study)
+    private GameTuning GeometryTuning(out string problem)
     {
-        if (!ImGui.CollapsingHeader("Tengely- és keréksugarak (m)", ImGuiTreeNodeFlags.DefaultOpen)) return;
-        ImGui.TextWrapped("Mért: helyi simulókör az első ív kilépése előtt 0,5 m-rel. Elméleti: állandósult körmozgás. A 90°-os ívben és az S-kanyarban az átmeneti eltérés természetes; az állandósult próbához válaszd a háromkörös vizsgálatot.");
-        if (!ImGui.BeginTable("study-radii", 3, ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerV | ImGuiTableFlags.SizingStretchProp)) return;
-        ImGui.TableSetupColumn("Tengely / kerék"); ImGui.TableSetupColumn("Mért helyi R (m)"); ImGui.TableSetupColumn("Elméleti állandósult R (m)"); ImGui.TableHeadersRow();
-        foreach (var row in study.Radii) {
-            ImGui.TableNextRow(); ImGui.TableNextColumn(); EditorStyle.Text(GeometryColours[row.Axle % GeometryColours.Length], row.Name);
-            ImGui.TableNextColumn(); ImGui.TextUnformatted(double.IsFinite(row.Observed) ? row.Observed.ToString("F3") : "—");
-            ImGui.TableNextColumn(); ImGui.TextUnformatted(double.IsFinite(row.Steady) ? row.Steady.ToString("F3") : "nem létezik");
+        problem = null;
+        try { return GameTuning.FromOverrides(catalog.Rules.SelectMany(r => r.Parameters).Where(p => p.Tunable).ToDictionary(p => p.Key, p => p.Value)); }
+        catch (ArgumentException ex) { problem = ex.Message; return null; }
+    }
+
+    private RigProfile GeometryProfile(GameTuning tuning) => geometryPreviewKind == 0 ? VehicleGeometryProfiles.Truck(tuning) :
+        VehicleGeometryProfiles.Machine(tuning, geometryPreviewKind == 1 ? ForestMachineKind.Forwarder : ForestMachineKind.Harvester);
+
+    private string GeometryMachine => geometryPreviewKind == 1 ? "Forwarder" : "Processor";
+
+    // ── Editing a tunable by its key ─────────────────────────────────────
+    private bool FindGeometry(string key, out GameRuleDefinition rule, out int index)
+    {
+        foreach (var candidate in catalog.Rules) {
+            if (candidate.Id is not ("vehicle.geometry" or "machine.geometry.forwarder" or "machine.geometry.processor" or "vehicle.modelBinding")) continue;
+            index = candidate.Parameters.FindIndex(p => p.Key == key);
+            if (index >= 0) { rule = candidate; return true; }
         }
-        ImGui.EndTable();
+        rule = null; index = -1; return false;
+    }
+
+    internal double GetGeometry(string key) => FindGeometry(key, out var rule, out int index) ? rule.Parameters[index].Value : 0;
+
+    internal void SetGeometry(string key, double value)
+    {
+        if (!FindGeometry(key, out var rule, out int index)) return;
+        var p = rule.Parameters[index];
+        rule.Parameters[index] = p with { Value = Math.Clamp(value, p.Min, p.Max) };
+    }
+
+    private void GeometryFieldLabel(string key, string label, string help, out RuleParameter parameter)
+    {
+        FindGeometry(key, out var rule, out int index); parameter = rule.Parameters[index];
+        var at = ImGui.GetCursorScreenPos();
+        if (parameter.Changed) ImGui.GetWindowDrawList().AddCircleFilled(at + new Vec2(-6, ImGui.GetTextLineHeight() / 2 + 3), 2.5f, EditorStyle.Selection);
+        ImGui.AlignTextToFramePadding(); ImGui.TextUnformatted(label);
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip($"{help}\nAlapérték: {parameter.Default:G6} {parameter.Unit} · tartomány: {parameter.Min:G6} – {parameter.Max:G6}");
+    }
+
+    private void GeometryNumber(string key, string label, string help, float speed = .02f)
+    {
+        GeometryFieldLabel(key, label, help, out var p);
+        ImGui.SameLine(ImGui.GetContentRegionAvail().X * .62f); ImGui.SetNextItemWidth(-1);
+        float value = (float)p.Value;
+        if (ImGui.DragFloat("##" + key, ref value, speed, (float)p.Min, (float)p.Max, "%.2f " + p.Unit.Replace("%", "%%"), ImGuiSliderFlags.AlwaysClamp)) SetGeometry(key, Math.Round(value, 2));
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip(help + "\nHúzás: hangolás · Ctrl+kattintás: beírás");
+    }
+
+    private void GeometryCount(string key, string label, string help)
+    {
+        GeometryFieldLabel(key, label, help, out var p);
+        ImGui.SameLine(ImGui.GetContentRegionAvail().X * .62f);
+        int count = (int)Math.Round(p.Value);
+        for (int i = (int)p.Min; i <= (int)p.Max; i++) {
+            if (i > (int)p.Min) ImGui.SameLine(0, 6);
+            if (ImGui.RadioButton(i + "##" + key, count == i)) SetGeometry(key, i);
+        }
+    }
+
+    private void GeometryChoice(string key, string help, params string[] options)
+    {
+        FindGeometry(key, out var rule, out int index);
+        int current = (int)Math.Round(rule.Parameters[index].Value);
+        for (int i = 0; i < options.Length; i++) {
+            if (ImGui.RadioButton(options[i] + "##" + key, current == i)) SetGeometry(key, i);
+            if (ImGui.IsItemHovered()) ImGui.SetTooltip(help);
+        }
+    }
+
+    private static string GeometryUnitName(RigProfile profile, int unit)
+    {
+        int active = profile.Steering == SteeringGeometry.Articulated ? 2 : 1;
+        if (unit < active) return active == 1 ? "Jármű" : unit == 0 ? "Első váz" : "Hátsó váz";
+        return unit == active + profile.Trailers.Length - 1 ? "Pótkocsi" : "Forgózsámoly";
+    }
+
+    private static Vec4 GeometryGroupColour(RigProfile profile, string axleId)
+    {
+        var groups = profile.Axles.Select(a => VehiclePathStudy.AxleGroup(a.Id)).Distinct().ToList();
+        return GeometryColours[Math.Max(0, groups.IndexOf(VehiclePathStudy.AxleGroup(axleId))) % GeometryColours.Length];
     }
 }
-

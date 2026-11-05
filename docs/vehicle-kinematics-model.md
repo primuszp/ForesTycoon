@@ -8,7 +8,15 @@ Megvalósított kinematikai alap és továbbfejlesztési követelmények, 2026-1
 - `VehicleGeometryProfiles`: típusonkénti tengelycsoportok, darabszám, tengelyosztás, nyomtáv, keréksugár, kormányszög és kormányzási sebesség. Teherautónál szóló, egy passzív fokozatú vagy forgózsámolyos/vonórudas kialakítás. Processzornál kerék- vagy derékcsuklós kormányzás választható. Az alap processzorprofil a jelenlegi négykerekű, merev törzsű modellhez illeszkedik; a forwarder derékcsuklós.
 - `RigPathFollower`: a gráf útvonalát kormányparanccsal követi; az előrehaladás az integrált referenciatengely helyzetének lokális vetülete. Tolatáskor a karosszéria nem fordul meg. A csuklós gép hátrameneti szabályozása a vezető hátsó vázrészt használja. Az aktív csukló szögsebességének átmeneti hatását is figyelembe veszi.
 - A checkpoint az aktív geometriát, összes egység helyét és irányát, kerékfordulatokat, kormányszöget, sebességváltó-irányt és útvonalszárat is megőrzi. A teherautó munkafázisai között a mechanikai állapot továbbadódik.
-- Editor: **Járművek → Tengelyelrendezés és kanyarodási próba**, majd a három típus geometriai paraméterei. Az előnézet a még nem alkalmazott értékekkel számol. A mezők a normál szabályprojekt és parancsnapló részei. A jármű a szolgálatba álláskor mintázza a profilt; menet közbeni szerkesztés nem alakítja át a mozgó szerelvényt. A gép a következő telephelyi induláskor kapja meg az új geometriát.
+- Editor: **Járművek**, típusválasztóval és négy lappal: *Tengelyelrendezés*, *Modellkötés*, *Pályapróba* és *Üzemi adatok*. Minden lap a még nem alkalmazott értékekkel számol. A mezők a normál szabályprojekt és parancsnapló részei. A jármű a szolgálatba álláskor mintázza a profilt; menet közbeni szerkesztés nem alakítja át a mozgó szerelvényt. A gép a következő telephelyi induláskor kapja meg az új geometriát.
+
+### Tengelyelrendezés megadása és modellhez kötése
+
+1. **Tengelyelrendezés.** Sablonból vagy mezőnként: pótkocsi-kialakítás / kormányzási mód, tengelyszámok, méretek. A méretarányos felülnézeten a sárga fogók húzásával is áthelyezhetők a tengelyek és csuklók. A `RigProfile.Warnings` az integrálható, de meg nem építhető elrendezést jelzi (egymásba érő kerekek, kormányzott tengelyt elérő hátsó csoport, pótkocsi elé futó tengely).
+2. **Modellkötés.** A `RigModelBinding` azt rögzíti, milyen fizikai méreteket ábrázol a modell (`vehicle.modelBinding` hangolási szabály). A renderer ebből számolja a tengelyek és csuklók helyét a modellen, ezért a korábbi beégetett 4 / 2 / 0,5 / 6 / −1,5 m és 2,2 / 4,8 / 2,8 / 3,2 m értékek helyett szerkeszthető adat. Az alapérték pontosan a korábbi látványt adja. A *Modell kötése ehhez az elrendezéshez* gomb a profil méreteit írja a kötésbe: ettől kezdve minden kerék és csukló a modell saját helyére kerül, a karosszéria nem nyúlik meg. A kötés csak kirajzolási adat: a pályát és a járhatósági döntést nem változtatja meg, és alkalmazás után azonnal látszik, újraindulás nélkül.
+3. **Pályapróba.** Lásd alább. A `VehicleModelSurvey` GPU nélkül méri fel a modell kerékcsomópontjait, így a kötés lapja a modell kerekeit a fizikai tengelyekre rajzolja, és összeveti a tengelyszámokat.
+
+A modellfájl típusonként rögzített: `Assets/Licensed/log-truck-textured.glb`, `forwarder.glb`, `harvester.glb`, ezek hiányában a repó teherautója, illetve helyettesítő gép. A repó `log-truck.glb` modellje egyetlen merev test: a pótkocsi fizikailag csuklik, de ez a mesh nem követi. Tetszőleges modell típushoz rendelése vagy kerékcsomópontok kézi kijelölése nincs megvalósítva; a csomópontokat a névkonvenció azonosítja.
 
 ### Megőrzött játékméretek és egy sávos utak
 
@@ -20,7 +28,7 @@ Minden út továbbra is egy sávos, közös középvonallal. A közelítőnyom v
 
 A pályavizsgálat önálló síkbeli szerkesztőeszköz: 90°-os ív, két ellenkező 90°-os ívből álló S-kanyar és háromkörös állandósult próba választható. Az első kormányzott tengely / első bogiecsoport követi az előírt úttengelyt; a többi tengely és minden bal/jobb kerék külön integrált nyomvonalat kap. Az editor még nem alkalmazott típusparamétereit használja, és a kormány-/csuklószög vagy kormányzási sebesség határán diagnosztikával megáll.
 
-A méteres rajz az összes tengely- és kerékpályát, úttengelyt, egy sáv két szegélyét, ívsugarakat és a szerelvény csúszkával kiválasztott helyzetét mutatja. A sugártáblában a belépés utáni helyi simulókör és az analitikus állandósult sugár külön oszlop: 90°-os ívben az átmeneti eltérés természetes. A nyerges és a forgózsámolyos kéttagú vontatmány hosszú körön a tankönyvi sugárhoz tart.
+A pályapróba animált: indítás/megállítás, gyorsítás, ismétlés, követő nézet, görgős nagyítás, húzás és az idővonalra kattintás. Az idővonal a kormány- és csuklószögeket, valamint a foglalt szélességet mutatja az út mentén. A megtett szakasz élénkebb, a sávból kilógó rész sárga, megakadáskor a hely és az ok a rajzon látszik. A rajz a söpört területet a `StudyEnvelopePoint` burkolósávból rajzolja (0,5 m-es állomások), nem képkockánként több tízezer burkolóból. A sugártáblában a belépés utáni helyi simulókör és az analitikus állandósult sugár külön oszlop: 90°-os ívben az átmeneti eltérés természetes. A nyerges és a forgózsámolyos kéttagú vontatmány hosszú körön a tankönyvi sugárhoz tart.
 
 A söpört terület a szerkeszthető téglalap-karosszériakontúrok, kerekek és vonórudak mintái közti konvex burkolatok kitöltött uniója. A mintalépés általában 0,05 m, hosszú vizsgálatnál legfeljebb 10 000 lépésre korlátozott. Ez közelített, síkbeli vizsgálati burkolóterület, nem a játék meshének pontos vetülete vagy hatósági méretezés. A kontúrok/túlnyúlások kizárólag vizsgálati adatok; az exportált SVG a méreteket és az összes nyomvonalat is tartalmazza. A játékbeli modellek skálája változatlan.
 
@@ -175,7 +183,7 @@ A fordulósugár-korlátot meghaladó ívet nem javítja meg a kerékszög levá
 | Csuklók | pozíció az előző vázrészhez képest, aktív/passzív jelleg, csuklószög-korlát |
 | Vontatmány | kapcsolási pont, kapcsolási pont–tengelycsoport távolság, saját tengelyek és befoglaló méret |
 | Testek | szélesség, első/hátsó túlnyúlás, ekvivalens tengely és mesh-origó kapcsolata |
-| Modellkötés | a vázrészek és kerékcsomópontok GLB-beli azonosítói; a fizikai adatok nem a node-nevekből származnak |
+| Modellkötés | megvalósítva: a modell által ábrázolt méretek (`RigModelBinding`). A vázrészek és kerékcsomópontok kézi GLB-kötése további munka |
 
 A profilt az alkalmazás előtt validáljuk: pozitív távolságok és sugarak, véges számok, egyedi azonosítók, helyes egységsorrend, érvényes tengely-/vázkötések, nem szinguláris csuklógeometria. A mozgó jármű mechanikai mérete nem változhat meg egy frame közepén; a geometriafrissítés telephelyen/álló állapotban lép életbe, a futó gép addig a rögzített aktív profilját őrzi.
 

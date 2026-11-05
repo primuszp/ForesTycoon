@@ -4756,6 +4756,153 @@
       ],
       "x": 25,
       "y": 420
+    },
+    {
+      "id": "vehicle.modelBinding",
+      "name": "Tengelyelrendez\u00E9s \u00E9s 3D-modell k\u00F6t\u00E9se",
+      "module": "J\u00E1rm\u0171vek",
+      "scope": "J\u00E1rm\u0171t\u00EDpus",
+      "schedule": "Renderk\u00E9pkocka",
+      "execution": "Presentation",
+      "description": "Azt mondja meg, milyen fizikai m\u00E9reteket \u00E1br\u00E1zol a modell. A kirajzol\u00E1s ebb\u0151l sz\u00E1m\u00EDtja, hol jelennek meg a kerekek \u00E9s a csukl\u00F3k a modellhez k\u00E9pest; a p\u00E1ly\u00E1t \u00E9s a s\u00F6p\u00F6rt ter\u00FCletet nem v\u00E1ltoztatja meg.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "vehicle.pose",
+        "vehicle.wheels",
+        "rules.behaviors"
+      ],
+      "writes": [
+        "visual.truck",
+        "visual.machines"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon.Simulation/World/Vehicles/VehicleGeometryProfiles.cs",
+          "symbol": "RigModelBinding"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "Teheraut\u00F3-modell: \u00E1br\u00E1zolt tengelyt\u00E1v",
+          "value": 4,
+          "unit": "m",
+          "key": "TruckModelWheelbase",
+          "min": 1,
+          "max": 12,
+          "default": 4
+        },
+        {
+          "name": "Teheraut\u00F3-modell: \u00E1br\u00E1zolt nyomt\u00E1v",
+          "value": 2,
+          "unit": "m",
+          "key": "TruckModelTrack",
+          "min": 1,
+          "max": 3,
+          "default": 2
+        },
+        {
+          "name": "Teheraut\u00F3-modell: \u00E1br\u00E1zolt ker\u00E9ksug\u00E1r",
+          "value": 0.5,
+          "unit": "m",
+          "key": "TruckModelWheelRadius",
+          "min": 0.2,
+          "max": 1.2,
+          "default": 0.5
+        },
+        {
+          "name": "Teheraut\u00F3-modell: \u00E1br\u00E1zolt von\u00F3horog",
+          "value": -1.5,
+          "unit": "m",
+          "key": "TruckModelHitch",
+          "min": -5,
+          "max": 2,
+          "default": -1.5
+        },
+        {
+          "name": "Teheraut\u00F3-modell: \u00E1br\u00E1zolt p\u00F3tkocsihossz",
+          "value": 6,
+          "unit": "m",
+          "key": "TruckModelTrailerLength",
+          "min": 1,
+          "max": 16,
+          "default": 6
+        },
+        {
+          "name": "Forwarder-modell: els\u0151 tengelycsoport\u2013csukl\u00F3",
+          "value": 2.2,
+          "unit": "m",
+          "key": "ForwarderModelFrontLength",
+          "min": 0.5,
+          "max": 10,
+          "default": 2.2
+        },
+        {
+          "name": "Forwarder-modell: csukl\u00F3\u2013h\u00E1ts\u00F3 tengelycsoport",
+          "value": 4.8,
+          "unit": "m",
+          "key": "ForwarderModelRearLength",
+          "min": 0.5,
+          "max": 12,
+          "default": 4.8
+        },
+        {
+          "name": "Forwarder-modell: \u00E1br\u00E1zolt nyomt\u00E1v",
+          "value": 2.5,
+          "unit": "m",
+          "key": "ForwarderModelTrack",
+          "min": 1,
+          "max": 3.5,
+          "default": 2.5
+        },
+        {
+          "name": "Forwarder-modell: \u00E1br\u00E1zolt ker\u00E9ksug\u00E1r",
+          "value": 0.7,
+          "unit": "m",
+          "key": "ForwarderModelWheelRadius",
+          "min": 0.2,
+          "max": 1.2,
+          "default": 0.7
+        },
+        {
+          "name": "Processzormodell: els\u0151 tengelycsoport\u2013csukl\u00F3",
+          "value": 2.8,
+          "unit": "m",
+          "key": "ProcessorModelFrontLength",
+          "min": 0.5,
+          "max": 10,
+          "default": 2.8
+        },
+        {
+          "name": "Processzormodell: csukl\u00F3\u2013h\u00E1ts\u00F3 tengelycsoport",
+          "value": 3.2,
+          "unit": "m",
+          "key": "ProcessorModelRearLength",
+          "min": 0.5,
+          "max": 12,
+          "default": 3.2
+        },
+        {
+          "name": "Processzormodell: \u00E1br\u00E1zolt nyomt\u00E1v",
+          "value": 2.5,
+          "unit": "m",
+          "key": "ProcessorModelTrack",
+          "min": 1,
+          "max": 3.5,
+          "default": 2.5
+        },
+        {
+          "name": "Processzormodell: \u00E1br\u00E1zolt ker\u00E9ksug\u00E1r",
+          "value": 0.7,
+          "unit": "m",
+          "key": "ProcessorModelWheelRadius",
+          "min": 0.2,
+          "max": 1.2,
+          "default": 0.7
+        }
+      ],
+      "x": 270,
+      "y": 420
     }
   ],
   "gaps": [

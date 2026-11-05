@@ -41,6 +41,53 @@ public class VehiclePresentationTests
         Assert.InRange((tractorHitch - trailerHitch).Length, 0, .0001f);
     }
 
+    [Fact]
+    public void ABindingEqualToTheProfilePutsEveryWheelAndHitchOnTheModelWithoutMovingThePath()
+    {
+        var custom = GameTuning.FromOverrides(new Dictionary<string, double> {
+            ["TruckWheelbase"] = 5.5, ["TruckTrack"] = 2.4, ["TruckWheelRadius"] = .6, ["TruckHitchOffset"] = -.8, ["TruckTrailerLength"] = 9, ["TruckAxleSpacing"] = 1.5,
+            ["TruckModelWheelbase"] = 5.5, ["TruckModelTrack"] = 2.4, ["TruckModelWheelRadius"] = .6, ["TruckModelHitch"] = -.8, ["TruckModelTrailerLength"] = 9 });
+        var model = new Model(); const float scale = 3;
+        var rig = new VehicleKinematics(VehicleGeometryProfiles.Truck(custom), default, 0);
+        var frame = RigRenderer.TruckFrames(rig, model, scale, (_, _) => 0, VehicleGeometryProfiles.TruckBinding(custom));
+        var wheels = frame.Visual.Wheels; var units = frame.Visual.Units;
+        float rear = model.AxleMidpoint - model.Wheelbase / 2;
+        int front = Array.FindIndex(rig.Profile.Axles, a => a.Steered) * 2;
+        Vector3 Model(float x, float y = 0) => Vector3.TransformPosition(new Vector3(x, y, 0), frame.Tractor);
+        Assert.Equal(Model(rear + model.Wheelbase).X, wheels[front].Position.X, 3);
+        Assert.Equal(Model(rear + model.Wheelbase, model.WheelTrack / 2).Y, wheels[front].Position.Y, 3);
+        Vector3 hitch = Vector3.TransformPosition(new Vector3(model.Kingpin, 0, model.WheelRadius * 2), frame.Tractor);
+        Assert.Equal(hitch.X, frame.Visual.Hitches[0].X, 3);
+        Vector3 trailerAxle = Vector3.TransformPosition(new Vector3(model.TrailerAxle, 0, 0), frame.Trailer);
+        Assert.Equal(trailerAxle.X, units[1].Axle.X, 3);
+        Assert.Equal(frame.Visual.Appearance.RadiusScale * .6f, model.WheelRadius * scale, 4);
+        Assert.Equal(rig.Units[1], new VehicleKinematics(VehicleGeometryProfiles.Truck(custom), default, 0).Units[1]);
+    }
+
+    [Fact]
+    public void TheDefaultBindingKeepsTheShippedAppearanceAndCustomBindingsAreSavedTuning()
+    {
+        var model = new Model(); var rig = new VehicleKinematics(VehicleGeometryProfiles.Truck(GameTuning.Default), default, .3);
+        var implicitBinding = RigRenderer.TruckFrames(rig, model, 3, (_, _) => 0);
+        var explicitBinding = RigRenderer.TruckFrames(rig, model, 3, (_, _) => 0, GameTuning.Default.Truck.ModelBinding);
+        Assert.Equal(implicitBinding.Tractor, explicitBinding.Tractor); Assert.Equal(implicitBinding.Trailer, explicitBinding.Trailer);
+        Assert.Equal(implicitBinding.Visual.Appearance, new RigAppearance(3, model.Wheelbase * 3 / 4, model.WheelTrack * 3 / 2, model.WheelRadius * 3 / .5f,
+            (model.Kingpin - model.TrailerAxle) * 3 / 6, (model.Kingpin - (model.AxleMidpoint - model.Wheelbase / 2)) * 3 + 1.5f * (model.Wheelbase * 3 / 4)));
+        var tuned = GameTuning.FromOverrides(new Dictionary<string, double> { ["ForwarderModelFrontLength"] = 2.6 });
+        Assert.Equal(2.6, VehicleGeometryProfiles.MachineBinding(tuned, ForestMachineKind.Forwarder).FrontLength);
+        Assert.Equal(2.2, GameTuning.Default[Tune.ForwarderModelFrontLength], 9);
+    }
+
+    [Fact]
+    public void TheRepositoryTruckSurveyFindsItsAxlesWithoutAGraphicsContext()
+    {
+        var survey = VehicleModelSurvey.Truck();
+        Assert.False(survey.Jointed);
+        Assert.Equal(2, survey.Axles(0).Length);
+        Assert.Equal(survey.Wheels.Max(w => w.X), survey.Axles(0)[0]);
+        Assert.InRange(survey.Track(0), .5, 1.2);
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(1)]

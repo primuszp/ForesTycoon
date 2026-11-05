@@ -341,6 +341,9 @@ namespace ForesTycoon
             Add("machine.geometry.processor", "Processzor csukló- és tengelygeometriája", "Járművek", "Járműtípus", "Mozgási al-lépés",
                 "ForesTycoon.Simulation/World/Vehicles/VehicleKinematics.cs", "VehicleKinematics", "vehicle.route|rules.behaviors", "vehicle.pose|vehicle.wheels",
                 "SI-mértékű tengelycsoportok, kerék- vagy alvázcsuklós kormányzás, kormányzási sebesség és passzív pótkocsilánc. A síkbeli geometria a megjelenítéstől független állapot.");
+            Add("vehicle.modelBinding", "Tengelyelrendezés és 3D-modell kötése", "Járművek", "Járműtípus", "Renderképkocka",
+                "ForesTycoon.Simulation/World/Vehicles/VehicleGeometryProfiles.cs", "RigModelBinding", "vehicle.pose|vehicle.wheels", "visual.truck|visual.machines",
+                "Azt mondja meg, milyen fizikai méreteket ábrázol a modell. A kirajzolás ebből számítja, hol jelennek meg a kerekek és a csuklók a modellhez képest; a pályát és a söpört területet nem változtatja meg.", "", GameRuleExecution.Presentation);
             // Every tunable number appears at its rule, editable in the editor and applied to the world as one journaled change.
             foreach (var spec in GameTuning.Specs)
             {

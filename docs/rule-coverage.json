@@ -542,9 +542,10 @@
       "ids": [
         "vehicle.geometry",
         "machine.geometry.forwarder",
-        "machine.geometry.processor"
+        "machine.geometry.processor",
+        "vehicle.modelBinding"
       ],
-      "editor": "Járművek → tengely- és csuklógeometria; kanyarodási pályapróba.",
+      "editor": "Járművek → Tengelyelrendezés, Modellkötés és Pályapróba.",
       "remaining": "Típusonként mentett geometria; kinematikai integrálás motorprimitív. A teljes karosszéria ütközésvizsgálata és automatikus többpontos megfordulás további munka.",
       "tests": [
         "ForesTycoon.Tests/VehicleKinematicsTests.cs",

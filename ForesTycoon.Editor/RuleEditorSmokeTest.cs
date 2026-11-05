@@ -470,18 +470,40 @@ namespace ForesTycoon.Editor
                 }
                 Require(GL.GetError() == ErrorCode.NoError, "Tuning list OpenGL error.");
                 FramebufferCapture.SavePng(Path.Combine(output, "tuning.png"), width, height);
+                void GeometryFrames() {
+                    for (int frame = 0; frame < 3; frame++) {
+                        ui.Update(width, height, width, height, Vec2.One, 1f / 60);
+                        ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 920));
+                        ImGui.Begin("Járműgeometria", ImGuiWindowFlags.NoSavedSettings);
+                        catalogView.DrawVehicleGeometryPreview(world); ImGui.End();
+                        GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit); ui.Render(); GL.Finish();
+                    }
+                    Require(GL.GetError() == ErrorCode.NoError, "Vehicle geometry preview OpenGL error.");
+                }
+                foreach (int kind in new[] { 0, 1, 2 })
+                foreach (int tab in new[] { CurrentRulesView.GeometryLayoutTab, CurrentRulesView.GeometryBindingTab }) {
+                    catalogView.SelectGeometryTabForTest(kind, tab); GeometryFrames();
+                    FramebufferCapture.SavePng(Path.Combine(output, $"vehicle-{(tab == CurrentRulesView.GeometryLayoutTab ? "layout" : "binding")}-{kind}.png"), width, height);
+                }
+                Require(catalogView.GeometryPresetProblemsForTest() is { Length: 0 }, "A vehicle template is not drivable: " + string.Join(" | ", catalogView.GeometryPresetProblemsForTest()));
+                catalogView.SelectGeometryTabForTest(0, CurrentRulesView.GeometryLayoutTab); GeometryFrames();
+                var handle = catalogView.GeometryHandleForTest("TruckWheelbase"); double wheelbase = catalogView.GetGeometry("TruckWheelbase");
+                ui.MouseMove((int)handle.X, (int)handle.Y); GeometryFrames();
+                ui.MouseButton(0, true); GeometryFrames();
+                ui.MouseMove((int)handle.X + 60, (int)handle.Y); GeometryFrames();
+                Require(catalogView.GetGeometry("TruckWheelbase") > wheelbase + .5, "Dragging the axle handle did not change the wheelbase.");
+                ui.MouseButton(0, false); GeometryFrames();
+                catalogView.SetGeometry("TruckWheelbase", wheelbase); ui.MouseMove(0, 0);
+                catalogView.SelectGeometryStudyForTest(0, StudyManoeuvre.QuarterTurn, 5); GeometryFrames();
+                Require(catalogView.GeometryStudyForTest?.Failure != null, "A too tight bend was not reported.");
+                FramebufferCapture.SavePng(Path.Combine(output, "vehicle-trial-too-tight.png"), width, height);
+                catalogView.SelectGeometryStudyForTest(0, StudyManoeuvre.QuarterTurn); GeometryFrames();
+                float playhead = catalogView.GeometryPlayheadForTest; catalogView.PlayGeometryForTest(); GeometryFrames();
+                Require(catalogView.GeometryPlayheadForTest != playhead, "The trial playback did not advance.");
                 foreach (int kind in new[] { 0, 1, 2 })
                 foreach (var manoeuvre in new[] { StudyManoeuvre.QuarterTurn, StudyManoeuvre.SCurve }) {
                 catalogView.SelectGeometryStudyForTest(kind, manoeuvre);
-                for (int frame = 0; frame < 2; frame++) {
-                    ui.Update(width, height, width, height, Vec2.One, 1f / 60);
-                    ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 920));
-                    ImGui.Begin("Járműgeometria", ImGuiWindowFlags.NoSavedSettings);
-                    ImGui.SetNextItemOpen(true, ImGuiCond.Always);
-                    catalogView.DrawVehicleGeometryPreview(world); ImGui.End();
-                    GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit); ui.Render(); GL.Finish();
-                }
-                Require(GL.GetError() == ErrorCode.NoError, "Vehicle geometry preview OpenGL error.");
+                GeometryFrames();
                 Require(catalogView.GeometryStudyForTest?.Failure == null && catalogView.GeometryStudyForTest?.Samples.Length > 100, "Vehicle path study failed.");
                 string studyName = $"vehicle-geometry-{kind}-{manoeuvre}";
                 FramebufferCapture.SavePng(Path.Combine(output, studyName + ".png"), width, height);
