@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using ForesTycoon.Rules;
@@ -9,57 +9,53 @@ namespace ForesTycoon.Editor;
 
 internal sealed class DynamicsEditorView
 {
-    private DynamicsModel model = new();
-    private string selectedStock, selectedFlow;
-    private readonly BehaviorEditorView equation = new();
-    internal BehaviorEditorView EquationEditor => equation;
-    private readonly Stack<string> undo = new(), redo = new();
-    internal DynamicsModel Document { get { SynchronizeEquation(); return new RuleProject { Dynamics = model }.Clone().Dynamics; } }
-    internal DynamicsModel Draft => model;
-    internal void Load(DynamicsModel value) {
-        model = new RuleProject { Dynamics = value }.Clone().Dynamics;
-        selectedFlow = null; selectedStock = model.Stocks.FirstOrDefault()?.Id; undo.Clear(); redo.Clear();
-        if (model.Flows.Count > 0) SelectFlow(model.Flows[0]);
-    }
-    private void Remember() { undo.Push(new RuleProject { Dynamics = model }.ToJson()); redo.Clear(); }
-    private void History(Stack<string> from, Stack<string> to)
+    private readonly DynamicsEditorState editorState;
+    private DynamicsModel model => editorState.Draft;
+    private readonly DynamicsViewUiState viewState;
+    private ref string selectedStock => ref viewState.SelectedStock;
+    private readonly BehaviorEditorView equation;
+    internal DynamicsEditorView(DynamicsEditorState state = null, DynamicsViewUiState ui = null, BehaviorViewUiState equationUi = null)
     {
-        SynchronizeEquation();
-        if (from.Count == 0) return;
-        to.Push(new RuleProject { Dynamics = model }.ToJson()); model = RuleProject.FromJson(from.Pop()).Dynamics; selectedFlow = null;
+        editorState = state ?? new(); viewState = ui ?? new();
+        equation = new(editorState.Equation, equationUi);
+        editorState.Replaced += ResetSelection;
+    }
+    internal BehaviorEditorView EquationEditor => equation;
+    internal DynamicsModel Document => editorState.Capture();
+    internal EditorReadList<DynamicsStockView> Stocks => editorState.Stocks;
+    internal EditorReadList<DynamicsFlowView> Flows => editorState.Flows;
+    internal HashSet<string> NamedValues() => editorState.NamedValues();
+    internal void Load(DynamicsModel value) { editorState.Load(value); ResetSelection(); }
+    internal void ResetSelection()
+    {
+        selectedStock = model.Stocks.FirstOrDefault()?.Id;
+        equation.ResetSelection();
     }
     internal string CreateStock()
     {
-        SynchronizeEquation(); Remember(); var stock = new DynamicsStock { Id = "s" + Guid.NewGuid().ToString("N")[..8] };
-        model.Stocks.Add(stock); selectedStock = stock.Id; selectedFlow = null; return stock.Id;
+        selectedStock = editorState.CreateStock(); editorState.BindFlow(null); return selectedStock;
     }
     internal string CreateFlow()
     {
-        SynchronizeEquation(); if (model.Stocks.Count == 0) throw new InvalidOperationException("Az áramláshoz előbb készletet hozz létre.");
-        Remember(); string id = "f" + Guid.NewGuid().ToString("N")[..8];
-        var flow = new DynamicsFlow { Id = id, To = model.Stocks.Any(s => s.Id == selectedStock) ? selectedStock : model.Stocks[0].Id,
-            Rate = new BehaviorGraph { Id = "rate." + id, Name = "Áramlási ráta", Hook = "flow." + id, Kind = "dynamics", Output = "rate",
-                Nodes = new() { new() { Id = "rate", Name = "Ráta", Operation = BehaviorOperation.Constant, Value = 1, X = 40, Y = 60 } } } };
-        model.Flows.Add(flow); SelectFlow(flow); return id;
+        string id = editorState.CreateFlow(selectedStock); equation.ResetSelection(); return id;
     }
     internal void DrawSelected(GameWorld world, string key, Func<string, double> read, Func<string, string, string[], Action<string>, bool> pick = null)
     {
-        SynchronizeEquation();
         if (key.StartsWith("stock.", StringComparison.Ordinal)) key = "stock:" + key[6..];
         if (key.StartsWith("stock:", StringComparison.Ordinal)) {
             var stock = model.Stocks.Find(s => s.Id == key[6..]);
             if (stock == null) { ImGui.TextWrapped("A készlet már nem létezik."); return; }
             string name = stock.Name, unit = stock.Unit;
-            if (ImGui.InputText("Készlet neve", ref name, 120)) { Remember(); stock.Name = name; }
-            if (ImGui.InputText("Mértékegység", ref unit, 40)) { Remember(); stock.Unit = unit; }
+            if (ImGui.InputText("Készlet neve", ref name, 120)) { editorState.EditStock(stock, value => value.Name = name); }
+            if (ImGui.InputText("Mértékegység", ref unit, 40)) { editorState.EditStock(stock, value => value.Unit = unit); }
             double initial = stock.Initial, min = stock.Minimum, max = stock.Maximum;
-            if (ImGui.InputDouble("Kezdőérték", ref initial)) { Remember(); stock.Initial = initial; }
-            if (ImGui.InputDouble("Minimum", ref min)) { Remember(); stock.Minimum = min; }
-            if (ImGui.InputDouble("Maximum", ref max)) { Remember(); stock.Maximum = max; }
+            if (ImGui.InputDouble("Kezdőérték", ref initial)) { editorState.EditStock(stock, value => value.Initial = initial); }
+            if (ImGui.InputDouble("Minimum", ref min)) { editorState.EditStock(stock, value => value.Minimum = min); }
+            if (ImGui.InputDouble("Maximum", ref max)) { editorState.EditStock(stock, value => value.Maximum = max); }
             ImGui.TextWrapped($"A világban: {read("stock." + stock.Id):G6} {stock.Unit}");
-            bool referenced = model.Flows.Any(f => f.From == stock.Id || f.To == stock.Id || f.Rate.Nodes.Any(n => n.Key == "stock." + stock.Id));
+            bool referenced = editorState.IsStockReferenced(stock);
             ImGui.BeginDisabled(referenced);
-            if (ImGui.Button("Készlet törlése")) { Remember(); model.Stocks.Remove(stock); ImGui.EndDisabled(); return; }
+            if (ImGui.Button("Készlet törlése")) { editorState.DeleteStock(stock); ImGui.EndDisabled(); return; }
             ImGui.EndDisabled();
             if (referenced) ImGui.TextWrapped("Törlés előtt bontsd a készletre hivatkozó áramlásokat.");
             ImGui.TextWrapped("Kapcsolódó áramlások:");
@@ -69,15 +65,15 @@ internal sealed class DynamicsEditorView
         }
         var active = model.Flows.Find(f => f.Id == key[5..]);
         if (active == null) { ImGui.TextWrapped("Az áramlás már nem létezik."); return; }
-        if (selectedFlow != active.Id) SelectFlow(active);
-        if (ImGui.Button("Áramlás törlése")) { Remember(); model.Flows.Remove(active); selectedFlow = null; return; }
+        if (editorState.BoundFlow != active.Id) { editorState.BindFlow(active.Id); equation.ResetSelection(); }
+        if (ImGui.Button("Áramlás törlése")) { editorState.DeleteFlow(active.Id); return; }
         string flowName = active.Name;
-        if (ImGui.InputText("Áramlás neve", ref flowName, 120)) { Remember(); active.Name = flowName; }
-        Endpoint("Forráskészlet", active.From, v => active.From = v); ImGui.SameLine();
-        Endpoint("Célkészlet", active.To, v => active.To = v);
+        if (ImGui.InputText("Áramlás neve", ref flowName, 120)) { editorState.EditFlow(active, value => value.Name = flowName); }
+        Endpoint("Forráskészlet", active.From, v => editorState.EditFlow(active, flow => flow.From = v)); ImGui.SameLine();
+        Endpoint("Célkészlet", active.To, v => editorState.EditFlow(active, flow => flow.To = v));
         ImGui.TextWrapped("Fix tick elején fut; a gráf másodpercenkénti átadást ad. Az áramlások az előző készletállapotból számolnak. Kevés készlet esetén arányosan osztoznak rajta; a sorrendjük nem ad elsőbbséget.");
         equation.Configure(new[] { DynamicsRuntime.FlowHook(active) }, DynamicsRuntime.Keys(model, GameWorld.RuleWorldFields), read);
-        equation.PickField = pick; equation.DrawEquation(world); SynchronizeEquation();
+        equation.PickField = pick; equation.DrawEquation(world);
     }
 
     private string EndpointName(string id) => id.Length == 0 ? "Környezet" : model.Stocks.Find(s => s.Id == id)?.Name ?? id;
@@ -85,23 +81,9 @@ internal sealed class DynamicsEditorView
     {
         ImGui.SetNextItemWidth(200);
         if (!ImGui.BeginCombo(label, EndpointName(id))) return;
-        if (ImGui.Selectable("Környezet", id.Length == 0)) { Remember(); set(""); }
+        if (ImGui.Selectable("Környezet", id.Length == 0)) { set(""); }
         foreach (var stock in model.Stocks)
-            if (ImGui.Selectable(stock.Name + "##" + stock.Id, stock.Id == id)) { Remember(); set(stock.Id); }
+            if (ImGui.Selectable(stock.Name + "##" + stock.Id, stock.Id == id)) { set(stock.Id); }
         ImGui.EndCombo();
-    }
-    private void SelectFlow(DynamicsFlow flow)
-    {
-        SynchronizeEquation();
-        selectedFlow = flow.Id;
-        equation.Configure(new[] { DynamicsRuntime.FlowHook(flow) }, DynamicsRuntime.Keys(model, GameWorld.RuleWorldFields), _ => 0);
-        equation.LoadDraft(new BehaviorModel { Graphs = new() { flow.Rate } });
-    }
-    private void SynchronizeEquation()
-    {
-        var flow = model.Flows.Find(f => f.Id == selectedFlow); if (flow == null) return;
-        var rate = equation.Document.Graphs.FirstOrDefault(); if (rate == null) return;
-        if (new BehaviorModel { Graphs = new() { rate } }.ToJson() == new BehaviorModel { Graphs = new() { flow.Rate } }.ToJson()) return;
-        Remember(); flow.Rate = rate;
     }
 }

@@ -27,6 +27,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ForesTycoon.RuleCompiler", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ForesTycoon.Simulation", "ForesTycoon.Simulation\ForesTycoon.Simulation.csproj", "{A1FBD640-6256-4DDF-95E9-E84C37EE03FE}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ForesTycoon.Editor.Core", "ForesTycoon.Editor.Core\ForesTycoon.Editor.Core.csproj", "{98BCD56E-1EDB-407E-82D7-953B16A04744}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -193,6 +195,18 @@ Global
 		{A1FBD640-6256-4DDF-95E9-E84C37EE03FE}.Release|x64.Build.0 = Release|Any CPU
 		{A1FBD640-6256-4DDF-95E9-E84C37EE03FE}.Release|x86.ActiveCfg = Release|Any CPU
 		{A1FBD640-6256-4DDF-95E9-E84C37EE03FE}.Release|x86.Build.0 = Release|Any CPU
+		{98BCD56E-1EDB-407E-82D7-953B16A04744}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{98BCD56E-1EDB-407E-82D7-953B16A04744}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{98BCD56E-1EDB-407E-82D7-953B16A04744}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{98BCD56E-1EDB-407E-82D7-953B16A04744}.Debug|x64.Build.0 = Debug|Any CPU
+		{98BCD56E-1EDB-407E-82D7-953B16A04744}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{98BCD56E-1EDB-407E-82D7-953B16A04744}.Debug|x86.Build.0 = Debug|Any CPU
+		{98BCD56E-1EDB-407E-82D7-953B16A04744}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{98BCD56E-1EDB-407E-82D7-953B16A04744}.Release|Any CPU.Build.0 = Release|Any CPU
+		{98BCD56E-1EDB-407E-82D7-953B16A04744}.Release|x64.ActiveCfg = Release|Any CPU
+		{98BCD56E-1EDB-407E-82D7-953B16A04744}.Release|x64.Build.0 = Release|Any CPU
+		{98BCD56E-1EDB-407E-82D7-953B16A04744}.Release|x86.ActiveCfg = Release|Any CPU
+		{98BCD56E-1EDB-407E-82D7-953B16A04744}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

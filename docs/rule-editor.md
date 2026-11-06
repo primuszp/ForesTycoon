@@ -1,5 +1,8 @@
 # Világszerkesztő
 
+A fejlesztői felelősségi köröket és bővítési szabályokat az
+[Editor-architektúra](editor-architecture.md) írja le.
+
 A ForesTycoon világát az editorban építjük fel, a játék ezt futtatja. A világ csempékből
 áll; a szabályok viszont a világéi: egyszer írod meg őket, és minden csempén ugyanúgy
 futnak. Egy csempe csak annyit mond: milyen a talaja, magassága, vize, mi áll rajta.

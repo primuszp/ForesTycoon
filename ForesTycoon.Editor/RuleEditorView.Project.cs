@@ -1,36 +1,25 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using ForesTycoon.Rules;
-using ImGuiNET;
-using System.Threading.Tasks;
-using ForesTycoon.RuleCompiler;
-using System.Text.Json;
 
 namespace ForesTycoon.Editor;
 
 internal sealed partial class RuleEditorView
 {
     private RuleProject pendingProject;
+    private System.Collections.Generic.Dictionary<string, double> pendingTuning;
     private bool projectInitialized, useLiveObjects = true;
-    private string projectPath = RuleProject.DefaultPath, projectName = "ForesTycoon szabályrendszer", worldPath = SaveGamePath.Default;
+    private string projectPath { get => workflow.ProjectPath; set => workflow.ProjectPath = value; }
+    private string worldPath = SaveGamePath.Default;
     private RuleWorldCatalog liveObjects;
     private string liveStatus = "";
     private DateTime nextObjectRead;
-    private readonly DynamicsEditorView dynamicsEditor = new();
-    // Compiled engine algorithms are not edited here; a project's reference to them is kept as it was loaded.
-    private AlgorithmGraphReference algorithmReference;
-    private Task<AlgorithmBuildResult> algorithmBuild;
-    private RuleProject publishingProject;
-    private string publishingPath;
-    private Task<RuleTrialResult> graphSimulation;
-    private RuleTrialResult trialResult;
-    private System.Threading.CancellationTokenSource trialCancellation;
-    private System.Threading.CancellationTokenSource publishingCancellation;
-    private string publishingAuthoringRevision;
-    private RuleAuthoring authoring = new();
-    private readonly ProjectFileGuard publishedGuard = new(), draftGuard = new();
-    private string guardedPath;
+    private readonly DynamicsEditorView dynamicsEditor;
+    private readonly ProjectWorkflow workflow;
+    private bool publishing => workflow.IsPublishing;
+    private bool savingScene => workflow.IsSavingScene;
+    private static IProjectWorkflowRuntime Runtime(GameWorld world) => new SimulationProjectWorkflowRuntime(world);
 
     private void EnsureProject(GameWorld world)
     {
@@ -41,15 +30,19 @@ internal sealed partial class RuleEditorView
                 catch (Exception e) when (Expected(e)) { pendingProject = null; projectLoadError = e.Message; }
             }
             if (pendingProject == null) {
-                projectName = world.RuleProjectDocument.Name;
-                if (behaviors.Document.Graphs.Count == 0 && behaviors.Document.Controllers.Count == 0) behaviors.LoadDraft(world.BehaviorDocument);
-                dynamicsEditor.Load(world.RuleProjectDocument.Dynamics);
+                var initial = world.RuleProjectDocument;
+                if (document.Behaviors.Draft.Graphs.Count > 0 || document.Behaviors.Draft.Controllers.Count > 0)
+                    initial.Behaviors = document.Behaviors.Capture();
+                if (pendingTuning != null) initial.Tuning = pendingTuning;
+                string loadError = projectLoadError;
+                LoadProject(world, initial);
+                projectLoadError = loadError;
             }
             behaviors.ApplyProject = () => ApplyProject(world, false);
-            behaviors.StoreGraphTemplate = graph => { RememberAuthoring(); authoring.Templates.Add(AuthoringOperations.Template(graph)); message = "A gráf másolata a szabálytárban van; új kötés még nem jött létre."; };
-            behaviors.StoreControllerTemplate = controller => { RememberAuthoring(); authoring.Templates.Add(AuthoringOperations.Template(controller)); message = "A munkaciklus másolata a szabálytárban van."; };
+            behaviors.StoreGraphTemplate = graph => { ruleWorkspace.StoreTemplate(graph); message = "A gráf másolata a szabálytárban van; új kötés még nem jött létre."; };
+            behaviors.StoreControllerTemplate = controller => { ruleWorkspace.StoreTemplate(controller); message = "A munkaciklus másolata a szabálytárban van."; };
             currentRules.RuleTarget = rule => {
-                var rules = RuleBookRules(world);
+                var rules = document.Rules;
                 int index = rules.FindIndex(r => r.Id == rule.Id || r.Template == rule.Id);
                 if (index >= 0) return () => ShowRuleBook(index);
                 var graph = behaviors.Document.Graphs.FirstOrDefault(g => !g.Hook.StartsWith("tuning.", StringComparison.Ordinal)
@@ -57,9 +50,7 @@ internal sealed partial class RuleEditorView
                 return graph == null ? null : () => ShowCommonRule("behavior:" + graph.Id);
             };
         }
-        if (guardedPath != Path.GetFullPath(projectPath)) { guardedPath = Path.GetFullPath(projectPath); publishedGuard.Observe(projectPath); draftGuard.Observe(RuleWorkshopModel.DraftPath(projectPath)); }
-        var dynamics = dynamicsEditor.Draft;
-        behaviors.Configure(WorldBehaviorPolicy.Hooks, DynamicsRuntime.Keys(dynamics, GameWorld.RuleWorldFields), key => PreviewValue(world, key));
+        behaviors.Configure(WorldBehaviorPolicy.Hooks, dynamicsEditor.NamedValues(), key => PreviewValue(world, key));
         behaviors.ObjectSource = kind => useLiveObjects
             ? liveObjects?.Objects.Where(o => o.Kind == kind).Select(o => (o.Id, o.Label)) ?? Enumerable.Empty<(ulong Id, string Label)>() : world.BehaviorTargets(kind);
         if (DateTime.UtcNow >= nextObjectRead) {
@@ -78,33 +69,27 @@ internal sealed partial class RuleEditorView
     }
     private void LoadProject(GameWorld world, RuleProject project)
     {
+        workflow.EnsureIdle();
         project = EditorProjectLoader.Prepare(project);
+        project.World ??= world.RuleProjectDocument.World ?? WorldLoader.CaptureScenario(world);
+        // Legacy maps without species use the built-in catalog, resolved once when the document opens.
+        if (project.World.Species.Count == 0) project.World.Species = GameWorld.DefaultScenario().Species;
+        MarkDocumentChanged();
+        trials.Invalidate();
         projectLoadError = null;
-        var tuning = GameTuning.FromOverrides(project.Tuning);
-        pendingProject = project.Clone(); projectName = project.Name;
-        workshopVersions.Reset(); trialResult = null; publishedProjectRevision = null;
-        authoring = project.Clone().Authoring ?? new();
-        LoadRuleBook(project);
-        scenario = project.World == null ? null : RuleProject.FromJson(new RuleProject { World = project.World }.ToJson()).World;
+        pendingProject = project;
+        document.Load(project);
+        workflow.ResetDocument(document.Revision());
+        ruleWorkspace.Reset(project);
         scenarioBuilt = false; appliedScenario = null;
-        if (scenario != null) seedEdit = scenario.Seed;
-        authoringUndo.Clear(); authoringRedo.Clear();
-        publishedGuard.Observe(projectPath); draftGuard.Observe(RuleWorkshopModel.DraftPath(projectPath)); guardedPath = Path.GetFullPath(projectPath);
-        algorithmReference = project.Algorithms;
-        dynamicsEditor.Load(project.Dynamics);
+        if (document.World != null) seedEdit = document.World.Seed;
+        dynamicsEditor.ResetSelection();
         behaviors.Configure(WorldBehaviorPolicy.Hooks, DynamicsRuntime.Keys(project.Dynamics, GameWorld.RuleWorldFields), key => PreviewValue(world, key));
-        behaviors.LoadDraft(project.Behaviors);
-        var catalog = world.DescribeCurrentRules();
-        foreach (var rule in catalog.Rules)
-            for (int i = 0; i < rule.Parameters.Count; i++)
-                if (rule.Parameters[i].Tunable) rule.Parameters[i] = rule.Parameters[i] with { Value = tuning[GameTuning.Spec(rule.Parameters[i].Key).Key] };
-        currentRules.Load(catalog);
+        behaviors.ResetSelection();
+        currentRules.Load(world.DescribeCurrentRules());
+        RecordHistory(world);
     }
-    internal RuleProject CollectProject(GameWorld world) => new() { Name = projectName,
-        Tuning = currentRules.TuningOverrides(world), Behaviors = behaviors.Document, Dynamics = dynamicsEditor.Document,
-        Algorithms = algorithmReference, Rules = RuleEngine.Clone(RuleBookRules(world)), RemovedStarters = RemovedStarters(world).ToList(), Fields = RuleEngine.CloneFields(RuleBookFields(world)),
-        Authoring = JsonSerializer.Deserialize<RuleAuthoring>(JsonSerializer.Serialize(authoring)),
-        World = scenario == null ? world.RuleProjectDocument.World : RuleProject.FromJson(new RuleProject { World = scenario }.ToJson()).World };
+    internal RuleProject CollectProject() => document.Capture();
     private double PreviewValue(GameWorld world, string key)
     {
         if (useLiveObjects) {
@@ -115,70 +100,57 @@ internal sealed partial class RuleEditorView
         }
         if (key.StartsWith("stock.")) {
             if (world.DynamicsValues.TryGetValue(key[6..], out double value)) return value;
-            return dynamicsEditor.Draft.Stocks.Find(s => s.Id == key[6..])?.Initial ?? 0;
+            return dynamicsEditor.Stocks.Find(s => s.Id == key[6..])?.Initial ?? 0;
         }
         return world.ReadRuleValue(key);
     }
     private void ApplyProject(GameWorld world, bool publish)
     {
-        if (publish) publishedGuard.RequireUnchanged(projectPath);
-        var project = CollectProject(world); project.Algorithms = null;
-        project = GameWorld.NormalizeRuleProject(project);
-        if (project.Algorithms != null && project.Algorithms.Revision != AlgorithmBuild.CurrentRevision) {
-            if (!publish) throw new InvalidOperationException("Az algoritmusgráfokat a Mentés és futtatás fordítja. A beépített tesztvilág az editor saját algoritmusverzióját futtatja; a teljes gráfprojektet a CLI szimuláció ellenőrzi.");
-            if (algorithmBuild != null) throw new InvalidOperationException("A fordítás már folyamatban van.");
-            publishingProject = project; publishingPath = Path.GetFullPath(projectPath);
-            publishingAuthoringRevision = AuthoringRevision(world);
-            publishingCancellation = new(); var cancellation = publishingCancellation.Token;
-            algorithmBuild = Task.Run(() => AlgorithmBuild.CompileAsync(project.Algorithms, cancellation));
-            message = "Az algoritmusgráfok ellenőrzése és fordítása folyamatban. Az érvényes projekt fordítás után kerül a játékhoz.";
-            return;
-        }
-        if (publish) { ProjectHistory.Archive(projectPath); RuleProject.WriteAtomic(projectPath, project.ToJson()); publishedGuard.Observe(projectPath); }
-        world.QueueRuleProject(project);
-        if (publish) { workshopVersions.MarkPublished(AuthoringRevision(world)); publishedProjectRevision = project.ContentRevision(); }
-        // Applying is saving: the scene the game starts from gets the same project, so a restart keeps what was applied.
-        if (publish && scenario != null) SaveScene(world);
-        message = publish ? "Alkalmazva: a futó játék átveszi, a jelenet mentése folyamatban (a következő indulás is ezt futtatja)." : "A teljes szabályprojekt alkalmazása naplózva a tesztvilágban.";
+        MarkDocumentChanged();
+        if (publish) CompleteEdits();
+        ApplyWorkflowResult(publish ? workflow.Publish(CollectProject(), Runtime(world)) : workflow.ApplyPreview(CollectProject(), Runtime(world)));
     }
-    private void RefreshProjectOperations()
+    private void RefreshProjectOperations(GameWorld world)
     {
-        if (graphSimulation?.IsCompleted == true) {
-            try {
-                trialResult = graphSimulation.GetAwaiter().GetResult();
-                workshopVersions.CompleteTrial(trialResult.DraftRevision);
-                message = "Összehasonlító próba kész. Az eredmények a Próba lépésben láthatók.";
-            } catch (OperationCanceledException) { message = "A próba megszakítva; a munkapéldány megmaradt."; }
-            catch (Exception e) { message = e.Message; }
-            graphSimulation = null; trialCancellation?.Dispose(); trialCancellation = null;
-        }
-        if (algorithmBuild?.IsCompleted == true) {
-            try {
-                var runtime = algorithmBuild.GetAwaiter().GetResult();
-                publishingCancellation?.Token.ThrowIfCancellationRequested();
-                publishedGuard.RequireUnchanged(publishingPath);
-                ProjectHistory.Archive(publishingPath);
-                RuleProject.WriteAtomic(publishingPath, publishingProject.ToJson());
-                publishedGuard.Observe(publishingPath);
-                workshopVersions.MarkPublished(publishingAuthoringRevision);
-                publishedProjectRevision = publishingProject.ContentRevision();
-                message = "Az algoritmusgráfok lefordultak és a projekt megjelent a játék számára. A játék ment és átáll az új algoritmusokra. " + runtime.Revision[..12];
-            } catch (OperationCanceledException) { message = "A fordítás / közzététel megszakítva. A munkapéldány megmaradt, a játék projektje nem változott."; }
-            catch (Exception e) { message = e.Message; }
-            algorithmBuild = null; publishingProject = null; publishingCancellation?.Dispose(); publishingCancellation = null;
-        }
+        if (trials.HasSource) trials.ValidateSource(AuthoringRevision(world));
+        trials.Poll();
+        foreach (var operation in workflow.Poll()) ApplyWorkflowResult(operation);
+    }
+    private void ApplyWorkflowResult(ProjectOperation operation)
+    {
+        statusFrame = -1000;
+        message = operation.Kind switch {
+            ProjectOperationKind.PreviewApplied => "A teljes szabályprojekt alkalmazása naplózva a tesztvilágban.",
+            ProjectOperationKind.DraftSaved => "Munkapéldány mentve. A játékban futó szabályokat nem módosította. " + operation.Path,
+            ProjectOperationKind.SceneSaveStarted => "A jelenet ellenőrzése és mentése folyamatban…",
+            ProjectOperationKind.SceneSaved => "Jelenet és szabályok mentve: " + operation.Path,
+            ProjectOperationKind.SceneSaveFailed => "A jelenet nem menthető: " + operation.Error?.Message,
+            ProjectOperationKind.PublishStarted => "Az algoritmusgráfok ellenőrzése és fordítása folyamatban. Az érvényes projekt fordítás után kerül a játékhoz.",
+            ProjectOperationKind.Published when operation.Error != null => "A projekt közzétéve. A jelenet mentése nem indítható: " + operation.Error.Message,
+            ProjectOperationKind.Published when operation.PreviewError != null => "A projekt közzétéve. A tesztvilág alkalmazása nem sikerült: " + operation.PreviewError.Message,
+            ProjectOperationKind.Published => "A projekt közzétéve; a futó játék átveszi. " + (operation.SceneSaveStarted ? "A jelenet mentése folyamatban." : ""),
+            ProjectOperationKind.PublishCancelled => "A fordítás / közzététel megszakítva. A munkapéldány megmaradt.",
+            ProjectOperationKind.PublishFailed => operation.Error?.Message ?? "A közzététel nem sikerült.",
+            ProjectOperationKind.SceneOpened => "Jelenet megnyitva: " + operation.Path,
+            _ => message
+        };
     }
     internal void StopBackgroundOperations(GameWorld world)
     {
-        trialCancellation?.Cancel();
-        publishingCancellation?.Cancel();
-        treeRenderer?.Dispose(); treeRenderer = null;
-        if (world == null || !projectInitialized || !workshopVersions.Unsaved) return;
-        try { WorkshopDraftStore.Save(RecoveryStem(), CollectProject(world)); }
+        CompleteEdits();
+        foreach (var operation in workflow.Stop())
+            if (operation.Error != null) Console.Error.WriteLine(operation.Error.Message);
+        trials.Dispose();
+        treeEditor.Dispose();
+        if (world == null || !projectInitialized) return;
+        document.Invalidate();
+        RefreshWorkshopRevision(world);
+        if (!workshopVersions.Unsaved) return;
+        try { workflow.SaveRecovery(CollectProject()); }
         catch (Exception e) { Console.Error.WriteLine("A helyreállítási munkapéldány mentése nem sikerült: " + e.Message); }
     }
     internal void ShowDynamics() {
-        var flow = dynamicsEditor.Draft.Flows.FirstOrDefault(); var stock = dynamicsEditor.Draft.Stocks.FirstOrDefault();
+        var flow = dynamicsEditor.Flows.FirstOrDefault(); var stock = dynamicsEditor.Stocks.FirstOrDefault();
         ShowCommonRule(flow != null ? "flow:" + flow.Id : stock != null ? "stock:" + stock.Id : "library");
     }
     internal void UseWorldFile(string file) { worldPath = Path.GetFullPath(file); useLiveObjects = false; }

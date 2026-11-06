@@ -9,6 +9,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../ForesTycoon.Editor.Core/ForesTycoon.Editor.Core.csproj" />
+    <Using Include="ForesTycoon.Editor.Core" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
@@ -30,16 +34,10 @@
     <None Include="../docs/references/opening-scene/fingerprints.json" Link="OpeningReference.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../docs/references/opening-scene/opening.world.json.gz" Link="OpeningReference.world.json.gz" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
-  <ItemGroup>
-    <Compile Include="../ForesTycoon.Editor/RuleWorkshopModel.cs" Link="Editor/RuleWorkshopModel.cs" />
-    <Compile Include="../ForesTycoon.Editor/WorkshopDraftStore.cs" Link="Editor/WorkshopDraftStore.cs" />
-    <Compile Include="../ForesTycoon.Editor/AuthoringOperations.cs" Link="Editor/AuthoringOperations.cs" />
-    <Compile Include="../ForesTycoon.Editor/EditorProjectLoader.cs" Link="Editor/EditorProjectLoader.cs" />
-    <Compile Include="../ForesTycoon.Editor/EditorWorldLoader.cs" Link="Editor/EditorWorldLoader.cs" />
-    <Compile Include="../ForesTycoon.Editor/StumpRuleTrial.cs" Link="Editor/StumpRuleTrial.cs" />
-  </ItemGroup>
+
 
   <ItemGroup>
+    <ProjectReference Include="../ForesTycoon.Editor/ForesTycoon.Editor.csproj" />
     <ProjectReference Include="../ForesTycoon.Simulation/ForesTycoon.Simulation.csproj" />
     <ProjectReference Include="..\ForesTycoon\ForesTycoon.csproj" />
     <ProjectReference Include="..\ForesTycoon.Engine\ForesTycoon.Engine.csproj" />

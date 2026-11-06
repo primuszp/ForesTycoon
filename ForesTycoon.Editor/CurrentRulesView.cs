@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -23,6 +23,21 @@ namespace ForesTycoon.Editor
             .Select((t, i) => new Domain(t.Name, EditorStyle.TopicColour(i), t.Modules)).ToArray();
         private static readonly Domain Other = new("Egyéb", new Vec4(0.6f, 0.6f, 0.6f, 1), Array.Empty<string>());
 
+        private readonly EditorTuning tuning;
+        private readonly bool ownsTuning;
+        private readonly Action<string, double> setTuningValue;
+        private readonly Func<string, string> readNotes;
+        private readonly Action<string, string> writeNotes;
+        internal CurrentRulesView(EditorTuning tuning = null, Action<string, double> setValue = null, CurrentRulesUiState ui = null, VehicleGeometryUiState vehicleUi = null,
+            Func<string, string> readNotes = null, Action<string, string> writeNotes = null)
+        {
+            ownsTuning = tuning == null; this.tuning = tuning ?? new();
+            setTuningValue = setValue ?? this.tuning.Set; this.readNotes = readNotes; this.writeNotes = writeNotes;
+            viewState = ui ?? new();
+            vehicles = new(new(this.tuning, vehicleUi ?? new(), () => catalog, setTuningValue, EnsureCatalog, UnappliedTuning, DrawTuning));
+            this.tuning.Changed += RefreshTuning;
+        }
+
         private GameRuleCatalog catalog;
         private GameRuleIndex index;
         private GameRuleDefinition[] visibleRules;
@@ -35,10 +50,15 @@ namespace ForesTycoon.Editor
         private string observedRule;
         private string[] observations = Array.Empty<string>();
         private long observedAt;
-        private string module = "", selected = "", search = "", dragging, hovered;
-        private Vec2 pan = new(10, 10);
-        private float zoom = 0.85f;
-        private bool fitRequested = true;
+        private readonly CurrentRulesUiState viewState;
+        private ref string module => ref viewState.Module;
+        private ref string selected => ref viewState.Selected;
+        private ref string search => ref viewState.Search;
+        private ref string dragging => ref viewState.Dragging;
+        private ref string hovered => ref viewState.Hovered;
+        private ref Vec2 pan => ref viewState.Pan;
+        private ref float zoom => ref viewState.Zoom;
+        private ref bool fitRequested => ref viewState.FitRequested;
 
         private const float ModuleWidth = 210, ModuleHeight = 78, ModuleColumn = 260, ModuleRow = 98;
         private const int DomainsPerRow = 3;
@@ -55,6 +75,8 @@ namespace ForesTycoon.Editor
             loaded = CurrentGameRules.Refresh(loaded, current ?? (file != null ? CurrentGameRules.Build() : loaded));
             var nextIndex = new GameRuleIndex(loaded);
             catalog = loaded; index = nextIndex;
+            if (ownsTuning) tuning.Replace(loaded.TuningOverrides());
+            RefreshTuning();
             groups = Domains.Select(d => (d, d.Modules.Where(m => index.Modules.Contains(m)).ToArray()))
                 .Append((Other, index.Modules.Where(m => !Domains.Any(d => d.Modules.Contains(m))).ToArray()))
                 .Where(g => g.Item2.Length > 0).ToList();
@@ -634,12 +656,14 @@ namespace ForesTycoon.Editor
                 foreach (string value in observations) { ImGui.Bullet(); ImGui.SameLine(); ImGui.PushTextWrapPos(); EditorStyle.Text(HudTheme.Info, value); ImGui.PopTextWrapPos(); }
             }
             EditorStyle.Section("Tervezői megjegyzés");
-            string notes = rule.Notes;
-            if (ImGui.InputTextMultiline("##notes", ref notes, 4096, new Vec2(-1, 96))) rule.Notes = notes;
+            string notes = readNotes?.Invoke(rule.Id) ?? rule.Notes;
+            if (ImGui.InputTextMultiline("##notes", ref notes, 4096, new Vec2(-1, 96))) {
+                if (writeNotes != null) writeNotes(rule.Id, notes); else rule.Notes = notes;
+            }
             if (notes.Length == 0 && !ImGui.IsItemActive())
             {
                 Vec2 min = ImGui.GetItemRectMin();
-                ImGui.GetWindowDrawList().AddText(min + new Vec2(8, 6), EditorStyle.U(EditorStyle.Fade(HudTheme.Muted, 0.6f)), "Ötlet, kérdés, hangolási jegyzet… (a katalógussal mentődik)");
+                ImGui.GetWindowDrawList().AddText(min + new Vec2(8, 6), EditorStyle.U(EditorStyle.Fade(HudTheme.Muted, 0.6f)), "Ötlet, kérdés, hangolási jegyzet…");
             }
         }
 
@@ -664,7 +688,7 @@ namespace ForesTycoon.Editor
                     ImGui.SetNextItemWidth(-1);
                     if (p.Changed) ImGui.PushStyleColor(ImGuiCol.Text, HudTheme.AmberAccent);
                     if (ImGui.DragFloat("##" + id, ref value, speed, (float)p.Min, (float)p.Max, Format(p), ImGuiSliderFlags.AlwaysClamp))
-                        rule.Parameters[i] = p with { Value = value == (float)p.Default ? p.Default : Math.Clamp(value, p.Min, p.Max) };
+                        SetParameter(rule, i, value == (float)p.Default ? p.Default : Math.Clamp(value, p.Min, p.Max));
                     if (p.Changed) ImGui.PopStyleColor();
                     if (ImGui.IsItemHovered()) ImGui.SetTooltip($"{p.Name}\nAlapérték: {p.Default:G6} {p.Unit}\nHúzás: hangolás · Ctrl+kattintás: beírás");
                     return ImGui.IsItemDeactivatedAfterEdit();
@@ -675,19 +699,24 @@ namespace ForesTycoon.Editor
 
 
 
-        /// <summary>Sets every tunable number: the given overrides, defaults for the rest.</summary>
-        internal void SetTuning(IReadOnlyDictionary<string, double> overrides)
+        /// <summary>Replaces the document values and refreshes every catalog projection.</summary>
+        internal void SetTuning(IReadOnlyDictionary<string, double> overrides) => tuning.Replace(overrides);
+
+        private void SetParameter(GameRuleDefinition rule, int index, double value) => setTuningValue(rule.Parameters[index].Key, value);
+
+        private void RefreshTuning()
         {
             foreach (var rule in catalog?.Rules ?? new())
-                for (int i = 0; i < rule.Parameters.Count; i++)
-                    if (rule.Parameters[i].Tunable)
-                        rule.Parameters[i] = rule.Parameters[i] with { Value = overrides.TryGetValue(rule.Parameters[i].Key, out double v) ? v : rule.Parameters[i].Default };
+                for (int i = 0; i < rule.Parameters.Count; i++) {
+                    var parameter = rule.Parameters[i];
+                    if (parameter.Tunable) rule.Parameters[i] = parameter with { Value = tuning.Get(parameter.Key) };
+                }
         }
 
         internal Dictionary<string, double> TuningOverrides(GameWorld world)
         {
-            if (catalog == null) Load(world.DescribeCurrentRules());
-            return catalog.TuningOverrides();
+            if (catalog == null && ownsTuning && world != null) EnsureCatalog(world);
+            return tuning.Capture();
         }
 
         /// <summary>How many tunables differ between this document and the test world.</summary>
@@ -736,17 +765,17 @@ namespace ForesTycoon.Editor
                 if (p.Key == "TruckTrailerLayout") {
                     int layout = (int)Math.Round(p.Value);
                     if (ImGui.Combo("##" + rule.Id + p.Key, ref layout, "Szóló tehergépkocsi\0Nyerges / középtengelyes pótkocsi\0Vonórudas, forgózsámolyos pótkocsi\0"))
-                        rule.Parameters[index] = p with { Value = layout };
+                        SetParameter(rule, index, layout);
                 } else if (p.Key == "ProcessorSteeringModel") {
                     int model = (int)Math.Round(p.Value);
                     if (ImGui.Combo("##" + rule.Id + p.Key, ref model, "Kerékkormányzás\0Alvázcsuklós kormányzás\0"))
-                        rule.Parameters[index] = p with { Value = model };
+                        SetParameter(rule, index, model);
                 } else if (p.Unit == "db") {
                     int count = (int)Math.Round(p.Value);
                     if (ImGui.DragInt("##" + rule.Id + p.Key, ref count, .03f, (int)p.Min, (int)p.Max, "%d", ImGuiSliderFlags.AlwaysClamp))
-                        rule.Parameters[index] = p with { Value = count };
+                        SetParameter(rule, index, count);
                 } else if (ImGui.DragFloat("##" + rule.Id + p.Key, ref value, speed, (float)p.Min, (float)p.Max, Format(p), ImGuiSliderFlags.AlwaysClamp))
-                    rule.Parameters[index] = p with { Value = value == (float)p.Default ? p.Default : Math.Clamp(value, p.Min, p.Max) };
+                    SetParameter(rule, index, value == (float)p.Default ? p.Default : Math.Clamp(value, p.Min, p.Max));
                 if (p.Changed) ImGui.PopStyleColor();
             }
             else { ImGui.AlignTextToFramePadding(); EditorStyle.Text(EditorStyle.Fade(HudTheme.Muted, 0.85f), p.Value.ToString("G6")); }
@@ -760,7 +789,7 @@ namespace ForesTycoon.Editor
             ImGui.TableNextColumn();
             if (p.Changed)
             {
-                if (EditorStyle.QuietButton("alap##" + rule.Id + p.Key, $"Vissza az alapértékre: {p.Default:G6}")) rule.Parameters[index] = p with { Value = p.Default };
+                if (EditorStyle.QuietButton("alap##" + rule.Id + p.Key, $"Vissza az alapértékre: {p.Default:G6}")) SetParameter(rule, index, p.Default);
             }
         }
 
@@ -785,7 +814,7 @@ namespace ForesTycoon.Editor
                 if (EditorStyle.QuietButton("Mind alapra", "Minden hangolt értéket visszaállít az alapértékre (alkalmazni külön kell)."))
                     foreach (var rule in catalog.Rules.Where(r => include(r.Id)))
                         for (int i = 0; i < rule.Parameters.Count; i++)
-                            if (rule.Parameters[i].Changed) rule.Parameters[i] = rule.Parameters[i] with { Value = rule.Parameters[i].Default };
+                            if (rule.Parameters[i].Changed) SetParameter(rule, i, rule.Parameters[i].Default);
             }
             ImGui.Spacing();
             ImGui.BeginChild("tuning-list", new Vec2(0, 0), ImGuiChildFlags.Borders);

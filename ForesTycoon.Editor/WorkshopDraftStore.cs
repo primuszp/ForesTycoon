@@ -8,7 +8,7 @@ internal static class WorkshopDraftStore
     internal static string Save(string publishedPath, RuleProject document)
     {
         string destination = RuleWorkshopModel.DraftPath(RuleWorkshopModel.PublishedPath(publishedPath));
-        RuleProject.WriteAtomic(destination, document.Clone().ToJson());
+        new ProjectPersistence().Save(destination, document);
         return destination;
     }
 }

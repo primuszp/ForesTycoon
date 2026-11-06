@@ -1,6 +1,5 @@
-using System;
+﻿using System;
 using System.IO;
-using System.Threading.Tasks;
 using ForesTycoon.Rules;
 using ImGuiNET;
 using Vec2 = System.Numerics.Vector2;
@@ -10,12 +9,8 @@ namespace ForesTycoon.Editor;
 /// <summary>The scene document: one file holds the map, missions and rules. The header's Jelenet menu opens and saves it.</summary>
 internal sealed partial class RuleEditorView
 {
-    // The game starts from this document: saving it here is what the game plays next.
-    private string scenePath = WorldLoader.OpeningScenePath()
-        ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ForesTycoon", "scenes", "opening.json");
+    private string scenePath { get => workflow.ScenePath; set => workflow.ScenePath = value; }
     private string scenePathEdit;
-
-    private Task<string> sceneSaveTask;
 
     private bool EditingGameScene => WorldLoader.OpeningScenePath() is string game && Path.GetFullPath(scenePath) == Path.GetFullPath(game);
 
@@ -25,6 +20,7 @@ internal sealed partial class RuleEditorView
         if (ImGui.Button("Jelenet…") || ImGui.GetIO().KeyCtrl && ImGui.IsKeyPressed(ImGuiKey.O)) { scenePathEdit = scenePath; ImGui.OpenPopup("scene-menu"); }
         if (ImGui.IsItemHovered()) ImGui.SetTooltip("Megnyitás, mentés, mentés másként · Ctrl+O");
         if (!ImGui.BeginPopup("scene-menu")) return;
+        ImGui.BeginDisabled(savingScene || publishing);
         string gameScene = WorldLoader.OpeningScenePath();
         EditorStyle.Section("Aktív jelenet");
         ImGui.TextUnformatted(Path.GetFullPath(scenePath));
@@ -40,10 +36,7 @@ internal sealed partial class RuleEditorView
         if (ImGui.Button("Megnyitás", new Vec2(140, 0))) { Try(() => OpenScene(world, scenePathEdit)); ImGui.CloseCurrentPopup(); }
         ImGui.SameLine();
         if (ImGui.Button("Mentés másként", new Vec2(140, 0))) {
-            Try(() => {
-                string previous = scenePath; scenePath = scenePathEdit;
-                try { SaveScene(world); } catch { scenePath = previous; throw; }
-            });
+            Try(() => SaveScene(world, scenePathEdit));
             ImGui.CloseCurrentPopup();
         }
 
@@ -52,46 +45,30 @@ internal sealed partial class RuleEditorView
         if (ImGui.IsItemHovered()) ImGui.SetTooltip(gameScene);
         if (ImGui.Button("Eredeti generált nyitójelenet", new Vec2(220, 0))) {
             Try(() => {
-                scenario = WorldLoader.OpeningProject().World;
-                seedEdit = scenario.Seed;
+                document.Scene.Replace(WorldLoader.OpeningProject().World);
+                seedEdit = document.World.Seed;
                 ApplyScenario(world, "Az eredeti, generált nyitójelenet betöltve (küldetések nélkül). Mentéskor az aktív fájlba kerül.");
             });
             ImGui.CloseCurrentPopup();
         }
         if (ImGui.IsItemHovered()) ImGui.SetTooltip("A beépített generátor kezdővilága, ahogy a szerkesztés előtt volt.");
-        ImGui.EndPopup();
+        ImGui.EndDisabled(); ImGui.EndPopup();
     }
 
-    private void SaveScene(GameWorld world)
+    private void SaveScene(GameWorld world, string destination = null, RuleProject snapshot = null)
     {
-        if (sceneSaveTask != null) return;
-        var project = CollectProject(world); project.Algorithms = null;
-        string destination = Path.GetFullPath(scenePath);
-        object species = world.WithSpecies(ForestSpeciesBook.CaptureContext);
-        sceneSaveTask = Task.Run(() => ForestSpeciesBook.WithContext(species, () => {
-            using var check = WorldLoader.CreateProject(project);
-            RuleProject.WriteAtomic(destination, project.ToJson()); return destination;
-        }));
-        message = "A jelenet ellenőrzése és mentése folyamatban…";
-    }
-
-    private void RefreshSceneSave()
-    {
-        if (sceneSaveTask?.IsCompleted != true) return;
-        try { message = "Jelenet és szabályok mentve: " + sceneSaveTask.GetAwaiter().GetResult(); statusFrame = -1000; }
-        catch (Exception error) { message = "A jelenet nem menthető: " + error.Message; }
-        finally { sceneSaveTask = null; }
+        CompleteEdits();
+        ApplyWorkflowResult(workflow.BeginSceneSave(snapshot ?? CollectProject(), Runtime(world), destination));
     }
 
     private void OpenScene(GameWorld world, string path)
     {
-        var project = RuleProject.FromJson(File.ReadAllText(path));
-        if (project.World == null) throw new InvalidDataException("A fájl nem tartalmaz jelenetet.");
-        world.RequestScenario(project.World, project);
-        LoadProject(world, project);
-        scenePath = path;
+        CompleteEdits();
+        var operation = workflow.OpenScene(path, Runtime(world), project => {
+            LoadProject(world, project);
+            world.RequestScenario(project.World, EditorDocument.ForSandbox(project));
+        });
         appliedScenario = ScenarioKey(); scenarioBuilt = true;
-        statusFrame = -1000; ClearHistory();
-        message = "Jelenet megnyitva: " + Path.GetFullPath(path);
+        ApplyWorkflowResult(operation);
     }
 }

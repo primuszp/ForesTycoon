@@ -10,14 +10,15 @@ namespace ForesTycoon.Editor;
 
 internal sealed partial class RuleEditorView
 {
-    private readonly WorkshopVersions workshopVersions = new();
-    private string publishedProjectRevision;
+    private WorkshopVersions workshopVersions => workflow.Versions;
+    private string publishedProjectRevision => workflow.PublishedProjectRevision;
 
-    private string AuthoringRevision(GameWorld world)
+    private void MarkDocumentChanged()
     {
-        var project = CollectProject(world); project.Algorithms = null;
-        return project.ContentRevision() + ":" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(authoring))));
+        document.Invalidate();
+        statusFrame = -1000;
     }
+    private string AuthoringRevision(GameWorld world) => document.Revision();
     private void RefreshWorkshopRevision(GameWorld world)
     {
         workshopVersions.Observe(AuthoringRevision(world));
@@ -25,17 +26,8 @@ internal sealed partial class RuleEditorView
             && DateTime.UtcNow - date.ToUniversalTime() <= TimeSpan.FromSeconds(15);
         workshopVersions.Acknowledge(fresh ? liveObjects.ProjectRevision : null);
     }
-    private void SaveProjectDraft(GameWorld world)
-    {
-        draftGuard.RequireUnchanged(RuleWorkshopModel.DraftPath(projectPath));
-        ProjectHistory.Archive(RuleWorkshopModel.DraftPath(projectPath));
-        string destination = WorkshopDraftStore.Save(projectPath, CollectProject(world));
-        draftGuard.Observe(destination);
-        RefreshWorkshopRevision(world); workshopVersions.MarkSaved();
-        message = "Munkapéldány mentve. A játékban futó szabályokat nem módosította. " + destination;
-    }
     internal void ShowWorkshopComparison(RuleTrialResult result)
     {
-        trialResult = result; workshopVersions.CompleteTrial(result.DraftRevision);
+        workshopVersions.CompleteTrial(result.DraftRevision);
     }
 }

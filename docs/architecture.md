@@ -2,6 +2,11 @@
 
 ```mermaid
 flowchart TD
+    Editor["Editor: ablak és oldalnézetek"] --> EditorCore["Editor.Core: dokumentum és szerkesztési szolgáltatások"]
+    Editor --> Game
+    EditorCore --> Simulation
+    EditorCore --> Rules
+    EditorCore --> Engine
     Game["ForesTycoon: UI, GameWorld adapter, jelenet"] --> Simulation["ForesTycoon.Simulation: SimulationWorld"]
     Game --> Visual["Rendering / Models / Effects"]
     Simulation --> Map["Map"]
@@ -18,6 +23,11 @@ flowchart TD
 A `Simulation` függőségi láncában nincs játék-, editor-, GPU-, ablak- vagy UI-modul.
 Ezt a `SimulationModuleTests` tranzitívan, az `ArchitectureTests` a forrásokon is ellenőrzi.
 
+Az Editor szerkesztési szolgáltatásai az önálló `ForesTycoon.Editor.Core` projektben
+élnek; a függőségi láncuk szintén nem tartalmaz játékhostot, GPU-t, ablakot vagy
+ImGui-t. A komponensek és parancsok részletes szerződése:
+[Editor-architektúra](editor-architecture.md).
+
 | Szerelvény | Névtér | Felelőssége | Nem tudhat |
 |---|---|---|---|
 | `ForesTycoon.Engine` | `ForesTycoon.Engine` | `FixedStepClock`, `SimulationFrameRunner`, `IWorldSystem`/`WorldSystemCollection`, `BackgroundJobScheduler`, `AnimationTimeline`, `Vertex` | erdő, terep, GL |
@@ -29,6 +39,8 @@ Ezt a `SimulationModuleTests` tranzitívan, az `ArchitectureTests` a forrásokon
 | `ForesTycoon.Effects` | `ForesTycoon.Effects` | vizuális effektek: `WeatherRenderer`, `CloudRenderer`, `FogHabitat`, `WeatherVisualState` | terep, erdő (csak `IWeatherSurface`-en át látja a talajt) |
 | `ForesTycoon.Simulation` | `ForesTycoon` (a meglévő belső típusnevek megőrzésével) | `SimulationWorld`, parancsok, logisztika, gazdaság, vadak, szabályfuttatás, mentés és akciójelző-állapot | render, ablak, UI, játékhost |
 | `ForesTycoon` | `ForesTycoon` | `GameWorld` megjelenítési adapter, a terep jelenete (`Terrain`), jelenet-ragasztó, felület, diagnosztika | – |
+| `ForesTycoon.Editor.Core` | `ForesTycoon.Editor.Core` | dokumentum, szerkesztési parancsok, tranzakciók, előzmények, mentés és projektfolyamat | játékhost, render, ablak, ImGui |
+| `ForesTycoon.Editor` | `ForesTycoon.Editor` | oldalnézetek, UI-állapot, natív előnézetek és hostadapterek | a Core nem függhet tőle |
 
 A render-modulok a játékkal **interfészeken** csatlakoznak, amelyeket a játék valósít meg:
 `IShadingSettings` / `IPostProcessSettings` / `IWeatherSettings` (a `GraphicsSettings` mindhármat),

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -10,47 +10,61 @@ using Vec2 = System.Numerics.Vector2;
 namespace ForesTycoon.Editor
 {
     /// <summary>
-    /// Shared rule workshop host; all world rules use the rule book and influence graph partials.
+    /// Composition host for editor pages, project lifecycle, navigation and the preview world.
     /// </summary>
     internal sealed partial class RuleEditorView
     {
 
+        private readonly EditorDocument document = new();
+        private readonly EditorUiState ui = new();
+        private readonly SoilEditorView soilEditor;
+        private readonly SpeciesEditorView speciesEditor;
+        private readonly TreeShapeEditorView treeEditor;
+        private readonly MapEditorView mapEditor;
+        private readonly BiomeEditorView biomeEditor;
+        private readonly MissionEditorView missionEditor;
+        private readonly TuningEditorView tuningEditor;
+        private readonly TrialEditorView trialEditor;
         private string message = "";
         private string projectLoadError;
         internal string ProjectLoadError => projectLoadError;
-        private readonly CurrentRulesView currentRules = new();
-        private readonly BehaviorEditorView behaviors = new();
-        internal void AdvanceSandbox(GameWorld world, double elapsed) => behaviors.Advance(world, elapsed);
+        private readonly CurrentRulesView currentRules;
+        private readonly BehaviorEditorView behaviors;
+        private readonly SandboxSession sandbox = new();
+        internal void AdvanceSandbox(GameWorld world, double elapsed)
+        { RefreshProjectOperations(world); sandbox.Advance(world, elapsed); }
 
         internal RuleEditorView(string modelPath = null)
         {
-            foreach (var editor in new[] { behaviors, expressionEditor, dynamicsEditor.EquationEditor }) {
-                editor.EditCurve = (id, curve) => {
-                    bool finished = false;
-                    return CurveEditor(id, curve, "world", Array.Empty<string>(), ref finished, bindings: false);
-                };
-                editor.EditNumber = (label, value, set) => {
-                    bool finished = false;
-                    if (CurveNumber(label, ref value, Math.Min(0, value * 2), Math.Max(1, value * 2), ref finished)) set(value);
-                };
-            }
+            workflow = new(RuleProject.DefaultPath, WorldLoader.OpeningScenePath()
+                ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ForesTycoon", "scenes", "opening.json"));
+            var context = new EditorPageContext(new SceneSession(document.Scene), ui, ApplyScenario, ApplyProject, Try, text => message = text,
+                ShowPage, () => appliedScenario == ScenarioKey(), document.Capture, document.Revision);
+            soilEditor = new(context); treeEditor = new(context); speciesEditor = new(context, treeEditor);
+            mapEditor = new(context);
+            biomeEditor = new(context, mapEditor); missionEditor = new(context); trialEditor = new(context, mapEditor);
+            currentRules = new(document.Tuning, document.Scene.SetTuning, ui.SystemMap, ui.Vehicles, document.Library.Notes, document.Library.SetNotes);
+            tuningEditor = new(context, currentRules);
+            behaviors = new(document.Behaviors, ui.Behaviors);
+            dynamicsEditor = new(document.Dynamics, ui.Dynamics, ui.FlowEquation);
+            ruleWorkspace = new(new(context, new RuleBookSession(document), new RuleLibrarySession(document.Library), behaviors, dynamicsEditor, () => projectInitialized, () => projectPath, () => liveStatus));
             if (modelPath == null) return;
             string path = Path.GetFullPath(modelPath);
             projectPath = RuleWorkshopModel.PublishedPath(path);
             try {
-            using var document = JsonDocument.Parse(File.ReadAllText(path));
-            if (document.RootElement.TryGetProperty("schema", out var projectSchema) && projectSchema.GetString() == "forest-rule-project")
-            { pendingProject = RuleProject.FromJson(document.RootElement.GetRawText()); projectPath = RuleWorkshopModel.PublishedPath(path); return; }
-            if (document.RootElement.TryGetProperty("schema", out var behaviorSchema) && behaviorSchema.GetString() == "forest-behaviors")
-            { behaviors.Load(BehaviorModel.FromJson(document.RootElement.GetRawText())); return; }
-            if (document.RootElement.TryGetProperty("schema", out var schema) && schema.GetString() == "forest-current-rules")
-            { currentRules.Load(GameRuleCatalog.FromJson(document.RootElement.GetRawText()), path); return; }
-            throw new InvalidDataException("Nyiss meg egy teljes szabályprojektet; a külön útkopási modell megszűnt.");
+            var source = workflow.ReadSource(path);
+            if (source.Project != null) { pendingProject = source.Project; return; }
+            if (source.Behaviors != null) { behaviors.Load(source.Behaviors); return; }
+            if (source.Catalog != null) {
+                pendingTuning = source.Catalog.TuningOverrides();
+                currentRules.Load(source.Catalog, path);
+            }
             } catch (Exception e) when (Expected(e)) { projectLoadError = e.Message; }
         }
 
         internal void Draw(GameWorld world, ref bool open, bool standalone = false)
         {
+            RefreshProjectOperations(world);
             if (!open) return;
             EnsureProject(world);
             var flags = ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse;
@@ -60,14 +74,13 @@ namespace ForesTycoon.Editor
             bool visible = ImGui.Begin("Világszerkesztő", ref open, flags);
             ImGui.PopStyleVar();
             if (!visible) { ImGui.End(); return; }
-            RefreshProjectOperations(); RefreshSceneSave();
             currentRules.EnsureCatalog(world);
             RefreshWorkshopRevision(world);
             Shell(world, standalone);
             ImGui.End();
         }
 
-        private void Try(Action action) { try { action(); } catch (Exception e) when (Expected(e)) { message = e.Message; } }
-        private static bool Expected(Exception e) => e is IOException or InvalidDataException or JsonException or ArgumentException or InvalidOperationException or UnauthorizedAccessException or NotSupportedException;
+        private bool Try(Action action) { try { action(); return true; } catch (Exception e) when (Expected(e)) { message = e.Message; return false; } }
+        private static bool Expected(Exception e) => EditorErrors.Expected(e);
     }
 }

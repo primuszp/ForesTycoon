@@ -81,11 +81,25 @@ public class VehiclePresentationTests
     [Fact]
     public void TheRepositoryTruckSurveyFindsItsAxlesWithoutAGraphicsContext()
     {
-        var survey = VehicleModelSurvey.Truck();
+        var survey = VehicleModelSurvey.Truck(Path.Combine(AppContext.BaseDirectory, "Assets", "Vehicles", "log-truck.glb"));
         Assert.False(survey.Jointed);
         Assert.Equal(2, survey.Axles(0).Length);
         Assert.Equal(survey.Wheels.Max(w => w.X), survey.Axles(0)[0]);
         Assert.InRange(survey.Track(0), .5, 1.2);
+    }
+
+    [Fact]
+    public void TheAutomaticTruckSurveyUsesTheRenderersSelectedModel()
+    {
+        string path = VehicleRenderer.ModelPath(); var survey = VehicleModelSurvey.Truck();
+        Assert.Equal(Path.GetFileName(path), survey.File); Assert.NotEmpty(survey.Wheels);
+        if (path.EndsWith("-textured.glb", StringComparison.Ordinal)) {
+            Assert.True(survey.Licensed); Assert.True(survey.Jointed); Assert.NotNull(survey.Joint);
+            Assert.NotEmpty(survey.Axles(0)); Assert.NotEmpty(survey.Axles(1));
+        } else {
+            Assert.False(survey.Licensed); Assert.False(survey.Jointed); Assert.Null(survey.Joint);
+            Assert.Equal(2, survey.Axles(0).Length);
+        }
     }
 
     [Theory]

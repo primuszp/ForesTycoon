@@ -1,10 +1,20 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
     <RootNamespace>ForesTycoon.Editor</RootNamespace>
     <RollForward>Major</RollForward>
   </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../ForesTycoon.Editor.Core/ForesTycoon.Editor.Core.csproj" />
+    <Using Include="ForesTycoon.Editor.Core" />
+    <Using Include="ForesTycoon.Editor.WorldEditorWidgets" Static="true" />
+    <Using Include="ForesTycoon.Editor.Core.RuleFieldCatalog" Static="true" />
+    <Using Include="ForesTycoon.Editor.RuleCardPresentation" Static="true" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="ForesTycoon.Tests" />
+  </ItemGroup>
   <ItemGroup>
     <!-- The editor hosts the game runtime for previews; the game never references the editor. -->
     <ProjectReference Include="../ForesTycoon.Simulation/ForesTycoon.Simulation.csproj" />

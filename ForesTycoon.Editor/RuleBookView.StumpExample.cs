@@ -1,0 +1,60 @@
+﻿using System;
+using System.Linq;
+using System.Text.Json;
+using ForesTycoon.Rules;
+using ImGuiNET;
+
+namespace ForesTycoon.Editor;
+
+internal sealed partial class RuleBookView
+{
+    private StumpRuleTrial.Result stumpTrial;
+    private string stumpTrialRevision, stumpTrialError;
+
+    internal void ResetVisualRule(GameWorld world, string ruleId)
+    {
+        var rules = RuleBookRules(world);
+        int index = Enumerable.Range(0, rules.Count).FirstOrDefault(index => rules[index].Id == ruleId, -1);
+        if (index < 0) return;
+        if (!ruleBook.RestoreVisualRule(rules[index])) return;
+        ShowRuleBook(index); selectedInfluence = selectedTerm = 0;
+        stumpTrial = null; stumpTrialError = null;
+        ApplyRuleBook(world, "Alapértelmezett szabály visszaállítva.");
+    }
+
+    internal void RunStumpComparison(GameWorld world, WorldRule rule) => RunStumpComparison(world, RuleBookRules(world).First(r => r.Id == rule.Id));
+    internal void RunStumpComparison(GameWorld world, RuleView rule)
+    {
+        try {
+            stumpTrial = StumpRuleTrial.Run(CollectProject(), rule.Id);
+            stumpTrialRevision = JsonSerializer.Serialize(rule.Capture()); stumpTrialError = null;
+        } catch (System.IO.InvalidDataException e) { stumpTrialError = e.Message; }
+    }
+
+    /// <summary>Rules with a side-by-side trial of fixed test objects (today: stump rules, see <see cref="StumpRuleTrial"/>).</summary>
+    private static bool HasComparisonTrial(RuleView rule) => rule.Scope == "stump";
+
+    private void StumpComparisonArea(GameWorld world, RuleView rule)
+    {
+        if (!HasComparisonTrial(rule)) return;
+        if (!ImGui.CollapsingHeader("Nedvesség és átmérő · négy próbatönk", ImGuiTreeNodeFlags.DefaultOpen)) return;
+        ImGui.TextWrapped("Külön tesztvilág, négy friss tönk. A nedvesség rögzített; csak ez a tönkszabály fut, a játék szabályfuttatójával.");
+        if (ImGui.Button("Összehasonlítás futtatása")) RunStumpComparison(world, rule);
+        if (stumpTrialError != null) EditorStyle.Text(HudTheme.Bad, stumpTrialError);
+        if (stumpTrial == null) return;
+        if (stumpTrialRevision != JsonSerializer.Serialize(rule.Capture()))
+            EditorStyle.Text(HudTheme.AmberAccent, "A szabály megváltozott. Az eredmény frissítéséhez futtasd újra a próbát.");
+        if (ImGui.BeginTable("stump-comparison", 4, ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.RowBg)) {
+            foreach (string heading in new[] { "Próbatönk", "Nedv. / átm.", "1 év után", "Eltűnés" }) ImGui.TableSetupColumn(heading);
+            ImGui.TableHeadersRow();
+            foreach (var row in stumpTrial.Cases) {
+                ImGui.TableNextRow(); ImGui.TableNextColumn(); ImGui.TextUnformatted(row.Name);
+                ImGui.TableNextColumn(); ImGui.TextUnformatted($"{row.Moisture:P0} / {row.Diameter * 100:F0} cm");
+                ImGui.TableNextColumn(); ImGui.TextUnformatted($"{row.OneYearProgress:P1}");
+                ImGui.TableNextColumn(); ImGui.TextUnformatted(row.RemovedAtYears is double at ? $"{at:F2} év" : $"> {stumpTrial.DurationYears:F0} év");
+            }
+            ImGui.EndTable();
+        }
+        ImGui.TextWrapped($"Az idők erdőévben értendők. Lépésköz: {stumpTrial.StepYears:F2} év; legfeljebb {stumpTrial.DurationYears:F0} évig fut. Szemléltető beállítás, nem mért biológiai modell.");
+    }
+}

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using ForesTycoon.Rules;
@@ -8,15 +8,6 @@ using Vec4 = System.Numerics.Vector4;
 
 namespace ForesTycoon.Editor;
 
-/// <summary>Every page of the editor. The sidebar groups them by the designer's task, not by where the data lives.</summary>
-internal enum EditorPage
-{
-    Map, Soils, Biomes, Species, Surfaces,
-    Missions, Vehicles, Parameters,
-    Objects, Rules, Responses, Processes, Controllers, Stocks, Library,
-    SystemMap, Overview, Trial
-}
-
 /// <summary>
 /// The editor's frame: a project bar on top (scene, history, save, apply), a sidebar with the pages grouped by task —
 /// build the world, set up the game, author the simulation's logic, check it — and a status bar with the test world's
@@ -24,8 +15,8 @@ internal enum EditorPage
 /// </summary>
 internal sealed partial class RuleEditorView
 {
-    private EditorPage page;
-    private bool? navCompact;
+    private ref EditorPage page => ref ui.Page;
+    private ref bool? navCompact => ref ui.NavigationCompact;
 
     private sealed record NavEntry(EditorPage Page, string Label, GameIcon Icon, string Help);
 
@@ -62,25 +53,12 @@ internal sealed partial class RuleEditorView
 
     private static NavEntry Entry(EditorPage p) => Navigation.SelectMany(g => g.Items).First(e => e.Page == p);
 
-    // The last item opened on each list page, reopened when the page is shown again.
-    private readonly Dictionary<EditorPage, string> lastCommon = new();
-
     private void ShowPage(EditorPage target)
     {
+        if (page != target) { CompleteEdits(); if (stroke.Count > 0) CancelStroke(); }
         page = target;
         bool listPage = target is EditorPage.Responses or EditorPage.Processes or EditorPage.Controllers or EditorPage.Stocks or EditorPage.Library;
-        if (listPage && (commonSelection == null || CommonPage(commonSelection) != target))
-            commonSelection = target == EditorPage.Library ? "library" : lastCommon.GetValueOrDefault(target);
-    }
-
-    /// <summary>The page that lists a common rule key ("behavior:…", "controller:…", "stock:…", "flow:…", "library").</summary>
-    private EditorPage CommonPage(string key)
-    {
-        if (key == "library") return EditorPage.Library;
-        if (key.StartsWith("controller", StringComparison.Ordinal)) return EditorPage.Controllers;
-        if (key.StartsWith("stock:", StringComparison.Ordinal) || key.StartsWith("flow:", StringComparison.Ordinal)) return EditorPage.Stocks;
-        var graph = behaviors.Document.Graphs.FirstOrDefault(g => "behavior:" + g.Id == key);
-        return graph != null && !EcologyResponseProgram.IsPureKind(graph.Kind) ? EditorPage.Processes : EditorPage.Responses;
+        if (listPage) ruleWorkspace.RestorePageSelection(target);
     }
 
     // ── Frame ────────────────────────────────────────────────────────────
@@ -104,12 +82,16 @@ internal sealed partial class RuleEditorView
             EditorStyle.Text(HudTheme.Muted, "A fájl megmaradt; az Editor a tesztvilág aktuális szabályait mutatja.");
             ImGui.PopTextWrapPos();
         }
-        if (sceneSaveTask != null) Waiting("Jelenet ellenőrzése és mentése…");
+        if (savingScene) Waiting("Jelenet ellenőrzése és mentése…");
         else if (world.BoundaryPending) Waiting(world.GenerationPending ? world.GenerationStage + "…" : "Szimulációs vagy szerkesztési munka folyamatban…");
-        else PageBody(world, standalone);
-        if (pendingCommonChange && !world.BoundaryPending && !ImGui.IsAnyItemActive()) {
-            Try(() => ApplyProject(world, false)); pendingCommonChange = false;
+        else {
+            if (!history.IsEditing && (ImGui.IsMouseDown(ImGuiMouseButton.Left) || ImGui.IsAnyItemActive()))
+                history.BeginEdit("szerkesztés");
+            PageBody(world, standalone);
         }
+        ruleWorkspace.FlushChanges(world);
+        if (!ImGui.IsMouseDown(ImGuiMouseButton.Left) && !ImGui.IsAnyItemActive()) CompleteEdits();
+        TrackHistory(world);
         if (world.GenerationCanCancel && ImGui.Button("Pályaépítés megszakítása")) world.CancelGeneration();
         if (!string.IsNullOrEmpty(world.GenerationError)) EditorStyle.Text(HudTheme.Bad, "A pályaépítés nem sikerült: " + world.GenerationError);
         ImGui.EndChild();
@@ -136,38 +118,19 @@ internal sealed partial class RuleEditorView
         ImGui.Dummy(new Vec2(0, 2));
         switch (page) {
             case EditorPage.Soils: SoilTypesTab(world); break;
-            case EditorPage.Biomes: BiomesTab(world); break;
+            case EditorPage.Biomes: biomeEditor.Draw(world); break;
             case EditorPage.Species: SpeciesTab(world); break;
-            case EditorPage.Surfaces: SurfacesTab(world); break;
-            case EditorPage.Missions: MissionsTab(world); break;
-            case EditorPage.Vehicles: VehiclesTab(world); break;
-            case EditorPage.Parameters: ParametersTab(world); break;
-            case EditorPage.Objects: ObjectsTab(world); break;
-            case EditorPage.Rules: RuleBookArea(world); break;
-            case EditorPage.Responses: CommonListPage(world, ResponseList, "Válassz egy összefüggést a listából."); break;
-            case EditorPage.Processes: CommonListPage(world, ProcessList, "Válassz egy folyamatkapcsolatot, vagy köss újat a játék egy folyamatába."); break;
-            case EditorPage.Controllers: CommonListPage(world, ControllerList, "Válassz egy munkaciklust."); break;
-            case EditorPage.Stocks: CommonListPage(world, StockList, "Még nincs saját készlet. Az „+ Készlet” gomb indít egyet."); break;
-            case EditorPage.Library: DrawCommonSelection(world); break;
-            case EditorPage.Overview: RuleOverviewArea(world, RuleBookRules(world)); break;
-            case EditorPage.SystemMap: currentRules.Draw(world, OpenHook, OpenController); break;
-            case EditorPage.Trial: TrialTab(world); break;
+            case EditorPage.Surfaces: tuningEditor.SurfacesTab(world); break;
+            case EditorPage.Missions: missionEditor.Draw(world); break;
+            case EditorPage.Vehicles: tuningEditor.VehiclesTab(world); break;
+            case EditorPage.Parameters: tuningEditor.ParametersTab(world); break;
+            case EditorPage.Objects or EditorPage.Rules or EditorPage.Responses or EditorPage.Processes
+                or EditorPage.Controllers or EditorPage.Stocks or EditorPage.Library or EditorPage.Overview:
+                ruleWorkspace.Draw(world); break;
+            case EditorPage.SystemMap: currentRules.Draw(world, ruleWorkspace.OpenHook, ruleWorkspace.OpenController); break;
+            case EditorPage.Trial: trialEditor.Draw(world); break;
             default: MapTab(world); break;
         }
-    }
-
-    /// <summary>Opens the graph bound to a hook, creating the type-level graph when the project has none yet.</summary>
-    private void OpenHook(BehaviorHook hook)
-    {
-        var graph = behaviors.Document.Graphs.FirstOrDefault(g => g.Hook == hook.Id && g.Kind == hook.Kind && g.ObjectId == null);
-        if (graph == null) { behaviors.SelectHook(hook); graph = behaviors.Document.Graphs.Last(g => g.Hook == hook.Id && g.Kind == hook.Kind && g.ObjectId == null); }
-        ShowCommonRule("behavior:" + graph.Id);
-    }
-
-    private void OpenController(string kind)
-    {
-        var controller = behaviors.Document.Controllers.FirstOrDefault(c => c.Kind == kind && c.ObjectId == null);
-        ShowCommonRule(controller != null ? "controllerId:" + controller.Id : "controller:" + kind);
     }
 
     // ── Project bar ──────────────────────────────────────────────────────
@@ -195,7 +158,7 @@ internal sealed partial class RuleEditorView
         Vec2 bar = ImGui.GetCursorScreenPos();
         draw.AddLine(bar + new Vec2(0, 4), bar + new Vec2(0, frame - 4), EditorStyle.U(EditorStyle.Hairline));
         ImGui.Dummy(new Vec2(1, frame)); ImGui.SameLine(0, 18);
-        ImGui.AlignTextToFramePadding(); EditorStyle.Text(HudTheme.Parchment, scenario?.Name ?? projectName);
+        ImGui.AlignTextToFramePadding(); EditorStyle.Text(HudTheme.Parchment, document.World?.Name ?? document.Name);
         ImGui.SameLine(0, 8); ImGui.AlignTextToFramePadding(); EditorStyle.Text(HudTheme.Muted, System.IO.Path.GetFileName(scenePath));
         if (ImGui.IsItemHovered()) ImGui.SetTooltip(System.IO.Path.GetFullPath(scenePath) + (EditingGameScene ? "\nEz a játék indulójelenete: mentés után a játék ezt futtatja." : ""));
         ImGui.SameLine(0, 12);
@@ -205,7 +168,7 @@ internal sealed partial class RuleEditorView
         if (ImGui.IsItemHovered()) ImGui.SetTooltip(statusCache.SceneSaved ? "A jelenetfájl megegyezik a szerkesztett állapottal." : "Mentetlen módosítás. Ctrl+S menti a jelenetfájlba.");
 
         // Actions, right-aligned: history, scene, save, apply.
-        string apply = algorithmBuild != null ? "Alkalmazás folyamatban…" : "Alkalmazás a játékban";
+        string apply = publishing ? "Alkalmazás folyamatban…" : "Alkalmazás a játékban";
         var style = ImGui.GetStyle();
         float right = EditorStyle.ButtonWidth("Vissza") + EditorStyle.ButtonWidth("Újra") + EditorStyle.ButtonWidth("Jelenet…")
             + EditorStyle.ButtonWidth("Mentés") + EditorStyle.ButtonWidth(apply) + style.ItemSpacing.X * 3 + 4 + 20;
@@ -215,11 +178,13 @@ internal sealed partial class RuleEditorView
         ImGui.SameLine(0, 20);
         SceneMenu(world);
         ImGui.SameLine();
+        ImGui.BeginDisabled(savingScene || publishing);
         if (ImGui.Button("Mentés")) Try(() => SaveAll(world));
         if (ImGui.IsItemHovered()) ImGui.SetTooltip("Ctrl+S · menti a munkapéldányt és a jelenetfájlt (pálya, küldetések, szabályok):\n" + scenePath);
-        if (ImGui.GetIO().KeyCtrl && ImGui.IsKeyPressed(ImGuiKey.S)) Try(() => SaveAll(world));
+        if (!savingScene && !publishing && ImGui.GetIO().KeyCtrl && ImGui.IsKeyPressed(ImGuiKey.S)) Try(() => SaveAll(world));
+        ImGui.EndDisabled();
         ImGui.SameLine();
-        if (EditorStyle.PrimaryButton(apply, algorithmBuild == null,
+        if (EditorStyle.PrimaryButton(apply, !publishing && !savingScene,
             "Menti a jelenetet, és a futó játék azonnal átveszi a szabályokat; a következő indulás is ezt futtatja.")) Try(() => ApplyProject(world, true));
         ImGui.EndChild();
     }
@@ -253,19 +218,19 @@ internal sealed partial class RuleEditorView
     {
         switch (p) {
             case EditorPage.Rules: {
-                var rules = RuleBookRules(world); return $"{rules.Count(r => r.Enabled)}/{rules.Count}";
+                var rules = document.Rules; return $"{rules.Count(r => r.Enabled)}/{rules.Count}";
             }
             case EditorPage.Responses: {
                 var graphs = behaviors.Document.Graphs.Where(g => EcologyResponseProgram.IsPureKind(g.Kind)).ToList();
                 return $"{graphs.Count(g => !g.Disabled)}/{graphs.Count}";
             }
-            case EditorPage.Processes: return ProcessGraphs().Count().ToString();
+            case EditorPage.Processes: return ruleWorkspace.ProcessCount.ToString();
             case EditorPage.Controllers: return behaviors.Document.Controllers.Count.ToString();
-            case EditorPage.Stocks: return (dynamicsEditor.Draft.Stocks.Count + dynamicsEditor.Draft.Flows.Count).ToString();
-            case EditorPage.Missions: return scenario?.Missions.Count.ToString();
-            case EditorPage.Soils: return scenario?.SoilTypes.Count.ToString();
-            case EditorPage.Biomes: return scenario?.Biomes.Count.ToString();
-            case EditorPage.Species: return scenario?.Species.Count.ToString();
+            case EditorPage.Stocks: return (dynamicsEditor.Stocks.Count + dynamicsEditor.Flows.Count).ToString();
+            case EditorPage.Missions: return document.World?.Missions.Count.ToString();
+            case EditorPage.Soils: return document.World?.SoilTypes.Count.ToString();
+            case EditorPage.Biomes: return document.World?.Biomes.Count.ToString();
+            case EditorPage.Species: return document.World?.Species.Count.ToString();
             default: return null;
         }
     }
@@ -284,16 +249,16 @@ internal sealed partial class RuleEditorView
         // Test world clock.
         bool ready = !world.BoundaryPending;
         ImGui.BeginDisabled(!ready);
-        if (ImGui.Button(behaviors.IsPaused ? "Indítás##sim" : "Szünet##sim")) behaviors.TogglePause();
+        if (ImGui.Button(sandbox.IsPaused ? "Indítás##sim" : "Szünet##sim")) sandbox.TogglePause();
         if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled)) ImGui.SetTooltip("A tesztvilág szimulációjának indítása vagy megállítása.");
-        void Advance(double hours) => behaviors.RequestTime(hours * world.SecondsPerEnvironmentHour);
+        void Advance(double hours) => sandbox.RequestTime(hours * world.SecondsPerEnvironmentHour);
         ImGui.SameLine(0, 4); if (ImGui.Button("+1 óra")) Advance(1);
         ImGui.SameLine(0, 4); if (ImGui.Button("+1 nap")) Advance(24);
         if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled)) ImGui.SetTooltip($"{24 * world.SecondsPerEnvironmentHour:0} játékmásodperc; nagy pályán néhány másodpercig tart.");
         ImGui.EndDisabled();
         ImGui.SameLine(0, 10); ImGui.AlignTextToFramePadding();
         double spring = world.RuleBook.FlowTotals.GetValueOrDefault("forrásvíz") / 1000 * world.TileArea;
-        EditorStyle.Text(behaviors.IsPaused ? HudTheme.Muted : HudTheme.Good, (behaviors.IsPaused ? "áll" : "fut") + (spring > 0 ? $" · forrásvíz {spring:0} m³" : ""));
+        EditorStyle.Text(sandbox.IsPaused ? HudTheme.Muted : HudTheme.Good, (sandbox.IsPaused ? "áll" : "fut") + (spring > 0 ? $" · forrásvíz {spring:0} m³" : ""));
         ImGui.SameLine(0, 16);
         Vec2 bar = ImGui.GetCursorScreenPos(); float frame = ImGui.GetFrameHeight();
         draw.AddLine(bar + new Vec2(0, 5), bar + new Vec2(0, frame - 5), EditorStyle.U(EditorStyle.Hairline));
@@ -334,125 +299,4 @@ internal sealed partial class RuleEditorView
         ImGui.EndChild();
     }
 
-    // ── Pages listing the common rules: a list on the left, the selected item's workspace on the right ──
-    private const float ListWidth = 300;
-    private string commonFilter = "";
-
-    private void CommonListPage(GameWorld world, Func<GameWorld, string, string> list, string empty)
-    {
-        EditorStyle.BeginPanel("common-list", new Vec2(ListWidth, 0));
-        string filter = EditorStyle.Search("##common-filter", "Keresés…", ref commonFilter);
-        ImGui.Spacing();
-        // The list returns its first item, opened when nothing of this page is selected yet.
-        string first = list(world, filter);
-        EditorStyle.EndPanel();
-        if ((commonSelection == null || CommonPage(commonSelection) != page) && first != null) ShowCommonRule(first);
-        ImGui.SameLine();
-        if (commonSelection != null && CommonPage(commonSelection) == page) { DrawCommonSelection(world); return; }
-        EditorStyle.BeginPanel("common-empty", Vec2.Zero);
-        EditorStyle.Text(HudTheme.Muted, empty);
-        EditorStyle.EndPanel();
-    }
-
-    private static bool Matches(string filter, params string[] texts) => filter.Length == 0 || texts.Any(t => Contains(t, filter));
-
-    internal static string ResponseFamily(string kind) => kind switch {
-        "site" => "Termőhely és víz",
-        "competition" or "competitionPair" or "resource" => "Verseny, fény és erőforrás",
-        "regeneration" => "Felújulás",
-        "initialTree" => "Kezdő állomány",
-        "environment" => "Környezet és időjárás",
-        "vehicleResponse" => "Járművek",
-        "gameplay" => "Játékmenet és gazdaság",
-        _ when LogisticsRules.IsKind(kind) => "Logisztika · " + RuleWorkshopModel.KindName(kind),
-        _ => kind
-    };
-
-    private string ResponseList(GameWorld world, string filter)
-    {
-        string first = null;
-        var groups = behaviors.Document.Graphs.Where(g => EcologyResponseProgram.IsPureKind(g.Kind) && Matches(filter, g.Name, g.Hook))
-            .GroupBy(g => ResponseFamily(g.Kind)).OrderBy(g => g.Key, StringComparer.CurrentCulture);
-        foreach (var group in groups) {
-            var members = group.ToList();
-            if (filter.Length > 0 || members.Any(g => commonSelection == "behavior:" + g.Id)) ImGui.SetNextItemOpen(true, filter.Length > 0 ? ImGuiCond.Always : ImGuiCond.Once);
-            bool open = ImGui.TreeNodeEx($"{group.Key}  ({members.Count(g => !g.Disabled)}/{members.Count})##family-{group.Key}",
-                ImGuiTreeNodeFlags.FramePadding | ImGuiTreeNodeFlags.SpanAvailWidth);
-            first ??= "behavior:" + members[0].Id;
-            if (!open) continue;
-            foreach (var g in members)
-                RuleCardEntry("behavior:" + g.Id, g.Name + (g.ObjectId.HasValue ? " · #" + g.ObjectId : ""), "Értéket számol", commonSelection == "behavior:" + g.Id, !g.Disabled,
-                    () => ShowCommonRule("behavior:" + g.Id), enabled => RequestResponseAvailability(g, enabled),
-                    g.Disabled ? "Fix eredményt ad. Kattintás: az összefüggés visszakapcsolása." : "Kikapcsoláskor te választod ki a helyettesítő eredményt.");
-            ImGui.TreePop();
-        }
-        if (first == null) EditorStyle.Text(HudTheme.Muted, "Nincs találat.");
-        return first;
-    }
-
-    private IEnumerable<BehaviorGraph> ProcessGraphs() => behaviors.Document.Graphs.Where(g => !EcologyResponseProgram.IsPureKind(g.Kind)
-        && (!g.Hook.StartsWith("tuning.", StringComparison.Ordinal) || g.Nodes.Any(n => n.Operation != BehaviorOperation.Native)));
-
-    private string ProcessList(GameWorld world, string filter)
-    {
-        if (ImGui.Button("+ Új folyamatkapcsolat", new Vec2(-1, 0))) ImGui.OpenPopup("new-process");
-        if (ImGui.BeginPopup("new-process")) {
-            EditorStyle.Text(HudTheme.Muted, "Melyik folyamatba kössön?");
-            foreach (var hook in WorldBehaviorPolicy.Hooks.Where(h => !h.Id.StartsWith("tuning.", StringComparison.Ordinal)))
-                if (ImGui.Selectable(hook.Name + " · " + hook.Kind)) {
-                    behaviors.SelectHook(hook);
-                    ShowCommonRule("behavior:" + behaviors.Document.Graphs.Last(g => g.Hook == hook.Id && g.Kind == hook.Kind && g.ObjectId == null).Id);
-                }
-            ImGui.EndPopup();
-        }
-        ImGui.Spacing();
-        string first = null;
-        foreach (var g in ProcessGraphs().Where(g => Matches(filter, g.Name, g.Hook))) {
-            string key = "behavior:" + g.Id; first ??= key;
-            if (ImGui.Selectable(g.Name + "##common-" + key, commonSelection == key)) ShowCommonRule(key);
-            if (ImGui.IsItemHovered()) ImGui.SetTooltip(g.Hook + " · " + g.Kind);
-        }
-        if (first == null) EditorStyle.Text(HudTheme.Muted, filter.Length > 0 ? "Nincs találat." : "Még nincs folyamatkapcsolat.");
-        return first;
-    }
-
-    private string ControllerList(GameWorld world, string filter)
-    {
-        string first = null;
-        var model = behaviors.Document;
-        foreach (var c in model.Controllers.Where(c => Matches(filter, c.Name, c.Kind))) {
-            string key = "controllerId:" + c.Id; first ??= key;
-            if (ImGui.Selectable(c.Name + (c.ObjectId.HasValue ? " · #" + c.ObjectId : "") + "##common-" + key, commonSelection == key)) ShowCommonRule(key);
-        }
-        var missing = new[] { "forwarder", "processor", "truck" }.Where(kind => !model.Controllers.Any(c => c.Kind == kind && c.ObjectId == null)).ToArray();
-        if (missing.Length > 0) {
-            ImGui.Spacing(); EditorStyle.Section("Új munkaciklus");
-            foreach (string kind in missing) {
-                string key = "controller:" + kind;
-                if (ImGui.Selectable("+ " + RuleWorkshopModel.KindName(kind) + " munkaciklusa##common-" + key, commonSelection == key)) ShowCommonRule(key);
-            }
-        }
-        return first;
-    }
-
-    private string StockList(GameWorld world, string filter)
-    {
-        float half = (ImGui.GetContentRegionAvail().X - ImGui.GetStyle().ItemSpacing.X) / 2;
-        if (ImGui.Button("+ Készlet", new Vec2(half, 0))) ShowCommonRule("stock:" + dynamicsEditor.CreateStock());
-        ImGui.SameLine();
-        ImGui.BeginDisabled(dynamicsEditor.Draft.Stocks.Count == 0);
-        if (ImGui.Button("+ Áramlás", new Vec2(half, 0))) ShowCommonRule("flow:" + dynamicsEditor.CreateFlow());
-        ImGui.EndDisabled();
-        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled)) ImGui.SetTooltip("Áramlás két készlet között; előbb készlet kell.");
-        string first = null;
-        void Item(string key, string label) {
-            first ??= key;
-            if (ImGui.Selectable(label + "##common-" + key, commonSelection == key)) ShowCommonRule(key);
-        }
-        var stocks = dynamicsEditor.Draft.Stocks.Where(s => Matches(filter, s.Name, s.Id)).ToList();
-        var flows = dynamicsEditor.Draft.Flows.Where(f => Matches(filter, f.Name, f.Id)).ToList();
-        if (stocks.Count > 0) { EditorStyle.Section("Készletek"); foreach (var s in stocks) Item("stock:" + s.Id, s.Name); }
-        if (flows.Count > 0) { EditorStyle.Section("Áramlások"); foreach (var f in flows) Item("flow:" + f.Id, f.Name); }
-        return first;
-    }
 }

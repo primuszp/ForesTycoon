@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Collections.Generic;
 using System.Linq;
 using ImGuiNET;
 using ForesTycoon.Rules;
@@ -80,7 +81,7 @@ namespace ForesTycoon.Editor
                 string output = Path.GetFullPath("artifacts/rule-editor"); Directory.CreateDirectory(output);
                 FramebufferCapture.SavePng(Path.Combine(output, "editor.png"), width, height);
                 int forestTile = Enumerable.Range(0, world.Map.Tiles.Count).FirstOrDefault(id => world.DescribeTile(id).ContainsKey("forest.trees"));
-                var trialProject = editor.CollectProject(world); trialProject.Algorithms = null;
+                var trialProject = editor.CollectProject(); trialProject.Algorithms = null;
                 trialProject.World ??= GameWorld.DefaultScenario(world.Map.Settings.Seed);
                 // A trial may have different species settings from the editor's live world.
                 trialProject.World.Species[0].TimberPrice = 777;
@@ -181,7 +182,7 @@ namespace ForesTycoon.Editor
                     }
                 }
                 editor.ShowRuleBook(world.RuleProjectDocument.Rules.FindIndex(r => r.Id == "road.weather")); Frames(12);
-                int connectionCount = editor.CollectProject(world).Rules.Single(r => r.Id == "road.weather").Effects[0].Influence.Terms.Count;
+                int connectionCount = editor.CollectProject().Rules.Single(r => r.Id == "road.weather").Effects[0].Influence.Terms.Count;
                 void DragLink(string source, string target)
                 {
                     var a = editor.InfluenceGraphAnchors[source]; var b = editor.InfluenceGraphAnchors[target];
@@ -213,7 +214,7 @@ namespace ForesTycoon.Editor
                 Require(RuleEditorView.FieldUses(world.RuleProjectDocument.Rules).Any(u => u.Key == "road.condition" && u.Writers.Count > 0) && RuleEditorView.FieldUses(world.RuleProjectDocument.Rules).Any(u => u.Key == "tile.moisture" && u.Readers.Count > 0),
                     "Overview does not list the road condition rule.");
                 // Response cards use a real checkbox and an explicit off-result choice, preserving the authored graph.
-                var responseBefore = editor.CollectProject(world).Behaviors.Graphs.Single(g => g.Hook == "forest.shading");
+                var responseBefore = editor.CollectProject().Behaviors.Graphs.Single(g => g.Hook == "forest.shading");
                 string responseKey = "behavior:" + responseBefore.Id;
                 editor.ShowCommonRule(responseKey); ui.MouseMove(0, 0); Frames(12);
                 void CardClick(string key) {
@@ -221,10 +222,10 @@ namespace ForesTycoon.Editor
                     ui.MouseButton(0, true); Frames(2); ui.MouseButton(0, false); Frames(12); world.ExecutePendingCommands();
                 }
                 CardClick("enable:" + responseKey);
-                Require(!editor.CollectProject(world).Behaviors.Graphs.Single(g => g.Id == responseBefore.Id).Disabled,
+                Require(!editor.CollectProject().Behaviors.Graphs.Single(g => g.Id == responseBefore.Id).Disabled,
                     "Response was disabled before choosing its replacement result.");
                 CardClick("off.cancel");
-                Require(!editor.CollectProject(world).Behaviors.Graphs.Single(g => g.Id == responseBefore.Id).Disabled, "Cancelling off changed the response.");
+                Require(!editor.CollectProject().Behaviors.Graphs.Single(g => g.Id == responseBefore.Id).Disabled, "Cancelling off changed the response.");
                 CardClick("enable:" + responseKey);
                 ui.MouseMove(0, 0); Frames(2);
                 FramebufferCapture.SavePng(Path.Combine(output, "response-card-off-choice.png"), width, height);
@@ -453,13 +454,8 @@ namespace ForesTycoon.Editor
                 }
                 File.WriteAllText(Path.Combine(captures, "catalog.json"), current.ToJson());
                 Require(world.RuleProjectDocument.ToJson() == snapshot, "Browsing catalog changed executable rules.");
-                // Tuning: edit numbers in the catalog, capture the list, apply them as one journaled change, save and reload.
-                var fuelRule = current.Rules.Find(r => r.Id == "economy.fuel");
-                int diesel = fuelRule.Parameters.FindIndex(p => p.Key == "DieselPrice");
-                fuelRule.Parameters[diesel] = fuelRule.Parameters[diesel] with { Value = 0.95 };
-                var forwarderRule = current.Rules.Find(r => r.Id == "machine.forwarder");
-                int capacity = forwarderRule.Parameters.FindIndex(p => p.Key == "ForwarderCapacity");
-                forwarderRule.Parameters[capacity] = forwarderRule.Parameters[capacity] with { Value = 18 };
+                // Tuning: edit the owned values, apply them as one journaled change, save and reload.
+                catalogView.SetTuning(new Dictionary<string, double> { ["DieselPrice"] = 0.95, ["ForwarderCapacity"] = 18 });
                 for (int frame = 0; frame < 2; frame++)
                 {
                     ui.Update(width, height, width, height, Vec2.One, 1f / 60);
@@ -651,7 +647,7 @@ namespace ForesTycoon.Editor
                 ImGui.SetNextWindowPos(new(20, 20)); ImGui.SetNextWindowSize(new(1300, 900)); legacyEditor.Draw(world, ref open);
                 ui.Render(); GL.Finish();
                 Require(legacyEditor.ProjectLoadError == null, "Legacy startup project failed: " + legacyEditor.ProjectLoadError);
-                var recovered = legacyEditor.CollectProject(world).Rules.Single(r => r.Id == "wildlife.forageRecovery")
+                var recovered = legacyEditor.CollectProject().Rules.Single(r => r.Id == "wildlife.forageRecovery")
                     .Effects.Single(e => e.Target == "depletion").Computation;
                 Require(recovered != null && recovered.Nodes.Single(n => n.Id == "custom").Value == .123, "Legacy editor formula was lost.");
                 Require(File.ReadAllText(legacyFile) == legacyJson, "Opening the legacy project overwrote its file.");

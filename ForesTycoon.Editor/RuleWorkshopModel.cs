@@ -1,4 +1,4 @@
-#nullable enable
+﻿#nullable enable
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -17,11 +17,8 @@ internal static class RuleWorkshopModel
     internal static int Topic(GameRuleDefinition rule) => Math.Max(0, Array.FindIndex(Topics, t => t.Modules.Contains(rule.Module)));
     internal static GameRuleDefinition[] Search(GameRuleIndex index, int topic, string query) => index.Search("", query.Trim())
         .Where(r => query.Trim().Length > 0 || Topic(r) == topic).ToArray();
-    internal static string PublishedPath(string file) {
-        string full = Path.GetFullPath(file);
-        return full.EndsWith(".draft.json", StringComparison.OrdinalIgnoreCase) ? full[..^11] : full;
-    }
-    internal static string DraftPath(string published) => PublishedPath(published) + ".draft.json";
+    internal static string PublishedPath(string file) => ProjectPaths.PublishedPath(file);
+    internal static string DraftPath(string published) => ProjectPaths.DraftPath(published);
     /// <summary>The catalog rule whose result a formula hook replaces or whose parameter it computes.</summary>
     internal static bool HookBelongsTo(BehaviorHook h, GameRuleDefinition rule) => h.Id == rule.Id
         || h.Kind == "gameplay" && GameplayRules.CatalogHooks.TryGetValue(rule.Id, out var hooks) && hooks.Contains(h.Id)
@@ -79,22 +76,4 @@ internal static class RuleWorkshopModel
         "world.water" => "Tárolt víz", "world.temperature" => "Hőmérséklet", "forest.totalVolume" => "Élő faállomány térfogata",
         "forest.meanHeight" => "Átlagmagasság", "forest.meanDiameter" => "Átlagátmérő", "forest.meanHealth" => "Átlagos faegészség",
         "road.meanCondition" => "Átlagos útállapot", _ => field };
-}
-
-/// <summary>Trial and publish results belong to the captured draft, never to whatever is open on completion.</summary>
-internal sealed class WorkshopVersions
-{
-    internal string? Current { get; private set; }
-    internal string? Saved { get; private set; }
-    internal string? Tested { get; private set; }
-    internal string? Published { get; private set; }
-    internal string? Running { get; private set; }
-    internal bool Unsaved => Current != Saved;
-    internal bool TestedCurrent => Tested != null && Tested == Current;
-    internal void Observe(string revision) { if (Current == null) Saved = revision; Current = revision; }
-    internal void MarkSaved() => Saved = Current;
-    internal void CompleteTrial(string capturedRevision) => Tested = capturedRevision;
-    internal void MarkPublished(string capturedRevision) => Published = capturedRevision;
-    internal void Acknowledge(string? runtimeRevision) => Running = runtimeRevision;
-    internal void Reset() { Current = Saved = Tested = Published = Running = null; }
 }

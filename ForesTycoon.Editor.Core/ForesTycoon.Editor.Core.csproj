@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>ForesTycoon.Editor.Core</RootNamespace>
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../ForesTycoon.Rules/ForesTycoon.Rules.csproj" />
+    <ProjectReference Include="../ForesTycoon.Simulation/ForesTycoon.Simulation.csproj" />
+    <ProjectReference Include="../ForesTycoon.RuleCompiler/ForesTycoon.RuleCompiler.csproj" />
+    <ProjectReference Include="../ForesTycoon.Engine/ForesTycoon.Engine.csproj" />
+    <Using Include="ForesTycoon.Ecology" />
+    <Using Include="ForesTycoon.Map" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="ForesTycoon.Editor" />
+    <InternalsVisibleTo Include="ForesTycoon.Tests" />
+  </ItemGroup>
+</Project>

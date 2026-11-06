@@ -34,11 +34,16 @@ internal static class RuleProjectCli
             Console.WriteLine(result.OutputPath); return true;
         }
         if (args[0] == "--publish-project" && args.Length == 5 && args[3] == "--expected") {
-            string destination = Path.GetFullPath(args[2]), expected = args[4]; var guard = new ProjectFileGuard(); guard.Observe(destination);
-            if ((ProjectFileGuard.Revision(destination) ?? "missing") != expected) throw new IOException("A célprojekt verziója eltér az elvárttól; nem írtam felül.");
-            var project = GameWorld.NormalizeRuleProject(ReadRuntimeProject(args[1]));
-            if (project.Algorithms != null) _ = AlgorithmBuild.CompileAsync(project.Algorithms).GetAwaiter().GetResult();
-            guard.RequireUnchanged(destination); ProjectHistory.Archive(destination); RuleProject.WriteAtomic(destination, project.ToJson()); Console.WriteLine(project.ContentRevision()); return true;
+            string destination = Path.GetFullPath(args[2]);
+            using var workflow = new ProjectWorkflow(destination, destination + ".scene.json");
+            var result = workflow.Publish(ReadRuntimeProject(args[1]), new SimulationProjectWorkflowRuntime(),
+                new(SaveScene: false, VerifyAlgorithms: true, ExpectedFileRevision: args[4]));
+            if (workflow.Compilation != null) {
+                _ = workflow.Compilation.GetAwaiter().GetResult();
+                result = workflow.Poll().Single();
+            }
+            if (result.Error != null) throw result.Error;
+            Console.WriteLine(result.RuntimeRevision); return true;
         }
         if (args[0] == "--project-file-revision" && args.Length == 2) { Console.WriteLine(ProjectFileGuard.Revision(args[1]) ?? "missing"); return true; }
         if (args[0] == "--export-algorithm-graphs" && args.Length == 3) {

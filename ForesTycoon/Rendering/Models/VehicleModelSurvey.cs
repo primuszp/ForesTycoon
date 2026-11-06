@@ -27,9 +27,9 @@ internal sealed record VehicleModelSurvey(string File, bool Licensed, bool Joint
     internal double Track(int unit) { var w = Wheels.Where(a => a.Unit == unit).ToArray(); return w.Length == 0 ? double.NaN : w.Max(a => Math.Abs(a.Side)) * 2; }
     internal double WheelRadius => Wheels.Length == 0 ? double.NaN : Wheels.Average(a => a.Height);
 
-    internal static VehicleModelSurvey Truck()
+    internal static VehicleModelSurvey Truck(string modelPath = null)
     {
-        string path = VehicleRenderer.ModelPath();
+        string path = modelPath ?? VehicleRenderer.ModelPath();
         return path.EndsWith("-textured.glb", StringComparison.Ordinal) ? TexturedTruck(path) : FlatTruck(path);
     }
 

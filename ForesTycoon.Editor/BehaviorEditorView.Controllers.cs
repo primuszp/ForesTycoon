@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using ForesTycoon.Rules;
 using ImGuiNET;
@@ -8,9 +8,10 @@ namespace ForesTycoon.Editor
 {
     internal sealed partial class BehaviorEditorView
     {
-        private string selectedController, selectedState;
-        internal void SelectControllerById(string id) { selectedController = id; selectedGraph = null; selectedState = model.Controllers.Find(c => c.Id == id)?.InitialState; }
-        internal void RestoreController(string kind, ulong? id) { Remember(); model.Controllers.RemoveAll(c => c.Kind == kind && c.ObjectId == id); selectedController = null; }
+        private ref string selectedController => ref viewState.SelectedController;
+        private ref string selectedState => ref viewState.SelectedState;
+        internal void SelectControllerById(string id) { if (selectedController != id) CommitEdit(); selectedController = id; selectedGraph = null; selectedState = model.Controllers.Find(c => c.Id == id)?.InitialState; }
+        internal void RestoreController(string kind, ulong? id) { controllers.RestoreDefault(kind, id); selectedController = null; }
         private static readonly string[] ActionNames = { "Automatikus munkavégzés", "Várakozás", "Hazatérés kérése", "Csak felrakodás", "Csak lerakodás", "Csak haladás", "Indulás a rakománnyal" };
         private static readonly string[] TriggerNames = { "Mindig", "Állapotban eltelt idő (s)", "Rakomány legalább (m³)", "Rakomány kisebb (m³)",
             "Gép állapota", "Belépés gépállapotba", "Feladatot kapott", "Feladat befejeződött", "Elromlott", "Megjavult" };
@@ -18,8 +19,7 @@ namespace ForesTycoon.Editor
         private static readonly string[] TruckStateNames = { "Telephelyen", "Forráshoz tart", "Rakodik", "Rakománnyal halad", "Lerakodik", "Üresen visszatér", "Hazafelé tart", "Készletre vár", "Útvonal megszakadt" };
         internal void SelectController(string kind, bool useTransportCycle = false)
         {
-            var controller = model.Controllers.Find(c => c.Kind == kind && c.ObjectId == null);
-            if (controller == null) { Remember(); controller = useTransportCycle && kind is "truck" or "forwarder" ? BehaviorController.TransportCycle(kind) : BehaviorController.TimedPause(kind); model.Controllers.Add(controller); }
+            var controller = controllers.Ensure(kind, useTransportCycle);
             selectedController = controller.Id; selectedState = controller.InitialState;
         }
         private void ControllerCanvas(BehaviorController controller, GameWorld world)
@@ -60,8 +60,11 @@ namespace ForesTycoon.Editor
             foreach (var state in controller.States) {
                 var p = Pos(state); var box = new Vec2(210, 100) * zoom;
                 bool over = hover && io.MousePos.X >= p.X && io.MousePos.Y >= p.Y && io.MousePos.X <= p.X + box.X && io.MousePos.Y <= p.Y + box.Y;
-                if (over && ImGui.IsMouseClicked(ImGuiMouseButton.Left)) { Remember(); selectedState = dragging = state.Id; }
-                if (dragging == state.Id && ImGui.IsMouseDragging(ImGuiMouseButton.Left)) { state.X += io.MouseDelta.X / zoom; state.Y += io.MouseDelta.Y / zoom; }
+                if (over && ImGui.IsMouseClicked(ImGuiMouseButton.Left)) { selectedState = dragging = state.Id; }
+                if (dragging == state.Id && ImGui.IsMouseDragging(ImGuiMouseButton.Left) && io.MouseDelta != Vec2.Zero) {
+                    layoutEdit ??= editorState.BeginEdit("munkaciklus elrendezése");
+                    layoutEdit.Apply(() => { state.X += io.MouseDelta.X / zoom; state.Y += io.MouseDelta.Y / zoom; });
+                }
                 draw.AddRectFilled(p, p + box, EditorStyle.NodeBodyHover, 5);
                 draw.AddRect(p, p + box, selectedState == state.Id ? EditorStyle.Selection : EditorStyle.U(HudTheme.Muted), 5, ImDrawFlags.None, active.Contains(state.Id) ? 3 : 1);
                 draw.PushClipRect(p + new Vec2(6, 4), p + box - new Vec2(6, 4), true);
@@ -71,78 +74,75 @@ namespace ForesTycoon.Editor
                     (controller.InitialState == state.Id ? "KEZDŐ " : "") + (active.Contains(state.Id) ? " · FUT" : ""));
                 draw.PopClipRect();
             }
-            if (!ImGui.IsMouseDown(ImGuiMouseButton.Left)) dragging = null;
+            if (ImGui.IsKeyPressed(ImGuiKey.Escape)) CancelLayoutEdit();
+            else if (!ImGui.IsMouseDown(ImGuiMouseButton.Left)) CommitEdit();
             draw.PopClipRect();
         }
         private void ControllerInspector(BehaviorController controller, GameWorld world)
         {
             ImGui.TextWrapped("Az állapot művelete minden géplépésben fut. Az első teljesülő átmenet nyer; lépésenként legfeljebb egy váltás történik.");
             string name = controller.Name;
-            if (ImGui.InputText("Vezérlés neve", ref name, 120)) { Remember(); controller.Name = name; }
+            if (ImGui.InputText("Vezérlés neve", ref name, 120)) { controllers.Edit(controller, c => c.Name = name); }
             bool specific = controller.ObjectId.HasValue;
-            if (ImGui.Checkbox("Egyedi gép", ref specific)) { Remember(); controller.ObjectId = specific ? 0UL : null; }
+            if (ImGui.Checkbox("Egyedi gép", ref specific)) { controllers.Edit(controller, c => c.ObjectId = specific ? 0UL : null); }
             if (specific) {
                 if (!ImGui.IsAnyItemActive()) targetId = controller.ObjectId.Value.ToString();
-                if (ImGui.InputText("Gépazonosító", ref targetId, 24) && ulong.TryParse(targetId, out ulong value)) { Remember(); controller.ObjectId = value; }
+                if (ImGui.InputText("Gépazonosító", ref targetId, 24) && ulong.TryParse(targetId, out ulong value)) { controllers.Edit(controller, c => c.ObjectId = value); }
                 if (ImGui.BeginCombo("Gépek", "Választás a világból")) {
                     foreach (var target in (ObjectSource?.Invoke(controller.Kind) ?? world.BehaviorTargets(controller.Kind)).Take(200))
-                        if (ImGui.Selectable(target.Label)) { Remember(); controller.ObjectId = target.Id; }
+                        if (ImGui.Selectable(target.Label)) { controllers.Edit(controller, c => c.ObjectId = target.Id); }
                     ImGui.EndCombo();
                 }
             }
             if (ImGui.Button("Vezérlés másolása")) {
                 if (StoreControllerTemplate != null) StoreControllerTemplate(controller);
             }
-            if (ImGui.Button("Vezérlés törlése")) { Remember(); model.Controllers.Remove(controller); selectedController = null; return; }
-            StateChoice("Kezdőállapot", controller, controller.InitialState, value => controller.InitialState = value);
+            if (ImGui.Button("Vezérlés törlése")) { controllers.Delete(controller); selectedController = null; return; }
+            StateChoice("Kezdőállapot", controller, controller.InitialState, value => controllers.SetInitialState(controller, value));
             if (ImGui.Button("Új állapot")) {
-                Remember(); var added = new BehaviorState { Id = Guid.NewGuid().ToString("N")[..8], Name = "Új állapot", X = 250, Y = 60 + controller.States.Count * 100 };
-                controller.States.Add(added); selectedState = added.Id;
+                selectedState = controllers.AddState(controller).Id;
             }
             var state = controller.States.Find(s => s.Id == selectedState);
             if (state != null) {
                 ImGui.Separator(); name = state.Name;
-                if (ImGui.InputText("Állapot neve", ref name, 120)) { Remember(); state.Name = name; }
+                if (ImGui.InputText("Állapot neve", ref name, 120)) { controllers.EditState(controller, state, s => s.Name = name); }
                 int action = (int)state.Action;
-                if (ImGui.Combo("Művelet", ref action, ActionNames, controller.Kind == "processor" ? 3 : ActionNames.Length)) { Remember(); state.Action = (BehaviorAction)action; }
+                if (ImGui.Combo("Művelet", ref action, ActionNames, controller.Kind == "processor" ? 3 : ActionNames.Length)) { controllers.EditState(controller, state, s => s.Action = (BehaviorAction)action); }
                 ImGui.TextWrapped(state.Action == BehaviorAction.ReturnHome ? "A gép befejezi a biztonságos rakodási ciklust, leadja a rakományt, majd hazatér."
                     : state.Action == BehaviorAction.Wait ? "Mozgás és munkavégzés szünetel. A rakomány, a fogott rönk és a javítás megmarad."
                     : state.Action == BehaviorAction.DepartLoaded ? "Rakománnyal elindul a célhoz; forwardernél megvárja a rönkciklus végét."
                     : state.Action >= BehaviorAction.LoadOnly ? "Csak ezt a munkafázist engedi. Átmenettel válts a következő fázisra; a gráf nem helyezi át a járművet."
                     : "A kijelölt feladat beépített mozgási és rakodási lépéseit hajtja végre.");
-                if (ImGui.Button("Állapot törlése") && controller.States.Count > 1) {
-                    Remember(); controller.States.Remove(state);
-                    foreach (var other in controller.States) other.Transitions.RemoveAll(t => t.Target == state.Id);
-                    if (controller.InitialState == state.Id) controller.InitialState = controller.States[0].Id;
+                if (ImGui.Button("Állapot törlése") && controllers.DeleteState(controller, state)) {
                     selectedState = controller.InitialState; return;
                 }
                 ImGui.TextWrapped("Átmenetek prioritási sorrendben. Egy átmeneten belül minden feltételnek teljesülnie kell.");
                 for (int i = 0; i < state.Transitions.Count; i++) {
                     ImGui.PushID(i); var transition = state.Transitions[i];
                     ImGui.Separator(); ImGui.TextUnformatted($"{i + 1}. átmenet");
-                    StateChoice("Célállapot", controller, transition.Target, value => transition.Target = value);
+                    StateChoice("Célállapot", controller, transition.Target, value => controllers.SetTarget(controller, state, transition, value));
                     for (int j = 0; j < transition.Conditions.Count; j++) {
                         ImGui.PushID(j); var condition = transition.Conditions[j]; int trigger = (int)condition.Trigger;
-                        if (ImGui.Combo("Feltétel", ref trigger, TriggerNames, TriggerNames.Length)) { Remember(); condition.Trigger = (BehaviorTrigger)trigger; condition.Value = 0; }
+                        if (ImGui.Combo("Feltétel", ref trigger, TriggerNames, TriggerNames.Length)) { controllers.SetTrigger(controller, state, transition, condition, (BehaviorTrigger)trigger); }
                         if (condition.Trigger is BehaviorTrigger.MachineState or BehaviorTrigger.EnteredMachineState) {
                             int value = (int)condition.Value;
                             var names = controller.Kind == "truck" ? TruckStateNames : MachineStateNames;
-                            if (ImGui.Combo("Gépállapot", ref value, names, names.Length)) { Remember(); condition.Value = value; }
+                            if (ImGui.Combo("Gépállapot", ref value, names, names.Length)) { controllers.SetConditionValue(controller, state, transition, condition, value); }
                         } else if (condition.Trigger is BehaviorTrigger.Elapsed or BehaviorTrigger.CargoAtLeast or BehaviorTrigger.CargoBelow) {
                             double value = condition.Value;
-                            if (ImGui.InputDouble("Küszöb", ref value)) { Remember(); condition.Value = value; }
+                            if (ImGui.InputDouble("Küszöb", ref value)) { controllers.SetConditionValue(controller, state, transition, condition, value); }
                         }
                         bool remove = ImGui.SmallButton("Feltétel törlése") && transition.Conditions.Count > 1;
                         ImGui.PopID();
-                        if (remove) { Remember(); transition.Conditions.RemoveAt(j); break; }
+                        if (remove) { controllers.DeleteCondition(controller, state, transition, condition); break; }
                     }
-                    if (ImGui.SmallButton("ÉS feltétel")) { Remember(); transition.Conditions.Add(new()); }
+                    if (ImGui.SmallButton("ÉS feltétel")) { controllers.AddCondition(controller, state, transition); }
                     bool up = ImGui.SmallButton("Előrébb") && i > 0; ImGui.SameLine();
                     bool removeTransition = ImGui.SmallButton("Átmenet törlése"); ImGui.PopID();
-                    if (up) { Remember(); (state.Transitions[i - 1], state.Transitions[i]) = (state.Transitions[i], state.Transitions[i - 1]); break; }
-                    if (removeTransition) { Remember(); state.Transitions.RemoveAt(i); break; }
+                    if (up) { controllers.MoveTransitionUp(controller, state, transition); break; }
+                    if (removeTransition) { controllers.DeleteTransition(controller, state, transition); break; }
                 }
-                if (ImGui.Button("Új átmenet")) { Remember(); state.Transitions.Add(new() { Target = controller.States.First(s => s.Id != state.Id || controller.States.Count == 1).Id }); }
+                if (ImGui.Button("Új átmenet")) { controllers.AddTransition(controller, state); }
             }
             ImGui.Separator(); ImGui.TextUnformatted("Futó példányok");
             foreach (var runtime in world.BehaviorStates.Where(s => s.Controller == controller.Id))
@@ -153,7 +153,7 @@ namespace ForesTycoon.Editor
         {
             if (!ImGui.BeginCombo(label, controller.States.Find(s => s.Id == selected)?.Name ?? "Hiányzó állapot")) return;
             foreach (var state in controller.States)
-                if (ImGui.Selectable(state.Name + "##" + state.Id, state.Id == selected)) { Remember(); set(state.Id); }
+                if (ImGui.Selectable(state.Name + "##" + state.Id, state.Id == selected)) { set(state.Id); }
             ImGui.EndCombo();
         }
     }
