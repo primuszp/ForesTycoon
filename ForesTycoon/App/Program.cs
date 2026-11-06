@@ -17,6 +17,7 @@ namespace ForesTycoon
             if (args.Length == 1 && args[0] == "--site-response-benchmark") { RuleStepBenchmark.Run(64, 256); return; }
             if (args.Length == 1 && args[0] == "--tree-vitality-benchmark") { TreeVitalityBenchmark.Run(); return; }
             if (args.Length == 1 && args[0] == "--traffic-benchmark") { TrafficRuleBenchmark.Run(); return; }
+            if (args.Length == 1 && args[0] == "--rain-haulage-scenario") { RainHaulageScenario.Run(Console.Out); return; }
             if (args.Length == 2 && args[0] == "--record-opening-reference") {
                 using var reference = new GameWorld(TerrainSettings.Default, enableRendering: false);
                 System.IO.Directory.CreateDirectory(args[1]);
