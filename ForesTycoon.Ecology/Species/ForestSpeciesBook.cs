@@ -54,19 +54,32 @@ namespace ForesTycoon.Ecology
         private static volatile Book current;
         private sealed record WorkerContext(Book Book);
         private static readonly AsyncLocal<WorkerContext> workerContext = new();
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Book, WorkerContext> contexts = new();
+        private static readonly WorkerContext builtinContext = new(null);
+        private static WorkerContext Context(Book book) => book == null ? builtinContext : contexts.GetValue(book, static b => new(b));
         private static Book ActiveBook => workerContext.Value is { } context ? context.Book : current;
+        internal readonly struct ContextScope : IDisposable
+        {
+            private readonly WorkerContext previous;
+            internal ContextScope(object context)
+            {
+                previous = workerContext.Value;
+                workerContext.Value = Context((Book)context);
+            }
+            public void Dispose() => workerContext.Value = previous;
+        }
+        internal static ContextScope EnterContext(object context) => new(context);
         internal static T WithContext<T>(object context, Func<T> compute)
         {
-            var previous = workerContext.Value;
-            try { workerContext.Value = new((Book)context); return compute(); }
-            finally { workerContext.Value = previous; }
+            using var scope = EnterContext(context);
+            return compute();
         }
 
         internal static object CaptureContext() => ActiveBook;
         internal static void RestoreContext(object context) => InstallBook((Book)context);
         private static void InstallBook(Book book)
         {
-            if (workerContext.Value != null) workerContext.Value = new(book);
+            if (workerContext.Value != null) workerContext.Value = Context(book);
             else current = book;
         }
 

@@ -7,7 +7,11 @@ namespace ForesTycoon.Rules;
 public static class LogisticsRules
 {
     public static readonly string[] InputKeys = ["step.seconds", "machine.kind", "machine.state", "machine.cargo", "machine.capacity", "machine.wear", "machine.pace", "machine.homeRequested", "source.stock", "source.fed", "source.availableTimber", "source.reachable", "spec.fellingRate", "spec.unloadRate", "spec.speed", "spec.loadedSpeed", "spec.fuelDriving", "spec.fuelLoaded", "spec.fuelCrane", "spec.fuelFelling", "spec.emptyMass", "spec.timberDensity", "spec.loadRate", "log.volume", "log.lastVolume", "transfer.unloading", "transfer.requested", "transfer.loaded", "route.damage", "route.surface", "route.from", "route.to", "mill.stock", "mill.processed", "site.forest", "site.harvest", "site.roadAccess", "depot.count", "order.hasTimber", "order.destinationIsMill", "workflow.stage", "workflow.arrived", "workflow.atSource", "decision.continue", "decision.deliver", "decision.fetch", "decision.return", "decision.allow", "machine.control", "machine.working", "machine.broken", "machine.hasVehicle", "machine.transit", "machine.transportState", "machine.speed", "transfer.held"];
-    public static string Kind(string agent) => "logistics" + char.ToUpperInvariant(agent[0]) + agent[1..];
+    public static string Kind(string agent) => agent switch {
+        "processor" => "logisticsProcessor", "forwarder" => "logisticsForwarder", "truck" => "logisticsTruck",
+        "mill" => "logisticsMill", "depot" => "logisticsDepot",
+        _ => "logistics" + char.ToUpperInvariant(agent[0]) + agent[1..]
+    };
     public static bool IsKind(string kind) => kind is "logisticsProcessor" or "logisticsForwarder" or "logisticsTruck" or "logisticsMill" or "logisticsDepot";
     private static BehaviorHook H(string id, string name, string kind, string unit, double min, double max, string state, string amount, string schedule) =>
         new(id, name, kind, unit, min, max, state, amount, schedule, true, InputKeys.Where(key => Available(id, kind, key)).ToArray());

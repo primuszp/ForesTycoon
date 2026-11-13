@@ -93,7 +93,7 @@ public class ArchitectureTests
     public void LibrarySourcesNeverUseGraphicsWindowingOrUi(string project)
     {
         string dir = Path.Combine(RepositoryRoot(), project);
-        var forbidden = new[] { "OpenTK.Graphics", "OpenTK.Windowing", "OpenTK.Input", "ImGuiNET", "System.Windows" };
+        var forbidden = new[] { "OpenTK.Graphics", "OpenTK.Windowing", "OpenTK.Input", "OpenTK.Audio.OpenAL", "ImGuiNET", "System.Windows" };
         foreach (string file in Directory.EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories)
                      .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")))
         {

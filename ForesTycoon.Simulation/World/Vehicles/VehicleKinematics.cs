@@ -72,9 +72,19 @@ internal sealed record RigProfile(SteeringGeometry Steering, double FrontLength,
         return result.ToArray();
     }
     internal RigProfile Copy() => this with { Axles = (RigAxle[])Axles.Clone(), Trailers = (RigTrailer[])Trailers.Clone() };
-    internal double MinimumRadius => Steering == SteeringGeometry.Axle ?
-        Axles.Where(a => a.Unit == 0 && a.Steered).Max(a => Math.Abs(a.X) / Math.Tan(MaxSteer) + a.Track * .5) :
-        (RearLength + FrontLength * Math.Cos(MaxSteer)) / Math.Sin(MaxSteer);
+    internal double MinimumRadius {
+        get {
+            if (Steering != SteeringGeometry.Axle) return (RearLength + FrontLength * Math.Cos(MaxSteer)) / Math.Sin(MaxSteer);
+            double radius = double.NegativeInfinity, tangent = Math.Tan(MaxSteer); bool found = false;
+            foreach (var axle in Axles) if (axle.Unit == 0 && axle.Steered) {
+                double value = Math.Abs(axle.X) / tangent + axle.Track * .5;
+                if (!found || value > radius || double.IsNaN(radius)) radius = value;
+                found = true;
+            }
+            if (!found) throw new InvalidOperationException("No steered axle.");
+            return radius;
+        }
+    }
     // The inner Ackermann wheel reaches its mechanical stop before the equivalent bicycle wheel does.
     internal double EquivalentSteerLimit => Steering == SteeringGeometry.Axle ? Math.Atan(FrontLength / MinimumRadius) : MaxSteer;
 }
@@ -122,49 +132,58 @@ internal sealed class VehicleKinematics
         if (!double.IsFinite(speed) || !double.IsFinite(command) || !double.IsFinite(dt) || dt < 0 || dt > 60)
             throw new ArgumentOutOfRangeException(nameof(dt));
         command = Math.Clamp(command, -Profile.EquivalentSteerLimit, Profile.EquivalentSteerLimit);
-        while (dt > 1e-12) {
-            double h = Math.Min(dt, Math.Min(1.0 / 60, .05 / Math.Max(.01, Math.Abs(speed))));
-            double nextSteer = Steer + Math.Clamp(command - Steer, -Profile.SteerRate * h, Profile.SteerRate * h);
-            double rate = (nextSteer - Steer) / h;
-            var first = Derivative(units, speed, Steer, rate);
-            var mid = new RigUnitPose[units.Length];
-            for (int i = 0; i < units.Length; i++) mid[i] = new(units[i].Axle + first.V[i] * (h * .5), units[i].Yaw + first.W[i] * (h * .5));
-            var derivative = Derivative(mid, speed, (Steer + nextSteer) * .5, rate);
-            var next = new RigUnitPose[units.Length];
-            next[0] = new(units[0].Axle + derivative.V[0] * h, Wrap(units[0].Yaw + derivative.W[0] * h));
-            int start = 1;
-            if (Profile.Steering == SteeringGeometry.Articulated) {
-                double yaw = Wrap(next[0].Yaw - nextSteer);
-                var joint = next[0].Axle - PlanPoint.Forward(next[0].Yaw) * Profile.FrontLength;
-                next[1] = new(joint - PlanPoint.Forward(yaw) * Profile.RearLength, yaw); start++;
-            }
-            for (int i = 0; i < Profile.Trailers.Length; i++) {
-                int j = start + i; var t = Profile.Trailers[i];
-                double yaw = Wrap(units[j].Yaw + derivative.W[j] * h);
-                if (Math.Abs(Wrap(yaw - next[j - 1].Yaw)) > t.MaxAngle) { Jackknifed = true; return false; }
-                var hitch = next[j - 1].Axle + PlanPoint.Forward(next[j - 1].Yaw) * t.HitchX;
-                next[j] = new(hitch - PlanPoint.Forward(yaw) * t.Length, yaw);
-            }
-            for (int i = 0; i < Profile.Axles.Length; i++) {
-                var a = Profile.Axles[i]; int j = a.Unit;
-                var f = PlanPoint.Forward(mid[j].Yaw); var n = PlanPoint.Left(mid[j].Yaw);
-                for (int side = 0; side < 2; side++) {
-                    double y = (side == 0 ? 1 : -1) * a.Track * .5;
-                    var velocity = derivative.V[j] + (n * a.X - f * y) * derivative.W[j];
-                    double u = velocity.Dot(f), w = velocity.Dot(n);
-                    double angle = a.Steered ? HalfTurn(Math.Atan2(w, u)) : 0;
-                    double rolling = u * Math.Cos(angle) + w * Math.Sin(angle);
-                    rolls[i * 2 + side] = Wrap(rolls[i * 2 + side] + rolling * h / a.Radius);
+        // Profiles have at most six units. All RK2 substeps share bounded stack workspace.
+        Span<RigUnitPose> pose = stackalloc RigUnitPose[units.Length]; units.AsSpan().CopyTo(pose);
+        Span<RigUnitPose> mid = stackalloc RigUnitPose[units.Length];
+        Span<RigUnitPose> next = stackalloc RigUnitPose[units.Length];
+        Span<PlanPoint> v = stackalloc PlanPoint[units.Length];
+        Span<double> w = stackalloc double[units.Length];
+        bool changed = false;
+        try {
+            while (dt > 1e-12) {
+                double h = Math.Min(dt, Math.Min(1.0 / 60, .05 / Math.Max(.01, Math.Abs(speed))));
+                double nextSteer = Steer + Math.Clamp(command - Steer, -Profile.SteerRate * h, Profile.SteerRate * h);
+                double rate = (nextSteer - Steer) / h;
+                Derivative(pose, speed, Steer, rate, v, w);
+                for (int i = 0; i < units.Length; i++) mid[i] = new(pose[i].Axle + v[i] * (h * .5), pose[i].Yaw + w[i] * (h * .5));
+                Derivative(mid, speed, (Steer + nextSteer) * .5, rate, v, w);
+                next[0] = new(pose[0].Axle + v[0] * h, Wrap(pose[0].Yaw + w[0] * h));
+                int start = 1;
+                if (Profile.Steering == SteeringGeometry.Articulated) {
+                    double yaw = Wrap(next[0].Yaw - nextSteer);
+                    var joint = next[0].Axle - PlanPoint.Forward(next[0].Yaw) * Profile.FrontLength;
+                    next[1] = new(joint - PlanPoint.Forward(yaw) * Profile.RearLength, yaw); start++;
                 }
+                for (int i = 0; i < Profile.Trailers.Length; i++) {
+                    int j = start + i; var t = Profile.Trailers[i];
+                    double yaw = Wrap(pose[j].Yaw + w[j] * h);
+                    if (Math.Abs(Wrap(yaw - next[j - 1].Yaw)) > t.MaxAngle) { Jackknifed = true; return false; }
+                    var hitch = next[j - 1].Axle + PlanPoint.Forward(next[j - 1].Yaw) * t.HitchX;
+                    next[j] = new(hitch - PlanPoint.Forward(yaw) * t.Length, yaw);
+                }
+                for (int i = 0; i < Profile.Axles.Length; i++) {
+                    var a = Profile.Axles[i]; int j = a.Unit;
+                    var f = PlanPoint.Forward(mid[j].Yaw); var n = PlanPoint.Left(mid[j].Yaw);
+                    for (int side = 0; side < 2; side++) {
+                        double y = (side == 0 ? 1 : -1) * a.Track * .5;
+                        var velocity = v[j] + (n * a.X - f * y) * w[j];
+                        double u = velocity.Dot(f), lateral = velocity.Dot(n);
+                        double angle = a.Steered ? HalfTurn(Math.Atan2(lateral, u)) : 0;
+                        double rolling = u * Math.Cos(angle) + lateral * Math.Sin(angle);
+                        rolls[i * 2 + side] = Wrap(rolls[i * 2 + side] + rolling * h / a.Radius);
+                    }
+                }
+                next.CopyTo(pose); changed = true; Steer = nextSteer; dt -= h; Jackknifed = false;
             }
-            units = next; Steer = nextSteer; dt -= h; Jackknifed = false;
+            return true;
+        } finally {
+            // Publish once per call. Previously returned Units arrays and captured presentation states stay detached.
+            if (changed) units = pose.ToArray();
         }
-        return true;
     }
 
-    private (PlanPoint[] V, double[] W) Derivative(RigUnitPose[] pose, double speed, double steer, double rate)
+    private void Derivative(ReadOnlySpan<RigUnitPose> pose, double speed, double steer, double rate, Span<PlanPoint> v, Span<double> w)
     {
-        var v = new PlanPoint[pose.Length]; var w = new double[pose.Length];
         v[0] = PlanPoint.Forward(pose[0].Yaw) * speed;
         int start = 1;
         if (Profile.Steering == SteeringGeometry.Axle) w[0] = speed * Math.Tan(steer) / Profile.FrontLength;
@@ -181,18 +200,19 @@ internal sealed class VehicleKinematics
             w[j] = hitchVelocity.Dot(PlanPoint.Left(pose[j].Yaw)) / t.Length;
             v[j] = PlanPoint.Forward(pose[j].Yaw) * hitchVelocity.Dot(PlanPoint.Forward(pose[j].Yaw));
         }
-        return (v, w);
     }
 
     internal RigWheelPose[] Wheels(double speed = 1)
     {
-        var d = Derivative(units, speed, Steer, 0); var result = new RigWheelPose[rolls.Length];
+        Span<PlanPoint> v = stackalloc PlanPoint[units.Length];
+        Span<double> w = stackalloc double[units.Length];
+        Derivative(units, speed, Steer, 0, v, w); var result = new RigWheelPose[rolls.Length];
         for (int i = 0; i < Profile.Axles.Length; i++) {
             var a = Profile.Axles[i]; var unit = units[a.Unit];
             var f = PlanPoint.Forward(unit.Yaw); var n = PlanPoint.Left(unit.Yaw);
             for (int side = 0; side < 2; side++) {
                 double y = (side == 0 ? 1 : -1) * a.Track * .5;
-                var velocity = d.V[a.Unit] + (n * a.X - f * y) * d.W[a.Unit];
+                var velocity = v[a.Unit] + (n * a.X - f * y) * w[a.Unit];
                 double angle = a.Steered ? HalfTurn(Math.Atan2(velocity.Dot(n), velocity.Dot(f))) : 0;
                 result[i * 2 + side] = new(a.Id, side == 0, unit.Axle + f * a.X + n * y, Wrap(unit.Yaw + angle), rolls[i * 2 + side]);
             }

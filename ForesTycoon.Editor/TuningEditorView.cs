@@ -14,8 +14,11 @@ namespace ForesTycoon.Editor;
 /// data and game parameters, and the rain trial. <see cref="WorldTab"/> and <see cref="TypeTab"/> remain the entry points
 /// other code uses to open a page.
 /// </summary>
-internal sealed class TuningEditorView(EditorPageContext context, CurrentRulesView currentRules)
+internal sealed class TuningEditorView(EditorPageContext context, CurrentRulesView currentRules, PresentationSession presentation) : IDisposable
 {
+    private readonly PresentationEditorView presentationEditor = new(presentation, context);
+    internal void Poll() => presentationEditor.Poll();
+    public void Dispose() => presentationEditor.Dispose();
     private bool Try(Action action) => context.Try(action);
     private void ApplyProject(GameWorld world, bool publish) => context.ApplyProject(world, publish);
     private string message { set => context.SetMessage(value); }
@@ -33,8 +36,15 @@ internal sealed class TuningEditorView(EditorPageContext context, CurrentRulesVi
     internal void ParametersTab(GameWorld world)
     {
         EditorStyle.BeginPanel("parameters", Vec2.Zero);
-        currentRules.DrawTuning(world, rule => !IsVehicleRule(rule));
-        if (currentRules.UnappliedTuning(world) > 0 && EditorStyle.PrimaryButton("Paraméterek alkalmazása")) Try(() => ApplyProject(world, false));
+        if (ImGui.BeginTabBar("parameter-pages")) {
+            if (ImGui.BeginTabItem("Játékszámok")) {
+                currentRules.DrawTuning(world, rule => !IsVehicleRule(rule));
+                if (currentRules.UnappliedTuning(world) > 0 && EditorStyle.PrimaryButton("Paraméterek alkalmazása")) Try(() => ApplyProject(world, false));
+                ImGui.EndTabItem();
+            }
+            if (ImGui.BeginTabItem("Animációk és hangok")) { presentationEditor.Draw(world); ImGui.EndTabItem(); }
+            ImGui.EndTabBar();
+        }
         EditorStyle.EndPanel();
     }
 

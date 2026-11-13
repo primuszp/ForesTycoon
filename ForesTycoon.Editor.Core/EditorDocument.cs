@@ -13,6 +13,7 @@ internal sealed class EditorDocument
 {
     internal string Name { get; set; } = "ForesTycoon szabályrendszer";
     internal WorldScenario? World { get; set; }
+    internal PresentationBindings Presentation { get; set; } = new();
     internal EditorTuning Tuning { get; } = new();
     private readonly EditorBuffer<RuleAuthoring> authoring = new(new(),
         value => JsonSerializer.Serialize(value), json => JsonSerializer.Deserialize<RuleAuthoring>(json)!);
@@ -54,6 +55,8 @@ internal sealed class EditorDocument
         var copy = project.Clone();
         // Validate tuning before replacing any authored state.
         _ = GameTuning.FromOverrides(copy.Tuning);
+        _ = new PresentationProfile(copy.Presentation);
+        Presentation = copy.Presentation.Clone();
         Name = copy.Name; World = copy.World; Authoring = copy.Authoring ?? new();
         Tuning.Replace(copy.Tuning);
         Algorithms = copy.Algorithms; Rules = copy.Rules; Fields = copy.Fields; RemovedStarters = copy.RemovedStarters;
@@ -66,7 +69,7 @@ internal sealed class EditorDocument
 
     internal RuleProject Capture()
         => new RuleProject {
-            Name = Name, Tuning = Tuning.Capture(), Behaviors = Behaviors.Draft, Dynamics = Dynamics.Draft, Algorithms = Algorithms,
+            Presentation = Presentation.Clone(), Name = Name, Tuning = Tuning.Capture(), Behaviors = Behaviors.Draft, Dynamics = Dynamics.Draft, Algorithms = Algorithms,
             Rules = Rules, Fields = Fields, RemovedStarters = RemovedStarters,
             Authoring = Authoring, World = World
         }.Clone();

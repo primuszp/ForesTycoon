@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
@@ -140,7 +140,7 @@ namespace ForesTycoon
             var scenario = project.World;
             // Painting and construction use the authored graphs before journal publication below.
             var preparing = Task.Run(() => PrepareRuleProject(project, ReadWorldValue));
-            while (!preparing.IsCompleted) yield return 64;
+            while (SimulationWork.TaskPending(preparing)) yield return 64;
             var prepared = preparing.GetAwaiter().GetResult();
             forest.ResponseRules = Environment.ResponseRules = prepared.Policy.Responses;
             Logistics.Behaviors = prepared.Policy;
@@ -160,7 +160,7 @@ namespace ForesTycoon
                 foreach (int unit in BuildSceneStructuresWork(scenario)) yield return unit;
             }
             var command = Task.Run(() => new SetRuleProjectCommand(project.ToJson()));
-            while (!command.IsCompleted) yield return 64;
+            while (SimulationWork.TaskPending(command)) yield return 64;
             Enqueue(command.GetAwaiter().GetResult());
             do { ContinueCommands(16); yield return 16; } while (commands.WorkPending);
         }

@@ -710,7 +710,7 @@ namespace ForesTycoon
             object species = ForestSpeciesBook.CaptureContext();
             var mesh = Task.Run(() => ForestSpeciesBook.WithContext(species, () => seasonal
                 ? DendroTreeGenerator.GenerateSeasonal(spec, lod) : DendroTreeGenerator.Generate(spec, lod)));
-            while (!mesh.IsCompleted) yield return false;
+            while (SimulationWork.TaskPending(mesh)) yield return false;
             result.Value = mesh.GetAwaiter().GetResult();
         }
 

@@ -62,14 +62,14 @@ namespace ForesTycoon
     internal sealed record TruckCheckpoint(int Id, int Home, TruckPhase Phase, int Vehicle, int Source, int Destination, bool HomeRequested,
         int Target = -1, double CargoValue = 0, double FuelCharged = 0, UpkeepCheckpoint Upkeep = null);
     internal sealed record StackCheckpoint(int Id, int Tile, float Volume, double Value);
-    internal sealed record MillCheckpoint(int TileId, int[] Footprint, CheckpointPosition Position, float Received, float Stock, float Processed);
+    internal sealed record MillCheckpoint(int TileId, int[] Footprint, CheckpointPosition Position, double Received, double Stock, double Processed);
     internal sealed record LogisticsCheckpoint(HarvestCheckpoint[] Sites, MillCheckpoint[] Mills, string Status,
         ForestMachineCheckpoint[] Machines = null, int NextMachineId = 1,
         DepotCheckpoint[] Depots = null, TruckCheckpoint[] Trucks = null, int NextTruckId = 1,
         StackCheckpoint[] Stacks = null, int NextStackId = 1, double Income = 0, double RunningCosts = 0);
     internal sealed record WorldCheckpointData(int Version, ulong Tick, int CommandCursor, int PendingCommands,
         TerrainCheckpoint Terrain, EcologyCheckpoint Ecology, WildlifeCheckpoint Wildlife, LogisticsCheckpoint Logistics,
-        VehiclesCheckpoint Vehicles, float AvailableTimber, float DeliveredTimber, EffectCheckpoint[] Effects,
+        VehiclesCheckpoint Vehicles, float AvailableTimber, double DeliveredTimber, EffectCheckpoint[] Effects,
         ForestryActionResult LastAction, ForestryAreaSummary LastArea, double Expenses = 0,
         Dictionary<string, double> Tuning = null, double RoadWeatherSeconds = 0, BehaviorModel Behaviors = null,
         BehaviorControllerSnapshot[] BehaviorStates = null, DynamicsModel Dynamics = null,
@@ -85,5 +85,7 @@ namespace ForesTycoon
         [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
         ForesTycoon.Rules.SpeciesDefinition[] Species = null,
         [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-        WorldScenario Scene = null);
+        WorldScenario Scene = null,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        PresentationBindings Presentation = null);
 }

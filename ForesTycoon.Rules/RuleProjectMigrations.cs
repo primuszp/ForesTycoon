@@ -17,7 +17,7 @@ public static class RuleProjectMigrations
         }
         UpgradeGeometry(project);
         UpgradeModelBinding(project);
-        if (project.Version >= 6) return;
+        if (project.Version >= 6) { UpgradePresentation(project); return; }
         var defaults = RuleProject.CreateDefault();
         string[] keys = { "DirtBuild", "DirtWeather", "DirtRainWeather", "AsphaltBufferMetres", "MacadamBufferMetres", "DirtBufferMetres", "TrailBufferMetres" };
         foreach (string key in keys) {
@@ -37,6 +37,14 @@ public static class RuleProjectMigrations
         project.Version = 6;
         UpgradeGeometry(project);
         UpgradeModelBinding(project);
+        UpgradePresentation(project);
+    }
+    private static void UpgradePresentation(RuleProject project)
+    {
+        if (project.Version is 8 or 9) {
+            project.Presentation ??= new();
+            project.Version = 10;
+        }
     }
     private static void UpgradeGeometry(RuleProject project)
     {

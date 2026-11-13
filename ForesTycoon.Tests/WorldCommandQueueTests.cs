@@ -3,7 +3,7 @@ namespace ForesTycoon.Tests;
 public class WorldCommandQueueTests
 {
     [Fact]
-    public void ExecutePending_PreservesInputOrderAndArguments()
+    public void SlicedQueuePreservesInputOrderAndArguments()
     {
         WorldCommandQueue queue = new WorldCommandQueue();
         RecordingTarget target = new RecordingTarget();
@@ -13,7 +13,9 @@ public class WorldCommandQueueTests
         queue.Enqueue(new PlantForestCommand(21, ForestSpecies.Birch));
         queue.Enqueue(new HarvestForestCommand(22));
 
-        int executed = queue.ExecutePending(target);
+        IEnumerable<int> Execute(IWorldCommand command) { command.Execute(target); yield return 1; }
+        int executed = 0;
+        do { executed += queue.Continue(target, Execute, 1); } while (queue.WorkPending);
 
         Assert.Equal(5, executed);
         Assert.Equal(new[]

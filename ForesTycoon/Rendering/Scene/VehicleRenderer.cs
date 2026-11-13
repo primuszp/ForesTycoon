@@ -31,8 +31,10 @@ namespace ForesTycoon
             outlineBudget--;
             return 0.8f / outlinePixelsPerUnit / scale;
         }
-        public static void Draw(VehicleSystem vehicles, Terrain terrain, float interpolationAlpha)
+        public static void Draw(VehicleSystem vehicles, Terrain terrain, float interpolationAlpha, ForesTycoon.Rules.PresentationProfile profile = null)
         {
+            profile ??= ForesTycoon.Rules.PresentationProfile.Default;
+            double wheelScale = ActorAnimationEvents.Time(profile, "truck.wheels", 1);
             if (vehicles.Count == 0) return;
             EnsureModel();
             float scale=terrain.RoadLaneWidth*DioramaScale.TruckLaneFill/importedModel.Width;
@@ -44,7 +46,7 @@ namespace ForesTycoon
                         var pose = vehicle.Presentation.Sample(interpolationAlpha) ?? vehicle.Kinematics.Interpolated(vehicle.PreviousRigPose, interpolationAlpha);
                         var frames = RigRenderer.TruckFrames(pose, importedModel, terrain.Map, scale, vehicles.Spec.ModelBinding);
                         importedModel.Draw(Matrix4.Identity, vehicle.VisualCargoFill, 0, rigFrames: frames);
-                        RigRenderer.Wheels(pose, terrain.Map, frames.Visual, importedModel.Articulated ? int.MaxValue : 1);
+                        RigRenderer.Wheels(pose, terrain.Map, frames.Visual, importedModel.Articulated ? int.MaxValue : 1, animationScale: wheelScale);
                         continue;
                     }
                     double routePosition = vehicle.InterpolatedRoutePosition(interpolationAlpha);
@@ -55,7 +57,7 @@ namespace ForesTycoon
                         if (Culled(center, scale)) continue;
                         var (articulation, trailerPitch) = Articulation(vehicle.RoadRoute, routePosition, center, forward, left, up, scale);
                         DrawTruck(new VehicleTransform(center, forward, left, up), vehicle.VisualCargoFill, scale, articulation, trailerPitch,
-                            (float)(routePosition * vehicle.RoadRoute.TileLength / (0.23*scale)),
+                            (float)(routePosition * vehicle.RoadRoute.TileLength / (0.23*scale) * wheelScale),
                             vehicle.RoadRoute.BodyCurvature(routePosition,importedModel.Wheelbase*scale),
                             VehicleVisualMotion.Suspension(routePosition*vehicle.RoadRoute.TileLength,
                                 (float)vehicle.CurrentSpeed,Math.Max(vehicle.RoadRoute.Roughness(routePosition,importedModel.Wheelbase*scale),vehicle.RoadDamage),vehicle.CargoFill));

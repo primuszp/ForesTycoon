@@ -28,9 +28,9 @@ internal static class AudioSmokeTest
             foreach (var cue in Enum.GetValues<AmbientCue>()) entries[cue.ToString()] = "tone.wav";
             File.WriteAllText(Path.Combine(root, "manifest.json"), JsonSerializer.Serialize(entries));
             // Two owners verify that context restoration and disposal do not invalidate the survivor.
-            using var first = OpenAlAmbientOutput.TryCreate(root, Console.Error.WriteLine)
+            using var first = OpenAlAudioOutput.TryCreate(root, Console.Error.WriteLine)
                 ?? throw new InvalidOperationException("Native audio smoke could not open OpenAL.");
-            using (var second = OpenAlAmbientOutput.TryCreate(root, Console.Error.WriteLine)
+            using (var second = OpenAlAudioOutput.TryCreate(root, Console.Error.WriteLine)
                 ?? throw new InvalidOperationException("Second audio context failed.")) {
                 for (int i = 0; i < 310; i++) {
                     first.Update(new(12, 8, true, .23, false), .1);
@@ -39,8 +39,26 @@ internal static class AudioSmokeTest
                 second.Muted = true; second.Update(new(0, 0, false, .75, true), .1);
             }
             first.Update(new(5, 0, false, .75, true), .1);
+            var data = new Rules.PresentationBindings { SpatialVoiceLimit = 2 };
+            data.MachineSounds["truck.driving"] = new() { File = "tone.wav", Gain = .1 };
+            using (var spatial = OpenAlAudioOutput.TryCreateSpatial(root, Console.Error.WriteLine, new(data))
+                ?? throw new InvalidOperationException("Spatial output failed.")) {
+                var backend = (OpenAlAudioOutput)spatial.Output;
+                ActorSoundSample[] emitters = { new(1, "truck.driving", new(1, 0, 0)), new(2, "truck.driving", new(-2, 0, 0)), new(3, "truck.driving", new(10, 0, 0)) };
+                for (int i = 0; i < 20; i++) {
+                    spatial.Update(emitters, OpenTK.Mathematics.Vector3.Zero, OpenTK.Mathematics.Matrix4.Identity, .1f, true);
+                    first.Update(new(5, 0, false, .75, true), .1);
+                }
+                spatial.Update(emitters, new(-1, 0, 0), OpenTK.Mathematics.Matrix4.Identity, .1f, true);
+                if (backend.ActiveSpatialVoices != 2 || backend.SpatialStarts != 2) throw new InvalidOperationException("Source cap or loop identity failed.");
+                spatial.Update(emitters, OpenTK.Mathematics.Vector3.Zero, OpenTK.Mathematics.Matrix4.Identity, .1f, false);
+                if (backend.ActiveSpatialVoices != 0) throw new InvalidOperationException("Spatial pause failed.");
+                spatial.Update(emitters, OpenTK.Mathematics.Vector3.Zero, OpenTK.Mathematics.Matrix4.Identity, .1f, true);
+                if (backend.SpatialStarts != 4) throw new InvalidOperationException("Spatial resume failed.");
+            }
+            first.Update(new(5, 0, false, .75, true), .1);
             Thread.Sleep(150);
-            Console.WriteLine("Audio smoke passed: eight cues, two contexts, loop/event gain, mute and cleanup.");
+            Console.WriteLine("Audio smoke passed: eight ambient cues, spatial pool, stable loops, pause/resume, interleaved contexts and cleanup.");
         }
         finally { Directory.Delete(root, recursive: true); }
     }

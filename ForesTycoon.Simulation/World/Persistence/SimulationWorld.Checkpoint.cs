@@ -18,7 +18,8 @@ namespace ForesTycoon
                 dynamics.Document, dynamics.Capture(), ruleProjectName, AlgorithmSnapshot(), ruleEngine.Capture(), ruleEngine.CaptureStep(), pendingForestRateRefresh,
                 worldSpeciesDefinitions != null && SpeciesEdits(new WorldScenario { Species = worldSpeciesDefinitions.ToList() }).Count > 0
                     ? RuleProject.FromJson(new RuleProject { World = new WorldScenario { Species = worldSpeciesDefinitions.ToList() } }.ToJson()).World.Species.ToArray() : null,
-                ruleProjectWorld?.CloneContent());
+                ruleProjectWorld?.CloneContent(),
+                Presentation.Revision == PresentationProfile.Default.Revision ? null : Presentation.Capture());
         }
 
         private void RestoreCheckpoint(WorldCheckpointData s) => WithSpecies(() => { SimulationWork.Complete(RestoreCheckpointWork(s)); return 0; });
@@ -39,6 +40,7 @@ namespace ForesTycoon
                 worldSpeciesDefinitions = scene.Species.ToArray();
                 ForestSpeciesBook.Apply(SpeciesEdits(scene)); worldSpecies = ForestSpeciesBook.CaptureContext();
             }
+            Presentation = new PresentationProfile(s.Presentation ?? new());
             var programs = Task.Run(() => PrepareCheckpointPrograms(s));
             CheckpointGuard.Require(Enum.IsDefined(s.LastAction) && s.LastArea.TileCount >= 0 && s.LastArea.Applied >= 0 &&
                 s.LastArea.Applied <= s.LastArea.TileCount, "forestry UI state");
@@ -60,7 +62,7 @@ namespace ForesTycoon
             roadWeatherSeconds = s.RoadWeatherSeconds;
             pendingForestRateRefresh = s.PendingForestRateRefresh;
             worldTick = s.Tick; lastForestryAction = s.LastAction; lastForestryArea = s.LastArea; Expenses = s.Expenses;
-            while (!programs.IsCompleted) yield return 64;
+            while (SimulationWork.TaskPending(programs)) yield return 64;
             var compiled = programs.GetAwaiter().GetResult();
             dynamics = compiled.Dynamics; ruleEngine = compiled.Engine; behaviorPolicy = compiled.Policy;
             foreach (int unit in ruleEngine.MigrateCustomValuesWork(this)) yield return unit;
@@ -83,6 +85,7 @@ namespace ForesTycoon
         internal static RuleProject CheckpointProject(WorldCheckpointData s)
         {
             var project = new RuleProject { Version = s.RuleBook?.ProjectVersion ?? 2,
+                Presentation = (s.Presentation ?? new()).Clone(),
                 Rules = RuleEngine.Clone(s.RuleBook?.Rules ?? RuleEngine.StarterRules()),
                 Behaviors = (s.Behaviors ?? WorldBehaviorPolicy.DefaultDocument()).Clone() };
             RuleProjectMigrations.UpgradeProject(project);

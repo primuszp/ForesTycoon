@@ -453,10 +453,11 @@
       "ids": [
         "visual.animals"
       ],
-      "editor": "Megjelenítés; most nem része az átvezetésnek.",
-      "remaining": "Rajzolás, animáció és vizuális geometria; a szimuláció eredményének megjelenítése motorfeladat.",
+      "editor": "Játékparaméterek → Animációk és hangok → Szarvasanimációk.",
+      "remaining": "A GLB, mozgási gyökér, nyugalmi/járási klip, sebesség és letiltás projektadat; közös játék/editor mintavétel és natív előnézet. Morph target animáció és további szereplők eseményei külön fejlesztés.",
       "tests": [
-        "ForesTycoon.Tests/CurrentGameRulesTests.cs"
+        "ForesTycoon.Tests/CurrentGameRulesTests.cs",
+        "ForesTycoon.Tests/PresentationBindingTests.cs"
       ]
     },
     {
@@ -551,6 +552,20 @@
         "ForesTycoon.Tests/VehicleKinematicsTests.cs",
         "ForesTycoon.Tests/FleetKinematicsTests.cs",
         "ForesTycoon.Tests/FleetTests.cs"
+      ]
+    },
+    {
+      "status": "presentation",
+      "ids": [
+        "audio.ambience"
+      ],
+      "editor": "Játékparaméterek → Játékszámok / Animációk és hangok.",
+      "remaining": "Környezeti és kilenc térbeli géphangkötés, előhallgatás, korlátos forráskészlet, projekt/mentés integráció kész. Doppler, akadályok miatti hangárnyékolás és visszhang külön fejlesztés.",
+      "tests": [
+        "ForesTycoon.Tests/AmbientAudioTests.cs",
+        "ForesTycoon.Tests/EditorEngineReviewTests.cs",
+        "ForesTycoon.Tests/PresentationBindingTests.cs",
+        "ForesTycoon.Tests/SpatialMachineAudioTests.cs"
       ]
     }
   ],

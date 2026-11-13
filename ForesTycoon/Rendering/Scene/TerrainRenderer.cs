@@ -48,6 +48,7 @@ namespace ForesTycoon
         private readonly ForestWeatherRenderer forestWeather = new ForestWeatherRenderer();
         private readonly CloudRenderer clouds = new CloudRenderer();
         private readonly WildlifeRenderer wildlife;
+        internal Func<ForesTycoon.Rules.PresentationProfile> Presentation { get; set; }
         internal int WildlifeCount => graphics.Wildlife ? wildlife.Count : 0;
         internal bool TryGetWildlifePosition(out OpenTK.Mathematics.Vector3 position) => wildlife.TryGetPosition(out position);
         private readonly WeatherRenderer precipitation = new WeatherRenderer();
@@ -58,7 +59,7 @@ namespace ForesTycoon
             this.environment = environment;
             if (environment != null) FloodDepth = environment.SurfaceDepth;
             this.logistics = logistics;
-            wildlife = new WildlifeRenderer(wildlifeSystem ?? new WildlifeSystem());
+            wildlife = new WildlifeRenderer(wildlifeSystem ?? new WildlifeSystem()) { Bindings = () => Presentation?.Invoke() ?? ForesTycoon.Rules.PresentationProfile.Default };
             this.terrain = terrain ?? throw new ArgumentNullException(nameof(terrain));
             this.vehicles = vehicles ?? throw new ArgumentNullException(nameof(vehicles));
             this.effects = effects ?? throw new ArgumentNullException(nameof(effects));
@@ -128,7 +129,7 @@ namespace ForesTycoon
                         terrain.DrawTrees(forest, shadowContext, graphics);
                         content.DrawMills(terrain, logistics, graphics);
                         wildlife.Draw(terrain, forest, graphics, context);
-                        VehicleRenderer.Draw(vehicles, terrain, context.MotionInterpolationAlpha);
+                        VehicleRenderer.Draw(vehicles, terrain, context.MotionInterpolationAlpha, Presentation?.Invoke());
                     });
                 }
                 finally { RenderPipeline.PassProbe?.Invoke("shadow-map", false); }
@@ -180,9 +181,9 @@ namespace ForesTycoon
             pipeline.Add(RenderLayer.Buildings, "buildings", _ => content.DrawMills(terrain, logistics, graphics));
             pipeline.Add(RenderLayer.Wildlife, "wildlife", context => wildlife.Draw(terrain, forest, graphics, context));
             pipeline.Add(RenderLayer.Vehicles, "vehicles", context =>
-                DrawSurface(SurfaceKind.Vehicle, () => VehicleRenderer.Draw(vehicles, terrain, context.MotionInterpolationAlpha)));
+                DrawSurface(SurfaceKind.Vehicle, () => VehicleRenderer.Draw(vehicles, terrain, context.MotionInterpolationAlpha, Presentation?.Invoke())));
             pipeline.Add(RenderLayer.Vehicles, "forest-machines", context =>
-                DrawSurface(SurfaceKind.Vehicle, () => machines.Draw(terrain, logistics, graphics, context.MotionInterpolationAlpha)));
+                DrawSurface(SurfaceKind.Vehicle, () => machines.Draw(terrain, logistics, graphics, context.MotionInterpolationAlpha, Presentation?.Invoke())));
             pipeline.Add(RenderLayer.Effects, "order-overlay", context =>
                 DrawSurface(SurfaceKind.Plain, () => terrain.DrawOrderOverlay(context.SimulationTimeSeconds)));
             pipeline.Add(RenderLayer.Effects, "world-effects", context =>

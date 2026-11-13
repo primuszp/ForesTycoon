@@ -186,6 +186,7 @@ public sealed class EditorSceneCommandsTests
         var project = SimulationWorld.DefaultRuleProject(); project.World = SimulationWorld.DefaultScenario(42, 16); project.Algorithms = null;
         var result = TrialService.Run(project, project, 0, 1);
         using var host = ForestSpeciesBook.WithContext<GameWorld>(null, () => WorldLoader.CreateProject(project));
+        host.QueueWeather(WeatherPreset.Sunny, 0, 20); host.ExecutePendingCommands();
         for (int tick = 0; tick < 30; tick++) host.Update(1d / 30);
         int count = host.TileGrid.Columns * host.TileGrid.Rows;
         Assert.Equal(Enumerable.Range(0, count).Select(host.TileSurfaceWater), result.Water);

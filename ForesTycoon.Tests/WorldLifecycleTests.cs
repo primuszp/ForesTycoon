@@ -174,6 +174,20 @@ public class WorldLifecycleTests
         Assert.Equal(WorldSaveData.CurrentRuntimeRulesVersion, data.RuntimeRulesVersion);
     }
 
+    [Fact]
+    public void FloatMillRuntimeImportsCompleteSnapshotsButRejectsHistoricalReplay()
+    {
+        using var world = Create(); world.Update(1d / 30);
+        var legacy = JsonNode.Parse(Save(world))!;
+        legacy["runtimeRulesVersion"] = "forestycoon-simulation/2026-10-31.4";
+        using (var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(legacy.ToJsonString()))) world.Load(stream);
+        Assert.Equal(1UL, world.SimulationTick);
+        legacy["tick"] = 2;
+        using var replay = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(legacy.ToJsonString()));
+        Assert.Throws<NotSupportedException>(() => world.Load(replay));
+        Assert.Equal(1UL, world.SimulationTick);
+    }
+
     [Theory]
     [InlineData(null)] [InlineData("")] [InlineData("forestycoon-simulation/future")]
     public void IncompatibleRulesRuntimeIsRejectedWithoutChangingWorld(string? version)

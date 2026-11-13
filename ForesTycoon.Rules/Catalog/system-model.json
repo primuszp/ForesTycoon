@@ -972,6 +972,16 @@
       "layer": ""
     },
     {
+      "id": "audio.output",
+      "name": "Környezeti hangkeverés",
+      "subsystem": "visual",
+      "kind": "Presentation",
+      "unit": "",
+      "observe": "",
+      "description": "A világ állapotát követő hangkimenet; nem ír szimulációs állapotot.",
+      "layer": ""
+    },
+    {
       "id": "visual.weather",
       "name": "Időjárás látványa",
       "subsystem": "visual",

@@ -9,7 +9,10 @@ namespace ForesTycoon
     {
         private AnimatedGlbModel model;
         private AnimatedModelRenderer renderer;
-        private int motionRoot=-1;
+        private WildlifeAnimationPlayer animation;
+        private string attemptedRevision;
+        internal Func<ForesTycoon.Rules.PresentationProfile> Bindings { get; set; }
+        internal string BindingError { get; private set; }
         private readonly Dictionary<int,AnimatedGlbModel.Pose> poses=new();
         private readonly WildlifeSystem simulation;
         internal WildlifeRenderer(WildlifeSystem simulation) { this.simulation = simulation; }
@@ -22,11 +25,19 @@ namespace ForesTycoon
         {
             if(!settings.Wildlife)return;
             if(Count==0)return;
-            if(model==null) {
-                model=AnimatedGlbModel.Load(Path.Combine(AppContext.BaseDirectory,"Assets","Wildlife","elk.glb"));
-                motionRoot=Array.FindIndex(model.Nodes,node=>node.Name=="RigRoot_01");
-                if(motionRoot<0)throw new InvalidDataException("Elk locomotion root is missing.");
+            var profile = Bindings?.Invoke() ?? ForesTycoon.Rules.PresentationProfile.Default;
+            if (attemptedRevision != profile.AnimationRevision) {
+                attemptedRevision = profile.AnimationRevision;
+                try {
+                    var next = new WildlifeAnimationPlayer(profile);
+                    renderer?.Dispose(); renderer = null; poses.Clear();
+                    animation = next; model = next.Model; BindingError = null;
+                } catch (Exception error) when (error is IOException or InvalidDataException or NotSupportedException or ArgumentException) {
+                    BindingError = error.Message;
+                    Console.Error.WriteLine("Wildlife animation binding rejected: " + error.Message);
+                }
             }
+            if (model == null) return;
             renderer??=new AnimatedModelRenderer(model);
             int outlineBudget=settings.Enhanced&&settings.WildlifeOutlines&&context.PixelsPerWorldUnit>=7&&RenderDevice.Visuals?.ShadowPass!=true
                 ? settings.Quality==GraphicsQuality.High?8:settings.Quality==GraphicsQuality.Medium?4:0 :0;
@@ -43,8 +54,7 @@ namespace ForesTycoon
                 // Cross-fade per-node TRS; rigid antlers follow their animated parent too.
                 double age = animal.PreviousAge + (animal.Age - animal.PreviousAge) * alpha;
                 double walkTime = animal.PreviousWalkTime + (animal.WalkTime - animal.PreviousWalkTime) * alpha;
-                pose.Evaluate("Stand_Eating_01",age+animal.Seed%100,
-                    "WalkSlow",walkTime,animal.Blend,inPlaceRoot:motionRoot);
+                animation.Sample(pose, age + animal.Seed % 100, walkTime, animal.Blend);
                 Vector3 forward=new(MathF.Cos(yaw),MathF.Sin(yaw),0),left=new(-MathF.Sin(yaw),MathF.Cos(yaw),0);
                 if(terrain.Map.TryGetSurfaceZ(position.X+forward.X*0.8f,position.Y+forward.Y*0.8f,out float front)&&
                     terrain.Map.TryGetSurfaceZ(position.X-forward.X*0.8f,position.Y-forward.Y*0.8f,out float back))forward.Z=(front-back)/1.6f;
@@ -57,6 +67,6 @@ namespace ForesTycoon
                 if(outlineBudget>0)outlineBudget--;
             }
         }
-        public void Dispose(){renderer?.Dispose();renderer=null;model=null;poses.Clear();}
+        public void Dispose(){renderer?.Dispose();renderer=null;model=null;animation=null;attemptedRevision=null;poses.Clear();}
     }
 }

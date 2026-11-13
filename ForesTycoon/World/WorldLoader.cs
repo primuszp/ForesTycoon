@@ -45,7 +45,7 @@ internal static partial class WorldLoader
         if (sceneProject != null) {
             string path = sceneProject;
             var reading = Task.Run(() => RuleProject.FromJson(System.IO.File.ReadAllText(path)));
-            while (!reading.IsCompleted) yield return 64;
+            while (SimulationWork.TaskPending(reading)) yield return 64;
             project = reading.GetAwaiter().GetResult();
         }
         // Fixed 16x16 bootstrap only. Every operation that scales with the requested map uses the work pipeline.

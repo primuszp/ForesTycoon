@@ -108,12 +108,13 @@ internal sealed partial class RuleEditorView
     {
         MarkDocumentChanged();
         if (publish) CompleteEdits();
+        PresentationEditorView.ValidateAssets(new PresentationProfile(document.Presentation));
         ApplyWorkflowResult(publish ? workflow.Publish(CollectProject(), Runtime(world)) : workflow.ApplyPreview(CollectProject(), Runtime(world)));
     }
     private void RefreshProjectOperations(GameWorld world)
     {
         if (trials.HasSource) trials.ValidateSource(AuthoringRevision(world));
-        trials.Poll();
+        trials.Poll(); tuningEditor.Poll();
         foreach (var operation in workflow.Poll()) ApplyWorkflowResult(operation);
     }
     private void ApplyWorkflowResult(ProjectOperation operation)
@@ -141,7 +142,7 @@ internal sealed partial class RuleEditorView
         foreach (var operation in workflow.Stop())
             if (operation.Error != null) Console.Error.WriteLine(operation.Error.Message);
         trials.Dispose();
-        treeEditor.Dispose();
+        treeEditor.Dispose(); tuningEditor.Dispose();
         if (world == null || !projectInitialized) return;
         document.Invalidate();
         RefreshWorkshopRevision(world);

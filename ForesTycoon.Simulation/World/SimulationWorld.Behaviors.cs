@@ -6,7 +6,7 @@ namespace ForesTycoon
 {
     internal sealed class WorldBehaviorPolicy : IBehaviorPolicy
     {
-        internal static readonly BehaviorHook[] Hooks = EcologyResponseProgram.Hooks.Concat(VehicleResponseRules.Hooks).Concat(LogisticsRules.Hooks).Concat(GameplayRules.Hooks).Concat(GameTuning.Specs.Select(s => new BehaviorHook("tuning." + s.Id, s.Name, "world", s.Unit, s.Min, s.Max,
+        internal static readonly BehaviorHook[] Hooks = EcologyResponseProgram.Hooks.Concat(VehicleResponseRules.Hooks).Concat(LogisticsRules.Hooks).Concat(GameplayRules.Hooks).Concat(GameTuning.Specs.Where(s => !s.Presentation).Select(s => new BehaviorHook("tuning." + s.Id, s.Name, "world", s.Unit, s.Min, s.Max,
             "Nem használt", "Nem használt", "Paraméter lekérdezése; járműspecifikáció a fix tick járműfázisának elején", false))).ToArray();
         private readonly CompiledBehaviorModel model;
         internal CompiledBehaviorControllers Controllers { get; }
@@ -77,12 +77,12 @@ namespace ForesTycoon
         }
         internal static string[] RuleObjectKinds => WorldBehaviorPolicy.Hooks.Where(h => h.SupportsObjects).Select(h => LogisticsRules.IsKind(h.Kind) ? h.Kind[9..].ToLowerInvariant() : h.Kind).Concat(RuleEngine.Scopes.Select(s => s.Id)).Concat(new[] { "wildlife", "depot", "stack" }).Distinct().ToArray();
         internal void QueueBehaviors(BehaviorModel model) => Enqueue(new SetBehaviorsCommand(model.ToJson()));
-        void IWorldCommandTarget.ExecuteBehaviors(string json) => SimulationWork.Complete(ApplyBehaviorsWork(json));
+        void IWorldCommandTarget.ExecuteBehaviors(string json) => ExecuteCommandSynchronously(new SetBehaviorsCommand(json));
         private IEnumerable<int> ApplyBehaviorsWork(string json)
         {
             var keys = DynamicsRuntime.Keys(dynamics.Document, RuleWorldFields);
             var preparing = System.Threading.Tasks.Task.Run(() => new WorldBehaviorPolicy(BehaviorModel.FromJson(json), keys, ruleValues.ReadRule));
-            while (!preparing.IsCompleted) yield return 1;
+            while (SimulationWork.TaskPending(preparing)) yield return 1;
             var replacement = preparing.GetAwaiter().GetResult();
             replacement.Controllers.PreserveUnchanged(behaviorPolicy.Controllers);
             if (ResponseSignature(behaviorPolicy.Document) != ResponseSignature(replacement.Document)) {

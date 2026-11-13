@@ -7,20 +7,22 @@ namespace ForesTycoon.Engine
     {
         private double accumulatorSeconds;
         private bool workInProgress;
+        private bool workConsumesRequest;
         private int requestedTicks;
         public bool WorkInProgress => workInProgress;
         public double PendingSimulationSeconds => accumulatorSeconds;
         public void RequestTick()
         {
-            accumulatorSeconds += StepSeconds;
-            requestedTicks++;
+            RequestTime(StepSeconds);
         }
         public void RequestTime(double seconds)
         {
             if (!double.IsFinite(seconds) || seconds < 0 || seconds / StepSeconds > int.MaxValue - requestedTicks)
                 throw new ArgumentOutOfRangeException(nameof(seconds));
             int ticks = (int)Math.Ceiling(seconds / StepSeconds);
-            accumulatorSeconds += ticks * StepSeconds;
+            double next = accumulatorSeconds + ticks * StepSeconds;
+            if (!double.IsFinite(next)) throw new ArgumentOutOfRangeException(nameof(seconds));
+            accumulatorSeconds = next;
             requestedTicks += ticks;
         }
 
@@ -52,10 +54,8 @@ namespace ForesTycoon.Engine
         public int Advance(double elapsedSeconds, Action<double> update, Func<bool> canContinue = null)
         {
             if (update == null) throw new ArgumentNullException(nameof(update));
-            if (!double.IsFinite(elapsedSeconds) || elapsedSeconds < 0.0) throw new ArgumentOutOfRangeException(nameof(elapsedSeconds));
-            if (!double.IsFinite(Speed) || Speed < 0.0) throw new InvalidOperationException("Simulation speed must be finite and nonnegative.");
+            ValidateSynchronousFrame(elapsedSeconds);
             double requested = accumulatorSeconds + elapsedSeconds * Speed;
-            if (!double.IsFinite(requested)) throw new ArgumentOutOfRangeException(nameof(elapsedSeconds), "Scaled frame time must be finite.");
             LastDroppedSimulationSeconds = 0;
             if (IsPaused || Speed == 0.0) return 0;
 
@@ -63,16 +63,7 @@ namespace ForesTycoon.Engine
             accumulatorSeconds = Math.Min(requested, StepSeconds * MaxTicksPerFrame);
             LastDroppedSimulationSeconds = requested - accumulatorSeconds;
 
-            int executed = 0;
-            while (accumulatorSeconds >= StepSeconds && executed < MaxTicksPerFrame)
-            {
-                // The host budget is checked between complete deterministic ticks.
-                if (executed > 0 && canContinue != null && !canContinue()) break;
-                update(StepSeconds);
-                accumulatorSeconds -= StepSeconds;
-                Tick++;
-                executed++;
-            }
+            int executed = RunTicks(dt => { update(dt); return true; }, canContinue, MaxTicksPerFrame);
 
             // Slow down under load instead of retaining whole-tick debt after fast-forward.
             if (accumulatorSeconds >= StepSeconds)
@@ -89,24 +80,41 @@ namespace ForesTycoon.Engine
         public int AdvanceWork(double elapsedSeconds, Func<double, bool> continueTick, Func<bool> canContinue = null)
         {
             ArgumentNullException.ThrowIfNull(continueTick);
-            if (!double.IsFinite(elapsedSeconds) || elapsedSeconds < 0 || !double.IsFinite(Speed) || Speed < 0)
-                throw new ArgumentOutOfRangeException(nameof(elapsedSeconds));
-            if (!IsPaused) {
-                double next = accumulatorSeconds + elapsedSeconds * Speed;
-                if (!double.IsFinite(next)) throw new ArgumentOutOfRangeException(nameof(elapsedSeconds));
-                accumulatorSeconds = next;
-            }
+            ValidateFrameInput(elapsedSeconds);
+            if (!IsPaused) accumulatorSeconds += elapsedSeconds * Speed;
             LastDroppedSimulationSeconds = 0;
+            return RunTicks(continueTick, canContinue);
+        }
+
+        internal void ValidateSynchronousFrame(double elapsedSeconds)
+        {
+            ValidateFrameInput(elapsedSeconds);
+            if (workInProgress || requestedTicks > 0)
+                throw new InvalidOperationException("Complete cooperative work and manual tick requests through AdvanceWork before using the capped adapter.");
+        }
+
+        internal void ValidateFrameInput(double elapsedSeconds)
+        {
+            if (!double.IsFinite(elapsedSeconds) || elapsedSeconds < 0) throw new ArgumentOutOfRangeException(nameof(elapsedSeconds));
+            if (!double.IsFinite(Speed) || Speed < 0) throw new InvalidOperationException("Simulation speed must be finite and nonnegative.");
+            if (!double.IsFinite(accumulatorSeconds + elapsedSeconds * Speed)) throw new ArgumentOutOfRangeException(nameof(elapsedSeconds), "Scaled frame time must be finite.");
+        }
+
+        private int RunTicks(Func<double, bool> continueTick, Func<bool> canContinue, int maximumSlices = 4096)
+        {
             int ticks = 0, slices = 0;
             // Bound even an accidental host without a wall-clock budget. Decisions within a tick never depend on time.
-            while ((workInProgress || (!IsPaused && Speed > 0 || requestedTicks > 0) && accumulatorSeconds >= StepSeconds) && ticks < MaxTicksPerFrame && slices < 4096) {
+            while ((workInProgress || requestedTicks > 0 || !IsPaused && Speed > 0 && accumulatorSeconds >= StepSeconds) && ticks < MaxTicksPerFrame && slices < maximumSlices) {
                 if (slices > 0 && canContinue != null && !canContinue()) break;
+                if (Tick == ulong.MaxValue) throw new InvalidOperationException("Simulation tick counter exhausted.");
+                if (!workInProgress) workConsumesRequest = requestedTicks > 0;
                 workInProgress = true;
                 bool complete = continueTick(StepSeconds);
                 slices++;
                 if (!complete) continue;
                 workInProgress = false;
-                if (requestedTicks > 0) requestedTicks--;
+                if (workConsumesRequest) requestedTicks--;
+                workConsumesRequest = false;
                 accumulatorSeconds = Math.Max(0, accumulatorSeconds - StepSeconds);
                 Tick++; ticks++;
             }
@@ -117,6 +125,7 @@ namespace ForesTycoon.Engine
         {
             accumulatorSeconds = 0.0;
             workInProgress = false;
+            workConsumesRequest = false;
             requestedTicks = 0;
             Tick = tick;
             DroppedSimulationSeconds = LastDroppedSimulationSeconds = 0;

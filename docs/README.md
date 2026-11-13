@@ -23,6 +23,8 @@
 
 ## Reviews and plans / Review-k és tervek
 
+[Editor–játék–motor felülvizsgálat és javítások (2026-11-13)](editor-game-review-2026-11-13.md)
+
 [2026-10-10 engine review](engine-review-2026-10-10.md) and
 [2026-09-13 engine review](engine-review-2026-09-13.md) describe the revisions reviewed
 at those dates. Other `*-plan.md`, `*-design.md` and study documents record design
@@ -62,3 +64,13 @@ GitHub-runnert, a friss munkát, az évszakos referenciaképeket, az engine-vali
 könyvtárat, a teljesítményriportokat és a tömör koronák ellenőrzési naplóit.
 A nyitott játék vagy IDE buildmappáit nem törli. A megtartott bizonyítékokat időnként
 érdemes újra áttekinteni.
+
+- [Animációk és hangesemények szerkesztése](presentation-bindings.md) — közös projektadat, natív előnézet és előhallgatás.
+
+- [Megjelenítés és hang konszolidációja](consolidation-2026-11-13.md) — felelősségek, megszüntetett ismétlődések és mért korlátok.
+
+- [Játékmotor alapjainak felülvizsgálata](engine-foundation-review-2026-11-13.md) — közös tickmag, parancsvégrehajtás, hosthatár és stabilitási javítások.
+
+- [Hosszú szimuláció és tesztelakadás](stability-stress-2026-11-13.md) — GC-várakozás reprodukciója, anyagmérleg-javítás és újrafuttatható stresszpróbák.
+
+- [Memória és teljesítmény](memory-performance-2026-11-13.md) — objektumélettartam, allokációcsökkentés és hosszú futású ellenőrzések.

@@ -37,6 +37,8 @@ namespace ForesTycoon
         /// <summary>Money spent on building and repairing, thousand forints.</summary>
         internal double Expenses { get; private set; }
         private double roadWeatherSeconds;
+        /// <summary>Audio events and positions published together at the last completed tick boundary.</summary>
+        internal System.Collections.Generic.IReadOnlyList<ActorSoundSample> MachineSoundSnapshot { get; private set; } = System.Array.Empty<ActorSoundSample>();
         /// <summary>
         /// Vehicle time per calendar time. As in Transport Tycoon, vehicles move at a natural pace whatever the calendar
         /// does: at the viewport's slow 1× (a quarter simulated second per real second, a year an hour) they still drive in
@@ -116,7 +118,7 @@ namespace ForesTycoon
         internal int ForestTreeCount => forest.IndividualTreeCount;
         internal float LastAnnualForestGrowth => forest.LastAnnualGrowthCubicMetres;
         public float TimberStockpile => Logistics.Remaining;
-        public float DeliveredTimber => timberCargo.Delivered;
+        public double DeliveredTimber => timberCargo.Delivered;
         public ForestryActionResult LastForestryAction => lastForestryAction;
         public ForestryAreaSummary LastForestryArea => lastForestryArea;
         public bool TryGetForestStand(int tileId, out ForestStand stand) => forest.TryGetStand(tileId, out stand);
@@ -175,7 +177,10 @@ namespace ForesTycoon
         // Synchronous simulation adapter for headless replay/tests. Interactive hosts use ContinueUpdate.
         public void Update(double fixedDeltaSeconds)
         {
-            SimulationWork.RequireSynchronousContext();
+            SimulationWork.RequireSynchronousContext(); EnsureAvailable();
+            if (generationWork != null || commands.WorkPending || RuleExportPending)
+                throw new InvalidOperationException("Finish foreground work before using synchronous Update; interactive hosts must use ContinueUpdate.");
+            using var context = ForestSpeciesBook.EnterContext(worldSpecies);
             while (!ContinueUpdate(fixedDeltaSeconds, 256)) { }
         }
 
@@ -192,7 +197,10 @@ namespace ForesTycoon
 
         /// <summary>Runs at most budget deterministic work units. The logical tick commits only on completion.</summary>
         internal bool ContinueUpdate(double fixedDeltaSeconds, int budget = 64)
-            => ForestSpeciesBook.WithContext(worldSpecies, () => ContinueUpdateCore(fixedDeltaSeconds, budget));
+        {
+            using var context = ForestSpeciesBook.EnterContext(worldSpecies);
+            return ContinueUpdateCore(fixedDeltaSeconds, budget);
+        }
 
         private bool ContinueUpdateCore(double fixedDeltaSeconds, int budget)
         {
@@ -265,13 +273,16 @@ namespace ForesTycoon
             foreach (int unit in systems.UpdateWork(fixedDeltaSeconds)) yield return unit;
             foreach (int unit in TrafficWork()) yield return unit;
             foreach (int unit in Logistics.PublishInventoryWork()) yield return unit;
+            System.Collections.Generic.List<ActorSoundSample> machineSounds = null;
             var motion = new System.Collections.Generic.List<(RigPresentation Target, RigPresentationSample Sample)>();
             var workAnimations = new System.Collections.Generic.List<(WorkAnimationPresentation Target, WorkAnimationSample Sample)>();
             foreach (var v in vehicles.Vehicles) {
+                if (ActorPresentationEvents.Sample(v, map) is { } sound) (machineSounds ??= new()).Add(sound);
                 if (v.Kinematics != null) motion.Add((v.Presentation, new(v.Kinematics.CapturePresentation(), v.CurrentSpeed > .0001 && !v.RouteBlocked && !v.Broken)));
                 yield return 1;
             }
             foreach (var m in Logistics.Machines) {
+                if (ActorPresentationEvents.Sample(m, map) is { } sound) (machineSounds ??= new()).Add(sound);
                 workAnimations.Add((m.WorkPresentation, new(m.WorkTime, m.State)));
                 if (m.Kinematics != null) motion.Add((m.Presentation, new(m.Kinematics.CapturePresentation(), m.State == ForestMachineState.Driving && !m.Upkeep.Broken)));
                 yield return 1;
@@ -279,6 +290,7 @@ namespace ForesTycoon
             // The entire set is committed without a yield, before the host advances its logical tick.
             foreach (var item in motion) item.Target.Publish(item.Sample);
             foreach (var item in workAnimations) item.Target.Publish(item.Sample);
+            MachineSoundSnapshot = machineSounds ?? (System.Collections.Generic.IReadOnlyList<ActorSoundSample>)System.Array.Empty<ActorSoundSample>();
             worldTick++;
         }
 
@@ -286,9 +298,9 @@ namespace ForesTycoon
         {
             SimulationWork.RequireSynchronousContext();
             EnsureAvailable(); VerifyPresentationAccess();
-            while (RuleExportPending) ContinueCommands(256);
             if (UpdatePending || RulesBlockCommands) return 0;
             if (generationWork != null) throw new InvalidOperationException("Use ContinueCommands while generating a world.");
+            while (RuleExportPending) ContinueCommands(256);
             int completed = 0, count = commands.Count;
             do { completed += ContinueCommands(256); } while (commands.WorkPending && completed < count);
             return completed;
@@ -331,39 +343,15 @@ namespace ForesTycoon
         internal double Spending => Expenses + (Logistics?.RunningCosts ?? 0);
         internal double Balance => behaviorPolicy.Gameplay.Evaluate("economy.balance", Income, Expenses, Logistics?.RunningCosts ?? 0);
         internal void QueueSendHome(int vehicleId, bool truck) => Enqueue(new SendHomeCommand(vehicleId, truck));
-        void IWorldCommandTarget.ExecutePlaceDepot(int tileId) { Logistics?.PlaceDepot(tileId); }
-        void IWorldCommandTarget.ExecuteSendVehicle(int vehicleId, int tileId, int destination, bool truck)
-        {
-            if (truck)
-            {
-                var t = Logistics.Trucks.Find(x => x.Id == vehicleId);
-                var source = Logistics.StackAt(tileId);
-                if (t == null) return;
-                if (source == null) { Logistics.Status = "A rönkszállító forrása egy sarang legyen."; return; }
-                Logistics.AssignTruck(t, source, destination);
-                return;
-            }
-            var m = Logistics.Machines.Find(x => x.Id == vehicleId);
-            if (m == null) return;
-            if (m.Kind == ForestMachineKind.Harvester)
-            {
-                var stack = Logistics.StackAt(tileId);
-                if (stack == null) { Logistics.Status = "A processzort egy sarangra küldd: oda hordja a fát."; return; }
-                Logistics.AssignProcessor(m, stack);
-            }
-            else
-            {
-                var source = Logistics.StackAt(tileId);
-                if (source == null) { Logistics.Status = "A forwarder forrása egy sarang legyen."; return; }
-                Logistics.AssignForwarder(m, source, destination);
-            }
-        }
+        void IWorldCommandTarget.ExecutePlaceDepot(int tileId) => ExecuteCommandSynchronously(new PlaceDepotCommand(tileId));
+        void IWorldCommandTarget.ExecuteSendVehicle(int vehicleId, int tileId, int destination, bool truck) =>
+            ExecuteCommandSynchronously(new SendVehicleCommand(vehicleId, tileId, destination, truck));
         void IWorldCommandTarget.ExecuteSendHome(int vehicleId, bool truck)
         {
             if (truck) { var t = Logistics.Trucks.Find(x => x.Id == vehicleId); if (t != null) Logistics.SendHome(t); }
             else { var m = Logistics.Machines.Find(x => x.Id == vehicleId); if (m != null) Logistics.SendHome(m); }
         }
-        void IWorldCommandTarget.ExecutePlaceSawmill(int tileId) { Logistics?.PlaceMill(tileId); }
+        void IWorldCommandTarget.ExecutePlaceSawmill(int tileId) => ExecuteCommandSynchronously(new PlaceSawmillCommand(tileId));
         public void QueueSpawnVehicle() => Enqueue(new SpawnVehicleCommand());
         internal void QueueWeather(WeatherPreset preset,int intensity,int duration) => Enqueue(new SetWeatherCommand(preset,intensity,duration));
         void IWorldCommandTarget.ExecuteWeather(WeatherPreset preset,int intensity,int duration)
@@ -387,10 +375,10 @@ namespace ForesTycoon
         }
 
         void IWorldCommandTarget.ExecuteElevationEdit(int nodeId, int delta, int radius, int strength) =>
-            SimulationWork.Complete(ExecuteCommandWork(new EditElevationCommand(nodeId, delta, radius, strength)));
+            ExecuteCommandSynchronously(new EditElevationCommand(nodeId, delta, radius, strength));
 
         void IWorldCommandTarget.ExecuteLegacyElevationEdit(int nodeId, int delta, int radius, int strength) =>
-            SimulationWork.Complete(ExecuteCommandWork(new EditElevationCommand(nodeId, delta, radius, strength, true)));
+            ExecuteCommandSynchronously(new EditElevationCommand(nodeId, delta, radius, strength, true));
 
         void IWorldCommandTarget.ExecuteRoadPath(int startTileId, int endTileId, bool remove) =>
             ((IWorldCommandTarget)this).ExecuteRoadPath(startTileId, endTileId, remove, RoadPaving.Asphalt);
@@ -404,7 +392,7 @@ namespace ForesTycoon
         }
 
         void IWorldCommandTarget.ExecuteRoadRepair(int startTileId, int endTileId) =>
-            SimulationWork.Complete(ExecuteCommandWork(new RoadRepairCommand(startTileId, endTileId)));
+            ExecuteCommandSynchronously(new RoadRepairCommand(startTileId, endTileId));
 
         /// <summary>Game seconds between rule steps; each logical step can suspend between bounded work units.</summary>
         internal const double RuleStepSeconds = 0.5;
@@ -430,10 +418,10 @@ namespace ForesTycoon
         }
 
         void IWorldCommandTarget.ExecuteSkidTrailPath(int startTileId, int endTileId, bool remove) =>
-            SimulationWork.Complete(ExecuteCommandWork(new SkidTrailPathCommand(startTileId, endTileId, remove)));
+            ExecuteCommandSynchronously(new SkidTrailPathCommand(startTileId, endTileId, remove));
 
         void IWorldCommandTarget.ExecuteRoadPath(int startTileId, int endTileId, bool remove, RoadPaving surface) =>
-            SimulationWork.Complete(RoadCommandWork(startTileId, endTileId, remove, surface));
+            ExecuteCommandSynchronously(new RoadPathCommand(startTileId, endTileId, remove, surface));
 
         void IWorldCommandTarget.ExecuteSpawnVehicle()
         {
@@ -441,20 +429,15 @@ namespace ForesTycoon
         }
 
         void IWorldCommandTarget.ExecutePlantForest(int tileId, ForestSpecies species) =>
-            SimulationWork.Complete(ExecuteCommandWork(new PlantForestCommand(tileId, species)));
+            ExecuteCommandSynchronously(new PlantForestCommand(tileId, species));
 
-        void IWorldCommandTarget.ExecuteHarvestForest(int tileId)
-        {
-            DesignateHarvest(tileId, tileId);
-        }
+        void IWorldCommandTarget.ExecuteHarvestForest(int tileId) => ExecuteCommandSynchronously(new HarvestForestCommand(tileId));
 
         void IWorldCommandTarget.ExecutePlantForestArea(int startTileId, int endTileId, ForestSpecies species) =>
-            SimulationWork.Complete(ExecuteCommandWork(new PlantForestAreaCommand(startTileId, endTileId, species)));
+            ExecuteCommandSynchronously(new PlantForestAreaCommand(startTileId, endTileId, species));
 
-        void IWorldCommandTarget.ExecuteHarvestForestArea(int startTileId, int endTileId)
-        {
-            DesignateHarvest(startTileId, endTileId);
-        }
+        void IWorldCommandTarget.ExecuteHarvestForestArea(int startTileId, int endTileId) =>
+            ExecuteCommandSynchronously(new HarvestForestAreaCommand(startTileId, endTileId));
 
         /// <summary>
         /// One effect per area gesture. Spawning per tile would bury the effect system under a
@@ -562,6 +545,7 @@ namespace ForesTycoon
             BindWorldQueries();
             ruleProjectName = candidate.ruleProjectName; ruleProjectWorld = candidate.ruleProjectWorld;
             algorithmGraphs = candidate.algorithmGraphs;
+            Presentation = candidate.Presentation; MachineSoundSnapshot = candidate.MachineSoundSnapshot;
             worldSpecies = candidate.worldSpecies;
             worldSpeciesDefinitions = candidate.worldSpeciesDefinitions;
             ruleEngine = candidate.ruleEngine;
@@ -598,14 +582,6 @@ namespace ForesTycoon
             }
         }
 
-        private void DesignateHarvest(int start,int end)
-        {
-            Span<int> ids=stackalloc int[TerrainMap.MaximumAreaTiles];
-            int count=map.GetTileRectangle(start,end,ids);
-            int applied=Logistics.Designate(ids[..count]);
-            lastForestryAction=applied>0?ForestryActionResult.Designated:ForestryActionResult.NoForest;
-            lastForestryArea=new ForestryAreaSummary(count,applied,Logistics.Remaining);
-        }
         private void InitializeLogistics()
         {
             Logistics=new ForestryLogistics(map,forest);

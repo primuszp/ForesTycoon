@@ -18,7 +18,7 @@ partial class SimulationWorld
     private Queue<TrafficPassage> trafficPassages = new();
     private TrafficPassage activePassage;
     internal void QueuePassage(TrafficPassage passage) => Enqueue(new TrafficPassageCommand(passage));
-    void IWorldCommandTarget.ExecuteTrafficPassage(string json) { RecordPassage(System.Text.Json.JsonSerializer.Deserialize<TrafficPassage>(json)); SimulationWork.Complete(TrafficWork()); }
+    void IWorldCommandTarget.ExecuteTrafficPassage(string json) => ExecuteCommandSynchronously(new TrafficPassageCommand(System.Text.Json.JsonSerializer.Deserialize<TrafficPassage>(json)));
     internal int PendingTrafficPassages => trafficPassages.Count;
     internal string LastRuleSample { get; private set; } = "Még nem történt áthaladás.";
     internal IReadOnlyList<RuleEngine.InfluencePreview> PreviewPassage(string ruleId, TrafficPassage passage)

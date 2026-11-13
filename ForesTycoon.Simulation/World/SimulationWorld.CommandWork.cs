@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using OpenTK.Mathematics;
 
@@ -11,7 +11,16 @@ partial class SimulationWorld
     internal bool ForegroundPending => generationWork != null || RuleExportPending || commands.Count > 0 && !UpdatePending && !RulesBlockCommands;
     internal bool BoundaryPending => UpdatePending || CommandPending || generationWork != null || RuleExportPending || trafficPassages.Count > 0;
 
-    // Synchronous adapter for replay, CLI fixtures and startup. Interactive hosts use ContinueCommands.
+    // Direct compatibility calls and queued interactive commands share exactly this work implementation.
+    private void ExecuteCommandSynchronously(IWorldCommand command)
+    {
+        SimulationWork.RequireSynchronousContext(); EnsureAvailable(); VerifyPresentationAccess();
+        if (BoundaryPending) throw new InvalidOperationException("Direct commands require a completed world boundary.");
+        try { WithSpecies(() => { SimulationWork.Complete(ExecuteCommandWork(command)); return 0; }); }
+        catch { faulted = true; throw; }
+    }
+
+    // The only command dispatcher; callers choose a work budget, never a different gameplay implementation.
     private IEnumerable<int> ExecuteCommandWork(IWorldCommand command)
     {
         var record = command.ToRecord(worldTick);

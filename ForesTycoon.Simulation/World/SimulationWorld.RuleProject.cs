@@ -19,6 +19,7 @@ partial class SimulationWorld
     }
     private RuleValueBinding ruleValues;
 
+    internal PresentationProfile Presentation { get; private set; } = PresentationProfile.Default;
     private DynamicsRuntime dynamics;
     private RuleEngine ruleEngine;
     internal RuleEngine RuleBook => ruleEngine;
@@ -26,7 +27,7 @@ partial class SimulationWorld
     internal string ActiveRuleProjectName => ruleProjectName;
     private AlgorithmGraphReference algorithmGraphs;
     internal RuleProject RuleProjectDocument => new() { Name = ruleProjectName,
-        Tuning = Tuning.ToValues(), Behaviors = BehaviorDocument, Dynamics = dynamics.Document, Algorithms = AlgorithmSnapshot(),
+        Presentation = Presentation.Capture(), Tuning = Tuning.ToValues(), Behaviors = BehaviorDocument, Dynamics = dynamics.Document, Algorithms = AlgorithmSnapshot(),
         Rules = RuleEngine.Clone(ruleEngine.Rules), RemovedStarters = ruleEngine.RemovedStarters.ToList(), Fields = RuleEngine.CloneFields(ruleEngine.Fields),
         World = ruleProjectWorld == null ? null : RuleProject.FromJson(new RuleProject { World = ruleProjectWorld }.ToJson()).World };
     /// <summary>The world map of the active project: used by the next new world, never applied to the running one.</summary>
@@ -80,6 +81,7 @@ partial class SimulationWorld
         copy.World?.Validate();
         foreach (var species in copy.World?.Species ?? new()) _ = ShapeOverride(species);
         MigrateRuleProject(copy);
+        _ = new PresentationProfile(copy.Presentation);
         var tuning = GameTuning.FromOverrides(copy.Tuning);
         var runtime = new DynamicsRuntime(copy.Dynamics, RuleWorldFields, readWorld);
         // Every host query has an explicit editable graph. Missing authored bindings remain inactive.
@@ -98,7 +100,7 @@ partial class SimulationWorld
         ValidateRuleProject(project);
         Enqueue(new SetRuleProjectCommand(project.ToJson()));
     }
-    void IWorldCommandTarget.ExecuteRuleProject(string json) => ApplyRuleProject(RuleProject.FromJson(json));
+    void IWorldCommandTarget.ExecuteRuleProject(string json) => ExecuteCommandSynchronously(new SetRuleProjectCommand(json));
     private void ApplyRuleProject(RuleProject project)
     {
         RequireAlgorithmRuntime(project.Algorithms);
@@ -114,6 +116,7 @@ partial class SimulationWorld
         next.Policy.Controllers.PreserveUnchanged(behaviorPolicy.Controllers);
         bool refresh = ruleEngine == null || GrowthSignature(ruleEngine.Rules) != GrowthSignature(next.Engine.Rules)
             || ResponseSignature(behaviorPolicy.Document) != ResponseSignature(next.Policy.Document);
+        Presentation = new PresentationProfile(next.Document.Presentation);
         dynamics = next.Dynamics; behaviorPolicy = next.Policy; ruleEngine = next.Engine; ruleProjectName = next.Document.Name;
         wildlife.InvalidateRules();
         // A rules-only project keeps the running scene (its map and missions); a project with a world replaces it.
@@ -142,7 +145,7 @@ partial class SimulationWorld
             var project = source(); RequireAlgorithmRuntime(project.Algorithms);
             return PrepareRuleProject(project, ruleValues.ReadWorld, ruleValues.ReadRule);
         });
-        while (!preparing.IsCompleted) yield return 64;
+        while (SimulationWork.TaskPending(preparing)) yield return 64;
         var next = preparing.GetAwaiter().GetResult();
         foreach (int unit in next.Engine.PreserveWork(ruleEngine, this)) yield return unit;
         InstallRuleProject(next);

@@ -191,8 +191,9 @@ namespace ForesTycoon
             });
         }
 
-        internal void Draw(Terrain terrain, ForestryLogistics logistics, GraphicsSettings settings, float alpha)
+        internal void Draw(Terrain terrain, ForestryLogistics logistics, GraphicsSettings settings, float alpha, ForesTycoon.Rules.PresentationProfile profile = null)
         {
+            profile ??= ForesTycoon.Rules.PresentationProfile.Default;
             if (logistics == null) return;
             frameSettings = settings;
             DrawDepots(terrain, logistics, settings);
@@ -256,9 +257,9 @@ namespace ForesTycoon
                     Matrix4.CreateTranslation((ForwarderJoint + ForwarderBogie) * MetreScale, 0, 0) * RigRenderer.Frame(displayPose.Units[1], terrain.Map, 1);
                 if (model != null && !(machine.Kind == ForestMachineKind.Harvester && visualRig?.Profile.Steering == SteeringGeometry.Articulated))
                     DrawModel(model, machine, position, placement, articulation, settings, terrain, logistics, displayPose,
-                        machine.WorkPresentation.Sample(machine.WorkTime, alpha));
+                        machine.WorkPresentation.Sample(machine.WorkTime, alpha), profile);
                 else DrawStandIn(machine, placement, trailer);
-                if (visualRig != null) RigRenderer.Wheels(visualRig, terrain.Map, displayPose);
+                if (visualRig != null) RigRenderer.Wheels(visualRig, terrain.Map, displayPose, animationScale: ActorAnimationEvents.Time(profile, ActorAnimationEvents.Wheels(machine.Kind), 1));
                 if (machine.Upkeep.Broken) BreakdownSign(placement.Row3.Xyz, (float)machine.Upkeep.RepairLeft);
                 if (machine.Kind == ForestMachineKind.Forwarder && machine.Cargo > 0.05f) DrawLoad(machine, trailer);
             }
@@ -300,11 +301,14 @@ namespace ForesTycoon
             return Matrix4.CreateTranslation(-joint, 0, 0) * Matrix4.CreateRotationZ(articulation) * Matrix4.CreateTranslation(joint, 0, 0) * placement;
         }
 
-        private void DrawModel(MachineModel m, ForestMachine machine, double position, Matrix4 placement, float articulation, GraphicsSettings settings, Terrain terrain, ForestryLogistics logistics, RigVisualPose displayPose, double workTime)
+        private void DrawModel(MachineModel m, ForestMachine machine, double position, Matrix4 placement, float articulation, GraphicsSettings settings, Terrain terrain, ForestryLogistics logistics, RigVisualPose displayPose, double workTime, ForesTycoon.Rules.PresentationProfile profile)
         {
+            string workEvent = ActorAnimationEvents.Work(machine.Kind, machine.State);
+            bool workEnabled = workEvent == null || profile.ActorAnimations[workEvent].Enabled;
+            workTime = ActorAnimationEvents.Time(profile, workEvent, workTime);
             var model = m.Model;
             // Rest pose, then extra local rotations: wheels roll with the distance driven, the crane works while felling or loading.
-            float roll = (float)(position * 5.0 / (0.7 * MetreScale) / 5.0);
+            float roll = (float)ActorAnimationEvents.Time(profile, ActorAnimationEvents.Wheels(machine.Kind), position / (0.7 * MetreScale));
             bool working = machine.State is ForestMachineState.Felling or ForestMachineState.Loading or ForestMachineState.Unloading;
             float swing = working ? 0.6f * MathF.Sin((float)workTime * 1.3f) : 0;
             float lift = working ? 0.25f * MathF.Sin((float)workTime * 2.1f) : 0;
@@ -322,7 +326,7 @@ namespace ForesTycoon
                         * Matrix4.CreateRotationY(displayPose == null ? articulation : 0) * Matrix4.CreateTranslation(node.Translation);
                 m.Pose.World[i] = node.Parent < 0 ? local : local * m.Pose.World[node.Parent];
             }
-            if (machine.Kind == ForestMachineKind.Forwarder && machine.State is ForestMachineState.Loading or ForestMachineState.Unloading)
+            if (workEnabled && machine.Kind == ForestMachineKind.Forwarder && machine.State is ForestMachineState.Loading or ForestMachineState.Unloading)
                 DrawCraneTransfer(m, machine, placement, terrain, logistics, settings, workTime);
             Matrix4 root = Axis * Matrix4.CreateScale(MetreScale) * placement;
             if (displayPose != null && m.Trailer >= 0 && machine.Kinematics.Profile.Steering == SteeringGeometry.Articulated) {

@@ -29,8 +29,8 @@ namespace ForesTycoon
 
         private int lastSeason = -1;
         private bool showSeasonCard, resumeAfterSeasonCard;
-        private (float Stock, float Delivered, float Health) seasonStart;
-        private (float Stock, float Delivered, float Health, int Season, int Year) seasonReport;
+        private (float Stock, double Delivered, float Health) seasonStart;
+        private (float Stock, double Delivered, float Health, int Season, int Year) seasonReport;
 
         private static readonly NVec4[] SeasonColours =
         {

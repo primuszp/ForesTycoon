@@ -6,7 +6,7 @@ namespace ForesTycoon
     sealed partial class TimberCargoSystem : IWorldSystem
     {
         public float Available { get; private set; }
-        public float Delivered { get; private set; }
+        public double Delivered { get; private set; }
 
         public void AddHarvested(float amount)
         {

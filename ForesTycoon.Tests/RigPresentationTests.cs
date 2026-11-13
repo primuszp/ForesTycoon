@@ -25,15 +25,19 @@ public class RigPresentationTests
         world.Update(1d / 30);
         Assert.NotNull(vehicle.Presentation.Current);
         var published = vehicle.Presentation.Current;
+        var publishedSounds = world.MachineSoundSnapshot;
+        Assert.Contains(publishedSounds, s => s.Event == "truck.driving");
         var pose = vehicle.Presentation.Sample(.5f).Units[0];
         bool sawUnpublishedMotion = false;
         while (!world.ContinueUpdate(1d / 30, 1)) {
             Assert.Same(published, vehicle.Presentation.Current);
+            Assert.Same(publishedSounds, world.MachineSoundSnapshot);
             Assert.Equal(pose, vehicle.Presentation.Sample(.5f).Units[0]);
             sawUnpublishedMotion |= vehicle.Kinematics.Units[0] != published.State.Units[0];
         }
         Assert.True(sawUnpublishedMotion);
         Assert.NotSame(published, vehicle.Presentation.Current);
+        Assert.NotSame(publishedSounds, world.MachineSoundSnapshot);
     }
 
     [Fact]

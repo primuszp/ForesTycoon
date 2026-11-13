@@ -2,8 +2,11 @@ using System.Collections.Generic;
 
 namespace ForesTycoon;
 
-partial class SimulationWorld
+partial class SimulationWorld : ISimulationFrameTarget
 {
+    int ISimulationFrameTarget.ContinueFrameCommands() => ContinueCommands();
+    bool ISimulationFrameTarget.ContinueFrameTick(double seconds) => ContinueUpdate(seconds);
+    bool ISimulationFrameTarget.ForegroundPending => ForegroundPending;
     // Optional host lifecycle hooks. A standalone world never creates presentation resources.
     protected virtual SimulationWorld CreateCandidate(TerrainMap map, double yearSeconds, SoilLandscapeDefinition soils,
         ClimateDefinition climate, Ecosystem preparedEcosystem = null, bool deferRules = false,

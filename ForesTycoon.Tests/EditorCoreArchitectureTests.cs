@@ -16,7 +16,7 @@ public sealed class EditorCoreArchitectureTests
         {
             if (!visited.Add(assembly.GetName().Name!)) return;
             foreach (var reference in assembly.GetReferencedAssemblies()) {
-                Assert.DoesNotContain(reference.Name, new[] { "ForesTycoon", "ForesTycoon.Editor", "ImGui.NET", "ForesTycoon.Rendering", "ForesTycoon.Models", "ForesTycoon.Effects", "OpenTK.Graphics", "OpenTK.Windowing.Common", "OpenTK.Windowing.Desktop" });
+                Assert.DoesNotContain(reference.Name, new[] { "ForesTycoon", "ForesTycoon.Editor", "ImGui.NET", "ForesTycoon.Rendering", "ForesTycoon.Models", "ForesTycoon.Effects", "OpenTK.Graphics", "OpenTK.Windowing.Common", "OpenTK.Windowing.Desktop", "OpenTK.Audio.OpenAL" });
                 if (reference.Name!.StartsWith("ForesTycoon.")) Visit(Assembly.Load(reference));
             }
         }
@@ -30,7 +30,7 @@ public sealed class EditorCoreArchitectureTests
         foreach (var type in new[] { typeof(EditorBuffer<>), typeof(EditorHistoryService<>), typeof(EditorDocumentHistory),
                      typeof(BehaviorEditorState), typeof(BehaviorGraphEditor), typeof(BehaviorControllerEditor), typeof(DynamicsEditorState),
                      typeof(RuleBookEditor), typeof(RuleInfluenceEditor), typeof(EditorSceneCommands), typeof(EditorAuthoringCommands),
-                     typeof(EditorTuning), typeof(ProjectPersistence), typeof(ProjectWorkflow), typeof(EditorProjectLoader), typeof(SandboxSession),
+                     typeof(EditorTuning), typeof(PresentationSession), typeof(ProjectPersistence), typeof(ProjectWorkflow), typeof(EditorProjectLoader), typeof(SandboxSession),
                      typeof(TrialService), typeof(WorldTrialResult), typeof(RuleBookSession), typeof(SceneSession), typeof(RuleLibrarySession),
                      typeof(RuleFieldAnalysis), typeof(RuleFieldCatalog) })
             Assert.Equal(core, type.Assembly);

@@ -9,6 +9,17 @@ internal static class SimulationWork
     [ThreadStatic] private static int sliceDepth, maximumUnits;
     internal static int MaximumUnits => Math.Max(1, maximumUnits);
 
+    /// <summary>Poll without a tight managed spin, including when a headless host drains work synchronously.</summary>
+    internal static bool TaskPending(System.Threading.Tasks.Task task)
+    {
+        if (task.IsCompleted) return false;
+        // A completed iterator unit is not a GC safe point. On macOS a lost runtime activation
+        // can otherwise leave GC waiting forever while this reader spins and its worker is suspended.
+        // Sleep(0) hands off the thread without imposing a timed delay on the interactive host.
+        System.Threading.Thread.Sleep(0);
+        return !task.IsCompleted;
+    }
+
     /// <summary>Guards nested work against accidentally draining a synchronous adapter.</summary>
     internal static bool MoveNext(IEnumerator<int> work, int budget = 1)
     {

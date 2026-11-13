@@ -16,6 +16,34 @@ public sealed class AmbientAudioTests
         public void Dispose() => Disposals++;
     }
 
+    private sealed class BatchedOutput : IAmbientOutput
+    {
+        internal int Batches;
+        public void SetLoop(AmbientCue cue, float gain) => throw new Exception("Expected a batch.");
+        public void SetEventGain(AmbientCue cue, float gain) => throw new Exception("Expected a batch.");
+        public void PlayEvent(AmbientCue cue) { }
+        public void Dispose() { }
+        public void SetGains(ReadOnlySpan<float> gains)
+        {
+            if (gains.Length != 8) throw new Exception("Incomplete batch.");
+            Batches++;
+        }
+    }
+
+    [Fact]
+    public void SteadyMixerUsesOneBatchAndNoManagedAllocationsPerFrame()
+    {
+        var output = new BatchedOutput();
+        using var mixer = new AmbientSoundscape(output);
+        var state = new AmbientState(10, 8, false, .3, false);
+        for (int i = 0; i < 100; i++) mixer.Update(state, 1d / 60);
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 1000; i++) mixer.Update(state, 1d / 60);
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        Assert.Equal(0, allocated);
+        Assert.Equal(1100, output.Batches);
+    }
+
     [Fact]
     public void WeatherChangesFadeAndSnowHasNoLiquidRain()
     {
@@ -135,7 +163,7 @@ public sealed class AmbientAudioTests
     [Fact]
     public void MissingManifestDoesNotInitializeNativeAudio()
     {
-        Assert.Null(OpenAlAmbientOutput.TryCreate(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()), _ => { }));
+        Assert.Null(OpenAlAudioOutput.TryCreate(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()), _ => { }));
     }
 
     [Fact]

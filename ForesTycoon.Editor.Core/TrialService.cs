@@ -29,6 +29,7 @@ internal sealed class TrialService : IDisposable
 
     internal void Start(RuleProject baseline, RuleProject edited, int intensity, int seconds, string revision)
     {
+        ValidateDuration(intensity, seconds);
         if (IsBusy) throw new InvalidOperationException("A próba már folyamatban van.");
         var before = baseline.Clone(); var after = edited.Clone();
         cancellation = new(); var token = cancellation.Token;
@@ -59,14 +60,25 @@ internal sealed class TrialService : IDisposable
         task = null; cancellation?.Dispose(); cancellation = null;
     }
 
+    private static void ValidateDuration(int intensity, int seconds)
+    {
+        if (intensity < 0 || intensity > 40) throw new ArgumentOutOfRangeException(nameof(intensity));
+        if (seconds < 0 || seconds > 600) throw new ArgumentOutOfRangeException(nameof(seconds));
+    }
+
     /// <summary>Same map, same rain, two rule sets; trafficability of every unpaved tile at the end.</summary>
     internal static WorldTrialResult Run(RuleProject baseline, RuleProject edited, int intensity, int seconds, string revision = "", CancellationToken cancellation = default)
     {
+        ValidateDuration(intensity, seconds);
         (double[] Traffic, double[] Water, bool[] Unpaved, double Mean, double Soft, int Columns, int Rows) Run(RuleProject project) =>
             ForestSpeciesBook.WithContext<(double[] Traffic, double[] Water, bool[] Unpaved, double Mean, double Soft, int Columns, int Rows)>(null, () => {
             cancellation.ThrowIfCancellationRequested();
             using var world = SimulationLoader.CreateProject(EditorDocument.ForSandbox(project));
-            if (intensity > 0) { world.QueueWeather(ForesTycoon.Ecology.WeatherPreset.Rain, intensity, seconds); world.ExecutePendingCommands(); }
+            // A zero-rain control must suppress natural weather as well. The weather command's
+            // minimum event duration is 20 s; shorter trials sample only the requested prefix.
+            world.QueueWeather(intensity == 0 ? ForesTycoon.Ecology.WeatherPreset.Sunny : ForesTycoon.Ecology.WeatherPreset.Rain,
+                intensity, Math.Max(20, seconds));
+            world.ExecutePendingCommands();
             for (int i = 0; i < seconds * 30; i++) { cancellation.ThrowIfCancellationRequested(); world.Update(1.0 / 30); }
             var (columns, rows) = world.TileGrid; int n = columns * rows;
             var traffic = new double[n]; var water = new double[n]; var unpaved = new bool[n];

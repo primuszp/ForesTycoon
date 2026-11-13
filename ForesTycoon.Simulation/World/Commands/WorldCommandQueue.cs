@@ -14,27 +14,6 @@ namespace ForesTycoon
         public void Enqueue(IWorldCommand command) =>
             pending.Enqueue(command ?? throw new ArgumentNullException(nameof(command)));
 
-        public int ExecutePending(IWorldCommandTarget world)
-        {
-            if (world == null) throw new ArgumentNullException(nameof(world));
-            if (isExecuting) throw new InvalidOperationException("World commands cannot be executed recursively.");
-
-            if (WorkPending) throw new InvalidOperationException("Finish the active sliced command batch before synchronous execution.");
-            int count = pending.Count;
-            isExecuting = true;
-            try
-            {
-                // Snapshot the count: commands produced by commands belong to the next batch.
-                for (int i = 0; i < count; i++)
-                    pending.Dequeue().Execute(world);
-            }
-            finally
-            {
-                isExecuting = false;
-            }
-            return count;
-        }
-
         private IEnumerator<int> active;
         private int batchRemaining;
         internal bool WorkPending => active != null || batchRemaining > 0;

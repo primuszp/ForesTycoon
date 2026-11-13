@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -134,7 +134,7 @@ namespace ForesTycoon
     }
     sealed partial class TimberCargoSystem
     {
-        internal void Restore(float available, float delivered) {
+        internal void Restore(float available, double delivered) {
             CheckpointGuard.NonNegative(available, "available timber"); CheckpointGuard.NonNegative(delivered, "delivered timber");
             Available = available; Delivered = delivered;
         }

@@ -1,4 +1,4 @@
-﻿# Engine architecture
+# Engine architecture
 
 > A modulhatárokat az [architecture.md](architecture.md) írja le. A világállapot, logisztika, gazdaság és mentés a `ForesTycoon.Simulation` modulban él (`SimulationWorld`); a játék `GameWorld` osztálya a megjelenítési adapter. Az erdő/víz/időjárás a `ForesTycoon.Ecology` szerelvényben van.
 
@@ -213,12 +213,12 @@ This separation keeps input responsive, makes commands replayable, and lets simu
 The current foundation has deterministic ticking, command batching, chunk culling, cross-platform execution, replay saves, performance counters, an OpenGL 3.3 core renderer and partial terrain updates. The highest remaining technical risks are:
 
 1. Dynamic terrain overlays, water and roads use streamed core-profile batches. Promote stable chunk geometry to persistent dirty-chunk VBOs when profiling shows upload bandwidth is the bottleneck.
-2. Picking still reads OpenGL matrices and refreshes hover continuously. Keep matrices CPU-side and recompute only when pointer, camera or terrain changes.
-3. Hydrology and road planning are synchronous. The background scheduler is ready, but dirty-chunk calculation still needs immutable job payloads.
-4. Version 8 saves restore validated dynamic checkpoints and replay only the subsequent journal. Periodic checkpoint retention, compression and large-world loading benchmarks remain future work.
+2. Picking uses cached CPU-side matrices. Further avoid repeated hover queries when pointer, camera and terrain are unchanged.
+3. Hydrology and road planning have resumable paths. Continue measuring the largest individual work unit and keep background inputs isolated from live mutable state.
+4. Versioned saves restore validated checkpoints and replay the subsequent journal through an isolated candidate world. Large-world serialization/IO latency still needs dedicated measurements.
 5. Split ImGui panel composition out of `Viewport` as the tool count grows.
 
-Recommended delivery order: placeable depots and route assignment, immutable hydrology jobs, economy/cargo graph, dirty-chunk GPU caches, then replay checkpoints.
+The original depot/route/economy/checkpoint milestones above have since been delivered. Current motor consolidation and verification: [2026-11-13 foundation review](engine-foundation-review-2026-11-13.md).
 
 ## Forest GPU cache and LOD (2026-09-13)
 
@@ -820,3 +820,14 @@ Rerouted geometry and one-tile cargo routes use the existing checkpoint fields. 
 The current driving corridor is the cleared network cell, including its verge. Full swept-body collision checks, lane-width widening and general multi-point manoeuvre planning remain separate work. The researched equations, editor fields and limitations are documented in [vehicle-kinematics-model.md](vehicle-kinematics-model.md). Rule-project version 7 adds the geometry settings; runtime version `2026-10-31.4` separates the new vehicle motion from historical replay tails.
 
 Vehicle bodies keep their previous uniform diorama scales: forest machines use 0.42; trucks use the existing 0.62 lane-fill ratio. `RigVisualPose` adapts physical angles and axle positions to that presentation without stretching body meshes. Roads retain a single shared centreline. Skid-trail rut spacing follows the displayed forwarder track, sampled from the active rig where available; these are reference ruts, not a persisted history of each vehicle footprint.
+
+
+## Közös motorvégrehajtás – 2026-11-13
+
+A szinkron és kooperatív óra egy tickmagot használ. A játék és az editor
+`ISimulationFrameTarget` szerződésen keresztül, képkockánkénti delegált-
+foglalás nélkül csatlakozik. A parancssor egyetlen végrehajtója `Continue`;
+a kompatibilitási világparancsok ugyanazt az `ExecuteCommandWork` folyamatot
+fogyasztják. A félkész tick/előtérrészlet közvetlen szinkron megkerülése
+hibának számít. Részletek és ellenőrzési határok a
+[motoralapok felülvizsgálatában](engine-foundation-review-2026-11-13.md).

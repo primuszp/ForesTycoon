@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using OpenTK.Mathematics;
 
 namespace ForesTycoon.Models
@@ -23,15 +24,29 @@ namespace ForesTycoon.Models
                     return new Vector4(Values[offset],Arity>1?Values[offset+1]:0,Arity>2?Values[offset+2]:0,Arity>3?Values[offset+3]:0);
                 }
                 Vector4 a=Read(index,stride==3?1:0),b=Read(next,stride==3?1:0);
-                if(Interpolation==AnimationInterpolation.Step||index==next)return a;
+                if(Interpolation==AnimationInterpolation.Step||index==next)return ValidateSample(a);
                 if(stride==3) {
                     float t2=t*t,t3=t2*t;
                     Vector4 result=(2*t3-3*t2+1)*a+(t3-2*t2+t)*span*Read(index,2)+(-2*t3+3*t2)*b+(t3-t2)*span*Read(next);
-                    return Path==AnimationPath.Rotation?QuaternionVector(new Quaternion(result.X,result.Y,result.Z,result.W).Normalized()):result;
+                    return ValidateSample(result);
                 }
                 if(Path==AnimationPath.Rotation)return QuaternionVector(Quaternion.Slerp(new Quaternion(a.X,a.Y,a.Z,a.W).Normalized(),
                     new Quaternion(b.X,b.Y,b.Z,b.W).Normalized(),t));
-                return Vector4.Lerp(a,b,t);
+                return ValidateSample(Vector4.Lerp(a,b,t));
+            }
+
+            private Vector4 ValidateSample(Vector4 value)
+            {
+                if (!float.IsFinite(value.X) || !float.IsFinite(value.Y) || !float.IsFinite(value.Z) || !float.IsFinite(value.W))
+                    throw new InvalidDataException("Animation interpolation produced a non-finite transform.");
+                if (Path != AnimationPath.Rotation) return value;
+                // Valid endpoint quaternions do not guarantee a nonzero cubic interpolant.
+                // Normalize in double precision so large finite tangents cannot overflow the norm.
+                double norm = Math.Sqrt((double)value.X * value.X + (double)value.Y * value.Y +
+                    (double)value.Z * value.Z + (double)value.W * value.W);
+                if (norm == 0) throw new InvalidDataException("Animation interpolation produced a zero quaternion.");
+                return new Vector4((float)(value.X / norm), (float)(value.Y / norm),
+                    (float)(value.Z / norm), (float)(value.W / norm));
             }
         }
         internal sealed class Pose

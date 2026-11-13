@@ -10,7 +10,7 @@ namespace ForesTycoon.Rules;
 /// <summary>The single authoring and runtime contract shared by the game, editor and agents.</summary>
 public sealed class RuleProject
 {
-    public const int CurrentVersion = 8;
+    public const int CurrentVersion = 10;
     private static readonly Lazy<string> ShippedDocument = new(() => {
         using var stream = typeof(RuleProject).Assembly.GetManifestResourceStream("ForesTycoon.Rules.DefaultProject")
             ?? throw new InvalidDataException("Hiányzó, az Editorban létrehozott alap-szabályprojekt.");
@@ -33,6 +33,7 @@ public sealed class RuleProject
     public string Name { get; set; } = "ForesTycoon szabályrendszer";
     public Dictionary<string, double> Tuning { get; set; } = new();
     public BehaviorModel Behaviors { get; set; } = new();
+    public PresentationBindings Presentation { get; set; } = new();
     public DynamicsModel Dynamics { get; set; } = new();
     public AlgorithmGraphReference Algorithms { get; set; }
     /// <summary>The world map and its soil types, authored in the world editor; used when a new world is created.</summary>

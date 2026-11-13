@@ -27,11 +27,11 @@ internal sealed class TrialEditorView(EditorPageContext context, MapEditorView m
     {
         EditorStyle.BeginPanel("trial-settings", new Vec2(300, 0));
         EditorStyle.Section("Esős próba");
-        ImGui.TextWrapped("Két világ épül ugyanebből a pályából: az egyik a játék alapszabályaival, a másik a te szabályaiddal. Mindkettőre ugyanannyi eső esik.");
+        ImGui.TextWrapped("Két világ épül ugyanebből a pályából: az egyik a játék alapszabályaival, a másik a te szabályaiddal. Mindkettő ugyanazt az esőkérést kapja; az időjárásszabályok szerkesztése az eső lefolyását is módosíthatja.");
         ImGui.SetNextItemWidth(-90); ImGui.SliderInt("Eső", ref trialIntensity, 0, 40);
         if (scene.World.Springs.Count > 0) EditorStyle.Text(HudTheme.Muted, $"A pálya {scene.World.Springs.Count} forrása is folyik. 0 eső: csak a források.");
         ImGui.SetNextItemWidth(-90); ImGui.SliderInt("Időtartam (s)", ref trialSeconds, 10, 180);
-        ImGui.TextWrapped($"{trialSeconds} játékmásodperc, kb. {trialSeconds / 900.0 * 12:0.#} erdőhónap.");
+        ImGui.TextWrapped($"{trialSeconds} játékmásodperc, kb. {trialSeconds / EcologyTime.DefaultGameSecondsPerYear * 12:0.#} erdőhónap.");
         bool busy = trials.IsBusy;
         if (EditorStyle.PrimaryButton(busy ? "Fut…" : "Próba indítása", !busy)) Try(() => {
             var project = context.Capture();

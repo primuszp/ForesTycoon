@@ -135,7 +135,7 @@ namespace ForesTycoon.Rendering
         internal static IEnumerable<int> UploadWork(WorkResult<int> result)
         {
             var generating = pixels.Value;
-            while (!generating.IsCompleted) yield return 64;
+            while (SimulationWork.TaskPending(generating)) yield return 64;
             byte[] data = generating.GetAwaiter().GetResult();
             int texture = GL.GenTexture(); result.Value = texture;
             yield return 64;

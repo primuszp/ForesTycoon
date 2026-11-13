@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using OpenTK.Mathematics;
@@ -14,7 +14,8 @@ namespace ForesTycoon
         internal int TileId;
         internal int[] Footprint;
         internal Vector3 Position;
-        internal float Received,Stock,Processed;
+        // Lifetime totals and many small processing debits must retain double precision.
+        internal double Received, Stock, Processed;
     }
     internal sealed partial class ForestryLogistics
     {
@@ -136,7 +137,7 @@ namespace ForesTycoon
         internal void Update(double seconds) => SimulationWork.Complete(UpdateWork(seconds));
         internal IEnumerable<int> UpdateWork(double seconds){
             foreach(var mill in Mills){yield return 1;
-                float cut = Math.Min(mill.Stock, (float)rules.Evaluate(Behaviors, "mill.process", "mill", (ulong)mill.TileId,
+                double cut = Math.Min(mill.Stock, rules.Evaluate(Behaviors, "mill.process", "mill", (ulong)mill.TileId,
                     new(StepSeconds: seconds, MillStock: mill.Stock, MillProcessed: mill.Processed)));
                 mill.Stock-=cut;mill.Processed+=cut;}
             var supply = new Dictionary<int, List<SupplyEdge>>();

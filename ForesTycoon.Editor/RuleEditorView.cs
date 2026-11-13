@@ -44,7 +44,7 @@ namespace ForesTycoon.Editor
             mapEditor = new(context);
             biomeEditor = new(context, mapEditor); missionEditor = new(context); trialEditor = new(context, mapEditor);
             currentRules = new(document.Tuning, document.Scene.SetTuning, ui.SystemMap, ui.Vehicles, document.Library.Notes, document.Library.SetNotes);
-            tuningEditor = new(context, currentRules);
+            tuningEditor = new(context, currentRules, new PresentationSession(document));
             behaviors = new(document.Behaviors, ui.Behaviors);
             dynamicsEditor = new(document.Dynamics, ui.Dynamics, ui.FlowEquation);
             ruleWorkspace = new(new(context, new RuleBookSession(document), new RuleLibrarySession(document.Library), behaviors, dynamicsEditor, () => projectInitialized, () => projectPath, () => liveStatus));

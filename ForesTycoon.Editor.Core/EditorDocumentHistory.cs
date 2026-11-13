@@ -16,7 +16,7 @@ internal sealed class EditorDocumentHistory
 {
     private sealed record Snapshot(string Scenario, string Tuning, string Rules);
     private sealed record RuleBookState(List<WorldRule> Rules, List<RuleFieldDefinition> Fields, List<string> RemovedStarters,
-        BehaviorModel Behaviors, DynamicsModel Dynamics);
+        BehaviorModel Behaviors, DynamicsModel Dynamics, PresentationBindings Presentation);
     private static readonly JsonSerializerOptions mapOptions = MapOptions();
     private readonly EditorDocument document;
     private readonly EditorHistoryService<Snapshot> history;
@@ -64,7 +64,7 @@ internal sealed class EditorDocumentHistory
         JsonSerializer.Serialize(new RuleProject { World = document.World }, mapOptions),
         JsonSerializer.Serialize(new SortedDictionary<string, double>(document.Tuning.Capture(), StringComparer.Ordinal)),
         JsonSerializer.Serialize(new RuleBookState(document.Rules, document.Fields, document.RemovedStarters,
-            document.Behaviors.Draft, document.Dynamics.Draft)));
+            document.Behaviors.Draft, document.Dynamics.Draft, document.Presentation)));
 
     private void Restore(Snapshot snapshot)
     {
@@ -73,6 +73,7 @@ internal sealed class EditorDocumentHistory
         var tuning = JsonSerializer.Deserialize<Dictionary<string, double>>(snapshot.Tuning)!;
         var book = JsonSerializer.Deserialize<RuleBookState>(snapshot.Rules)!;
         _ = GameTuning.FromOverrides(tuning);
+        document.Presentation = book.Presentation.Clone();
         document.World = map; document.Tuning.Replace(tuning);
         // Unrelated local histories and object references survive a map or tuning undo/cancel.
         bool Different<T>(T current, T saved) => JsonSerializer.Serialize(current) != JsonSerializer.Serialize(saved);

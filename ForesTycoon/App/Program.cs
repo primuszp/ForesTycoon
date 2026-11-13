@@ -6,6 +6,11 @@ namespace ForesTycoon
     {
         static void Main(string[] args)
         {
+            if (args.Length is 2 or 3 && args[0] == "--memory-performance-probe") { MemoryPerformanceProbe.Run(args[1], args.Length == 3 ? int.Parse(args[2]) : 40); return; }
+            if (args.Length == 2 && args[0] == "--background-wait-stress") { BackgroundWaitStress.Run(int.Parse(args[1])); return; }
+            if (args.Length == 5 && args[0] == "--simulation-soak") {
+                SimulationSoak.Run(int.Parse(args[1]), int.Parse(args[2]), int.Parse(args[3]), args[4]); return;
+            }
             if (args.Length == 1 && args[0] == "--audio-smoke-test") { AudioSmokeTest.Run(); return; }
             if (args.Length == 1 && args[0] == "--startup-smoke-test") { StartupSmokeTest.Run(); return; }
             if (args.Length == 1 && args[0] == "--orders-rule-benchmark") { OrderRuleBenchmark.Run(); return; }

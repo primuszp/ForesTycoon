@@ -25,10 +25,12 @@ namespace ForesTycoon
         TruckModelWheelbase, TruckModelTrack, TruckModelWheelRadius, TruckModelHitch, TruckModelTrailerLength,
         ForwarderModelFrontLength, ForwarderModelRearLength, ForwarderModelTrack, ForwarderModelWheelRadius,
         ProcessorModelFrontLength, ProcessorModelRearLength, ProcessorModelTrack, ProcessorModelWheelRadius,
+        AudioFadeSeconds, AudioWindReference, AudioRainReference, AudioWindGain, AudioRainGain,
+        AudioSeasonGain, AudioThunderGain, AudioDeerGain,
     }
 
     /// <summary>One tunable: which rule it belongs to, how it is shown and the range the game accepts.</summary>
-    internal sealed record TuningSpec(Tune Key, string Rule, string Name, string Unit, double Default, double Min, double Max)
+    internal sealed record TuningSpec(Tune Key, string Rule, string Name, string Unit, double Default, double Min, double Max, bool Presentation = false)
     {
         internal string Id => Key.ToString();
     }
@@ -157,6 +159,14 @@ namespace ForesTycoon
             new(Tune.ProcessorModelRearLength, "vehicle.modelBinding", "Processzormodell: csukló–hátsó tengelycsoport", "m", 3.2, 0.5, 12),
             new(Tune.ProcessorModelTrack, "vehicle.modelBinding", "Processzormodell: ábrázolt nyomtáv", "m", 2.5, 1, 3.5),
             new(Tune.ProcessorModelWheelRadius, "vehicle.modelBinding", "Processzormodell: ábrázolt keréksugár", "m", 0.7, 0.2, 1.2),
+            new(Tune.AudioFadeSeconds, "audio.ambience", "Hangátmenet időállandója", "valós s", 1.5, 0.01, 30, true),
+            new(Tune.AudioWindReference, "audio.ambience", "Szél teljes hangerőnél", "m/s", 15, 0.1, 100, true),
+            new(Tune.AudioRainReference, "audio.ambience", "Eső teljes hangerőnél", "mm/h", 12, 0.1, 200, true),
+            new(Tune.AudioWindGain, "audio.ambience", "Szélhang szintje", "arány", 0.45, 0, 1, true),
+            new(Tune.AudioRainGain, "audio.ambience", "Esőhang szintje", "arány", 0.55, 0, 1, true),
+            new(Tune.AudioSeasonGain, "audio.ambience", "Évszak hangjának szintje", "arány", 0.3, 0, 1, true),
+            new(Tune.AudioThunderGain, "audio.ambience", "Mennydörgés szintje", "arány", 0.65, 0, 1, true),
+            new(Tune.AudioDeerGain, "audio.ambience", "Szarvashang szintje", "arány", 0.35, 0, 1, true),
         };
 
         private static readonly Dictionary<string, TuningSpec> byId = Specs.ToDictionary(s => s.Id, StringComparer.Ordinal);
@@ -186,7 +196,7 @@ namespace ForesTycoon
         internal GameTuning WithBehaviors(IBehaviorPolicy policy, VehicleRuleProgram vehicleRules = null) => new(values, policy, vehicleRules);
 
         internal double BaseValue(Tune key) => values[(int)key];
-        internal double this[Tune key] => behaviors?.Evaluate(new(behaviorKeys[(int)key], "world", 0, values[(int)key])) ?? values[(int)key];
+        internal double this[Tune key] => Specs[(int)key].Presentation ? values[(int)key] : behaviors?.Evaluate(new(behaviorKeys[(int)key], "world", 0, values[(int)key])) ?? values[(int)key];
         internal float F(Tune key) => (float)this[key];
         internal static TuningSpec Spec(string id) => byId.TryGetValue(id, out var spec) ? spec : null;
         internal static TuningSpec Spec(Tune key) => Specs[(int)key];

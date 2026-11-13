@@ -341,7 +341,7 @@ namespace ForesTycoon
                 performance.BeginSimulation();
                 TerrainMap frameMap = world.Map;
                 SimulationFrameResult result = ruleProjectLink.HandoffPending ? new(0, 0) : simulation.AdvanceWork(
-                    frameClock.SimulationDeltaSeconds, () => world.ContinueCommands(), dt => world.ContinueUpdate(dt), () => world.ForegroundPending);
+                    frameClock.SimulationDeltaSeconds, world);
                 if (!ReferenceEquals(frameMap, world.Map)) {
                     currentMapTiles = world.MapTileColumns;
                     simulationClock.Reset(world.SimulationTick); frameClock.Reset();
@@ -591,6 +591,7 @@ namespace ForesTycoon
         {
             if (glResourcesDisposed) return;
             soundscape?.Dispose(); soundscape = null;
+            machineAudio?.Dispose(); machineAudio = null;
             worldCreation?.Dispose(); worldCreation = null;
             mapPreparation?.Dispose(); mapPreparation = null;
             roadSurveys.Dispose(); orderPreviews.Dispose(); imgui?.Dispose(); postProcess?.Dispose(); world?.Dispose();

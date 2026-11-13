@@ -113,7 +113,7 @@
       "sources": [
         {
           "file": "ForesTycoon.Simulation/World/Commands/WorldCommandQueue.cs",
-          "symbol": "ExecutePending"
+          "symbol": "Continue"
         }
       ],
       "parameters": [],
@@ -4094,6 +4094,118 @@
       "y": 30
     },
     {
+      "id": "audio.ambience",
+      "name": "K\u00F6rnyezeti hangok",
+      "module": "Megjelen\u00EDt\u00E9s",
+      "scope": "Vil\u00E1g / hangkever\u0151",
+      "schedule": "Val\u00F3s id\u0151",
+      "execution": "Presentation",
+      "description": "Projektb\u0151l szerkeszthet\u0151 k\u00F6rnyezeti \u00E9s t\u00E9rbeli g\u00E9phangk\u00F6t\u00E9sek, hanger\u0151, t\u00E1vols\u00E1g \u00E9s korl\u00E1tos forr\u00E1sk\u00E9szlet. A hang a publik\u00E1lt g\u00E9p\u00E1llapotot k\u00F6veti; nem l\u00E9pteti a szimul\u00E1ci\u00F3t.",
+      "formula": "",
+      "notes": "",
+      "reads": [
+        "weather.rain",
+        "weather.forcing",
+        "calendar.time",
+        "wildlife.state",
+        "machine.state",
+        "vehicle.position"
+      ],
+      "writes": [
+        "audio.output"
+      ],
+      "sources": [
+        {
+          "file": "ForesTycoon/Audio/AmbientSoundscape.cs",
+          "symbol": "AmbientSoundscape"
+        },
+        {
+          "file": "ForesTycoon/Audio/SpatialMachineAudio.cs",
+          "symbol": "SpatialMachineAudio"
+        },
+        {
+          "file": "ForesTycoon.Simulation/World/Vehicles/ActorPresentationEvents.cs",
+          "symbol": "ActorPresentationEvents"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "Hang\u00E1tmenet id\u0151\u00E1lland\u00F3ja",
+          "value": 1.5,
+          "unit": "val\u00F3s s",
+          "key": "AudioFadeSeconds",
+          "min": 0.01,
+          "max": 30,
+          "default": 1.5
+        },
+        {
+          "name": "Sz\u00E9l teljes hanger\u0151n\u00E9l",
+          "value": 15,
+          "unit": "m/s",
+          "key": "AudioWindReference",
+          "min": 0.1,
+          "max": 100,
+          "default": 15
+        },
+        {
+          "name": "Es\u0151 teljes hanger\u0151n\u00E9l",
+          "value": 12,
+          "unit": "mm/h",
+          "key": "AudioRainReference",
+          "min": 0.1,
+          "max": 200,
+          "default": 12
+        },
+        {
+          "name": "Sz\u00E9lhang szintje",
+          "value": 0.45,
+          "unit": "ar\u00E1ny",
+          "key": "AudioWindGain",
+          "min": 0,
+          "max": 1,
+          "default": 0.45
+        },
+        {
+          "name": "Es\u0151hang szintje",
+          "value": 0.55,
+          "unit": "ar\u00E1ny",
+          "key": "AudioRainGain",
+          "min": 0,
+          "max": 1,
+          "default": 0.55
+        },
+        {
+          "name": "\u00C9vszak hangj\u00E1nak szintje",
+          "value": 0.3,
+          "unit": "ar\u00E1ny",
+          "key": "AudioSeasonGain",
+          "min": 0,
+          "max": 1,
+          "default": 0.3
+        },
+        {
+          "name": "Mennyd\u00F6rg\u00E9s szintje",
+          "value": 0.65,
+          "unit": "ar\u00E1ny",
+          "key": "AudioThunderGain",
+          "min": 0,
+          "max": 1,
+          "default": 0.65
+        },
+        {
+          "name": "Szarvashang szintje",
+          "value": 0.35,
+          "unit": "ar\u00E1ny",
+          "key": "AudioDeerGain",
+          "min": 0,
+          "max": 1,
+          "default": 0.35
+        }
+      ],
+      "x": 515,
+      "y": 30
+    },
+    {
       "id": "visual.weather",
       "name": "Id\u0151j\u00E1r\u00E1si l\u00E1tv\u00E1ny",
       "module": "Megjelen\u00EDt\u00E9s",
@@ -4122,8 +4234,8 @@
         }
       ],
       "parameters": [],
-      "x": 515,
-      "y": 30
+      "x": 25,
+      "y": 160
     },
     {
       "id": "visual.phenology",
@@ -4151,7 +4263,7 @@
         }
       ],
       "parameters": [],
-      "x": 25,
+      "x": 270,
       "y": 160
     },
     {
@@ -4183,7 +4295,7 @@
         }
       ],
       "parameters": [],
-      "x": 270,
+      "x": 515,
       "y": 160
     },
     {
@@ -4214,8 +4326,8 @@
         }
       ],
       "parameters": [],
-      "x": 515,
-      "y": 160
+      "x": 25,
+      "y": 290
     },
     {
       "id": "visual.buildings",
@@ -4246,7 +4358,7 @@
         }
       ],
       "parameters": [],
-      "x": 25,
+      "x": 270,
       "y": 290
     },
     {
@@ -4273,7 +4385,7 @@
         }
       ],
       "parameters": [],
-      "x": 270,
+      "x": 515,
       "y": 290
     },
     {
@@ -4302,8 +4414,8 @@
         }
       ],
       "parameters": [],
-      "x": 515,
-      "y": 290
+      "x": 25,
+      "y": 420
     },
     {
       "id": "visual.terrain",
@@ -4330,7 +4442,7 @@
         }
       ],
       "parameters": [],
-      "x": 25,
+      "x": 270,
       "y": 420
     },
     {
@@ -4361,7 +4473,7 @@
         }
       ],
       "parameters": [],
-      "x": 270,
+      "x": 515,
       "y": 420
     },
     {

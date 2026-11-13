@@ -38,6 +38,7 @@ sealed partial class GameWorld : SimulationWorld, IWorldInteractionTarget
     protected override void BindPresentationQueries()
     {
         if (terrainRenderer == null) return;
+        terrainRenderer.Presentation = () => Presentation;
         terrainRenderer.FloodDepth = id => Environment?.SurfaceDepth(id) ?? 0;
         terrain.SideProfile = SideProfile;
         terrain.GroundOf = TileGround;

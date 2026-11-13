@@ -47,7 +47,7 @@ partial class SimulationWorld
             ValidateRuleProject(project); RequireAlgorithmRuntime(project.Algorithms);
             return (Project: project, Soils: SoilModel(project.World));
         });
-        while (!preparing.IsCompleted) yield return 64;
+        while (SimulationWork.TaskPending(preparing)) yield return 64;
         var prepared = preparing.GetAwaiter().GetResult();
         foreach (int unit in GenerateWorldWork(ScenarioSettings(prepared.Project.World), prepared.Soils, prepared.Project)) yield return unit;
     }
@@ -86,7 +86,7 @@ partial class SimulationWorld
             LastForegroundWorkUnits = 0;
             while (LastForegroundWorkUnits < budget)
             {
-                if (!SimulationWork.MoveNext(generationWork))
+                if (!SimulationWork.MoveNext(generationWork, budget - LastForegroundWorkUnits))
                 {
                     generationWork.Dispose(); generationWork = null;
                     GenerationStage = ""; published = true;
@@ -117,7 +117,7 @@ partial class SimulationWorld
         {
             GenerationStage = "Kiindulójelenet beolvasása";
             var reading = Task.Run(() => SimulationLoader.ReadInitialState(project.World));
-            while (!reading.IsCompleted) yield return 64;
+            while (SimulationWork.TaskPending(reading)) yield return 64;
             snapshot = reading.GetAwaiter().GetResult();
             settings = snapshot.Terrain.ToSettings(); soils = snapshot.ReplaySoilModel;
         }
@@ -128,7 +128,7 @@ partial class SimulationWorld
         foreach (int unit in TerrainMap.CreateWork(settings, terrainResult)) yield return unit;
         GenerationStage = "Talaj, erdő és környezet";
         var preparingResponses = Task.Run(() => ForesTycoon.Rules.EcologyResponseProgram.FromModel(project?.Behaviors ?? WorldBehaviorPolicy.DefaultDocument()));
-        while (!preparingResponses.IsCompleted) yield return 64;
+        while (SimulationWork.TaskPending(preparingResponses)) yield return 64;
         var responses = preparingResponses.GetAwaiter().GetResult();
         ForestSpeciesBook.Apply(SpeciesEdits(project?.World));
         // The forest is grown with the ecosystem, before the candidate world exists: give it the scene's zones and biomes now.

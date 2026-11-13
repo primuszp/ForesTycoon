@@ -56,7 +56,7 @@ namespace ForesTycoon
                 "calendar.time|forest.trees|water.root", "ecology.steps|forest.month", "Előkészítés → víz és időjárás → havi növényzet → havi integrálok törlése. A sorrend befolyásolja az eredményt.");
             Param(phases, "Alaplépés", EnvironmentSystem.StepSeconds, "játék-s");
             Add("commands.apply", "Játékosparancsok", "Idő és vezérlés", "Világ és kijelölt objektum", "Parancssor végrehajtásakor",
-                "ForesTycoon.Simulation/World/Commands/WorldCommandQueue.cs", "ExecutePending", "player.input", "commands",
+                "ForesTycoon.Simulation/World/Commands/WorldCommandQueue.cs", "Continue", "player.input", "commands",
                 "Építés, bontás, javítás, ültetés, kitermelés kijelölése, járműutasítás és időjárási beavatkozás naplózható parancs.");
             Add("save.restore", "Checkpoint és visszajátszás", "Idő és vezérlés", "Világ", "Mentés / betöltés", game, "Load",
                 "commands|rules.behaviors|machine.controllerState|calendar.time|forest.trees|water.root|water.snow|road.condition|vehicle.cargo|machine.grapple|economy.income", "save.snapshot",
@@ -297,6 +297,11 @@ namespace ForesTycoon
             Add("visual.truck", "Teherautómodell és látható rakomány", "Megjelenítés", "Teherautó", "Renderképkocka",
                 "ForesTycoon/Rendering/Models/GlbTruckModel.cs", "GlbTruckModel", "vehicle.position|vehicle.speed|vehicle.cargo|terrain.height", "visual.truck",
                 "Importált modell, kerékmozgás, rakomány és útfelületet követő dőlés. A megjelenítés olvassa a szimulációt.", "", GameRuleExecution.Presentation);
+            var audioPresentation = Add("audio.ambience", "Környezeti hangok", "Megjelenítés", "Világ / hangkeverő", "Valós idő",
+                "ForesTycoon/Audio/AmbientSoundscape.cs", "AmbientSoundscape", "weather.rain|weather.forcing|calendar.time|wildlife.state|machine.state|vehicle.position", "audio.output",
+                "Projektből szerkeszthető környezeti és térbeli géphangkötések, hangerő, távolság és korlátos forráskészlet. A hang a publikált gépállapotot követi; nem lépteti a szimulációt.", "", GameRuleExecution.Presentation);
+            audioPresentation.Sources.Add(new("ForesTycoon/Audio/SpatialMachineAudio.cs", "SpatialMachineAudio"));
+            audioPresentation.Sources.Add(new("ForesTycoon.Simulation/World/Vehicles/ActorPresentationEvents.cs", "ActorPresentationEvents"));
             Add("visual.weather", "Időjárási látvány", "Megjelenítés", "Világ / felület", "Renderképkocka",
                 "ForesTycoon/Rendering/Scene/TerrainRenderer.cs", "TerrainRenderer", "weather.rain|weather.snowfall|weather.forcing|water.snow|water.surface|forest.trees|road.condition", "visual.weather",
                 "Eső, hóesés, felhő, villámlás és nedves felületek. A talaj, utak és fák hóborítása a helyi szimulált hókészletet követi, olvadáskor eltűnik. A kézi látványteszt külön beállítás.", "", GameRuleExecution.Presentation);
@@ -350,7 +355,7 @@ namespace ForesTycoon
                 var owner = catalog.Rules.Find(r => r.Id == spec.Rule) ?? throw new InvalidOperationException("Tuning rule missing: " + spec.Rule);
                 owner.Parameters.Add(new(spec.Name, tuning.BaseValue(spec.Key), spec.Unit, spec.Id, spec.Min, spec.Max, spec.Default));
             }
-            var behaviorRules = WorldBehaviorPolicy.Hooks.Select(h => h.Id).Concat(GameTuning.Specs.Select(s => s.Rule))
+            var behaviorRules = WorldBehaviorPolicy.Hooks.Select(h => h.Id).Concat(GameTuning.Specs.Where(s => !s.Presentation).Select(s => s.Rule))
                 .Append("machine.forwarder").Append("machine.processor").ToHashSet();
             foreach (var rule in catalog.Rules.Where(r => behaviorRules.Contains(r.Id)))
                 rule.Reads = rule.Reads.Append("rules.behaviors").Distinct().ToArray();

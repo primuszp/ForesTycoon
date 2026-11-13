@@ -15,7 +15,7 @@ internal sealed class SandboxSession
     internal void Advance(SimulationWorld world, double elapsed)
     {
         Synchronize(world);
-        runner.AdvanceWork(elapsed, () => world.ContinueCommands(), dt => world.ContinueUpdate(dt), () => world.ForegroundPending);
+        runner.AdvanceWork(elapsed, world);
         Synchronize(world);
     }
 

@@ -1,4 +1,4 @@
-param([switch]$Native, [switch]$SkipBuild)
+param([switch]$Native, [switch]$SkipBuild, [switch]$Stress, [ValidateRange(1,120)][int]$StressMonths = 24)
 
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
@@ -13,7 +13,16 @@ try {
         Invoke-DotNet @('build', 'ForesTycoon.sln', '-c', 'Release', '--no-restore', '-warnaserror', '--verbosity', 'minimal')
     }
     Invoke-DotNet @('test', 'ForesTycoon.Tests', '-c', 'Release', '--no-build', '--no-restore',
-        '--logger', 'trx', '--results-directory', 'artifacts/engine-validation/tests')
+        '--logger', 'trx', '--logger', 'console;verbosity=normal',
+        '--blame-hang-timeout', '180s', '--blame-hang-dump-type', 'none',
+        '--results-directory', 'artifacts/engine-validation/tests')
+    if ($Stress) {
+        $gameAssembly = 'ForesTycoon/bin/Release/net8.0/ForesTycoon.dll'
+        Invoke-DotNet @($gameAssembly, '--memory-performance-probe', 'artifacts/engine-validation/memory', '40')
+        Invoke-DotNet @($gameAssembly, '--background-wait-stress', '60')
+        Invoke-DotNet @($gameAssembly, '--simulation-soak', "$StressMonths", '16', '42', 'artifacts/engine-validation/soak-16')
+        Invoke-DotNet @($gameAssembly, '--simulation-soak', "$StressMonths", '32', '7', 'artifacts/engine-validation/soak-32')
+    }
     if ($Native) {
         $gameAssembly = 'ForesTycoon/bin/Release/net8.0/ForesTycoon.dll'
         foreach ($smoke in @('--render-environment-smoke-test', '--checkpoint-smoke-test', '--forest-smoke-test', '--graphics-smoke-test',

@@ -75,9 +75,10 @@ partial class SimulationWorld
         // cloning, canonical hashing and JSON serialization can then run after this boundary has been released.
         var policy = behaviorPolicy; var model = dynamics; var engine = ruleEngine;
         var scene = ruleProjectWorld; var tuning = Tuning.ToValues(); var algorithms = AlgorithmSnapshot();
+        var presentation = Presentation;
         string name = ruleProjectName;
         string Revision() => new RuleProject {
-            Name = name, Tuning = tuning, Behaviors = policy.Document, Dynamics = model.Document, Algorithms = algorithms,
+            Presentation = presentation.Capture(), Name = name, Tuning = tuning, Behaviors = policy.Document, Dynamics = model.Document, Algorithms = algorithms,
             Rules = RuleEngine.Clone(engine.Rules), RemovedStarters = engine.RemovedStarters.ToList(),
             Fields = RuleEngine.CloneFields(engine.Fields), World = scene
         }.ContentRevision();

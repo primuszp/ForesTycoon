@@ -1,8 +1,186 @@
 {
   "schema": "forest-rule-project",
-  "version": 8,
+  "version": 10,
   "name": "ForesTycoon szab\u00E1lyrendszer",
+  "presentation": {
+    "actorAnimations": {
+      "truck.wheels": {
+        "enabled": true,
+        "speed": 1
+      },
+      "harvester.wheels": {
+        "enabled": true,
+        "speed": 1
+      },
+      "forwarder.wheels": {
+        "enabled": true,
+        "speed": 1
+      },
+      "harvester.felling": {
+        "enabled": true,
+        "speed": 1
+      },
+      "harvester.unloading": {
+        "enabled": true,
+        "speed": 1
+      },
+      "forwarder.loading": {
+        "enabled": true,
+        "speed": 1
+      },
+      "forwarder.unloading": {
+        "enabled": true,
+        "speed": 1
+      }
+    },
+    "machineSounds": {
+      "truck.driving": {
+        "file": "",
+        "enabled": true,
+        "gain": 0.5,
+        "referenceDistance": 5,
+        "maxDistance": 150
+      },
+      "truck.loading": {
+        "file": "",
+        "enabled": true,
+        "gain": 0.5,
+        "referenceDistance": 5,
+        "maxDistance": 150
+      },
+      "truck.unloading": {
+        "file": "",
+        "enabled": true,
+        "gain": 0.5,
+        "referenceDistance": 5,
+        "maxDistance": 150
+      },
+      "harvester.driving": {
+        "file": "",
+        "enabled": true,
+        "gain": 0.5,
+        "referenceDistance": 5,
+        "maxDistance": 150
+      },
+      "harvester.felling": {
+        "file": "",
+        "enabled": true,
+        "gain": 0.5,
+        "referenceDistance": 5,
+        "maxDistance": 150
+      },
+      "harvester.unloading": {
+        "file": "",
+        "enabled": true,
+        "gain": 0.5,
+        "referenceDistance": 5,
+        "maxDistance": 150
+      },
+      "forwarder.driving": {
+        "file": "",
+        "enabled": true,
+        "gain": 0.5,
+        "referenceDistance": 5,
+        "maxDistance": 150
+      },
+      "forwarder.loading": {
+        "file": "",
+        "enabled": true,
+        "gain": 0.5,
+        "referenceDistance": 5,
+        "maxDistance": 150
+      },
+      "forwarder.unloading": {
+        "file": "",
+        "enabled": true,
+        "gain": 0.5,
+        "referenceDistance": 5,
+        "maxDistance": 150
+      }
+    },
+    "spatialVoiceLimit": 16,
+    "wildlifeModel": "Assets/Wildlife/elk.glb",
+    "motionRoot": "RigRoot_01",
+    "animations": {
+      "deer.idle": {
+        "clip": "Stand_Eating_01",
+        "speed": 1,
+        "enabled": true
+      },
+      "deer.walk": {
+        "clip": "WalkSlow",
+        "speed": 1,
+        "enabled": true
+      }
+    },
+    "sounds": {
+      "Wind": {
+        "file": "",
+        "enabled": true,
+        "gain": 1,
+        "minimumDelay": 8,
+        "delayRange": 18
+      },
+      "Rain": {
+        "file": "",
+        "enabled": true,
+        "gain": 1,
+        "minimumDelay": 8,
+        "delayRange": 18
+      },
+      "Spring": {
+        "file": "",
+        "enabled": true,
+        "gain": 1,
+        "minimumDelay": 8,
+        "delayRange": 18
+      },
+      "Summer": {
+        "file": "",
+        "enabled": true,
+        "gain": 1,
+        "minimumDelay": 8,
+        "delayRange": 18
+      },
+      "Autumn": {
+        "file": "",
+        "enabled": true,
+        "gain": 1,
+        "minimumDelay": 8,
+        "delayRange": 18
+      },
+      "Winter": {
+        "file": "",
+        "enabled": true,
+        "gain": 1,
+        "minimumDelay": 8,
+        "delayRange": 18
+      },
+      "Thunder": {
+        "file": "",
+        "enabled": true,
+        "gain": 1,
+        "minimumDelay": 8,
+        "delayRange": 18
+      },
+      "Deer": {
+        "file": "",
+        "enabled": true,
+        "gain": 1,
+        "minimumDelay": 20,
+        "delayRange": 45
+      }
+    }
+  },
   "tuning": {
+    "AudioFadeSeconds": 1.5,
+    "AudioWindReference": 15,
+    "AudioRainReference": 12,
+    "AudioWindGain": 0.45,
+    "AudioRainGain": 0.55,
+    "AudioSeasonGain": 0.3,
+    "AudioThunderGain": 0.65,
+    "AudioDeerGain": 0.35,
     "VehicleTimeScale": 4,
     "AsphaltBuild": 650,
     "MacadamBuild": 200,

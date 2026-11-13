@@ -21,7 +21,7 @@ internal sealed class SlicedQueryBatch
     {
         var task = pending[slot];
         if (task == null) yield break;
-        while (!task.IsCompleted) yield return Math.Min(64, SimulationWork.MaximumUnits);
+        while (SimulationWork.TaskPending(task)) yield return Math.Min(64, SimulationWork.MaximumUnits);
         pending[slot] = null;
         task.GetAwaiter().GetResult();
     }
@@ -40,7 +40,7 @@ internal sealed class SlicedQueryBatch
     {
         foreach (var task in pending) {
             if (task == null) continue;
-            while (!task.IsCompleted) yield return Math.Min(64, SimulationWork.MaximumUnits);
+            while (SimulationWork.TaskPending(task)) yield return Math.Min(64, SimulationWork.MaximumUnits);
         }
         System.Runtime.ExceptionServices.ExceptionDispatchInfo failure = null;
         for (int i = 0; i < pending.Length; i++) {

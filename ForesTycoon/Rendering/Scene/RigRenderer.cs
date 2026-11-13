@@ -41,7 +41,7 @@ internal static class RigRenderer
     }
 
     internal static void Wheels(VehicleKinematics rig, TerrainMap map, RigVisualPose visualPose, int visibleUnits = int.MaxValue,
-        Func<float, float, float> height = null)
+        Func<float, float, float> height = null, double animationScale = 1)
     {
         var wheels = visualPose.Wheels;
         var visual = RenderDevice.Visuals; var previous = visual?.Kind ?? SurfaceKind.Vehicle;
@@ -55,7 +55,7 @@ internal static class RigRenderer
                     map.TryGetDrivingSurfaceZ(x, y, out float z);
                     if (height != null) z = height(x, y);
                     float r = (float)axle.Radius * visualPose.Appearance.RadiusScale, halfWidth = r * .3f;
-                    var frame = Matrix4.CreateRotationY((float)w.Roll) * Matrix4.CreateRotationZ((float)w.Yaw) * Matrix4.CreateTranslation(x, y, z + r + .025f);
+                    var frame = Matrix4.CreateRotationY((float)(w.Roll * animationScale)) * Matrix4.CreateRotationZ((float)w.Yaw) * Matrix4.CreateTranslation(x, y, z + r + .025f);
                     Vector3 P(float a, float side, float size = 1) => Vector3.TransformPosition(new Vector3(MathF.Cos(a) * r * size, side, MathF.Sin(a) * r * size), frame);
                     for (int i = 0; i < 16; i++) {
                         float a = i * MathF.Tau / 16, b = (i + 1) * MathF.Tau / 16;
