@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using ForesTycoon.Rules;
 using ImGuiNET;
 using OpenTK.Graphics.OpenGL;
@@ -15,6 +15,10 @@ namespace ForesTycoon.Editor
         {
             if (RuleProjectCli.Run(args)) return;
             if (args.Length == 1 && args[0] == "--presentation-bindings-smoke-test") { PresentationBindingsSmokeTest.Run(); return; }
+            if (args.Length is 1 or 2 && args[0] == "--editor-maintenance-benchmark")
+            {
+                EditorMaintenanceBenchmark.Run(args.Length == 2 ? args[1] : "artifacts/editor-next/maintenance-benchmark.json"); return;
+            }
             if (args.Length == 1 && args[0] == "--rules-benchmark") { RuleOptimizationBenchmark.Run(); return; }
             if (args.Length == 1 && args[0] == "--check-editor-coverage")
             {
@@ -38,7 +42,8 @@ namespace ForesTycoon.Editor
                 using var smokeWindow = new EditorWindow(null, true); smokeWindow.Run(); return;
             }
             string file = System.IO.File.Exists(RuleProject.DefaultPath) ? RuleProject.DefaultPath : null, worldFile = null;
-            for (int i = 0; i < args.Length; i += 2) {
+            for (int i = 0; i < args.Length; i += 2)
+            {
                 if (i + 1 >= args.Length) throw new ArgumentException("Használat: ForesTycoon.Editor [--model projekt.json] [--world játékmentés.json]");
                 if (args[i] is "--model" or "--project") file = args[i + 1];
                 else if (args[i] == "--world") worldFile = args[i + 1];
@@ -64,9 +69,14 @@ namespace ForesTycoon.Editor
         private System.Collections.Generic.SortedDictionary<string, string> openingReference;
         internal EditorWindow(string file, bool smoke = false, bool visible = true, string worldFile = null) : base(GameWindowSettings.Default, new NativeWindowSettings
         {
-            Title = "ForesTycoon – Világszerkesztő", ClientSize = new(1600, 960),
-            API = ContextAPI.OpenGL, APIVersion = new(3, 3), Profile = ContextProfile.Core, StartVisible = !smoke && visible
-        }) { editor = new RuleEditorView(file); this.smoke = smoke; this.worldFile = worldFile; if (!smoke) FitToScreen(); }
+            Title = "ForesTycoon – Világszerkesztő",
+            ClientSize = new(1600, 960),
+            API = ContextAPI.OpenGL,
+            APIVersion = new(3, 3),
+            Profile = ContextProfile.Core,
+            StartVisible = !smoke && visible
+        })
+        { editor = new RuleEditorView(file); this.smoke = smoke; this.worldFile = worldFile; if (!smoke) FitToScreen(); }
 
         // A laptop screen (e.g. a 1512×982 pt MacBook) cannot hold the 1600×960 window: open inside the work area, and
         // shrink text and spacing a little so the panels and previews keep their room.
@@ -93,16 +103,19 @@ namespace ForesTycoon.Editor
         }
         protected override void RenderScene(FrameEventArgs args)
         {
-            if (sandbox == null) {
+            if (sandbox == null)
+            {
                 long started = System.Diagnostics.Stopwatch.GetTimestamp(); int slices = 0;
-                while (slices++ < 4096 && System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds < 4) {
+                while (slices++ < 4096 && System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds < 4)
+                {
                     if (startupWork.MoveNext()) continue;
                     startupWork.Dispose(); startupWork = null; sandbox = startupResult.Value;
                     if (worldFile != null) { EditorWorldLoader.Load(sandbox, worldFile); editor.UseWorldFile(worldFile); }
                     if (smoke) openingReference = OpeningSceneReference.Fingerprints(sandbox);
                     break;
                 }
-                if (sandbox == null) {
+                if (sandbox == null)
+                {
                     ui.Update(ClientSize.X, ClientSize.Y, FramebufferSize.X, FramebufferSize.Y, Vec2.One, (float)Math.Max(.001, args.Time));
                     ImGui.Begin("Pálya előkészítése"); ImGui.TextUnformatted("A tesztvilág szakaszosan épül fel…"); ImGui.End();
                     GL.Clear(ClearBufferMask.ColorBufferBit); ui.Render(); return;
@@ -149,12 +162,23 @@ namespace ForesTycoon.Editor
             {
                 >= Keys.A and <= Keys.Z => (ImGuiKey)((int)ImGuiKey.A + (int)key - (int)Keys.A),
                 >= Keys.D0 and <= Keys.D9 => (ImGuiKey)((int)ImGuiKey._0 + (int)key - (int)Keys.D0),
-                Keys.Tab => ImGuiKey.Tab, Keys.Left => ImGuiKey.LeftArrow, Keys.Right => ImGuiKey.RightArrow,
-                Keys.Up => ImGuiKey.UpArrow, Keys.Down => ImGuiKey.DownArrow, Keys.Home => ImGuiKey.Home,
-                Keys.End => ImGuiKey.End, Keys.PageUp => ImGuiKey.PageUp, Keys.PageDown => ImGuiKey.PageDown,
-                Keys.Backspace => ImGuiKey.Backspace, Keys.Delete => ImGuiKey.Delete, Keys.Insert => ImGuiKey.Insert,
-                Keys.Enter => ImGuiKey.Enter, Keys.KeyPadEnter => ImGuiKey.KeypadEnter, Keys.Escape => ImGuiKey.Escape,
-                Keys.Space => ImGuiKey.Space, _ => ImGuiKey.None
+                Keys.Tab => ImGuiKey.Tab,
+                Keys.Left => ImGuiKey.LeftArrow,
+                Keys.Right => ImGuiKey.RightArrow,
+                Keys.Up => ImGuiKey.UpArrow,
+                Keys.Down => ImGuiKey.DownArrow,
+                Keys.Home => ImGuiKey.Home,
+                Keys.End => ImGuiKey.End,
+                Keys.PageUp => ImGuiKey.PageUp,
+                Keys.PageDown => ImGuiKey.PageDown,
+                Keys.Backspace => ImGuiKey.Backspace,
+                Keys.Delete => ImGuiKey.Delete,
+                Keys.Insert => ImGuiKey.Insert,
+                Keys.Enter => ImGuiKey.Enter,
+                Keys.KeyPadEnter => ImGuiKey.KeypadEnter,
+                Keys.Escape => ImGuiKey.Escape,
+                Keys.Space => ImGuiKey.Space,
+                _ => ImGuiKey.None
             };
             if (mapped != ImGuiKey.None) io.AddKeyEvent(mapped, down);
             io.AddKeyEvent(ImGuiKey.ModCtrl, KeyboardState.IsKeyDown(Keys.LeftControl) || KeyboardState.IsKeyDown(Keys.RightControl));
@@ -166,6 +190,7 @@ namespace ForesTycoon.Editor
         {
             editor?.StopBackgroundOperations(sandbox);
             startupWork?.Dispose(); startupWork = null;
-            ui?.Dispose(); sandbox?.Dispose(); ui = null; sandbox = null; }
+            ui?.Dispose(); sandbox?.Dispose(); ui = null; sandbox = null;
+        }
     }
 }

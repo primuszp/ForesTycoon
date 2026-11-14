@@ -62,6 +62,34 @@ internal sealed class SceneSession
     {
         foreach (var status in world.MissionStatus(editor.World.Missions)) yield return new(status.Value, status.State, status.Error);
     }
+    internal bool CanAddElevationZone => editor.CanAddElevationZone;
+    internal void SetElevationBoundary(ElevationZoneView zone, int level) => editor.SetElevationBoundary(Resolve(zone), level);
+    internal void AddElevationZone() => editor.AddElevationZone();
+    internal void DeleteElevationZone(ElevationZoneView zone) => editor.DeleteElevationZone(Resolve(zone));
+    internal void ResetElevationZones() => editor.ResetElevationZones();
+    internal BiomeView AddBiome(string zone) => View(editor.AddBiome(zone))!;
+    internal void DeleteBiome(BiomeView biome) => editor.DeleteBiome(Resolve(biome));
+    internal void SetBiomeZone(BiomeView biome, string zone) => editor.SetBiomeZone(Resolve(biome), zone);
+    internal void SetBiomeGround(BiomeView biome, BiomeGroundKind kind, string material) => editor.SetBiomeGround(Resolve(biome), kind, material);
+    internal void ResetBiomes() => editor.ResetBiomes();
+    internal GroundMaterialView AddMaterial(GroundMaterialView source) => View(editor.AddMaterial(Resolve(source)))!;
+    internal void RenameMission(MissionView mission, string id) => editor.RenameMission(Resolve(mission), id);
+    internal void SetMissionTitle(MissionView mission, string title) => editor.SetMissionTitle(Resolve(mission), title);
+    internal void SetMissionMetric(MissionView mission, string metric) => editor.SetMissionMetric(Resolve(mission), metric);
+    internal void SetMissionCondition(MissionView mission, string comparison, double target) => editor.SetMissionCondition(Resolve(mission), comparison, target);
+    internal void SetMissionDeadline(MissionView mission, double year) => editor.SetMissionDeadline(Resolve(mission), year);
+    internal void SetShapeParameter(SpeciesView species, string? phase, string name, double? value) => editor.SetShapeParameter(Resolve(species), phase, name, value);
+    internal void ResetShapePhase(SpeciesView species, string? phase) => editor.ResetShapePhase(Resolve(species), phase);
+    internal void SetSpeciesColour(SpeciesView species, SpeciesColourChannel channel, string? value) => editor.SetSpeciesColour(Resolve(species), channel, value);
+    internal void ResetSpeciesColours(SpeciesView species) => editor.ResetSpeciesColours(Resolve(species));
+    internal void RestoreSpecies(SpeciesView species) => editor.RestoreSpecies(Resolve(species));
+    internal void MoveHorizonUp(SoilView soil, int index) => editor.MoveHorizonUp(Resolve(soil), index);
+    internal void DeleteHorizon(SoilView soil, int index) => editor.DeleteHorizon(Resolve(soil), index);
+    internal void AddHorizon(SoilView soil) => editor.AddHorizon(Resolve(soil));
+    internal void SetHorizonName(SoilView soil, int index, string name) => editor.SetHorizonName(Resolve(soil), index, name);
+    internal void SetHorizonColour(SoilView soil, int index, string colour) => editor.SetHorizonColour(Resolve(soil), index, colour);
+    internal void SetHorizonDepth(SoilView soil, int index, double depth) => editor.SetHorizonDepth(Resolve(soil), index, depth);
+    internal void ResetHorizons(SoilView soil) => editor.ResetHorizons(Resolve(soil));
     internal void EditWorld(Action<WorldScenario> change) => editor.EditWorld(change);
     internal void Replace(WorldScenario scenario) => editor.Replace(scenario);
     internal void SetTuning(string key, double value) => editor.SetTuning(key, value);

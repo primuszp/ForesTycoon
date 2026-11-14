@@ -24,7 +24,8 @@ internal sealed class SoilEditorView(EditorPageContext context)
         for (int i = 0; i < scene.World.SoilTypes.Count; i++)
             if (SoilSwatch(scene.World.SoilTypes[i], i == selectedSoilType, "type" + i)) selectedSoilType = i;
         ImGui.Spacing();
-        if (ImGui.Button("Új talajtípus", new Vec2(-1, 0))) {
+        if (ImGui.Button("Új talajtípus", new Vec2(-1, 0)))
+        {
             scene.CopySoil(scene.World.SoilTypes[selectedSoilType]); selectedSoilType = scene.World.SoilTypes.Count - 1;
             message = "Új talajtípus. Festéssel kerül a térképre.";
         }
@@ -45,31 +46,48 @@ internal sealed class SoilEditorView(EditorPageContext context)
         EditorStyle.Text(HudTheme.Muted, $"A tesztvilágban {count} csempe ({100.0 * count / Math.Max(1, tiles):0}%) · azonosító: {type.Id}");
         bool changed = false;
         void Done() { if (ImGui.IsItemDeactivatedAfterEdit()) changed = true; }
-        if (ImGui.BeginTable("type-fields", 3, ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.RowBg)) {
+        if (ImGui.BeginTable("type-fields", 3, ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.RowBg))
+        {
             ImGui.TableSetupColumn("Paraméter", ImGuiTableColumnFlags.WidthFixed, 220);
             ImGui.TableSetupColumn("Érték", ImGuiTableColumnFlags.WidthFixed, 260);
             ImGui.TableSetupColumn("Hol hat");
-            void Row(string label, string effect, Action field) {
+            void Row(string label, string effect, Action field)
+            {
                 ImGui.TableNextRow(); ImGui.TableSetColumnIndex(0); ImGui.AlignTextToFramePadding(); ImGui.TextUnformatted(label);
                 ImGui.TableSetColumnIndex(1); ImGui.SetNextItemWidth(-1); field();
                 ImGui.TableSetColumnIndex(2); ImGui.PushTextWrapPos(); EditorStyle.Text(HudTheme.Muted, effect); ImGui.PopTextWrapPos();
             }
             Row("Név", "Megjelenik a térképen és a játékban.", () => { string n = type.Name; if (ImGui.InputText("##name", ref n, 80) && n.Trim().Length > 0) scene.Edit(type, edited => edited.Name = n.Trim()); Done(); });
-            Row("Szín", "A térkép színe.", () => { var c = Colour(type.Color); var rgb = new System.Numerics.Vector3(c.X, c.Y, c.Z);
-                if (ImGui.ColorEdit3("##colour", ref rgb, ImGuiColorEditFlags.NoInputs)) scene.Edit(type, edited => edited.Color = Hex(new Vec4(rgb, 1))); Done(); });
-            Row("Teherbírás (0–1)", "Földút és közelítőnyom járhatósága átázva: talaj.teherbírás a járhatósági szabályban.", () => { float v = (float)type.BearingCapacity;
-                if (ImGui.SliderFloat("##bearing", ref v, 0, 1, "%.2f")) scene.Edit(type, edited => edited.BearingCapacity = Math.Round(v, 3)); Done(); });
-            Row("Termékenység (0–1)", "Termőhelyi alkalmasság: a fák növekedése és egészsége.", () => { float v = (float)type.Fertility;
-                if (ImGui.SliderFloat("##fertility", ref v, 0, 1, "%.2f")) scene.Edit(type, edited => edited.Fertility = Math.Round(v, 3)); Done(); });
+            Row("Szín", "A térkép színe.", () =>
+            {
+                var c = Colour(type.Color); var rgb = new System.Numerics.Vector3(c.X, c.Y, c.Z);
+                if (ImGui.ColorEdit3("##colour", ref rgb, ImGuiColorEditFlags.NoInputs)) scene.Edit(type, edited => edited.Color = Hex(new Vec4(rgb, 1))); Done();
+            });
+            Row("Teherbírás (0–1)", "Földút és közelítőnyom járhatósága átázva: talaj.teherbírás a járhatósági szabályban.", () =>
+            {
+                float v = (float)type.BearingCapacity;
+                if (ImGui.SliderFloat("##bearing", ref v, 0, 1, "%.2f")) scene.Edit(type, edited => edited.BearingCapacity = Math.Round(v, 3)); Done();
+            });
+            Row("Termékenység (0–1)", "Termőhelyi alkalmasság: a fák növekedése és egészsége.", () =>
+            {
+                float v = (float)type.Fertility;
+                if (ImGui.SliderFloat("##fertility", ref v, 0, 1, "%.2f")) scene.Edit(type, edited => edited.Fertility = Math.Round(v, 3)); Done();
+            });
             Row("Telítettség (mm)", "A talaj teljes víztartása; e fölött pangó víz.", () => { double v = type.Saturation; if (ImGui.InputDouble("##sat", ref v, 5, 20, "%.0f")) scene.Edit(type, edited => edited.Saturation = v); Done(); });
             Row("Szabadföldi vízkapacitás (mm)", "E fölött a víz elszivárog a mélybe.", () => { double v = type.FieldCapacity; if (ImGui.InputDouble("##fc", ref v, 5, 20, "%.0f")) scene.Edit(type, edited => edited.FieldCapacity = v); Done(); });
             Row("Hervadáspont (mm)", "Ez alatt a fák nem jutnak vízhez: aszály.", () => { double v = type.WiltingPoint; if (ImGui.InputDouble("##wp", ref v, 1, 10, "%.0f")) scene.Edit(type, edited => edited.WiltingPoint = v); Done(); });
             Row("Beszivárgás (mm/óra)", "Milyen gyorsan nyeli el a csapadékot; a többi lefolyik.", () => { double v = type.InfiltrationPerHour; if (ImGui.InputDouble("##inf", ref v, 1, 5, "%.1f")) scene.Edit(type, edited => edited.InfiltrationPerHour = v); Done(); });
             Row("Drénezés (mm/óra)", "Milyen gyorsan szivárog a többletvíz a mélybe.", () => { double v = type.DrainagePerHour; if (ImGui.InputDouble("##dr", ref v, .1, 1, "%.2f")) scene.Edit(type, edited => edited.DrainagePerHour = v); Done(); });
-            Row("Generálás: nedvesség (0–1)", "Hová teszi a generátor: nedvesebb vagy szárazabb helyekre.", () => { float v = (float)type.PreferredMoisture;
-                if (ImGui.SliderFloat("##pm", ref v, 0, 1, "%.2f")) scene.Edit(type, edited => edited.PreferredMoisture = Math.Round(v, 3)); Done(); });
-            Row("Generálás: textúra (0–1)", "Durva (homok) vagy finom (agyag) foltokba kerül.", () => { float v = (float)type.PreferredTexture;
-                if (ImGui.SliderFloat("##pt", ref v, 0, 1, "%.2f")) scene.Edit(type, edited => edited.PreferredTexture = Math.Round(v, 3)); Done(); });
+            Row("Generálás: nedvesség (0–1)", "Hová teszi a generátor: nedvesebb vagy szárazabb helyekre.", () =>
+            {
+                float v = (float)type.PreferredMoisture;
+                if (ImGui.SliderFloat("##pm", ref v, 0, 1, "%.2f")) scene.Edit(type, edited => edited.PreferredMoisture = Math.Round(v, 3)); Done();
+            });
+            Row("Generálás: textúra (0–1)", "Durva (homok) vagy finom (agyag) foltokba kerül.", () =>
+            {
+                float v = (float)type.PreferredTexture;
+                if (ImGui.SliderFloat("##pt", ref v, 0, 1, "%.2f")) scene.Edit(type, edited => edited.PreferredTexture = Math.Round(v, 3)); Done();
+            });
             ImGui.EndTable();
         }
         if (changed) ApplyScenario(world, $"{type.Name} módosítva.");
@@ -92,7 +110,6 @@ internal sealed class SoilEditorView(EditorPageContext context)
         if (scrollToSoilProfile) { scrollToSoilProfile = false; ImGui.SetScrollHereY(0.1f); }
         var shown = type.Profile();
         bool builtin = type.Horizons is not { Count: > 0 };
-        void Edit(Action<List<SoilHorizon>> change) => scene.EditHorizons(type, change);
 
         // The column: true thicknesses times the diorama scale, bedrock below, a depth scale on the left.
         float columnWidth = ImGui.GetFontSize() * 5, height = ImGui.GetFontSize() * 16;
@@ -101,14 +118,16 @@ internal sealed class SoilEditorView(EditorPageContext context)
         Vec2 at = ImGui.GetCursorScreenPos() + new Vec2(ImGui.GetFontSize() * 2.4f, 4);
         var draw = ImGui.GetWindowDrawList();
         float y = at.Y;
-        foreach (var h in shown) {
+        foreach (var h in shown)
+        {
             float next = y + (float)h.Depth * perMetre;
             draw.AddRectFilled(new Vec2(at.X, y), new Vec2(at.X + columnWidth, next), EditorStyle.U(Colour(h.Color)));
             y = next;
         }
         draw.AddRectFilled(new Vec2(at.X, y), new Vec2(at.X + columnWidth, at.Y + height), EditorStyle.U(Colour(SoilHorizon.Bedrock)));
         draw.AddRect(at, at + new Vec2(columnWidth, height), EditorStyle.U(EditorStyle.Hairline));
-        for (double m = 0; m <= total * 1.15; m += .5) {
+        for (double m = 0; m <= total * 1.15; m += .5)
+        {
             float ty = at.Y + (float)m * perMetre;
             draw.AddLine(new Vec2(at.X - 5, ty), new Vec2(at.X, ty), EditorStyle.TextMuted);
             draw.AddText(new Vec2(at.X - ImGui.GetFontSize() * 2.3f, ty - ImGui.GetFontSize() / 2), EditorStyle.TextMuted, $"{m:0.#} m");
@@ -120,17 +139,18 @@ internal sealed class SoilEditorView(EditorPageContext context)
         EditorStyle.Text(HudTheme.Muted, builtin ? "A talaj beépített szelvénye; az első módosítás a talajtípushoz másolja." : "Saját szelvény. A sorrend felülről lefelé.");
         ImGui.PopTextWrapPos();
         int remove = -1, up = -1;
-        for (int i = 0; i < shown.Count; i++) {
+        for (int i = 0; i < shown.Count; i++)
+        {
             var h = shown[i];
             ImGui.PushID("horizon" + i);
             var c = Colour(h.Color); var rgb = new System.Numerics.Vector3(c.X, c.Y, c.Z);
-            if (ImGui.ColorEdit3("##colour", ref rgb, ImGuiColorEditFlags.NoInputs)) Edit(horizons => horizons[i].Color = Hex(new Vec4(rgb, 1)));
+            if (ImGui.ColorEdit3("##colour", ref rgb, ImGuiColorEditFlags.NoInputs)) scene.SetHorizonColour(type, i, Hex(new Vec4(rgb, 1)));
             ImGui.SameLine();
             string name = h.Name; ImGui.SetNextItemWidth(ImGui.GetFontSize() * 11);
-            if (ImGui.InputText("##name", ref name, 40) && name.Trim().Length > 0) Edit(horizons => horizons[i].Name = name.Trim());
+            if (ImGui.InputText("##name", ref name, 40) && name.Trim().Length > 0) scene.SetHorizonName(type, i, name);
             ImGui.SameLine();
             float depth = (float)h.Depth; ImGui.SetNextItemWidth(ImGui.GetFontSize() * 6);
-            if (ImGui.DragFloat("##depth", ref depth, .01f, .01f, 5, "%.2f m")) Edit(horizons => horizons[i].Depth = Math.Round(Math.Clamp(depth, .01, 5), 2));
+            if (ImGui.DragFloat("##depth", ref depth, .01f, .01f, 5, "%.2f m")) scene.SetHorizonDepth(type, i, depth);
             ImGui.SameLine();
             ImGui.BeginDisabled(i == 0); if (EditorStyle.QuietButton("Fel")) up = i; ImGui.EndDisabled();
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled)) ImGui.SetTooltip("Egy szinttel feljebb.");
@@ -138,14 +158,14 @@ internal sealed class SoilEditorView(EditorPageContext context)
             ImGui.BeginDisabled(shown.Count == 1); if (EditorStyle.QuietButton("Törlés")) remove = i; ImGui.EndDisabled();
             ImGui.PopID();
         }
-        if (up > 0) Edit(own => { (own[up - 1], own[up]) = (own[up], own[up - 1]); });
-        if (remove >= 0) Edit(own => own.RemoveAt(remove));
+        if (up > 0) scene.MoveHorizonUp(type, up);
+        if (remove >= 0) scene.DeleteHorizon(type, remove);
         ImGui.BeginDisabled(shown.Count >= 8);
-        if (ImGui.Button("Új szint alulra")) Edit(own => own.Add(new SoilHorizon { Name = "Új szint", Depth = .3, Color = shown[^1].Color }));
+        if (ImGui.Button("Új szint alulra")) scene.AddHorizon(type);
         ImGui.EndDisabled();
         ImGui.SameLine();
         ImGui.BeginDisabled(builtin);
-        if (ImGui.Button("Beépített szelvény")) scene.Edit(type, edited => edited.Horizons = new());
+        if (ImGui.Button("Beépített szelvény")) scene.ResetHorizons(type);
         ImGui.EndDisabled();
         float scale = (float)scene.World.ProfileScale; ImGui.SetNextItemWidth(ImGui.GetFontSize() * 10);
         if (ImGui.SliderFloat("Nagyítás a dioráma oldalán", ref scale, 1, 30, "%.0f×")) scene.EditWorld(scene => scene.ProfileScale = Math.Round(scale));

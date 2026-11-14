@@ -59,11 +59,17 @@ internal sealed class RuleBookSession
         .Concat(editor.CustomFields.Where(field => field.Scope == scope.Id).Select(field => field.Name)).Distinct().ToArray();
     internal IReadOnlyList<RuleFieldUse> FieldUses()
     {
-        if (fieldUses == null || analyzedVersion != document.Version) {
+        if (fieldUses == null || analyzedVersion != document.Version)
+        {
             fieldUses = RuleFieldAnalysis.Build(RuleFieldCatalog.Objects, editor.Entries, RuleFieldCatalog.KeyDisplay); analyzedVersion = document.Version;
         }
         return fieldUses;
     }
+    // Text generation only reads owned models; formatting never needs a mutable transfer copy.
+    internal IReadOnlyList<string> Describe(RuleView rule, RuleSentence sentence) => Array.AsReadOnly(sentence.Rule(Resolve(rule)).ToArray());
+    internal string DescribeTerm(RuleEffectView effect, InfluenceTermView term, RuleSentence sentence) => sentence.Term(Resolve(effect), Resolve(term));
+    internal string DescribeCondition(InfluenceConditionView condition, RuleSentence sentence) => sentence.Condition(Resolve(condition));
+    internal string DescribeFactor(InfluenceFactorView factor, RuleSentence sentence) => sentence.Factor(Resolve(factor));
     internal int IndexOf(RuleView value) => editor.IndexOf(Resolve(value));
     internal void EditEffect(RuleView rule, RuleEffectView effect, Action<RuleEffect> change) => editor.EditEffect(Resolve(rule), Resolve(effect), change);
     internal RuleView CreateEmpty() => View(editor.CreateEmpty())!;

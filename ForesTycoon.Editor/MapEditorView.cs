@@ -48,7 +48,8 @@ internal sealed partial class MapEditorView(EditorPageContext context)
         float left = 250, right = 320;
         EditorStyle.BeginPanel("map-left", new Vec2(left, 0));
         EditorStyle.Section("Réteg");
-        foreach (var (layer, layerName, help) in Layers) {
+        foreach (var (layer, layerName, help) in Layers)
+        {
             if (ImGui.Selectable(layerName, mapLayer == layer)) mapLayer = layer;
             if (ImGui.IsItemHovered()) ImGui.SetTooltip(help);
         }
@@ -67,7 +68,8 @@ internal sealed partial class MapEditorView(EditorPageContext context)
             (scene.World.HeightPaint.Count, "festett terepsarok", world => world.HeightPaint.Clear()),
             (scene.World.ForestPaint.Count, "festett erdőcsempe", world => world.ForestPaint.Clear()),
             (scene.World.ForestFelling.Count, "kivágott erdőcsempe", world => world.ForestFelling.Clear()),
-            (scene.World.Springs.Count, "forrás", world => world.Springs.Clear()) }) {
+            (scene.World.Springs.Count, "forrás", world => world.Springs.Clear()) })
+        {
             if (count == 0) continue;
             ImGui.AlignTextToFramePadding(); ImGui.TextUnformatted($"{count} {label}"); ImGui.SameLine();
             if (ImGui.SmallButton("törlés##" + label)) { scene.EditWorld(clear); ApplyScenario(world, label + ": a festés törölve."); }
@@ -79,7 +81,8 @@ internal sealed partial class MapEditorView(EditorPageContext context)
         ImGui.SliderInt("##relief", ref relief, WorldScenario.MinimumRelief, WorldScenario.MaximumRelief, $"{relief} szint · {relief * 2} m");
         if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
             ImGui.SetTooltip("A legmagasabb terepszint (szintenként 2 m). 6: alföldi, dombos táj; 10–16: dombság és hegyvidék, meredek oldalakkal.\nA magassági övek, ha az alapértékükön állnak, vele együtt igazodnak.");
-        if (ImGui.IsItemDeactivatedAfterEdit() && relief != scene.World.MaxHeight) {
+        if (ImGui.IsItemDeactivatedAfterEdit() && relief != scene.World.MaxHeight)
+        {
             scene.SetRelief(relief);
             ApplyScenario(world, $"A domborzat legfeljebb {relief} szint ({relief * 2} m).");
         }
@@ -88,7 +91,8 @@ internal sealed partial class MapEditorView(EditorPageContext context)
         ImGui.BeginDisabled(captured);
         int sizeIndex = Array.IndexOf(MapSizes, scene.World.Size);
         ImGui.SetNextItemWidth(-1);
-        if (ImGui.Combo("##size", ref sizeIndex, MapSizes.Select(n => $"{n} × {n} csempe").ToArray(), MapSizes.Length) && sizeIndex >= 0 && MapSizes[sizeIndex] != scene.World.Size) {
+        if (ImGui.Combo("##size", ref sizeIndex, MapSizes.Select(n => $"{n} × {n} csempe").ToArray(), MapSizes.Length) && sizeIndex >= 0 && MapSizes[sizeIndex] != scene.World.Size)
+        {
             scene.Resize(MapSizes[sizeIndex]);
             ApplyScenario(world, $"A pálya mérete {scene.World.Size} × {scene.World.Size}; a festés törlődött, mert a csempék újraszámozódtak.");
         }
@@ -105,28 +109,33 @@ internal sealed partial class MapEditorView(EditorPageContext context)
         ImGui.EndChild(); ImGui.SameLine();
 
         EditorStyle.BeginPanel("map-right", new Vec2(0, 0));
-        if (mapLayer == MapLayer.Soil) {
+        if (mapLayer == MapLayer.Soil)
+        {
             EditorStyle.Section("Ecset");
             ImGui.TextWrapped("Bal gombbal húzva festesz; elengedéskor a tesztvilág újraépül.");
-            for (int i = 0; i < scene.World.SoilTypes.Count; i++) {
+            for (int i = 0; i < scene.World.SoilTypes.Count; i++)
+            {
                 var type = scene.World.SoilTypes[i];
                 if (SoilSwatch(type, i == brushSoil, "brush" + i)) brushSoil = i;
             }
             ImGui.SetNextItemWidth(-60); ImGui.SliderInt("Méret", ref brushSize, 1, 6);
         }
-        else if (mapLayer == MapLayer.Elevation) {
+        else if (mapLayer == MapLayer.Elevation)
+        {
             EditorStyle.Section("Ecset");
             ImGui.TextWrapped("Húzással egy lépcsőt emel vagy süllyeszt; a simítás az átlaghoz igazít. A szomszédos sarkok legfeljebb egy lépcsőnyire térnek el.");
             ImGui.RadioButton("Emelés", ref elevationTool, 0); ImGui.SameLine(); ImGui.RadioButton("Süllyesztés", ref elevationTool, 1); ImGui.SameLine(); ImGui.RadioButton("Simítás", ref elevationTool, 2);
             ImGui.SetNextItemWidth(-60); ImGui.SliderInt("Méret", ref brushSize, 1, 6);
         }
         else if (mapLayer == MapLayer.Zones) ZonePanel(world);
-        else if (mapLayer == MapLayer.Water) {
+        else if (mapLayer == MapLayer.Water)
+        {
             EditorStyle.Section("Ecset");
             ImGui.TextWrapped("A víz a domborzatból adódik: a zárt mélyedés a pereméig megtelik. A tó ecset a csempéket a vízszintre süllyeszti és partot emel köréjük; a szárazföld a vízszint fölé emel.");
             ImGui.RadioButton("Tó", ref waterTool, 0); ImGui.SameLine(); ImGui.RadioButton("Szárazföld", ref waterTool, 1);
             ImGui.RadioButton("Forrás", ref waterTool, 2); ImGui.SameLine(); ImGui.RadioButton("Forrás törlése", ref waterTool, 3);
-            if (waterTool == 2) {
+            if (waterTool == 2)
+            {
                 ImGui.SetNextItemWidth(-90); ImGui.SliderFloat("Hozam", ref springRate, 10, 20000, "%.0f mm/óra", ImGuiSliderFlags.Logarithmic);
                 EditorStyle.Text(HudTheme.Muted, $"= {springRate / 1000 * world.TileArea:0.#} m³/óra csempénként ({world.TileArea:0} m²)");
                 ImGui.TextWrapped("A forrás folyamatosan vizet ad a csempe felszínéhez. A víz a szintkülönbség szerint folyik: lejtőn lefelé, sík terepen szétterül, árokban végigfolyik, felfelé soha; ha a meder nem győzi, kiönt.");
@@ -134,7 +143,8 @@ internal sealed partial class MapEditorView(EditorPageContext context)
             if (scene.World.Springs.Count > 0) EditorStyle.Text(HudTheme.Muted, $"{scene.World.Springs.Count} forrás a pályán (fehér pont).");
             ImGui.SetNextItemWidth(-60); ImGui.SliderInt("Méret", ref brushSize, 1, 6);
         }
-        else if (mapLayer == MapLayer.Forest) {
+        else if (mapLayer == MapLayer.Forest)
+        {
             EditorStyle.Section("Ecset");
             ImGui.TextWrapped("Kezdő erdő: a festett csempén a választott faj természetes, vegyes korú állománya nő; az irtás üresen hagyja.");
             if (ImGui.Selectable("Irtás (nincs erdő)", brushSpecies < 0)) brushSpecies = -1;
@@ -160,7 +170,8 @@ internal sealed partial class MapEditorView(EditorPageContext context)
             ("soil.profile", "Talaj"), ("soil.bearing", "Teherbírás"), ("soil.fertility", "Termékenység"),
             ("water.root", "Gyökérzónavíz"), ("water.deep", "Mélyvíz"), ("water.surface", "Felszíni víz") })
             if (section.TryGetValue(key, out var value)) EditorStyle.Fact(label, value);
-        if (world.Map.IsNetworkTile(tile)) {
+        if (world.Map.IsNetworkTile(tile))
+        {
             EditorStyle.Fact("Elérési puffer", $"{world.RoadBufferMetres(tile):0.#} m");
             EditorStyle.Fact("Elérhető élő faanyag", structureSurvey != null && structureSurvey.TimberByRoad.TryGetValue(tile, out double volume)
                 ? $"{volume:F1} m³" : "Számítás…");
@@ -189,18 +200,21 @@ internal sealed partial class MapEditorView(EditorPageContext context)
         var draw = ImGui.GetWindowDrawList();
         var paint = painting ? StrokeColour() : default;
         for (int c = 0; c < columns; c++)
-            for (int r = 0; r < rows; r++) {
+            for (int r = 0; r < rows; r++)
+            {
                 int tile = c * rows + r;
                 Vec2 min = at + new Vec2(c, r) * cell;
                 draw.AddRectFilled(min, min + new Vec2(cell, cell), EditorStyle.U(stroke.Contains(tile) && painting ? paint : colour(tile)));
             }
         int over = -1;
         var mouse = ImGui.GetIO().MousePos;
-        if (hover) {
+        if (hover)
+        {
             int c = (int)((mouse.X - at.X) / cell), r = (int)((mouse.Y - at.Y) / cell);
             if (c >= 0 && c < columns && r >= 0 && r < rows) over = c * rows + r;
         }
-        if (over >= 0) {
+        if (over >= 0)
+        {
             int c = over / rows, r = over % rows, radius = painting ? brushSize - 1 : 0;
             draw.AddRect(at + new Vec2(c - radius, r - radius) * cell, at + new Vec2(c + radius + 1, r + radius + 1) * cell, EditorStyle.Selection, 2, ImDrawFlags.None, 2);
             if (painting && !strokeCancelled && ImGui.IsMouseDown(ImGuiMouseButton.Left))
@@ -214,12 +228,14 @@ internal sealed partial class MapEditorView(EditorPageContext context)
         if (mapLayer == MapLayer.Water && id == "pálya")
             foreach (int spring in scene.World.Springs.Keys.Where(t => t < columns * rows))
                 draw.AddCircleFilled(at + new Vec2(spring / rows + .5f, spring % rows + .5f) * cell, Math.Max(2, cell * .25f), EditorStyle.U(1, 1, 1, .95f));
-        if (selectedTile >= 0 && selectedTile < columns * rows) {
+        if (selectedTile >= 0 && selectedTile < columns * rows)
+        {
             int c = selectedTile / rows, r = selectedTile % rows;
             draw.AddRect(at + new Vec2(c, r) * cell, at + new Vec2(c + 1, r + 1) * cell, EditorStyle.U(1, 1, 1, .9f), 0, ImDrawFlags.None, 2);
         }
         if (painting && ImGui.IsKeyPressed(ImGuiKey.Escape)) CancelStroke();
-        if (!ImGui.IsMouseDown(ImGuiMouseButton.Left)) {
+        if (!ImGui.IsMouseDown(ImGuiMouseButton.Left))
+        {
             if (painting && stroke.Count > 0) { CommitStroke(world); stroke.Clear(); }
             strokeCancelled = false;
         }
@@ -228,7 +244,8 @@ internal sealed partial class MapEditorView(EditorPageContext context)
         return over;
     }
 
-    private Vec4 StrokeColour() => mapLayer switch {
+    private Vec4 StrokeColour() => mapLayer switch
+    {
         MapLayer.Elevation => elevationTool == 0 ? new(0.90f, 0.86f, 0.72f, 1) : elevationTool == 1 ? new(0.20f, 0.28f, 0.22f, 1) : new(0.6f, 0.6f, 0.55f, 1),
         MapLayer.Water => waterTool == 0 ? new(0.25f, 0.50f, 0.90f, 1) : new(0.55f, 0.48f, 0.34f, 1),
         MapLayer.Forest => brushSpecies < 0 ? new(0.30f, 0.26f, 0.20f, 1) : SpeciesColour(scene.World.Species[brushSpecies].Id),
@@ -241,7 +258,8 @@ internal sealed partial class MapEditorView(EditorPageContext context)
     internal void CommitStroke(GameWorld world)
     {
         int tiles = stroke.Count;
-        switch (mapLayer) {
+        switch (mapLayer)
+        {
             case MapLayer.Soil:
                 scene.PaintSoil(stroke, scene.World.SoilTypes[brushSoil].Id);
                 ApplyScenario(world, $"{tiles} csempe festve: {scene.World.SoilTypes[brushSoil].Name}."); return;
@@ -251,12 +269,14 @@ internal sealed partial class MapEditorView(EditorPageContext context)
                 scene.PaintForest(eligible, species);
                 ApplyScenario(world, $"{tiles} csempe: " + (brushSpecies < 0 ? "fakivágás; a faanyag a helyszínen marad." : scene.World.Species[brushSpecies].Name + " erdő.")); return;
         }
-        if (mapLayer == MapLayer.Water && waterTool >= 2) {
+        if (mapLayer == MapLayer.Water && waterTool >= 2)
+        {
             scene.PaintSprings(stroke, waterTool == 2 ? springRate : null);
             if (Try(() => ApplyProject(world, false))) message = waterTool == 2 ? $"{tiles} forrás, {springRate:0} mm/óra. Indítsd a szimulációt, és nézd, merre folyik a víz." : $"{tiles} csempéről a forrás törölve.";
             return;
         }
-        if (mapLayer == MapLayer.Water) {
+        if (mapLayer == MapLayer.Water)
+        {
             var targets = waterTool == 0 ? world.LakeTargets(stroke, scene.World.HeightPaint) : world.LandTargets(stroke);
             if (!world.Map.CanApplyHeightTargets(targets)) { message = "A terepmódosítás meglévő objektumot érintene."; return; }
             scene.PaintHeights(targets);
@@ -267,7 +287,8 @@ internal sealed partial class MapEditorView(EditorPageContext context)
         var corners = stroke.SelectMany(world.Map.TileCorners).Distinct().ToArray();
         int average = corners.Length == 0 ? 0 : (int)Math.Round(corners.Average(world.Map.NodeHeight));
         var heightTargets = new Dictionary<int, int>();
-        foreach (int node in corners) {
+        foreach (int node in corners)
+        {
             int height = world.Map.NodeHeight(node);
             heightTargets[node] = elevationTool switch { 0 => Math.Min(world.Map.MaximumHeight, height + 1), 1 => Math.Max(0, height - 1), _ => average };
         }
@@ -276,12 +297,14 @@ internal sealed partial class MapEditorView(EditorPageContext context)
         ApplyScenario(world, $"Domborzat: {tiles} csempe " + (elevationTool == 0 ? "emelve." : elevationTool == 1 ? "süllyesztve." : "simítva."));
     }
 
-    private Func<int, Vec4> TileColour(GameWorld world) => mapLayer switch {
+    private Func<int, Vec4> TileColour(GameWorld world) => mapLayer switch
+    {
         MapLayer.Elevation => tile => Mix(new(0.18f, 0.30f, 0.20f, 1), new(0.86f, 0.82f, 0.68f, 1), world.TileElevation(tile)),
         MapLayer.Zones => tile => EditorStyle.Dim(Colour(scene.World.ElevationZones[scene.World.ZoneOf(world.TileLevel(tile))].Color),
             world.TileSlope(tile) switch { TerrainSlope.Flat => 1f, TerrainSlope.Gentle => .86f, _ => .66f }),
         MapLayer.Biomes => tile => BiomeColour(world, tile),
-        MapLayer.Ground => tile => { var g = scene.World.Ground(TileBiome(world, tile), world.TileMoisture(tile), (int)world.TileSlope(tile)); return new Vec4(g.R, g.G, g.B, 1); },
+        MapLayer.Ground => tile => { var g = scene.World.Ground(TileBiome(world, tile), world.TileMoisture(tile), (int)world.TileSlope(tile)); return new Vec4(g.R, g.G, g.B, 1); }
+        ,
         MapLayer.Water => tile => world.IsWaterTile(tile) ? new(0.25f, 0.50f, 0.90f, 1)
             : Mix(Mix(new(0.22f, 0.24f, 0.20f, 1), new(0.62f, 0.60f, 0.52f, 1), world.TileElevation(tile)), new(0.30f, 0.62f, 0.95f, 1),
                 (float)Math.Sqrt(Math.Clamp((world.TileSurfaceWater(tile) - 0.5) / 100, 0, 1))),
@@ -289,8 +312,12 @@ internal sealed partial class MapEditorView(EditorPageContext context)
         MapLayer.Forest => tile => world.TileSpecies(tile) is var s && s != ForesTycoon.Ecology.ForestSpecies.None
             ? Mix(new(0.17f, 0.19f, 0.14f, 1), SpeciesColour(s.ToString()), 0.45f + 0.55f * (float)Math.Clamp(world.TileForest(tile) / 30, 0, 1))
             : world.IsWaterTile(tile) ? new(0.20f, 0.32f, 0.50f, 1) : new(0.17f, 0.19f, 0.14f, 1),
-        MapLayer.Tracks => tile => world.Map.IsRoadTile(tile) ? world.Map.GetRoadPaving(tile) switch {
-            RoadPaving.Asphalt => new(0.45f, 0.46f, 0.47f, 1), RoadPaving.Macadam => new(0.85f, 0.82f, 0.75f, 1), _ => new(0.62f, 0.43f, 0.26f, 1) } : world.Map.IsBuildingTile(tile) ? new(0.62f, 0.40f, 0.26f, 1) : world.Map.IsSkidTrail(tile) ? new(0.85f, 0.55f, 0.28f, 1)
+        MapLayer.Tracks => tile => world.Map.IsRoadTile(tile) ? world.Map.GetRoadPaving(tile) switch
+        {
+            RoadPaving.Asphalt => new(0.45f, 0.46f, 0.47f, 1),
+            RoadPaving.Macadam => new(0.85f, 0.82f, 0.75f, 1),
+            _ => new(0.62f, 0.43f, 0.26f, 1)
+        } : world.Map.IsBuildingTile(tile) ? new(0.62f, 0.40f, 0.26f, 1) : world.Map.IsSkidTrail(tile) ? new(0.85f, 0.55f, 0.28f, 1)
             : EditorStyle.Dim(SoilColour(world, tile), .45f),
         MapLayer.Trafficability => tile => world.IsUnpaved(tile) ? TrafficColour(world.Trafficability(tile)) : new(0.45f, 0.45f, 0.45f, 1),
         _ => tile => SoilColour(world, tile)
@@ -326,7 +353,8 @@ internal sealed partial class MapEditorView(EditorPageContext context)
         ImGui.TextWrapped($"Egy öv a lenti övtől a felső szintjéig tart; a legfelső felfelé nyitott. A terep 0–{world.Map.MaximumHeight}. szintig emelhető, a víz a {world.Map.WaterHeight}. szintig áll.");
         var zones = scene.World.ElevationZones;
         int remove = -1;
-        for (int i = 0; i < zones.Count; i++) {
+        for (int i = 0; i < zones.Count; i++)
+        {
             var zone = zones[i];
             ImGui.PushID("zone" + i);
             var c = Colour(zone.Color); var rgb = new System.Numerics.Vector3(c.X, c.Y, c.Z);
@@ -336,29 +364,21 @@ internal sealed partial class MapEditorView(EditorPageContext context)
             if (ImGui.InputText("##name", ref name, 40) && name.Trim().Length > 0) scene.Edit(zone, edited => edited.Name = name.Trim());
             if (zones.Count > 1) { ImGui.SameLine(); if (EditorStyle.QuietButton("Törlés")) remove = i; }
             int low = i == 0 ? 0 : zones[i - 1].MaxLevel + 1;
-            if (i < zones.Count - 1) {
+            if (i < zones.Count - 1)
+            {
                 int top = zone.MaxLevel; ImGui.AlignTextToFramePadding(); ImGui.TextUnformatted($"{low}. szinttől"); ImGui.SameLine(); ImGui.SetNextItemWidth(ImGui.GetFontSize() * 6);
                 // The upper bound stays between this zone's floor and the next zone's top, so the order never breaks.
-                if (ImGui.InputInt("szintig##top", ref top)) scene.Edit(zone, edited => edited.MaxLevel = Math.Clamp(top, low, zones[i + 1].MaxLevel - 1));
-            } else { ImGui.AlignTextToFramePadding(); EditorStyle.Text(HudTheme.Muted, $"{low}. szinttől felfelé"); }
+                if (ImGui.InputInt("szintig##top", ref top)) scene.SetElevationBoundary(zone, top);
+            }
+            else { ImGui.AlignTextToFramePadding(); EditorStyle.Text(HudTheme.Muted, $"{low}. szinttől felfelé"); }
             ImGui.PopID();
             ImGui.Spacing();
         }
-        if (remove >= 0) {
-            // The removed zone's levels go to the zone above it; removing the top zone opens the one below upwards.
-            scene.EditWorld(world => {
-                var owned = world.ElevationZones;
-                if (remove == owned.Count - 1) owned[remove - 1].MaxLevel = owned[remove].MaxLevel;
-                owned.RemoveAt(remove);
-            });
-        }
-        ImGui.BeginDisabled(zones.Count >= 8 || zones[^1].MaxLevel - (zones.Count > 1 ? zones[^2].MaxLevel : -1) < 2);
-        if (ImGui.Button("Új öv a legfelső alá", new Vec2(-1, 0))) {
-            int floor = zones.Count > 1 ? zones[^2].MaxLevel + 1 : 0;
-            scene.EditWorld(world => world.ElevationZones.Insert(world.ElevationZones.Count - 1, new ElevationZoneDefinition { Id = "zone" + Guid.NewGuid().ToString("N")[..6], Name = "Új öv", Color = "#9A9A9A", MaxLevel = floor }));
-        }
+        if (remove >= 0) scene.DeleteElevationZone(zones[remove]);
+        ImGui.BeginDisabled(!scene.CanAddElevationZone);
+        if (ImGui.Button("Új öv a legfelső alá", new Vec2(-1, 0))) scene.AddElevationZone();
         ImGui.EndDisabled();
-        if (ImGui.Button("Alapértelmezett övek", new Vec2(-1, 0))) scene.EditWorld(scene => scene.ElevationZones = ElevationZoneDefinition.Defaults(scene.MaxHeight));
+        if (ImGui.Button("Alapértelmezett övek", new Vec2(-1, 0))) scene.ResetElevationZones();
     }
 
     private void MapLegend(GameWorld world)
@@ -366,7 +386,8 @@ internal sealed partial class MapEditorView(EditorPageContext context)
         var draw = ImGui.GetWindowDrawList();
         int tiles = world.TileGrid.Columns * world.TileGrid.Rows;
         string Share(int count) => $"{100.0 * count / Math.Max(1, tiles):0}%";
-        if (mapLayer == MapLayer.Forest) {
+        if (mapLayer == MapLayer.Forest)
+        {
             var counts = Enumerable.Range(0, tiles).Select(world.TileSpecies).Where(s => s != ForesTycoon.Ecology.ForestSpecies.None)
                 .GroupBy(s => s).OrderByDescending(g => g.Count()).Take(6).ToArray();
             Legend(counts.Select(g => (SpeciesColour(g.Key.ToString()),
@@ -374,33 +395,38 @@ internal sealed partial class MapEditorView(EditorPageContext context)
             if (counts.Length == 0) EditorStyle.Text(HudTheme.Muted, "Nincs erdő a pályán.");
             return;
         }
-        if (mapLayer is MapLayer.Soil or MapLayer.Tracks) {
+        if (mapLayer is MapLayer.Soil or MapLayer.Tracks)
+        {
             var counts = new int[scene.World.SoilTypes.Count];
             for (int t = 0; t < tiles; t++) { int s = world.SoilIndex(t); if (s < counts.Length) counts[s]++; }
             Legend(scene.World.SoilTypes.Select((type, i) => (Colour(type.Color), $"{type.Name} · {Share(counts[i])}")));
             if (mapLayer == MapLayer.Tracks) { EditorStyle.Text(HudTheme.Muted, "szürke: aszfalt · világos: makadám · barna: földút/épület · narancs: közelítőnyom"); }
             return;
         }
-        if (mapLayer == MapLayer.Ground) {
+        if (mapLayer == MapLayer.Ground)
+        {
             var used = new HashSet<string>(scene.World.Biomes.SelectMany(b => new[] { b.DryGround, b.WetGround, b.SteepGround }));
             Legend(scene.World.GroundMaterials.Where(m => used.Contains(m.Id)).Select(m => (Colour(m.Color), m.Name)));
             EditorStyle.Text(HudTheme.Muted, "a csempék színe keveredik: száraz és nedves a nedvesség, meredek a lejtő szerint");
             return;
         }
-        if (mapLayer == MapLayer.Biomes) {
+        if (mapLayer == MapLayer.Biomes)
+        {
             var counts = BiomeCounts(world);
             Legend(scene.World.Biomes.Select((biome, i) => (Colour(biome.Color), $"{biome.Name} · {Share(counts[i])}")));
             if (counts[^1] > 0) EditorStyle.Text(HudTheme.Muted, $"szürke: biom nélküli öv · {Share(counts[^1])}");
             return;
         }
-        if (mapLayer == MapLayer.Zones) {
+        if (mapLayer == MapLayer.Zones)
+        {
             var counts = new int[scene.World.ElevationZones.Count];
             for (int t = 0; t < tiles; t++) counts[scene.World.ZoneOf(world.TileLevel(t))]++;
             Legend(scene.World.ElevationZones.Select((zone, i) => (Colour(zone.Color), $"{zone.Name} · {Share(counts[i])}")));
             EditorStyle.Text(HudTheme.Muted, "sötétebb: enyhe vagy meredek lejtő");
             return;
         }
-        (string Low, string High, Vec4 A, Vec4 B) = mapLayer switch {
+        (string Low, string High, Vec4 A, Vec4 B) = mapLayer switch
+        {
             MapLayer.Elevation => ("alacsony", "magas", new Vec4(0.18f, 0.30f, 0.20f, 1), new Vec4(0.86f, 0.82f, 0.68f, 1)),
             MapLayer.GroundWater => ("száraz", "telített", new Vec4(0.30f, 0.25f, 0.17f, 1), new Vec4(0.30f, 0.56f, 0.88f, 1)),
             MapLayer.Water => ("száraz", "100+ mm felszíni víz · sötétkék: tó", new Vec4(0.42f, 0.42f, 0.36f, 1), new Vec4(0.30f, 0.62f, 0.95f, 1)),

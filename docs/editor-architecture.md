@@ -23,14 +23,17 @@ flowchart TD
 | `EditorUiState` | Ablakonkénti kijelölések, szűrők, megnyitott fülek, térképecset és kameraválasztások. Nem kerül a projektfájlba és nem része a dokumentumrevíziónak. |
 | `MapEditorView` | Rétegek, térképkijelölés, ecset-előnézet és építményelhelyezés. A kész ecsetvonás jelenetparancsot indít. |
 | `SoilEditorView`, `SpeciesEditorView`, `BiomeEditorView`, `MissionEditorView` | A megfelelő típusok listája és űrlapja; a változtatásokat a jelenetparancsoknak adják át. |
-| `TreeShapeEditorView` | Faalak- és színűrlapok, valamint az előnézethez tartozó CPU/GPU-erőforrások életciklusa. A beépített összehasonlítást külön fajadat-nézetből állítja elő. |
+| `TreeShapeEditorView` | Faalak- és színűrlapok, kijelölt fázis és beviteli mezők. Az előnézetet külön komponensre delegálja. |
+| `TreeAppearancePreview` / `TreePreviewCamera` / Core `EditorPreviewBuild<T>` | Előnézeti felület és GPU-életciklus / kamera és beviteli gesztusok / soros, összevont háttérépítés és eredményátvétel. |
 | `RuleWorkspaceView` | A külön szabályoldalak összeállítása, közös kiválasztás és az alkalmazási kérés továbbítása; az összefüggés-, folyamat-, vezérlő- és készletoldalak összehangolása. |
 | `RuleBookView` | A szabálykönyv listája, csoportjai, hatásgráfja, ellenőrző űrlapja és számítási szerkesztője. |
 | `RuleObjectBrowserView`, `RuleOverviewView` | Objektumhierarchia és mezők böngészése / mezőhasználat és több író megjelenítése; navigáció parancsokon és visszahívásokon keresztül. |
 | `RuleLibraryView` | Sablontár és az aktív kötések felülete. A sablonok tárolását, átnevezését, importját és törlését a Core végzi. |
 | `RuleFieldPickerView`, `RuleCurveEditorView`, `RuleCardWidgets` | Újrahasználható beviteli és megjelenítési elemek. Saját gesztus-/megjelenítési állapotuk van, a munkadokumentumhoz nem férnek hozzá. |
 | `BehaviorEditorView`, `DynamicsEditorView` | Gráf-, vezérlő- és készletfelület; az adat és a helyi előzmény a Core megfelelő szerkesztési állapotában marad. |
-| `CurrentRulesView` | A futó szabálykatalógus és rendszertérkép, továbbá a közös tuningprojekció. A jármű-munkaterületet külön komponensre delegálja. |
+| `CurrentRulesView` | A katalógusoldal komponenseinek összeállítása és a külső belépési pontok továbbítása. |
+| Core `RuleCatalogSession` / `RuleCatalogLayout` / `RuleCatalogNavigation` | Index, keresési gyorsítótár és dokumentumtuning-projekció / katalóguselrendezés / ablakonkénti kijelölés és navigáció. |
+| `RuleCatalogSidebarView`, `RuleCatalogMapView`, `RuleCatalogInspectorView`, `RuleTuningView` | Oldalsáv, rendszertérkép, részletező panel és megosztott tuningmezők; külön példányok, a szülőnézetre mutató referencia nélkül. |
 | `VehicleGeometryView` | Tengelyelrendezés, modellkötés, geometriai fogantyúk és járműpálya-próba. A változtatások ugyanazokat a tuningparancsokat használják. |
 | `TrialEditorView` / Core `TrialService` | Próbabeállítások és eredményrajzolás / megszakítható CPU-próba, forrásrevízió- és térképméret-ellenőrzés. |
 
@@ -214,3 +217,51 @@ kimeneten, egymást követő build és tesztindítással történt:
 - A szabálykönyv, a sablontár, a mezőhasználati nézet és az önálló ablak
   natív képernyőképeinek ellenőrzése: rendben.
 - `git diff --check`: tiszta.
+
+
+## További karbantarthatósági lépések: 1–4, 2026-11-06
+
+Az előző lezárás után kijelölt négy fejlesztés megvalósítása:
+
+1. **Katalógusnézet bontása.** A `CurrentRulesView.cs` 67 soros összeállító
+   komponens lett. A katalógusindex és tuningprojekció a Core-ba, az elrendezés,
+   navigáció, oldalsáv, térkép, részletek és tuningfelület külön tulajdonoshoz
+   került. A bezárás leiratkozik a tuningváltozás eseményéről.
+2. **Faelőnézet bontása.** A `TreeShapeEditorView` a 259 soros űrlapkomponens.
+   A `TreeAppearancePreview` birtokolja az előnézeti felületet és a GPU-erőforrást,
+   a `TreePreviewCamera` a kameragesztusokat, a Core `EditorPreviewBuild<T>` a
+   háttérfeladatokat. Csak a hostszál veszi át az elkészült eredményt. Az újabb
+   kérés a futó munka után indul, a köztes kérések összevonódnak; bezáráskor a
+   felület nem vár a CPU-építésre, a késői hibák megfigyeltek maradnak.
+3. **Nevesített szerkesztési parancsok.** A magassági övek sorrendje és korlátai,
+   a biomok öv-/anyagkötései és elemszámkorlátai, a talajrétegek sorrendje,
+   vastagsága és korlátai, a küldetések egyedi azonosítója és feltételei,
+   valamint a faalak-/színértékek ellenőrzése a Core-ban történik.
+   Az űrlapok ezeket a műveleteket hívják. Az egyszerű szöveges és skalármezők
+   továbbra is használhatják az általános, tulajdonjogot és előzményt ellenőrző
+   `Edit` parancsot; a teljes piszkozat érvényességét alkalmazáskor ellenőrizzük.
+4. **Mérés és célzott optimalizálás.** A CPU-mérőparancs valóban fordítható,
+   32 és 256 szabályos dokumentumokat használ. A szabályszöveg már nem igényel
+   DTO-másolatokat, a revízió hash-e egy csak belül használt aggregátumot olvas,
+   a tranzakció a frissen ellenőrzött kezdő pillanatképet használja újra.
+   A változatlan előzményállapothoz nem készül új szöveges különbségmagyarázat.
+   A független `Capture()` szerződése megmaradt.
+
+A magassági öv törlése most a hozzá tartozó biomokat is a szintjeit átvevő
+szomszédos övhöz rendeli; az Undo/Redo mindkét változást együtt kezeli.
+Alapértelmezett övek/biomok visszaállítása sem hagy érvénytelen hivatkozást.
+A hiányzó opcionális faalak-szótárak csak szerkesztéskor materializálódnak.
+Közvetlenül az Életút nézetbe lépve is helyes a készültségjelzés, és hibás
+háttérépítés nem jelölheti késznek a régebbi eredményt. A nyers ágváz építése
+induláskor rögzített fénybeállítást használ.
+
+Az `EditorComponentTests` az összetevők elkülönítését, keresési invalidálást,
+eseményleiratkozást és a háttérépítés sikeres/hibás/bezárt életciklusát vizsgálja.
+Az `EditorAuthoringCommandTests` az új műveletek határait, hivatkozásait,
+tranzakcióit és az elavult kijelölések elutasítását ellenőrzi.
+Az `EditorProjectionTests` a szövegek és revíziók korábbi eredménnyel való
+egyezését, a másolatok függetlenségét és a függő módosítás visszaállítását védi.
+A natív próba az Életút nézet közvetlen megnyitását is gyakorolja.
+
+A mérés módszere, megismétlése és tényleges eredményei:
+[Editor teljesítménymérés](editor-maintenance-performance.md).

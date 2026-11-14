@@ -47,7 +47,8 @@ internal sealed partial class RuleBookView
     {
         if (term.AmountField.Length > 0) yield return (term.AmountField, term.Decrease ? -1 : 1, "Erősség forrása", false);
         foreach (var factor in term.Factors) yield return (factor.Source, ConnectionDirection(term, factor), ConnectionLabel(scope, effect, term, factor), factor.Shape == "step");
-        foreach (var condition in term.Conditions) {
+        foreach (var condition in term.Conditions)
+        {
             int direction = condition.Comparison is "less" or "atMost" or "notEqual" ? -1 : 1;
             yield return (condition.Field, direction, direction > 0 ? "Kiváltja" : "Gátolja", true);
             if (condition.ValueCurve is { } curve) yield return (curve.Source, -direction * curve.ToCurve().Sign, "Küszöb görbéje", true);
@@ -86,7 +87,8 @@ internal sealed partial class RuleBookView
         {
             bool picked = false;
             ImGui.TextUnformatted(label); ImGui.SetNextItemWidth(-1);
-            if (ImGui.BeginCombo("##" + label, Label(current), ImGuiComboFlags.HeightLarge)) {
+            if (ImGui.BeginCombo("##" + label, Label(current), ImGuiComboFlags.HeightLarge))
+            {
                 foreach (string f in choices.Prepend(outside))
                     if (ImGui.Selectable(Label(f) + "##" + f, f == current)) { set(f); picked = true; }
                 ImGui.EndCombo();
@@ -97,17 +99,21 @@ internal sealed partial class RuleBookView
         changed |= Choose("Hová?", effect.To, into, v => Edit(value => { value.To = v; if (!v.Contains('.') || writable.Contains(v)) value.Spread = "even"; }));
         if (effect.Target == effect.To) EditorStyle.Text(HudTheme.Bad, "A forrás és a cél nem lehet ugyanaz.");
         int dot = effect.To.IndexOf('.');
-        if (dot > 0 && scope.Collections.FirstOrDefault(c => c.Name == effect.To[..dot]) is { } collection) {
+        if (dot > 0 && scope.Collections.FirstOrDefault(c => c.Name == effect.To[..dot]) is { } collection)
+        {
             int spread = effect.Spread == "downhill" ? 1 : 0;
             ImGui.RadioButton("Egyenlően", ref spread, 0); ImGui.SameLine(); ImGui.RadioButton("Lejtés szerint", ref spread, 1);
-            if (spread != (effect.Spread == "downhill" ? 1 : 0)) {
-                Edit(value => {
+            if (spread != (effect.Spread == "downhill" ? 1 : 0))
+            {
+                Edit(value =>
+                {
                     value.Spread = spread == 1 ? "downhill" : "even";
                     if (spread == 1 && value.Level.Length == 0) value.Level = RuleEngine.Scope(collection.Target).Fields.FirstOrDefault(f => f.Name == "waterLevel")?.Name ?? "";
                 });
                 changed = true;
             }
-            if (effect.Spread == "downhill") {
+            if (effect.Spread == "downhill")
+            {
                 var levels = RuleEngine.Scope(collection.Target).Fields.Where(f => !f.Name.Contains('.') && scope.Fields.Any(o => o.Name == f.Name)).Select(f => f.Name).ToArray();
                 changed |= ObjectFieldPicker("Mi szerint lejt?", rule.Scope, effect.Level, levels, v => Edit(value => value.Level = v));
                 EditorStyle.Text(HudTheme.Muted, "Minden tag annyival több részt kap, amennyivel alacsonyabban van; a magasabban lévők semmit.");
@@ -136,26 +142,32 @@ internal sealed partial class RuleBookView
     private void DrawInfluenceGraph(GameWorld world, RuleView rule, RuleScope scope, ref bool changed)
     {
         var readable = ReadableFields(world, scope);
-        if (ImGui.CollapsingHeader("+ Forrás, cél vagy művelet hozzáadása")) {
-            if (rule.Effects.Count > 0) {
+        if (ImGui.CollapsingHeader("+ Forrás, cél vagy művelet hozzáadása"))
+        {
+            if (rule.Effects.Count > 0)
+            {
                 int effectIndex = Math.Clamp(selectedInfluence, 0, rule.Effects.Count - 1);
                 var selected = rule.Effects[effectIndex];
                 bool hasTerm = selected.Influence.Terms.Count > 0;
                 ImGui.RadioButton($"új kapcsolatként: {FieldDisplay(rule.Scope, selected.Target)}", ref addSourceAs, 0);
-                if (hasTerm) {
+                if (hasTerm)
+                {
                     ImGui.SameLine();
                     ImGui.RadioButton($"szorzóként: {selected.Influence.Terms[Math.Clamp(selectedTerm, 0, selected.Influence.Terms.Count - 1)].Name}", ref addSourceAs, 1);
-                } else addSourceAs = 0;
+                }
+                else addSourceAs = 0;
                 int termIndex = addSourceAs == 1 ? Math.Clamp(selectedTerm, 0, selected.Influence.Terms.Count - 1) : -1;
                 changed |= ObjectFieldPicker("Forrás (azonnal bekötve)", rule.Scope, "", readable,
                     f => ConnectSource(rule, f, effectIndex, termIndex, ref selectedInfluence, ref selectedTerm));
-            } else EditorStyle.Text(HudTheme.Muted, "Előbb adj meg egy célt; a forrás arra kötődik be.");
+            }
+            else EditorStyle.Text(HudTheme.Muted, "Előbb adj meg egy célt; a forrás arra kötődik be.");
             changed |= ObjectFieldPicker("Cél vagy művelet", rule.Scope, "", WritableFields(world, scope)
-                .Concat(scope.Actions.Select(a => a.Name)).ToArray(), field => {
-                var target = ruleBook.EnsureVisualTarget(rule, field);
-                int index = rule.Effects.IndexOf(target);
-                selectedInfluence = index; selectedTerm = 0;
-            });
+                .Concat(scope.Actions.Select(a => a.Name)).ToArray(), field =>
+                {
+                    var target = ruleBook.EnsureVisualTarget(rule, field);
+                    int index = rule.Effects.IndexOf(target);
+                    selectedInfluence = index; selectedTerm = 0;
+                });
         }
         bool pending = pendingInfluenceRule == rule.Id && pendingInfluenceSource != null;
         EditorStyle.Text(pending ? HudTheme.AmberAccent : HudTheme.Muted, pending
@@ -178,7 +190,8 @@ internal sealed partial class RuleBookView
         var feeding = Enumerable.Range(0, rule.Effects.Count).Select(e => Enumerable.Range(0, terms.Length).Where(i => terms[i].Effect == e).ToArray()).ToArray();
         // Each target sits level with the middle of its connections, never overlapping the previous one.
         var targetY = new float[rule.Effects.Count]; var targetH = new float[rule.Effects.Count]; float nextFree = top;
-        for (int e = 0; e < rule.Effects.Count; e++) {
+        for (int e = 0; e < rule.Effects.Count; e++)
+        {
             targetH[e] = Tall(feeding[e].Length);
             float middle = feeding[e].Length > 0 ? feeding[e].Average(i => termY[i] + termH[i] / 2) - targetH[e] / 2 : nextFree;
             targetY[e] = Math.Max(nextFree, middle); nextFree = targetY[e] + targetH[e] + gap;
@@ -221,10 +234,12 @@ internal sealed partial class RuleBookView
         bool Lit(string source, int term, int effect) => focus == null || focus == "source:" + source || focus == "term:" + term || focus == "target:" + effect;
         uint Tone(uint colour, bool lit) => lit ? colour : EditorStyle.Fade(colour, .25f);
         var plugged = new HashSet<string>();
-        for (int i = 0; i < terms.Length; i++) {
+        for (int i = 0; i < terms.Length; i++)
+        {
             var entry = terms[i]; var t = entry.Value;
             bool chosen = selectedInfluence == entry.Effect && selectedTerm == entry.Term;
-            for (int j = 0; j < inputs[i].Length; j++) {
+            for (int j = 0; j < inputs[i].Length; j++)
+            {
                 var input = inputs[i][j];
                 int source = Array.IndexOf(sources, input.Source);
                 if (source < 0) continue;
@@ -244,7 +259,8 @@ internal sealed partial class RuleBookView
         bool dragging = draggingInfluenceSource != null && draggingInfluenceRule == rule.Id && ImGui.IsMouseDown(ImGuiMouseButton.Left)
             && Vec2.Distance(mouse, influenceDragStart) >= 5;
         InfluenceGraphSourceLabels.Clear();
-        for (int i = 0; i < sources.Length; i++) {
+        for (int i = 0; i < sources.Length; i++)
+        {
             var p = Source(i); string source = sources[i];
             var connections = terms.SelectMany(t => GraphInputs(rule.Scope, rule.Effects[t.Effect], t.Value).Where(input => input.Source == source)).ToArray();
             string[] labels = connections.Select(c => c.Gate ? "Feltétel" : c.Label).Distinct().ToArray();
@@ -260,12 +276,14 @@ internal sealed partial class RuleBookView
                 ObjectDisplay(rule.Scope, FieldObject(rule.Scope, source)) + (range.Length > 0 ? " · " + range : ""), EditorStyle.TextMuted,
                 FieldDisplay(rule.Scope, source), EditorStyle.TextBright, label, EditorStyle.U(labelColour), over || chosen);
             EditorStyle.Port(draw, SourcePort(i), EditorStyle.U(EditorStyle.InputKind), plugged.Contains("source:" + i));
-            if (over) {
+            if (over)
+            {
                 hoverNow = "source:" + source;
                 ImGui.SetTooltip(FieldHelp(rule.Scope, source) + "\nHúzd vagy kattints rá, majd kattints egy célra vagy hatásra.");
                 if (ImGui.IsMouseClicked(ImGuiMouseButton.Left)) { draggingInfluenceSource = source; draggingInfluenceRule = rule.Id; influenceDragStart = mouse; }
                 // A click without movement selects the source for click-to-connect.
-                if (ImGui.IsMouseReleased(ImGuiMouseButton.Left) && draggingInfluenceSource == source && Vec2.Distance(mouse, influenceDragStart) < 5) {
+                if (ImGui.IsMouseReleased(ImGuiMouseButton.Left) && draggingInfluenceSource == source && Vec2.Distance(mouse, influenceDragStart) < 5)
+                {
                     bool same = pendingInfluenceSource == source && pendingInfluenceRule == rule.Id;
                     pendingInfluenceSource = same ? null : source; pendingInfluenceRule = same ? null : rule.Id;
                 }
@@ -275,7 +293,8 @@ internal sealed partial class RuleBookView
         bool Dropped() => ImGui.IsMouseReleased(ImGuiMouseButton.Left) && draggingInfluenceRule == rule.Id && draggingInfluenceSource != null
             && Vec2.Distance(mouse, influenceDragStart) >= 5;
         bool Clicked() => ImGui.IsMouseClicked(ImGuiMouseButton.Left) && pendingInfluenceRule == rule.Id && pendingInfluenceSource != null;
-        for (int i = 0; i < terms.Length; i++) {
+        for (int i = 0; i < terms.Length; i++)
+        {
             var entry = terms[i]; var t = entry.Value; var p = Term(i);
             var effect = rule.Effects[entry.Effect];
             int gates = t.Conditions.Count + t.Factors.Count(f => f.Shape == "step"), multipliers = t.Factors.Count(f => f.Shape != "step");
@@ -288,15 +307,17 @@ internal sealed partial class RuleBookView
             uint termPort = !t.Enabled ? EditorStyle.U(HudTheme.Muted) : EditorStyle.TextBright;
             for (int j = 0; j < inputs[i].Length; j++) EditorStyle.Port(draw, TermIn(i, j), inputs[i][j].Gate ? EditorStyle.U(HudTheme.Info) : termPort, true);
             EditorStyle.Port(draw, TermOut(i), termPort, true);
-            if (over) {
+            if (over)
+            {
                 hoverNow = "term:" + i;
-                ImGui.SetTooltip(Sentences(world, rule.Scope).Term(effect.Capture(), t.Capture()) + "\nKattintás: beállítások. Forrás ráhúzása: új szorzó.");
+                ImGui.SetTooltip(ruleBook.DescribeTerm(effect, t, Sentences(world, rule.Scope)) + "\nKattintás: beállítások. Forrás ráhúzása: új szorzó.");
                 if (Clicked()) { changed |= ConnectSource(rule, pendingInfluenceSource, entry.Effect, entry.Term, ref selectedInfluence, ref selectedTerm); consumed = true; }
                 else if (ImGui.IsMouseClicked(ImGuiMouseButton.Left)) { selectedInfluence = entry.Effect; selectedTerm = entry.Term; }
                 if (Dropped()) changed |= ConnectSource(rule, draggingInfluenceSource, entry.Effect, entry.Term, ref selectedInfluence, ref selectedTerm);
             }
         }
-        for (int i = 0; i < rule.Effects.Count; i++) {
+        for (int i = 0; i < rule.Effects.Count; i++)
+        {
             var p = Target(i); var effect = rule.Effects[i];
             string mode = effect.Mode == "action" ? "művelet" : effect.Mode == "approach" ? $"közelít · {RuleSentence.Number(effect.ApproachPerYear)} / év" : effect.Mode == "set" ? "beállítja"
                 : effect.Mode == "flow" ? "áramlás › " + (effect.To.Length == 0 ? "ki a rendszerből" : FieldTitle(rule.Scope, effect.To))
@@ -307,7 +328,8 @@ internal sealed partial class RuleBookView
                 effect.Target.Length == 0 ? "Kívülről" : FieldDisplay(rule.Scope, effect.Target), EditorStyle.TextBright, mode + (range.Length > 0 ? " · " + range : ""), 0, over);
             for (int j = 0; j < feeding[i].Length; j++) EditorStyle.Port(draw, TargetIn(i, j), EditorStyle.U(EditorStyle.OutputKind), true);
             if (feeding[i].Length == 0) EditorStyle.Port(draw, Target(i) + new Vec2(0, targetH[i] / 2), EditorStyle.U(EditorStyle.OutputKind), false);
-            if (over) {
+            if (over)
+            {
                 hoverNow = "target:" + i;
                 ImGui.SetTooltip(FieldHelp(rule.Scope, effect.Target) + "\nKattintás: kijelölés. Forrás ráhúzása: új kapcsolat.");
                 if (Clicked()) { changed |= ConnectSource(rule, pendingInfluenceSource, i, -1, ref selectedInfluence, ref selectedTerm); consumed = true; }
@@ -316,18 +338,21 @@ internal sealed partial class RuleBookView
             }
         }
         // The wire being made follows the mouse from the source's port.
-        if (dragging) {
+        if (dragging)
+        {
             int source = Array.IndexOf(sources, draggingInfluenceSource);
             if (source >= 0) EditorStyle.Wire(draw, SourcePort(source), mouse, EditorStyle.Selection, 2.4f, false, EditorStyle.Canvas);
         }
-        if (pending && hovered) {
+        if (pending && hovered)
+        {
             int source = Array.IndexOf(sources, pendingInfluenceSource);
             if (source >= 0) EditorStyle.Wire(draw, SourcePort(source), mouse, EditorStyle.Selection, 2f, true, EditorStyle.Canvas);
         }
         influenceHover = hoverNow; influenceHoverRule = hoverNow == null ? null : rule.Id;
         // A connection made, Esc, or a click on empty canvas ends click-to-connect.
         if (consumed || pending && ImGui.IsKeyPressed(ImGuiKey.Escape)
-            || pending && hovered && ImGui.IsMouseClicked(ImGuiMouseButton.Left) && !sources.Select((s, i) => Hit(Source(i), sourceSize)).Any(h => h)) {
+            || pending && hovered && ImGui.IsMouseClicked(ImGuiMouseButton.Left) && !sources.Select((s, i) => Hit(Source(i), sourceSize)).Any(h => h))
+        {
             pendingInfluenceSource = null; pendingInfluenceRule = null;
         }
         if (ImGui.IsMouseReleased(ImGuiMouseButton.Left) || draggingInfluenceRule != rule.Id) { draggingInfluenceSource = null; draggingInfluenceRule = null; }

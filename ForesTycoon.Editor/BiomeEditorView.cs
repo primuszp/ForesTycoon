@@ -28,7 +28,8 @@ internal sealed class BiomeEditorView(EditorPageContext context, MapEditorView m
         EditorStyle.BeginPanel("biome-list", new Vec2(ImGui.GetFontSize() * 15.5f, 0));
         EditorStyle.Section("Biomok");
         selectedBiome = Math.Clamp(selectedBiome, 0, Math.Max(0, scene.World.Biomes.Count - 1));
-        foreach (var zone in scene.World.ElevationZones) {
+        foreach (var zone in scene.World.ElevationZones)
+        {
             EditorStyle.Text(HudTheme.Muted, zone.Name);
             for (int i = 0; i < scene.World.Biomes.Count; i++)
                 if (scene.World.Biomes[i].Zone == zone.Id && ColourSwatch(scene.World.Biomes[i].Name, Colour(scene.World.Biomes[i].Color), i == selectedBiome, "biome" + i)) selectedBiome = i;
@@ -36,16 +37,17 @@ internal sealed class BiomeEditorView(EditorPageContext context, MapEditorView m
         }
         ImGui.Spacing();
         ImGui.BeginDisabled(scene.World.Biomes.Count >= 32);
-        if (ImGui.Button("Új biom", new Vec2(-1, 0))) {
+        if (ImGui.Button("Új biom", new Vec2(-1, 0)))
+        {
             var zone = scene.World.Biomes.Count > 0 ? scene.World.Biomes[selectedBiome].Zone : scene.World.ElevationZones[0].Id;
-            scene.EditWorld(scene => scene.Biomes.Add(new BiomeDefinition { Id = "biome" + Guid.NewGuid().ToString("N")[..6], Name = "Új biom", Zone = zone, Color = "#8A9A6A" }));
+            scene.AddBiome(zone);
             selectedBiome = scene.World.Biomes.Count - 1;
         }
         ImGui.EndDisabled();
         ImGui.BeginDisabled(scene.World.Biomes.Count == 0);
-        if (ImGui.Button("Törlés", new Vec2(-1, 0))) { scene.EditWorld(scene => scene.Biomes.RemoveAt(selectedBiome)); selectedBiome = 0; }
+        if (ImGui.Button("Törlés", new Vec2(-1, 0))) { scene.DeleteBiome(scene.World.Biomes[selectedBiome]); selectedBiome = 0; }
         ImGui.EndDisabled();
-        if (ImGui.Button("Alapértelmezett biomok", new Vec2(-1, 0))) { scene.EditWorld(scene => scene.Biomes = BiomeDefinition.Defaults()); selectedBiome = 0; }
+        if (ImGui.Button("Alapértelmezett biomok", new Vec2(-1, 0))) { scene.ResetBiomes(); selectedBiome = 0; }
         EditorStyle.EndPanel(); ImGui.SameLine();
 
         EditorStyle.BeginPanel("biome-form", Vec2.Zero);
@@ -54,24 +56,35 @@ internal sealed class BiomeEditorView(EditorPageContext context, MapEditorView m
         EditorStyle.Title(biome.Name);
         var counts = map.BiomeCounts(world); int tiles = world.TileGrid.Columns * world.TileGrid.Rows;
         EditorStyle.Text(HudTheme.Muted, $"A tesztvilágban {counts[selectedBiome]} csempe ({100.0 * counts[selectedBiome] / Math.Max(1, tiles):0}%) · szabályokban: tile.biome = {selectedBiome} · azonosító: {biome.Id}");
-        ParameterTable("biome-fields", Row => {
+        ParameterTable("biome-fields", Row =>
+        {
             Row("Név", "A térképen, a csempeadatoknál és a játékban.", () => { string n = biome.Name; if (ImGui.InputText("##name", ref n, 60) && n.Trim().Length > 0) scene.Edit(biome, edited => edited.Name = n.Trim()); });
-            Row("Szín", "A Biom térképréteg színe.", () => { var c = Colour(biome.Color); var rgb = new System.Numerics.Vector3(c.X, c.Y, c.Z);
-                if (ImGui.ColorEdit3("##colour", ref rgb, ImGuiColorEditFlags.NoInputs)) scene.Edit(biome, edited => edited.Color = Hex(new Vec4(rgb, 1))); });
-            Row("Magassági öv", "Ebben az övben fordul elő. Az övek határa a Térkép · Magassági övek rétegen állítható.", () => {
+            Row("Szín", "A Biom térképréteg színe.", () =>
+            {
+                var c = Colour(biome.Color); var rgb = new System.Numerics.Vector3(c.X, c.Y, c.Z);
+                if (ImGui.ColorEdit3("##colour", ref rgb, ImGuiColorEditFlags.NoInputs)) scene.Edit(biome, edited => edited.Color = Hex(new Vec4(rgb, 1)));
+            });
+            Row("Magassági öv", "Ebben az övben fordul elő. Az övek határa a Térkép · Magassági övek rétegen állítható.", () =>
+            {
                 int zone = Math.Max(0, scene.World.ElevationZones.FindIndex(z => z.Id == biome.Zone));
-                if (ImGui.Combo("##zone", ref zone, scene.World.ElevationZones.Select(z => z.Name).ToArray(), scene.World.ElevationZones.Count)) scene.Edit(biome, edited => edited.Zone = scene.World.ElevationZones[zone].Id); });
+                if (ImGui.Combo("##zone", ref zone, scene.World.ElevationZones.Select(z => z.Name).ToArray(), scene.World.ElevationZones.Count)) scene.SetBiomeZone(biome, scene.World.ElevationZones[zone].Id);
+            });
             string[] names = scene.World.GroundMaterials.Select(m => m.Name).ToArray();
-            void Ground(string label, string help, Func<string> get, Action<string> set) => Row(label, help, () => {
+            void Ground(string label, string help, Func<string> get, Action<string> set) => Row(label, help, () =>
+            {
                 int i = Math.Max(0, scene.World.GroundMaterials.FindIndex(m => m.Id == get()));
-                if (ImGui.Combo("##" + label, ref i, names, names.Length)) set(scene.World.GroundMaterials[i].Id); });
-            Ground("Száraz felszín", "Ez borítja a biom csempéit, ahol a talaj száraz vagy átlagos.", () => biome.DryGround, v => scene.Edit(biome, edited => edited.DryGround = v));
-            Ground("Nedves felszín", "A nedves csempék (patak, mélyedés, tópart) felé erre vált át, fokozatosan.", () => biome.WetGround, v => scene.Edit(biome, edited => edited.WetGround = v));
-            Ground("Meredek felszín", "A lejtős csempéken ez keveredik be: enyhe lejtőn kicsit, meredeken teljesen.", () => biome.SteepGround, v => scene.Edit(biome, edited => edited.SteepGround = v));
+                if (ImGui.Combo("##" + label, ref i, names, names.Length)) set(scene.World.GroundMaterials[i].Id);
+            });
+            Ground("Száraz felszín", "Ez borítja a biom csempéit, ahol a talaj száraz vagy átlagos.", () => biome.DryGround, v => scene.SetBiomeGround(biome, BiomeGroundKind.Dry, v));
+            Ground("Nedves felszín", "A nedves csempék (patak, mélyedés, tópart) felé erre vált át, fokozatosan.", () => biome.WetGround, v => scene.SetBiomeGround(biome, BiomeGroundKind.Wet, v));
+            Ground("Meredek felszín", "A lejtős csempéken ez keveredik be: enyhe lejtőn kicsit, meredeken teljesen.", () => biome.SteepGround, v => scene.SetBiomeGround(biome, BiomeGroundKind.Steep, v));
             Row("Részarány", "Ha az övben több biom van, ekkora súllyal osztoznak rajta, kb. 16 csempés foltokban.", () =>
                 Number("##share", () => biome.Share, v => scene.Edit(biome, edited => edited.Share = v), .1, "%.2f", .01, 1000));
-            Row("Leírás", "A táj jellege; a súgóban és a tervezésnél segít.", () => { string d = biome.Description ?? "";
-                if (ImGui.InputTextMultiline("##description", ref d, 400, new Vec2(-1, ImGui.GetTextLineHeight() * 3.4f))) scene.Edit(biome, edited => edited.Description = d.Trim()); });
+            Row("Leírás", "A táj jellege; a súgóban és a tervezésnél segít.", () =>
+            {
+                string d = biome.Description ?? "";
+                if (ImGui.InputTextMultiline("##description", ref d, 400, new Vec2(-1, ImGui.GetTextLineHeight() * 3.4f))) scene.Edit(biome, edited => edited.Description = d.Trim());
+            });
         });
         ImGui.Spacing();
         ImGui.PushTextWrapPos(0);
@@ -93,8 +106,9 @@ internal sealed class BiomeEditorView(EditorPageContext context, MapEditorView m
             if (ColourSwatch(materials[i].Name, Colour(materials[i].Color), i == selectedMaterial, "material" + i)) selectedMaterial = i;
         ImGui.Spacing();
         ImGui.BeginDisabled(materials.Count >= 32);
-        if (ImGui.Button("Új felszínanyag", new Vec2(-1, 0))) {
-            scene.EditWorld(scene => scene.GroundMaterials.Add(new GroundMaterialDefinition { Id = "ground" + Guid.NewGuid().ToString("N")[..6], Name = "Új felszín", Color = materials[selectedMaterial].Color, Pattern = materials[selectedMaterial].Pattern }));
+        if (ImGui.Button("Új felszínanyag", new Vec2(-1, 0)))
+        {
+            scene.AddMaterial(materials[selectedMaterial]);
             selectedMaterial = materials.Count - 1;
         }
         ImGui.EndDisabled();
@@ -104,7 +118,8 @@ internal sealed class BiomeEditorView(EditorPageContext context, MapEditorView m
         if (ImGui.Button("Törlés", new Vec2(-1, 0))) { scene.DeleteMaterial(material); selectedMaterial = 0; }
         ImGui.EndDisabled();
         if (users.Count > 0) ImGui.TextWrapped("Biom használja, ezért nem törölhető.");
-        if (ImGui.Button("Alapértelmezett anyagok", new Vec2(-1, 0))) {
+        if (ImGui.Button("Alapértelmezett anyagok", new Vec2(-1, 0)))
+        {
             scene.ResetMaterials(); selectedMaterial = 0;
         }
         EditorStyle.EndPanel(); ImGui.SameLine();
@@ -113,14 +128,19 @@ internal sealed class BiomeEditorView(EditorPageContext context, MapEditorView m
         materials = scene.World.GroundMaterials; material = materials[selectedMaterial];
         EditorStyle.Title(material.Name);
         EditorStyle.Text(HudTheme.Muted, users.Count == 0 ? $"Nem használja biom · azonosító: {material.Id}" : $"Használja: {string.Join(", ", users)} · azonosító: {material.Id}");
-        ParameterTable("material-fields", Row => {
+        ParameterTable("material-fields", Row =>
+        {
             Row("Név", "A biomok felszínválasztójában.", () => { string n = material.Name; if (ImGui.InputText("##name", ref n, 60) && n.Trim().Length > 0) scene.Edit(material, edited => edited.Name = n.Trim()); });
-            Row("Szín", "A talaj alapszíne; a játék a szomszédos csempék színével keveri, és nagy foltokban kissé világosítja, sötétíti.", () => {
+            Row("Szín", "A talaj alapszíne; a játék a szomszédos csempék színével keveri, és nagy foltokban kissé világosítja, sötétíti.", () =>
+            {
                 var c = Colour(material.Color); var rgb = new System.Numerics.Vector3(c.X, c.Y, c.Z);
-                if (ImGui.ColorEdit3("##colour", ref rgb, ImGuiColorEditFlags.NoInputs)) scene.Edit(material, edited => edited.Color = Hex(new Vec4(rgb, 1))); });
-            Row("Minta", "A felszín apró részletei a játékban: fűszálak, homokfodrok, sziklarepedések, kavicsok…", () => {
+                if (ImGui.ColorEdit3("##colour", ref rgb, ImGuiColorEditFlags.NoInputs)) scene.Edit(material, edited => edited.Color = Hex(new Vec4(rgb, 1)));
+            });
+            Row("Minta", "A felszín apró részletei a játékban: fűszálak, homokfodrok, sziklarepedések, kavicsok…", () =>
+            {
                 int p = Math.Max(0, Array.IndexOf(GroundMaterialDefinition.Patterns, material.Pattern));
-                if (ImGui.Combo("##pattern", ref p, PatternNames, PatternNames.Length)) scene.Edit(material, edited => edited.Pattern = GroundMaterialDefinition.Patterns[p]); });
+                if (ImGui.Combo("##pattern", ref p, PatternNames, PatternNames.Length)) scene.Edit(material, edited => edited.Pattern = GroundMaterialDefinition.Patterns[p]);
+            });
         });
         ImGui.Spacing();
         // A strip of the material next to the biomes' other grounds, as the map draws them.

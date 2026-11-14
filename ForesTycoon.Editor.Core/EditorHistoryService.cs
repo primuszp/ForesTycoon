@@ -1,4 +1,4 @@
-#nullable enable
+﻿#nullable enable
 using System;
 using System.Collections.Generic;
 
@@ -54,6 +54,7 @@ internal sealed class EditorHistoryService<T> where T : notnull
     {
         if (IsEditing) return false;
         var next = capture();
+        if (history.Current is { } unchanged && EqualityComparer<T>.Default.Equals(unchanged.State, next)) return false;
         return Record(next, history.Current is { } current ? describe(current.State, next) : "Megnyitás");
     }
 
@@ -61,7 +62,7 @@ internal sealed class EditorHistoryService<T> where T : notnull
     {
         if (IsEditing) throw new InvalidOperationException("Előbb zárd le a folyamatban lévő szerkesztést.");
         Checkpoint();
-        var edit = new EditToken(this, capture(), summary); active = edit;
+        var edit = new EditToken(this, history.Current!.State, summary); active = edit;
         try { EditStarted?.Invoke(); }
         catch { active = null; throw; }
         return edit;
@@ -79,7 +80,8 @@ internal sealed class EditorHistoryService<T> where T : notnull
     internal void Execute(string summary, Action change)
     {
         if (active != null) active.ApplyCommand(change);
-        else {
+        else
+        {
             using var edit = BeginEdit(summary);
             ((EditToken)edit).ApplyCommand(change);
             edit.Commit();
@@ -126,10 +128,12 @@ internal sealed class EditorHistoryService<T> where T : notnull
         if (!ReferenceEquals(active, edit)) return false;
         var after = capture(); bool changed = !EqualityComparer<T>.Default.Equals(edit.Before, after);
         active = null;
-        try {
+        try
+        {
             if (cancel && changed) restore(edit.Before);
             else if (!cancel && changed) Record(after, edit.Summary);
-        } catch { active = edit; throw; }
+        }
+        catch { active = edit; throw; }
         EditFinished?.Invoke(cancel); return changed;
     }
 

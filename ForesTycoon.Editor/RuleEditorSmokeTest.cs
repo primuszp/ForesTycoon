@@ -256,6 +256,12 @@ namespace ForesTycoon.Editor
                     while (!editor.TreePreviewReady && started.Elapsed < TimeSpan.FromSeconds(30)) { Frames(1); System.Threading.Thread.Sleep(5); }
                     Frames(3);
                 }
+                // Opening directly into life-course mode must not depend on a previously built single-tree preview.
+                editor.SetTreePreviewForTest(2, -1, false);
+                editor.ShowSpeciesAppearance(oakIndex, 4); PreviewFrames();
+                Require(editor.TreePreviewReady, "Direct life-course preview was not built: " + editor.TreePreviewError);
+                FramebufferCapture.SavePng(Path.Combine(output, "species-life-course-initial.png"), width, height);
+                editor.SetTreePreviewForTest(0, -1, false);
                 editor.ShowSpeciesAppearance(oakIndex, 4); PreviewFrames();
                 Require(editor.TreePreviewReady, "Tree preview was not built.");
                 FramebufferCapture.SavePng(Path.Combine(output, "species-appearance.png"), width, height);

@@ -23,11 +23,13 @@ internal sealed class MissionEditorView(EditorPageContext context)
             if (ImGui.Selectable($"{missions[i].Title}##mission{i}", selectedMission == i)) selectedMission = i;
         if (missions.Count == 0) EditorStyle.Text(HudTheme.Muted, "Ennek a pályának még nincs küldetése.");
         ImGui.Spacing();
-        if (ImGui.Button("Új küldetés") && missions.Count < 32) {
+        if (ImGui.Button("Új küldetés") && missions.Count < 32)
+        {
             scene.AddMission();
             selectedMission = missions.Count - 1;
         }
-        if (missions.Count > 0) {
+        if (missions.Count > 0)
+        {
             ImGui.SameLine();
             if (ImGui.Button("Törlés")) { scene.DeleteMission(missions[Math.Clamp(selectedMission, 0, missions.Count - 1)]); selectedMission = Math.Max(0, selectedMission - 1); }
         }
@@ -38,7 +40,8 @@ internal sealed class MissionEditorView(EditorPageContext context)
         ImGui.EndChild();
         ImGui.SameLine();
         EditorStyle.BeginPanel("missions-body", Vec2.Zero);
-        if (missions.Count == 0) {
+        if (missions.Count == 0)
+        {
             EditorStyle.Text(HudTheme.Muted, "Az „Új küldetés” gomb felvesz egy célt: mérőszám, küszöb és határidő.");
             ImGui.EndChild(); return;
         }
@@ -46,29 +49,30 @@ internal sealed class MissionEditorView(EditorPageContext context)
         var goal = missions[selectedMission];
         EditorStyle.Section("Küldetés");
         string title = goal.Title, description = goal.Description ?? "", id = goal.Id, metric = goal.Metric;
-        ImGui.SetNextItemWidth(420); if (ImGui.InputText("Cím", ref title, 128) && title.Trim().Length > 0) scene.Edit(goal, edited => edited.Title = title);
-        ImGui.SetNextItemWidth(420); if (ImGui.InputText("Azonosító", ref id, 64) && id.Trim().Length > 0 && !missions.Any(m => m != goal && m.Id == id)) scene.Edit(goal, edited => edited.Id = id);
+        ImGui.SetNextItemWidth(420); if (ImGui.InputText("Cím", ref title, 128) && title.Trim().Length > 0) scene.SetMissionTitle(goal, title);
+        ImGui.SetNextItemWidth(420); if (ImGui.InputText("Azonosító", ref id, 64) && id.Trim().Length > 0 && !missions.Any(m => m != goal && m.Id == id)) scene.RenameMission(goal, id);
         if (ImGui.InputTextMultiline("Leírás", ref description, 1024, new Vec2(420, 70))) scene.Edit(goal, edited => edited.Description = description);
 
         EditorStyle.Section("Feltétel");
         string current = GameWorld.MissionMetrics.FirstOrDefault(m => m.Key == goal.Metric).Name ?? goal.Metric;
         ImGui.SetNextItemWidth(260);
-        if (ImGui.BeginCombo("Mérőszám", current)) {
+        if (ImGui.BeginCombo("Mérőszám", current))
+        {
             foreach (var (key, name) in GameWorld.MissionMetrics)
-                if (ImGui.Selectable(name, goal.Metric == key)) scene.Edit(goal, edited => edited.Metric = key);
+                if (ImGui.Selectable(name, goal.Metric == key)) scene.SetMissionMetric(goal, key);
             ImGui.EndCombo();
         }
         ImGui.SameLine(); ImGui.SetNextItemWidth(160);
         if (ImGui.InputText("Kulcs", ref metric, 128) && (metric.StartsWith("world.", StringComparison.Ordinal) || metric.StartsWith("stock.", StringComparison.Ordinal)))
-            scene.Edit(goal, edited => edited.Metric = metric);
+            scene.SetMissionMetric(goal, metric);
         if (ImGui.IsItemHovered()) ImGui.SetTooltip("Bármely world.* mező vagy a dinamika egy stock.* készlete.");
         int comparison = Math.Max(0, Array.IndexOf(MissionGoal.Comparisons, goal.Comparison));
         ImGui.SetNextItemWidth(80);
-        if (ImGui.Combo("##cmp", ref comparison, new[] { "legalább", "legfeljebb" }, 2)) scene.Edit(goal, edited => edited.Comparison = MissionGoal.Comparisons[comparison]);
+        if (ImGui.Combo("##cmp", ref comparison, new[] { "legalább", "legfeljebb" }, 2)) scene.SetMissionCondition(goal, MissionGoal.Comparisons[comparison], goal.Target);
         ImGui.SameLine(); double target = goal.Target; ImGui.SetNextItemWidth(160);
-        if (ImGui.InputDouble("Cél", ref target, 0, 0, "%.2f") && double.IsFinite(target)) scene.Edit(goal, edited => edited.Target = target);
+        if (ImGui.InputDouble("Cél", ref target, 0, 0, "%.2f") && double.IsFinite(target)) scene.SetMissionCondition(goal, goal.Comparison, target);
         double deadline = goal.DeadlineYear; ImGui.SetNextItemWidth(160);
-        if (ImGui.InputDouble("Határidő (erdőév, 0 = nincs)", ref deadline, 0, 0, "%.2f")) scene.Edit(goal, edited => edited.DeadlineYear = Math.Clamp(deadline, 0, 1000));
+        if (ImGui.InputDouble("Határidő (erdőév, 0 = nincs)", ref deadline, 0, 0, "%.2f")) context.Try(() => scene.SetMissionDeadline(goal, deadline));
 
         EditorStyle.Section("Most a tesztvilágban");
         try { goal.Validate(); } catch (System.IO.InvalidDataException e) { EditorStyle.Text(HudTheme.Bad, e.Message); }

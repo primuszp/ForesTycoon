@@ -1,4 +1,4 @@
-# Documentation / Dokumentáció
+﻿# Documentation / Dokumentáció
 
 [English project overview](../README.md) | [Magyar projektáttekintés](../README.hu.md)
 
@@ -74,3 +74,4 @@ A nyitott játék vagy IDE buildmappáit nem törli. A megtartott bizonyítékok
 - [Hosszú szimuláció és tesztelakadás](stability-stress-2026-11-13.md) — GC-várakozás reprodukciója, anyagmérleg-javítás és újrafuttatható stresszpróbák.
 
 - [Memória és teljesítmény](memory-performance-2026-11-13.md) — objektumélettartam, allokációcsökkentés és hosszú futású ellenőrzések.
+- [Editor: karbantarthatósági teljesítménymérés](editor-maintenance-performance.md) – megismételhető CPU-/foglalásmérés és az optimalizálás eredményei.

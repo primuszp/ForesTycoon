@@ -1,4 +1,4 @@
-#nullable enable
+﻿#nullable enable
 using System;
 using System.Collections.Generic;
 using System.Security.Cryptography;
@@ -65,14 +65,26 @@ internal sealed class EditorDocument
         History.Reset();
     }
 
-    internal string Revision() => revision ??= RevisionOf(Capture());
+    internal string Revision() => revision ??= RevisionOf(CurrentProject());
 
-    internal RuleProject Capture()
-        => new RuleProject {
-            Presentation = Presentation.Clone(), Name = Name, Tuning = Tuning.Capture(), Behaviors = Behaviors.Draft, Dynamics = Dynamics.Draft, Algorithms = Algorithms,
-            Rules = Rules, Fields = Fields, RemovedStarters = RemovedStarters,
-            Authoring = Authoring, World = World
-        }.Clone();
+    internal RuleProject Capture() => CurrentProject().Clone();
+
+    // A borrowed aggregate is used synchronously for hashing only; it never crosses the document boundary.
+    private RuleProject CurrentProject()
+        => new RuleProject
+        {
+            Presentation = Presentation,
+            Name = Name,
+            Tuning = Tuning.Capture(),
+            Behaviors = Behaviors.Draft,
+            Dynamics = Dynamics.Draft,
+            Algorithms = Algorithms,
+            Rules = Rules,
+            Fields = Fields,
+            RemovedStarters = RemovedStarters,
+            Authoring = Authoring,
+            World = World
+        };
 
     internal static string RevisionOf(RuleProject project) => project.ContentRevision() + ":"
         + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(project.Authoring ?? new()))));
