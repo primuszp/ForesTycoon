@@ -16,8 +16,9 @@ internal static class RuleProjectCli
     {
         if (args.Length == 0) return false;
         if (args.Length == 2 && args[0] == "--export-opening-scene") {
+            string expected = RuleProjectFile.Revision(args[1]);
             var project = WorldLoader.OpeningProject(); project.Algorithms = null;
-            RuleProject.WriteAtomic(args[1], project.ToJson());
+            RuleProjectFile.Write(args[1], project.ToJson(), expected);
             Console.WriteLine("Nyitójelenet projektje mentve: " + Path.GetFullPath(args[1])); return true;
         }
         if (args[0] == "--compare-project" && args.Length == 6 && args[4] == "--world") {
@@ -45,15 +46,17 @@ internal static class RuleProjectCli
             if (result.Error != null) throw result.Error;
             Console.WriteLine(result.RuntimeRevision); return true;
         }
-        if (args[0] == "--project-file-revision" && args.Length == 2) { Console.WriteLine(ProjectFileGuard.Revision(args[1]) ?? "missing"); return true; }
+        if (args[0] == "--project-file-revision" && args.Length == 2) { Console.WriteLine(RuleProjectFile.Revision(args[1]) ?? "missing"); return true; }
         if (args[0] == "--export-algorithm-graphs" && args.Length == 3) {
             var bundle = AlgorithmBundle.ImportWorkspace(args[1]); RuleProject.WriteAtomic(args[2], bundle.ToJson());
             Console.WriteLine($"{bundle.Files.Count} gráf, {bundle.Files.Sum(f => f.Nodes.Count)} csomópont; {bundle.Revision()}"); return true;
         }
         if (args[0] == "--attach-algorithm-graphs" && args.Length == 4) {
-            var project = RuleProject.FromJson(File.ReadAllText(args[1])); var bundle = AlgorithmBundle.FromJson(File.ReadAllText(args[2]));
+            var (source, expected) = RuleProjectFile.Read(args[1]);
+            if (source == null) throw new FileNotFoundException("A projektfájl nem található.", args[1]);
+            var project = RuleProject.FromJson(source); var bundle = AlgorithmBundle.FromJson(File.ReadAllText(args[2]));
             project.Algorithms = AlgorithmBuild.Store(bundle, args[3], args[1]); GameWorld.ValidateRuleProject(project);
-            RuleProject.WriteAtomic(args[1], project.ToJson()); Console.WriteLine(project.Algorithms.Revision); return true;
+            RuleProjectFile.Write(args[1], project.ToJson(), expected); Console.WriteLine(project.Algorithms.Revision); return true;
         }
         if (args[0] == "--compile-project" && args.Length == 2) {
             var project = ReadRuntimeProject(args[1]); GameWorld.ValidateRuleProject(project);
@@ -61,9 +64,10 @@ internal static class RuleProjectCli
             var result = AlgorithmBuild.CompileAsync(project.Algorithms).GetAwaiter().GetResult(); Console.WriteLine(result.AssemblyPath); return true;
         }
         if (args[0] == "--new-project" && args.Length == 2) {
+            string expected = RuleProjectFile.Revision(args[1]);
             var project = GameWorld.DefaultRuleProject(); var workspace = AlgorithmBuild.FindWorkspace();
             if (workspace != null) project.Algorithms = AlgorithmBuild.Store(AlgorithmBundle.ImportWorkspace(workspace), workspace, args[1]);
-            RuleProject.WriteAtomic(args[1], project.ToJson()); Console.WriteLine(Path.GetFullPath(args[1])); return true;
+            RuleProjectFile.Write(args[1], project.ToJson(), expected); Console.WriteLine(Path.GetFullPath(args[1])); return true;
         }
         if (args[0] == "--validate-project" && args.Length == 2) {
             var project = ReadRuntimeProject(args[1]); GameWorld.ValidateRuleProject(project);

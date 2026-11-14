@@ -91,8 +91,8 @@ namespace ForesTycoon
                 ecosystem = preparedEcosystem ?? ForestSpeciesBook.WithContext(worldSpecies,
                     () => new Ecosystem(map, forestYearSeconds, soilModel, climate, initialResponses ?? behaviorPolicy.Responses));
                 timberCargo = systems.Add(new TimberCargoSystem());
-                vehicles = systems.Add(new VehicleSystem(timberCargo, route => VehicleRoadRoute.Create(this.map, route)) { TimeScale = VehicleTimeScale });
-                vehicles.RoadRouteWorkFactory = (route, result) => VehicleRoadRoute.CreateWork(this.map, route, result);
+                vehicles = systems.Add(new VehicleSystem(timberCargo) { TimeScale = VehicleTimeScale });
+                BindVehicleRoutes();
                 effects = systems.Add(new WorldEffectSystem());
                 InitializeLogistics();
                 if (!deferRules) WithSpecies(() => { InitializeRuleProject(); return 0; });
@@ -186,11 +186,12 @@ namespace ForesTycoon
 
         private IEnumerator<int> updateWork;
         private double updateDelta;
-        private int workPhase;
+        private enum TickPhase { Dynamics, Ecology, Logistics, Rules, Wildlife, Systems, Count }
+        private TickPhase workPhase;
         private bool pendingForestRateRefresh;
-        private readonly double[] workCpu = new double[6];
-        private static readonly string[] WorkPhaseNames = { "dynamics", "ecology", "logistics", "rules", "wildlife", "systems" };
-        internal string ActiveWorkProcess => WorkPhaseNames[workPhase];
+        private readonly double[] workCpu = new double[(int)TickPhase.Count];
+        private static readonly string[] WorkPhaseNames = Array.ConvertAll(Enum.GetNames<TickPhase>(), name => name.ToLowerInvariant());
+        internal string ActiveWorkProcess => WorkPhaseNames[(int)workPhase];
         internal bool UpdatePending => updateWork != null;
         private readonly Queue<Action> tickBoundaryActions = new();
         internal int LastUpdateWorkUnits { get; private set; }
@@ -211,30 +212,32 @@ namespace ForesTycoon
                 throw new InvalidOperationException("A pending tick must retain its time step.");
             if (generationWork != null || commands.WorkPending || RuleExportPending) return false;
             updateDelta = fixedDeltaSeconds;
-            if (updateWork == null) { Array.Clear(workCpu); workPhase = 0; updateWork = UpdateWork(fixedDeltaSeconds).GetEnumerator(); }
+            if (updateWork == null) { Array.Clear(workCpu); workPhase = TickPhase.Dynamics; updateWork = UpdateWork(fixedDeltaSeconds).GetEnumerator(); }
             LastUpdateWorkUnits = 0;
-            int measuredPhase = workPhase;
+            TickPhase measuredPhase = workPhase;
             long phaseStarted = ProfileUpdates ? Stopwatch.GetTimestamp() : 0;
             try {
                 while (LastUpdateWorkUnits < budget) {
                     bool more = SimulationWork.MoveNext(updateWork, budget - LastUpdateWorkUnits);
                     if (ProfileUpdates && measuredPhase != workPhase) {
-                        workCpu[measuredPhase] += Stopwatch.GetElapsedTime(phaseStarted).TotalMilliseconds;
+                        workCpu[(int)measuredPhase] += Stopwatch.GetElapsedTime(phaseStarted).TotalMilliseconds;
                         measuredPhase = workPhase; phaseStarted = Stopwatch.GetTimestamp();
                     }
                     if (!more) {
                         updateWork.Dispose(); updateWork = null;
                         if (ProfileUpdates) {
-                            workCpu[measuredPhase] += Stopwatch.GetElapsedTime(phaseStarted).TotalMilliseconds;
-                            LastUpdateProfile = new(workCpu[0] + workCpu[1], workCpu[2] + workCpu[3], workCpu[4], workCpu[5]);
-                            LastRuleStepMilliseconds = workCpu[3] > 0 ? workCpu[3] : null;
+                            workCpu[(int)measuredPhase] += Stopwatch.GetElapsedTime(phaseStarted).TotalMilliseconds;
+                            double rulesMs = workCpu[(int)TickPhase.Rules];
+                            LastUpdateProfile = new(workCpu[(int)TickPhase.Dynamics] + workCpu[(int)TickPhase.Ecology],
+                                workCpu[(int)TickPhase.Logistics] + rulesMs, workCpu[(int)TickPhase.Wildlife], workCpu[(int)TickPhase.Systems]);
+                            LastRuleStepMilliseconds = rulesMs > 0 ? rulesMs : null;
                         }
                         PublishBoundaryActions();
                         return true;
                     }
                     LastUpdateWorkUnits += Math.Max(1, updateWork.Current);
                 }
-                if (ProfileUpdates) workCpu[measuredPhase] += Stopwatch.GetElapsedTime(phaseStarted).TotalMilliseconds;
+                if (ProfileUpdates) workCpu[(int)measuredPhase] += Stopwatch.GetElapsedTime(phaseStarted).TotalMilliseconds;
                 return false;
             }
             catch when (updateWork != null) { updateWork.Dispose(); updateWork = null; faulted = true; throw; }
@@ -255,22 +258,24 @@ namespace ForesTycoon
                 pendingForestRateRefresh = false;
             }
             foreach (int unit in dynamics.StepWork(fixedDeltaSeconds, forest.ForestYear * ecosystem.ForestYearSeconds)) yield return unit;
-            workPhase = 1;
+            workPhase = TickPhase.Ecology;
             foreach (int unit in ecosystem.UpdateWork(fixedDeltaSeconds)) yield return unit;
-            workPhase = 2;
+            workPhase = TickPhase.Logistics;
             // Both fleets use the same sampled clock for this logical tick, including dynamic formula hooks.
             vehicles.TimeScale = Tuning[Tune.VehicleTimeScale];
             vehicles.Spec = Tuning.SampleTruck();
             foreach (int unit in Logistics.UpdateWork(fixedDeltaSeconds * vehicles.TimeScale)) yield return unit;
-            workPhase = 3;
+            workPhase = TickPhase.Rules;
+            // Machinery moves in logistics. Its passages affect the road before the timed rules read it.
             foreach (int unit in TrafficWork()) yield return unit;
             foreach (int unit in Environment.RefreshVegetationWork()) yield return unit;
             foreach (int unit in WeatherRoadsWork(fixedDeltaSeconds)) yield return unit;
-            workPhase = 4;
+            workPhase = TickPhase.Wildlife;
             double wildlifeTimeScale = behaviorPolicy.Gameplay.Evaluate("wildlife.timeScale", forest.ForestYear, wildlife.Animals.Count);
             foreach (int unit in wildlife.UpdateWork(fixedDeltaSeconds * wildlifeTimeScale, map, forest, Environment)) yield return unit;
-            workPhase = 5;
+            workPhase = TickPhase.Systems;
             foreach (int unit in systems.UpdateWork(fixedDeltaSeconds)) yield return unit;
+            // VehicleSystem moves trucks here. Drain their passages before publishing the completed tick.
             foreach (int unit in TrafficWork()) yield return unit;
             foreach (int unit in Logistics.PublishInventoryWork()) yield return unit;
             System.Collections.Generic.List<ActorSoundSample> machineSounds = null;
@@ -479,11 +484,14 @@ namespace ForesTycoon
             LastLoadReplayedTicks = 0;
         }
 
-        public void Save(Stream destination, double tickRate = 30.0)
+        public void Save(Stream destination, double tickRate = 30.0) =>
+            WorldSaveSerializer.Write(destination, CaptureSaveData(tickRate));
+
+        internal WorldSaveData CaptureSaveData(double tickRate = 30.0)
         {
             EnsureAvailable();
             if (BoundaryPending) throw new InvalidOperationException("Save must be requested at a completed tick (AtTickBoundary).");
-            WorldSaveSerializer.Write(destination, new WorldSaveData
+            return new WorldSaveData
             {
                 TickRate = tickRate,
                 ForestYearSeconds = ecosystem.ForestYearSeconds,
@@ -493,7 +501,7 @@ namespace ForesTycoon
                 Terrain = TerrainSettingsData.From(map.Settings),
                 Commands = new List<WorldCommandRecord>(commandJournal),
                 Checkpoint = CaptureCheckpoint()
-            });
+            };
         }
 
         public void Load(Stream source, bool allowAlgorithmMigration = false)
@@ -524,7 +532,12 @@ namespace ForesTycoon
         private void Adopt(SimulationWorld candidate, bool preserveBoundaryActions = false)
         {
             CancelRuleExport();
-            updateWork?.Dispose(); updateWork = null; if (!preserveBoundaryActions) tickBoundaryActions.Clear();
+            updateWork?.Dispose(); updateWork = null;
+            if (!preserveBoundaryActions) {
+                tickBoundaryActions.Clear();
+                CancelQueuedGenerationRequests();
+                activeGenerationRequest?.TrySetResult(null);
+            }
             (map, candidate.map) = (candidate.map, map);
             SwapPresentation(candidate);
             (ecosystem, candidate.ecosystem) = (candidate.ecosystem, ecosystem);
@@ -539,9 +552,7 @@ namespace ForesTycoon
             (commandJournal, candidate.commandJournal) = (candidate.commandJournal, commandJournal);
             (trafficPassages, candidate.trafficPassages) = (candidate.trafficPassages, trafficPassages);
             (activePassage, candidate.activePassage) = (candidate.activePassage, activePassage);
-            // Route creation must follow this world's terrain after the ownership transfer.
-            vehicles.RoadRouteFactory = route => VehicleRoadRoute.Create(map, route);
-            vehicles.RoadRouteWorkFactory = (route, result) => VehicleRoadRoute.CreateWork(map, route, result);
+            BindVehicleRoutes();
             BindWorldQueries();
             ruleProjectName = candidate.ruleProjectName; ruleProjectWorld = candidate.ruleProjectWorld;
             algorithmGraphs = candidate.algorithmGraphs;
@@ -582,6 +593,13 @@ namespace ForesTycoon
             }
         }
 
+        private void BindVehicleRoutes()
+        {
+            // Bind to this world again after adopting a candidate whose map has been swapped out.
+            vehicles.RoadRouteFactory = route => VehicleRoadRoute.Create(map, route);
+            vehicles.RoadRouteWorkFactory = (route, result) => VehicleRoadRoute.CreateWork(map, route, result);
+        }
+
         private void InitializeLogistics()
         {
             Logistics=new ForestryLogistics(map,forest);
@@ -607,6 +625,8 @@ namespace ForesTycoon
             CancelRuleExport();
             updateWork?.Dispose(); updateWork = null; tickBoundaryActions.Clear();
             generationWork?.Dispose(); generationWork = null; commands.Clear();
+            CancelQueuedGenerationRequests();
+            activeGenerationRequest?.TrySetResult(null);
             backgroundJobs.Dispose();
             if (forest != null) foreach (int unit in forest.FinishBackgroundWork()) yield return unit;
             if (ecosystem != null) foreach (int unit in Environment.FinishQueryWork()) yield return unit;

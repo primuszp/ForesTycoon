@@ -16,6 +16,10 @@ artifacts/
 # Logs
 *.log
 
+# Rule project coordination files
+*.write.lock
+*.project-status.json
+
 # OS files
 Thumbs.db
 Desktop.ini

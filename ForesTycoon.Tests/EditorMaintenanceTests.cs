@@ -9,6 +9,64 @@ namespace ForesTycoon.Tests;
 public sealed class EditorMaintenanceTests
 {
     [Fact]
+    public void PreviewBecomesCurrentOnlyAfterItsMapIsPublished()
+    {
+        using var world = FoundationPersistenceTests.FlatWorld();
+        var editor = new RuleEditorView();
+        Invoke(editor, "EnsureProject", world);
+        var project = editor.CollectProject();
+        project.World = GameWorld.DefaultScenario(71, 16);
+        Invoke(editor, "LoadProject", world, project);
+
+        Invoke(editor, "ApplyScenario", world, "");
+        Assert.False((bool)Invoke(editor, "PreviewCurrent")!);
+        world.CancelGeneration();
+        Invoke(editor, "RefreshPreviewBuild", world);
+        Assert.False((bool)Invoke(editor, "PreviewCurrent")!);
+
+        var invalid = editor.CollectProject();
+        invalid.Tuning["missing tuning key"] = 1;
+        Invoke(editor, "RequestPreviewBuild", world, invalid);
+        while (world.GenerationPending) world.ContinueGeneration(256);
+        Invoke(editor, "RefreshPreviewBuild", world);
+        Assert.NotNull(world.GenerationError);
+        Assert.False((bool)Invoke(editor, "PreviewCurrent")!);
+
+        Invoke(editor, "ApplyScenario", world, "");
+        while (world.GenerationPending) world.ContinueGeneration(256);
+        Invoke(editor, "RefreshPreviewBuild", world);
+        Assert.True((bool)Invoke(editor, "PreviewCurrent")!);
+
+        world.Regenerate(TerrainSettings.Default.WithNodeSize(17, 72));
+        Invoke(editor, "RefreshPreviewBuild", world);
+        Assert.False((bool)Invoke(editor, "PreviewCurrent")!);
+    }
+
+    [Fact]
+    public void SharedWriteLockPreventsASecondWriterAndStaleRevisionCannotReplaceTheWinner()
+    {
+        using var files = new TemporaryFiles();
+        string path = files.PathFor("project.json");
+        var winner = new ProjectPersistence();
+        var contender = new ProjectPersistence();
+        File.WriteAllText(path, "original");
+        winner.Observe(path);
+        contender.Observe(path);
+
+        using (var gate = new FileStream(path + ".write.lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None)) {
+            Assert.Throws<IOException>(() => contender.Save(path, new RuleProject { Name = "second" }));
+            Assert.Equal("original", File.ReadAllText(path));
+            Assert.False(Directory.Exists(path + ".history"));
+        }
+
+        winner.Save(path, new RuleProject { Name = "first" });
+        Assert.Throws<IOException>(() => contender.Save(path, new RuleProject { Name = "second" }));
+        Assert.Equal("first", RuleProject.FromJson(File.ReadAllText(path)).Name);
+        Assert.Equal("original", File.ReadAllText(Assert.Single(Directory.GetFiles(path + ".history"))));
+        Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(path)!, "*.tmp"));
+    }
+
+    [Fact]
     public async Task SceneSaveRejectsAnExternalEditMadeDuringValidation()
     {
         using var files = new TemporaryFiles();

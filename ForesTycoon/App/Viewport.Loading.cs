@@ -16,6 +16,8 @@ namespace ForesTycoon
         private float loadingProgress;
         private string loadingStage = "A táj létrehozása…";
         private readonly string sceneProject;
+        private RuleProject handoffProject;
+        private SetRuleProjectCommand handoffCommand;
 
         private void RenderLoadingFrame()
         {
@@ -35,8 +37,10 @@ namespace ForesTycoon
                     }
                     if (world == null) { DrawLoadingScreen(); return; }
                     if (resumeWorld != null) {
-                        // The rule project link applies the published project to the resumed world on its first poll.
                         using var input = System.IO.File.OpenRead(resumeWorld); world.Load(input, allowAlgorithmMigration: true);
+                        handoffProject = RuleProject.FromJson(System.IO.File.ReadAllText(handoffProjectPath));
+                        handoffCommand = world.QueueRuleProject(handoffProject);
+                        simulationClock.Reset(world.SimulationTick);
                     }
                     interaction = new WorldInteractionController(world) { TargetPicked = SendTargetPicked };
                 }
@@ -58,7 +62,6 @@ namespace ForesTycoon
                         isLoaded = true;
                         frameClock.Reset();
                         SetupViewport();
-                        if (runtimeAcknowledgement != null) RuleProject.WriteAtomic(runtimeAcknowledgement, "ready");
                         break;
                     }
                     loadingProgress = mapPreparation.Current;
@@ -72,6 +75,14 @@ namespace ForesTycoon
             }
 
             DrawLoadingScreen();
+            if (isLoaded && handoffCommand != null) {
+                if (handoffCommand.AppliedTick is not ulong tick || world.BoundaryPending)
+                    throw new InvalidOperationException("Az átadott szabályprojekt alkalmazása nem fejeződött be.");
+                ruleProjectLink.AdoptHandoff(world, handoffProject, tick);
+                new RuntimeHandoffAcknowledgement(handoffProject.ContentRevision(), handoffProject.Algorithms?.Revision, tick)
+                    .Write(runtimeAcknowledgement);
+                handoffCommand = null; handoffProject = null;
+            }
         }
 
         private void DrawLoadingScreen()

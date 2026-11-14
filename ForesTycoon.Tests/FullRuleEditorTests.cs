@@ -55,12 +55,17 @@ public sealed class FullRuleEditorTests
     {
         string folder = Path.Combine(Path.GetTempPath(), "full-editor-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(folder);
         try {
-            string file = Path.Combine(folder, "project.json"); var guard = new ProjectFileGuard(); guard.Observe(file);
-            Assert.False(guard.Changed(file)); File.WriteAllText(file, "initial"); Assert.True(guard.Changed(file));
-            guard.Observe(file); ProjectHistory.Archive(file); File.WriteAllText(file, "agent edit");
-            Assert.Throws<IOException>(() => guard.RequireUnchanged(file));
+            string file = Path.Combine(folder, "project.json");
+            var persistence = new ProjectPersistence();
+            persistence.Observe(file);
+            File.WriteAllText(file, "initial");
+            Assert.Throws<IOException>(() => persistence.Save(file, new RuleProject()));
+            Assert.Equal("initial", persistence.ReadText(file));
+            persistence.Save(file, new RuleProject());
+            File.WriteAllText(file, "agent edit");
+            Assert.Throws<IOException>(() => persistence.Save(file, new RuleProject()));
             Assert.Equal("initial", File.ReadAllText(Directory.GetFiles(file + ".history").Single()));
-            guard.Observe(file); guard.RequireUnchanged(file);
+            Assert.Equal("agent edit", persistence.ReadText(file));
         } finally { Directory.Delete(folder, true); }
     }
     [Fact]

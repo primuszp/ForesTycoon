@@ -39,7 +39,7 @@ namespace ForesTycoon.Editor
             workflow = new(RuleProject.DefaultPath, WorldLoader.OpeningScenePath()
                 ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ForesTycoon", "scenes", "opening.json"));
             var context = new EditorPageContext(new SceneSession(document.Scene), ui, ApplyScenario, ApplyProject, Try, text => message = text,
-                ShowPage, () => appliedScenario == ScenarioKey(), document.Capture, document.Revision);
+                ShowPage, PreviewCurrent, document.Capture, document.Revision);
             soilEditor = new(context); treeEditor = new(context); speciesEditor = new(context, treeEditor);
             mapEditor = new(context);
             biomeEditor = new(context, mapEditor); missionEditor = new(context); trialEditor = new(context, mapEditor);

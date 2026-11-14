@@ -13,7 +13,14 @@ namespace ForesTycoon.Editor
     {
         private static void Main(string[] args)
         {
-            if (RuleProjectCli.Run(args)) return;
+            try {
+                if (RuleProjectCli.Run(args)) return;
+            }
+            catch (System.IO.IOException error) {
+                Console.Error.WriteLine(error.Message);
+                Environment.ExitCode = 1;
+                return;
+            }
             if (args.Length == 1 && args[0] == "--presentation-bindings-smoke-test") { PresentationBindingsSmokeTest.Run(); return; }
             if (args.Length is 1 or 2 && args[0] == "--editor-maintenance-benchmark")
             {

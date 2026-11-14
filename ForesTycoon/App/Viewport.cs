@@ -66,7 +66,7 @@ namespace ForesTycoon
         private bool         nodeHovered  = false;
         private GameWorld    world        = null;
         private readonly RuleProjectLink ruleProjectLink;
-        private readonly string resumeWorld, runtimeAcknowledgement;
+        private readonly string resumeWorld, runtimeAcknowledgement, handoffProjectPath;
         private WorldInteractionController interaction;
 
         private bool         isLoaded     = false;
@@ -187,7 +187,7 @@ namespace ForesTycoon
 
         // ────────────────────────────────────────────────────────────────────
         public Viewport(ulong? smokeTestFrameLimit = null, string captureDirectory = null, bool visible = true, bool captureSeasons = false,
-            string resumeWorld = null, string runtimeAcknowledgement = null, string sceneProject = null) : base(
+            string resumeWorld = null, string runtimeAcknowledgement = null, string sceneProject = null, string handoffProjectPath = null) : base(
             new GameWindowSettings
             {
                 UpdateFrequency = 0
@@ -198,10 +198,11 @@ namespace ForesTycoon
             this.captureDirectory = captureDirectory;
             this.captureSeasons = captureSeasons;
             this.resumeWorld = resumeWorld; this.runtimeAcknowledgement = runtimeAcknowledgement;
+            this.handoffProjectPath = handoffProjectPath;
             this.sceneProject = sceneProject;
             // No automatic whole-code graph bootstrap: the built code runs unless a project carries an edited algorithm bundle.
             // A fresh start runs the opening scene, which the editor's Apply also saves: the published copy is adopted, not
-            // re-applied. A resumed save takes the published project from the link's first poll.
+            // re-applied. A resumed save applies the frozen handoff project before its first poll.
             ruleProjectLink = new(path: sceneProject, closeOldRuntime: Close, bootstrapAlgorithms: false,
                 adoptRunning: sceneProject == null && resumeWorld == null && WorldLoader.OpeningScenePath() != null);
         }
@@ -480,15 +481,26 @@ namespace ForesTycoon
             RequestFrame();
         }
 
-        private void QuickSave() => world.AtTickBoundary(QuickSaveAtBoundary);
+        private System.Threading.Tasks.Task quickSaveWrite;
+        private bool quickSaveQueued;
+
+        private void QuickSave()
+        {
+            if (quickSaveQueued || quickSaveWrite != null) return;
+            quickSaveQueued = true;
+            world.AtTickBoundary(QuickSaveAtBoundary);
+        }
 
         private void QuickSaveAtBoundary()
         {
+            quickSaveQueued = false;
             try
             {
                 string path = SaveGamePath.Default;
-                SaveGameFile.Write(path, stream => world.Save(stream, 1.0 / simulationClock.StepSeconds));
-                ShowToast($"Mentve: {path}", HudTheme.Good);
+                var snapshot = world.CaptureSaveData(1.0 / simulationClock.StepSeconds);
+                quickSaveWrite = System.Threading.Tasks.Task.Run(() =>
+                    SaveGameFile.Write(path, stream => WorldSaveSerializer.Write(stream, snapshot)));
+                ShowToast("Mentés folyamatban…", HudTheme.Info);
             }
             catch (Exception ex)
             {
@@ -496,8 +508,25 @@ namespace ForesTycoon
             }
         }
 
+        private void CompleteQuickSave(bool wait = false)
+        {
+            if (quickSaveWrite == null || !wait && !quickSaveWrite.IsCompleted) return;
+            try {
+                quickSaveWrite.GetAwaiter().GetResult();
+                ShowToast($"Mentve: {SaveGamePath.Default}", HudTheme.Good);
+            } catch (Exception error) {
+                ShowToast("Mentési hiba: " + error.Message, HudTheme.Bad);
+                if (wait) Console.Error.WriteLine(error.Message);
+            } finally { quickSaveWrite = null; }
+        }
+
         private void QuickLoad()
         {
+            CompleteQuickSave();
+            if (quickSaveQueued || quickSaveWrite != null) {
+                ShowToast("Betöltés a folyamatban lévő mentés után lehetséges.", HudTheme.Info);
+                return;
+            }
             try
             {
                 string path = SaveGamePath.Default;
@@ -560,6 +589,7 @@ namespace ForesTycoon
 
         protected override void RenderScene(FrameEventArgs e)
         {
+            CompleteQuickSave();
             // Loading ends when the loading frame finishes its own preparation pass and sets isLoaded. The renderer may already
             // report its geometry prepared (a generated world arrives prepared); skipping the loading frame then left the game
             // on the loading screen for good whenever that last pass needed more than one 4 ms slice.
@@ -590,6 +620,7 @@ namespace ForesTycoon
         private void DisposeGlResources()
         {
             if (glResourcesDisposed) return;
+            CompleteQuickSave(wait: true);
             soundscape?.Dispose(); soundscape = null;
             machineAudio?.Dispose(); machineAudio = null;
             worldCreation?.Dispose(); worldCreation = null;

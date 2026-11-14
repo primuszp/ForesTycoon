@@ -130,9 +130,7 @@ internal sealed class ProjectWorkflow : IDisposable
     internal ProjectOperation Publish(RuleProject project, IProjectWorkflowRuntime runtime, PublicationOptions? options = null)
     {
         EnsureIdle(); options ??= new();
-        if (options.ExpectedFileRevision != null && (ProjectFileGuard.Revision(projectPath) ?? "missing") != options.ExpectedFileRevision)
-            throw new IOException("A célprojekt verziója eltér az elvárttól; nem írtam felül.");
-        persistence.RequireUnchanged(projectPath);
+        persistence.RequireUnchanged(projectPath, options.ExpectedFileRevision);
         var snapshot = project.Clone(); string revision = EditorDocument.RevisionOf(snapshot);
         var validated = runtime.Normalize(snapshot);
         var intent = new Publication(validated, projectPath, scenePath, revision, runtime,

@@ -265,9 +265,13 @@ internal sealed partial class RuleEditorView
         ImGui.Dummy(new Vec2(1, frame)); ImGui.SameLine(0, 16);
 
         // Chips on the right; the message gets the room in between.
-        string worldChip = statusCache.WorldCurrent ? "tesztvilág naprakész" : "tesztvilág: újraépítés kell";
-        bool running = publishedProjectRevision != null && workshopVersions.Running == publishedProjectRevision && liveObjects?.Error == null;
-        string gameChip = publishedProjectRevision == null ? "játék: korábbi szabályok" : running ? "játék: átvette" : "játék: átvételre vár";
+        bool buildingPreview = previewBuild.Completion != null;
+        string worldChip = buildingPreview ? "tesztvilág épül" : statusCache.WorldCurrent ? "tesztvilág naprakész" : "tesztvilág: újraépítés kell";
+        bool running = publishedProjectRevision != null && workshopVersions.Running == publishedProjectRevision;
+        bool rejected = publishedProjectRevision != null && gameProjectStatus?.RejectedRevision == publishedProjectRevision;
+        string gameChip = running ? "játék: átvette" : rejected ? "játék: elutasította"
+            : gameProjectStatus == null ? "játék: nincs visszajelzés"
+            : publishedProjectRevision == null ? "játék: elérhető" : "játék: átvételre vár";
         float chips = ImGui.CalcTextSize(worldChip).X + ImGui.CalcTextSize(gameChip).X + 48 + 8;
         float messageRoom = ImGui.GetContentRegionAvail().X - chips - 24;
         string status = message.Split('\n')[0];
@@ -290,12 +294,16 @@ internal sealed partial class RuleEditorView
         ImGui.SameLine();
         ImGui.SetCursorPosX(Math.Max(ImGui.GetCursorPosX(), ImGui.GetWindowWidth() - 12 - chips));
         ImGui.SetCursorPosY(ImGui.GetCursorPosY() + (frame - ImGui.GetTextLineHeight() - 6) / 2);
-        if (EditorStyle.Chip(worldChip, statusCache.WorldCurrent ? HudTheme.Good : HudTheme.Info, "chip-world", !statusCache.WorldCurrent)
-            && !statusCache.WorldCurrent) { ApplyScenario(world, ""); statusFrame = -1000; }
-        if (ImGui.IsItemHovered()) ImGui.SetTooltip(statusCache.WorldCurrent ? "A tesztvilág ebből a pályából épült." : "A pálya megváltozott. Kattintás: a tesztvilág újraépítése.");
+        bool canRebuild = !statusCache.WorldCurrent && !buildingPreview;
+        if (EditorStyle.Chip(worldChip, statusCache.WorldCurrent ? HudTheme.Good : HudTheme.Info, "chip-world", canRebuild)
+            && canRebuild) { ApplyScenario(world, ""); statusFrame = -1000; }
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip(buildingPreview ? world.GenerationStage
+            : statusCache.WorldCurrent ? "A tesztvilág ebből a pályából épült." : "Kattintás: a tesztvilág újraépítése.");
         ImGui.SameLine(0, 8);
-        EditorStyle.Chip(gameChip, running ? HudTheme.Good : HudTheme.Muted, "chip-game");
-        if (ImGui.IsItemHovered()) ImGui.SetTooltip("„Alkalmazás a játékban” menti a jelenetet, és a futó játék átveszi a szabályokat.");
+        EditorStyle.Chip(gameChip, running ? HudTheme.Good : rejected ? HudTheme.Bad : HudTheme.Muted, "chip-game");
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip(gameProjectStatus?.Error is string projectError ? projectError
+            : gameProjectStatus?.AppliedRevision is string revision ? $"Alkalmazott revízió: {revision}\nTick: {gameProjectStatus.AppliedTick}"
+            : "A futó játék visszaigazolása a szabályok alkalmazása után jelenik meg.");
         ImGui.EndChild();
     }
 

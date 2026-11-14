@@ -66,9 +66,9 @@ internal sealed partial class RuleEditorView
         CompleteEdits();
         var operation = workflow.OpenScene(path, Runtime(world), project => {
             LoadProject(world, project);
-            world.RequestScenario(project.World, EditorDocument.ForSandbox(project));
+            RequestPreviewBuild(world, EditorDocument.ForSandbox(project));
         });
-        appliedScenario = ScenarioKey(); scenarioBuilt = true;
+        scenarioBuilt = true;
         ApplyWorkflowResult(operation);
     }
 }

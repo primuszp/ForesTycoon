@@ -90,7 +90,7 @@ internal sealed partial class RuleEditorView
         document.Load(project);
         workflow.ResetDocument(document.Revision());
         ruleWorkspace.Reset(project);
-        scenarioBuilt = false; appliedScenario = null;
+        scenarioBuilt = false; appliedScenario = null; appliedScenarioMap = null; previewBuild = default;
         if (document.World != null) seedEdit = document.World.Seed;
         dynamicsEditor.ResetSelection();
         behaviors.Configure(WorldBehaviorPolicy.Hooks, DynamicsRuntime.Keys(project.Dynamics, GameWorld.RuleWorldFields), key => PreviewValue(world, key));
@@ -124,6 +124,7 @@ internal sealed partial class RuleEditorView
     }
     private void RefreshProjectOperations(GameWorld world)
     {
+        RefreshPreviewBuild(world);
         if (trials.HasSource) trials.ValidateSource(AuthoringRevision(world));
         trials.Poll(); tuningEditor.Poll();
         foreach (var operation in workflow.Poll()) ApplyWorkflowResult(operation);

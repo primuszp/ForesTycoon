@@ -10,7 +10,8 @@ namespace ForesTycoon.RuleCompiler;
 public sealed record AlgorithmBuildResult(string Revision, string AssemblyPath, string Log);
 public static class AlgorithmBuild
 {
-    public static string CacheRoot => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ForesTycoon", "algorithm-runtime");
+    public static string CacheRoot => Path.GetFullPath(Environment.GetEnvironmentVariable("FORESTYCOON_ALGORITHM_CACHE")
+        ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ForesTycoon", "algorithm-runtime"));
     public static string CurrentRevision {
         get {
             string path = Path.Combine(AppContext.BaseDirectory, "algorithm-runtime.json");

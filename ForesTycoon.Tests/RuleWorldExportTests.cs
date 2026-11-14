@@ -8,6 +8,56 @@ public sealed class RuleWorldExportTests
     private static GameWorld World() => new(TerrainSettings.Default.WithNodeSize(17, 42), enableRendering: false);
 
     [Fact]
+    public void GameAcknowledgesOnlyCompletedRuleApplicationsWithoutExportingTheWorld()
+    {
+        string directory = Directory.CreateTempSubdirectory("forestycoon-project-status-").FullName;
+        try {
+            using var world = World();
+            string path = Path.Combine(directory, "project.json");
+            string statusPath = path + ".project-status.json";
+            var project = world.RuleProjectDocument;
+            RuleProject.WriteAtomic(path, project.ToJson());
+            var link = new RuleProjectLink(path, adoptRunning: true, bootstrapAlgorithms: false);
+            link.Poll(world, 0, allowAutomaticWorldExport: false);
+
+            project.Name = "Applied publication";
+            string revision = project.ContentRevision();
+            RuleProject.WriteAtomic(path, project.ToJson());
+            link.Poll(world, 1, allowAutomaticWorldExport: false);
+            using (var queued = JsonDocument.Parse(File.ReadAllText(statusPath)))
+                Assert.Equal(JsonValueKind.Null, queued.RootElement.GetProperty("AppliedRevision").ValueKind);
+
+            world.ContinueCommands(1);
+            Assert.True(world.BoundaryPending);
+            link.Poll(world, 4, allowAutomaticWorldExport: false);
+            using (var partial = JsonDocument.Parse(File.ReadAllText(statusPath)))
+                Assert.Equal(JsonValueKind.Null, partial.RootElement.GetProperty("AppliedRevision").ValueKind);
+
+            Assert.Equal(1, world.ExecutePendingCommands());
+            link.Poll(world, 0, allowAutomaticWorldExport: false);
+            using var applied = JsonDocument.Parse(File.ReadAllText(statusPath));
+            Assert.Equal(revision, applied.RootElement.GetProperty("AppliedRevision").GetString());
+            Assert.Equal(world.SimulationTick, applied.RootElement.GetProperty("AppliedTick").GetUInt64());
+
+            project.Tuning["invalid-setting"] = 42;
+            string rejectedRevision = project.ContentRevision();
+            RuleProject.WriteAtomic(path, project.ToJson());
+            link.Poll(world, 1, allowAutomaticWorldExport: false);
+            using var rejected = JsonDocument.Parse(File.ReadAllText(statusPath));
+            Assert.Equal(revision, rejected.RootElement.GetProperty("AppliedRevision").GetString());
+            Assert.Equal(rejectedRevision, rejected.RootElement.GetProperty("RejectedRevision").GetString());
+            Assert.False(string.IsNullOrEmpty(rejected.RootElement.GetProperty("Error").GetString()));
+            Assert.False(world.ForegroundPending);
+            Assert.False(File.Exists(path + ".world.json"));
+
+            world.Regenerate(TerrainSettings.Default.WithNodeSize(17, 43));
+            link.Poll(world, 0, allowAutomaticWorldExport: false);
+            using var regenerated = JsonDocument.Parse(File.ReadAllText(statusPath));
+            Assert.Equal(JsonValueKind.Null, regenerated.RootElement.GetProperty("AppliedRevision").ValueKind);
+        } finally { Directory.Delete(directory, true); }
+    }
+
+    [Fact]
     public async Task GameplayDoesNotPeriodicallyTakeWorldOwnershipButAnExplicitEditorRequestStillWorks()
     {
         string directory = Path.Combine(Path.GetTempPath(), "forestycoon-running-export-" + Guid.NewGuid().ToString("N"));

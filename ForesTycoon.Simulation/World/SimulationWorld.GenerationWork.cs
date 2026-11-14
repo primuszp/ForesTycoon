@@ -9,6 +9,8 @@ partial class SimulationWorld
     private IEnumerator<int> generationWork;
     private object generationSpecies;
     private bool generationCommitted;
+    private readonly HashSet<TaskCompletionSource<TerrainMap>> queuedGenerationRequests = new();
+    private TaskCompletionSource<TerrainMap> activeGenerationRequest;
     private readonly List<IWorldCommand> generationInputs = new();
     internal bool GenerationPending => generationWork != null;
     internal bool GenerationCanCancel => GenerationPending && !generationCommitted;
@@ -23,18 +25,35 @@ partial class SimulationWorld
         RequestReplacement(GenerateWorldWork(settings, soils ?? SoilLandscapeDefinition.Default, null));
     }
 
-    internal void RequestScenario(WorldScenario scenario, RuleProject definition = null)
+    internal Task<TerrainMap> RequestScenario(WorldScenario scenario, RuleProject definition = null)
     {
         EnsureAvailable(allowFaulted: true);
         ArgumentNullException.ThrowIfNull(scenario);
-        RequestReplacement(PrepareScenarioWork(scenario, definition));
+        return RequestReplacement(PrepareScenarioWork(scenario, definition));
     }
 
-    private void RequestReplacement(IEnumerable<int> work)
+    private Task<TerrainMap> RequestReplacement(IEnumerable<int> work)
     {
+        var request = new TaskCompletionSource<TerrainMap>(TaskCreationOptions.RunContinuationsAsynchronously);
         // A failed operation cannot reach another valid boundary. Keep it isolated until a new world is published.
-        if (faulted) { tickBoundaryActions.Clear(); BeginGeneration(work); }
-        else AtTickBoundary(() => BeginGeneration(work));
+        if (faulted) {
+            tickBoundaryActions.Clear();
+            CancelQueuedGenerationRequests();
+            BeginGeneration(work, request);
+        } else {
+            queuedGenerationRequests.Add(request);
+            AtTickBoundary(() => {
+                queuedGenerationRequests.Remove(request);
+                BeginGeneration(work, request);
+            });
+        }
+        return request.Task;
+    }
+
+    private void CancelQueuedGenerationRequests()
+    {
+        foreach (var request in queuedGenerationRequests) request.TrySetResult(null);
+        queuedGenerationRequests.Clear();
     }
 
     private IEnumerable<int> PrepareScenarioWork(WorldScenario scenario, RuleProject definition)
@@ -52,9 +71,11 @@ partial class SimulationWorld
         foreach (int unit in GenerateWorldWork(ScenarioSettings(prepared.Project.World), prepared.Soils, prepared.Project)) yield return unit;
     }
 
-    private void BeginGeneration(IEnumerable<int> work)
+    private void BeginGeneration(IEnumerable<int> work, TaskCompletionSource<TerrainMap> request)
     {
         generationWork?.Dispose();
+        activeGenerationRequest?.TrySetResult(null);
+        activeGenerationRequest = request;
         generationInputs.Clear(); generationCommitted = false;
         generationWork = work.GetEnumerator();
         generationSpecies = worldSpecies;
@@ -66,6 +87,7 @@ partial class SimulationWorld
         VerifyPresentationAccess();
         if (generationCommitted && generationWork != null) return; // Only resource retirement remains after publication.
         generationWork?.Dispose(); generationWork = null; GenerationStage = ""; generationInputs.Clear();
+        activeGenerationRequest?.TrySetResult(null); activeGenerationRequest = null;
         PublishBoundaryActions();
     }
 
@@ -90,6 +112,7 @@ partial class SimulationWorld
                 {
                     generationWork.Dispose(); generationWork = null;
                     GenerationStage = ""; published = true;
+                    activeGenerationRequest?.TrySetResult(generationCommitted ? map : null); activeGenerationRequest = null;
                     return true;
                 }
                 LastForegroundWorkUnits += Math.Max(1, generationWork.Current);
@@ -101,6 +124,7 @@ partial class SimulationWorld
         {
             generationWork.Dispose(); generationWork = null;
             GenerationError = error.Message; GenerationStage = ""; generationInputs.Clear();
+            activeGenerationRequest?.TrySetResult(null); activeGenerationRequest = null;
             return true;
         }
         finally

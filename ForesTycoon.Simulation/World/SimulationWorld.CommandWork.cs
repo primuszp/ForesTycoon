@@ -139,6 +139,7 @@ partial class SimulationWorld
         }
         foreach (int unit in Logistics.PublishInventoryWork()) yield return unit;
         Logistics.InvalidateOrderPreviews();
+        if (command is SetRuleProjectCommand projectCommand) projectCommand.AppliedTick = worldTick;
     }
 
     private int[] AreaTiles(int start, int end)

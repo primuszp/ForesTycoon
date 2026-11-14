@@ -23,6 +23,52 @@ public sealed class TrafficRuleTests
     }
 
     [Fact]
+    public void TickProcessesEarlyPassagesBeforeTimedWearAndLatePassagesBeforeSaving()
+    {
+        using var world = World();
+        var scenario = GameWorld.DefaultScenario(42, 16);
+        for (int node = 0; node < 17 * 17; node++) scenario.HeightPaint[node] = 4;
+        world.StartScenario(scenario);
+        var endpoints = Network(world, false);
+        var road = world.Map.FindNetworkPath(endpoints[0], endpoints[^1]);
+        Assert.True(road.Length >= 2);
+        int earlyTile = road[0], lateTile = road[1];
+        var project = world.RuleProjectDocument;
+        foreach (var rule in project.Rules) rule.Enabled = false;
+        project.Rules.Add(new() { Id = "test-passage", Scope = "passage", Schedule = "passage",
+            Effects = { new() { Target = "road.condition", Mode = "set", Formula = "0.8" } } });
+        project.Rules.Add(new() { Id = "test-weather", Scope = "road", Schedule = "step",
+            Effects = { new() { Target = "condition", Mode = "set", Formula = "condition * 0.5" } } });
+        world.QueueRuleProject(project);
+        world.ExecutePendingCommands();
+
+        world.VehicleState.SpawnTransit(road);
+        // Inject the late passage from the vehicle-system update, without depending on acceleration or terrain.
+        world.VehicleState.BehaviorPause = vehicle => {
+            world.RecordPassage(new(lateTile, TrafficVehicleKind.Truck, vehicle.Id, 36000, 1));
+            return true;
+        };
+        world.RecordPassage(new(earlyTile, TrafficVehicleKind.Processor, 42, 20000, 0));
+        Assert.False(world.ContinueUpdate(SimulationWorld.RuleStepSeconds, 1));
+
+        using var save = new MemoryStream();
+        world.AtTickBoundary(() => world.Save(save));
+        Assert.Equal(0, save.Length);
+        int slices = 0;
+        while (!world.ContinueUpdate(SimulationWorld.RuleStepSeconds, 3)) Assert.True(++slices < 50000);
+
+        Assert.Equal(.4f, world.GetRoadCondition(earlyTile), 6);
+        Assert.Equal(.8f, world.GetRoadCondition(lateTile), 6);
+        Assert.Equal(0, world.PendingTrafficPassages);
+        Assert.True(save.Length > 0);
+        save.Position = 0;
+        using var restored = World();
+        restored.Load(save);
+        Assert.Equal(1UL, restored.SimulationTick);
+        Assert.Equal(State(world), State(restored));
+    }
+
+    [Fact]
     public void OneDiscoveredVisualRuleOwnsRoadWearTrailWearAndIdleReset()
     {
         using var world = World(); var rule = world.RuleBook.Rules.Single(r => r.Id == "traffic.wear");

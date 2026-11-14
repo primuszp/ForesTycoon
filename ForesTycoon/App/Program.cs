@@ -37,7 +37,7 @@ namespace ForesTycoon
                 return;
             }
             if (GraphRuntimeHost.RunHeadless(args)) return;
-            if ((args.Length == 0 || Array.IndexOf(args, "--algorithm-handoff") >= 0) && GraphRuntimeHost.DispatchProjectRuntime(args)) return;
+            if (args.Length == 0 && GraphRuntimeHost.DispatchProjectRuntime(args)) return;
             RenderBackendSelection.UseOpenGl();
             if (args.Length == 2 && args[0] == "--render-throughput-benchmark") { RenderThroughputBenchmark.Run(args[1]); return; }
             int forwarderExport = Array.IndexOf(args, "--export-forwarder-animation");
@@ -133,13 +133,14 @@ namespace ForesTycoon
             int sceneProject = Array.IndexOf(args, "--scene-project");
             if (sceneProject >= 0 && (sceneProject + 1 >= args.Length || handoff >= 0))
                 throw new ArgumentException("--scene-project jelenetprojekt.json szükséges; algoritmusátadással együtt nem használható.");
-            if (handoff >= 0 && handoff + 2 >= args.Length) throw new ArgumentException("Az algoritmusátadás mentést és nyugtázási útvonalat kér.");
+            if (handoff >= 0 && handoff + 3 >= args.Length) throw new ArgumentException("Az algoritmusátadás mentést, nyugtázási útvonalat és rögzített projektet kér.");
             if (captureSeasons >= 0 && captureSeasons + 1 >= args.Length) throw new ArgumentException("--capture-seasons requires an output directory.");
             using Viewport game = new Viewport(smokeTest ? 120UL : null,
                 captureSeasons >= 0 ? args[captureSeasons + 1] : captureFrame >= 0 ? args[captureFrame + 1] : null,
                 captureSeasons: captureSeasons >= 0, resumeWorld: handoff >= 0 ? args[handoff + 1] : null,
                 runtimeAcknowledgement: handoff >= 0 ? args[handoff + 2] : null,
-                sceneProject: sceneProject >= 0 ? args[sceneProject + 1] : null);
+                sceneProject: sceneProject >= 0 ? args[sceneProject + 1] : null,
+                handoffProjectPath: handoff >= 0 ? args[handoff + 3] : null);
             game.Run();
         }
     }

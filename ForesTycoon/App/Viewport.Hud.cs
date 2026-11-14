@@ -841,25 +841,30 @@ namespace ForesTycoon
                 {
                     try
                     {
-                        string json = System.IO.File.ReadAllText(ruleModelPath);
+                        var (published, expected) = RuleProjectFile.Read(ruleProjectLink.Path);
+                        var (json, _) = RuleProjectFile.Read(ruleModelPath);
+                        if (json == null) throw new System.IO.FileNotFoundException("A szabálymodell nem található.", ruleModelPath);
                         using var document = System.Text.Json.JsonDocument.Parse(json);
                         string schema = document.RootElement.TryGetProperty("schema", out var schemaValue) ? schemaValue.GetString() : null;
-                        var project = world.RuleProjectDocument;
+                        RuleProject project;
                         if (schema == "forest-rule-project")
                         {
                             project = RuleProject.FromJson(json);
                         }
                         else if (schema == "forest-behaviors")
                         {
+                            project = published == null ? world.RuleProjectDocument : RuleProject.FromJson(published);
                             project.Behaviors = BehaviorModel.FromJson(json);
                         }
                         else if (schema == "forest-current-rules")
                         {
+                            project = published == null ? world.RuleProjectDocument : RuleProject.FromJson(published);
                             var catalog = GameRuleCatalog.FromJson(json);
                             project.Tuning = catalog.TuningOverrides();
                         }
                         else throw new System.IO.InvalidDataException("Teljes szabályprojektet válassz; a külön útkopási modell megszűnt.");
-                        GameWorld.ValidateRuleProject(project); RuleProject.WriteAtomic(ruleProjectLink.Path, project.ToJson());
+                        GameWorld.ValidateRuleProject(project);
+                        RuleProjectFile.Write(ruleProjectLink.Path, project.ToJson(), expected);
                         ruleImportStatus = "A közös szabályprojekt frissült; a játék automatikusan alkalmazza.";
                     }
                     catch (Exception e) when (e is System.IO.IOException or System.Text.Json.JsonException or ArgumentException or InvalidOperationException or UnauthorizedAccessException or NotSupportedException)

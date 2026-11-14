@@ -8,6 +8,25 @@ namespace ForesTycoon.Tests;
 public class AlgorithmGraphTests
 {
     [Fact]
+    public void HandoffRequiresMatchingProjectAlgorithmAndTick()
+    {
+        string path = Path.GetTempFileName();
+        try {
+            var expected = new RuntimeHandoffAcknowledgement("project", "algorithm", 42);
+            File.WriteAllText(path, "ready");
+            Assert.False(expected.Matches(path));
+            (expected with { ProjectRevision = "other" }).Write(path);
+            Assert.False(expected.Matches(path));
+            (expected with { AlgorithmRevision = "other" }).Write(path);
+            Assert.False(expected.Matches(path));
+            (expected with { Tick = 43 }).Write(path);
+            Assert.False(expected.Matches(path));
+            expected.Write(path);
+            Assert.True(expected.Matches(path));
+        } finally { File.Delete(path); }
+    }
+
+    [Fact]
     public void StructuralGraphRoundTripsControlFlowTriviaAndInterpolation()
     {
         const string source = "// graph\nclass Rule { double Step(double value) { if (value > 2) { value *= 3; } foreach (var x in new[]{1,2}) value += x; System.Console.WriteLine($\"v={value:0.00}\"); return value; } }\n";
@@ -99,8 +118,13 @@ public class AlgorithmGraphTests
         bool closed = false; string linkTrace = Path.Combine(output, "handoff-trace.json");
         using (var oldWorld = new GameWorld(TerrainSettings.Default.WithNodeSize(9, 42), enableRendering: false)) {
             oldWorld.Update(.1);
-            var link = new RuleProjectLink(projectPath, () => closed = true, (runtime, save, ready, path) => AlgorithmBuild.StartRuntime(runtime,
-                new[] { "--run-rule-project", path, "0", linkTrace, "--world", save, "--migrate", "--ack", ready }, path));
+            var link = new RuleProjectLink(projectPath, () => closed = true, (runtime, save, ready, snapshot, path) => {
+                Assert.Equal(project.ContentRevision(), RuleProject.FromJson(File.ReadAllText(snapshot)).ContentRevision());
+                var newer = project.Clone(); newer.Name = "Published while the runtime starts";
+                RuleProject.WriteAtomic(path, newer.ToJson());
+                return AlgorithmBuild.StartRuntime(runtime,
+                    new[] { "--run-rule-project", snapshot, "0", linkTrace, "--world", save, "--migrate", "--ack", ready }, path);
+            });
             for (int i = 0; i < 1200 && !closed; i++) {
                 // A headless host must advance the same bounded foreground work as the viewport.
                 if (oldWorld.ForegroundPending) oldWorld.ContinueCommands(256);
@@ -109,6 +133,7 @@ public class AlgorithmGraphTests
             Assert.True(closed, link.Error); Assert.Equal(1UL, oldWorld.SimulationTick);
             using var handoff = JsonDocument.Parse(File.ReadAllText(linkTrace));
             Assert.Equal(123, handoff.RootElement.GetProperty("trace")[0].GetProperty("fields").GetProperty("world.balance").GetDouble());
+            Assert.Equal("Published while the runtime starts", RuleProject.FromJson(File.ReadAllText(projectPath)).Name);
         }
         // Semantically invalid graphs do not replace the already compiled executable.
         file.Nodes.Single(n => n.Id == expression).Children.Select(id => file.Nodes.Single(n => n.Id == id)).Single().Text = "missing_graph_variable";

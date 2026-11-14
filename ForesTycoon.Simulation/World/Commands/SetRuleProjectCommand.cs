@@ -3,6 +3,7 @@ namespace ForesTycoon;
 internal sealed class SetRuleProjectCommand : IWorldCommand
 {
     private readonly string json;
+    internal ulong? AppliedTick { get; set; }
     internal SetRuleProjectCommand(string json)
     {
         var document = RuleProject.FromJson(json);

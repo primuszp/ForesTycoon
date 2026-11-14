@@ -56,6 +56,50 @@ public class WorldLifecycleTests
     }
     private static string State(GameWorld world) => JsonSerializer.Serialize(world.CaptureCheckpoint());
 
+    [Fact]
+    public async Task CapturedSaveCanBeWrittenAfterTheLiveWorldAdvancesAndIsDisposed()
+    {
+        WorldSaveData snapshot;
+        byte[] expected;
+        using (var world = Create()) {
+            BuildRoadAndTrail(world);
+            world.QueueWeather(WeatherPreset.Storm, 30, 20);
+            world.ExecutePendingCommands();
+            world.Update(0.25);
+            snapshot = world.CaptureSaveData();
+            expected = Save(world);
+            for (int tick = 0; tick < 20; tick++) world.Update(1.0 / 30);
+            Assert.NotEqual(snapshot.Tick, world.SimulationTick);
+        }
+
+        var actual = await Task.Run(() => {
+            using var stream = new MemoryStream();
+            WorldSaveSerializer.Write(stream, snapshot);
+            return stream.ToArray();
+        });
+        Assert.Equal(expected, actual);
+    }
+
+    [Fact]
+    public void VehicleRouteFactoriesUseTheAdoptedMapAfterLoad()
+    {
+        using var replacement = Create();
+        BuildRoadAndTrail(replacement);
+        int tile = replacement.Map.RoadTiles.First();
+        using var world = Create();
+        Assert.False(world.Map.IsRoadTile(tile));
+        using var saved = new MemoryStream(Save(replacement));
+        world.Load(saved);
+
+        Assert.True(world.Map.TryGetNetworkSurface(tile, out var center, out _));
+        int[] route = { tile };
+        var synchronous = world.VehicleState.RoadRouteFactory(route);
+        var sliced = new WorkResult<VehicleRoadRoute>();
+        SimulationWork.Complete(world.VehicleState.RoadRouteWorkFactory(route, sliced));
+        Assert.Equal(center, synchronous.Sample(0));
+        Assert.Equal(center, sliced.Value.Sample(0));
+    }
+
     private static void BuildRoadAndTrail(GameWorld world)
     {
         for (int id = 0; id < world.Map.Tiles.Count && world.RoadCount == 0; id++)

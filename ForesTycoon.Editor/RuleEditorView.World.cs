@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Threading.Tasks;
 using ForesTycoon.Rules;
 using ImGuiNET;
 using Vec2 = System.Numerics.Vector2;
@@ -18,6 +19,8 @@ internal sealed partial class RuleEditorView
 {
     private ref MapLayer mapLayer => ref ui.Map.Layer;
     private string appliedScenario;
+    private TerrainMap appliedScenarioMap;
+    private (Task<TerrainMap> Completion, string Key) previewBuild;
     private ref int selectedTile => ref ui.Map.SelectedTile;
     private ref int selectedSoilType => ref ui.Soils.Selected;
     private ref int selectedSpecies => ref ui.Species.Selected;
@@ -64,10 +67,33 @@ internal sealed partial class RuleEditorView
         try {
             document.World.Validate();
             var project = CollectProject(); project.Algorithms = null;
-            world.RequestScenario(document.World, project); appliedScenario = ScenarioKey(); statusFrame = -1000;
+            RequestPreviewBuild(world, project);
             message = what + " A tesztvilág újraépítése folyamatban.";
         } catch (Exception e) when (e is System.IO.InvalidDataException or ArgumentException or InvalidOperationException) { message = e.Message; }
     }
+
+    private void RequestPreviewBuild(GameWorld world, RuleProject project)
+    {
+        previewBuild = (world.RequestScenario(project.World, project), ScenarioKey());
+        statusFrame = -1000;
+    }
+
+    private void RefreshPreviewBuild(GameWorld world)
+    {
+        if (appliedScenarioMap != world.Map) { appliedScenario = null; appliedScenarioMap = null; statusFrame = -1000; }
+        if (previewBuild.Completion?.IsCompleted != true) return;
+        if (previewBuild.Completion.GetAwaiter().GetResult() == world.Map) {
+            appliedScenario = previewBuild.Key;
+            appliedScenarioMap = world.Map;
+            message = "A tesztvilág felépült.";
+        } else {
+            message = world.GenerationError ?? "A tesztvilág építése megszakadt.";
+        }
+        previewBuild = default;
+        statusFrame = -1000;
+    }
+
+    private bool PreviewCurrent() => previewBuild.Completion == null && appliedScenario == ScenarioKey();
 
     // ── Where the work stands: file, test world, game ────────────────────
     private (string Path, DateTime Written, string Key) sceneFile;
@@ -109,7 +135,7 @@ internal sealed partial class RuleEditorView
         // Serializing the whole scene is not free: refresh twice a second.
         if (ImGui.GetFrameCount() - statusFrame > 30) {
             statusFrame = ImGui.GetFrameCount();
-            statusCache = (SceneFileKey() is string saved && saved == SceneDocumentKey(world), appliedScenario == ScenarioKey());
+            statusCache = (SceneFileKey() is string saved && saved == SceneDocumentKey(world), PreviewCurrent());
         }
     }
 

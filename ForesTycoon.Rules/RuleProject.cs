@@ -79,12 +79,15 @@ public sealed class RuleProject
     }
     public static string DefaultPath => Path.GetFullPath(Environment.GetEnvironmentVariable("FORESTYCOON_RULE_PROJECT")
         ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ForesTycoon", "rules", "project.json"));
-    public static void WriteAtomic(string path, string json)
+    public static void WriteAtomic(string path, string json) =>
+        WriteAtomic(path, temporary => File.WriteAllText(temporary, json), overwrite: true);
+
+    internal static void WriteAtomic(string path, Action<string> writeTemporary, bool overwrite)
     {
         path = Path.GetFullPath(path);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         string temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        try { File.WriteAllText(temporary, json); File.Move(temporary, path, true); }
+        try { writeTemporary(temporary); File.Move(temporary, path, overwrite); }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
 }

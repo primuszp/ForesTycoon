@@ -94,11 +94,13 @@ partial class SimulationWorld
         var engine = new RuleEngine(copy.Rules, copy.Fields, copy.Dynamics.Stocks.Select(s => s.Id), readRule ?? (_ => 0), prepareExecutables) { RemovedStarters = copy.RemovedStarters };
         return (copy, tuning, runtime, policy, engine);
     }
-    internal void QueueRuleProject(RuleProject project)
+    internal SetRuleProjectCommand QueueRuleProject(RuleProject project)
     {
         RequireAlgorithmRuntime(project.Algorithms);
         ValidateRuleProject(project);
-        Enqueue(new SetRuleProjectCommand(project.ToJson()));
+        var command = new SetRuleProjectCommand(project.ToJson());
+        Enqueue(command);
+        return command;
     }
     void IWorldCommandTarget.ExecuteRuleProject(string json) => ExecuteCommandSynchronously(new SetRuleProjectCommand(json));
     private void ApplyRuleProject(RuleProject project)

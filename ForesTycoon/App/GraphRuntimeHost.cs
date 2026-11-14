@@ -22,6 +22,7 @@ internal static class GraphRuntimeHost
             using var input = File.OpenRead(args[5]); world.Load(input, allowAlgorithmMigration: args.Contains("--migrate"));
             world.QueueRuleProject(project); world.ExecutePendingCommands();
         }
+        ulong appliedTick = world.SimulationTick;
         var trace = new List<object>();
         for (int i = 0; i <= ticks; i++) {
             if (i % 30 == 0 || i == ticks) trace.Add(new { tick = world.SimulationTick, seconds = i / 30d,
@@ -32,7 +33,8 @@ internal static class GraphRuntimeHost
         RuleProject.WriteAtomic(args[3], JsonSerializer.Serialize(new { revision = AlgorithmBuild.CurrentRevision, trace, world = world.ExportRuleWorld("Algoritmusgráf szimuláció") },
             new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
         int acknowledgement = Array.IndexOf(args, "--ack");
-        if (acknowledgement >= 0) RuleProject.WriteAtomic(args[acknowledgement + 1], "ready");
+        if (acknowledgement >= 0)
+            new RuntimeHandoffAcknowledgement(project.ContentRevision(), AlgorithmBuild.CurrentRevision, appliedTick).Write(args[acknowledgement + 1]);
         Console.WriteLine("Gráfszimuláció kész: " + Path.GetFullPath(args[3])); return true;
     }
     internal static bool DispatchProjectRuntime(string[] args)
