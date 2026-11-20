@@ -103,7 +103,7 @@ internal sealed partial class MapEditorView(EditorPageContext context)
         ImGui.EndChild(); ImGui.SameLine();
 
         EditorStyle.BeginPanel("map-canvas", new Vec2(-right - 8, 0), ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
-        int hovered = DrawTiles(world, "pálya", TileColour(world), painting: mapLayer is MapLayer.Soil or MapLayer.Elevation or MapLayer.Water or MapLayer.Forest);
+        int hovered = DrawTiles(world, "pálya", TileColour(world), painting: mapLayer is MapLayer.Soil or MapLayer.Elevation or MapLayer.Water || mapLayer == MapLayer.Forest && !context.Ui.Map.ThinningTrial && !inspectTrees);
         if (mapLayer == MapLayer.Tracks) StructureCanvas(world, hovered);
         MapLegend(world);
         ImGui.EndChild(); ImGui.SameLine();
@@ -145,12 +145,21 @@ internal sealed partial class MapEditorView(EditorPageContext context)
         }
         else if (mapLayer == MapLayer.Forest)
         {
-            EditorStyle.Section("Ecset");
-            ImGui.TextWrapped("Kezdő erdő: a festett csempén a választott faj természetes, vegyes korú állománya nő; az irtás üresen hagyja.");
-            if (ImGui.Selectable("Irtás (nincs erdő)", brushSpecies < 0)) brushSpecies = -1;
-            for (int i = 0; i < scene.World.Species.Count; i++)
-                if (ColourSwatch(scene.World.Species[i].Name, SpeciesColour(scene.World.Species[i].Id), i == brushSpecies, "species" + i)) brushSpecies = i;
-            ImGui.SetNextItemWidth(-60); ImGui.SliderInt("Méret", ref brushSize, 1, 6);
+            ImGui.Checkbox("Egyes fák vizsgálata", ref inspectTrees);
+            if (inspectTrees) DrawTreeHistory(world);
+            else {
+                ImGui.Checkbox("Gyérítési próba a tesztvilágban", ref context.Ui.Map.ThinningTrial);
+                if (context.Ui.Map.ThinningTrial) {
+                    DrawThinningTrial(world);
+                } else {
+                    EditorStyle.Section("Ecset");
+                    ImGui.TextWrapped("Kezdő erdő: a festett csempén a választott faj természetes, vegyes korú állománya nő; az irtás üresen hagyja.");
+                    if (ImGui.Selectable("Irtás (nincs erdő)", brushSpecies < 0)) brushSpecies = -1;
+                    for (int i = 0; i < scene.World.Species.Count; i++)
+                        if (ColourSwatch(scene.World.Species[i].Name, SpeciesColour(scene.World.Species[i].Id), i == brushSpecies, "species" + i)) brushSpecies = i;
+                    ImGui.SetNextItemWidth(-60); ImGui.SliderInt("Méret", ref brushSize, 1, 6);
+                }
+            }
         }
         else if (mapLayer == MapLayer.Tracks) StructurePanel(world);
         int shown = hovered >= 0 ? hovered : selectedTile;
@@ -222,7 +231,11 @@ internal sealed partial class MapEditorView(EditorPageContext context)
                     for (int dr = -radius; dr <= radius; dr++)
                         if (dc * dc + dr * dr <= radius * radius + radius && c + dc >= 0 && c + dc < columns && r + dr >= 0 && r + dr < rows)
                             stroke.Add((c + dc) * rows + r + dr);
-            if (!painting && ImGui.IsMouseClicked(ImGuiMouseButton.Left)) selectedTile = over;
+            if (!painting && ImGui.IsMouseClicked(ImGuiMouseButton.Left)) {
+                selectedTile = over;
+                if (inspectTrees && mapLayer == MapLayer.Forest)
+                    SelectNearestTree(world, over, (mouse.X - at.X) / cell - c, (mouse.Y - at.Y) / cell - r);
+            }
         }
         if (id == "pálya") mapGeometry = (at, cell, rows);
         if (mapLayer == MapLayer.Water && id == "pálya")

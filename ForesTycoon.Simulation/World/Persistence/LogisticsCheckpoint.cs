@@ -7,7 +7,7 @@ namespace ForesTycoon
     internal sealed partial class ForestryLogistics
     {
         internal LogisticsCheckpoint Capture() => new(
-            Sites.Select(s => new HarvestCheckpoint((int[])s.Tiles.Clone(), s.InitialVolume)).ToArray(),
+            Sites.Select(s => new HarvestCheckpoint((int[])s.Tiles.Clone(), s.InitialVolume, MarkedTrees: s.MarkedTrees?.OrderBy(id => id).ToArray())).ToArray(),
             Mills.Select(m => new MillCheckpoint(m.TileId, (int[])m.Footprint.Clone(), new(m.Position), m.Received, m.Stock, m.Processed)).ToArray(), Status,
             Machines.Select(m => new ForestMachineCheckpoint(m.Id, m.Kind, m.Site == null ? -1 : Sites.IndexOf(m.Site), (int[])m.Path.Clone(), m.PathPosition,
                 m.PreviousPathPosition, m.State, m.Goal, m.Cargo, m.WorkTime, m.Home == null ? -1 : Depots.IndexOf(m.Home), m.HomeRequested,
@@ -41,7 +41,15 @@ namespace ForesTycoon
                 CheckpointGuard.Require(site != null && site.Tiles != null && site.Tiles.Length > 0, "harvest site");
                 foreach (int id in site.Tiles) { yield return 1; CheckpointGuard.Require(terrain.IsValidTileId(id) && used.Add(id), "harvest tile"); }
                 CheckpointGuard.NonNegative(site.InitialVolume, "harvest volume");
-                sites.Add(new HarvestSite { Tiles = (int[])site.Tiles.Clone(), InitialVolume = site.InitialVolume });
+                HashSet<ulong> marks = null;
+                if (site.MarkedTrees != null) {
+                    marks = new();
+                    foreach (ulong id in site.MarkedTrees) {
+                        yield return 1;
+                        CheckpointGuard.Require(id > 0 && id < (ulong)forest.IndividualTrees.StateSize && marks.Add(id), "marked tree identity");
+                    }
+                }
+                sites.Add(new HarvestSite { Tiles = (int[])site.Tiles.Clone(), InitialVolume = site.InitialVolume, MarkedTrees = marks });
                 // Older saves kept felled wood as piles and a landing stock: they become stacks.
                 foreach (var pile in site.Piles ?? Array.Empty<PileCheckpoint>())
                     { yield return 1; if (pile != null && pile.Volume > 0 && !stackTiles.Contains(pile.Tile))

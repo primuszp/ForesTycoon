@@ -4,6 +4,37 @@ namespace ForesTycoon.Tests;
 
 public class DendroTreeGeneratorTests
 {
+    public static IEnumerable<object[]> JuvenileSpecies => Enum.GetValues<ForestSpecies>()
+        .Where(species => species != ForestSpecies.None).Select(species => new object[] { species });
+
+    [Theory]
+    [MemberData(nameof(JuvenileSpecies))]
+    internal void JuvenileStagesHaveDistinctArchitectureAtTheSameSize(ForestSpecies species)
+    {
+        var seedling = new TreeShapeSpec(species, 42, TreeLifePhase.Seedling, new(.012f, .8f, .24f),
+            1, new TreeSite(.85f), LeafState.Full, .4f);
+        var sapling = seedling with { Phase = TreeLifePhase.Sapling };
+        var first = DendroTreeGenerator.Generate(seedling, ForestLod.Near);
+        var branched = DendroTreeGenerator.Generate(sapling, ForestLod.Near);
+        var young = DendroTreeGenerator.Generate(sapling with { Phase = TreeLifePhase.Young }, ForestLod.Near);
+        Assert.Empty(first.Branches);
+        Assert.NotEmpty(branched.Branches);
+        Assert.False(branched.Crown.SequenceEqual(young.Crown));
+        foreach (var stage in new[] { seedling, sapling })
+        foreach (var lod in Enum.GetValues<ForestLod>())
+        {
+            var mesh = DendroTreeGenerator.GenerateSeasonal(stage, lod);
+            Assert.NotEmpty(mesh.Crown);
+            foreach (var vertex in mesh.Crown)
+                Assert.True(float.IsFinite(vertex.Position.LengthSquared) && Math.Abs(vertex.Normal.Length - 1) < .0001f);
+            if (TreePhenology.Evergreen(species)) continue;
+            var winter = DendroTreeGenerator.Generate(stage with { Leaves = LeafState.Bare }, lod);
+            Assert.Equal(winter.Trunk, mesh.Trunk);
+            Assert.Equal(winter.Branches, mesh.Branches);
+            Assert.Empty(winter.Crown);
+        }
+    }
+
     public static IEnumerable<object[]> Cases => Enum.GetValues<ForestSpecies>().Where(s => s != ForestSpecies.None)
         .SelectMany(s => Enum.GetValues<TreeLifeStage>().SelectMany(stage => new[] { 0, 42, -1, int.MinValue }
             .Select(seed => new object[] { s, stage, seed })));
@@ -39,7 +70,12 @@ public class DendroTreeGeneratorTests
         var reached = new HashSet<Vector3>(); var work = new Stack<Vector3>();
         work.Push(neighbours.Keys.First());
         while (work.TryPop(out var p)) if (reached.Add(p)) foreach (var n in neighbours[p]) work.Push(n);
-        if (species == ForestSpecies.Pine && stage is TreeLifeStage.Mature or TreeLifeStage.Old)
+        if (stage == TreeLifeStage.Seedling)
+        {
+            // Separate closed blades meet at a node. Different nodes leave the stem visible.
+            Assert.True(reached.Count < neighbours.Count);
+        }
+        else if (species == ForestSpecies.Pine && stage is TreeLifeStage.Mature or TreeLifeStage.Old)
         {
             // Open Scots-pine foliage deliberately has several individually closed pads.
             Assert.True(reached.Count < neighbours.Count);
@@ -244,6 +280,51 @@ public class DendroTreeGeneratorTests
         int Triangles(float age) => DendroTreeGenerator.Generate(species, 42, TreeLifeStage.Mature, 0.85f,
             ForestTreeGrowth.Initial(species, age, 1), 0, ForestLod.Near).Crown.Length / 3;
         Assert.True(Triangles(2) < Triangles(80));
+    }
+
+    [Theory]
+    [InlineData(ForestSpecies.Fir)]
+    [InlineData(ForestSpecies.Larch)]
+    [InlineData(ForestSpecies.Birch)]
+    internal void SeasonalMeshKeepsSummerFoliageAndTheExpectedWinterWood(ForestSpecies species)
+    {
+        var spec = new TreeShapeSpec(species, 13, TreeLifePhase.Old, ForestTreeGrowth.Initial(species, 80, 1),
+            .5f, new TreeSite(.6f), LeafState.Full, .4f);
+        foreach (var lod in Enum.GetValues<ForestLod>())
+        {
+            var summer = DendroTreeGenerator.Generate(spec, lod);
+            var winter = TreePhenology.Evergreen(species) ? summer
+                : DendroTreeGenerator.Generate(spec with { Leaves = LeafState.Bare }, lod);
+            var seasonal = DendroTreeGenerator.GenerateSeasonal(spec, lod);
+            Assert.Equal(summer.Crown, seasonal.Crown);
+            Assert.Equal(winter.Trunk, seasonal.Trunk);
+            Assert.Equal(winter.Branches, seasonal.Branches);
+        }
+    }
+
+    [Fact]
+    public void OldSilverFirReachesFullHeightOnAnOuterShoot()
+    {
+        var size = new ForestTreeDimensions(.5f, 24, 4);
+        var spec = new TreeShapeSpec(ForestSpecies.Fir, 42, TreeLifePhase.Old, size, 1, new TreeSite(1), LeafState.Full, 0);
+        var rim = DendroTreeGenerator.Generate(spec, ForestLod.Near).Crown.MaxBy(v => v.Position.Z);
+        var leader = DendroTreeGenerator.Generate(spec with { Phase = TreeLifePhase.Young }, ForestLod.Near).Crown.MaxBy(v => v.Position.Z);
+        Assert.Equal(size.Height * TreeScale.MetresToWorld, rim.Position.Z, 4);
+        Assert.True(rim.Position.Xy.Length > size.CrownRadius * TreeScale.MetresToWorld * .25f);
+        Assert.Equal(0f, leader.Position.Xy.Length, 4);
+    }
+
+    [Fact]
+    public void OldFirHasBroaderUpperWhorlsThanAYoungFirAtTheSameSize()
+    {
+        float Shoulder(TreeLifeStage stage)
+        {
+            var crown = DendroCrownMesh.Build(CrownForm.Fir, 42, stage, 6, 2, .9f, 0,
+                Array.Empty<Vector3>(), 0xffffffff, ForestLod.Near);
+            float widest = crown.Max(v => v.Position.Xy.Length);
+            return crown.Where(v => v.Position.Z >= 5.4f).Max(v => v.Position.Xy.Length) / widest;
+        }
+        Assert.True(Shoulder(TreeLifeStage.Old) > Shoulder(TreeLifeStage.Young) + .30f);
     }
 
     [Fact]

@@ -112,7 +112,7 @@ internal sealed partial class RuleEditorView
     private void PageBody(GameWorld world, bool standalone)
     {
         Scenario(world);
-        if (standalone && !scenarioBuilt) { scenarioBuilt = true; if (appliedScenario != ScenarioKey()) ApplyScenario(world, "A tesztvilág a pályából épült."); }
+        if (standalone && !scenarioBuilt) { scenarioBuilt = true; if (appliedScenario != document.PreviewMapKey()) ApplyScenario(world, "A tesztvilág a pályából épült."); }
         var entry = Entry(page);
         EditorStyle.PageHeader(entry.Label, entry.Help);
         ImGui.Dummy(new Vec2(0, 2));

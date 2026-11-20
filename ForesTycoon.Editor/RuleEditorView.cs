@@ -64,6 +64,7 @@ namespace ForesTycoon.Editor
 
         internal void Draw(GameWorld world, ref bool open, bool standalone = false)
         {
+            mapEditor.Observe(open ? world.Forest : null);
             RefreshProjectOperations(world);
             if (!open) return;
             EnsureProject(world);

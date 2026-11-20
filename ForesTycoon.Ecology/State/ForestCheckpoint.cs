@@ -101,6 +101,7 @@ namespace ForesTycoon.Ecology
 
         internal IEnumerable<int> RestoreWork(ForestCheckpoint s)
         {
+            ObservationReset?.Invoke();
             ArgumentNullException.ThrowIfNull(s);
             CheckpointGuard.Length(s.Stands, stands.Length, "forest stands");
             CheckpointGuard.Require(double.IsFinite(s.AccumulatedSeconds) && s.AccumulatedSeconds >= 0 &&

@@ -8,6 +8,9 @@ namespace ForesTycoon.Ecology
 
     sealed partial class ForestSystem
     {
+        IReadOnlyCollection<int> IForestCanopy.HydrologyTiles => IndividualTrees.PatchTiles;
+        ulong IForestCanopy.HydrologyStorageEpoch => IndividualTrees.StorageEpoch;
+
         // Demand is proportional to each living tree's projected crown/leaf area and health.
         // Aggregating per cell permits proportional uptake without visiting each tree per water tick.
         internal ForestHydrologyInputs HydrologyInputs(int tileId)

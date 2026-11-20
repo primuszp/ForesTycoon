@@ -35,12 +35,14 @@ namespace ForesTycoon
             }
         }
 
-        internal static void RunMonthProfile()
+        internal static void RunMonthProfile(bool recordHistory = false)
         {
             foreach (int size in new[] { 64, 128 }) {
                 using var world = new SimulationWorld(TerrainSettings.Default.WithNodeSize(size + 1, 42).WithForestPattern(ForestPattern.LargeMixed),
                     forestYearSeconds: 120);
                 world.Environment.ForceWeather(WeatherPreset.Rain, 30, 600);
+                var history = new ForestTreeHistory();
+                if (recordHistory) history.Observe(world.Forest);
                 world.Forest.ProfileMonthlyWork = true;
                 world.RuleBook.Profile = new(StringComparer.Ordinal);
                 var ticks = new List<double>();

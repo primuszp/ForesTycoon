@@ -8,7 +8,7 @@ Forrás: `ForesTycoon.Rules/ForestRegenerationRules.cs`.
 | Gráf | Mit dönt el? | Alapértelmezés |
 | --- | --- | --- |
 | `forest.seedCrowding` | A szomszédos lombterhelés válasza | Átlagos biomassza / 1,2, 0–1 közé korlátozva |
-| `forest.seedSupply` | Egy szomszédos állomány mennyi magot ad | Érettség legalább 1, egészség legalább 0,45: egy egység mag |
+| `forest.seedSupply` | Egy szomszédos állomány mennyi magot ad | Egy egység mag, ha legalább egy fa elérte a faj érési korát, és ennek a fának az egészsége legalább 0,45 |
 | `forest.seedSelection` | Melyik magadó fafaja telepedjen meg | Termőhelyi alkalmasság × forrás egészsége × árnyéktűrési válasz |
 | `forest.germination` | Legyen-e megtelepedés ebben a hónapban | Alkalmasság legalább 0,18; vízválasz legalább 0,3; sorsolás az éves esély időarányos részére |
 | `forest.seedlingCount` | Hány új faegyed jelenjen meg | Egy csemete |
@@ -26,7 +26,8 @@ külön is leállítható; nem veszi át a helyét beégetett számítás.
 ## Elérhető objektumok és tényleges bemenetek
 
 - **Magadó állomány:** `source.age`, `source.maturity`, `source.health`,
-  `source.biomass`, `source.distance`. A távolság a két csempe középpontja közötti méter.
+  `source.biomass`, `source.distance`. Az életkor és az egészség az élő egyedek átlaga. A távolság a két csempe középpontja közötti méter.
+- **Magtermő korú fák**. A `source.matureCount` az érési kort elérő élő egyedek száma. A `source.bestMatureHealth` közülük a legjobb egészségi érték, üres csoportnál nulla. Az alapgráf ezt a két mezőt olvassa. A korábban mentett, állományátlagra épülő gráfok továbbra is az eredeti bemeneteket kapják.
 - **Célcsempe:** `tile.moisture`, `tile.fertility`, `tile.elevation`,
   `tile.suitability`, `tile.waterResponse`, `tile.crowding`, `tile.neighborBiomass`.
   Az alkalmasság és a vízválasz a már meglévő közös projektgráfok eredménye.
@@ -45,11 +46,13 @@ olvassa; nincs második, kézzel karbantartott mezőválasztó.
 
 ## Mi marad a motorban?
 
-A megtelepedés üres, erdőt fizikailag fogadni képes csempére történik; az út,
-víz és épület jogosultságát a közös habitat határ biztosítja. A terjedési tér
-**a négy közvetlen szomszéd**, nem tetszőleges sugarú keresés. Ezen belül a
-forrásgráf távolságfüggő súlyt vagy kizárást adhat. Nincs többhónapos magkészlet,
-szél szerinti távoli magterjedés vagy újulat már foglalt csempén.
+Üres, erdősíthető csempére a négy közvetlen szomszédból érkezhet mag.
+Részben fedett csempén a motor havonta egy kivágott vagy elhalt fa közelében
+keres helyet. A megmaradt koronák vetületén kívül, az élő törzsektől legalább
+fél méterre egy magonc fér el a vizsgált helyen. A csírázást és a kezdeti
+vitalitást ugyanazok a projektgráfok vezérlik. Az ugyanott már megtelepedett
+egyed elfoglalja a helyet. A léket a helyi állomány és az azonos fajhoz tartozó
+szomszédok vethetik be. Így egy csempén több korosztály élhet együtt.
 
 A pozitív magadó pontszámú jelöltek közül a legnagyobb kiválasztási pontszám
 nyer. Egyenlőségnél a stabil szomszédsorrend dönt. Ez a redukció és a
@@ -80,7 +83,7 @@ láthatatlan, régi magadó-előszűrés.
 Mentés a meglévő `AtTickBoundary` határon történik: a hónap közben kért mentés
 várakozik, és nem fejezi be korlátlan munkával a hónapot. A pillanatkép ideiglenes
 munkamemória; nincs félig lefutott iterátor szerializálása. A kész ticken belüli
-havi előkészítési gyorsítótár továbbra is menthető. A futtató verziója
+havi előkészítési gyorsítótár továbbra is menthető. Az eredeti, 2026. októberi mérés futtatóverziója
 `forestycoon-simulation/2026-10-16.8`; nincs régi újulati szabályokat átvezető
 betöltési ág.
 
@@ -105,6 +108,47 @@ A végső teszt- és mérési naplók: `artifacts/regeneration-tests-final.txt`,
 `artifacts/regeneration-editor-smoke-final.txt`, `artifacts/regeneration-benchmark.txt`.
 A nagy pályás CPU-mérés parancsa: `--regeneration-benchmark`.
 
+
+## Harmincéves állománymérleg
+
+A játékprogram `--forest-demography 30 42` kapcsolója a 42-es kezdőértékű,
+16×16 csempés generált pályán harminc erdőévet futtat játékosi beavatkozás
+nélkül. Az első argumentum az évek száma, a második a térképgenerátor
+kezdőértéke. Az opcionális harmadik argumentum alapértéke `control`.
+A `forest.light`, `forest.space` vagy `water.stress` kiválasztásával az adott
+válaszgráf kimenete egy lesz a futás idejére. A kontroll is ugyanazon a
+projektbetöltési úton indul. A standard kimenet CSV, soronként egy év, fafaj
+és talajprofil.
+A diagnosztika havonta egyedi azonosító alapján követi a fákat, így az egy éven
+belül megjelent és elpusztult újulat is szerepel a mérlegben.
+Minden sorra ellenőrzi a nyitóállomány + újulat − elhalás = záróállomány egyenletet.
+
+Az elhalt fák `mean_prior_water`, `mean_prior_light`, `mean_prior_space` és
+`mean_prior_stress_years` értékei az utolsó olyan havi felvételből származnak,
+amelyben még éltek. Az elhalási kort az eltűnés hónapjára számítja.
+Üres csoporthoz az átlagmező üres. A talajonkénti darabszám értelmezéséhez
+a faj kiinduló létszámát és az újulatot is figyelembe kell venni.
+
+A 2026. november 20-i összehasonlításban az egyedi magadóadatokra épülő
+alapgráf eredménye a korábbi állományátlagos szabályhoz képest így alakult.
+
+| Kezdőérték | Induló egyed | Újulat 30 év alatt, előtte → utána | Élő egyed a 30. év végén, előtte → utána |
+| ---: | ---: | ---: | ---: |
+| 17 | 278 | 23 → 24 | 157 → 158 |
+| 42 | 348 | 15 → 18 | 94 → 95 |
+| 83 | 199 | 14 → 17 | 83 → 85 |
+
+A három próbapályán összesen 113 nyír indult. A módosított szabállyal két
+további nyír telepedett meg, és a 30. év végére mind a 115 egyed elpusztult.
+Az utolsó élő havi felvételen átlagosan 3,99 erdőévnyi felhalmozott stresszük
+volt.
+
+A 42-es pálya érzékenységi próbájában a 30. év végén a kontrollban 95 egyed,
+a maximális fényt adó változatban 104, a maximális növekedési teret adóban
+122, a maximális vízválasz mellett 179 egyed élt. Ugyanebben a sorrendben
+0, 0, 0 és 3 nyír maradt. Minden változatban a teljes erdő ugyanazt az egy
+módosítást kapta, ezért a különbségekben az újulat és a megváltozott
+szomszédsági versengés hatása is szerepel.
 
 ## Nagy pályás CPU-mérés
 

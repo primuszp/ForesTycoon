@@ -30,6 +30,7 @@ namespace ForesTycoon.Ecology
         private ulong nextId = 1;
         private ulong topologyRevision;
         internal ulong Generation { get; private set; }
+        internal IReadOnlyCollection<int> PatchTiles => patches.Keys;
         internal ulong StorageEpoch { get; private set; }
         internal ulong TopologyVersion => topologyRevision;
         internal int TreeCount { get; private set; }
@@ -87,15 +88,12 @@ namespace ForesTycoon.Ecology
                 }
                 for (int i = 0; i < count; i++)
                 {
-                    uint seed = Random(unchecked((uint)worldSeed ^ (uint)tileId * 977u ^ (uint)nextId * 131u));
+                    uint seed = NextSeed(worldSeed, tileId);
                     int cell = planted ? i : cells[i];
                     float u = (cell % lattice + 0.5f + (planted ? 0 : (Unit(seed) - 0.5f) * 0.7f)) / lattice;
                     float v = (cell / lattice + 0.5f + (planted ? 0 : (Unit(Random(seed)) - 0.5f) * 0.7f)) / lattice;
                     float age = planted ? stand.AgeYears : stand.AgeYears * (0.85f + Unit(Random(seed + 7)) * 0.3f);
-                    var tree = new ForestTree(nextId++, tileId, stand.Species, u, v, seed, year - age, year,
-                        ForestTreeGrowth.Initial(stand.Species, age, 1, responses, Unit(Random(seed + 17)), planted), default, stand.Health);
-                    patch.Trees[patch.Count++] = tree;
-                    TreeCount++;
+                    AppendTree(patch, tileId, stand.Species, u, v, seed, age, year, stand.Health, planted, responses);
                     yield return 1;
                 }
             }
@@ -103,6 +101,28 @@ namespace ForesTycoon.Ecology
             patch.Revision++;
             NotifyTopologyChanged(patch);
             uint CellRank(int cell) => Random(unchecked((uint)worldSeed ^ (uint)tileId * 977u ^ (uint)cell * 313u));
+        }
+
+        private uint NextSeed(int worldSeed, int tileId) =>
+            Random(unchecked((uint)worldSeed ^ (uint)tileId * 977u ^ (uint)nextId * 131u));
+
+        private void AppendTree(Patch patch, int tile, ForestSpecies species, float u, float v, uint seed,
+            float age, double year, float health, bool planted, ForesTycoon.Rules.EcologyResponseProgram responses)
+        {
+            var size = ForestTreeGrowth.Initial(species, age, 1, responses, Unit(Random(seed + 17)), planted);
+            patch.Trees[patch.Count++] = new ForestTree(nextId++, tile, species, u, v, seed, year - age, year, size, default, health);
+            TreeCount++;
+        }
+
+        internal void RecruitIntoGap(Patch patch, int tile, ForestSpecies species, float u, float v, float age,
+            double year, float health, int worldSeed, ForesTycoon.Rules.EcologyResponseProgram responses)
+        {
+            if (patch.Count == patch.Trees.Length) Array.Resize(ref patch.Trees, Math.Min(128, patch.Count * 2));
+            uint seed = NextSeed(worldSeed, tile);
+            AppendTree(patch, tile, species, u, v, seed, age * (.85f + Unit(Random(seed + 7)) * .3f),
+                year, health, false, responses);
+            patch.Revision++;
+            NotifyTopologyChanged(patch);
         }
 
         internal void RemoveLiving(Patch patch, int index)

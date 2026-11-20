@@ -36,8 +36,8 @@ namespace ForesTycoon.TreeModels
 
         internal static LobeCrownMesh.Profile? Resolve(ForestSpecies species, TreeLifePhase phase, bool dead = false, bool commonOnly = false)
         {
-            if (!LobeCrownMesh.Applies(species, phase)) return null;
-            var baseline = LobeCrownMesh.For(DendroCrownMesh.For(species, phase));
+            if (phase < TreeLifePhase.Young) return null;
+            var baseline = LobeCrownMesh.For(species, phase);
             if (baseline is not { } profile) return null;
             var form = ForestSpeciesBook.Shape(species);
             int clusters = phase >= TreeLifePhase.Old ? profile.Old : phase == TreeLifePhase.Mature ? profile.Mature : profile.Young;

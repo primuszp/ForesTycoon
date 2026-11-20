@@ -17,6 +17,7 @@ namespace ForesTycoon
         /// <summary>Picking the work site of the fleet vehicle chosen in the fleet window.</summary>
         SendVehicle,
         PlaceStack,
-        RemoveStack
+        RemoveStack,
+        ThinForest
     }
 }

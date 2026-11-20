@@ -30,6 +30,7 @@ namespace ForesTycoon
         void ExecutePlantForest(int tileId, ForestSpecies species);
         void ExecuteHarvestForest(int tileId);
         void ExecutePlantForestArea(int startTileId, int endTileId, ForestSpecies species);
+        void ExecuteThinForestArea(int start, int end, int percent);
         void ExecuteHarvestForestArea(int startTileId, int endTileId);
     }
 }

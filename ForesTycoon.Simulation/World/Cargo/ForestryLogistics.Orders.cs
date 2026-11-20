@@ -53,7 +53,7 @@ namespace ForesTycoon
             var path = new WorkResult<int[]>();
             foreach (int unit in PreviewMachinePathWork(OrderOrigin(machine), tile, machine, path)) yield return unit;
             if (path.Value == null) { result.Value = "A processzor nem jut el ide: nincs engedélyezett út vagy nyom."; yield break; }
-            foreach (int unit in FindPathWork(null, tile, t => ContainsTile(t) && forest.AvailableTimber(t) > .001f, path, agent: machine)) yield return unit;
+            foreach (int unit in FindPathWork(null, tile, t => DesignatedTimber(t) > .001f, path, agent: machine)) yield return unit;
             result.Value = MachineOrderRejection(machine, stack, hasTimber: path.Value != null);
         }
 

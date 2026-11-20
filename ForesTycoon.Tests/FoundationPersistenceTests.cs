@@ -16,6 +16,48 @@ public sealed class FoundationPersistenceTests
     }
 
     [Fact]
+    public void PreviewAndCommandChooseIdenticalStemsWithoutChangingTheWorldDuringPreview()
+    {
+        using var world = new GameWorld(TerrainSettings.Default.WithNodeSize(17, 42), enableRendering: false);
+        string before = JsonSerializer.Serialize(world.CaptureCheckpoint());
+        int tile = world.Forest.IndividualTrees.Patches.Select(p => p.Key)
+            .First(id => world.Logistics.PreviewThinning(id, 30).Marks.Count > 0);
+        var preview = world.Logistics.PreviewThinning(tile, 30);
+        Assert.False(preview.Occupied);
+        Assert.Equal(before, JsonSerializer.Serialize(world.CaptureCheckpoint()));
+        world.QueueThinForestArea(tile, tile, 30);
+        world.ExecutePendingCommands();
+        Assert.Equal(preview.Survey, world.LastForestryArea.Thinning);
+        Assert.True(preview.Marks.SetEquals(Assert.Single(world.Logistics.Sites).MarkedTrees));
+        Assert.True(world.Logistics.PreviewThinning(tile, 30).Occupied);
+    }
+
+    [Fact]
+    public void PendingThinningOrderAndMarkedTreesSurviveWorldSave()
+    {
+        using var world = new GameWorld(TerrainSettings.Default.WithNodeSize(17, 42), enableRendering: false);
+        world.QueueThinForestArea(0, 255, 45);
+        using var pending = new MemoryStream(); world.Save(pending);
+        world.ExecutePendingCommands();
+        Assert.Equal(ForestryActionResult.ThinningDesignated, world.LastForestryAction);
+        var expected = Assert.Single(world.Logistics.Sites).MarkedTrees.ToHashSet();
+        Assert.NotEmpty(expected);
+        var survey = world.LastForestryArea.Thinning!.Value;
+        Assert.Equal(45, survey.TargetPercent);
+        Assert.Equal(expected.Count, survey.MarkedTrees);
+        Assert.InRange(survey.MarkedPercent, double.Epsilon, 45);
+        Assert.True(survey.MarkedTrees < survey.SurveyedTrees);
+        using var restored = new GameWorld(TerrainSettings.Default.WithNodeSize(17, 42), enableRendering: false);
+        pending.Position = 0; restored.Load(pending);
+        while (restored.ForegroundPending) restored.ContinueCommands(7);
+        Assert.True(expected.SetEquals(Assert.Single(restored.Logistics.Sites).MarkedTrees));
+        using var saved = new MemoryStream(); restored.Save(saved); saved.Position = 0; world.Load(saved);
+        Assert.True(expected.SetEquals(Assert.Single(world.Logistics.Sites).MarkedTrees));
+        Assert.Equal(survey, world.LastForestryArea.Thinning);
+        Assert.Throws<ArgumentOutOfRangeException>(() => world.QueueThinForestArea(0, 1, 100));
+    }
+
+    [Fact]
     public void TreeCustomMemoryIsBoundedByLiveTreesAcrossRepeatedReplacementAndSaveLoad()
     {
         using var world = new GameWorld(TerrainSettings.Default.WithNodeSize(17, 42), enableRendering: false);

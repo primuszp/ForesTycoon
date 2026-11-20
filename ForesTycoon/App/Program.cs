@@ -8,6 +8,16 @@ namespace ForesTycoon
         {
             if (args.Length is 2 or 3 && args[0] == "--memory-performance-probe") { MemoryPerformanceProbe.Run(args[1], args.Length == 3 ? int.Parse(args[2]) : 40); return; }
             if (args.Length == 2 && args[0] == "--background-wait-stress") { BackgroundWaitStress.Run(int.Parse(args[1])); return; }
+            if (args.Length == 3 && args[0] == "--thinning-trial") {
+                ThinningTrial.Run(int.Parse(args[1]), int.Parse(args[2]), Console.Out); return;
+            }
+            if (args.Length == 4 && args[0] == "--forest-followup") {
+                ForestFollowup.Run(int.Parse(args[1]), int.Parse(args[2]), args[3]); return;
+            }
+            if (args.Length == 1 && args[0] == "--soil-recovery") { ForestFollowup.SoilRecovery(Console.Out); return; }
+            if (args.Length is 3 or 4 && args[0] == "--forest-demography") {
+                ForestDemography.Run(int.Parse(args[1]), int.Parse(args[2]), args.Length == 4 ? args[3] : "control"); return;
+            }
             if (args.Length == 5 && args[0] == "--simulation-soak") {
                 SimulationSoak.Run(int.Parse(args[1]), int.Parse(args[2]), int.Parse(args[3]), args[4]); return;
             }
@@ -20,6 +30,7 @@ namespace ForesTycoon
             if (args.Length == 1 && args[0] == "--regeneration-benchmark") { RuleStepBenchmark.Run(64, 256); return; }
             if (args.Length == 1 && args[0] == "--competition-benchmark") { RuleStepBenchmark.Run(64, 256); return; }
             if (args.Length == 1 && args[0] == "--site-response-benchmark") { RuleStepBenchmark.Run(64, 256); return; }
+            if (args.Length == 1 && args[0] == "--tree-generation-benchmark") { VegetationBenchmark.RunGeneration(); return; }
             if (args.Length == 1 && args[0] == "--tree-vitality-benchmark") { TreeVitalityBenchmark.Run(); return; }
             if (args.Length == 1 && args[0] == "--traffic-benchmark") { TrafficRuleBenchmark.Run(); return; }
             if (args.Length == 1 && args[0] == "--rain-haulage-scenario") { RainHaulageScenario.Run(Console.Out); return; }
@@ -70,7 +81,7 @@ namespace ForesTycoon
             if (Array.Exists(args, argument => argument == "--foreground-benchmark")) { ForegroundWorkBenchmark.Run(); return; }
             if (Array.Exists(args, argument => argument == "--rule-benchmark")) { RuleStepBenchmark.Run(); return; }
             if (args.Length >= 1 && args[0] == "--rule-host-benchmark") { RuleStepBenchmark.RunHosts(Array.ConvertAll(args[1..], int.Parse)); return; }
-            if (Array.Exists(args, argument => argument == "--month-work-benchmark")) { RuleStepBenchmark.RunMonthProfile(); return; }
+            if (Array.Exists(args, argument => argument == "--month-work-benchmark")) { RuleStepBenchmark.RunMonthProfile(Array.Exists(args, a => a == "--tree-history")); return; }
             if (Array.Exists(args, argument => argument == "--simulation-benchmark")) { ForestSimulationBenchmark.Run(); return; }
             if (Array.Exists(args, argument => argument == "--plantation-smoke-test"))
             {

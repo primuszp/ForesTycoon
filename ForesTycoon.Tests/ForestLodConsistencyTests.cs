@@ -9,7 +9,8 @@ public class ForestLodConsistencyTests
     public ForestLodConsistencyTests(ITestOutputHelper output) => this.output = output;
 
     private static readonly ForestSpecies[] Species =
-        { ForestSpecies.Spruce, ForestSpecies.Birch, ForestSpecies.Oak, ForestSpecies.Beech, ForestSpecies.Maple, ForestSpecies.Pine };
+        { ForestSpecies.Spruce, ForestSpecies.Birch, ForestSpecies.Oak, ForestSpecies.Beech, ForestSpecies.Maple, ForestSpecies.Pine,
+            ForestSpecies.Fir, ForestSpecies.Larch };
     public static IEnumerable<object[]> Each => Species.Select(s => new object[] { s });
 
     private static TreeShapeSpec Spec(ForestSpecies species, LeafState leaves)
@@ -50,6 +51,20 @@ public class ForestLodConsistencyTests
     internal void EveryLodFillsTheSameSilhouette(ForestSpecies species)
     {
         CheckSilhouette(Spec(species, LeafState.Full));
+    }
+
+    [Theory]
+    [InlineData(ForestSpecies.Fir, TreeLifePhase.Old)]
+    [InlineData(ForestSpecies.Fir, TreeLifePhase.Senescent)]
+    [InlineData(ForestSpecies.Pine, TreeLifePhase.Young)]
+    [InlineData(ForestSpecies.Larch, TreeLifePhase.Old)]
+    internal void WhorledCrownsKeepTheirSilhouetteAcrossLods(ForestSpecies species, TreeLifePhase phase)
+    {
+        var profile = ForestSpeciesProfile.For(species);
+        float age = phase == TreeLifePhase.Young ? profile.MatureAgeYears * .55f
+            : profile.MaximumAgeYears * (phase == TreeLifePhase.Old ? .76f : .94f);
+        var size = ForestTreeGrowth.Initial(species, age, 1);
+        CheckSilhouette(Spec(species, LeafState.Full) with { Phase = phase, Size = size });
     }
 
     [Fact]

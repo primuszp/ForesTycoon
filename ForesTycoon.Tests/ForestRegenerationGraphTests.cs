@@ -63,6 +63,55 @@ public class ForestRegenerationGraphTests
         }; g.Output = "near";
         forest = Forest(p); forest.Update(1); Assert.False(forest.TryGetStand(1, out _));
     }
+    [Theory]
+    [InlineData(true, .8, true)]
+    [InlineData(true, .2, false)]
+    [InlineData(false, .8, false)]
+    public void SeedSupplyChecksAgeAndHealthOnTheSameIndividual(bool hasMatureTree, double health, bool expected)
+    {
+        var project = GameWorld.DefaultRuleProject();
+        Constant(project, "forest.germination", 1);
+        Constant(project, "forest.seedSelection", 1);
+        var forest = Forest(project);
+        Assert.True(forest.IndividualTrees.TryGet(0, out var patch));
+        float matureAge = ForestSpeciesProfile.For(ForestSpecies.Oak).MatureAgeYears;
+        for (int i = 0; i < patch.Count; i++)
+            patch.Trees[i] = patch.Trees[i] with { BirthYear = -1, Health = 1 };
+        patch.Trees[0] = patch.Trees[0] with { BirthYear = hasMatureTree ? -matureAge : -1, Health = (float)health };
+        Assert.True(forest.TryGetStand(0, out var mixed));
+        Assert.True(mixed.Maturity < 1 && mixed.Health > .45f);
+        forest.Update(1);
+        Assert.Equal(expected, forest.TryGetStand(1, out _));
+    }
+
+    [Fact]
+    public void GameOpeningAndNewEditorProjectsUseIndividualSeedTreeInputs()
+    {
+        using var world = WorldLoader.CreateStart(enableRendering: false);
+        foreach (var project in new[] { world.RuleProjectDocument, GameWorld.DefaultRuleProject() })
+        {
+            var supply = project.Behaviors.Graphs.Single(g => g.Hook == "forest.seedSupply");
+            Assert.Contains(supply.Nodes, node => node.Key == "source.matureCount");
+            Assert.Contains(supply.Nodes, node => node.Key == "source.bestMatureHealth");
+        }
+    }
+
+    [Fact]
+    public void AnAuthoredStandMeanThresholdStillReadsTheStandAverage()
+    {
+        var project = GameWorld.DefaultRuleProject();
+        var supply = project.Behaviors.Graphs.Single(g => g.Hook == "forest.seedSupply");
+        supply.Nodes.Single(n => n.Key == "source.matureCount").Key = "source.maturity";
+        supply.Nodes.Single(n => n.Key == "source.bestMatureHealth").Key = "source.health";
+        Constant(project, "forest.germination", 1);
+        Constant(project, "forest.seedSelection", 1);
+        var forest = Forest(project);
+        Assert.True(forest.IndividualTrees.TryGet(0, out var patch));
+        patch.Trees[0] = patch.Trees[0] with { BirthYear = -ForestSpeciesProfile.For(ForestSpecies.Oak).MatureAgeYears, Health = 1 };
+        forest.Update(1);
+        Assert.False(forest.TryGetStand(1, out _));
+    }
+
     [Fact]
     public void AuthoredSeedlingAgeControlsCreatedDimensions() {
         var young = Forest(Project()); var p = Project(); Constant(p, "forest.seedlingAge", 4); var older = Forest(p);
@@ -78,6 +127,62 @@ public class ForestRegenerationGraphTests
         forest.Update(1); Assert.True(forest.IndividualTrees.TryGet(1, out var patch));
         Assert.Equal(7, patch.Count); Assert.All(patch.Trees.Take(patch.Count), t => Assert.Equal(ForestSpecies.Oak, t.Species));
     }
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    public void PartialCanopyRecruitsIntoAnActualGapOnceAndRespectsGermination(bool allow, bool felling)
+    {
+        var p = Project(); Constant(p, "forest.germination", allow ? 1 : 0);
+        Constant(p, "forest.seedlingCount", 7);
+        var forest = Forest(p);
+        Assert.True(forest.IndividualTrees.TryGet(0, out var patch));
+        var removed = patch.Trees[0];
+        var retained = patch.Trees.Skip(1).Take(patch.Count - 1).Select(t => t.Id).ToArray();
+        if (felling) {
+            var extracted = new WorkResult<float>();
+            SimulationWork.Complete(forest.ExtractTimberWork(0, 1, extracted, new HashSet<ulong> { removed.Id }));
+            Assert.True(extracted.Value > 0);
+        } else forest.KillIndividual(0, 0, forest.ForestYear);
+        forest.Update(1);
+        forest.Update(1);
+        Assert.Equal(retained, patch.Trees.Take(retained.Length).Select(t => t.Id));
+        Assert.Equal(retained.Length + (allow ? 1 : 0), patch.Count);
+        if (allow) {
+            var recruit = patch.Trees[patch.Count - 1];
+            Assert.NotEqual(removed.Id, recruit.Id);
+            Assert.Equal(removed.Species, recruit.Species);
+            Assert.InRange(Math.Abs(recruit.U - removed.U), 0, 0.5 / 16);
+            Assert.InRange(Math.Abs(recruit.V - removed.V), 0, 0.5 / 16);
+        }
+    }
+
+    [Fact]
+    public void ClosedMonthlyHistoryAndRecruitOriginFollowTheActualTrees()
+    {
+        var forest = Forest(Project());
+        var history = new ForestTreeHistory();
+        history.Observe(forest);
+        var births = new List<(ulong Id, int Tile, bool Gap)>();
+        forest.SeedlingEstablished += (_, tree, gap) => births.Add((tree.Id, tree.TileId, gap));
+        forest.IndividualTrees.TryGet(0, out var patch);
+        ulong survivor = patch.Trees[1].Id;
+        forest.KillIndividual(0, 0, 0);
+        for (int i = 0; i < 26; i++) forest.Update(1);
+        Assert.Contains(births, b => b.Tile == 0 && b.Gap);
+        Assert.Contains(births, b => b.Tile == 1 && !b.Gap);
+        Assert.Equal(births.Count, births.Select(b => b.Id).Distinct().Count());
+        var rows = new TreeMonthSample[24];
+        Assert.Equal(24, history.Read(survivor, rows));
+        Assert.Equal(3UL, rows[0].Month);
+        Assert.Equal(26UL, rows[^1].Month);
+        Assert.All(rows, r => Assert.Equal(survivor, r.Id));
+        forest.Clear();
+        Assert.Equal(0, history.Read(survivor, rows));
+        history.Observe(null);
+    }
+
     [Fact]
     public void DiagnosticCrowdingUsesTheSameAuthoredGraph() {
         var p = Project(); Constant(p, "forest.seedCrowding", .23); var forest = Forest(p);

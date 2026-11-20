@@ -90,11 +90,14 @@ namespace ForesTycoon.TreeModels
             {
                 float age = phase switch { TreeLifePhase.Young => 0.25f, TreeLifePhase.Mature => 0.6f,
                     TreeLifePhase.Old or TreeLifePhase.Senescent => 1f, _ => 0f };
-                return 0.98f - lift * (1 - light) * age;
+                float clearance = species == ForestSpecies.Fir ? phase switch {
+                    TreeLifePhase.Mature => .07f, TreeLifePhase.Old => .13f, TreeLifePhase.Senescent => .18f, _ => 0
+                } : 0;
+                return 0.98f - clearance - lift * (1 - light) * age;
             }
             // A mature pine carries an open upper canopy, not a full-depth conifer cone.
             float depth = species == ForestSpecies.Pine && phase >= TreeLifePhase.Mature
-                ? phase switch { TreeLifePhase.Mature => .56f, TreeLifePhase.Old => .58f, _ => .52f }
+                ? phase switch { TreeLifePhase.Mature => .56f, TreeLifePhase.Old => .50f, _ => .52f }
                 : TreeLifePhases.CrownFraction(species, phase);
             return Math.Clamp(depth * (0.72f + 0.28f * LightResponse(species, light)), 0.2f, 0.95f);
         }
@@ -214,10 +217,19 @@ namespace ForesTycoon.TreeModels
                     {
                         // Upper scaffold branches spread as the leader loses dominance. These are
                         // defaults only: common and phase-specific editor choices remain authoritative.
-                        AdultDefault("Shape", TreeParams.Hemispherical);
-                        AdultDefault("1Branches", 24);
-                        AdultDefault("1DownAngle", 80); AdultDefault("1DownAngleV", -12);
-                        AdultDefault("1Curve", 15); AdultDefault("1CurveV", 70); AdultDefault("2CurveV", 60);
+                        bool veteran = phase == TreeLifePhase.Old;
+                        AdultDefault("Shape", veteran ? TreeParams.Cylindrical : TreeParams.Hemispherical);
+                        AdultDefault("1Branches", veteran ? 11 : 24);
+                        AdultDefault("1DownAngle", veteran ? 87 : 80); AdultDefault("1DownAngleV", -12);
+                        AdultDefault("1Curve", veteran ? 23 : 15); AdultDefault("1CurveV", veteran ? 80 : 70);
+                        AdultDefault("2CurveV", veteran ? 45 : 60);
+                        if (veteran)
+                        {
+                            // A few long, rising scaffold limbs divide into twig fans near their ends.
+                            AdultDefault("1Length", .56); AdultDefault("1LengthV", .11);
+                            AdultDefault("1CurveBack", -40); AdultDefault("2Branches", 8);
+                            AdultDefault("2Length", .56); AdultDefault("2DownAngle", 39);
+                        }
                     }
                     void AdultDefault(string name, double value)
                     {

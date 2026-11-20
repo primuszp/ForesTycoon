@@ -28,6 +28,9 @@ namespace ForesTycoon.Ecology
     {
         /// <summary>Changes whenever the vegetation (and so interception and uptake demand) changes.</summary>
         ulong Revision { get; }
+        // Sparse canopies enumerate every patch that can produce nonzero output, including empty patches with authored rules.
+        System.Collections.Generic.IReadOnlyCollection<int> HydrologyTiles => null;
+        ulong HydrologyStorageEpoch => 0;
         ForestHydrologyInputs HydrologyInputs(int tileId);
         System.Collections.Generic.IEnumerable<int> HydrologyInputsWork(int tileId, WorkResult<ForestHydrologyInputs> result)
         {

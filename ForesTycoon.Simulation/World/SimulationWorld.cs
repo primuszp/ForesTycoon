@@ -368,6 +368,7 @@ namespace ForesTycoon
         public void QueueHarvestForest(int tileId) => Enqueue(new HarvestForestCommand(tileId));
         public void QueuePlantForestArea(int startTileId, int endTileId, ForestSpecies species) =>
             Enqueue(new PlantForestAreaCommand(startTileId, endTileId, species));
+        public void QueueThinForestArea(int start, int end, int percent) => Enqueue(new ThinForestAreaCommand(start, end, percent));
         public void QueueHarvestForestArea(int startTileId, int endTileId) =>
             Enqueue(new HarvestForestAreaCommand(startTileId, endTileId));
 
@@ -441,6 +442,7 @@ namespace ForesTycoon
         void IWorldCommandTarget.ExecutePlantForestArea(int startTileId, int endTileId, ForestSpecies species) =>
             ExecuteCommandSynchronously(new PlantForestAreaCommand(startTileId, endTileId, species));
 
+        void IWorldCommandTarget.ExecuteThinForestArea(int start, int end, int percent) => ExecuteCommandSynchronously(new ThinForestAreaCommand(start, end, percent));
         void IWorldCommandTarget.ExecuteHarvestForestArea(int startTileId, int endTileId) =>
             ExecuteCommandSynchronously(new HarvestForestAreaCommand(startTileId, endTileId));
 

@@ -178,7 +178,7 @@ namespace ForesTycoon
                     "ForesTycoon.Rules/TreeVitalityRules.cs", "Defaults",
                     "forest.resources|forest.fitness|forest.species|forest.health|forest.stress|calendar.time",
                     vitality.Id == "forest.mortality" ? "forest.trees|forest.deadwood" : vitality.Id, vitality.Description, execution: GameRuleExecution.EditableGraph);
-            Add("forest.regeneration", "Természetes újulat", "Erdő", "Üres cella és magszóró szomszédok", "Erdőhónap", "ForesTycoon.Editor/GameRules/default.project.json", "forest.germination",
+            Add("forest.regeneration", "Természetes újulat", "Erdő", "Üres cella vagy lék és a magadó állományok", "Erdőhónap", "ForesTycoon.Editor/GameRules/default.project.json", "forest.germination",
                 "forest.trees|forest.species|forest.fitness|world.seed|calendar.time|road.network|buildings.footprint", "forest.trees",
                 "A projekt gráfjai adják a magadó képességet, a megtelepedő faj pontszámát, a csírázást és az újulat kezdő állapotát. Szeletelt szomszédvizsgálat és determinisztikus sorsolás.", execution: GameRuleExecution.EditableGraph);
             Add("forest.canopy", "Lombborítás és vízigény visszacsatolása", "Erdő", "Térképcella", "Erdőrevízió-változás",
@@ -188,7 +188,7 @@ namespace ForesTycoon
                 "commands|terrain.height|terrain.water|road.network|buildings.footprint|forest.species|forest.fitness", "forest.trees|forest.plantations",
                 "Érvényes termőhelyen választott fajból csemeték; területazonosító, telepítési év és kezdő egyedszám. A jelenlegi telepítés nem számol pénzügyi költséget.");
             Add("forest.designate", "Kitermelés kijelölése", "Erdészeti beavatkozás", "Kijelölt cellák", "Játékosparancs", logistics, "Designate",
-                "commands|forest.volume", "harvest.sites", "A kijelölés megjegyzi a kitermelhető térfogatot; önmagában nem vágja ki a fákat.");
+                "commands|forest.volume", "harvest.sites", "Véghasználatnál a teljes csempe, alsó gyérítésnél a körlapösszeg megadott hányadáig a vékonyabb fák azonosítója kerül a megbízásba. A processzor termeli ki a kijelölt fákat.");
             Add("forest.fell", "Egész fák kivágása és helyi depó", "Erdészeti beavatkozás", "Faegyed / cella", "Processzor-munka vagy kitermelési művelet", individuals, "FellIndividual",
                 "harvest.sites|forest.trees|machine.work", "forest.trees|forest.stumps|timber.localDepot",
                 "Egész fák kerülnek a helyi rönkdepóba. Részrakodás nem zsugorítja a megmaradt fákat; a fák térfogata és a tönk mérete megmarad.", "V = π × átmérő² / 4 × magasság × 0,45");
@@ -366,7 +366,7 @@ namespace ForesTycoon
                 "A talaj-, klíma- és fafajparaméterek a projekt szerkeszthető típusadatai; a rájuk épülő állapotváltozások a szabályokban adhatók meg.",
                 "Talajtömörödés, erózió és útkialakítás miatti részletes vízelvezető műtárgyak nincsenek külön folyamatként megvalósítva.",
                 "A vadak nem rágják a csemetéket; kártevő-, fertőzés- és tűzterjedési rendszer még nincs.",
-                "Gyérítés, ápolás és ezek pénzügyi költsége még nem külön játékosparancs; telepítés és kitermelés van.",
+                "A gyérítés gépi költségeit a szokásos kitermelési lánc számolja. Külön ápolási megbízás és cellán belüli elegyes újulat még nincs.",
                 "A hitelkeret csak az út- és nyomépítést, valamint az útjavítást korlátozza; alapértéke korlátlan. Járművásárlás, kamat és beépített piaci kereslet–kínálat modell még nincs: a piaci árszorzó képlettel vagy saját készlettel modellezhető.",
                 "A fa térfogatának pénzbeli értékét a logisztikai TimberPrice adja; a teherautó fasűrűsége minden fajra azonos.",
                 "A natív folyamatok több írója és visszacsatolása a meglévő futtatási sorrend szerint működik; a katalógus élei nem új végrehajtási sorrendet jelentenek." });

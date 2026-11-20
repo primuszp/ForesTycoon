@@ -24,7 +24,8 @@ namespace ForesTycoon
         SetTuning = 16,
         SetBehaviors,
         SetRuleProject,
-        TrafficPassage
+        TrafficPassage,
+        ThinForestArea
     }
 
     readonly record struct WorldCommandRecord(
@@ -76,7 +77,7 @@ namespace ForesTycoon
         public const int CurrentVersion = 19;
         // Bump whenever native simulation semantics change. Editable graphs and tuning
         // are stored separately in the checkpoint/journal; this identifies their runtime.
-        public const string CurrentRuntimeRulesVersion = "forestycoon-simulation/2026-11-13.1";
+        public const string CurrentRuntimeRulesVersion = "forestycoon-simulation/2026-11-20.3";
         public string RuntimeRulesVersion { get; init; } = CurrentRuntimeRulesVersion;
         public WorldSaveData() { }
         // Missing JSON must not silently inherit today's runtime identifier.
@@ -94,7 +95,7 @@ namespace ForesTycoon
             get {
                 var state = Version < 18 && Checkpoint != null
                     ? Checkpoint with { DeliveredTimber = Checkpoint.Logistics?.Mills?.Sum(m => m?.Received ?? 0) ?? Checkpoint.DeliveredTimber } : Checkpoint;
-                if (state?.Vehicles?.Vehicles == null || RuntimeRulesVersion == CurrentRuntimeRulesVersion) return state;
+                if (state?.Vehicles?.Vehicles == null || RuntimeRulesVersion is CurrentRuntimeRulesVersion or "forestycoon-simulation/2026-11-13.1" or "forestycoon-simulation/2026-11-20.1" or "forestycoon-simulation/2026-11-20.2") return state;
                 // Earlier non-physical shuttles could stop just beyond an endpoint. Keep their timber at the actual loading stop.
                 return state with { Vehicles = state.Vehicles with { Vehicles = state.Vehicles.Vehicles.Select(v => {
                     if (v.Physics || v.Transit || v.SourceTiles == null || v.State is not (VehicleTransportState.Loading or VehicleTransportState.Waiting or VehicleTransportState.Unloading)) return v;
@@ -125,7 +126,7 @@ namespace ForesTycoon
                 || (Version == 14 && RuntimeRulesVersion == "forestycoon-simulation/2026-10-10.4")
                 || (Version == 15 && RuntimeRulesVersion == "forestycoon-simulation/2026-10-10.5");
             // Older runtimes can import complete states; never replay their history under changed simulation semantics.
-            bool previousSnapshot = Version is >= 16 and <= CurrentVersion && RuntimeRulesVersion is "forestycoon-simulation/2026-10-10.6" or "forestycoon-simulation/2026-10-16.1" or "forestycoon-simulation/2026-10-17.1" or "forestycoon-simulation/2026-10-19.1" or "forestycoon-simulation/2026-10-19.2" or "forestycoon-simulation/2026-10-19.3" or "forestycoon-simulation/2026-10-21.1" or "forestycoon-simulation/2026-10-30.1" or "forestycoon-simulation/2026-10-31.1" or "forestycoon-simulation/2026-10-31.2" or "forestycoon-simulation/2026-10-31.3" or "forestycoon-simulation/2026-10-31.4"
+            bool previousSnapshot = Version is >= 16 and <= CurrentVersion && RuntimeRulesVersion is "forestycoon-simulation/2026-10-10.6" or "forestycoon-simulation/2026-10-16.1" or "forestycoon-simulation/2026-10-17.1" or "forestycoon-simulation/2026-10-19.1" or "forestycoon-simulation/2026-10-19.2" or "forestycoon-simulation/2026-10-19.3" or "forestycoon-simulation/2026-10-21.1" or "forestycoon-simulation/2026-10-30.1" or "forestycoon-simulation/2026-10-31.1" or "forestycoon-simulation/2026-10-31.2" or "forestycoon-simulation/2026-10-31.3" or "forestycoon-simulation/2026-10-31.4" or "forestycoon-simulation/2026-11-13.1" or "forestycoon-simulation/2026-11-20.1" or "forestycoon-simulation/2026-11-20.2"
                 && Checkpoint != null && Checkpoint.Tick == Tick;
             if (Version >= 12 && !migratedRuntime && !previousSnapshot && !string.Equals(RuntimeRulesVersion, CurrentRuntimeRulesVersion, StringComparison.Ordinal))
                 throw new NotSupportedException($"Simulation rules runtime '{RuntimeRulesVersion ?? "missing"}' is not supported; expected '{CurrentRuntimeRulesVersion}'.");

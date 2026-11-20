@@ -16,6 +16,8 @@ internal interface IRegenerationQuery
 internal interface IRegenerationSource
 {
     [RuleField("Érettség", Display = "Érettség", Min = 0, Max = 1)] double Maturity { get; }
+    [RuleField("A faj érési korát elérő élő egyedek száma", Display = "Magtermő korú egyedek", Unit = "db", Min = 0)] double MatureCount { get; }
+    [RuleField("A magtermő korú egyedek legjobb egészségi értéke", Display = "Legjobb magtermő egészsége", Min = 0, Max = 1)] double BestMatureHealth { get; }
     [RuleField("Magadó átlagéletkora", Display = "Életkor", Unit = "év", Min = 0)] double Age { get; }
     [RuleField("A magadó és a célcsempe középpontjának távolsága", Display = "Távolság", Unit = "m", Min = 0)] double Distance { get; }
     [RuleField("Egészség", Display = "Egészség", Min = 0, Max = 1)] double Health { get; }

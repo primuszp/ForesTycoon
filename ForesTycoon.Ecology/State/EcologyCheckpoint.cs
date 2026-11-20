@@ -16,7 +16,9 @@ namespace ForesTycoon.Ecology
         [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
         double? RuleExchanged = null,
         [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-        double? RainLeftToRules = null);
+        double? RainLeftToRules = null,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        double[] SupplyIntegral = null);
     internal sealed record TreePatchCheckpoint(int TileId, ForestTree[] Trees, ForestTreeStump[] Stumps,
         ForestDeadTree[] DeadTrees, float Depot, ulong Revision, ulong TopologyRevision);
     internal sealed record TreeStoreCheckpoint(TreePatchCheckpoint[] Patches, ulong NextId, ulong TopologyRevision,
@@ -37,7 +39,8 @@ namespace ForesTycoon.Ecology
         internal EnvironmentCheckpoint Capture() => new(StateFields.Select(a => (double[])a.Clone()).ToArray(),
             remainder, monthSeconds, radiationIntegral, Evaporated, Transpired, Outflow, InitialWater, Revision, weather.Capture(),
             (ForestHydrologyInputs[])vegetation.Clone(), vegetationRevision, RainReceived, (double[])snow.Clone(), springReceived, initialWaterBeforeSoilEdit,
-            ruleExchanged == 0 ? null : ruleExchanged, rainLeftToRules == 0 ? null : rainLeftToRules);
+            ruleExchanged == 0 ? null : ruleExchanged, rainLeftToRules == 0 ? null : rainLeftToRules,
+            monthSeconds == 0 ? null : (double[])supplyIntegral.Clone());
 
         internal void Restore(EnvironmentCheckpoint state) => SimulationWork.Complete(RestoreWork(state));
 
@@ -57,9 +60,12 @@ namespace ForesTycoon.Ecology
                 CheckpointGuard.Length(state.Fields[f], CellCount, "water raster length");
                 foreach (double value in state.Fields[f]) { yield return 1; CheckpointGuard.NonNegative(value, "water raster value"); }
             }
+            if (state.SupplyIntegral != null) CheckpointGuard.Length(state.SupplyIntegral, CellCount, "soil supply integral length");
             for (int id = 0; id < CellCount; id++)
             {
                 yield return 1;
+                if (state.SupplyIntegral != null) CheckpointGuard.Require(state.SupplyIntegral[id] >= 0 &&
+                    state.SupplyIntegral[id] <= state.MonthSeconds + 1e-8, "soil supply integral");
                 CheckpointGuard.Require(state.Fields[2][id] <= soils[id].Saturation + 1e-9, "soil saturation");
                 CheckpointGuard.Unit(state.Fields[4][id], "drought"); CheckpointGuard.Unit(state.Fields[5][id], "waterlogging");
             }
@@ -91,10 +97,16 @@ namespace ForesTycoon.Ecology
             CheckpointGuard.Require(double.IsFinite(ruleExchanged), "rule water exchange");
             CheckpointGuard.NonNegative(regionalRainReceived, "received precipitation");
             for (int i = 0; i < fields.Length; i++) { yield return 1; state.Fields[i].CopyTo(fields[i], 0); }
+            for (int id = 0; id < CellCount; id++) {
+                // Older mid-month saves measured supply only at the endpoint.
+                supplyIntegral[id] = state.SupplyIntegral?[id] ?? soils[id].Availability(soil[id]) * state.MonthSeconds;
+                yield return 1;
+            }
             Array.Clear(snow);
             state.Snow?.CopyTo(snow, 0);
             remainder = state.Remainder; monthSeconds = state.MonthSeconds; radiationIntegral = state.RadiationIntegral;
             Evaporated = state.Evaporated; Transpired = state.Transpired; Outflow = state.Outflow; Revision = state.Revision;
+            vegetationStorageEpoch = null;
             state.Vegetation.CopyTo(vegetation, 0); vegetationRevision = state.VegetationRevision;
             foreach (int unit in SummarizeWork()) yield return unit;
             double scale = Math.Max(1, InitialWater + RainReceived + springReceived);

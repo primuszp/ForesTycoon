@@ -7,7 +7,8 @@ namespace ForesTycoon.Rules;
 public static class ForestRegenerationRules
 {
     public static readonly string[] Inputs = { "source.maturity", "source.health", "source.biomass", "tile.moisture", "tile.suitability",
-        "tile.waterResponse", "tile.crowding", "species.shadeTolerance", "species.maximumBiomass", "seeds.supply", "step.years", "seeds.random", "tile.neighborBiomass", "source.distance", "source.age", "species.matureAge", "tile.fertility", "tile.elevation", "environment.radiation" };
+        "tile.waterResponse", "tile.crowding", "species.shadeTolerance", "species.maximumBiomass", "seeds.supply", "step.years", "seeds.random", "tile.neighborBiomass", "source.distance", "source.age", "species.matureAge", "tile.fertility", "tile.elevation", "environment.radiation",
+        "source.matureCount", "source.bestMatureHealth" };
     public static readonly BehaviorHook[] Hooks = {
         Hook("forest.seedCrowding", "Újulat lombterhelése", 1),
         Hook("forest.seedlingAge", "Újulat kezdő életkora", 1e3),
@@ -33,6 +34,8 @@ public static class ForestRegenerationRules
 /// <summary>Immutable measured inputs to one authored regeneration decision.</summary>
 public readonly record struct ForestRegenerationInputs
 {
+    public int MatureCount { get; init; }
+    public double BestMatureHealth { get; init; }
     public double Maturity { get; init; }
     public double Health { get; init; }
     public double Biomass { get; init; }

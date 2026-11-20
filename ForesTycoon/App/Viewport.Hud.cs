@@ -28,7 +28,7 @@ namespace ForesTycoon
         private const float StatusBarHeight = 150f;
 
         private const double ToastSeconds = 4.5;
-        private (ForestryActionResult Action, int Applied, int Tiles) lastForestryToast;
+        private (ForestryActionResult Action, ForestryAreaSummary Area) lastForestryToast;
 
         private void ShowToast(string text, NVec4 color)
         {
@@ -226,6 +226,13 @@ namespace ForesTycoon
                 case TerrainEditTool.SkidTrailRemove:
                     ImGui.TextDisabled("Húzd végig a megszüntetendő nyomon.");
                     break;
+                case TerrainEditTool.ThinForest:
+                    int percent = interaction.ThinningPercent;
+                    ImGui.SetNextItemWidth(140);
+                    if (ImGui.SliderInt("Kivehető körlapösszeg", ref percent, 10, 50, "%d%%"))
+                        interaction.ThinningPercent = percent;
+                    if (ImGui.IsItemHovered()) ImGui.SetTooltip("Csempénként a megadott körlapösszeg-hányadig jelöli ki a vékonyabb fákat. A vágást a processzor végzi.");
+                    break;
                 case TerrainEditTool.HarvestForest:
                     ImGui.TextDisabled("Húzással jelöld ki a vágást. A processzor dönt, darabol és a nyom mellé sarangol; a forwarder a rakodóra hordja. Nyom kell az útig.");
                     if (interaction.IsForestryDragging) { ImGui.SameLine(); ImGui.TextUnformatted($"{world.ForestryPreviewCount} csempe"); }
@@ -304,12 +311,14 @@ namespace ForesTycoon
         private void TrackForestryResult()
         {
             ForestryAreaSummary area = world.LastForestryArea;
-            var current = (world.LastForestryAction, area.Applied, area.TileCount);
+            var current = (world.LastForestryAction, area);
             if (current == lastForestryToast) return;
             lastForestryToast = current;
             if (world.LastForestryAction == ForestryActionResult.None) return;
 
             string text = ForestryActionText(world.LastForestryAction);
+            if (area.Thinning is { SurveyedTrees: > 0 } thinning)
+                text = thinning.Description;
             if (!area.IsEmpty)
                 text += $"  ({area.Applied}/{area.TileCount} csempe" + (area.TimberVolume > 0f ? $", {area.TimberVolume:F1} m³)" : ")");
             ShowToast(text, ForestryActionSucceeded(world.LastForestryAction) ? HudTheme.Good : HudTheme.Bad);
@@ -357,7 +366,8 @@ namespace ForesTycoon
             {
                 ImGui.SeparatorText("Erdőtelepítés");
                 HudTheme.KeyValue("Terület", $"#{plot.Plantation.AreaId} · {Capitalize(ForestSpeciesName(plot.Plantation.Species))}");
-                HudTheme.KeyValue("Soros telepítés", $"{plot.Living}/{plot.Plantation.InitialTrees} élő fa/csempe");
+                HudTheme.KeyValue("Telepített tőszám", $"{plot.Plantation.InitialTrees} db/csempe");
+                HudTheme.KeyValue("Jelenlegi élő tőszám", $"{plot.Living} db/csempe");
                 HudTheme.KeyValue("Látható holtfa", $"{plot.Dead}");
                 if (plot.Living > 0)
                 {
@@ -708,6 +718,10 @@ namespace ForesTycoon
                     interaction.PlantingSpecies = request.Species;
                     SelectTool(TerrainEditTool.PlantForest);
                     ShowToast($"Erdőtelepítés: {ForestSpeciesName(request.Species)}. Húzással jelöld ki a területet.", HudTheme.Info);
+                    break;
+                case ManagementRequestKind.Thin:
+                    SelectTool(TerrainEditTool.ThinForest);
+                    ShowToast("Gyérítés: válassz erélyt, majd jelöld ki a területet.", HudTheme.Info);
                     break;
                 case ManagementRequestKind.Harvest:
                     SelectTool(TerrainEditTool.HarvestForest);
@@ -1061,11 +1075,12 @@ namespace ForesTycoon
             species == ForestSpecies.None ? "nincs" : ForestSpeciesTraits.For(species).Name.ToLowerInvariant();
 
         private static bool ForestryActionSucceeded(ForestryActionResult result) =>
-            result == ForestryActionResult.Designated || result == ForestryActionResult.Planted || result == ForestryActionResult.Harvested;
+            result is ForestryActionResult.Designated or ForestryActionResult.ThinningDesignated or ForestryActionResult.Planted or ForestryActionResult.Harvested;
 
         private static string ForestryActionText(ForestryActionResult result) => result switch
         {
             ForestryActionResult.Planted => "Ültetés sikeres – a facsemete már látható.",
+            ForestryActionResult.ThinningDesignated => "Gyérítés kijelölve. A megjelölt fákat a processzor termeli ki.",
             ForestryActionResult.Designated => "Kitermelési terület kijelölve – a fák rakodáskor fogynak.",
             ForestryActionResult.Harvested => "Fakitermelés sikeres.",
             ForestryActionResult.TileOccupied => "Ültetés sikertelen: a csempe már foglalt.",

@@ -8,16 +8,35 @@ namespace ForesTycoon.TreeModels
     {
         private sealed record Shell(Vector3[] Points, float[] Tints, float[] Openness, int[] Triangles, Vector3 Centre);
 
+        private readonly record struct RayLobe(Vector3 Origin, Vector3 Direction, float InverseBottom, int Index);
+
         internal static Vertex[] Build(TreeForm form, ForestLod lod)
         {
             var spec = form.Spec;
             var profile = TreeCrownParameters.Resolve(spec.Species, spec.Phase, spec.Dead)
                 ?? throw new ArgumentOutOfRangeException(nameof(form));
             float crownHeight = form.Height * form.CrownFraction;
-            var leaves = new List<Vector3>();
             var sk = form.Skeleton;
-            for (int i = 0; i < sk.Leaves.Length; i++)
-                if (!form.Dead[sk.LeafStem[i]]) AddLeaf(sk.Leaves[i]);
+            var leaves = new List<Vector3>(sk.Leaves.Length);
+            bool veteranPine = spec.Species == ForestSpecies.Pine && spec.Phase == TreeLifePhase.Old && profile.Gaps > 0;
+            if (veteranPine)
+            {
+                // Old pine retains its needles on the external shoots. Seed the foliage
+                // masses on the actual distal wood, leaving the crooks of the big limbs bare.
+                var hasChildren = new bool[sk.StemCount];
+                foreach (var stem in sk.Stems)
+                    if (stem.Parent >= 0) hasChildren[stem.Parent] = true;
+                for (int i = 0; i < sk.StemCount; i++)
+                {
+                    if (hasChildren[i] || sk.Stems[i].Level == 0 || form.Dead[i]) continue;
+                    var twig = sk.PointsOf(i);
+                    AddLeaf(twig[^1]);
+                    AddLeaf(Vector3.Lerp(twig[^2], twig[^1], .4f));
+                }
+            }
+            if (!veteranPine || leaves.Count == 0)
+                for (int i = 0; i < sk.Leaves.Length; i++)
+                    if (!form.Dead[sk.LeafStem[i]]) AddLeaf(sk.Leaves[i]);
             if (leaves.Count == 0) foreach (var leaf in sk.Leaves) AddLeaf(leaf);
             void AddLeaf(Vector3 leaf)
             {
@@ -29,7 +48,7 @@ namespace ForesTycoon.TreeModels
             }
             int requested = spec.Phase >= TreeLifePhase.Old ? profile.Old : spec.Phase == TreeLifePhase.Mature ? profile.Mature : profile.Young;
             float aspect = form.CrownRadius / crownHeight;
-            var lobes = Cluster(leaves, requested, profile, spec.Seed, aspect);
+            var lobes = Cluster(leaves, requested, profile, spec.Seed, aspect, weightByTips: veteranPine);
             float c = MathF.Cos(spec.Yaw), s = MathF.Sin(spec.Yaw);
             Vector2 Turn(Vector2 p) => new(c * p.X - s * p.Y, s * p.X + c * p.Y);
             for (int i = 0; i < lobes.Count; i++)
@@ -42,7 +61,7 @@ namespace ForesTycoon.TreeModels
             var shells = MakeShells(lod, count);
             // A sparse lattice must not rescale the distances between branch pads. Derive one
             // reference envelope from the near surface, then use it for every viewing distance.
-            var reference = pads && lod != ForestLod.Near
+            var reference = pads && !veteranPine && lod != ForestLod.Near
                 ? MakeShells(ForestLod.Near, Lattice(form.CrownRadius, ForestLod.Near, form.Shrub) * profile.Detail) : shells;
             float minZ = float.MaxValue, maxZ = float.MinValue, maxR = 0;
             foreach (var shell in reference) foreach (var p in shell.Points) maxR = Math.Max(maxR, p.Xy.Length);
@@ -59,7 +78,7 @@ namespace ForesTycoon.TreeModels
                 {
                     var allocation = PadSamples(lobes, samples, detail);
                     for (int i = 0; i < lobes.Count; i++)
-                        result.Add(Sample(PadLobes(lobes[i], spec.Seed, i, spec.Yaw), aspect, spec.Yaw, allocation[i]));
+                        result.Add(Sample(PadLobes(lobes[i], spec.Seed, i, spec.Yaw), aspect, spec.Yaw, allocation[i], refinements: 6));
                 }
                 else result.Add(Sample(lobes, aspect, spec.Yaw, samples));
                 for (int i = 0; i < result.Count; i++)
@@ -67,10 +86,13 @@ namespace ForesTycoon.TreeModels
                 return result;
             }
             float thin = .72f + .28f * form.Foliage;
-            float xy = form.CrownRadius * thin / maxR * (pads ? 1 : Coverage(count));
+            float xy = form.CrownRadius * thin / (veteranPine ? 1 : maxR) * (pads ? 1 : Coverage(count));
             float topLoss = form.Dieback > .45f && spec.Phase >= TreeLifePhase.Old
                 ? Math.Min(.25f, (form.Dieback - .3f) * .5f) : 0;
-            var result = new List<Vertex>();
+            int vertexCount = 0;
+            foreach (var shell in shells) vertexCount += shell.Triangles.Length;
+            var result = new Vertex[vertexCount];
+            int offset = 0;
             foreach (var shell in shells)
             {
                 var points = shell.Points;
@@ -79,18 +101,20 @@ namespace ForesTycoon.TreeModels
                 {
                     float t = Math.Clamp((points[i].Z - minZ) / (maxZ - minZ), 0, 1);
                     float exposure = Math.Clamp(points[i].Xy.Length / maxR, 0, 1);
-                    float sideLight = form.SideExposure(MathF.Atan2(points[i].Y, points[i].X));
+                    float sideLight = profile.Roundness > 0 && !form.Bands.Space.IsUnspecified
+                        ? form.SideExposure(MathF.Atan2(points[i].Y, points[i].X)) : form.Bands.Light01;
                     float skirt = profile.Roundness > 0 ? 1 - .18f * (1 - sideLight) * Math.Clamp((.55f - t) / .55f, 0, 1) : 1;
                     shades[i] = profile.Roundness > 0
                         ? .68f + .27f * t + .13f * sideLight * exposure + shell.Tints[i] * .4f - .06f * (1 - sideLight) * (1 - t)
                         : .72f + .20f * t + .12f * exposure + shell.Tints[i];
                     shades[i] -= .14f * (1 - shell.Openness[i]) * (1 - profile.Roundness);
-                    points[i] = form.Warp.Apply(new(points[i].X * xy * skirt, points[i].Y * xy * skirt,
-                        form.CrownBase + t * crownHeight * (1 - topLoss)));
+                    points[i] = form.ShapePineCrown(form.Warp.Apply(new(points[i].X * xy * skirt, points[i].Y * xy * skirt,
+                        form.CrownBase + t * crownHeight * (1 - topLoss))));
                 }
-                result.AddRange(Emit(points, shell.Triangles, shades, form, profile));
+                Emit(points, shell.Triangles, shades, form, profile, result.AsSpan(offset, shell.Triangles.Length));
+                offset += shell.Triangles.Length;
             }
-            return result.ToArray();
+            return result;
         }
 
         // A branch-end pad is itself a small group of shoots. Reuse the same implicit surface,
@@ -139,7 +163,7 @@ namespace ForesTycoon.TreeModels
             return allocation;
         }
 
-        private static Shell Sample(List<Lobe> lobes, float aspect, float yaw, int count)
+        private static Shell Sample(List<Lobe> lobes, float aspect, float yaw, int count, int refinements = 10)
         {
             var (directions, triangles) = Sphere(count);
             // Work in an isotropic frame (z in crown radii), so the metaballs blend like round masses.
@@ -153,6 +177,11 @@ namespace ForesTycoon.TreeModels
                 float w = radius.X * radius.Y * radius.Z; middle += centres[l] * w; weight += w;
             }
             middle /= weight;
+            // All samples on a ray share the same affine transform into each ellipsoid.
+            var origins = new Vector3[lobes.Count];
+            for (int l = 0; l < lobes.Count; l++)
+                origins[l] = lobes[l].Local(middle - centres[l]) * inverseRadii[l];
+            var hits = new RayLobe[lobes.Count];
             var stretch = new Vector3(1, 1, 0.5f / aspect);
             float cos = MathF.Cos(yaw), sin = MathF.Sin(yaw);
             var points = new Vector3[count]; var tints = new float[count]; var openness = new float[count];
@@ -176,35 +205,42 @@ namespace ForesTycoon.TreeModels
             {
                 const float Step = 0.06f;
                 float far = 0;
+                int hitCount = 0;
                 for (int l = 0; l < lobes.Count; l++)
-                    far = Math.Max(far, SupportExit(lobes[l].Local(middle - centres[l]) * inverseRadii[l],
-                        lobes[l].Local(ray) * inverseRadii[l], lobes[l].Bottom));
-                owner = 0;
-                float t = far;
-                while (t > 0 && Field(middle + ray * t, out _, out _) < Threshold) t -= Step;
-                if (t <= 0) { Field(middle, out owner, out openness); return 0.05f; }
-                float inside = t, outside = Math.Min(far, t + Step);
-                for (int k = 0; k < 10; k++)
                 {
-                    float m = (inside + outside) * 0.5f;
-                    if (Field(middle + ray * m, out _, out _) >= Threshold) inside = m; else outside = m;
+                    var direction = lobes[l].Local(ray) * inverseRadii[l];
+                    float exit = SupportExit(origins[l], direction, lobes[l].Bottom);
+                    if (exit <= 0) continue;
+                    hits[hitCount++] = new(origins[l], direction, 1 / lobes[l].Bottom, l);
+                    far = Math.Max(far, exit);
                 }
-                Field(middle + ray * inside, out owner, out openness);
+                float t = far;
+                while (t > 0 && Field(t, hitCount, out _, out _) < Threshold) t -= Step;
+                if (t <= 0) { Field(0, hitCount, out owner, out openness); return .05f; }
+                float inside = t, outside = Math.Min(far, t + Step);
+                // Six bisections on a small shoot pad bound the radial interval to .06/64.
+                for (int k = 0; k < refinements; k++)
+                {
+                    float m = (inside + outside) * .5f;
+                    if (Field(m, hitCount, out _, out _) >= Threshold) inside = m; else outside = m;
+                }
+                Field(inside, hitCount, out owner, out openness);
                 return inside;
             }
 
-            float Field(Vector3 p, out int strongest, out float openness)
+            float Field(float t, int hitCount, out int strongest, out float openness)
             {
                 float sum = 0, best = 0; strongest = 0;
-                for (int l = 0; l < centres.Length; l++)
+                for (int i = 0; i < hitCount; i++)
                 {
-                    var q = lobes[l].Local(p - centres[l]) * inverseRadii[l];
-                    if (q.Z < 0) q.Z /= lobes[l].Bottom;
+                    ref readonly var hit = ref hits[i];
+                    var q = hit.Origin + hit.Direction * t;
+                    if (q.Z < 0) q.Z *= hit.InverseBottom;
                     float r2 = q.LengthSquared / (Influence * Influence);
                     if (r2 >= 1) continue;
                     float f = (1 - r2) * (1 - r2);
                     sum += f;
-                    if (f > best) { best = f; strongest = l; }
+                    if (f > best) { best = f; strongest = hit.Index; }
                 }
                 openness = best / Math.Max(sum, 1e-9f);
                 return sum;
@@ -221,6 +257,7 @@ namespace ForesTycoon.TreeModels
             { minZ = Math.Min(minZ, p.Z); maxZ = Math.Max(maxZ, p.Z); maxR = Math.Max(maxR, (p.Xy - centre).Length); }
             float cos = MathF.Cos(yaw), sin = MathF.Sin(yaw), depth = maxZ - minZ;
             if (profile.Roundness > 0)
+            {
                 for (int i = 0; i < count; i++)
                 {
                     var d = directions[i];
@@ -230,18 +267,27 @@ namespace ForesTycoon.TreeModels
                     q = Vector3.Lerp(q, new(d.X, d.Y, .5f * (d.Z + 1)), profile.Roundness);
                     points[i] = new(centre.X + q.X * maxR, centre.Y + q.Y * maxR, minZ + q.Z * depth);
                 }
-            minZ = float.MaxValue; maxZ = float.MinValue; maxR = 0;
-            foreach (var p in points)
-            { minZ = Math.Min(minZ, p.Z); maxZ = Math.Max(maxZ, p.Z); maxR = Math.Max(maxR, (p.Xy - centre).Length); }
+                minZ = float.MaxValue; maxZ = float.MinValue;
+                foreach (var p in points)
+                { minZ = Math.Min(minZ, p.Z); maxZ = Math.Max(maxZ, p.Z); }
+            }
             var detailCentre = new Vector3(centre.X, centre.Y, (minZ + maxZ) * .5f);
-            for (int i = 0; i < count; i++) points[i] = detailCentre + (points[i] - detailCentre)
-                * CrownSurfaceDetail.Factor(directions[i], seed, profile.Jitter);
+            for (int i = 0; i < count; i++)
+            {
+                float relief = CrownSurfaceDetail.Factor(directions[i], seed, profile.Jitter);
+                points[i] = detailCentre + (points[i] - detailCentre) * relief;
+                // Reuse the tree-local shoot relief as a baked light cue across all LODs.
+                shell.Tints[i] += 1.2f * (relief - 1);
+            }
             if (pads)
             {
                 // Compensate sparse facets locally, leaving branch-pad centres in the same place.
-                float coverage = lod == ForestLod.Far ? 1.16f : lod == ForestLod.Medium ? 1.04f : 1;
+                float coverage = lod == ForestLod.Far ? 1.16f + 1.3f * Math.Max(0, .56f - profile.Flatten)
+                    : lod == ForestLod.Medium ? 1.04f : 1;
+                // Few polar samples understate the thickness of a flat branch-end pad.
+                float thickness = lod == ForestLod.Far ? 1 + Math.Max(0, .60f - profile.Flatten) : 1;
                 for (int i = 0; i < count; i++) points[i] = new(centre.X + (points[i].X - centre.X) * coverage,
-                    centre.Y + (points[i].Y - centre.Y) * coverage, points[i].Z);
+                    centre.Y + (points[i].Y - centre.Y) * coverage, detailCentre.Z + (points[i].Z - detailCentre.Z) * thickness);
                 return;
             }
             if (count >= 24) return;
@@ -268,7 +314,7 @@ namespace ForesTycoon.TreeModels
             }
         }
 
-        private static Vertex[] Emit(Vector3[] points, int[] triangles, float[] shades, TreeForm form, Profile profile)
+        private static void Emit(Vector3[] points, int[] triangles, float[] shades, TreeForm form, Profile profile, Span<Vertex> result)
         {
             int count = points.Length;
             var normals = new Vector3[count];
@@ -278,8 +324,13 @@ namespace ForesTycoon.TreeModels
                 Vector3 n = Vector3.Cross(points[b] - points[a], points[c] - points[a]);
                 normals[a] += n; normals[b] += n; normals[c] += n;
             }
-            for (int i = 0; i < count; i++) normals[i] = normals[i].Normalized();
-            var result = new Vertex[triangles.Length];
+            var colors = new uint[count];
+            for (int i = 0; i < count; i++)
+            {
+                normals[i] = normals[i].Normalized();
+                colors[i] = Tint(form.CrownColor, shades[i] + .09f * normals[i].Z);
+            }
+
             float smooth = profile.Roundness > 0 ? .55f + .35f * profile.Roundness : .8f;
             for (int i = 0; i < result.Length; i += 3)
             {
@@ -290,12 +341,9 @@ namespace ForesTycoon.TreeModels
                     // Mostly smooth shading: a rounded mass, with only a hint of its facets.
                     var normal = (smooth * normals[v] + (1 - smooth) * face).Normalized();
                     if (Vector3.Dot(normal, face) < 0.15f) normal = face;
-                    // Sky light from above, shadowed undersides. Zero mean over a closed surface,
-                    // so the area-weighted crown colour stays the same at every LOD.
-                    result[i + j] = new(points[v], normal, Tint(form.CrownColor, shades[v] + 0.09f * normals[v].Z));
+                    result[i + j] = new(points[v], normal, colors[v]);
                 }
             }
-            return result;
         }
     }
 }

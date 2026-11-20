@@ -196,7 +196,7 @@ namespace ForesTycoon
             var path = new WorkResult<int[]>();
             foreach (int unit in FindPathWork(null, OrderOrigin(machine), t => t == stack.Tile, path, agent: machine)) yield return unit;
             if (path.Value == null) { Status = "A processzor nem jut el ehhez a saranghoz."; yield break; }
-            foreach (int unit in FindPathWork(null, stack.Tile, t => ContainsTile(t) && forest.AvailableTimber(t) > .001f, path, agent: machine)) yield return unit;
+            foreach (int unit in FindPathWork(null, stack.Tile, t => DesignatedTimber(t) > .001f, path, agent: machine)) yield return unit;
             bool hasTimber = path.Value != null;
             string rejection = MachineOrderRejection(machine, stack, hasTimber: hasTimber);
             yield return 1;
@@ -210,7 +210,7 @@ namespace ForesTycoon
 
         /// <summary>Path to the nearest designated tile with standing timber, over network, trails, stacks and fellings.</summary>
         private int[] NearestTimber(ForestMachine machine, int from) =>
-            FindPath(null, from, t => ContainsTile(t) && forest.AvailableTimber(t) > 0.001f, agent: machine);
+            FindPath(null, from, t => DesignatedTimber(t) > 0.001f, agent: machine);
         private bool IsDepotTile(int tile) => Depots.Exists(d => Array.IndexOf(d.Footprint, tile) >= 0);
 
         /// <summary>The forwarder's work: carry <paramref name="source"/> to <paramref name="destination"/> until it is empty.</summary>
@@ -479,7 +479,11 @@ namespace ForesTycoon
                 if (forest.TryGetStand(tile, out var stand)) machine.UnitPrice = TimberPrice(stand.Species);
                 double price = machine.UnitPrice > 0 ? machine.UnitPrice : TimberPrice(ForestSpecies.None);
                 var extracted = new WorkResult<float>();
-                foreach (int unit in forest.ExtractTimberWork(tile, Math.Min((float)machine.Rule("machine.felling", dt, forest.AvailableTimber(tile)), Math.Max(0, machine.Capacity - machine.Cargo)), extracted)) yield return unit;
+                if (SiteAt(tile) is { } site) {
+                    float available = forest.AvailableTimber(tile, site.MarkedTrees);
+                    float request = Math.Min((float)machine.Rule("machine.felling", dt, available), Math.Max(0, machine.Capacity - machine.Cargo));
+                    foreach (int unit in forest.ExtractTimberWork(tile, request, extracted, site.MarkedTrees)) yield return unit;
+                }
                 float cut = extracted.Value;
                 machine.Cargo += cut; machine.CargoValue += cut * price;
                 Fuel(machine, machine.Rule("machine.fuel", dt));
@@ -489,10 +493,10 @@ namespace ForesTycoon
                 if (!UnloadStep(machine, machine.Tile, dt)) yield break;
             }
             // The project decides whether to continue locally or request a topology query.
-            var operation = machine.Workflow(MachineWorkflowStage.BeforeWorkSearch, dt, forest.AvailableTimber(machine.Tile));
+            var operation = machine.Workflow(MachineWorkflowStage.BeforeWorkSearch, dt, DesignatedTimber(machine.Tile));
             if (operation == MachineWorkflowOperation.Continue) yield break;
             var timberResult = new WorkResult<int[]>();
-            if (operation is MachineWorkflowOperation.GoToWork or MachineWorkflowOperation.SearchForWork) foreach (int unit in FindPathWork(null, machine.Tile, t => ContainsTile(t) && forest.AvailableTimber(t) > .001f, timberResult, agent: machine)) yield return unit;
+            if (operation is MachineWorkflowOperation.GoToWork or MachineWorkflowOperation.SearchForWork) foreach (int unit in FindPathWork(null, machine.Tile, t => DesignatedTimber(t) > .001f, timberResult, agent: machine)) yield return unit;
             int[] timber = timberResult.Value;
             machine.HasWork = timber != null;
             if (operation == MachineWorkflowOperation.SearchForWork) operation = machine.Workflow(MachineWorkflowStage.AfterWorkSearch, dt, reachable: timber != null);

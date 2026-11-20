@@ -30,6 +30,7 @@ internal sealed class EditorDocument
     internal List<string> RemovedStarters { get; set; } = new();
     internal long Version { get; private set; }
     private string? revision;
+    private string? previewMapKey;
 
     internal EditorDocument()
     {
@@ -48,7 +49,12 @@ internal sealed class EditorDocument
     internal bool UndoAuthoring() => authoring.Undo();
     internal bool RedoAuthoring() => authoring.Redo();
 
-    internal void Invalidate() { Version++; revision = null; }
+    internal void Invalidate()
+    {
+        Version++;
+        revision = null;
+        previewMapKey = null;
+    }
 
     internal void Load(RuleProject project)
     {
@@ -66,6 +72,10 @@ internal sealed class EditorDocument
     }
 
     internal string Revision() => revision ??= RevisionOf(CurrentProject());
+
+    internal string PreviewMapKey() => previewMapKey ??= World == null
+        ? new RuleProject().ToJson()
+        : EditorDocumentHistory.MapPart(new RuleProject { World = World }.ToJson());
 
     internal RuleProject Capture() => CurrentProject().Clone();
 

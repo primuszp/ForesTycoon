@@ -149,7 +149,7 @@ csak a tarvágás fizet.
 
 | Akció | Hatás a szimulációban | Kapcsolódás |
 |---|---|---|
-| Tisztítás / gyérítés (x% egyed) | kevesebb verseny → több fény/víz/tér a maradéknak | `ForestCompetition`, egyedszintű kivágás már létezik |
+| Gyérítés a csempe körlapösszegének megadott százalékáig | a vékonyabb, vágható törzsek kijelölése után a meghagyott fák versenyhelyzete változik | játékbeli kijelölés, processzoros kitermelés és szerkesztőbeli törzsenkénti előnézet |
 | Egészségügyi termelés | elhalt és `StressYears` magas fák eltávolítása | `ForestDeadTree` |
 | Vízelvezető árok | `DrainagePerHour` növelés a csempén | `SoilProperties` csempe-szintű felülírás |
 | Víztartó (gát, tó) | lefolyás lassítása, talajvíz feltöltés | `SurfaceWaterFlux`, terepszerkesztés |
@@ -209,4 +209,4 @@ csak a tarvágás fizet.
 - A Teendők lencse ikonjai a 3D nézetben is megjelennek a csempék fölött, zoomtól függően ritkítva.
 - Képernyőképek: `--capture-frame <könyvtár>` 08–11. kép.
 
-Következő: M3/M4 új beavatkozások (gyérítés, egészségügyi termelés, árok), a szabályok JSON-ba szervezése.
+A gyérítés hatása harminc erdőéven keresztül követhető a [párosított kísérletben](thinning-trial.md). Az M3/M4 további tervezett beavatkozásai közé tartozik az egészségügyi termelés és az árok.

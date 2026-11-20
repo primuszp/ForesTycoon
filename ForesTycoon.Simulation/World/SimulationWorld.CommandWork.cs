@@ -100,15 +100,23 @@ partial class SimulationWorld
                     break;
                 }
             case WorldCommandKind.HarvestForest:
+            case WorldCommandKind.ThinForestArea:
             case WorldCommandKind.HarvestForestArea:
                 {
                     int[] ids = AreaTiles(record.A, record.Kind == WorldCommandKind.HarvestForest ? record.A : record.B);
                     var applied = new WorkResult<int>();
-                    foreach (int unit in Logistics.DesignateWork(ids, applied)) yield return unit;
-                    var remaining = new WorkResult<float>();
-                    foreach (int unit in Logistics.RemainingWork(remaining)) yield return unit;
-                    lastForestryAction = applied.Value > 0 ? ForestryActionResult.Designated : ForestryActionResult.NoForest;
-                    lastForestryArea = new(ids.Length, applied.Value, remaining.Value);
+                    bool thinning = record.Kind == WorldCommandKind.ThinForestArea;
+                    var prescription = thinning ? new WorkResult<ThinningPrescription>() : null;
+                    foreach (int unit in Logistics.DesignateWork(ids, applied, thinning ? record.C : 0, prescription)) yield return unit;
+                    if (thinning) {
+                        lastForestryAction = applied.Value > 0 ? ForestryActionResult.ThinningDesignated : ForestryActionResult.NoForest;
+                        lastForestryArea = new(ids.Length, applied.Value, applied.Value == 0 ? 0 : Logistics.Sites[^1].InitialVolume) { Thinning = prescription.Value };
+                    } else {
+                        var remaining = new WorkResult<float>();
+                        foreach (int unit in Logistics.RemainingWork(remaining)) yield return unit;
+                        lastForestryAction = applied.Value > 0 ? ForestryActionResult.Designated : ForestryActionResult.NoForest;
+                        lastForestryArea = new(ids.Length, applied.Value, remaining.Value);
+                    }
                     break;
                 }
             case WorldCommandKind.SendVehicle:

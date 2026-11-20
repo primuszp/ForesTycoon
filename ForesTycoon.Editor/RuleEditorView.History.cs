@@ -15,7 +15,6 @@ internal sealed partial class RuleEditorView
     }
 
     private void RecordHistory(GameWorld world) => history.Checkpoint(force: true);
-    private static string MapPart(string scenarioJson) => EditorDocumentHistory.MapPart(scenarioJson);
 
     private void ApplyHistory(GameWorld world, EditorDocumentRestore restored, string verb)
     {

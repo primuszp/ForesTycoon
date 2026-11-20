@@ -18,6 +18,7 @@ namespace ForesTycoon
         void QueuePlantForest(int tileId, ForestSpecies species);
         void QueueHarvestForest(int tileId);
         void QueuePlantForestArea(int startTileId, int endTileId, ForestSpecies species);
+        void QueueThinForestArea(int start, int end, int percent);
         void QueueHarvestForestArea(int startTileId, int endTileId);
         void SetForestryPreview(int startTileId, int endTileId, bool removal);
         void ClearForestryPreview();

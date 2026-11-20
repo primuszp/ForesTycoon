@@ -55,6 +55,7 @@ public class WorldInteractionControllerTests
 
     [Theory]
     [InlineData((int)TerrainEditTool.PlantForest, "plant:23:Spruce")]
+    [InlineData((int)TerrainEditTool.ThinForest, "thin:23:23:30")]
     [InlineData((int)TerrainEditTool.HarvestForest, "harvest:23")]
     public void ForestryTool_QueuesTileCommandOnClick(int toolValue, string expected)
     {
@@ -125,6 +126,7 @@ public class WorldInteractionControllerTests
         public void ClearRoadPreview() => Events.Add("clear");
         public void QueuePlantForestArea(int startTileId, int endTileId, ForestSpecies species) =>
             Events.Add($"plant-area:{startTileId}:{endTileId}:{species}");
+        public void QueueThinForestArea(int start, int end, int percent) => Events.Add($"thin:{start}:{end}:{percent}");
         public void QueueHarvestForestArea(int startTileId, int endTileId) =>
             Events.Add($"harvest-area:{startTileId}:{endTileId}");
         public void SetForestryPreview(int startTileId, int endTileId, bool removal) =>

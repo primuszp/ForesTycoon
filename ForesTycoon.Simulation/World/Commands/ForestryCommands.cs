@@ -65,6 +65,19 @@ namespace ForesTycoon
             tick, WorldCommandKind.HarvestForestArea, startTileId, endTileId, 0, 0, false);
     }
 
+    sealed class ThinForestAreaCommand : IWorldCommand
+    {
+        private readonly int start, end, percent;
+        public ThinForestAreaCommand(int start, int end, int percent)
+        {
+            if (percent is < 1 or > 99) throw new ArgumentOutOfRangeException(nameof(percent));
+            this.start = start; this.end = end; this.percent = percent;
+        }
+
+        public void Execute(IWorldCommandTarget world) => world.ExecuteThinForestArea(start, end, percent);
+        public WorldCommandRecord ToRecord(ulong tick) => new(tick, WorldCommandKind.ThinForestArea, start, end, percent, 0, false);
+    }
+
     sealed class HarvestForestCommand : IWorldCommand
     {
         private readonly int tileId;

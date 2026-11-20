@@ -33,6 +33,8 @@ internal sealed class EditorUiState
 internal sealed class MapUiState
 {
     internal MapLayer Layer;
+    internal bool ThinningTrial;
+    internal int ThinningPercent = 30;
     internal int BrushSoil = 1, BrushSize = 2, SelectedTile = -1, Seed, ElevationTool, WaterTool, BrushSpecies;
     internal float SpringRate = 300;
     internal readonly HashSet<int> Stroke = new();

@@ -4,6 +4,103 @@ Ez a leírás a DendroKit (Weber–Penn) alapú generátor fajparamétereinek é
 poligonkeretének hátterét foglalja össze. A kód: `ForesTycoon.TreeModels/Meshing/DendroTreeGenerator.cs`
 és `DendroCrownMesh.cs`.
 
+## Idős erdeifenyő fényben és árnyékban
+
+Az idős erdeifenyő ágvázához a Glen Affric állományfotóját vettük alapul. A modellben a hosszú, ágtiszta törzs fölött néhány erős vázág oldalra nyúlik, majd felfelé fordul. A lombcsoportok az élő hajtásvégekhez kötődnek. Méretük attól is függ, hány hajtásvég esik egymás közelébe. A világos állású fák jobban szétterülnek, míg az árnyalt állásúak koronája keskenyebb. [Glen Affric, Európai erdei fafajok atlasza, 132. oldal](https://ies-ows.jrc.ec.europa.eu/efdac/download/Atlas/pdf/Pinus_sylvestris.pdf)
+
+Az [előtte–utána képen](references/tree-crowns/idos-erdeifenyo.png) az első két oszlop ugyanazt a fát mutatja két irányból, a harmadik a nyitópálya saját koronabeállításával készült, a negyedik egy árnyalt állású példány. Minden képpár azonos nagyítású.
+
+Hat generálási magot, két fényviszonyt és három részletességet mértünk az idős fázis előző változatához képest. Az értékek bemelegített ágváz-gyorsítótár mellett, három független Release folyamat 15 mérési körének mediánjaiból származnak.
+
+| 36 modell egy körben | Generálási idő, korábbi → új | Lefoglalt memória, korábbi → új | Háromszög, korábbi → új |
+|---|---:|---:|---:|
+| Alapbeállítás | 15,51 → 10,26 ms | 17,43 → 14,11 MB | 89 934 → 77 737 |
+| Nyitópálya koronabeállítása | 22,16 → 15,95 ms | 21,40 → 19,09 MB | 113 943 → 111 372 |
+
+Mind a 72 páros összevetésben csökkent a háromszögszám. A képek a játék háromszöghálóinak szoftveres rajzai. GPU-képkockaidőt ez a mérés nem vizsgált.
+
+## Jegenyefenyő és erdeifenyő a hat életfázisban
+
+Az [azonos nézetű összehasonlításon](references/tree-crowns/jegenyefenyo-es-erdeifenyo.png) minden képpár ugyanazt az egyedet és méretarányt használja. A korábbi változat a külön magonc- és csemetemodellek bevezetése utáni állapot. Az ábra a játék nyári háromszöghálóit mutatja.
+
+| Életfázis | Jegenyefenyő (*Abies alba*) | Erdeifenyő (*Pinus sylvestris*) |
+|---|---|---|
+| Magonc | Szélesebb, közel vízszintesen szétterülő sziklevelek, fölöttük az első tűk. | A nyúlánk szár tetején sugarasan álló karcsú sziklevelek, középen rövid, egyesével álló első tűk. |
+| Csemete | Lapos oldalhajtások, a közeli nézetben oldalra fésült tűkkel. | Emelkedő oldalhajtások, a külső hajtásszakaszon tömörülő tűpárok. |
+| Fiatal | Keskeny, vezérhajtásban végződő korona, oldalirányban kinyúló ágörvökkel. | Kúpos korona, felszálló ágvégekkel és szabálytalanabb körvonallal. |
+| Érett | Tompuló csúcs, a felső örvök szélesedni kezdenek. | Magasan elágazó törzs, telt ágvégi lombcsoportok, a felső törzsszakaszon narancsos kéreg. |
+| Idős | A korona peremén álló oldalhajtás eléri a fa legnagyobb magasságát, kialakul a gólyafészekkorona. | A felső vázágak oldalra terülnek, a lombpárnák laposabbak és az erősebb ágakon összefüggőbbek. |
+| Szeneszcens | Egyenetlenebb felső perem, mélyebben ülő csúcs, felszakadozó koronaszél. | Kevesebb lombpárna, nyitottabb ágváz és a törzs tengelyétől eltolódó felső korona. |
+
+A képi ellenőrzéshez a jegenyefenyő csíranövényét és a tátrai idős jegenyefenyők koronáit, az erdeifenyőnél négy- és húszhetes növényeket, továbbá természetes állományban álló, kifejlett fákat vettünk alapul. Az egyes fázisok jellemző formai átmeneteket jelenítenek meg. [Jegenyefenyő, szlovák dendrológiai atlasz](https://www.atlasdrevin.sk/en/druh/33-abies-alba-mill) · [Erdeifenyő, korjelzett csemetefotók](https://www.foreststart.com/gallery) · [Erdeifenyő, Európai Bizottság JRC, 132–133. oldal](https://ies-ows.jrc.ec.europa.eu/efdac/download/Atlas/pdf/Pinus_sylvestris.pdf)
+
+A két fenyőfaj első átdolgozásakor, az idős erdeifenyő fenti finomítása előtt egy kör 216 szezonális modellből állt (két faj, hat fázis, hat generálási mag, három részletesség). A Release CPU-mérésnél azonos bemeneteket és bemelegített ágváz-gyorsítótárat használtunk. Verziónként három folyamat 15 mért körének mediánjait vetettük össze.
+
+| 216 modell egy körben | Korábbi | Javított |
+|---|---:|---:|
+| Generálási idő | 38,13 ms | 32,41 ms |
+| Lefoglalt memória a generáló szálon | 35,93 MB | 35,04 MB |
+| Háromszögek | 182 491 | 176 656 |
+
+Egyetlen mintánál sem nőtt a háromszögek száma. A képkockaidőre ez a CPU-mérés nem ad eredményt.
+
+## A magonc és a csemete hajtásrendszere
+
+A magonc főtengelyén sziklevelek, majd az első lomblevelek vagy tűk látszanak. A bükk két széles sziklevelet kapott. A tölgyeknél és a mogyorónál a sziklevelek a talajban maradnak, ezért a modelljükön a föld feletti első lomblevelek láthatók. A fenyőmagoncok szikleveleinek száma és állása fajonként különbözik. A részletekhez a szász állami erdészet csíranövény-fotósorozatát és a bochumi botanikai gyűjteményt használtuk. [Sachsenforst](https://www.sbs.sachsen.de/download/Jeder_faengt_mal_klein_an.pdf) · [Bochumi magoncfotók](https://botanik-bochum.de/pflanzenbilder_gehoelze_keimlinge.htm)
+
+A csemete vezérhajtásán már oldalhajtások fejlődnek. A bükk levelei az oldalhajtások mentén terülnek szét, a tölgyekéi a hajtásvégek felé tömörülnek. A kőris és a bodza átellenes, összetett leveleket visel. A jegenyefenyő tűi oldalra fésültek, a vörösfenyő rövidhajtásain csomók látszanak. Közelről a levelek kétoldalról és élük felől is látható, zárt testek. Közepes és távoli nézetben a generátor néhány felülettel foglalja össze a hajtásokat. A fiatal fa kialakult koronáját a következő életfázis modellezi. [Kor szerint feliratozott fenyőfotók](https://www.foreststart.com/gallery) · [Pilisi kísérlet, természetes újulat](https://piliskiserlet.ecolres.hu/sites/default/files/OBI-seminar_2019_02_28_TinyaF_0.pdf) · [Két tölgyfaj levélalakja csemetekorban](https://www.afs-journal.org/articles/forest/pdf/2004/01/F4108.pdf)
+
+A [négy faj előtte–utána képe](references/tree-crowns/magonc-csemete-fiatal.png) egy nézetből mutatja a magoncot, a csemetét és a fiatal fát. A [16 faj részletes tablója](references/tree-crowns/magonc-es-csemete.png) a két legkorábbi fázist mutatja. A méretarányt minden egyedhez külön választottuk, hogy egy levél vagy tűcsomó is látszódjon. Az ábrák a játék háromszöghálóiból készültek.
+
+Azonos bemenettel 192 szezonális modellt generáltunk egy körben (16 faj, két korai fázis, két mag, három részletesség). A korábbi állapot az első koronaátdolgozás utáni verzió. A CPU- és memóriaérték a bemelegített generátor 15 ismétlésének mediánja, három folyamatpár mediánjára összesítve, macOS arm64 Release fordításban.
+
+| 192 magonc- és csemetemodell | Korábbi | Javított |
+|---|---:|---:|
+| CPU-generálási idő | 12,05 ms | 4,97 ms |
+| Lefoglalt memória a generáló szálon | 30,30 MB | 9,87 MB |
+| Kiírt háromszögek | 92 382 | 29 800 |
+
+A 192 hálót egyenként is összevetettük. Egyiknél sem nőtt a háromszögszám. A mind a hat életfázist tartalmazó 576 modelles benchmarkban ugyanebben az összevetésben a CPU-idő 58,63 ms-ról 49,63 ms-ra, a háromszögszám 450 447-ről 388 490-re csökkent. A mérés a modellépítés költségét mutatja. Játékbeli GPU-képkockaidőt ezen a gépen a gyorsított OpenGL-kontextus hiányában nem mértünk.
+
+## Faj- és koronaellenőrzés, 2026. november
+
+A [fajtabló](references/tree-crowns/fafajok-eletfazisai.png) a játék közeli, nyári modelljeit mutatja egyedenként nagyítva. Az [elegyes állomány két képe](references/tree-crowns/elegyes-allomany.png) ugyanazt a 41 egyedet mutatja közös méretarányban, azonos kamerával és fényiránnyal. Mindkettő a generált háromszögháló szoftveres rajza. A játék anyagai, textúrái és időjárási effektjei külön renderelési lépést alkotnak.
+
+A fotókat a fajok habitusának összevetésére használtuk. A hat oszlop a játék növekedési fázisait követi. A fényképek között természetes állományok, szabadon álló arborétumi példányok és magoncok is szerepelnek, eltérő termőhelyeken. Dokumentált korú idős példányok különösen a jegenyefenyőről és a vörösfenyőről állnak rendelkezésre. [Magoncok és fiatal növények fotói](https://botanik-bochum.de/pflanzenbilder_gehoelze_keimlinge.htm) · [Európai erdei fafajok atlasza](https://forest.jrc.ec.europa.eu/en/european-atlas/atlas-download-page/)
+
+| Faj | Mit ellenőriztünk a modellen? | Képi referencia |
+|---|---|---|
+| Lucfenyő | A magonc sziklevélörve fölött megjelennek az első tűk. A csemete már tűs oldalhajtásokat visel. A fiatal fa kúpos koronáján elkülönülnek az ágemeletek. | [Picea abies](https://www.atlasdrevin.sk/en/druh/36-picea-abies-l-h-karst) · [Magoncok](https://commons.wikimedia.org/wiki/Category:Picea_abies_(seedlings)) |
+| Jegenyefenyő | Fiatalon kúpos, később szélesedik a felső koronaharmad. Idősen a felső ágörvek megközelítik a csúcs magasságát. | [Korona és állomány](https://www.atlasdrevin.sk/en/druh/33-abies-alba-mill) · [Dawyck és Loch Fyne](https://www.treesandshrubsonline.org/articles/abies/abies-alba/) |
+| Európai vörösfenyő | A sugarasan kinyúló ágcsoportok mélyebben tagolják a körvonalat, az ágemeletek magassága körben változik. Télen a teljes ágváz jelenik meg. | [Alpesi és idős példányok](https://www.treesandshrubsonline.org/articles/larix/larix-decidua/) · [Arboretum Wespelaar](https://www.arboretumwespelaar.be/userfiles/file/pdf/180225_Coniferen_Awouters_BDB.pdf) |
+| Erdeifenyő | A fiatal kúp és a magas törzsön ülő, idős korban is elkülönülő ágvégi lombpárnák közötti átmenet. | [Glen Affric állományképe](https://ies-ows.jrc.ec.europa.eu/efdac/download/Atlas/pdf/Pinus_sylvestris.pdf) |
+| Közönséges boróka | A felálló változat csúcsa határozottabban keskenyedik. A faj terülő habitusa külön alakváltozat volna. | [Juniperus communis](https://www.atlasdrevin.sk/en/druh/41-juniperus-communis-l) |
+| Kocsányos tölgy | Idős korban laposabb, kijjebb nyúló ágvégi lombtömegek tagolják a koronát. | [Kifejlett korona](https://www.atlasdrevin.sk/en/druh/43-quercus-robur-l) · [Bochumi fajgaléria](https://botanik-bochum.de/pflanzenbilder/Quercus_robur.htm) |
+| Kocsánytalan tölgy | Az érett korona tojásdadabb, összefüggőbb felülete követi az egyenesebb ágrendszert. | [Quercus petraea](https://www.treesandshrubsonline.org/articles/quercus/quercus-petraea/) |
+| Csertölgy | Az érett példányok lombtömegei kevésbé simulnak össze, kirajzolódik a szabálytalan ágrendszer. | [Quercus cerris](https://www.atlasdrevin.sk/en/druh/47-quercus-cerris-l) · [Két- és hároméves cserújulat, 4–6. ábra](https://journal.pmf.ni.ac.rs/bionys/index.php/bionys/article/download/322/253) |
+| Közönséges nyír | A kifejlett korona alsó lombcsoportjai jobban követik a lecsüngő hajtásvégeket. | [Betula pendula](https://www.atlasdrevin.sk/en/druh/7-betula-pendula-l) |
+| Bükk | Zárt, simább korona, oldalirányban terjeszkedő lombtömegek. | [Bükk különböző életkorokban](https://botanik-bochum.de/pflanzenbilder/Fagus_sylvatica.htm) |
+| Hegyi juhar | Tömött, tojásdad vagy kupolás korona. | [Acer pseudoplatanus](https://www.atlasdrevin.sk/en/druh/89-acer-pseudoplatanus-l) |
+| Magas kőris | Fiatalon keskenyebb, idősebb korban lazább, elkülönülő lombcsoportok. | [Fraxinus excelsior](https://www.atlasdrevin.sk/sk/druh/103-jasen-stihly) |
+| Mogyoró | Több tősarj, felfelé szétnyíló ágrendszer. | [Corylus avellana](https://www.atlasdrevin.sk/en/druh/4-corylus-avellana-l) |
+| Egybibés galagonya | Széles tojásdad, tömött cserje- vagy kisfakorona. | [Crataegus monogyna](https://www.atlasdrevin.sk/en/druh/71-crataegus-monogyna-jacq) |
+| Kökény | A sűrű ágrendszert teltebb koronaközép és alacsonyabban kezdődő lomb jelzi. | [Prunus spinosa](https://www.atlasdrevin.sk/en/druh/67-prunus-spinosa-l) |
+| Fekete bodza | A lombtömegek a korábbi galagonyaprofilnál kijjebb és magasabbra kerülnek a széthajló ágakon. | [Sambucus nigra](https://www.atlasdrevin.sk/sk/druh/109-baza-cierna) |
+
+A szezonális modellépítés az évszakváltáshoz szükséges faanyagot egy menetben készíti. A lombcsoportok keresése megőrzi a legközelebbi kiindulópont távolságát. A koronafelület mintavétele a sugarat metsző lombtömegekre korlátozódik. A szín a korona meglévő felületi változatosságát követi, a háló egyes csúcspontjain egyszer számítjuk ki.
+
+A CPU-mérés parancsa `dotnet run -c Release --project ForesTycoon -- --tree-generation-benchmark`. Egy kör 16 faj × 6 életfázis × 2 mag × 3 részletesség. Hat bemelegítő kör után 15 kör mediánja kerül a kimenetre. Az ágváz-gyorsítótár ekkor már meleg. A játékbeli GPU-képkockaidőt külön a `--vegetation-benchmark` méri, működő OpenGL-környezetben.
+
+Az első koronaátdolgozás mérése a magonc és a csemete külön modellezése előtt, macOS arm64-en, Release fordításban, a `fd1d6c6` verzióhoz viszonyítva. A két generátort ugyanaz a mérőprogram futtatta, verziónként három külön folyamatban, váltott sorrendben. A táblázat a három futás mediánját adja.
+
+| 576 szezonális modell egy körben | Korábbi | Átdolgozott |
+|---|---:|---:|
+| CPU-generálási idő | 69,89 ms | 59,54 ms |
+| Lefoglalt memória a generáló szálon | 174,90 MB | 132,65 MB |
+| Kiírt háromszögek összesen | 452 751 | 450 447 |
+
+A közeli, közepes és távoli modellek mintájában egyetlen háló háromszögszáma sem nőtt. Az OpenGL-illesztőprogram ebben a mérési környezetben nem adott gyorsított rajzolási kontextust, így játékbeli képkockaidő ehhez a méréshez nem tartozik.
+
 ## 1. Eljárásos famodellek – áttekintés
 
 | Irány | Fő művek | Lényeg | Alkalmazhatóság itt |

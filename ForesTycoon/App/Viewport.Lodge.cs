@@ -313,7 +313,7 @@ namespace ForesTycoon
             var tool = interaction.ActiveTool;
             verb = tool switch
             {
-                TerrainEditTool.PlantForest => Verb.Tend,
+                TerrainEditTool.PlantForest or TerrainEditTool.ThinForest => Verb.Tend,
                 TerrainEditTool.HarvestForest or TerrainEditTool.SkidTrail or TerrainEditTool.SkidTrailRemove
                     or TerrainEditTool.PlaceStack or TerrainEditTool.RemoveStack => Verb.Produce,
                 TerrainEditTool.Road or TerrainEditTool.RoadRemove or TerrainEditTool.RoadRepair or TerrainEditTool.PlaceSawmill or TerrainEditTool.PlaceDepot
@@ -352,7 +352,7 @@ namespace ForesTycoon
             BeginPanel("##verbs", new NVec2(centre, Height - Edge), new NVec2(0.5f, 1));
             VerbButton(Verb.Observe, GameIcon.Inspect, "Megfigyel", "lencsék · Q");
             ImGui.SameLine();
-            VerbButton(Verb.Tend, GameIcon.Plant, "Gondoz", "ültetés · W");
+            VerbButton(Verb.Tend, GameIcon.Plant, "Gondoz", "ültetés és gyérítés · W");
             ImGui.SameLine();
             VerbButton(Verb.Produce, GameIcon.Harvest, "Termel", "kitermelés · E");
             ImGui.SameLine();
@@ -401,6 +401,8 @@ namespace ForesTycoon
                     break;
                 case Verb.Tend:
                     ToolIcon(GameIcon.Plant, TerrainEditTool.PlantForest, Size, "Ültetés", "6", "Csemeték ültetése húzással.");
+                    ImGui.SameLine();
+                    ToolIcon(GameIcon.Harvest, TerrainEditTool.ThinForest, Size, "Gyérítés", "", "Alsó gyérítés a kijelölt területen.");
                     break;
                 case Verb.Produce:
                     ToolIcon(GameIcon.Harvest, TerrainEditTool.HarvestForest, Size, "Kitermelés", "7", "Húzással jelöld ki a vágásterületet.");

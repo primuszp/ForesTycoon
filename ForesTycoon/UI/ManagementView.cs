@@ -8,7 +8,7 @@ namespace ForesTycoon
 {
     /// <summary>What the player asked for from the management panel; the viewport carries it out.</summary>
     internal readonly record struct ManagementRequest(ManagementRequestKind Kind, int TileId, ForestSpecies Species = ForestSpecies.None);
-    internal enum ManagementRequestKind : byte { None, Focus, Plant, Harvest }
+    internal enum ManagementRequestKind : byte { None, Focus, Plant, Harvest, Thin }
 
     /// <summary>
     /// Management lenses (water, soil, health, stand, to-do) as a top-down tile raster with a
@@ -382,6 +382,11 @@ namespace ForesTycoon
                 ImGui.SameLine();
                 if (ImGui.Button($"Ültetés: {ForestSpeciesTraits.For(recommended[0].Species).Name}"))
                     request = new(ManagementRequestKind.Plant, selected, recommended[0].Species);
+            }
+            if (s.Trees > 1)
+            {
+                ImGui.SameLine();
+                if (ImGui.Button("Gyérítés")) request = new(ManagementRequestKind.Thin, selected);
             }
             if (s.IsForest && s.Issue is ManagementIssue.Harvestable or ManagementIssue.Dieback or ManagementIssue.Overstocked)
             {

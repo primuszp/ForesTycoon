@@ -4,7 +4,7 @@ using OpenTK.Mathematics;
 
 namespace ForesTycoon.TreeModels
 {
-    internal enum CrownForm { Spruce, Oak, Birch, Beech, Hazel, Hawthorn, Maple, Ash, Pine, Juniper }
+    internal enum CrownForm { Spruce, Oak, Birch, Beech, Hazel, Hawthorn, Maple, Ash, Pine, Juniper, Fir, Larch, YoungPine }
 
     /// <summary>Season, vitality and site adjustments of the crown envelope.</summary>
     /// <param name="Foliage">1 = full leaf, lower values shrink the crown (budding, leaf fall, thin foliage).</param>
@@ -19,9 +19,11 @@ namespace ForesTycoon.TreeModels
     {
         internal static CrownForm For(ForestSpecies species, TreeLifePhase phase = TreeLifePhase.Mature) => species switch
         {
-            ForestSpecies.Spruce or ForestSpecies.Fir or ForestSpecies.Larch => CrownForm.Spruce,
+            ForestSpecies.Spruce => CrownForm.Spruce,
+            ForestSpecies.Fir => CrownForm.Fir,
+            ForestSpecies.Larch => CrownForm.Larch,
             // Young pines are tiered cones; the flat, high crown comes with age.
-            ForestSpecies.Pine => phase <= TreeLifePhase.Young ? CrownForm.Spruce : CrownForm.Pine,
+            ForestSpecies.Pine => phase <= TreeLifePhase.Young ? CrownForm.YoungPine : CrownForm.Pine,
             ForestSpecies.Juniper => CrownForm.Juniper,
             ForestSpecies.Oak or ForestSpecies.SessileOak or ForestSpecies.TurkeyOak => CrownForm.Oak,
             ForestSpecies.Birch => CrownForm.Birch,
@@ -31,6 +33,8 @@ namespace ForesTycoon.TreeModels
             ForestSpecies.Hawthorn or ForestSpecies.Blackthorn or ForestSpecies.Elder => CrownForm.Hawthorn,
             _ => CrownForm.Beech
         };
+
+        private static bool Whorled(CrownForm form) => form is CrownForm.Spruce or CrownForm.Fir or CrownForm.Larch or CrownForm.YoungPine;
 
         // Reference zoom (pixels per world unit) at the fine end of each LOD band.
         // Tessellation is chosen so the silhouette chord error stays below one pixel there.
@@ -80,8 +84,14 @@ namespace ForesTycoon.TreeModels
             CrownForm.Ash => stage == TreeLifeStage.Old ? new(0.50f, 0.55f, 0.70f, 0.75f, 0.10f, 7) : new(0.48f, 0.60f, 0.80f, 0.70f, 0.06f, 6),
             // Mature Scots pine: broad flat-topped, clumpy crown high on a clear bole.
             CrownForm.Pine => new(0.50f, 0.50f, 0.70f, 0.85f, 0.08f, 6),
+            CrownForm.YoungPine => new(.30f, .68f, .71f, .42f, .08f, 6),
             // Juniper: narrow, pointed, columnar.
-            CrownForm.Juniper => new(0.40f, 0.60f, 1.20f, 0.60f, 0.02f, 4),
+            CrownForm.Juniper => new(.29f, .42f, 1.55f, .32f, .02f, 5),
+            // The silver fir loses its pointed leader silhouette as the upper whorls catch up.
+            CrownForm.Fir when stage == TreeLifeStage.Old => new(.48f, .26f, .12f, .15f, .03f),
+            CrownForm.Fir when stage == TreeLifeStage.Mature => new(.30f, .36f, .46f, .26f, .02f),
+            CrownForm.Fir => new(.12f, .40f, 1.0f, .36f, 0),
+            CrownForm.Larch => new(.23f, .42f, .85f, .54f, 0, 6),
             _ => new(0.10f, 0.40f, 0.95f, 0.40f, 0f, 3) // spruce: cone, shaped further by whorl tiers
         };
 
@@ -93,7 +103,7 @@ namespace ForesTycoon.TreeModels
         // into a species prior; spruce additionally gets stacked whorl tiers.
         internal static Vertex[] Build(CrownForm form, int seed, TreeLifeStage stage,
             float height, float radius, float fraction, float yaw, IReadOnlyList<Vector3> leaves,
-            uint color, ForestLod lod, CrownShaping? shape = null)
+            uint color, ForestLod lod, CrownShaping? shape = null, bool senescent = false)
         {
             var shaping = shape ?? CrownShaping.Full;
             var profile = For(form, stage);
@@ -101,11 +111,12 @@ namespace ForesTycoon.TreeModels
             float minShare = 0.35f * (1 - 0.8f * shaping.Dieback);
             float bottom = height * (1 - fraction), crownHeight = height * fraction * (1 - shaping.TopLoss);
             float topZ = bottom + crownHeight;
-            int sides = form == CrownForm.Spruce
+            bool whorled = Whorled(form);
+            int sides = whorled
                 ? Sides(radius, lod, lod == ForestLod.Far ? 4 : lod == ForestLod.Medium ? 6 : 12, lod == ForestLod.Far ? 5 : lod == ForestLod.Medium ? 10 : 24)
                 : Sides(radius, lod, lod == ForestLod.Far ? 4 : lod == ForestLod.Near ? 12 : 5,
                     lod == ForestLod.Far ? 5 : lod == ForestLod.Medium ? 9 : 24);
-            var rings = Rings(form, sides, crownHeight, radius, lod);
+            var rings = Rings(form, stage, sides, crownHeight, radius, lod);
             int ringCount = rings.Count;
             var points = new Vector3[2 + ringCount * sides];
             // Leaves in polar form. A directional max of projections would give the convex
@@ -119,6 +130,12 @@ namespace ForesTycoon.TreeModels
                 leafDirection[i] = leafRadius[i] > 1e-6f ? leaves[i].Xy / leafRadius[i] : Vector2.Zero;
             }
             int window = profile.Window;
+            Span<Vector2> directions = stackalloc Vector2[sides];
+            for (int side = 0; side < sides; side++)
+            {
+                float angle = RingAngle(side);
+                directions[side] = new(MathF.Cos(angle), MathF.Sin(angle));
+            }
             var support = new float[sides];
             float bulgeAmount = ForestTreeVariation.Range(seed, 711, 0.06f, 0.16f) * (form == CrownForm.Oak ? 1.4f : 1);
             int bulgeLobes = form == CrownForm.Oak || stage == TreeLifeStage.Old ? 3 : 5;
@@ -130,7 +147,7 @@ namespace ForesTycoon.TreeModels
                 var (t, scale) = rings[ring];
                 float prior = Envelope(profile, t) * scale;
                 // The axial weight is independent of azimuth: evaluate it once per leaf/ring.
-                float sharpness = form == CrownForm.Spruce ? 40 : form == CrownForm.Oak ? 34 : 22;
+                float sharpness = whorled ? 40 : form == CrownForm.Oak ? 34 : 22;
                 for (int sample = 0; sample < leaves.Count; sample++)
                 {
                     float dz = (leaves[sample].Z - bottom) / crownHeight - t;
@@ -138,8 +155,7 @@ namespace ForesTycoon.TreeModels
                 }
                 for (int side = 0; side < sides; side++)
                 {
-                    float angle = RingAngle(side);
-                    Vector2 direction = new(MathF.Cos(angle), MathF.Sin(angle));
+                    Vector2 direction = directions[side];
                     float best = 0;
                     for (int sample = 0; sample < leaves.Count; sample++)
                     {
@@ -156,7 +172,7 @@ namespace ForesTycoon.TreeModels
                     float smooth = (support[(side + sides - 1) % sides] + 2 * support[side] + support[(side + 1) % sides]) * 0.25f;
                     float angle = RingAngle(side);
                     float bulge = 1 + bulgeAmount * MathF.Sin(angle * bulgeLobes + t * 7 + seed % 17);
-                    float lobe = smooth * (form == CrownForm.Spruce ? scale : 1);
+                    float lobe = smooth * (whorled ? scale : 1);
                     float r = (prior * radius * (1 - profile.LeafWeight) + lobe * profile.LeafWeight) * bulge;
                     r = Math.Max(r, prior * radius * minShare);
                     ringRadius[ring * sides + side] = r;
@@ -164,7 +180,7 @@ namespace ForesTycoon.TreeModels
             }
             // Vertical [1 2 1] smoothing removes shelves and flat brims where a single far leaf sat in
             // one ring; spruce keeps its tiers.
-            if (form != CrownForm.Spruce && ringCount > 2)
+            if (!whorled && ringCount > 2)
             {
                 var smoothed = new float[ringRadius.Length];
                 for (int ring = 0; ring < ringCount; ring++)
@@ -175,12 +191,21 @@ namespace ForesTycoon.TreeModels
                     }
                 ringRadius = smoothed;
             }
-            bool tiered = form == CrownForm.Spruce && ringCount > 3;
+            bool tiered = whorled && ringCount > 3;
             for (int ring = 0; ring < ringCount; ring++)
+            {
+                float ringTurn = tiered ? .25f * (2 * ForestTreeVariation.Unit(seed, 820 + ring) - 1) : 0;
                 for (int side = 0; side < sides; side++)
                 {
                     float t = rings[ring].T;
                     float r = ringRadius[ring * sides + side], angle = RingAngle(side);
+                    if (form == CrownForm.Larch)
+                    {
+                        // Foliage follows spreading sprays. Neighbouring sectors belong to the same
+                        // branch, so the uneven whorl edges survive a change of tessellation.
+                        float spray = MathF.Cos(3 * (angle - yaw) + t * 8 + seed % 17);
+                        r *= 1 + .24f * spray * (1 - t);
+                    }
                     // Break horizontal shelves without adding vertices. The displacement is
                     // bounded by the neighbouring ring gaps, so rings cannot cross.
                     float gap = Math.Min(t - (ring == 0 ? 0 : rings[ring - 1].T),
@@ -191,24 +216,77 @@ namespace ForesTycoon.TreeModels
                         // Whorls are not stacked copies: each ring turns a little, the branch tips of a
                         // skirt reach unevenly and droop (more on the lower, heavier whorls), and the top
                         // shoulder narrows into a slim leader.
-                        angle += 0.25f * (2 * ForestTreeVariation.Unit(seed, 820 + ring) - 1);
+                        angle += ringTurn;
                         if (rings[ring].Scale >= 1 && ring > 0)
                         {
                             r *= 1 + 0.1f * (2 * ForestTreeVariation.Unit(seed, 840 + ring * 16 + side) - 1);
                             dz -= gap * 0.3f * (1 - t);
                         }
-                        if (ring == ringCount - 1) r *= 0.7f;
+                        if (ring == ringCount - 1 && (form != CrownForm.Fir || stage < TreeLifeStage.Mature)) r *= .7f;
+                    }
+                    float level = t + dz;
+                    if (form is CrownForm.Fir or CrownForm.YoungPine)
+                    {
+                        // Branch fans project beyond their whorl at discrete azimuths. Their
+                        // edges lie almost level in fir and sweep upwards in young pine.
+                        float fan = MathF.Cos(3 * (angle - yaw) + t * 14 + seed % 17);
+                        float edge = rings[ring].Scale;
+                        float depth = form == CrownForm.YoungPine ? .38f : senescent ? .25f : .17f;
+                        r *= 1 + depth * fan * edge;
+                        level += gap * edge * fan * (form == CrownForm.YoungPine ? .58f : .32f);
+                        if (form == CrownForm.Fir && stage == TreeLifeStage.Old)
+                        {
+                            // Upper lateral shoots catch the terminal leader. Patchier old
+                            // crowns retain a few high tips instead of one symmetrical cap.
+                            float upper = Math.Max(0, 2 * t - 1);
+                            level += (1 - level) * upper * (.38f + .29f * fan);
+                            if (senescent) r *= 1 - .38f * (.5f - .5f * fan) * (.35f + upper);
+                        }
+                    }
+                    if (form is CrownForm.Fir or CrownForm.Larch)
+                    {
+                        // Whorls tilt together towards one side of the tree. This continuous
+                        // vertical warp fixes both poles and is monotone at every azimuth.
+                        float tilt = form == CrownForm.Fir ? .15f : .23f;
+                        level += tilt * level * (1 - level) * MathF.Sin(angle - yaw + seed % 19 + level * 3);
                     }
                     maxRadius = Math.Max(maxRadius, r);
-                    points[1 + ring * sides + side] = new(MathF.Cos(angle) * r, MathF.Sin(angle) * r, bottom + (t + dz) * crownHeight);
+                    points[1 + ring * sides + side] = new(MathF.Cos(angle) * r, MathF.Sin(angle) * r, bottom + level * crownHeight);
                 }
+            }
+            if (form == CrownForm.Fir && stage == TreeLifeStage.Old && tiered)
+            {
+                // The terminal leader stops overtopping the lateral shoots. The highest
+                // point belongs to the outer rim of the stork's nest.
+                int rim = 1 + (ringCount - 1) * sides;
+                int highest = rim;
+                for (int i = rim + 1; i < rim + sides; i++)
+                    if (points[i].Z > points[highest].Z) highest = i;
+                points[highest].Z = topZ;
+                points[^1].Z = topZ - crownHeight * (senescent ? .043f : .024f);
+            }
             // Coarser levels of detail must fill the same silhouette, or trees visibly shrink and grow as the
             // camera zooms: compensate the inscribed polygon (mean width n·sin(pi/n)/pi of a circle) and the
             // wider gaps between fewer rings, relative to the smooth envelope of the growth form.
             float width = radius / Math.Max(1e-6f, maxRadius) * FillCompensation(profile, form, rings, sides);
             // The distant, high pine canopy also stands in for its omitted long bole.
             // A small width allowance preserves filled area at the LOD transition.
-            if (form == CrownForm.Pine && lod == ForestLod.Far) width *= 1.025f;
+            if (lod == ForestLod.Far)
+            {
+                // Two rings bridge the gaps between whorls. Match their projected fill to the
+                // near mesh, especially the long upper shoulder on an old fir.
+                width *= form switch
+                {
+                    CrownForm.Pine => 1.025f,
+                    CrownForm.YoungPine => 1.12f,
+                    CrownForm.Fir when senescent => 1.04f,
+                    CrownForm.Fir when stage == TreeLifeStage.Old => .89f,
+                    CrownForm.Fir => .92f,
+                    CrownForm.Larch when stage == TreeLifeStage.Old => .98f,
+                    CrownForm.Larch => .94f,
+                    _ => 1
+                };
+            }
             // Thin foliage (bud burst, leaf fall) shrinks the envelope sideways and a little downwards.
             float thin = 0.72f + 0.28f * shaping.Foliage;
             for (int i = 1; i < points.Length - 1; i++) { points[i].X *= width * thin; points[i].Y *= width * thin; }
@@ -276,7 +354,7 @@ namespace ForesTycoon.TreeModels
             const int Steps = 48;
             float ideal = 0;
             for (int i = 0; i < Steps; i++) ideal += Envelope(profile, (i + 0.5f) / Steps) / Steps;
-            if (form == CrownForm.Spruce) ideal *= SpruceTierFill;
+            if (Whorled(form)) ideal *= (1 + WhorlShoulder(form)) * .5f + .02f;
             // Area under the piecewise-linear outline through the ring radii, closed at both poles.
             float piece = 0, previousT = 0, previous = 0;
             foreach (var (t, scale) in rings)
@@ -290,32 +368,45 @@ namespace ForesTycoon.TreeModels
             return Math.Clamp(ideal / Math.Max(1e-4f, piece), 0.85f, 1.25f) / MathF.Sqrt(polygon);
         }
 
-        // Share of the smooth spruce cone that the stacked whorl tiers fill (skirt wide, shoulder narrow).
-        private const float SpruceTierFill = 0.84f;
+        // Radius at the next whorl insertion, relative to the skirt edge.
+        private static float WhorlShoulder(CrownForm form) => form switch
+        {
+            CrownForm.Fir => .78f,
+            CrownForm.YoungPine => .57f,
+            CrownForm.Larch => .51f,
+            _ => .64f
+        };
 
         // Ring heights and per-ring radius multipliers. Deciduous crowns use evenly
         // spaced rings whose count follows the profile's vertical chord error; spruce
         // uses pairs of rings per whorl tier: a wide skirt edge and a narrow shoulder.
-        private static List<(float T, float Scale)> Rings(CrownForm form, int sides, float crownHeight, float radius, ForestLod lod)
+        private static List<(float T, float Scale)> Rings(CrownForm form, TreeLifeStage stage, int sides, float crownHeight, float radius, ForestLod lod)
         {
             var rings = new List<(float, float)>();
             float aspect = Math.Clamp(crownHeight / Math.Max(1e-4f, 2 * radius), 0.5f, 3f);
-            if (form == CrownForm.Spruce)
+            if (Whorled(form))
             {
                 // Show a tier only when it is at least ~5 px tall at the LOD reference zoom.
                 int tiers = Math.Clamp((int)(crownHeight * ReferencePixels(lod) / 5), 0, lod == ForestLod.Near ? 8 : lod == ForestLod.Medium ? 5 : 0);
+                if (form == CrownForm.Fir && stage >= TreeLifeStage.Mature)
+                    tiers = Math.Min(tiers, lod == ForestLod.Near ? 7 : 4);
+                // A seedling has only a few shoot increments, even when inspected close up.
+                if (stage == TreeLifeStage.Seedling) tiers = Math.Min(tiers, 2);
                 if (tiers < 2)
                 {
-                    rings.Add((0.08f, 1)); rings.Add((0.45f, 1));
-                    if (lod != ForestLod.Far) rings.Add((0.75f, 1));
+                    bool blunt = form == CrownForm.Fir && stage == TreeLifeStage.Old;
+                    rings.Add((.08f, 1)); rings.Add((blunt && lod == ForestLod.Far ? .82f : .45f, 1));
+                    if (lod != ForestLod.Far) rings.Add((blunt ? .92f : .75f, 1));
                     return rings;
                 }
                 rings.Add((0.04f, 0.92f));
+                float extent = form == CrownForm.Fir && stage == TreeLifeStage.Old ? .94f : .86f;
+                float span = extent / tiers;
                 for (int k = 0; k < tiers; k++)
                 {
-                    float start = 0.04f + 0.86f * k / tiers, span = 0.86f / tiers;
+                    float start = .04f + span * k;
                     rings.Add((start + span * 0.18f, 1.00f));  // skirt: drooping branch tips
-                    rings.Add((start + span * 0.92f, 0.64f));  // shoulder: next whorl insertion
+                    rings.Add((start + span * 0.92f, WhorlShoulder(form)));  // shoulder: next whorl insertion
                 }
                 return rings;
             }

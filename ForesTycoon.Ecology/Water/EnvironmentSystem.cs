@@ -48,10 +48,11 @@ namespace ForesTycoon.Ecology
         private ForesTycoon.Rules.EcologyResponseProgram Responses => ResponseRules ?? ForesTycoon.Rules.EcologyResponseProgram.Default;
         private readonly IForestHabitat habitat;
         private readonly IForestCanopy forest;
-        private readonly double[] canopy, surface, soil, deep, drought, wet, wetIntegral, snow;
+        private readonly double[] canopy, surface, soil, deep, drought, wet, wetIntegral, supplyIntegral, snow;
         private readonly SurfaceWaterFlux snowFlux;
         private readonly SoilProperties[] soils;
         private readonly ForestHydrologyInputs[] vegetation;
+        private ulong? vegetationStorageEpoch;
         private ulong vegetationRevision = ulong.MaxValue;
         private double remainder, monthSeconds, radiationIntegral;
         private readonly WeatherSystem weather;
@@ -176,7 +177,7 @@ namespace ForesTycoon.Ecology
             int n = habitat.TileCount;
             canopy = new double[n]; surface = new double[n]; soil = new double[n]; deep = new double[n];
             snow = new double[n];
-            drought = new double[n]; wet = new double[n]; wetIntegral = new double[n];
+            drought = new double[n]; wet = new double[n]; wetIntegral = new double[n]; supplyIntegral = new double[n];
             snowFlux = new SurfaceWaterFlux(n);
             soils = new SoilProperties[n]; vegetation = new ForestHydrologyInputs[n];
             if (!deferInitialization) SimulationWork.Complete(InitializeWork());
@@ -235,11 +236,22 @@ namespace ForesTycoon.Ecology
         {
             if (forest == null || vegetationRevision == forest.Revision) yield break;
             var result = new WorkResult<ForestHydrologyInputs>();
-            for (int id = 0; id < CellCount; id++) {
-                yield return 1;
-                foreach (int unit in forest.HydrologyInputsWork(id, result)) yield return unit;
-                vegetation[id] = result.Value;
+            var tiles = forest.HydrologyTiles;
+            if (tiles != null && vegetationStorageEpoch == forest.HydrologyStorageEpoch) {
+                foreach (int id in tiles) {
+                    yield return 1;
+                    foreach (int unit in forest.HydrologyInputsWork(id, result)) yield return unit;
+                    vegetation[id] = result.Value;
+                }
+            } else {
+                // Removing a patch, resetting the forest or loading a checkpoint can leave stale values anywhere.
+                for (int id = 0; id < CellCount; id++) {
+                    yield return 1;
+                    foreach (int unit in forest.HydrologyInputsWork(id, result)) yield return unit;
+                    vegetation[id] = result.Value;
+                }
             }
+            vegetationStorageEpoch = forest.HydrologyStorageEpoch;
             vegetationRevision = forest.Revision;
         }
 
@@ -257,7 +269,9 @@ namespace ForesTycoon.Ecology
                 rainLeftToRules += rain;
                 // Drought and waterlogging follow the root zone smoothly: tree growth and trafficability read them.
                 var profile = soils[id];
-                drought[id] = Responses.Drought(profile.Availability(soil[id]), drought[id], dt);
+                double supply = profile.Availability(soil[id]);
+                supplyIntegral[id] += supply * dt;
+                drought[id] = Responses.Drought(supply, drought[id], dt);
                 wet[id] = Responses.Waterlogging(profile.Waterlogging(soil[id]), wet[id], dt);
                 wetIntegral[id] += wet[id] * dt;
             }
@@ -312,10 +326,12 @@ namespace ForesTycoon.Ecology
             MeanSoil = CellCount > 0 ? root / CellCount : 0;
             MeanSnowCover = CellCount > 0 ? cover / CellCount : 0;
         }
+        internal double PeriodSupply(int id) => monthSeconds > 0 ? Math.Clamp(supplyIntegral[id] / monthSeconds, 0, 1) : soils[id].Availability(soil[id]);
+
         internal double GrowthFactor(int id, ForestSpecies species)
         {
             if ((uint)id >= (uint)CellCount) return 1;
-            double supply = soils[id].Availability(soil[id]);
+            double supply = PeriodSupply(id);
             double waterlogging = monthSeconds > 0 ? wetIntegral[id] / monthSeconds : wet[id];
             return Responses.WaterFactor(supply, waterlogging, ForestSpeciesTraits.For(species).DrySensitivity);
         }
@@ -343,7 +359,8 @@ namespace ForesTycoon.Ecology
         internal IEnumerable<int> FinishForestMonthWork()
         {
             for (int first = 0; first < wetIntegral.Length; first += 1024) {
-                Array.Clear(wetIntegral, first, Math.Min(1024, wetIntegral.Length - first)); yield return 1;
+                int count = Math.Min(1024, wetIntegral.Length - first);
+                Array.Clear(wetIntegral, first, count); Array.Clear(supplyIntegral, first, count); yield return 1;
             }
             monthSeconds = radiationIntegral = 0;
         }

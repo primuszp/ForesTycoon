@@ -31,12 +31,21 @@ namespace ForesTycoon.Ecology
         float AgeYears,
         float TimberVolume);
 
+    readonly record struct ThinningPrescription(int TargetPercent, int SurveyedTrees, int MarkedTrees,
+        double StandingBasalArea, double MarkedBasalArea)
+    {
+        public double MarkedPercent => StandingBasalArea > 0 ? 100 * MarkedBasalArea / StandingBasalArea : 0;
+        internal string Description => $"Körlapösszeg: {MarkedPercent:F1}% (cél: {TargetPercent}%). Kijelölve {MarkedTrees}/{SurveyedTrees} törzs.";
+    }
+
     /// <summary>Outcome of one area planting or felling gesture.</summary>
     readonly record struct ForestryAreaSummary(
         int TileCount,
         int Applied,
         float TimberVolume)
     {
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public ThinningPrescription? Thinning { get; init; }
         public int Skipped => TileCount - Applied;
         public bool IsEmpty => TileCount == 0;
     }
@@ -50,6 +59,7 @@ namespace ForesTycoon.Ecology
         TileOccupied,
         UnsuitableTerrain,
         NoForest,
-        Designated
+        Designated,
+        ThinningDesignated
     }
 }

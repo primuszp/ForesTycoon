@@ -8,10 +8,15 @@ public sealed class EditorSceneCommandsTests
     public void AStandaloneSceneCommandCanBeUndoneAndRedoneWithoutADrawFrame()
     {
         var document = Open(); string before = document.Revision();
+        string mapBefore = document.PreviewMapKey();
+        Assert.Same(mapBefore, document.PreviewMapKey());
         document.Scene.PaintSoil(new[] { 1, 2 }, document.World!.SoilTypes[0].Id);
         string after = document.Revision(); Assert.NotEqual(before, after);
+        string mapAfter = document.PreviewMapKey(); Assert.NotEqual(mapBefore, mapAfter);
         Assert.NotNull(document.History.Undo()); Assert.Equal(before, document.Revision());
+        Assert.Equal(mapBefore, document.PreviewMapKey());
         Assert.NotNull(document.History.Redo()); Assert.Equal(after, document.Revision());
+        Assert.Equal(mapAfter, document.PreviewMapKey());
     }
 
     [Fact]

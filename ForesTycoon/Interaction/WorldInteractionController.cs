@@ -35,6 +35,7 @@ namespace ForesTycoon
         public int RoadDragStartTileId => roadDragStartTileId;
         public bool IsForestryDragging => forestryDragStartTileId >= 0;
         public bool IsRoadRemoval { get; private set; }
+        public int ThinningPercent { get; set; } = 30;
         public ForestSpecies PlantingSpecies { get; set; } = ForestSpecies.Spruce;
         /// <summary>The tile clicked while the send tool is active (the viewport turns it into a work order).</summary>
         public Action<int> TargetPicked { get; set; }
@@ -49,7 +50,7 @@ namespace ForesTycoon
             tool == TerrainEditTool.SkidTrail || tool == TerrainEditTool.SkidTrailRemove;
 
         public static bool IsForestryTool(TerrainEditTool tool) =>
-            tool == TerrainEditTool.PlantForest || tool == TerrainEditTool.HarvestForest;
+            tool is TerrainEditTool.PlantForest or TerrainEditTool.HarvestForest or TerrainEditTool.ThinForest;
 
         public void SelectTool(TerrainEditTool tool)
         {
@@ -65,7 +66,7 @@ namespace ForesTycoon
             {
                 forestryDragStartTileId = world.HoveredTileId;
                 world.SetForestryPreview(forestryDragStartTileId, forestryDragStartTileId,
-                    ActiveTool == TerrainEditTool.HarvestForest);
+                    ActiveTool != TerrainEditTool.PlantForest);
                 return;
             }
 
@@ -79,7 +80,7 @@ namespace ForesTycoon
             if (IsForestryDragging && world.HoveredTileId >= 0)
             {
                 world.SetForestryPreview(forestryDragStartTileId, world.HoveredTileId,
-                    ActiveTool == TerrainEditTool.HarvestForest);
+                    ActiveTool != TerrainEditTool.PlantForest);
                 return;
             }
 
@@ -137,6 +138,8 @@ namespace ForesTycoon
                         if (startTileId == endTileId) world.QueuePlantForest(endTileId, PlantingSpecies);
                         else world.QueuePlantForestArea(startTileId, endTileId, PlantingSpecies);
                     }
+                    else if (ActiveTool == TerrainEditTool.ThinForest)
+                        world.QueueThinForestArea(startTileId, endTileId, ThinningPercent);
                     else
                     {
                         if (startTileId == endTileId) world.QueueHarvestForest(endTileId);

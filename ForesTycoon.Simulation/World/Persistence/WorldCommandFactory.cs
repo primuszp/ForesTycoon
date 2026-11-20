@@ -28,6 +28,7 @@ namespace ForesTycoon
             WorldCommandKind.HarvestForest => new HarvestForestCommand(record.A),
             WorldCommandKind.PlantForestArea =>
                 new PlantForestAreaCommand(record.A, record.B, (ForestSpecies)record.C),
+            WorldCommandKind.ThinForestArea => new ThinForestAreaCommand(record.A, record.B, record.C),
             WorldCommandKind.HarvestForestArea => new HarvestForestAreaCommand(record.A, record.B),
             _ => throw new InvalidOperationException($"Unknown world command kind: {record.Kind}.")
         };

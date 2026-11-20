@@ -74,6 +74,10 @@ namespace ForesTycoon.TreeModels
         internal readonly bool Shrub;
         internal readonly uint WoodColor, DeadColor, CrownColor;
         private readonly float cos, sin;
+        private readonly float pineCrownLift;
+        private readonly float oldPineSpread;
+        private readonly Vector2 oldPineBend;
+        private readonly Vector2 pineCrownOffset;
 
         internal TreeForm(in TreeShapeSpec spec, TreeSkeleton skeleton = null)
         {
@@ -101,6 +105,19 @@ namespace ForesTycoon.TreeModels
             Height = size.Height * TreeScale.MetresToWorld;
             CrownRadius = size.CrownRadius * TreeScale.MetresToWorld * (0.74f + 0.26f * response);
             CrownBase = Height * (1 - CrownFraction);
+            if (spec.Species == ForestSpecies.Pine && spec.Phase >= TreeLifePhase.Mature)
+            {
+                pineCrownLift = spec.Phase switch { TreeLifePhase.Mature => .18f, TreeLifePhase.Old => .58f,
+                    TreeLifePhase.Senescent => .79f, _ => 0 };
+                float angle = spec.Yaw + MathF.Tau * ForestTreeVariation.Unit(spec.Seed, 18291);
+                pineCrownOffset = new Vector2(MathF.Cos(angle), MathF.Sin(angle)) * (CrownRadius * .72f * pineCrownLift);
+                if (spec.Phase == TreeLifePhase.Old)
+                {
+                    oldPineSpread = .23f + .62f * light;
+                    oldPineBend = new Vector2(-MathF.Sin(angle), MathF.Cos(angle))
+                        * (CrownRadius * ForestTreeVariation.Range(spec.Seed, 18292, .18f, .38f));
+                }
+            }
             ZScale = Height / Skeleton.Height;
             XyScale = CrownRadius * 0.88f / Math.Max(0.001f, Skeleton.LeafRadius);
             cos = MathF.Cos(spec.Yaw); sin = MathF.Sin(spec.Yaw);
@@ -142,7 +159,28 @@ namespace ForesTycoon.TreeModels
         }
 
         /// <summary>Generator-unit point to the world frame of the tree base.</summary>
-        internal Vector3 ToWorld(Vector3 p) => Warp.Apply(ToFrame(p));
+        internal Vector3 ToWorld(Vector3 p) => ShapePineCrown(Warp.Apply(ToFrame(p)));
+
+        // Upper laterals of ageing Scots pine approach the leader. Bend both the woody
+        // scaffold and its foliage with the same mapping, fixing the crown base and apex.
+        internal Vector3 ShapePineCrown(Vector3 p)
+        {
+            if (oldPineSpread > 0)
+            {
+                // A gradual bend below the fork carries through into all lateral attachments.
+                float bole = Math.Clamp(p.Z / CrownBase, 0, 1);
+                float upper = Math.Clamp((p.Z - CrownBase) / (Height - CrownBase), 0, 1);
+                p.Xy *= 1 + oldPineSpread * (.65f * bole * bole + .35f * upper);
+                p.Xy += oldPineBend * (bole * bole * (3 - 2 * bole) - upper);
+            }
+            if (pineCrownLift > 0 && p.Z > CrownBase)
+            {
+                float t = Math.Min(1, (p.Z - CrownBase) / (Height - CrownBase));
+                p.Z += pineCrownLift * (p.Z - CrownBase) * (1 - t);
+                p.Xy += pineCrownOffset * (t * t * (3 - 2 * t));
+            }
+            return p;
+        }
 
         // Visual response of a crown to available neighbour space; independent of physical growth.
         internal static float CrownPlasticity(ForestSpecies species) => species switch

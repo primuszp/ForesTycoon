@@ -40,6 +40,36 @@ public class ForestEnvironmentCouplingTests
         return (forest, environment, new ForestEnvironmentCoordinator(forest, environment));
     }
 
+    [Theory]
+    [InlineData((int)ForestSpecies.Birch)]
+    [InlineData((int)ForestSpecies.Pine)]
+    public void DryAndWetIntervalsContributeInProportionToTheirDuration(int speciesId)
+    {
+        var species = (ForestSpecies)speciesId;
+        var env = new EnvironmentSystem(new Habitat(), null);
+        var soil = SoilProperties.Standard;
+        env.SetWater(0, EnvironmentSystem.WaterStore.Soil, soil.WiltingPoint);
+        env.AdvanceStep(3);
+        var dry = env.Capture();
+        Assert.Equal(0, env.PeriodSupply(0));
+        Assert.Equal(0, env.GrowthFactor(0, species), 8);
+        env.SetWater(0, EnvironmentSystem.WaterStore.Soil, soil.FieldCapacity);
+        env.AdvanceStep(1);
+        Assert.Equal(.25, env.PeriodSupply(0), 8);
+        Assert.True(env.CurrentWaterFactor(0, species) > env.GrowthFactor(0, species));
+        double monthly = env.GrowthFactor(0, species);
+        var restored = new EnvironmentSystem(new Habitat(), null);
+        restored.Restore(dry);
+        restored.SetWater(0, EnvironmentSystem.WaterStore.Soil, soil.FieldCapacity);
+        restored.AdvanceStep(1);
+        Assert.Equal(monthly, restored.GrowthFactor(0, species));
+        restored.Restore(env.Capture() with { SupplyIntegral = null });
+        Assert.Equal(1, restored.PeriodSupply(0), 8);
+        env.FinishForestMonth();
+        Assert.Equal(1, env.PeriodSupply(0), 8);
+        Assert.Equal(1, env.GrowthFactor(0, species), 8);
+    }
+
     [Fact]
     public void HarvestImmediatelyReleasesNeighbourLightWithoutChangingItsSizeOrHealth()
     {
@@ -66,6 +96,27 @@ public class ForestEnvironmentCouplingTests
         Assert.True(after.Resources.Light > before.Resources.Light);
         Assert.True(after.AnnualGrowth.Diameter > before.AnnualGrowth.Diameter);
         Assert.Equal(before with { Resources = after.Resources, AnnualGrowth = after.AnnualGrowth }, after);
+    }
+
+    [Fact]
+    public void SparseCanopyRefreshClearsRemovedPatchesAndIncludesNewOnes()
+    {
+        var habitat = new NeighbourHabitat();
+        var forest = new ForestSystem(habitat, new[] { new ForestStand(ForestSpecies.Oak, 60, .8f, 1), default });
+        var water = new EnvironmentSystem(habitat, forest);
+        SimulationWork.Complete(water.RefreshVegetationWork());
+        Assert.True(water.Cover(0) > 0);
+        forest.ClearTerrainTiles(new[] { 0 });
+        forest.Plant(1, ForestSpecies.Birch);
+        SimulationWork.Complete(water.RefreshVegetationWork());
+        Assert.Equal(0, water.Cover(0));
+        Assert.Equal(forest.HydrologyInputs(1), water.HydrologyInputs(1));
+        forest.ClearTerrainTiles(new[] { 1 });
+        SimulationWork.Complete(water.RefreshVegetationWork());
+        forest.Plant(0, ForestSpecies.Oak);
+        SimulationWork.Complete(water.RefreshVegetationWork());
+        Assert.Equal(forest.HydrologyInputs(0), water.HydrologyInputs(0));
+        Assert.Equal(0, water.Cover(1));
     }
 
     [Fact]

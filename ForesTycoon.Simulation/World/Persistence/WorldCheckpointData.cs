@@ -49,7 +49,8 @@ namespace ForesTycoon
         ulong ForestRevision, ulong SurfaceRevision, int NextAnimalId = 1,
         WildlifeHabitatCheckpoint[] Habitat = null, AnimalTypeCheckpoint[] Types = null);
     internal sealed record PileCheckpoint(int Tile, float Volume);
-    internal sealed record HarvestCheckpoint(int[] Tiles, float InitialVolume, int Landing = -1, PileCheckpoint[] Piles = null, float LandingStock = 0);
+    internal sealed record HarvestCheckpoint(int[] Tiles, float InitialVolume, int Landing = -1, PileCheckpoint[] Piles = null, float LandingStock = 0,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] ulong[] MarkedTrees = null);
     internal sealed record ForestMachineCheckpoint(int Id, ForestMachineKind Kind, int Site, int[] Path, double Position, double PreviousPosition,
         ForestMachineState State, ForestMachineState Goal, float Cargo, double WorkTime, int Home = -1, bool HomeRequested = false,
         int Source = -1, int Target = -1, int Destination = -1, double CargoValue = 0, double FuelUsed = 0, double UnitPrice = 0,

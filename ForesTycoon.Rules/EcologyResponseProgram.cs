@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Collections.Frozen;
 using System.Linq;
 
 namespace ForesTycoon.Rules;
@@ -19,6 +20,9 @@ public sealed class EcologyResponseProgram
             new[] { "tile.rawWaterlogging", "tile.waterlogging", "step.seconds" })
     };
     public static readonly BehaviorHook[] Hooks = SiteHooks.Concat(ForestCompetitionRules.Hooks).Concat(ForestRegenerationRules.Hooks).Concat(TreeInitialSizeRules.Hooks).Concat(EnvironmentRules.Hooks).ToArray();
+    private static readonly FrozenDictionary<string, int> RegenerationIndices = Hooks
+        .Select((hook, index) => (hook, index)).Where(entry => entry.hook.Kind == "regeneration")
+        .ToFrozenDictionary(entry => entry.hook.Id, entry => entry.index, StringComparer.Ordinal);
     private static readonly int EnvironmentIndex = Hooks.Length - EnvironmentRules.Hooks.Length;
     private static readonly int InitialSizeIndex = Array.FindIndex(Hooks, h => h.Id == "forest.initialHeight" && h.Kind == "initialTree");
     public static bool IsPureKind(string kind) => LogisticsRules.IsKind(kind) || kind is "gameplay" or "site" or "competitionPair" or "competition" or "resource" or "regeneration" or "initialTree" or "environment" or "vehicleResponse";
@@ -176,10 +180,8 @@ public sealed class EcologyResponseProgram
 
     public double Regeneration(string hook, in ForestRegenerationInputs query)
     {
-        int index = -1;
-        for (int i = 0; i < Hooks.Length; i++)
-            if (Hooks[i].Id == hook && Hooks[i].Kind == "regeneration") { index = i; break; }
-        if (index < 0) throw new ArgumentException("Unknown regeneration response.", nameof(hook));
+        if (hook == null || !RegenerationIndices.TryGetValue(hook, out int index))
+            throw new ArgumentException("Unknown regeneration response.", nameof(hook));
         var v = inputs[index];
         if (hook == "forest.seedCrowding") { v[0] = query.NeighborBiomass; v[1] = query.Moisture; return Evaluate(index); }
         v[0] = query.Maturity;
@@ -201,6 +203,8 @@ public sealed class EcologyResponseProgram
         v[16] = query.Fertility;
         v[17] = query.Elevation;
         v[18] = query.Radiation;
+        v[19] = query.MatureCount;
+        v[20] = query.BestMatureHealth;
         return Evaluate(index);
     }
     public (double Height, double Diameter, double CrownRadius) InitialSize(double age, double random, double scale, bool planted,

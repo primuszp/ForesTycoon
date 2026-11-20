@@ -35,6 +35,37 @@ public sealed class TreeVitalityRuleTests
         Assert.Contains(RuleEngine.Scope("deadTree").Actions, a => a.Name == "remove");
     }
 
+    [Theory]
+    [InlineData((int)ForestSpecies.Birch)]
+    [InlineData((int)ForestSpecies.Pine)]
+    public void RewettingAWellLitTreeReversesAccumulatedWaterStress(int speciesId)
+    {
+        using var world = World();
+        var project = world.RuleProjectDocument;
+        foreach (string hook in new[] { "forest.light", "forest.space" }) {
+            var graph = project.Behaviors.Graphs.Single(g => g.Hook == hook);
+            graph.Nodes = new() { new() { Id = "full", Name = "Full", Operation = BehaviorOperation.Constant, Value = 1 } };
+            graph.Output = "full";
+        }
+        world.QueueRuleProject(project); world.ExecutePendingCommands();
+        var tree = world.Forest.IndividualTrees.Patches.SelectMany(p => p.Value.Trees.Take(p.Value.Count))
+            .First(t => t.Species == (ForestSpecies)speciesId);
+        var samples = new List<TreeMonthSample>();
+        world.Forest.MonthlyTreeObserved += s => { if (s.Id == tree.Id) samples.Add(s); };
+        var soil = world.Soils.Profile(tree.TileId).Properties;
+        for (int month = 0; month < 4; month++)
+            for (int tick = 0; tick < 300; tick++) {
+                world.Environment.SetWater(tree.TileId, EnvironmentSystem.WaterStore.Soil, month < 2 ? soil.WiltingPoint : soil.FieldCapacity);
+                world.Update(1d / 30);
+            }
+        Assert.Equal(4, samples.Count);
+        Assert.True(samples[1].StressYears > samples[0].StressYears);
+        Assert.True(samples[2].Resources.Water > samples[1].Resources.Water);
+        Assert.True(samples[2].StressYears < samples[1].StressYears);
+        Assert.True(samples[3].StressYears < samples[2].StressYears);
+        Assert.False(samples[3].Dead);
+    }
+
     [Fact]
     public void HealthMovesTowardsTheGraphTargetAtTheEditedSpeedWithoutOvershoot()
     {
@@ -89,6 +120,25 @@ public sealed class TreeVitalityRuleTests
         for (int i = 0; i < p.Count; i++) p.Trees[i] = p.Trees[i] with { Health = .1f, StressYears = 5, BirthYear = -1000 };
         w.Forest.Update(120); Assert.Equal(ForestTreeStore.PlantedTreesPerTile, p.Count);
         Assert.All(p.Trees.Take(p.Count), t => { Assert.Equal(.1f, t.Health); Assert.Equal(5, t.StressYears); });
+    }
+
+    [Fact]
+    public void MonthlyDeathRetainsTheMeasuredHealthEvenWhenTheRuleRemovesTheTree()
+    {
+        using var world = World();
+        var patch = Plantation(world);
+        Only(world, "forest.mortality");
+        var tree = patch.Trees[0] with { Health = .1f, StressYears = 5 };
+        patch.Trees[0] = tree;
+        var history = new ForestTreeHistory();
+        history.Observe(world.Forest);
+        world.Forest.Update(10);
+        var rows = new TreeMonthSample[24];
+        Assert.Equal(1, history.Read(tree.Id, rows));
+        Assert.True(rows[0].Dead);
+        Assert.Equal(.1f, rows[0].Health);
+        Assert.Equal(5, rows[0].StressYears);
+        history.Observe(null);
     }
 
     [Fact]

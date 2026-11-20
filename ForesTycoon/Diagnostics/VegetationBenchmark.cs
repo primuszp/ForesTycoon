@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -12,6 +13,48 @@ namespace ForesTycoon
 {
     internal static class VegetationBenchmark
     {
+        // Exercises the same seasonal cache-miss path as terrain streaming, without a GPU.
+        internal static void RunGeneration()
+        {
+            var samples = new List<TreeShapeSpec>();
+            foreach (var species in Enum.GetValues<ForestSpecies>().Where(s => s != ForestSpecies.None))
+            {
+                var profile = ForestSpeciesProfile.For(species);
+                foreach (var phase in Enum.GetValues<TreeLifePhase>())
+                {
+                    float start = phase == TreeLifePhase.Seedling ? 0 : TreeLifePhases.NextAge(species, phase - 1);
+                    float end = phase == TreeLifePhase.Senescent ? profile.MaximumAgeYears : TreeLifePhases.NextAge(species, phase);
+                    var size = ForestTreeGrowth.Initial(species, (start + end) * .5f, 1);
+                    foreach (int seed in new[] { 42, 123 })
+                        samples.Add(new(species, seed, phase, size, phase == TreeLifePhase.Senescent ? .5f : 1,
+                            new TreeSite(.85f), LeafState.Full, seed * .21f));
+                }
+            }
+            var lods = Enum.GetValues<ForestLod>();
+            const int warmups = 6, rounds = 15;
+            var times = new double[rounds];
+            var bytes = new long[rounds];
+            long triangles = 0;
+            for (int pass = -warmups; pass < rounds; pass++)
+            {
+                triangles = 0;
+                var start = Stopwatch.GetTimestamp();
+                long allocated = GC.GetAllocatedBytesForCurrentThread();
+                foreach (var spec in samples)
+                foreach (var lod in lods)
+                {
+                    var mesh = DendroTreeGenerator.GenerateSeasonal(spec, lod);
+                    triangles += (mesh.Trunk.Length + mesh.Branches.Length + mesh.Crown.Length) / 3;
+                }
+                if (pass < 0) continue;
+                times[pass] = Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+                bytes[pass] = GC.GetAllocatedBytesForCurrentThread() - allocated;
+            }
+            Array.Sort(times); Array.Sort(bytes);
+            Console.WriteLine(JsonSerializer.Serialize(new { models = samples.Count * lods.Length,
+                rounds, medianMs = times[rounds / 2], medianAllocatedBytes = bytes[rounds / 2], triangles }));
+        }
+
         internal static void Run(string label)
         {
             int triangles = 0, maximum = 0, count = 0;

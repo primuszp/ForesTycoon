@@ -8,7 +8,7 @@ namespace ForesTycoon.TreeModels
     {
         // Farthest-point seeds + a fixed Lloyd iteration count: deterministic spatial
         // clusters, independent of mesh LOD and with no extra random stream.
-        private static List<Lobe> Cluster(List<Vector3> leaves, int requested, Profile p, int seed, float aspect)
+        private static List<Lobe> Cluster(List<Vector3> leaves, int requested, Profile p, int seed, float aspect, bool weightByTips = false)
         {
             // Only joined crowns use a central spine. Open crowns keep their actual leaf clusters.
             float flatten = p.Flatten * aspect;
@@ -34,20 +34,24 @@ namespace ForesTycoon.TreeModels
             // split into masses along their height rather than leaving gaps between few tall groups.
             var metric = new Vector3(1, 1, Math.Clamp(1 / aspect, 1, 4));
             var centres = new Vector3[count]; centres[0] = leaves[0];
+            var nearestSeed = new float[leaves.Count];
+            Array.Fill(nearestSeed, float.MaxValue);
             for (int k = 1; k < count; k++)
             {
                 float best = -1;
-                foreach (var leaf in leaves)
+                for (int i = 0; i < leaves.Count; i++)
                 {
-                    float nearest = float.MaxValue;
-                    for (int j = 0; j < k; j++) nearest = Math.Min(nearest, ((leaf - centres[j]) * metric).LengthSquared);
-                    if (nearest > best) { best = nearest; centres[k] = leaf; }
+                    float distance = ((leaves[i] - centres[k - 1]) * metric).LengthSquared;
+                    nearestSeed[i] = Math.Min(nearestSeed[i], distance);
+                    if (nearestSeed[i] > best) { best = nearestSeed[i]; centres[k] = leaves[i]; }
                 }
             }
             var assignment = new int[leaves.Count]; var totals = new int[count];
+            var sums = new Vector3[count];
             for (int iteration = 0; iteration < 6; iteration++)
             {
-                var sums = new Vector3[count]; Array.Clear(totals);
+                bool changed = false;
+                Array.Clear(sums); Array.Clear(totals);
                 for (int i = 0; i < leaves.Count; i++)
                 {
                     float nearest = float.MaxValue; int winner = 0;
@@ -56,9 +60,11 @@ namespace ForesTycoon.TreeModels
                         float distance = ((leaves[i] - centres[k]) * metric).LengthSquared;
                         if (distance < nearest) { nearest = distance; winner = k; }
                     }
+                    changed |= assignment[i] != winner;
                     assignment[i] = winner; sums[winner] += leaves[i]; totals[winner]++;
                 }
                 for (int k = 0; k < count; k++) if (totals[k] > 0) centres[k] = sums[k] / totals[k];
+                if (iteration > 0 && !changed) break;
             }
             for (int k = 0; k < count; k++)
             {
@@ -83,6 +89,8 @@ namespace ForesTycoon.TreeModels
                 if (pads) radius = Math.Clamp(.12f + 1.2f * MathF.Sqrt((xx + yy) / totals[k]), p.MinRadius, p.MaxRadius)
                     * (1 - .25f * p.Gaps);
                 if (pads) radius *= 1 + (p.CoreRadius - .3f) * Math.Max(0, 1 - centre.Xy.Length / p.Reach);
+                if (weightByTips)
+                    radius *= Math.Clamp(MathF.Sqrt(totals[k] * (float)count / leaves.Count), .62f, 1.50f);
                 float rise = (centre.Z - p.MinZ) / Math.Max(1e-3f, p.MaxZ - p.MinZ) - 0.5f;
                 radius *= 1 + p.Vase * rise * 0.6f;
                 var footprint = Footprint(xx, yy, xy, p.Anisotropy);

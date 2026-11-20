@@ -40,20 +40,17 @@ namespace ForesTycoon.TreeModels
         internal static Mesh GenerateSeasonal(in TreeShapeSpec spec, ForestLod lod)
         {
             var form = new TreeForm(spec with { Leaves = LeafState.Full });
-            var mesh = Build(form, lod);
-            if (TreePhenology.Evergreen(spec.Species) || spec.Dead) return mesh;
-            var winterForm = new TreeForm(spec with { Leaves = LeafState.Bare }, form.Skeleton);
-            var trunk = new List<Vertex>(); var branches = new List<Vertex>();
-            TreeWoodMesh.Build(winterForm, lod, false, trunk, branches);
-            return mesh with { Trunk = trunk.ToArray(), Branches = branches.ToArray() };
+            return Build(form, lod, winterBranches: !TreePhenology.Evergreen(spec.Species));
         }
 
-        internal static Mesh Build(TreeForm form, ForestLod lod)
+        internal static Mesh Build(TreeForm form, ForestLod lod, bool winterBranches = false)
         {
+            if (form.Spec.Phase is TreeLifePhase.Seedling or TreeLifePhase.Sapling)
+                return JuvenileTreeMesh.Build(form, lod);
             var spec = form.Spec; var sk = form.Skeleton;
             bool crowned = form.Foliage > 0 && !spec.Dead;
             var trunk = new List<Vertex>(); var branches = new List<Vertex>();
-            TreeWoodMesh.Build(form, lod, crowned, trunk, branches);
+            TreeWoodMesh.Build(form, lod, crowned && !winterBranches, trunk, branches);
             Vertex[] crown = Array.Empty<Vertex>();
             if (crowned && LobeCrownMesh.Applies(spec.Species, spec.Phase))
                 crown = LobeCrownMesh.Build(form, lod);
@@ -69,7 +66,7 @@ namespace ForesTycoon.TreeModels
                     form.Height, form.CrownRadius, form.CrownFraction, spec.Yaw, support, form.CrownColor, lod,
                     new CrownShaping(form.Foliage, form.Dieback,
                         form.Dieback > 0.45f && spec.Phase >= TreeLifePhase.Old ? Math.Min(0.25f, (form.Dieback - 0.3f) * 0.5f) : 0,
-                        form.Warp));
+                        form.Warp), senescent: spec.Phase == TreeLifePhase.Senescent);
             }
             return new(trunk.ToArray(), branches.ToArray(), crown, sk.StemCount, sk.LeafTotal);
         }

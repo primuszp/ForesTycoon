@@ -55,6 +55,27 @@ public class PineCrownTests
         });
     }
 
+    [Theory]
+    [InlineData(42)]
+    [InlineData(123)]
+    public void OldPineSpreadsItsLiveCrownFurtherInOpenLight(int seed)
+    {
+        ForestSpeciesBook.WithContext<object?>(null, () => {
+            var spec = new TreeShapeSpec(ForestSpecies.Pine, seed, TreeLifePhase.Old, new(.4f, 26, 5), 1,
+                new TreeSite(.85f), LeafState.Full, 0);
+            float Width(Vertex[] crown) => crown.Max(v => v.Position.X) - crown.Min(v => v.Position.X)
+                + crown.Max(v => v.Position.Y) - crown.Min(v => v.Position.Y);
+            foreach (var lod in Enum.GetValues<ForestLod>())
+            {
+                var open = DendroTreeGenerator.Generate(spec, lod).Crown;
+                var shaded = DendroTreeGenerator.Generate(spec with { Site = new TreeSite(.24f) }, lod).Crown;
+                Assert.True(Width(open) > 1.15f * Width(shaded));
+                Assert.Equal(open.Max(v => v.Position.Z), shaded.Max(v => v.Position.Z), 4);
+            }
+            return null;
+        });
+    }
+
     [Fact]
     public void AdultPineKeepsShedBranchStubsBelowTheLiveCrown()
     {

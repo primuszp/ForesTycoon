@@ -154,6 +154,7 @@ internal sealed partial class RuleEditorView
         CompleteEdits();
         foreach (var operation in workflow.Stop())
             if (operation.Error != null) Console.Error.WriteLine(operation.Error.Message);
+        mapEditor.Observe(null);
         trials.Dispose();
         treeEditor.Dispose(); tuningEditor.Dispose();
         currentRules.Dispose();

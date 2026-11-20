@@ -60,6 +60,29 @@ namespace ForesTycoon.TreeModels
             _ => null
         };
 
+        // Species sharing a juvenile envelope diverge as their scaffolds develop. These
+        // defaults precede the editor's common and per-phase overrides.
+        internal static Profile? For(ForestSpecies species, TreeLifePhase phase)
+        {
+            if (For(DendroCrownMesh.For(species, phase)) is not { } p) return null;
+            bool adult = phase >= TreeLifePhase.Mature;
+            return species switch
+            {
+                ForestSpecies.Pine when phase == TreeLifePhase.Mature => p with { Flatten = .76f, MinRadius = .14f, Gaps = .26f },
+                ForestSpecies.Pine when phase == TreeLifePhase.Old => p with { Old = 25, Flatten = .78f, MinRadius = .22f, MaxRadius = .48f, Vase = .76f, Gaps = .18f },
+                ForestSpecies.Pine when phase == TreeLifePhase.Senescent => p with { Old = 28, Flatten = .42f, MinRadius = .14f, MaxRadius = .40f, Vase = .68f, Gaps = .53f },
+                ForestSpecies.SessileOak when adult => p with { Roundness = .55f, Flatten = .93f, Reach = .48f },
+                ForestSpecies.TurkeyOak when adult => p with { Roundness = .32f, Jitter = .16f, Reach = .60f },
+                ForestSpecies.Oak when phase >= TreeLifePhase.Old => p with { Flatten = .66f, Reach = .64f, MaxZ = .78f },
+                ForestSpecies.Birch when adult => p with { Bottom = 1.65f, Reach = .54f },
+                ForestSpecies.Blackthorn => p with { MinZ = .18f, MaxZ = .70f, CoreRadius = .40f,
+                    Flatten = .63f, Roundness = .48f, BranchFollow = .55f },
+                ForestSpecies.Elder => p with { MinZ = .38f, MaxZ = .85f, Reach = .62f, Vase = .55f,
+                    Flatten = .72f, Bottom = 1.15f, BranchFollow = .72f, Anisotropy = .65f },
+                _ => p
+            };
+        }
+
         /// <summary>Leaf-cluster crowns beyond sapling: broadleaves and adult Scots pine; young conifers remain whorled.</summary>
         internal static bool Applies(ForestSpecies species, TreeLifePhase phase) =>
             phase >= TreeLifePhase.Young && For(DendroCrownMesh.For(species, phase)).HasValue;

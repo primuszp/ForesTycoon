@@ -59,7 +59,6 @@ internal sealed partial class RuleEditorView
     private void SpeciesTab(GameWorld world) => speciesEditor.Draw(world);
 
     private WorldScenario Scenario(GameWorld world) => document.World;
-    private string ScenarioKey() => document.World == null ? new RuleProject().ToJson() : MapPart(new RuleProject { World = document.World }.ToJson());
     /// <summary>The editor's test world is rebuilt from the map whenever the map or a type changes.</summary>
     private void ApplyScenario(GameWorld world, string what)
     {
@@ -74,7 +73,7 @@ internal sealed partial class RuleEditorView
 
     private void RequestPreviewBuild(GameWorld world, RuleProject project)
     {
-        previewBuild = (world.RequestScenario(project.World, project), ScenarioKey());
+        previewBuild = (world.RequestScenario(project.World, project), document.PreviewMapKey());
         statusFrame = -1000;
     }
 
@@ -93,7 +92,7 @@ internal sealed partial class RuleEditorView
         statusFrame = -1000;
     }
 
-    private bool PreviewCurrent() => previewBuild.Completion == null && appliedScenario == ScenarioKey();
+    private bool PreviewCurrent() => previewBuild.Completion == null && appliedScenario == document.PreviewMapKey();
 
     // ── Where the work stands: file, test world, game ────────────────────
     private (string Path, DateTime Written, string Key) sceneFile;

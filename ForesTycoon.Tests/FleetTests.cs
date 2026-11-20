@@ -16,7 +16,7 @@ public partial class FleetTests
     private sealed record Scene(TerrainMap Map, ForestSystem Forest, ForestryLogistics Logistics, VehicleSystem Vehicles, List<TrafficPassage> Passages, TimberCargoSystem Cargo);
 
     // Road along v = 2, a skid trail (8, 3) → (8, 7) to the stand, a mill at (12, 3), the depot at (4, 3).
-    private static Scene Build(bool stacks = true, bool mixedRoads = false, RoadPaving firstSurface = RoadPaving.Asphalt)
+    private static Scene Build(bool stacks = true, bool mixedRoads = false, RoadPaving firstSurface = RoadPaving.Asphalt, int thinningPercent = 0)
     {
         var map = new TerrainMap(Settings, (_, _) => 4);
         var stands = new ForestStand[map.Tiles.Count];
@@ -39,7 +39,7 @@ public partial class FleetTests
         logistics.Vehicles = vehicles;
         Assert.True(logistics.PlaceMill(Mill), logistics.Status);
         Assert.True(logistics.PlaceDepot(Depot), logistics.Status);
-        logistics.Designate(Stand);
+        SimulationWork.Complete(logistics.DesignateWork(Stand, new WorkResult<int>(), thinningPercent));
         if (stacks)
         {
             Assert.True(logistics.PlaceStack(ForestStack), logistics.Status);
@@ -56,6 +56,35 @@ public partial class FleetTests
 
     private static ForestMachine Processor(Scene s) => s.Logistics.Machines.Single(m => m.Kind == ForestMachineKind.Harvester);
     private static ForestMachine Forwarder(Scene s) => s.Logistics.Machines.Single(m => m.Kind == ForestMachineKind.Forwarder);
+
+    [Fact]
+    public void ThinningMarksSurviveRestoreAndProcessorOnlyDeliversMarkedTimber()
+    {
+        var s = Build(thinningPercent: 30);
+        var site = Assert.Single(s.Logistics.Sites);
+        var marks = site.MarkedTrees.ToHashSet();
+        Assert.NotEmpty(marks);
+        var retained = new HashSet<ulong>();
+        foreach (int id in Stand) {
+            Assert.True(s.Forest.IndividualTrees.TryGet(id, out var patch));
+            var trees = patch.Trees.Take(patch.Count).OrderBy(t => t.Dimensions.Diameter).ThenBy(t => t.Id).ToArray();
+            var marked = trees.Where(t => marks.Contains(t.Id)).ToArray();
+            Assert.Equal(trees.Take(marked.Length), marked);
+            Assert.True(marked.Sum(t => Math.Pow(t.Dimensions.Diameter, 2)) <= .3 * trees.Sum(t => Math.Pow(t.Dimensions.Diameter, 2)));
+            retained.UnionWith(trees.Skip(marked.Length).Select(t => t.Id));
+        }
+        var captured = s.Logistics.Capture();
+        s.Logistics.Restore(captured);
+        site = Assert.Single(s.Logistics.Sites);
+        Assert.True(marks.SetEquals(site.MarkedTrees));
+        var stack = s.Logistics.StackAt(ForestStack);
+        Assert.True(s.Logistics.AssignProcessor(Processor(s), stack));
+        for (int i = 0; i < 900 && stack.Volume < site.InitialVolume - .001; i++) Run(s, 1);
+        Assert.Equal(site.InitialVolume, stack.Volume, 3);
+        Assert.Equal(0, s.Logistics.Volume(site), 3);
+        Assert.True(retained.SetEquals(s.Forest.IndividualTrees.Patches.SelectMany(p => p.Value.Trees.Take(p.Value.Count)).Select(t => t.Id)));
+        Assert.True(Processor(s).FuelUsed > 0);
+    }
 
     [Fact]
     public void ControllerHomeActionFinishesHeldLogAndDeliversBeforeReturningToDepot()

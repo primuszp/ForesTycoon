@@ -226,6 +226,7 @@ namespace ForesTycoon.Ecology
 
         public void Clear()
         {
+            ObservationReset?.Invoke();
             monthlyPreparation.Clear();
             currentYearGrowth = lastYearGrowth = 0;
             IndividualTrees.Clear();

@@ -43,6 +43,7 @@ public class WorldCommandQueueTests
         public void ExecutePlantForestArea(int startTileId, int endTileId, ForestSpecies species) =>
             Events.Add($"plant-area:{startTileId}:{endTileId}:{species}");
 
+        public void ExecuteThinForestArea(int start, int end, int percent) => throw new NotSupportedException();
         public void ExecuteHarvestForestArea(int startTileId, int endTileId) =>
             Events.Add($"harvest-area:{startTileId}:{endTileId}");
     }

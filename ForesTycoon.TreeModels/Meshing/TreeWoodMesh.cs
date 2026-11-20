@@ -25,10 +25,14 @@ namespace ForesTycoon.TreeModels
         internal static void Build(TreeForm form, ForestLod lod, bool leafed, List<Vertex> trunk, List<Vertex> branches)
         {
             var spec = form.Spec;
+            float pineHeight = spec.Species == ForestSpecies.Pine && spec.Phase >= TreeLifePhase.Young
+                && !spec.Dead && ForestSpeciesBook.Look(spec.Species)?.Bark == null ? form.Height : 0;
             bool lobed = leafed && !form.Shrub && LobeCrownMesh.Applies(spec.Species, spec.Phase);
             bool open = lobed && TreeCrownParameters.Resolve(spec.Species, spec.Phase, spec.Dead)?.Gaps > 0;
             int budget = Budget(lod, !leafed, lobed);
             if (open) budget = lod == ForestLod.Near ? 1000 : lod == ForestLod.Medium ? 320 : 100;
+            if (open && spec.Species == ForestSpecies.Pine && spec.Phase == TreeLifePhase.Old)
+                budget = lod == ForestLod.Near ? 910 : lod == ForestLod.Medium ? 230 : 100;
             if (budget == 0) return;
             var sk = form.Skeleton;
             int n = sk.StemCount;
@@ -147,8 +151,20 @@ namespace ForesTycoon.TreeModels
                 }
                 if (Environment.GetEnvironmentVariable("TREE_DEBUG") != null) Console.WriteLine($"stem {i} L{stem.Level} kept {kept.Count} sides {sides} cost {cost} r {maxRadius}");
                 uint color = form.Dead[i] && !root ? form.DeadColor : form.WoodColor;
+                // Select the same scaffold vertices at each LOD before lifting the upper shoots.
+                if (spec.Species == ForestSpecies.Pine && spec.Phase >= TreeLifePhase.Mature)
+                    foreach (int vertex in kept) points[vertex] = form.ShapePineCrown(points[vertex]);
+                if (spec.Species == ForestSpecies.Pine && spec.Phase == TreeLifePhase.Old && stem.Level > 0)
+                {
+                    // Old boughs retain substantial load-bearing collars below the live tips.
+                    float gain = stem.Level == 1 ? 2.2f : 1.45f;
+                    float limitRadius = form.BreastRadius * (stem.Level == 1 ? .57f : .30f);
+                    foreach (int vertex in kept)
+                        radii[vertex] = Math.Max(radii[vertex], Math.Min(radii[vertex] * gain, limitRadius));
+                }
                 // Taper tips to a point on thin stems; trunks keep their open top inside the crown.
-                Tube(points, radii, kept, sides, color, stem.Level == 0 ? trunk : branches, !(root && leafed));
+                Tube(points, radii, kept, sides, color, stem.Level == 0 ? trunk : branches, !(root && leafed),
+                    form.Dead[i] ? 0 : pineHeight);
             }
             if (lod == ForestLod.Near && !form.Shrub && spec.Phase >= TreeLifePhase.Mature) Roots(form, trunk);
             if (leafed && spec.Species == ForestSpecies.Pine && spec.Phase >= TreeLifePhase.Mature && lod != ForestLod.Far)
@@ -178,8 +194,8 @@ namespace ForesTycoon.TreeModels
                 float length = form.Height * ForestTreeVariation.Range(form.Spec.Seed, 18200 + k, .018f, .035f);
                 float rise = ForestTreeVariation.Range(form.Spec.Seed, 18300 + k, -.15f, .3f);
                 points.Clear(); radii.Clear();
-                points.Add(form.Warp.Apply(anchor));
-                points.Add(form.Warp.Apply(anchor + new Vector3(MathF.Cos(angle), MathF.Sin(angle), rise) * length));
+                points.Add(form.ShapePineCrown(form.Warp.Apply(anchor)));
+                points.Add(form.ShapePineCrown(form.Warp.Apply(anchor + new Vector3(MathF.Cos(angle), MathF.Sin(angle), rise) * length)));
                 radii.Add(form.BreastRadius * .18f); radii.Add(form.BreastRadius * .05f);
                 Tube(points, radii, kept, 3, form.DeadColor, branches, true);
             }
@@ -206,14 +222,14 @@ namespace ForesTycoon.TreeModels
             if (fraction < 1)
                 for (int v = 0; v < stem.Count; v++)
                 {
-                    Vector3 p = f.ToWorld(sk.Points[stem.Start + v]);
+                    Vector3 p = f.Warp.Apply(f.ToFrame(sk.Points[stem.Start + v]));
                     if (v > 0) total += (p - previous).Length;
                     previous = p;
                 }
             float allowed = total * fraction, walked = 0;
             for (int v = 0; v < stem.Count; v++)
             {
-                Vector3 p = f.ToWorld(sk.Points[stem.Start + v]);
+                Vector3 p = f.Warp.Apply(f.ToFrame(sk.Points[stem.Start + v]));
                 // Drooping limbs rest on the ground rather than diving into it; the same rule applies to
                 // parent and child, so junctions stay exact.
                 if (stem.Level > 0) p.Z = Math.Max(p.Z, 0.015f * f.Height);
@@ -285,7 +301,7 @@ namespace ForesTycoon.TreeModels
 
         /// <summary>One tube through the kept points with parallel-transported rings and smooth normals.</summary>
         private static void Tube(List<Vector3> p, List<float> r, List<int> kept, int sides, uint color,
-            List<Vertex> target, bool closeTip)
+            List<Vertex> target, bool closeTip, float pineHeight = 0)
         {
             // Drop coincident points so every segment has a direction.
             var idx = new List<int>(kept.Count);
@@ -294,10 +310,18 @@ namespace ForesTycoon.TreeModels
             if (idx.Count < 2) return;
             int m = idx.Count;
             var dir = new Vector3[m];
+            uint[] bark = pineHeight > 0 ? new uint[m] : null;
             for (int i = 0; i < m; i++)
             {
                 Vector3 d = p[idx[Math.Min(m - 1, i + 1)]] - p[idx[Math.Max(0, i - 1)]];
                 dir[i] = Vector3.Normalize(d);
+                if (bark != null)
+                {
+                    float sunBark = Math.Clamp((p[idx[i]].Z / pineHeight - .27f) * 1.65f, 0, 1);
+                    // Thin orange upper bark develops above the dark basal plates.
+                    uint channel(int shift, float target) => (uint)MathF.Round(float.Lerp((color >> shift) & 255, target, .75f * sunBark));
+                    bark[i] = (color & 0xff000000u) | channel(0, 199) | (channel(8, 123) << 8) | (channel(16, 68) << 16);
+                }
             }
             var u = new Vector3[m]; var v = new Vector3[m];
             u[0] = Vector3.Cross(dir[0], Math.Abs(dir[0].Z) > 0.9f ? Vector3.UnitX : Vector3.UnitZ).Normalized();
@@ -312,7 +336,7 @@ namespace ForesTycoon.TreeModels
             for (int s = 0; s <= sides; s++) { cos[s] = MathF.Cos(MathF.Tau * s / sides); sin[s] = MathF.Sin(MathF.Tau * s / sides); }
             Vector3 Radial(int ring, int s) => u[ring] * cos[s] + v[ring] * sin[s];
             float tipRadius = r[idx[m - 1]];
-            Vertex Vtx(int ring, int s, float radius) { var d = Radial(ring, s); return new(p[idx[ring]] + d * radius, d, color); }
+            Vertex Vtx(int ring, int s, float radius) { var d = Radial(ring, s); return new(p[idx[ring]] + d * radius, d, bark?[ring] ?? color); }
             for (int i = 0; i < m - 1; i++)
             {
                 float ra = r[idx[i]], rb = r[idx[i + 1]];
@@ -330,7 +354,7 @@ namespace ForesTycoon.TreeModels
                 int top = m - 1; Vector3 apex = p[idx[top]] + dir[top] * tipRadius * 0.9f;
                 var apexNormal = dir[top];
                 for (int s = 0; s < sides; s++)
-                    Add(target, Vtx(top, s, tipRadius * 0.45f), Vtx(top, s + 1, tipRadius * 0.45f), new Vertex(apex, apexNormal, color));
+                    Add(target, Vtx(top, s, tipRadius * 0.45f), Vtx(top, s + 1, tipRadius * 0.45f), new Vertex(apex, apexNormal, bark?[top] ?? color));
             }
         }
 
