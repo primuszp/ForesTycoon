@@ -23,13 +23,13 @@ namespace ForesTycoon.Rendering
                 uniforms.Add(key, location = GL.GetUniformLocation(program, name));
             return location;
         }
-        internal static void ApplyForestState(float elapsed = 0, float year = 0, int texture = 0)
+        internal static void ApplyForestState(float elapsed = 0, float year = 0, int texture = 0, int coveragePart = 0)
         {
             RenderDevice.Environment.VerifyAccess();
             GL.GetInteger(GetPName.CurrentProgram, out int current);
             var states = Cache.Forests;
             if (!states.TryGetValue(current, out var state)) states.Add(current, state = new OpenGlForestUniforms(current));
-            state.Apply(elapsed, year, texture, OpenGlVertexBuffer.ForestSpringTints);
+            state.Apply(elapsed, year, texture, OpenGlVertexBuffer.ForestSpringTints, coveragePart);
         }
         internal static void Delete(int program)
         {

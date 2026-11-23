@@ -5,7 +5,7 @@ namespace ForesTycoon.Rendering.OpenGl
 {
     internal sealed class OpenGlGeometryProgram : IDisposable
     {
-        private int shader, viewProjectionLocation, modelLocation;
+        private int shader, viewProjectionLocation, modelLocation, lodRangeLocation;
         private bool initialized;
         internal void Initialize()
         {
@@ -23,17 +23,12 @@ void main()
     vertex_color = forestTint(in_color);
 }";
             string fragmentSource = @"#version 330 core
-" + OpenGlForestGrowthShader.FragmentShader + @"
+" + OpenGlForestGrowthShader.FragmentShader + OpenGlForestGrowthShader.LodMaskShader + @"
 in vec4 vertex_color;
 out vec4 output_color;
-uniform vec2 lod_range;
-void lodMask(){
-    float rank=fract(52.9829189*fract(dot(floor(gl_FragCoord.xy),vec2(0.06711056,0.00583715))));
-    if(rank<lod_range.x||rank>=lod_range.y)discard;
-}
 void main()
 {
-    lodMask();
+    forestLodMask();
     forestLeafMask();
     output_color = vertex_color;
 }";
@@ -42,6 +37,7 @@ void main()
 
             viewProjectionLocation = GlProgram.Uniform(shader, "view_projection");
             modelLocation = GlProgram.Uniform(shader, "model");
+            lodRangeLocation = GlProgram.Uniform(shader, "lod_range");
             initialized = true;
         }
         internal void Use()
@@ -49,7 +45,7 @@ void main()
             if (!initialized) throw new InvalidOperationException("Graphics backend is not initialized.");
             if (RenderDevice.Visuals?.Active == true) { RenderDevice.Visuals.Use(); return; }
             GL.UseProgram(shader);
-            GL.Uniform2(GlProgram.Uniform(shader,"lod_range"),RenderDevice.LodRange);
+            GL.Uniform2(lodRangeLocation, RenderDevice.LodRange);
             Matrix4 viewProjection = RenderDevice.ViewProjection;
             Matrix4 model = RenderDevice.Model;
             GL.UniformMatrix4(viewProjectionLocation, false, ref viewProjection);

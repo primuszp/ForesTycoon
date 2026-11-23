@@ -38,7 +38,11 @@ dotnet restore ForesTycoon.sln
 dotnet run --project ForesTycoon -c Release
 ```
 
-A solution Visual Studióban is megnyitható. A megvásárolt, helyileg telepített modellek opcionálisak: nélkülük a játék a repóban szereplő modellekkel vagy helyettesítő geometriával fut. A megvásárolt modellek nincsenek a nyilvános repóban; részletek: [helyi assetek](docs/logging-facility-assets.md).
+A solution Visual Studióban is megnyitható. A zöld indítógomb **ForesTycoon** profilja a nyitópályát nyitja meg. A gomb melletti listában a **ForesTycoon – Kettős-gerinc** profil a hegyvidéki pályát indítja.
+
+A Grafika ablakban a **Famodell** külön beállítás. Az Adaptív mód terhelés alapján választ, a Rögzített magas kérését a videomemória-keret korlátozhatja. A panel mutatja a célszintet, a betöltés állását és az aktív GPU-t. A játék megjegyzi a menüben választott famodellmódot.
+
+A megvásárolt, helyileg telepített modellek opcionálisak. A játék a repóban szereplő modellekkel és helyettesítő geometriával is fut. A helyi modellek kezelését a projekt külön dokumentálja. [Helyi assetek](docs/logging-facility-assets.md)
 
 ## Kezelés
 

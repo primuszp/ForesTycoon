@@ -5,16 +5,6 @@ namespace ForesTycoon
     internal static class ForestLodPolicy
     {
         private const float NearExit = 13f, NearEnter = 16f;
-        internal static (ForestLod Low,ForestLod High,float Blend) Transition(float pixels)
-        {
-            if (!float.IsFinite(pixels)||pixels<=0)throw new ArgumentOutOfRangeException(nameof(pixels));
-            if(pixels<=2.5f)return(ForestLod.Far,ForestLod.Far,0);
-            if(pixels<4.5f)return(ForestLod.Far,ForestLod.Medium,Smooth((pixels-2.5f)/2));
-            if(pixels<=NearExit)return(ForestLod.Medium,ForestLod.Medium,0);
-            if(pixels<NearEnter)return(ForestLod.Medium,ForestLod.Near,Smooth((pixels-NearExit)/(NearEnter-NearExit)));
-            return(ForestLod.Near,ForestLod.Near,0);
-        }
-        private static float Smooth(float value)=>value*value*(3-2*value);
 
         internal static ForestLod Select(float pixelsPerWorldUnit, ForestLod? previous)
         {
@@ -32,4 +22,25 @@ namespace ForesTycoon
         internal static ForestLod SelectShadow(float texelsPerWorldUnit) => texelsPerWorldUnit >= 8 ? ForestLod.Medium : ForestLod.Far;
     }
 
+    internal readonly record struct ForestLodFade(ForestLod Low, ForestLod High, float Progress)
+    {
+        private const float DurationSeconds = 0.22f;
+        // Keep several visible steps even on a slow frame or after a backgrounded window resumes.
+        private const float MaxStepSeconds = 1f / 30;
+
+        internal static ForestLodFade Start(ForestLod current, ForestLod next) =>
+            current < next ? new(current, next, 0) : new(next, current, 1);
+
+        internal float HighCoverage => Progress * Progress * (3 - 2 * Progress);
+        internal ForestLod? Endpoint => Progress <= 0 ? Low : Progress >= 1 ? High : null;
+
+        internal ForestLodFade Advance(ForestLod target, float deltaSeconds)
+        {
+            // Both directions use the same masks. If a jump skips a level and the camera
+            // comes back between the two endpoints, complete towards the dominant model.
+            float direction = target <= Low || (target < High && Progress < 0.5f) ? -1 : 1;
+            float step = Math.Clamp(deltaSeconds, 0, MaxStepSeconds) / DurationSeconds;
+            return this with { Progress = Math.Clamp(Progress + direction * step, 0, 1) };
+        }
+    }
 }

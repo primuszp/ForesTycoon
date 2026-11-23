@@ -86,6 +86,14 @@ namespace ForesTycoon
         /// <summary>The speed the player sees and picks (1×, 2×, 4× … 256×).</summary>
         private double GameSpeed { get => simulationClock.Speed / GamePace; set => simulationClock.Speed = value * GamePace; }
         private readonly FramePerformanceMonitor performance = new FramePerformanceMonitor();
+        private IForestFrameTiming forestFrameTiming;
+        private ForestDetailMode? sampledForestMode;
+        private readonly ForestDetailMode? startupForestDetailMode;
+        private bool forestDetailSaveFailed;
+        private string graphicsAdapter;
+        private bool RememberForestDetail => captureDirectory == null && !smokeTestFrameLimit.HasValue;
+        private bool samplingForestTime;
+        private double nextForestMemorySample;
         private ulong frameIndex;
         private int currentMapTiles = 64;
         private const int MaximumVisibleTiles = 64;
@@ -188,7 +196,7 @@ namespace ForesTycoon
         // ────────────────────────────────────────────────────────────────────
         public Viewport(ulong? smokeTestFrameLimit = null, string captureDirectory = null, bool visible = true, bool captureSeasons = false,
             string resumeWorld = null, string runtimeAcknowledgement = null, string sceneProject = null, string handoffProjectPath = null,
-            string frameProfilePath = null) : base(
+            string frameProfilePath = null, ForestDetailMode? forestDetailMode = null) : base(
             new GameWindowSettings
             {
                 UpdateFrequency = 0
@@ -202,6 +210,7 @@ namespace ForesTycoon
             this.handoffProjectPath = handoffProjectPath;
             this.sceneProject = sceneProject;
             this.frameProfilePath = frameProfilePath;
+            startupForestDetailMode = forestDetailMode;
             // No automatic whole-code graph bootstrap: the built code runs unless a project carries an edited algorithm bundle.
             // A fresh start runs the opening scene, which the editor's Apply also saves: the published copy is adopted, not
             // re-applied. A resumed save applies the frozen handoff project before its first poll.
@@ -214,6 +223,7 @@ namespace ForesTycoon
             try
             {
                 RenderBackendSelection.Window.SetSwapInterval(this, 0);   // vsync ki (OpenTK 3 VSync=false megfelelője)
+                graphicsAdapter = RenderDevice.Backend.RendererName;
                 postProcess = new DioramaPostProcess();
                 GameSpeed = 1;   // start at the slow 1×
                 imgui = new ImGuiController();
@@ -251,6 +261,8 @@ namespace ForesTycoon
         // ── Rajzolás ─────────────────────────────────────────────────────────
         private void Render()
         {
+            var forestTiming = world.Graphics.ForestTiming;
+            forestTiming?.BeginFrame(frameIndex);
             // Loading/UI frames precede the scene; establish the 3D depth state on every frame.
             // Without it the slab draws over the terrain and post-processing receives no scene depth.
             frameProfile?.Mark("viewport.setup", true);
@@ -275,6 +287,12 @@ namespace ForesTycoon
             if (diorama)
                 postProcess.End(world.Graphics, renderContext.PixelsPerWorldUnit, DpiScale, (float)frameClock.TotalTimeSeconds);
             frameProfile?.Mark("viewport.diorama", false);
+            if (forestTiming?.Recording == true) {
+                var workload = world.GetForestFrameWorkload();
+                bool settled = activeButton == PointerButton.None && Math.Abs(zoom - targetZoom) <= .01f &&
+                    Math.Abs(roty - targetRotY) <= .01f;
+                forestTiming.EndFrame(frameClock.TotalTimeSeconds, workload with { Ready = workload.Ready && settled });
+            }
 
             frameProfile?.Mark("viewport.hud", true);
             DrawImGui();
@@ -351,7 +369,7 @@ namespace ForesTycoon
             try
             {
                 if (frameProfilePath != null) {
-                    frameProfile ??= new(frameProfilePath, FramebufferWidth, FramebufferHeight, sceneProject);
+                    frameProfile ??= new(frameProfilePath, FramebufferWidth, FramebufferHeight, sceneProject ?? WorldLoader.OpeningScenePath());
                     frameProfile.BeginFrame();
                 }
                 performance.BeginFrame();
@@ -365,9 +383,13 @@ namespace ForesTycoon
                 if (!ReferenceEquals(frameMap, world.Map)) {
                     currentMapTiles = world.MapTileColumns;
                     simulationClock.Reset(world.SimulationTick); frameClock.Reset();
+                    world.Graphics.ForestQuality.Reset();
+                    forestFrameTiming?.Discard();
+                    nextForestMemorySample = 0;
                 }
                 performance.EndSimulation(result.Commands, result.Ticks, simulationClock.DroppedSimulationSeconds);
                 SetupViewport();
+                UpdateForestBudget();
                 performance.BeginRender();
                 Render();
                 performance.EndRender();
@@ -377,6 +399,35 @@ namespace ForesTycoon
             {
                 frameInProgress = false;
             }
+        }
+
+        private void UpdateForestBudget()
+        {
+            var graphics = world.Graphics;
+            var quality = graphics.ForestQuality;
+            bool foreground = IsFocused || frameProfilePath != null;
+            bool sample = foreground && quality.Mode == ForestDetailMode.Adaptive;
+            if (sample != samplingForestTime || quality.Mode != sampledForestMode) {
+                forestFrameTiming?.Discard();
+                quality.DiscardHistory();
+                samplingForestTime = sample;
+                sampledForestMode = quality.Mode;
+                nextForestMemorySample = 0;
+            }
+
+            if (foreground && (sample || quality.Mode == ForestDetailMode.FixedHigh)) {
+                forestFrameTiming ??= SceneRenderBackends.Current.CreateForestFrameTiming();
+                if (frameClock.TotalTimeSeconds >= nextForestMemorySample) {
+                    quality.NearBudgetBytes = forestFrameTiming.NearBudgetBytes(world.ForestGpuPayloadBytes);
+                    nextForestMemorySample = frameClock.TotalTimeSeconds + 1;
+                }
+            }
+            if (forestFrameTiming != null) {
+                while (forestFrameTiming.TryRead(out var completed))
+                    if (sample && frameClock.TotalTimeSeconds - completed.Time <= 1)
+                        quality.Observe(completed);
+            }
+            graphics.ForestTiming = sample ? forestFrameTiming : null;
         }
 
         private void RefreshPointerHover()
@@ -646,6 +697,7 @@ namespace ForesTycoon
             worldCreation?.Dispose(); worldCreation = null;
             mapPreparation?.Dispose(); mapPreparation = null;
             frameProfile?.Dispose(); frameProfile = null;
+            forestFrameTiming?.Dispose(); forestFrameTiming = null;
             roadSurveys.Dispose(); orderPreviews.Dispose(); imgui?.Dispose(); postProcess?.Dispose(); world?.Dispose();
             imgui = null; postProcess = null; world = null; isLoaded = false; glResourcesDisposed = true;
         }

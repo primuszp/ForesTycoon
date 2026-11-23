@@ -43,6 +43,7 @@ namespace ForesTycoon.Rendering
     /// <summary>Core GPU operations grouped by resource and pass ownership, never individual native calls.</summary>
     internal interface IGraphicsBackend : IDisposable
     {
+        string RendererName => null;
         void Initialize();
         void UseGeometryShader();
         void UseScreenLineShader(float widthPixels, Vector4 colorOverride = default);

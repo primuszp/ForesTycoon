@@ -11,7 +11,7 @@ namespace ForesTycoon
     {
         private const float CloseScale = 20;
 
-        internal static void Run()
+        internal static void Run(bool lodOnly = false)
         {
             using var window = new NativeWindow(new NativeWindowSettings
             {
@@ -27,6 +27,11 @@ namespace ForesTycoon
             Terrain terrain = null;
             try
             {
+                CheckZoomTransitions();
+                CheckResidentForestCoverage();
+                CheckWhorledSilhouette();
+                CheckAdaptiveForestQuality();
+                if (lodOnly) return;
                 terrain = new Terrain(TerrainSettings.Default.WithNodeSize(33, 42));
                 var forest = new ForestSystem(terrain.Map);
                 Require(forest.Count > 0, "Test map has no forest.");
@@ -47,11 +52,15 @@ namespace ForesTycoon
                 Require(terrain.ForestChunkRebuilds == 0, "Zoom inside one LOD rebuilt the forest.");
                 Draw(terrain, forest, CloseScale);
                 Require(terrain.ForestChunkRebuilds == 0, "Returning to a cached LOD rebuilt the forest.");
-                Draw(terrain,forest,3.5f);
-                Draw(terrain,forest,9);
-                Draw(terrain,forest,9);
-                Require(terrain.ForestChunkRebuilds==0,"LOD blending rebuilt cached meshes.");
-                Require(RenderDevice.LodRange==new Vector2(0,1),"LOD mask leaked to other objects.");
+                Draw(terrain, forest, 10);
+                Draw(terrain, forest, CloseScale, 1f / 60);
+                Require(terrain.ForestLodFadeCount > 0 && terrain.ForestLodFadeCount < terrain.VisibleChunkCount &&
+                    terrain.ForestLodOverlapVertices <= Terrain.ForestLodOverlapBudget,
+                    "A dense forest started all its overlaps at once or exceeded the transition budget.");
+                Draw(terrain, forest, CloseScale, 1f / 60);
+                Require(terrain.ForestLodOverlapVertices <= Terrain.ForestLodOverlapBudget,
+                    "Existing fades exceeded the next frame's transition budget.");
+                Draw(terrain, forest, CloseScale);
                 forest.Update(ForestSystem.DefaultSecondsPerYear / 12);
                 Draw(terrain, forest, CloseScale);
                 Require(terrain.ForestChunkRebuilds == 0, "Monthly growth rebuilt topology instead of refreshing GPU state.");
@@ -111,9 +120,279 @@ namespace ForesTycoon
             }
         }
 
-        private static int Draw(Terrain terrain, ForestSystem forest, float scale)
+        private static void CheckAdaptiveForestQuality()
         {
-            var context = new RenderContext(0, 0, 0, 0, 0, 0, false, false, 1,
+            using var terrain = new Terrain(TerrainSettings.Default.WithNodeSize(17, 42), (_, _) => 4);
+            var stands = new ForestStand[256];
+            stands[34] = new(ForestSpecies.Spruce, 60, .65f, 1);
+            var forest = new ForestSystem(terrain.Map, stands);
+            var graphics = new GraphicsSettings { Enhanced = false, Weather = false, Fog = false, Wildlife = false };
+            using var scene = new TerrainRenderer(terrain, new VehicleSystem(), new WorldEffectSystem(), forest, graphics);
+            foreach (var _ in scene.PrepareMapGeometry(completeForestCache: true)) { }
+            graphics.ForestQuality.Mode = ForestDetailMode.Adaptive;
+            RenderDevice.SetCamera(Matrix4.Identity);
+            DrawScene(1, timed: false);
+
+            using var timing = SceneRenderBackends.Current.CreateForestFrameTiming();
+            graphics.ForestTiming = timing;
+            timing.BeginFrame(0);
+            DrawScene(1);
+            timing.EndFrame(1, terrain.GetForestFrameWorkload(graphics));
+            GL.Finish();
+            Require(timing.TryRead(out var sample) && sample.Lod == ForestLod.Medium && sample.ForestMs > 0 &&
+                sample.FrameMs >= sample.ForestMs, "Runtime timing failed to distinguish the forest from the whole frame.");
+            graphics.ForestTiming = null;
+            foreach (float scale in new[] { 1f, 4f, CloseScale, 1f }) {
+                DrawScene(scale);
+                Require(terrain.ForestLodFadeCount == 0 && terrain.ReadyVisibleForestChunks(ForestLod.Medium) == terrain.VisibleChunkCount,
+                    "Zoom changed a settled adaptive model without a workload change.");
+            }
+            graphics.ForestQuality.Mode = ForestDetailMode.FixedHigh;
+            DrawScene(1);
+            Require(terrain.CurrentForestLod == ForestLod.Near, "Fixed High followed the camera zoom.");
+            graphics.ForestQuality.NearBudgetBytes = 1;
+            DrawScene(CloseScale);
+            Require(terrain.ForestNearMemoryLimited && terrain.CurrentForestLod == ForestLod.Medium,
+                "Fixed High bypassed the GPU memory guard.");
+            Console.WriteLine("Adaptive forest: completed GPU samples, stable geometry across zoom, fixed high and memory guard passed.");
+
+            void DrawScene(float scale, bool timed = true)
+            {
+                var context = new RenderContext(0, timed ? 1f / 60 : 0, 1, 0, 0, 0, false, false, 1,
+                    0, 0, -1000, -1000, 1000, 1000, scale);
+                RenderDevice.InitializeFrameState();
+                scene.Draw(context);
+            }
+        }
+
+        private static void CheckResidentForestCoverage()
+        {
+            const int side = 64;
+            using var terrain = new Terrain(TerrainSettings.Default.WithNodeSize(side + 1, 42), (_, _) => 4);
+            var stands = new ForestStand[side * side];
+            var treeTiles = new System.Collections.Generic.List<int>();
+            for (int u = 8; u < side; u += 16)
+                for (int v = 8; v < side; v += 16) {
+                    int id = u * side + v;
+                    stands[id] = new(ForestSpecies.Spruce, 60, .75f, 1);
+                    treeTiles.Add(id);
+                }
+            int roadTile = treeTiles[^1], neighbouringOak = roadTile + 3, neighbouringSpruce = roadTile + 5;
+            stands[neighbouringOak] = new(ForestSpecies.Oak, 60, .75f, 1);
+            stands[neighbouringSpruce] = new(ForestSpecies.Spruce, 60, .75f, 1);
+            treeTiles.Add(neighbouringOak);
+            treeTiles.Add(neighbouringSpruce);
+            var forest = new ForestSystem(terrain.Map, stands);
+            var graphics = new GraphicsSettings { Enhanced = false, Weather = false, Fog = false, Wildlife = false };
+            terrain.StreamGeometry = true;
+            terrain.ForestCacheBudgetBytes = 1; // Force all expendable offscreen geometry out of cache.
+            terrain.Map.TryGetTileCenter(treeTiles[0], out var centre);
+            terrain.GetWeatherBounds(out var min, out var max);
+            var camera = Matrix4.CreateOrthographicOffCenter(min.X, max.X, min.Y, max.Y, -1000, 1000);
+            var close = new RenderContext(0, 1f / 60, 1, 0, 0, 0, false, false, 1,
+                0, 0, centre.X - 2, centre.Y - 2, centre.X + 2, centre.Y + 2, CloseScale);
+            var retreat = new RenderContext(0, 1f / 60, 2, 0, 0, 0, false, false, 1,
+                0, 0, min.X, min.Y, max.X, max.Y, 10);
+            var wide = new RenderContext(0, 1f / 60, 3, 0, 0, 0, false, false, 1,
+                0, 0, min.X, min.Y, max.X, max.Y, 1);
+            foreach (var _ in terrain.PrepareMapGeometry(forest, graphics)) { }
+            Require(terrain.ForestResidentLods == 16 && terrain.ForestGpuPayloadBytes < 1_000_000,
+                "Whole-map coverage was not compact and resident under a one-byte detail budget.");
+            foreach (var _ in terrain.PrepareForestView(forest, graphics, close)) { }
+            Capture(close);
+            int previouslyVisible = terrain.VisibleChunkCount;
+            Require(previouslyVisible < 16, "Close camera fixture must leave some chunks unseen.");
+
+            var firstWidePixels = Capture(retreat);
+            Require(terrain.VisibleChunkCount == 16 && terrain.ReadyVisibleForestChunks(ForestLod.Far) >= 16 - previouslyVisible,
+                "A retreating camera opened a gap in a previously unseen chunk.");
+            Require(terrain.ForestChunkRebuilds == 0, "Newly exposed coverage had to wait for mesh generation.");
+            foreach (int id in treeTiles)
+                Require(TreeVisible(firstWidePixels, id), $"Tree in tile {id} was missing on the first wide frame.");
+            for (int i = 0; i < 18; i++) Capture(wide);
+            Require(terrain.ReadyVisibleForestChunks(ForestLod.Far) == 16, "Far view left holes after settling.");
+            int instances = 0;
+            foreach (int id in treeTiles)
+                if (forest.IndividualTrees.TryGet(id, out var patch))
+                    instances += patch.Count;
+            Require(instances > 0 && RenderMetrics.SubmittedVertices == instances * ForestCoverageInstance.IndicesPerPart * 2
+                && RenderMetrics.DrawCalls == 16 * 2 + 1,
+                "Resident coverage did not batch the two crown shapes separately within the mixed chunk at the original geometry cost.");
+
+            Require(terrain.Map.BuildRoadTilePath(roadTile, roadTile + 1).Length > 0, "Coverage fixture failed to place a road.");
+            var afterRoad = Capture(wide);
+            Require(!TreeVisible(afterRoad, roadTile) && TreeVisible(afterRoad, neighbouringOak) && TreeVisible(afterRoad, neighbouringSpruce),
+                "Road clearing did not preserve the standard and whorled instance ranges in the same chunk.");
+            graphics.ForestQuality.Mode = ForestDetailMode.FixedMedium;
+            foreach (var _ in terrain.PrepareForestView(forest, graphics, close)) { }
+            Capture(close);
+            var away = new RenderContext(0, 1f / 60, 4, 0, 0, 0, false, false, 1,
+                0, 0, max.X + 100, max.Y + 100, max.X + 105, max.Y + 105, CloseScale);
+            Capture(away);
+            Require(terrain.VisibleChunkCount == 0 && terrain.ForestResidentLods > 16,
+                "A camera pan evicted reusable models despite memory headroom.");
+            Capture(close);
+            Require(terrain.ReadyVisibleForestChunks(ForestLod.Medium) == terrain.VisibleChunkCount && terrain.ForestChunkRebuilds == 0,
+                "Returning to an already visited forest presented another model or rebuilt it.");
+            Require(GL.GetError() == ErrorCode.NoError, "Resident indexed instances produced an OpenGL error.");
+            Console.WriteLine($"Resident forest: {16 - previouslyVisible} cold chunks covered on the first zoom-out frame, shared whorled crowns, mixed-chunk road clearing and offscreen model reuse passed.");
+
+            byte[] Capture(RenderContext view)
+            {
+                RenderDevice.InitializeFrameState();
+                RenderDevice.SetViewport(256, 256);
+                RenderDevice.SetCamera(camera);
+                RenderDevice.Clear(new Vector4(0, 0, 0, 1));
+                RenderMetrics.BeginFrame();
+                terrain.UpdateVisibleTiles(view);
+                terrain.DrawTrees(forest, view, graphics);
+                var pixels = new byte[256 * 256 * 4];
+                RenderDevice.ReadPixels(0, 0, 256, 256, pixels);
+                return pixels;
+            }
+
+            bool TreeVisible(byte[] pixels, int id)
+            {
+                terrain.Map.TryGetTileCenter(id, out var point);
+                int x = (int)((point.X - min.X) * 256 / (max.X - min.X));
+                int y = (int)((point.Y - min.Y) * 256 / (max.Y - min.Y));
+                for (int row = Math.Max(0, y - 4); row < Math.Min(256, y + 5); row++)
+                    for (int column = Math.Max(0, x - 4); column < Math.Min(256, x + 5); column++)
+                        if (pixels[(row * 256 + column) * 4 + 1] > 20) return true;
+                return false;
+            }
+        }
+
+        private static void CheckWhorledSilhouette()
+        {
+            const int size = 256;
+            using var coverage = SceneRenderBackends.Current.CreateForestCoverageBuffer();
+            coverage.SetData(new ForestCoverageInstance[] {
+                new(new(0, 0, 0, 1), new(4, 1, .1f, 1), new(0, 0, 0, 1),
+                    new(0, .7f, 0, 1), default, new(1, 1, 1, -1), default)
+            });
+            RenderDevice.InitializeFrameState();
+            RenderDevice.SetViewport(size, size);
+            RenderDevice.SetCamera(Matrix4.CreateRotationX(-MathF.PI / 2) * Matrix4.CreateOrthographicOffCenter(-2, 2, 0, 4, -8, 8));
+            var pixels = new byte[size * size * 4];
+            var standard = Measure(ForestCoveragePart.Crown);
+            var whorled = Measure(ForestCoveragePart.WhorledCrown);
+            Require(standard.Upper < standard.Gap && whorled.Upper > whorled.Gap * 1.35f,
+                "The resident spruce crown did not form a distinct upper whorl at the same triangle count.");
+
+            (int Gap, int Upper) Measure(ForestCoveragePart part)
+            {
+                RenderDevice.Clear(new(0, 0, 0, 1));
+                RenderDevice.UseGeometryShader();
+                coverage.Draw(0, 1, part, 0, 0);
+                RenderDevice.ReadPixels(0, 0, size, size, pixels);
+                return (WidthAt(.53f), WidthAt(.61f));
+            }
+
+            int WidthAt(float relativeHeight)
+            {
+                int row = (int)(relativeHeight * size), width = 0;
+                for (int x = 0; x < size; x++)
+                    if (pixels[(row * size + x) * 4 + 1] > 20) width++;
+                return width;
+            }
+        }
+
+        private static void CheckZoomTransitions()
+        {
+            using var terrain = new Terrain(TerrainSettings.Default.WithNodeSize(17, 42), (_, _) => 4);
+            var stands = new ForestStand[256];
+            stands[34] = new(ForestSpecies.Spruce, 45, .9f, 1);
+            stands[35] = new(ForestSpecies.Oak, 45, .9f, 1);
+            var forest = new ForestSystem(terrain.Map, stands);
+            var graphics = new GraphicsSettings { Enhanced = false, Weather = false, Fog = false, Wildlife = false };
+            using var scene = new TerrainRenderer(terrain, new VehicleSystem(), new WorldEffectSystem(), forest, graphics);
+            terrain.Map.TryGetTileCenter(34, out var root);
+            var camera = Matrix4.CreateTranslation(-root) * Matrix4.CreateRotationZ(-MathF.PI / 4)
+                * Matrix4.CreateRotationX(-MathF.PI / 4) * Matrix4.CreateOrthographic(24, 24, -100, 100);
+            ulong frame = 0;
+
+            terrain.ForestCacheBudgetBytes = 1;
+            terrain.SynchronousForestBuilds = true;
+            byte[] coldFar = Capture(1);
+            terrain.SynchronousForestBuilds = false;
+            Require(coldFar.AsSpan().SequenceEqual(Capture(CloseScale, true)),
+                "A distant forest vanished on the first close frame while the cold model builds.");
+            Require(terrain.HasPendingForestBuild && coldFar.AsSpan().SequenceEqual(Capture(1, true)) && !terrain.HasPendingForestBuild,
+                "Reversing a cold zoom left an obsolete detail build ahead of the camera.");
+            for (int i = 0; terrain.ForestLodFadeCount == 0 && i < 2000; i++) {
+                Present(CloseScale, true);
+                System.Threading.Thread.Sleep(1);
+            }
+            Require(terrain.ForestLodFadeCount == 1, "The cold destination never started its fade.");
+            for (int i = 0; i < 20; i++) Present(CloseScale, true);
+            Require(terrain.ForestLodFadeCount == 0 && terrain.ReadyVisibleForestChunks(ForestLod.Near) == terrain.VisibleChunkCount,
+                "Cache pressure discarded a model before the transition could finish.");
+
+            foreach (bool enhanced in new[] { false, true }) {
+                graphics.Enhanced = enhanced;
+                foreach (var _ in scene.PrepareMapGeometry(completeForestCache: true)) { }
+                byte[] near = Capture(CloseScale);
+                byte[] far = Capture(1);
+                long hardCut = Difference(far, near);
+                Require(hardCut > 1000, "The camera cannot distinguish the tree models in the zoom fixture.");
+                byte[] previous = Capture(CloseScale, true);
+                Require(far.AsSpan().SequenceEqual(previous), "The first zoom frame immediately swapped a cached forest.");
+                long maxDelta = 0;
+                for (int i = 0; i < 16; i++) {
+                    byte[] next = Capture(CloseScale, true);
+                    maxDelta = Math.Max(maxDelta, Difference(previous, next));
+                    previous = next;
+                }
+                Require(near.AsSpan().SequenceEqual(previous) && terrain.ForestLodFadeCount == 0 && terrain.ForestLodOverlapVertices == 0,
+                    "The transition failed to settle on the exact close model.");
+                Require(maxDelta < hardCut * .4, "The fade retained a visible one-frame jump.");
+
+                Capture(1);
+                Present(CloseScale, true);
+                Present(CloseScale, true);
+                byte[] second = Capture(CloseScale, true);
+                Capture(CloseScale, true);
+                Require(second.AsSpan().SequenceEqual(Capture(1, true)), "A zoom reversal changed the stable pixel mask.");
+                for (int i = 0; i < 16; i++) Present(1, true);
+                Require(far.AsSpan().SequenceEqual(Capture(1, true)) && terrain.ForestLodFadeCount == 0,
+                    "A zoom reversal did not return to the original LOD.");
+                Console.WriteLine($"Zoom LOD ({(enhanced ? "textured/shadows" : "plain")}): worst interframe RGB difference {maxDelta * 100.0 / hardCut:F1}% of a hard cut.");
+            }
+            Require(GL.GetError() == ErrorCode.NoError, "Zoom LOD shader reported an OpenGL error.");
+
+            void Present(float scale, bool timed)
+            {
+                RenderDevice.InitializeFrameState();
+                RenderDevice.SetViewport(256, 256);
+                RenderDevice.SetCamera(camera);
+                RenderDevice.Clear(new Vector4(0, 0, 0, 1));
+                var context = new RenderContext(0, timed ? 1f / 60 : 0, timed ? ++frame : 0, 0, 0, 0,
+                    false, false, 1, -45, -45, -10000, -10000, 10000, 10000, scale);
+                scene.Draw(context);
+                Require(RenderDevice.LodRange == new Vector2(0, 1), "Forest coverage leaked to later passes.");
+            }
+
+            byte[] Capture(float scale, bool timed = false)
+            {
+                Present(scale, timed);
+                var pixels = new byte[256 * 256 * 4];
+                RenderDevice.ReadPixels(0, 0, 256, 256, pixels);
+                return pixels;
+            }
+
+            static long Difference(byte[] a, byte[] b)
+            {
+                long result = 0;
+                for (int i = 0; i < a.Length; i += 4)
+                    result += Math.Abs(a[i] - b[i]) + Math.Abs(a[i + 1] - b[i + 1]) + Math.Abs(a[i + 2] - b[i + 2]);
+                return result;
+            }
+        }
+
+        private static int Draw(Terrain terrain, ForestSystem forest, float scale, float deltaSeconds = 0)
+        {
+            var context = new RenderContext(0, deltaSeconds, 0, 0, 0, 0, false, false, 1,
                 -60, -45, -10000, -10000, 10000, 10000, scale);
             terrain.UpdateVisibleTiles(context);
             RenderMetrics.BeginFrame();

@@ -48,7 +48,9 @@ namespace ForesTycoon
                 return;
             }
             if (GraphRuntimeHost.RunHeadless(args)) return;
-            if (args.Length == 0 && GraphRuntimeHost.DispatchProjectRuntime(args)) return;
+            string profileScene = Environment.GetEnvironmentVariable("FORESTYCOON_SCENE_PROJECT");
+            if (string.IsNullOrWhiteSpace(profileScene)) profileScene = null;
+            if (args.Length == 0 && profileScene == null && GraphRuntimeHost.DispatchProjectRuntime(args)) return;
             RenderBackendSelection.UseOpenGl();
             if (args.Length == 2 && args[0] == "--render-throughput-benchmark") { RenderThroughputBenchmark.Run(args[1]); return; }
             int forwarderExport = Array.IndexOf(args, "--export-forwarder-animation");
@@ -130,9 +132,10 @@ namespace ForesTycoon
                 preview.Run();
                 return;
             }
-            if (Array.Exists(args, argument => string.Equals(argument, "--forest-smoke-test", StringComparison.OrdinalIgnoreCase)))
+            bool forestLodSmoke = Array.Exists(args, argument => string.Equals(argument, "--forest-lod-smoke-test", StringComparison.OrdinalIgnoreCase));
+            if (forestLodSmoke || Array.Exists(args, argument => string.Equals(argument, "--forest-smoke-test", StringComparison.OrdinalIgnoreCase)))
             {
-                ForestRenderSmokeTest.Run();
+                ForestRenderSmokeTest.Run(forestLodSmoke);
                 return;
             }
             bool smokeTest = Array.Exists(args, argument =>
@@ -143,19 +146,36 @@ namespace ForesTycoon
             int profileFrames = Array.IndexOf(args, "--profile-frames");
             if (profileFrames >= 0 && (profileFrames + 1 >= args.Length || args[profileFrames + 1].StartsWith("--", StringComparison.Ordinal)))
                 throw new ArgumentException("--profile-frames requires an output JSON file.");
+            ulong profileFrameCount = 120;
+            int frameCountOption = Array.IndexOf(args, "--profile-frame-count");
+            if (frameCountOption >= 0 && (profileFrames < 0 || frameCountOption + 1 >= args.Length ||
+                !ulong.TryParse(args[frameCountOption + 1], out profileFrameCount) || profileFrameCount == 0))
+                throw new ArgumentException("--profile-frame-count requires --profile-frames and a positive frame count.");
+            int detailOption = Array.IndexOf(args, "--forest-detail");
+            ForestDetailMode? forestDetail = detailOption < 0 ? null :
+                detailOption + 1 < args.Length ? args[detailOption + 1] switch {
+                    "adaptive" => ForestDetailMode.Adaptive,
+                    "medium" => ForestDetailMode.FixedMedium,
+                    "high" => ForestDetailMode.FixedHigh,
+                    "zoom" => ForestDetailMode.Camera,
+                    _ => throw new ArgumentException("--forest-detail requires adaptive, medium, high or zoom.")
+                } : throw new ArgumentException("--forest-detail requires a mode.");
             int handoff = Array.IndexOf(args, "--algorithm-handoff");
             int sceneProject = Array.IndexOf(args, "--scene-project");
             if (sceneProject >= 0 && (sceneProject + 1 >= args.Length || handoff >= 0))
                 throw new ArgumentException("--scene-project jelenetprojekt.json szükséges; algoritmusátadással együtt nem használható.");
             if (handoff >= 0 && handoff + 3 >= args.Length) throw new ArgumentException("Az algoritmusátadás mentést, nyugtázási útvonalat és rögzített projektet kér.");
             if (captureSeasons >= 0 && captureSeasons + 1 >= args.Length) throw new ArgumentException("--capture-seasons requires an output directory.");
-            using Viewport game = new Viewport(smokeTest || profileFrames >= 0 ? 120UL : null,
+            string requestedScene = sceneProject >= 0 ? args[sceneProject + 1] : profileScene;
+            string scenePath = handoff >= 0 ? null : WorldLoader.ResolveSceneProjectPath(requestedScene);
+            using Viewport game = new Viewport(profileFrames >= 0 ? profileFrameCount : smokeTest ? 120UL : null,
                 captureSeasons >= 0 ? args[captureSeasons + 1] : captureFrame >= 0 ? args[captureFrame + 1] : null,
                 captureSeasons: captureSeasons >= 0, resumeWorld: handoff >= 0 ? args[handoff + 1] : null,
                 runtimeAcknowledgement: handoff >= 0 ? args[handoff + 2] : null,
-                sceneProject: sceneProject >= 0 ? args[sceneProject + 1] : null,
+                sceneProject: scenePath,
                 handoffProjectPath: handoff >= 0 ? args[handoff + 3] : null,
-                frameProfilePath: profileFrames >= 0 ? args[profileFrames + 1] : null);
+                frameProfilePath: profileFrames >= 0 ? args[profileFrames + 1] : null,
+                forestDetailMode: forestDetail);
             game.Run();
         }
     }

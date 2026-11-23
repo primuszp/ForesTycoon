@@ -770,6 +770,25 @@ namespace ForesTycoon
 
             int quality = (int)g.Quality;
             if (ImGui.Combo("Minőség", ref quality, "Alacsony\0Közepes\0Magas\0")) g.Quality = (GraphicsQuality)quality;
+            int forestDetail = (int)g.ForestQuality.Mode;
+            if (ImGui.Combo("Famodell", ref forestDetail, "Adaptív\0Rögzített közepes\0Rögzített magas\0Zoom alapján\0")) {
+                g.ForestQuality.Mode = (ForestDetailMode)forestDetail;
+                if (RememberForestDetail) forestDetailSaveFailed = !ForestDetailPreference.Save(g.ForestQuality.Mode);
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Az adaptív mód tartós GPU-terhelés alapján vált. A magas szinthez elegendő grafikus memória szükséges.");
+            HudTheme.KeyValue("Famodell célszintje", world.CurrentForestLod switch {
+                ForestLod.Near => "Magas", ForestLod.Medium => "Közepes", _ => "Távoli"
+            });
+            int readyForest = world.ReadyVisibleForestChunks(world.CurrentForestLod);
+            if (readyForest < world.VisibleChunkCount)
+                ImGui.TextDisabled($"{readyForest}/{world.VisibleChunkCount} erdőszakasz kész a célszinten.");
+            if (world.ForestNearMemoryLimited)
+                ImGui.TextDisabled("A magas szinthez kevés a videomemória.");
+            else if (g.ForestQuality.Mode == ForestDetailMode.Adaptive && world.CurrentForestLod == ForestLod.Far)
+                ImGui.TextDisabled("Csökkentett részletesség a GPU terhelése miatt.");
+            if (forestDetailSaveFailed) ImGui.TextDisabled("A famodell módját nem sikerült elmenteni.");
+            if (!string.IsNullOrEmpty(graphicsAdapter)) ImGui.TextWrapped($"GPU · {graphicsAdapter}");
 
             if (!g.Enhanced)
             {

@@ -77,6 +77,9 @@ sealed partial class GameWorld : SimulationWorld, IWorldInteractionTarget
         terrain = null;
     }
     internal int ReadyVisibleForestChunks(ForestLod lod) => terrain?.ReadyVisibleForestChunks(lod) ?? 0;
+    internal ForestLod CurrentForestLod => terrain?.CurrentForestLod ?? ForestLod.Medium;
+    internal bool ForestNearMemoryLimited => terrain?.ForestNearMemoryLimited == true;
+    internal ForestFrameWorkload GetForestFrameWorkload() => terrain?.GetForestFrameWorkload(Graphics) ?? default;
 
     public int RoadPreviewCount => terrain?.RoadPreviewCount ?? 0;
 

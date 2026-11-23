@@ -7,6 +7,7 @@ namespace ForesTycoon.Rendering
         private readonly IGeometryBufferBackend backend;
         private readonly RenderEnvironment owner;
         private long vertexBytes, elementBytes, growthBytes;
+        internal int VertexCount => (int)(vertexBytes / Vertex.Stride);
         internal long GpuPayloadBytes => vertexBytes + elementBytes + growthBytes;
         internal long CpuPayloadBytes => (long)backend.CpuVertices.Length * Vertex.Stride;
         public VertexBuffer(PrimitiveTopology topology, GeometryBufferUsage usage = GeometryBufferUsage.Static)

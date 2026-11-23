@@ -12,6 +12,7 @@ namespace ForesTycoon.OpenGl
         private bool disposed, initialized;
         private IEnumerator<int> initialization, environmentUpload;
         private int program, depthProgram, textures, shadowTexture, shadowFramebuffer;
+        private int lodRangeLocation;
         private int environmentTexture;
         private float[] environmentPixels;
         // The per-tile ground map (pattern, steep pattern, steep blend) and the terrain ground revision it was built from.
@@ -129,7 +130,7 @@ namespace ForesTycoon.OpenGl
             ObjectDisposedException.ThrowIf(disposed, this); owner.Check();
             int shader = ShadowPass ? depthProgram : program;
             GL.UseProgram(shader);
-            GL.Uniform2(GlProgram.Uniform(shader, "lod_range"), RenderDevice.LodRange);
+            if (!ShadowPass) GL.Uniform2(lodRangeLocation, RenderDevice.LodRange);
             Matrix4 model = RenderDevice.Model;
             Matrix4 camera = ShadowPass ? lightMatrix : RenderDevice.ViewProjection;
             GL.UniformMatrix4(GlProgram.Uniform(shader, "model"), false, ref model);
@@ -253,15 +254,10 @@ void main() {
     gl_Position = camera * p;
 }";
             string fragment = @"#version 330 core
-" + OpenGlForestGrowthShader.FragmentShader + @"
+" + OpenGlForestGrowthShader.FragmentShader + OpenGlForestGrowthShader.LodMaskShader + @"
 in vec3 world, smooth_normal;
 in vec4 tint, light_position;
 out vec4 output_color;
-uniform vec2 lod_range;
-void lodMask(){
-    float rank=fract(52.9829189*fract(dot(floor(gl_FragCoord.xy),vec2(0.06711056,0.00583715))));
-    if(rank<lod_range.x||rank>=lod_range.y)discard;
-}
 uniform sampler2DArray materials;
 uniform sampler2DShadow shadow_map;
 uniform sampler2D environment_map;
@@ -317,7 +313,7 @@ float cloudDensity(vec2 p){
     return smoothstep(0.28,0.72,surfaceNoise2(p)*0.65+surfaceNoise2(p*2.03)*0.25+surfaceNoise2(p*4.1)*0.1);
 }
 void main() {
-    lodMask();
+    forestLodMask();
     forestLeafMask();
 
     if(kind == 0) { output_color = tint; return; }
@@ -435,6 +431,7 @@ void main() {
     output_color = vec4(pow(max(base,vec3(0)),vec3(1.0/2.2)),species_code > 0 || crown_species > 0 ? 1.0 : tint.a);
 }";
             program = GlProgram.Create(vertex, fragment);
+            lodRangeLocation = GlProgram.Uniform(program, "lod_range");
             yield return 64;
             depthProgram = GlProgram.Create(@"#version 330 core
 layout(location=0) in vec3 position;
@@ -445,15 +442,7 @@ out vec4 tint;
 " + OpenGlForestGrowthShader.Shader + @"
 void main(){gl_Position=camera*model*vec4(forestPoint(position),1); tint=forestTint(color);
 }",
-                "#version 330 core\n" + OpenGlForestGrowthShader.FragmentShader + @"uniform vec2 lod_range;
-uniform int kind;
-in vec4 tint;
-
-void lodMask(){
-    float rank=fract(52.9829189*fract(dot(floor(gl_FragCoord.xy),vec2(0.06711056,0.00583715))));
-    if(rank<lod_range.x||rank>=lod_range.y)discard;
-}
-void main(){lodMask(); forestLeafMask(); }");
+                "#version 330 core\n" + OpenGlForestGrowthShader.FragmentShader + @"void main(){ forestLeafMask(); }");
             yield return 64;
             var uploaded = new WorkResult<int>();
             foreach (int unit in ProceduralSurfaceTextures.UploadWork(uploaded)) { textures = uploaded.Value; yield return unit; }

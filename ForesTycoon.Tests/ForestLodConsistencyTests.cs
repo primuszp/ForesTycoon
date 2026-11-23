@@ -54,6 +54,21 @@ public class ForestLodConsistencyTests
     }
 
     [Theory]
+    [InlineData(ForestSpecies.Oak)]
+    [InlineData(ForestSpecies.Beech)]
+    [InlineData(ForestSpecies.Birch)]
+    [InlineData(ForestSpecies.Maple)]
+    internal void NearCanopyRefinesTheSameSurfaceAsMedium(ForestSpecies species)
+    {
+        var spec = Spec(species, LeafState.Full);
+        var medium = DendroTreeGenerator.Generate(spec, ForestLod.Medium).Crown;
+        var near = DendroTreeGenerator.Generate(spec, ForestLod.Near).Crown;
+        Assert.True(near.Length > medium.Length);
+        var nearPositions = near.Select(vertex => vertex.Position).ToHashSet();
+        Assert.All(medium, vertex => Assert.Contains(vertex.Position, nearPositions));
+    }
+
+    [Theory]
     [InlineData(ForestSpecies.Fir, TreeLifePhase.Old)]
     [InlineData(ForestSpecies.Fir, TreeLifePhase.Senescent)]
     [InlineData(ForestSpecies.Pine, TreeLifePhase.Young)]

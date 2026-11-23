@@ -10,7 +10,7 @@ namespace ForesTycoon.OpenGl
         private readonly RenderResourceOwner owner = new();
         private bool disposed;
         private int program;
-        private int matrixLocation, widthLocation;
+        private int matrixLocation, widthLocation, lodRangeLocation;
         public void Use(float outlineWorldWidth = 0)
         {
             ObjectDisposedException.ThrowIf(disposed, this); owner.Check();
@@ -22,7 +22,7 @@ namespace ForesTycoon.OpenGl
             }
             if (program == 0) Initialize();
             GL.UseProgram(program);
-            GL.Uniform2(GlProgram.Uniform(program,"lod_range"),RenderDevice.LodRange);
+            GL.Uniform2(lodRangeLocation, RenderDevice.LodRange);
             Matrix4 matrix = RenderDevice.Model * RenderDevice.ViewProjection;
             GL.UniformMatrix4(matrixLocation, false, ref matrix);
             GL.Uniform1(widthLocation, outlineWorldWidth);
@@ -44,22 +44,17 @@ void main() {
     tint.a=color.a;
 }";
             string fragmentSource = @"#version 330 core
-" + OpenGlForestGrowthShader.FragmentShader + @"
+" + OpenGlForestGrowthShader.FragmentShader + OpenGlForestGrowthShader.LodMaskShader + @"
 in vec4 tint;
 out vec4 output_color;
-uniform vec2 lod_range;
-
-void lodMask(){
-    float rank=fract(52.9829189*fract(dot(floor(gl_FragCoord.xy),vec2(0.06711056,0.00583715))));
-    if(rank<lod_range.x||rank>=lod_range.y)discard;
-}
-void main() { lodMask(); forestLeafMask();
+void main() { forestLodMask(); forestLeafMask();
     output_color = vec4(tint.rgb,1); }";
             try
             {
                 program = GlProgram.Create(vertexSource, fragmentSource);
                 matrixLocation = GlProgram.Uniform(program, "matrix");
                 widthLocation = GlProgram.Uniform(program, "outline_width");
+                lodRangeLocation = GlProgram.Uniform(program, "lod_range");
             }
             catch { Dispose(); throw; }
         }

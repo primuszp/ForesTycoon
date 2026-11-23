@@ -12,6 +12,7 @@ namespace ForesTycoon.Rendering.OpenGl
         private ColoredVertex[] upload = Array.Empty<ColoredVertex>();
         private int vao, buffer;
 
+        public string RendererName { get { owner.Check(); return GL.GetString(StringName.Renderer); } }
         public void Initialize() { owner.Check(); geometry.Initialize(); }
         public void UseGeometryShader() { owner.Check(); geometry.Use(); }
         public void UseScreenLineShader(float widthPixels, Vector4 colorOverride = default) { owner.Check(); screenLines.Use(widthPixels, colorOverride); }

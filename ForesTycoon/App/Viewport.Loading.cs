@@ -36,6 +36,7 @@ namespace ForesTycoon
                         worldCreation.Dispose(); worldCreation = null; world = createdWorld.Value; break;
                     }
                     if (world == null) { DrawLoadingScreen(); return; }
+                    world.Graphics.ForestQuality.Mode = captureDirectory == null ? ForestDetailMode.Adaptive : ForestDetailMode.Camera;
                     if (resumeWorld != null) {
                         using var input = System.IO.File.OpenRead(resumeWorld); world.Load(input, allowAlgorithmMigration: true);
                         handoffProject = RuleProject.FromJson(System.IO.File.ReadAllText(handoffProjectPath));
@@ -60,6 +61,10 @@ namespace ForesTycoon
                         loadingProgress = 1;
                         loadingPresented = false;
                         isLoaded = true;
+                        if (startupForestDetailMode is ForestDetailMode mode)
+                            world.Graphics.ForestQuality.Mode = mode;
+                        else if (RememberForestDetail)
+                            world.Graphics.ForestQuality.Mode = ForestDetailPreference.Read();
                         frameClock.Reset();
                         SetupViewport();
                         break;

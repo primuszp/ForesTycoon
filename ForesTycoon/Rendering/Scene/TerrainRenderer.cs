@@ -181,7 +181,12 @@ namespace ForesTycoon
                 content.DrawBuildingPreview(terrain, forest, logistics, graphics.SawmillPreview);
             }));
             pipeline.Add(RenderLayer.DecalEnd, "decal-state-end", _ => EndDecals());
-            pipeline.Add(RenderLayer.Props, "props", context => terrain.DrawTrees(forest, context, graphics));
+            pipeline.Add(RenderLayer.Props, "props", context => {
+                var timing = graphics.HideTrees ? null : graphics.ForestTiming;
+                timing?.MarkForest(true);
+                terrain.DrawTrees(forest, context, graphics);
+                timing?.MarkForest(false);
+            });
             pipeline.Add(RenderLayer.Buildings, "buildings", _ => content.DrawMills(terrain, logistics, graphics));
             pipeline.Add(RenderLayer.Wildlife, "wildlife", context => wildlife.Draw(terrain, forest, graphics, context));
             pipeline.Add(RenderLayer.Vehicles, "vehicles", context =>

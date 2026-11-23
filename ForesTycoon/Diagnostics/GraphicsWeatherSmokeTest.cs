@@ -41,7 +41,7 @@ namespace ForesTycoon
                 // Interactive hosts finish this sliced resource preparation on their loading frames.
                 // Pixel comparisons need the same complete shaders/textures/shadow target before the baseline.
                 settings.Enhanced = true;
-                foreach (float _ in renderer.PrepareMapGeometry()) { }
+                foreach (float _ in renderer.PrepareMapGeometry(completeForestCache: true)) { }
                 settings.Enhanced = false;
                 terrain.StreamGeometry = false; // Retain the three explicitly warmed diagnostic LODs.
                 string output = Path.GetFullPath("artifacts/graphics-weather"); Directory.CreateDirectory(output);
@@ -61,9 +61,9 @@ namespace ForesTycoon
                 settings.ShowGrid = false;
                 Require(!plainGrid.AsSpan().SequenceEqual(Frame("grid-plain-disabled")), "Plain grid is missing.");
                 settings.Textures = true;
-                Frame("lod-far-medium-blend",3.5f);
-                byte[] lodBlend=Frame("lod-medium-near-blend",9);
-                CheckRestored(lodBlend,Frame("lod-medium-near-paused",9));
+                Frame("lod-far", 1);
+                byte[] mediumLod = Frame("lod-medium", 9);
+                CheckRestored(mediumLod, Frame("lod-medium-paused", 9));
                 Frame(null, 1); // Leave the near hysteresis band before comparing the initial medium-LOD baseline.
                 Require(!original.AsSpan().SequenceEqual(sunny), "Enhanced graphics did not change the image.");
                 settings.Shadows = false;
@@ -287,7 +287,7 @@ namespace ForesTycoon
                     GL.ClearColor(0.1725f, 0.2078f, 0.251f, 1);
                     GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
                     RenderDevice.SetCamera(matrix); RenderMetrics.BeginFrame();
-                    renderer.Draw(new RenderContext(time, 1, 0, time, (ulong)(time * 30), 0, false, false, 1,
+                    renderer.Draw(new RenderContext(time, 0, 0, time, (ulong)(time * 30), 0, false, false, 1,
                           -45, -45, -65, -43, 65, 51, pixelsPerWorldUnit));
                     GL.Finish(); Require(GL.GetError() == ErrorCode.NoError, "Graphics/weather OpenGL error.");
                     if(name == null) return Array.Empty<byte>();

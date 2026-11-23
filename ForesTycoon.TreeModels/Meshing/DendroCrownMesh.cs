@@ -34,7 +34,7 @@ namespace ForesTycoon.TreeModels
             _ => CrownForm.Beech
         };
 
-        private static bool Whorled(CrownForm form) => form is CrownForm.Spruce or CrownForm.Fir or CrownForm.Larch or CrownForm.YoungPine;
+        internal static bool Whorled(CrownForm form) => form is CrownForm.Spruce or CrownForm.Fir or CrownForm.Larch or CrownForm.YoungPine;
 
         // Reference zoom (pixels per world unit) at the fine end of each LOD band.
         // Tessellation is chosen so the silhouette chord error stays below one pixel there.

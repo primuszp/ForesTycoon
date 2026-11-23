@@ -18,7 +18,7 @@ sealed partial class Viewport
 internal sealed class ViewportFrameProfile(string path, int width, int height, string scene) : IDisposable
 {
     private readonly RenderPassProfiler passes = new();
-    private readonly string renderer = GL.GetString(StringName.Renderer);
+    private readonly string renderer = RenderDevice.Backend.RendererName;
     private readonly string driver = GL.GetString(StringName.Version);
     private readonly List<Frame> frames = new();
     private long started;
@@ -26,7 +26,8 @@ internal sealed class ViewportFrameProfile(string path, int width, int height, s
 
     private sealed record Frame(ulong Number, double CompletedMs, double SwapMs, double TotalMs, int SimulationTicks,
         int Draws, int Vertices, int VisibleChunks, int ForestLods, long ForestGpuBytes,
-        int Near, int Medium, int Far, RenderPassProfiler.Timing[] Passes);
+        string ForestTarget, long ForestNearBudgetBytes, ForestGpuSample? ForestFeedback, int Near, int Medium, int Far,
+        RenderPassProfiler.Timing[] Passes);
 
     internal void BeginFrame() { started = Stopwatch.GetTimestamp(); passes.BeginFrame(); }
     internal void Mark(string name, bool begin) => passes.Mark(name, begin);
@@ -38,6 +39,8 @@ internal sealed class ViewportFrameProfile(string path, int width, int height, s
         double total = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         frames.Add(new(number, completeMs, swapMs, total, simulationTicks, RenderMetrics.DrawCalls, RenderMetrics.SubmittedVertices,
             world.VisibleChunkCount, world.ForestResidentLods, world.ForestGpuPayloadBytes,
+            world.CurrentForestLod.ToString(), world.Graphics.ForestQuality.NearBudgetBytes,
+            world.Graphics.ForestQuality.LastSample,
             world.ReadyVisibleForestChunks(ForestLod.Near), world.ReadyVisibleForestChunks(ForestLod.Medium),
             world.ReadyVisibleForestChunks(ForestLod.Far), passes.ReadCompletedFrame()));
     }

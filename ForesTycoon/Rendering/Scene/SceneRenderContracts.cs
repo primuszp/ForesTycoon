@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using ImGuiNET;
+using ForesTycoon.Rendering;
 
 namespace ForesTycoon
 {
@@ -11,6 +12,17 @@ namespace ForesTycoon
         void RenderShadows(Terrain terrain, Action<float> draw);
     }
     internal interface IForestMaterialBackend : IDisposable { void Use(float outlineWorldWidth); }
+    internal readonly record struct ForestFrameWorkload(ForestLod Lod, bool Ready, bool NearFits);
+    internal interface IForestFrameTiming : IDisposable
+    {
+        bool Recording { get; }
+        void BeginFrame(ulong frame);
+        void MarkForest(bool begin);
+        void EndFrame(double time, ForestFrameWorkload workload);
+        bool TryRead(out ForestGpuSample sample);
+        long NearBudgetBytes(long forestGpuBytes);
+        void Discard();
+    }
     internal interface IForestWeatherBackend : IDisposable
     {
         ForestWeatherMetrics Metrics => default;
@@ -31,6 +43,8 @@ namespace ForesTycoon
         ISurfaceRenderBackend CreateSurface(GraphicsSettings settings, WeatherVisualState weather,
             EnvironmentSystem environment, Terrain terrain);
         IForestMaterialBackend CreateForestMaterial();
+        IForestFrameTiming CreateForestFrameTiming();
+        IForestCoverageBuffer CreateForestCoverageBuffer();
         IForestWeatherBackend CreateForestWeather();
         IUiRenderBackend CreateUi();
     }

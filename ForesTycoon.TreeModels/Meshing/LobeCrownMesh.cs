@@ -119,16 +119,17 @@ namespace ForesTycoon.TreeModels
             };
         }
 
-        private static float Coverage(int count) => count >= 96 ? 1.0f : count >= 40 ? 1.03f : count >= 24 ? 1.05f : 1.08f; // 48 → 1.03
+        // Compensate the inscribed facets of sparse crowns when estimating their projected coverage.
+        private static float Coverage(int count) => count >= 96 ? 1.0f : count >= 40 ? 1.03f : count >= 24 ? 1.05f : 1.10f;
 
-        private static readonly Dictionary<int, (Vector3[], int[])> Spheres = new();
+        private static readonly Dictionary<(int Count, int Anchors), (Vector3[], int[])> Spheres = new();
 
         /// <summary>Fibonacci sphere lattice and its convex-hull triangulation (outward winding), cached per size.</summary>
-        internal static (Vector3[] Directions, int[] Triangles) Sphere(int count)
+        internal static (Vector3[] Directions, int[] Triangles) Sphere(int count, int anchors = 0)
         {
             lock (Spheres)
             {
-                if (Spheres.TryGetValue(count, out var cached)) return cached;
+                if (Spheres.TryGetValue((count, anchors), out var cached)) return cached;
                 var d = new Vector3[count];
                 float golden = MathF.PI * (3 - MathF.Sqrt(5));
                 for (int i = 0; i < count; i++)
@@ -136,9 +137,33 @@ namespace ForesTycoon.TreeModels
                     float z = 1 - (2 * i + 1f) / count, r = MathF.Sqrt(Math.Max(0, 1 - z * z));
                     d[i] = new(MathF.Cos(i * golden) * r, MathF.Sin(i * golden) * r, z);
                 }
+                if (anchors > 0) {
+                    // Keep every coarse sampling ray. Replace its closest fine sample
+                    // to keep the dense triangulation reasonably uniform.
+                    var coarse = Sphere(anchors).Directions;
+                    var replaced = new bool[count];
+                    var nested = new Vector3[count];
+                    coarse.CopyTo(nested, 0);
+                    foreach (var anchor in coarse) {
+                        float best = float.NegativeInfinity;
+                        int closest = -1;
+                        for (int i = 0; i < d.Length; i++) {
+                            if (replaced[i]) continue;
+                            float distance = Vector3.Dot(anchor, d[i]);
+                            if (distance <= best) continue;
+                            best = distance;
+                            closest = i;
+                        }
+                        replaced[closest] = true;
+                    }
+                    int next = anchors;
+                    for (int i = 0; i < d.Length; i++)
+                        if (!replaced[i]) nested[next++] = d[i];
+                    d = nested;
+                }
                 var faces = HullFaces(d);
                 if (faces.Length != 3 * (2 * count - 4)) throw new InvalidOperationException($"Degenerate crown lattice ({count} points, {faces.Length / 3} faces).");
-                return Spheres[count] = (d, faces);
+                return Spheres[(count, anchors)] = (d, faces);
             }
         }
 

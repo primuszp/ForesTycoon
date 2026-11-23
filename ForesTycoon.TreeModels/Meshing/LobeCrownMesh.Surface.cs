@@ -58,14 +58,17 @@ namespace ForesTycoon.TreeModels
             }
             int count = Lattice(form.CrownRadius, lod, form.Shrub) * profile.Detail;
             bool pads = profile.Gaps > 0;
+            bool commonSurface = !pads && !form.Shrub && lod != ForestLod.Far;
+            int commonSamples = commonSurface ? Lattice(form.CrownRadius, ForestLod.Medium) * profile.Detail : 0;
             var shells = MakeShells(lod, count);
             // A sparse lattice must not rescale the distances between branch pads. Derive one
             // reference envelope from the near surface, then use it for every viewing distance.
             var reference = pads && !veteranPine && lod != ForestLod.Near
                 ? MakeShells(ForestLod.Near, Lattice(form.CrownRadius, ForestLod.Near, form.Shrub) * profile.Detail) : shells;
             float minZ = float.MaxValue, maxZ = float.MinValue, maxR = 0;
-            foreach (var shell in reference) foreach (var p in shell.Points) maxR = Math.Max(maxR, p.Xy.Length);
-            foreach (var shell in shells) foreach (var p in shell.Points)
+            foreach (var shell in reference) foreach (var p in EnvelopeSamples(shell))
+                maxR = Math.Max(maxR, p.Xy.Length);
+            foreach (var shell in shells) foreach (var p in EnvelopeSamples(shell))
             { minZ = Math.Min(minZ, p.Z); maxZ = Math.Max(maxZ, p.Z); }
             // Do not lift every pad to fill an empty lower band. That would pull the upper
             // foliage away from its real woody support when the leaf cloud sits high.
@@ -80,13 +83,16 @@ namespace ForesTycoon.TreeModels
                     for (int i = 0; i < lobes.Count; i++)
                         result.Add(Sample(PadLobes(lobes[i], spec.Seed, i, spec.Yaw), aspect, spec.Yaw, allocation[i], refinements: 6));
                 }
-                else result.Add(Sample(lobes, aspect, spec.Yaw, samples));
+                else result.Add(Sample(lobes, aspect, spec.Yaw, samples, anchors: commonSamples < samples ? commonSamples : 0));
                 for (int i = 0; i < result.Count; i++)
-                    Shape(result[i], profile, spec.Yaw, spec.Seed + i * 2053, aspect, pads, detail);
+                    Shape(result[i], profile, spec.Yaw, spec.Seed + i * 2053, aspect, pads, detail, commonSamples);
                 return result;
             }
+            ReadOnlySpan<Vector3> EnvelopeSamples(Shell shell) =>
+                commonSurface ? shell.Points.AsSpan(0, commonSamples) : shell.Points;
+
             float thin = .72f + .28f * form.Foliage;
-            float xy = form.CrownRadius * thin / (veteranPine ? 1 : maxR) * (pads ? 1 : Coverage(count));
+            float xy = form.CrownRadius * thin / (veteranPine ? 1 : maxR) * (pads || commonSurface ? 1 : Coverage(count));
             float topLoss = form.Dieback > .45f && spec.Phase >= TreeLifePhase.Old
                 ? Math.Min(.25f, (form.Dieback - .3f) * .5f) : 0;
             int vertexCount = 0;
@@ -108,7 +114,11 @@ namespace ForesTycoon.TreeModels
                         ? .68f + .27f * t + .13f * sideLight * exposure + shell.Tints[i] * .4f - .06f * (1 - sideLight) * (1 - t)
                         : .72f + .20f * t + .12f * exposure + shell.Tints[i];
                     shades[i] -= .14f * (1 - shell.Openness[i]) * (1 - profile.Roundness);
-                    points[i] = form.ShapePineCrown(form.Warp.Apply(new(points[i].X * xy * skirt, points[i].Y * xy * skirt,
+                    var footprint = points[i].Xy;
+                    // Extra samples refine the surface inside the same crown-radius envelope.
+                    if (commonSurface && footprint.LengthSquared > maxR * maxR)
+                        footprint *= maxR / footprint.Length;
+                    points[i] = form.ShapePineCrown(form.Warp.Apply(new(footprint.X * xy * skirt, footprint.Y * xy * skirt,
                         form.CrownBase + t * crownHeight * (1 - topLoss))));
                 }
                 Emit(points, shell.Triangles, shades, form, profile, result.AsSpan(offset, shell.Triangles.Length));
@@ -163,9 +173,9 @@ namespace ForesTycoon.TreeModels
             return allocation;
         }
 
-        private static Shell Sample(List<Lobe> lobes, float aspect, float yaw, int count, int refinements = 10)
+        private static Shell Sample(List<Lobe> lobes, float aspect, float yaw, int count, int refinements = 10, int anchors = 0)
         {
-            var (directions, triangles) = Sphere(count);
+            var (directions, triangles) = Sphere(count, anchors);
             // Work in an isotropic frame (z in crown radii), so the metaballs blend like round masses.
             var iso = new Vector3(1, 1, 1 / aspect);
             var centres = new Vector3[lobes.Count]; var inverseRadii = new Vector3[lobes.Count];
@@ -247,13 +257,15 @@ namespace ForesTycoon.TreeModels
             }
         }
 
-        private static void Shape(Shell shell, Profile profile, float yaw, int seed, float aspect, bool pads, ForestLod lod)
+        private static void Shape(Shell shell, Profile profile, float yaw, int seed, float aspect, bool pads,
+            ForestLod lod, int commonSamples)
         {
             var points = shell.Points; int count = points.Length;
-            var (directions, _) = Sphere(count);
+            var (directions, _) = Sphere(count, commonSamples < count ? commonSamples : 0);
             var centre = pads ? shell.Centre.Xy : Vector2.Zero;
+            var envelope = points.AsSpan(0, commonSamples == 0 ? count : commonSamples);
             float minZ = float.MaxValue, maxZ = float.MinValue, maxR = 0;
-            foreach (var p in points)
+            foreach (var p in envelope)
             { minZ = Math.Min(minZ, p.Z); maxZ = Math.Max(maxZ, p.Z); maxR = Math.Max(maxR, (p.Xy - centre).Length); }
             float cos = MathF.Cos(yaw), sin = MathF.Sin(yaw), depth = maxZ - minZ;
             if (profile.Roundness > 0)
@@ -268,7 +280,7 @@ namespace ForesTycoon.TreeModels
                     points[i] = new(centre.X + q.X * maxR, centre.Y + q.Y * maxR, minZ + q.Z * depth);
                 }
                 minZ = float.MaxValue; maxZ = float.MinValue;
-                foreach (var p in points)
+                foreach (var p in envelope)
                 { minZ = Math.Min(minZ, p.Z); maxZ = Math.Max(maxZ, p.Z); }
             }
             var detailCentre = new Vector3(centre.X, centre.Y, (minZ + maxZ) * .5f);

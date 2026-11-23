@@ -15,6 +15,14 @@ internal static partial class WorldLoader
 
     internal const string OpeningSceneFile = "Content/Scenes/opening.project.json";
 
+    internal static string ResolveSceneProjectPath(string path)
+    {
+        if (path == null || System.IO.Path.IsPathRooted(path)) return path;
+        if (System.IO.File.Exists(path)) return System.IO.Path.GetFullPath(path);
+        string shipped = System.IO.Path.GetFullPath(path, AppContext.BaseDirectory);
+        return System.IO.File.Exists(shipped) ? shipped : System.IO.Path.GetFullPath(path);
+    }
+
     /// <summary>
     /// The opening scene document the game starts from: the project's source copy when running from a checkout (so editor
     /// saves are played without a rebuild), otherwise the copy shipped next to the executable; null if neither exists.

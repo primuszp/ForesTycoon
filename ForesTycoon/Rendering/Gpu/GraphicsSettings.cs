@@ -5,6 +5,8 @@ namespace ForesTycoon
     internal sealed class GraphicsSettings : IPostProcessSettings, IShadingSettings, IWeatherSettings
     {
         internal GraphicsQuality Quality = GraphicsQuality.High;
+        internal readonly ForestQualityController ForestQuality = new();
+        internal IForestFrameTiming ForestTiming;
         internal double EffectCpuBudgetMilliseconds => Quality == GraphicsQuality.Low ? .5 : Quality == GraphicsQuality.Medium ? 1 : 2;
         double IWeatherSettings.EffectCpuBudgetMilliseconds => EffectCpuBudgetMilliseconds;
         internal int ShadowResolution => Quality == GraphicsQuality.Low ? 512 : Quality == GraphicsQuality.Medium ? 1024 : 2048;

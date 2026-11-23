@@ -1,0 +1,13 @@
+{
+  "profiles": {
+    "ForesTycoon": {
+      "commandName": "Project"
+    },
+    "ForesTycoon – Kettős-gerinc": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "FORESTYCOON_SCENE_PROJECT": "Content/Scenes/kettos-gerinc.project.json"
+      }
+    }
+  }
+}

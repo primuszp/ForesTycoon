@@ -12,20 +12,35 @@ public sealed class PrimitiveGeometryCaptureCollection { }
 public class ForestRenderingTests
 {
     [Fact]
-    public void LodTransitionIsContinuousAcrossBothZoomBands()
+    public void LodFadePreservesCoverageWhenReversingIncludingAcrossASkippedLevel()
     {
-        foreach(var band in new[]{(2.5f,4.5f),(13f,16f)}) {
-            float previous=0;
-            for(int step=1;step<100;step++) {
-                var transition=ForestLodPolicy.Transition(band.Item1+(band.Item2-band.Item1)*step/100);
-                Assert.NotEqual(transition.Low,transition.High);
-                Assert.InRange(transition.Blend,previous,previous+0.02f);
-                previous=transition.Blend;
-            }
-            Assert.InRange(previous,0.99f,1);
+        foreach (var (low, high) in new[] {
+            (ForestLod.Far, ForestLod.Medium), (ForestLod.Medium, ForestLod.Near), (ForestLod.Far, ForestLod.Near)
+        }) {
+            var start = ForestLodFade.Start(low, high);
+            Assert.Equal(low, start.Endpoint);
+            Assert.Equal(high, ForestLodFade.Start(high, low).Endpoint);
+            var first = start.Advance(high, 1f / 60);
+            var second = first.Advance(high, 1f / 60);
+            Assert.Null(first.Endpoint);
+            Assert.InRange(second.HighCoverage, first.HighCoverage, .1f);
+            Assert.Equal(first.HighCoverage, second.Advance(low, 1f / 60).HighCoverage, 6);
+            Assert.Equal(second, second.Advance(low, 0));
         }
-        Assert.Equal(ForestLod.Far,ForestLodPolicy.Transition(1).Low);
-        Assert.Equal(ForestLod.Near,ForestLodPolicy.Transition(17).Low);
+    }
+
+    [Fact]
+    public void LodFadeTakesMultipleFramesEvenAfterAHitch()
+    {
+        var fade = ForestLodFade.Start(ForestLod.Near, ForestLod.Far);
+        for (int i = 0; i < 6; i++) {
+            float previous = fade.HighCoverage;
+            fade = fade.Advance(ForestLod.Far, .25f);
+            Assert.Null(fade.Endpoint);
+            Assert.InRange(previous - fade.HighCoverage, 0, .24f);
+        }
+        Assert.Equal(ForestLod.Far, fade.Advance(ForestLod.Far, .25f).Endpoint);
+        Assert.Equal(ForestLod.Far, fade.Advance(ForestLod.Medium, .25f).Endpoint);
     }
 
     [Fact]

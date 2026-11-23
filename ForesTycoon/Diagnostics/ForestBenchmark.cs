@@ -41,7 +41,7 @@ namespace ForesTycoon
                             {
                                 float movingZoom = 7 + 5 * MathF.Sin(frame * MathF.PI / 30);
                                 float yaw = -45 + frame * 4;
-                                context = new RenderContext(0, 0, (ulong)(frame + 10), 0, 0, 0, false, false, 1, -60, yaw,
+                                context = new RenderContext(0, 1f / 30, (ulong)(frame + 10), 0, 0, 0, false, false, 1, -60, yaw,
                                     -640 / movingZoom, -360 / movingZoom, 640 / movingZoom, 360 / movingZoom, movingZoom);
                                 view = Matrix4.CreateRotationZ(MathHelper.DegreesToRadians(yaw)) * Matrix4.CreateRotationX(-MathF.PI / 3);
                                 projection = Matrix4.CreateOrthographicOffCenter(-640 / movingZoom, 640 / movingZoom,
