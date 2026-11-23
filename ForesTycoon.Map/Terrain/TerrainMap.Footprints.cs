@@ -39,6 +39,5 @@ namespace ForesTycoon.Map
             return result;
         }
 
-        internal int[] FindLogisticsRoadPath(int start, int end) => RoadPathfinder.FindPath(roads, nodeRows - 1, start, end);
     }
 }

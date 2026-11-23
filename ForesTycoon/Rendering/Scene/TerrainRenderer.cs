@@ -13,12 +13,16 @@ namespace ForesTycoon
         internal void VerifyAccess() { ObjectDisposedException.ThrowIf(disposed, this); owner.VerifyAccess(); }
         private readonly Terrain terrain;
         internal bool MapGeometryPrepared { get; private set; }
-        internal System.Collections.Generic.IEnumerable<float> PrepareMapGeometry()
+        internal System.Collections.Generic.IEnumerable<float> PrepareMapGeometry(RenderContext? initialView = null, bool completeForestCache = false)
         {
             VerifyAccess();
-            terrain.SkidTrailTrackWidthWorld = machines.ForwarderTrackWidthWorld(logistics);
-            foreach (int unit in surfaces.PrepareWork()) yield return 0;
-            foreach (float progress in terrain.PrepareMapGeometry(forest, graphics)) yield return progress;
+            if (!MapGeometryPrepared || completeForestCache) {
+                terrain.SkidTrailTrackWidthWorld = machines.ForwarderTrackWidthWorld(logistics);
+                foreach (int unit in surfaces.PrepareWork()) yield return 0;
+                foreach (float progress in terrain.PrepareMapGeometry(forest, graphics, completeForestCache)) yield return progress;
+            }
+            if (initialView is RenderContext view)
+                foreach (float progress in terrain.PrepareForestView(forest, graphics, view)) yield return progress;
             MapGeometryPrepared = true;
         }
         private readonly VehicleSystem vehicles;
@@ -114,7 +118,7 @@ namespace ForesTycoon
                 RenderPipeline.PassProbe?.Invoke("shadow-map", true);
                 try
                 {
-                    surfaces.RenderShadows(terrain, () =>
+                    surfaces.RenderShadows(terrain, texelsPerWorldUnit =>
 
                     {
                         shadowDrawn = true;
@@ -123,7 +127,7 @@ namespace ForesTycoon
                             context.FrameIndex, context.SimulationTimeSeconds, context.SimulationTick, context.InterpolationAlpha,
                             false, false, 1, context.CameraTilt, context.CameraYaw,
                             context.ViewMinX - 40, context.ViewMinY - 40, context.ViewMaxX + 40, context.ViewMaxY + 40,
-                            context.PixelsPerWorldUnit, context.MotionInterpolationAlpha);
+                            texelsPerWorldUnit, context.MotionInterpolationAlpha);
                         terrain.UpdateVisibleTiles(shadowContext);
                         terrain.DrawTerrainBase();
                         terrain.DrawTrees(forest, shadowContext, graphics);

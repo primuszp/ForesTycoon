@@ -20,6 +20,7 @@ internal sealed partial class RuleEditorView
     {
         if (restored == null) return;
         if (document.World != null) seedEdit = document.World.Seed;
+        mapEditor.ResetMapSelection();
         ruleWorkspace.ResetCalculation();
         MarkDocumentChanged();
         if (restored.RebuildWorld) ApplyScenario(world, verb + ": " + restored.Summary + ".");

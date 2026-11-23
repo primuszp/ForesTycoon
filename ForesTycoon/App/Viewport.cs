@@ -187,7 +187,8 @@ namespace ForesTycoon
 
         // ────────────────────────────────────────────────────────────────────
         public Viewport(ulong? smokeTestFrameLimit = null, string captureDirectory = null, bool visible = true, bool captureSeasons = false,
-            string resumeWorld = null, string runtimeAcknowledgement = null, string sceneProject = null, string handoffProjectPath = null) : base(
+            string resumeWorld = null, string runtimeAcknowledgement = null, string sceneProject = null, string handoffProjectPath = null,
+            string frameProfilePath = null) : base(
             new GameWindowSettings
             {
                 UpdateFrequency = 0
@@ -200,6 +201,7 @@ namespace ForesTycoon
             this.resumeWorld = resumeWorld; this.runtimeAcknowledgement = runtimeAcknowledgement;
             this.handoffProjectPath = handoffProjectPath;
             this.sceneProject = sceneProject;
+            this.frameProfilePath = frameProfilePath;
             // No automatic whole-code graph bootstrap: the built code runs unless a project carries an edited algorithm bundle.
             // A fresh start runs the opening scene, which the editor's Apply also saves: the published copy is adopted, not
             // re-applied. A resumed save applies the frozen handoff project before its first poll.
@@ -251,6 +253,7 @@ namespace ForesTycoon
         {
             // Loading/UI frames precede the scene; establish the 3D depth state on every frame.
             // Without it the slab draws over the terrain and post-processing receives no scene depth.
+            frameProfile?.Mark("viewport.setup", true);
             RenderDevice.InitializeFrameState();
             bool diorama = postProcess.Begin(world.Graphics, FramebufferWidth, FramebufferHeight);
             // The studio backdrop follows the sky: warm at dusk, deep blue at night (last frame's light).
@@ -265,13 +268,38 @@ namespace ForesTycoon
 
             frameIndex++;
 
+            RenderContext renderContext = CreateWorldRenderContext();
+            frameProfile?.Mark("viewport.setup", false);
+            world.Draw(renderContext);
+            frameProfile?.Mark("viewport.diorama", true);
+            if (diorama)
+                postProcess.End(world.Graphics, renderContext.PixelsPerWorldUnit, DpiScale, (float)frameClock.TotalTimeSeconds);
+            frameProfile?.Mark("viewport.diorama", false);
+
+            frameProfile?.Mark("viewport.hud", true);
+            DrawImGui();
+            frameProfile?.Mark("viewport.hud", false);
+
+            if (smokeTestFrameLimit.HasValue && frameIndex == 10)
+                ValidateSmokeFramebuffer();
+            if (captureDirectory != null)
+                RunCaptureScript();
+
+            frameProfile?.CompleteGpuFrame();
+            long swapStarted = frameProfile == null ? 0 : System.Diagnostics.Stopwatch.GetTimestamp();
+            RenderBackendSelection.Window.Present(this);
+            frameProfile?.EndPresent(swapStarted);
+        }
+
+        private RenderContext CreateWorldRenderContext()
+        {
             bool isTerrainEditTool = interaction.ActiveTool == TerrainEditTool.Raise || interaction.ActiveTool == TerrainEditTool.Lower;
             bool isRotating = interaction.ActiveTool == TerrainEditTool.Inspect && activeButton == PointerButton.Left;
             bool showTileHighlight = !isTerrainEditTool && !isRotating;
             float markerPixelRadius = Math.Max(4.0f, Math.Min(zoom * 0.55f, 9.0f));
             float nodeMarkerRadius = markerPixelRadius / Math.Max(zoom, 0.001f);
 
-            RenderContext renderContext = new RenderContext(
+            return new RenderContext(
                 frameClock.TotalTimeSeconds,
                 frameClock.DeltaTimeSeconds,
                 frameIndex,
@@ -288,19 +316,6 @@ namespace ForesTycoon
                 screenX + Width / zoom,
                 screenY + Height / zoom,
                 zoom * FramebufferWidth / Math.Max(1, Width), simulationClock.MotionInterpolationAlpha);
-
-            world.Draw(renderContext);
-            if (diorama)
-                postProcess.End(world.Graphics, renderContext.PixelsPerWorldUnit, DpiScale, (float)frameClock.TotalTimeSeconds);
-
-            DrawImGui();
-
-            if (smokeTestFrameLimit.HasValue && frameIndex == 10)
-                ValidateSmokeFramebuffer();
-            if (captureDirectory != null)
-                RunCaptureScript();
-
-            RenderBackendSelection.Window.Present(this);
         }
 
         private void ValidateSmokeFramebuffer()
@@ -335,6 +350,10 @@ namespace ForesTycoon
             frameInProgress = true;
             try
             {
+                if (frameProfilePath != null) {
+                    frameProfile ??= new(frameProfilePath, FramebufferWidth, FramebufferHeight, sceneProject);
+                    frameProfile.BeginFrame();
+                }
                 performance.BeginFrame();
                 frameClock.Tick();
                 RefreshPointerHover();
@@ -352,6 +371,7 @@ namespace ForesTycoon
                 performance.BeginRender();
                 Render();
                 performance.EndRender();
+                frameProfile?.Record(frameIndex, world, performance.SimulationTicks);
             }
             finally
             {
@@ -625,6 +645,7 @@ namespace ForesTycoon
             machineAudio?.Dispose(); machineAudio = null;
             worldCreation?.Dispose(); worldCreation = null;
             mapPreparation?.Dispose(); mapPreparation = null;
+            frameProfile?.Dispose(); frameProfile = null;
             roadSurveys.Dispose(); orderPreviews.Dispose(); imgui?.Dispose(); postProcess?.Dispose(); world?.Dispose();
             imgui = null; postProcess = null; world = null; isLoaded = false; glResourcesDisposed = true;
         }

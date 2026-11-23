@@ -102,8 +102,8 @@ namespace ForesTycoon.Ecology
             CheckpointGuard.Require((state.Climate ?? ClimateDefinition.Legacy) == Environment.Climate.Definition, "climate model");
             CheckpointGuard.Require(state.Version == 1 && state.ForestYearSeconds == ForestYearSeconds &&
                 state.SoilHash == Soils?.Definition.Catalog.Hash, "ecology model");
-            if (Soils != null) CheckpointGuard.Require(state.SoilProfiles != null &&
-                Soils.ProfileIndices.SequenceEqual(state.SoilProfiles), "soil raster");
+            if (Soils != null)
+                foreach (int unit in Soils.RestoreWork(state.SoilProfiles)) yield return unit;
             foreach (int unit in Forest.RestoreWork(state.Forest)) yield return unit;
             foreach (int unit in Environment.RestoreWork(state.Environment)) yield return unit;
             coordinator.Runtime.Restore(state.Clock);

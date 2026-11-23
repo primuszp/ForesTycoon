@@ -132,15 +132,15 @@ sealed partial class GameWorld : SimulationWorld, IWorldInteractionTarget
         ForestSpeciesBook.WithContext(SpeciesContext, () => { terrainRenderer.Draw(context); return 0; });
     }
     internal bool MapGeometryPrepared => terrainRenderer?.MapGeometryPrepared == true;
-    internal System.Collections.Generic.IEnumerable<float> PrepareMapGeometry()
+    internal System.Collections.Generic.IEnumerable<float> PrepareMapGeometry(RenderContext? initialView = null)
     {
         EnsureAvailable();
         if (terrainRenderer == null) throw new InvalidOperationException("Attach rendering before preparing a map.");
-        return PrepareMapGeometryWithSpecies();
+        return PrepareMapGeometryWithSpecies(initialView);
     }
-    private IEnumerable<float> PrepareMapGeometryWithSpecies()
+    private IEnumerable<float> PrepareMapGeometryWithSpecies(RenderContext? initialView)
     {
-        using var work = terrainRenderer.PrepareMapGeometry().GetEnumerator();
+        using var work = terrainRenderer.PrepareMapGeometry(initialView).GetEnumerator();
         while (ForestSpeciesBook.WithContext(SpeciesContext, () => work.MoveNext())) yield return work.Current;
     }
 

@@ -19,10 +19,20 @@ public class TerrainSettingsTests
         Assert.Throws<ArgumentException>(() => CreateSettings(nodeColumns: 65, nodeRows: 33));
     }
 
-    [Fact]
-    public void Constructor_RejectsNodeCountThatIsNotPowerOfTwoPlusOne()
+    [Theory]
+    [InlineData(49)]
+    [InlineData(97)]
+    public void GeneratorSupportsEditorSizesBetweenPowersOfTwo(int nodes)
     {
-        Assert.Throws<ArgumentException>(() => CreateSettings(nodeColumns: 64, nodeRows: 64));
+        var settings = CreateSettings(nodeColumns: nodes, nodeRows: nodes);
+        var generator = new TerrainGenerator(settings.Seed);
+        generator.Generate(nodes, nodes, settings.MaxHeight, out var heights, out var rivers);
+        new TerrainGenerator(settings.Seed).Generate(nodes, nodes, settings.MaxHeight, out var repeated, out var repeatedRivers);
+        Assert.Equal(nodes, heights.GetLength(0));
+        Assert.Equal(nodes, heights.GetLength(1));
+        Assert.Equal(heights.Cast<int>(), repeated.Cast<int>());
+        Assert.Equal(rivers.Cast<bool>(), repeatedRivers.Cast<bool>());
+        Assert.True(heights.Cast<int>().Distinct().Count() >= 3);
     }
 
     [Fact]

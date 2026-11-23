@@ -99,11 +99,13 @@ public sealed class EditorSceneCommandsTests
         var document = Open();
         document.Scene.EditWorld(world => {
             world.SoilPaint[1] = "soil"; world.HeightPaint[2] = 4; world.ForestPaint[3] = "Spruce";
+            world.Roads.Add(new() { From = 11, To = 23 }); world.Sawmills.Add(24); world.Depots.Add(25);
             world.ForestFelling.Add(4); world.Springs[5] = 200;
         });
         string before = document.Capture().ToJson(); document.Scene.Resize(48);
         Assert.Empty(document.World!.SoilPaint); Assert.Empty(document.World.HeightPaint);
         Assert.Empty(document.World.ForestPaint); Assert.Empty(document.World.ForestFelling); Assert.Empty(document.World.Springs);
+        Assert.Empty(document.World.Roads); Assert.Empty(document.World.Sawmills); Assert.Empty(document.World.Depots);
         document.History.Undo(); Assert.Equal(before, document.Capture().ToJson());
     }
 

@@ -8,7 +8,7 @@ namespace ForesTycoon
     {
         IEnumerable<int> PrepareWork();
         void BeginFrame();
-        void RenderShadows(Terrain terrain, Action draw);
+        void RenderShadows(Terrain terrain, Action<float> draw);
     }
     internal interface IForestMaterialBackend : IDisposable { void Use(float outlineWorldWidth); }
     internal interface IForestWeatherBackend : IDisposable

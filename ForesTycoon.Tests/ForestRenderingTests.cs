@@ -14,7 +14,7 @@ public class ForestRenderingTests
     [Fact]
     public void LodTransitionIsContinuousAcrossBothZoomBands()
     {
-        foreach(var band in new[]{(2.5f,4.5f),(7f,11f)}) {
+        foreach(var band in new[]{(2.5f,4.5f),(13f,16f)}) {
             float previous=0;
             for(int step=1;step<100;step++) {
                 var transition=ForestLodPolicy.Transition(band.Item1+(band.Item2-band.Item1)*step/100);
@@ -25,19 +25,21 @@ public class ForestRenderingTests
             Assert.InRange(previous,0.99f,1);
         }
         Assert.Equal(ForestLod.Far,ForestLodPolicy.Transition(1).Low);
-        Assert.Equal(ForestLod.Near,ForestLodPolicy.Transition(12).Low);
+        Assert.Equal(ForestLod.Near,ForestLodPolicy.Transition(17).Low);
     }
 
     [Fact]
     public void Lod_HasHysteresisAndSupportsLargeZoomJumps()
     {
-        Assert.Equal(ForestLod.Near, ForestLodPolicy.Select(10, null));
-        Assert.Equal(ForestLod.Near, ForestLodPolicy.Select(8, ForestLod.Near));
-        Assert.Equal(ForestLod.Medium, ForestLodPolicy.Select(8, ForestLod.Medium));
+        Assert.Equal(ForestLod.Medium, ForestLodPolicy.Select(10, null));
+        Assert.Equal(ForestLod.Near, ForestLodPolicy.Select(14, ForestLod.Near));
+        Assert.Equal(ForestLod.Medium, ForestLodPolicy.Select(14, ForestLod.Medium));
         Assert.Equal(ForestLod.Medium, ForestLodPolicy.Select(3, ForestLod.Medium));
         Assert.Equal(ForestLod.Far, ForestLodPolicy.Select(3, ForestLod.Far));
         Assert.Equal(ForestLod.Far, ForestLodPolicy.Select(1, ForestLod.Near));
         Assert.Equal(ForestLod.Near, ForestLodPolicy.Select(20, ForestLod.Far));
+        Assert.Equal(ForestLod.Far, ForestLodPolicy.SelectShadow(4));
+        Assert.Equal(ForestLod.Medium, ForestLodPolicy.SelectShadow(12));
     }
 
     [Fact]

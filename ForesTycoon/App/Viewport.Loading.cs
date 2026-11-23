@@ -50,7 +50,7 @@ namespace ForesTycoon
                     while (world.ForegroundPending && Stopwatch.GetElapsedTime(commandsStarted).TotalMilliseconds < 4);
                     if (world.ForegroundPending) { DrawLoadingScreen(); return; }
                 }
-                mapPreparation ??= world.PrepareMapGeometry().GetEnumerator();
+                mapPreparation ??= world.PrepareMapGeometry(CreateWorldRenderContext()).GetEnumerator();
                 long started = Stopwatch.GetTimestamp();
                 do
                 {
@@ -110,7 +110,7 @@ namespace ForesTycoon
                 draw.AddRectFilled(start + new NVec2(x, 0), start + new NVec2(x + block, size.Y), ImGui.GetColorU32(ImGuiCol.PlotHistogram), 3);
             }
             else ImGui.ProgressBar(loadingProgress, new NVec2(-1, 0));
-            ImGui.TextWrapped("A teljes pálya és a fák részletességi szintjei betöltődnek.");
+            ImGui.TextWrapped("A terep és a kezdő nézet fái betöltődnek.");
             ImGui.End();
             imgui.Render();
             RenderBackendSelection.Window.Present(this);

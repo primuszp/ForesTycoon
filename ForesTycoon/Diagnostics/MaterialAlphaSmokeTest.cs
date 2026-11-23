@@ -112,7 +112,7 @@ namespace ForesTycoon
                 using var terrain=new Terrain(TerrainSettings.Default.WithNodeSize(17,42),(_,_)=>4);
                 using var visuals=new SurfaceVisualRenderer(settings,new WeatherVisualState());
                 RenderDevice.Visuals=visuals;visuals.BeginFrame();
-                visuals.RenderShadows(terrain,()=> {
+                visuals.RenderShadows(terrain,_=> {
                     renderer.Draw(pose,visuals.ShadowCamera.Inverted(),settings,sourceMaterial:true);
                     GL.GetInteger(GetPName.DrawFramebufferBinding,out int framebuffer);
                     GL.GetInteger(GetPName.ReadFramebufferBinding,out int previous);

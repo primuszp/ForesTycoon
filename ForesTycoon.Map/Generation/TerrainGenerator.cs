@@ -22,7 +22,7 @@ namespace ForesTycoon.Map
             this.seed = seed;
         }
 
-        /// <summary>Legenerálja a kvantált magasságot és a folyó-maszkot. size = nodeCols (négyzetes rács, 2^n+1).</summary>
+        /// <summary>Legenerálja a kvantált magasságot és a folyó-maszkot a négyzetes rácson.</summary>
         public void Generate(int nodeCols, int nodeRows, int maxHeight, out int[,] targetW, out bool[,] isRiver)
         {
             var result = new WorkResult<(int[,] Heights, bool[,] Rivers)>();
@@ -33,26 +33,29 @@ namespace ForesTycoon.Map
         internal IEnumerable<int> GenerateWork(int nodeCols, int nodeRows, int maxHeight,
             WorkResult<(int[,] Heights, bool[,] Rivers)> result)
         {
+            if (nodeCols < 2 || nodeCols != nodeRows)
+                throw new ArgumentException("Terrain generation requires a square node grid of at least 2×2.");
             int size = nodeCols;
+            int sampleSize = (int)System.Numerics.BitOperations.RoundUpToPowerOf2((uint)(size - 1)) + 1;
             int[,] targetW; bool[,] isRiver;
             Random rnd = new Random(seed);
-            double[,] h = new double[size, size];
+            var h = new double[sampleSize, sampleSize];
             InitNoise(seed);
 
             // ── 1. Diamond-Square ─────────────────────────────────────────────
             h[0, 0] = rnd.NextDouble();
-            h[0, size - 1] = rnd.NextDouble();
-            h[size - 1, 0] = rnd.NextDouble();
-            h[size - 1, size - 1] = rnd.NextDouble();
+            h[0, sampleSize - 1] = rnd.NextDouble();
+            h[sampleSize - 1, 0] = rnd.NextDouble();
+            h[sampleSize - 1, sampleSize - 1] = rnd.NextDouble();
 
             double range = 1.0;
-            for (int step = size - 1; step > 1; step /= 2)
+            for (int step = sampleSize - 1; step > 1; step /= 2)
             {
                 int half = step / 2;
                 range *= Roughness;
 
-                for (int x = 0; x < size - 1; x += step)
-                    for (int y = 0; y < size - 1; y += step)
+                for (int x = 0; x < sampleSize - 1; x += step)
+                    for (int y = 0; y < sampleSize - 1; y += step)
                     {
                         yield return 1;
                         double avg = (h[x, y] + h[x + step, y] +
@@ -60,16 +63,35 @@ namespace ForesTycoon.Map
                         h[x + half, y + half] = avg + (rnd.NextDouble() * 2 - 1) * range;
                     }
 
-                for (int x = 0; x < size; x += half)
-                    for (int y = ((x / half) % 2 == 0) ? half : 0; y < size; y += step)
+                for (int x = 0; x < sampleSize; x += half)
+                    for (int y = ((x / half) % 2 == 0) ? half : 0; y < sampleSize; y += step)
                     {
                         yield return 1;
                         double sum = 0; int cnt = 0;
                         if (x - half >= 0) { sum += h[x - half, y]; cnt++; }
-                        if (x + half < size) { sum += h[x + half, y]; cnt++; }
+                        if (x + half < sampleSize) { sum += h[x + half, y]; cnt++; }
                         if (y - half >= 0) { sum += h[x, y - half]; cnt++; }
-                        if (y + half < size) { sum += h[x, y + half]; cnt++; }
+                        if (y + half < sampleSize) { sum += h[x, y + half]; cnt++; }
                         h[x, y] = sum / cnt + (rnd.NextDouble() * 2 - 1) * range;
+                    }
+            }
+
+            // Diamond-Square needs a power-of-two interval. Water and erosion use the actual tile spacing.
+            if (sampleSize != size)
+            {
+                var samples = h;
+                h = new double[size, size];
+                double scale = (sampleSize - 1d) / (size - 1);
+                for (int x = 0; x < size; x++)
+                    for (int y = 0; y < size; y++)
+                    {
+                        yield return 1;
+                        double sx = Math.Min(sampleSize - 1, x * scale), sy = Math.Min(sampleSize - 1, y * scale);
+                        int x0 = (int)sx, y0 = (int)sy;
+                        int x1 = Math.Min(x0 + 1, sampleSize - 1), y1 = Math.Min(y0 + 1, sampleSize - 1);
+                        double near = Lerp(samples[x0, y0], samples[x0, y1], sy - y0);
+                        double far = Lerp(samples[x1, y0], samples[x1, y1], sy - y0);
+                        h[x, y] = Lerp(near, far, sx - x0);
                     }
             }
 

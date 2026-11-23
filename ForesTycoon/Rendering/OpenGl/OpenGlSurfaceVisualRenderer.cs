@@ -93,7 +93,7 @@ namespace ForesTycoon.OpenGl
             }
         }
 
-        public void RenderShadows(Terrain terrain, Action draw)
+        public void RenderShadows(Terrain terrain, Action<float> draw)
         {
             ObjectDisposedException.ThrowIf(disposed, this); owner.Check();
             if (!settings.Enhanced || !initialized || !settings.Lighting || !settings.Shadows) return;
@@ -112,7 +112,7 @@ namespace ForesTycoon.OpenGl
                 using (RenderDevice.CreateStateScope().Enable(RenderCapability.DepthTest).Disable(RenderCapability.Blend).DepthWrite(true).PolygonOffset(2, 4))
                 {
                     GL.Clear(ClearBufferMask.DepthBufferBit);
-                    draw();
+                    draw(shadowSize / (radius * 2));
                 }
                 shadowsReady = true;
             }

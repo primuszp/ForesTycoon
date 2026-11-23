@@ -14,8 +14,11 @@ public sealed class SceneStructureTests
         for (int tile = 0; tile < 32 * 32; tile++) project.World.ForestPaint[tile] = "";
         using var probe = WorldLoader.CreateProject(project);
         int rows = probe.TileGrid.Rows;
-        // The longest dry run along one column becomes the road.
-        var (column, start, end) = Enumerable.Range(2, 28).SelectMany(c => Runs(probe, c, rows)).OrderByDescending(r => r.End - r.Start).First();
+        // The fixture needs a connected road with flat land for its neighbouring building footprints.
+        var (column, start, end) = Enumerable.Range(2, 28).SelectMany(c => Runs(probe, c, rows))
+            .Where(run => probe.Map.BuildRoadPlan(probe.Map.Tiles[run.Column * rows + run.Start], probe.Map.Tiles[run.Column * rows + run.End])
+                .All(probe.Map.CanBuildRoadStep))
+            .OrderByDescending(r => r.End - r.Start).First();
         project.World.Roads.Add(new RoadSegment { From = column * rows + start, To = column * rows + end, Surface = "Macadam" });
         using var withRoad = WorldLoader.CreateProject(project);
         var spots = Enumerable.Range(0, rows * rows).Where(t => withRoad.Map.TryGetSawmillFootprint(t, out var f, out _)
@@ -34,9 +37,10 @@ public sealed class SceneStructureTests
     {
         int start = -1;
         for (int r = 0; r <= rows; r++) {
-            bool dry = r < rows && !world.IsWaterTile(column * rows + r);
+            bool dry = r < rows && !world.IsWaterTile(column * rows + r)
+                && world.Map.Tiles[column * rows + r].Shape.Slope == TerrainSlope.Flat;
             if (dry && start < 0) start = r;
-            if (!dry && start >= 0) { if (r - 1 - start >= 6) yield return (column, start, Math.Min(r - 1, start + 12)); start = -1; }
+            if (!dry && start >= 0) { if (r - 1 - start >= 4) yield return (column, start, Math.Min(r - 1, start + 12)); start = -1; }
         }
     }
 
@@ -116,5 +120,20 @@ public sealed class SceneStructureTests
         Assert.Single(twice.Logistics.Depots);
         project.World.Roads.Add(new RoadSegment { From = 0, To = 5000, Surface = "Asphalt" });
         Assert.Throws<InvalidDataException>(project.World.Validate);
+    }
+
+    [Fact]
+    public async Task PreviewAndSaveReportAnIncompleteRoadStartingOnAnExistingRoad()
+    {
+        var project = Scene(out _, out _);
+        int start = project.World.Roads[0].From;
+        project.World.Roads.Add(new() { From = start, To = 0, Surface = "Macadam" });
+        using var world = new SimulationWorld(TerrainSettings.Default.WithNodeSize(17, 42));
+        var preview = world.RequestScenario(project.World, project);
+        while (!world.ContinueGeneration(256)) { }
+        Assert.Same(world.Map, await preview);
+        Assert.Contains(world.SceneProblems, issue => issue.StartsWith($"Az út #{start} → #0 nem teljes."));
+        var validate = new SimulationProjectWorkflowRuntime(world).CaptureSceneValidation();
+        Assert.Throws<InvalidDataException>(() => validate(project));
     }
 }

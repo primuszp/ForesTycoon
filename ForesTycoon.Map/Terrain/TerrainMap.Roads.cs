@@ -433,6 +433,9 @@ namespace ForesTycoon.Map
 
         internal List<RoadPlanStep> BuildRoadPlan(Tile a, Tile b) => new(RoadPlanSteps(a, b));
 
+        internal bool CanBuildRoadStep(RoadPlanStep step) => AnalyzeRoadPlacement(tiles[step.TileId], step.Edges).IsValid;
+        internal bool HasRoadStep(RoadPlanStep step) => (roads.GetEdges(step.TileId) & step.Edges) == step.Edges;
+
         private IEnumerable<RoadPlanStep> RoadPlanSteps(Tile a, Tile b)
         {
             if (a == null || b == null) yield break;

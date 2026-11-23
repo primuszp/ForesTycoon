@@ -41,18 +41,31 @@ internal sealed partial class RuleEditorView
         }
 
         EditorStyle.Section("Kiindulás");
+        if (ImGui.Button("Új generált pálya", new Vec2(220, 0))) {
+            Try(() => BeginNewScene(world, GameWorld.DefaultScenario()));
+            ImGui.CloseCurrentPopup();
+        }
         if (gameScene != null && ImGui.Button("A játék nyitójelenete", new Vec2(220, 0))) { Try(() => OpenScene(world, gameScene)); ImGui.CloseCurrentPopup(); }
         if (ImGui.IsItemHovered()) ImGui.SetTooltip(gameScene);
-        if (ImGui.Button("Eredeti generált nyitójelenet", new Vec2(220, 0))) {
-            Try(() => {
-                document.Scene.Replace(WorldLoader.OpeningProject().World);
-                seedEdit = document.World.Seed;
-                ApplyScenario(world, "Az eredeti, generált nyitójelenet betöltve (küldetések nélkül). Mentéskor az aktív fájlba kerül.");
-            });
+        if (ImGui.Button("Az eredeti nyitójelenet másolata", new Vec2(220, 0))) {
+            Try(() => BeginNewScene(world, WorldLoader.OpeningProject().World));
             ImGui.CloseCurrentPopup();
         }
         if (ImGui.IsItemHovered()) ImGui.SetTooltip("A beépített generátor kezdővilága, ahogy a szerkesztés előtt volt.");
         ImGui.EndDisabled(); ImGui.EndPopup();
+    }
+
+    private void BeginNewScene(GameWorld world, WorldScenario scenario)
+    {
+        CompleteEdits();
+        var project = CollectProject();
+        project.World = scenario;
+        string directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ForesTycoon", "scenes");
+        string destination = Path.Combine(directory, $"palya-{Guid.NewGuid():N}.project.json");
+        LoadProject(world, project);
+        projectPath = scenePath = destination;
+        scenarioBuilt = true;
+        ApplyScenario(world, "Új jelenet. A Jelenet menüben választhatsz mentési helyet.");
     }
 
     private void SaveScene(GameWorld world, string destination = null, RuleProject snapshot = null)

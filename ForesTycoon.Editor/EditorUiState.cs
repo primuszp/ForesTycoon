@@ -37,8 +37,10 @@ internal sealed class MapUiState
     internal int ThinningPercent = 30;
     internal int BrushSoil = 1, BrushSize = 2, SelectedTile = -1, Seed, ElevationTool, WaterTool, BrushSpecies;
     internal float SpringRate = 300;
+    internal int? ReliefDraft;
     internal readonly HashSet<int> Stroke = new();
     internal bool StrokeCancelled;
+    internal int LastBrushTile = -1;
     internal StructureTool StructureTool;
     internal int RoadStart = -1;
     internal string HighlightedStructure;

@@ -49,14 +49,15 @@ namespace ForesTycoon.Editor
                 using var smokeWindow = new EditorWindow(null, true); smokeWindow.Run(); return;
             }
             string file = System.IO.File.Exists(RuleProject.DefaultPath) ? RuleProject.DefaultPath : null, worldFile = null;
+            bool explicitProject = false;
             for (int i = 0; i < args.Length; i += 2)
             {
                 if (i + 1 >= args.Length) throw new ArgumentException("Használat: ForesTycoon.Editor [--model projekt.json] [--world játékmentés.json]");
-                if (args[i] is "--model" or "--project") file = args[i + 1];
+                if (args[i] is "--model" or "--project") { file = args[i + 1]; explicitProject = args[i] == "--project"; }
                 else if (args[i] == "--world") worldFile = args[i + 1];
                 else throw new ArgumentException("Ismeretlen kapcsoló: " + args[i]);
             }
-            using var window = new EditorWindow(file, worldFile: worldFile); window.Run();
+            using var window = new EditorWindow(file, worldFile: worldFile, explicitProject: explicitProject); window.Run();
         }
     }
 
@@ -74,7 +75,7 @@ namespace ForesTycoon.Editor
         private int frames;
         private readonly string worldFile;
         private System.Collections.Generic.SortedDictionary<string, string> openingReference;
-        internal EditorWindow(string file, bool smoke = false, bool visible = true, string worldFile = null) : base(GameWindowSettings.Default, new NativeWindowSettings
+        internal EditorWindow(string file, bool smoke = false, bool visible = true, string worldFile = null, bool explicitProject = false) : base(GameWindowSettings.Default, new NativeWindowSettings
         {
             Title = "ForesTycoon – Világszerkesztő",
             ClientSize = new(1600, 960),
@@ -83,7 +84,7 @@ namespace ForesTycoon.Editor
             Profile = ContextProfile.Core,
             StartVisible = !smoke && visible
         })
-        { editor = new RuleEditorView(file); this.smoke = smoke; this.worldFile = worldFile; if (!smoke) FitToScreen(); }
+        { editor = new RuleEditorView(file, explicitProject); this.smoke = smoke; this.worldFile = worldFile; if (!smoke) FitToScreen(); }
 
         // A laptop screen (e.g. a 1512×982 pt MacBook) cannot hold the 1600×960 window: open inside the work area, and
         // shrink text and spacing a little so the panels and previews keep their room.

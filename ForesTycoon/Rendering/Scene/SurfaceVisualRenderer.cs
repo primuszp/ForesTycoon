@@ -17,7 +17,7 @@ namespace ForesTycoon
         public bool Active => backend.Active;
         internal IEnumerable<int> PrepareWork() => backend.PrepareWork();
         internal void BeginFrame() => backend.BeginFrame();
-        internal void RenderShadows(Terrain terrain, Action draw) => backend.RenderShadows(terrain, draw);
+        internal void RenderShadows(Terrain terrain, Action<float> draw) => backend.RenderShadows(terrain, draw);
         public void Use(float outlineWidth = 0) => backend.Use(outlineWidth);
         public void Dispose() => backend.Dispose();
     }

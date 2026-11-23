@@ -67,8 +67,7 @@ namespace ForesTycoon
         internal bool SynchronousForestBuilds { get; set; }
         // Direct geometry tools can still request synchronous first builds; the game host streams them.
         internal bool StreamGeometry { get; set; }
-        // Interactive maps keep their prepared geometry across camera moves. Streaming
-        // still budgets replacements after simulation changes and player edits.
+        // Diagnostics can pin every prepared LOD for controlled rendering comparisons.
         internal bool RetainPreparedGeometry { get; private set; }
         internal long ForestCacheBudgetBytes { get; set; } = 128L * 1024 * 1024;
         internal long ForestGpuPayloadBytes { get; private set; }
@@ -87,7 +86,8 @@ namespace ForesTycoon
         internal int ForestCacheEvictions { get; private set; }
         private long forestUseSequence;
         private ForestLod? generatedForestLod;
-        private readonly List<ForestLod> chunkLods = new();
+        private static readonly ForestLod[] forestLods = Enum.GetValues<ForestLod>();
+        private readonly List<IndividualForestChunk> drawnForestChunks = new();
         private readonly HashSet<Dictionary<int, ForestTreeStore.Patch>> measuredForestSnapshots = new();
 
         private void MeasureForestPayload()
@@ -113,7 +113,7 @@ namespace ForesTycoon
             }
         }
 
-        private void TrimForestCache()
+        private void TrimForestCache(bool keepShadowMeshes)
         {
             if (ForestCacheBudgetBytes <= 0) throw new InvalidOperationException("Forest cache budget must be positive.");
             // Build scratch is borrowed by one suspended iterator. Release it only after completion/cancellation.
@@ -128,6 +128,9 @@ namespace ForesTycoon
                 ForestBudgetExcessBytes = Math.Max(0, ForestCpuPayloadBytes + ForestGpuPayloadBytes - ForestCacheBudgetBytes);
                 return;
             }
+            long coarseBytes = 0;
+            foreach (var (key, geometry) in individualForestChunks)
+                if (key.Item2 == ForestLod.Far) coarseBytes += geometry.CpuBytes + geometry.GpuBytes;
             while (ForestCpuPayloadBytes + ForestGpuPayloadBytes > ForestCacheBudgetBytes)
             {
                 (TerrainChunk Chunk, ForestLod Lod) victim = default;
@@ -138,15 +141,21 @@ namespace ForesTycoon
                     // Never release resources while they are the frame's visible continuity fallback.
                     if (visibleChunkSet.Contains(entry.Key.Item1) && displayedForestLods.TryGetValue(entry.Key.Item1, out var displayed)
                         && displayed == entry.Key.Item2) continue;
+                    // Small maps can keep a cheap coarse fallback under its own share of
+                    // the budget. The depth pass can also reuse it without a new mesh.
+                    if (entry.Key.Item2 == ForestLod.Far && (coarseBytes <= ForestCacheBudgetBytes / 2
+                        || keepShadowMeshes && visibleChunkSet.Contains(entry.Key.Item1))) continue;
                     if (entry.Value.LastUsed < oldest) { victim = entry.Key; oldest = entry.Value.LastUsed; }
                 }
                 if (victim.Chunk == null) break;
-                individualForestChunks[victim].Dispose(); individualForestChunks.Remove(victim);
+                var geometry = individualForestChunks[victim];
+                if (victim.Lod == ForestLod.Far) coarseBytes -= geometry.CpuBytes + geometry.GpuBytes;
+                geometry.Dispose(); individualForestChunks.Remove(victim);
                 ForestCacheEvictions++;
                 if (displayedForestLods.TryGetValue(victim.Chunk, out var previous) && previous == victim.Lod)
                     displayedForestLods.Remove(victim.Chunk);
                 bool retained = pendingForestBuild?.Chunk == victim.Chunk;
-                foreach (var lod in Enum.GetValues<ForestLod>()) retained |= individualForestChunks.ContainsKey((victim.Chunk, lod));
+                foreach (var lod in forestLods) retained |= individualForestChunks.ContainsKey((victim.Chunk, lod));
                 if (!retained) forestLodSnapshots.Remove(victim.Chunk);
                 MeasureForestPayload();
             }
@@ -167,8 +176,15 @@ namespace ForesTycoon
         private void PrepareNeighbouringLods(ForestSystem forest, GraphicsSettings graphics, ForestLod lod)
         {
             if (pendingForestBuild != null) return;
+            if (lod != ForestLod.Far && graphics.Enhanced && graphics.Lighting && graphics.Shadows) {
+                foreach (var chunk in visibleChunks) {
+                    if (individualForestChunks.TryGetValue((chunk, ForestLod.Far), out var cached) && IsFresh(cached, chunk, forest, graphics)) continue;
+                    GetIndividualForestChunk(chunk, forest, graphics, ForestLod.Far, true, out _, preload: true);
+                    return;
+                }
+            }
             if (StreamGeometry && ForestCpuPayloadBytes + ForestGpuPayloadBytes >= ForestCacheBudgetBytes * 3 / 4) return;
-            foreach (var other in Enum.GetValues<ForestLod>())
+            foreach (var other in forestLods)
             {
                 if (Math.Abs((int)other - (int)lod) != 1) continue;
                 foreach (var chunk in visibleChunks)
@@ -188,41 +204,62 @@ namespace ForesTycoon
             {
                 SynchronousForestBuilds = true;
                 foreach (var chunk in chunkIndex.Chunks)
-                    foreach (var lod in Enum.GetValues<ForestLod>()) GetIndividualForestChunk(chunk, forest, graphics, lod, false, out _);
+                    foreach (var lod in forestLods) GetIndividualForestChunk(chunk, forest, graphics, lod, false, out _);
             }
             finally { SynchronousForestBuilds = synchronous; }
         }
 
-        internal IEnumerable<float> PrepareMapGeometry(ForestSystem forest, GraphicsSettings graphics)
+        internal IEnumerable<float> PrepareMapGeometry(ForestSystem forest, GraphicsSettings graphics, bool completeForestCache = false)
         {
-            RetainPreparedGeometry = true;
+            RetainPreparedGeometry = completeForestCache;
             CancelForestBuild();
-            int completed = 0, total = chunkIndex.Chunks.Count * 4;
+            int completed = 0, total = chunkIndex.Chunks.Count * (completeForestCache ? 4 : 2);
+            long coarseBytes = 0;
             foreach (var chunk in chunkIndex.Chunks)
             {
                 DrawCachedTerrain(new[] { chunk }, false);
                 yield return (float)++completed / total;
-                foreach (var lod in Enum.GetValues<ForestLod>())
-                {
-                    if (!individualForestChunks.TryGetValue((chunk, lod), out var geometry))
-                        individualForestChunks.Add((chunk, lod), geometry = new(chunk.TileIds.Length));
-                    if (!IsFresh(geometry, chunk, forest, graphics))
-                    {
-                        foreach (var step in BuildIndividualForestChunk(chunk, geometry, forest, graphics, lod))
-                            yield return (float)completed / total;
-                        geometry.Initialized = true;
-                        UpdateIndividualForestState(geometry, forest);
-                        geometry.ForestRevision = forest.Revision;
-                        SetIndividualForestElapsed(geometry, forest.ForestYear);
-                        TotalForestChunkRebuilds++;
+                foreach (var lod in forestLods) {
+                    if (!completeForestCache && lod != ForestLod.Far) break;
+                    if (completeForestCache || coarseBytes < ForestCacheBudgetBytes / 2) {
+                        foreach (var _ in PrepareForestLevel(chunk, forest, graphics, lod)) yield return (float)completed / total;
+                        var geometry = individualForestChunks[(chunk, lod)];
+                        coarseBytes += geometry.GpuBytes + geometry.CpuBytes;
+                        displayedForestLods[chunk] = lod;
                     }
-                    // Also retain a fallback before this chunk has ever been visible.
-                    displayedForestLods[chunk] = lod;
                     yield return (float)++completed / total;
                 }
             }
-            TrimForestCache();
+            TrimForestCache(graphics.Enhanced && graphics.Shadows);
             TrimStaticCache();
+        }
+
+        internal IEnumerable<float> PrepareForestView(ForestSystem forest, GraphicsSettings graphics, RenderContext view)
+        {
+            CancelForestBuild();
+            UpdateVisibleTiles(view);
+            var target = ForestLodPolicy.Select(view.PixelsPerWorldUnit, null);
+            int completed = 0, total = Math.Max(1, visibleChunks.Count);
+            foreach (var chunk in visibleChunks) {
+                foreach (var _ in PrepareForestLevel(chunk, forest, graphics, ForestLod.Far)) yield return (float)completed / total;
+                foreach (var _ in PrepareForestLevel(chunk, forest, graphics, target)) yield return (float)completed / total;
+                displayedForestLods[chunk] = target;
+                yield return (float)++completed / total;
+            }
+            TrimForestCache(graphics.Enhanced && graphics.Shadows);
+        }
+
+        private IEnumerable<bool> PrepareForestLevel(TerrainChunk chunk, ForestSystem forest, GraphicsSettings graphics, ForestLod lod)
+        {
+            if (!individualForestChunks.TryGetValue((chunk, lod), out var geometry))
+                individualForestChunks.Add((chunk, lod), geometry = new(chunk.TileIds.Length));
+            if (IsFresh(geometry, chunk, forest, graphics)) yield break;
+            foreach (bool step in BuildIndividualForestChunk(chunk, geometry, forest, graphics, lod)) yield return step;
+            UpdateIndividualForestState(geometry, forest);
+            geometry.ForestRevision = forest.Revision;
+            SetIndividualForestElapsed(geometry, forest.ForestYear);
+            geometry.Initialized = true;
+            TotalForestChunkRebuilds++;
         }
 
 
@@ -234,7 +271,7 @@ namespace ForesTycoon
             foreach (var chunk in chunkIndex.Chunks)
             {
                 IndividualForestChunk basis = null;
-                foreach (var lod in Enum.GetValues<ForestLod>())
+                foreach (var lod in forestLods)
                 {
                     if (!individualForestChunks.TryGetValue((chunk, lod), out var geometry) || !IsFresh(geometry, chunk, forest, graphics)) continue;
                     if (geometry.Wood.ForestCurrentYear != (float)forest.ForestYear ||
@@ -381,7 +418,7 @@ namespace ForesTycoon
                 fallback = retained;
                 bestDistance = (int)target - (int)retained;
             }
-            foreach (var lod in Enum.GetValues<ForestLod>())
+            foreach (var lod in forestLods)
             {
                 if (lod == target || !individualForestChunks.TryGetValue((chunk, lod), out var other)) continue;
                 int distance = Math.Abs((int)lod - (int)target);
@@ -578,7 +615,7 @@ namespace ForesTycoon
             // Every LOD is a tessellation of the same frozen tree/site snapshot. Building a
             // missing LOD from today's dimensions would change morphology when zooming.
             IndividualForestChunk basis = null;
-            foreach (var level in Enum.GetValues<ForestLod>())
+            foreach (var level in forestLods)
                 if (individualForestChunks.TryGetValue((chunk, level), out var cached) &&
                     !ReferenceEquals(cached, geometry) && IsFresh(cached, chunk, forest, graphics))
                 { basis = cached; break; }
@@ -717,50 +754,62 @@ namespace ForesTycoon
         private void DrawIndividualTrees(ForestSystem forest, RenderContext context, GraphicsSettings graphics)
         {
             graphics ??= defaultPineGraphics;
-            bool shadow0 = RenderDevice.Visuals?.ShadowPass == true;
-            if (!shadow0) AdvanceForestBuild(forest, graphics);
-            generatedForestLod = ForestLodPolicy.Select(context.PixelsPerWorldUnit, generatedForestLod);
-            ForestLod lod = generatedForestLod.Value;
-            chunkLods.Clear();
-            foreach (var chunk in visibleChunks)
-            {
-                // A cold region builds the camera's requested detail directly. Never put a distant
-                // proxy on screen at close zoom just to fill coverage before the detailed mesh.
-                chunkLods.Add(ResolveForestLod(chunk, forest, graphics, lod));
-            }
-            if (!shadow0) PrepareNeighbouringLods(forest, graphics, lod);
             bool shadow = RenderDevice.Visuals?.ShadowPass == true;
+            drawnForestChunks.Clear();
+            if (shadow) {
+                var target = ForestLodPolicy.SelectShadow(context.PixelsPerWorldUnit);
+                foreach (var chunk in visibleChunks) {
+                    var geometry = ShadowForestChunk(chunk, target, forest, graphics);
+                    if (geometry != null) drawnForestChunks.Add(geometry);
+                }
+            } else {
+                AdvanceForestBuild(forest, graphics);
+                generatedForestLod = ForestLodPolicy.Select(context.PixelsPerWorldUnit, generatedForestLod);
+                ForestLod lod = generatedForestLod.Value;
+                foreach (var chunk in visibleChunks) {
+                    var displayed = ResolveForestLod(chunk, forest, graphics, lod);
+                    var geometry = individualForestChunks[(chunk, displayed)];
+                    if (geometry.Initialized && geometry.Generation == forest.IndividualTrees.Generation) drawnForestChunks.Add(geometry);
+                }
+                PrepareNeighbouringLods(forest, graphics, lod);
+            }
             if (!shadow)
             {
                 if (RenderDevice.Visuals != null) RenderDevice.Visuals.Kind = SurfaceKind.ForestFloor;
                 using (RenderDevice.CreateStateScope().AlphaBlend().DepthWrite(false).PolygonOffset(-1, -1))
-                    for (int c = 0; c < visibleChunks.Count; c++)
-                    {
-                        var geometry = individualForestChunks[(visibleChunks[c], chunkLods[c])];
-                        if (geometry.Initialized && geometry.Generation == forest.IndividualTrees.Generation) DrawForestPart(geometry, 2);
-                    }
+                    foreach (var geometry in drawnForestChunks) DrawForestPart(geometry, 2);
             }
-            if (graphics.HideTrees) { if (!shadow) TrimForestCache(); return; }
+            if (graphics.HideTrees) { if (!shadow) TrimForestCache(keepShadowMeshes: false); return; }
             if (RenderDevice.Visuals != null) RenderDevice.Visuals.Kind = SurfaceKind.Wood;
-            for (int c = 0; c < visibleChunks.Count; c++)
-            {
-                var geometry = individualForestChunks[(visibleChunks[c], chunkLods[c])];
-                if (geometry.Initialized && geometry.Generation == forest.IndividualTrees.Generation) DrawForestPart(geometry, 0);
-            }
+            foreach (var geometry in drawnForestChunks) DrawForestPart(geometry, 0);
             forestMaterial.Use();
             // The texture represents the whole foliage mass. Rendering only the front
             // shell lets its gaps expose branches instead of filling them with the back
             // shell or a solid outline. Use identical coverage for shadow casters.
             using (RenderDevice.CreateStateScope().Cull(RenderCullFace.Back))
-            {
-                for (int c = 0; c < visibleChunks.Count; c++)
-                {
-                    var geometry = individualForestChunks[(visibleChunks[c], chunkLods[c])];
-                    if (geometry.Initialized && geometry.Generation == forest.IndividualTrees.Generation) DrawForestPart(geometry, 1);
-                }
-            }
+                foreach (var geometry in drawnForestChunks) DrawForestPart(geometry, 1);
             forestMaterial.Use();
-            if (!shadow) TrimForestCache();
+            if (!shadow) TrimForestCache(graphics.Enhanced && graphics.Lighting && graphics.Shadows);
+        }
+
+        private IndividualForestChunk ShadowForestChunk(TerrainChunk chunk, ForestLod requested, ForestSystem forest, GraphicsSettings graphics)
+        {
+            // Prefer an existing coarse mesh in the shadow pass. It never drives camera LOD hysteresis or builds geometry.
+            var wanted = Find(requested);
+            if (wanted != null) return wanted;
+            foreach (var lod in forestLods) {
+                if (lod == requested) continue;
+                var fallback = Find(lod);
+                if (fallback != null) return fallback;
+            }
+            return null;
+
+            IndividualForestChunk Find(ForestLod lod) {
+                if (!individualForestChunks.TryGetValue((chunk, lod), out var geometry) || !geometry.Initialized
+                    || geometry.Generation != forest.IndividualTrees.Generation) return null;
+                if (!IsFresh(geometry, chunk, forest, graphics)) SetIndividualForestElapsed(geometry, forest.ForestYear);
+                return geometry;
+            }
         }
 
         private void DrawForestPart(IndividualForestChunk geometry, int part)

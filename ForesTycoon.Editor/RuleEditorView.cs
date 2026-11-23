@@ -34,7 +34,7 @@ namespace ForesTycoon.Editor
         internal void AdvanceSandbox(GameWorld world, double elapsed)
         { RefreshProjectOperations(world); sandbox.Advance(world, elapsed); }
 
-        internal RuleEditorView(string modelPath = null)
+        internal RuleEditorView(string modelPath = null, bool explicitProject = false)
         {
             workflow = new(RuleProject.DefaultPath, WorldLoader.OpeningScenePath()
                 ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ForesTycoon", "scenes", "opening.json"));
@@ -53,7 +53,14 @@ namespace ForesTycoon.Editor
             projectPath = RuleWorkshopModel.PublishedPath(path);
             try {
             var source = workflow.ReadSource(path);
-            if (source.Project != null) { pendingProject = source.Project; return; }
+            if (source.Project != null) {
+                pendingProject = source.Project;
+                if (explicitProject) {
+                    pendingProject.World ??= GameWorld.DefaultScenario();
+                    pendingScenePath = path;
+                }
+                return;
+            }
             if (source.Behaviors != null) { behaviors.Load(source.Behaviors); return; }
             if (source.Catalog != null) {
                 pendingTuning = source.Catalog.TuningOverrides();

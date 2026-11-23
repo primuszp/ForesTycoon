@@ -157,9 +157,9 @@ partial class SimulationWorld
         Array.Resize(ref ids, count); return ids;
     }
 
-    private IEnumerable<int> RoadCommandWork(int start, int end, bool remove, RoadPaving surface)
+    private IEnumerable<int> RoadCommandWork(int start, int end, bool remove, RoadPaving surface, bool startingEstate = false)
     {
-        if (!remove && !Fundable()) yield break;
+        if (!remove && !startingEstate && !Fundable()) yield break;
         var stroke = new WorkResult<int[]>(); var landing = new WorkResult<int> { Value = -1 }; bool needsLanding = false;
         if (!remove) {
             foreach (int unit in map.RoadStrokeTilesWork(start, end, stroke)) yield return unit;
@@ -175,7 +175,7 @@ partial class SimulationWorld
         var changed = new WorkResult<int[]>();
         foreach (int unit in map.RoadPathWork(start, end, remove, surface, changed)) yield return unit;
         if (changed.Value.Length == 0) yield break;
-        if (!remove) Expenses += behaviorPolicy.Gameplay.Evaluate("road.buildCost", changed.Value.Length, RoadCosts.Build(surface, Tuning), (int)surface);
+        if (!remove && !startingEstate) Expenses += behaviorPolicy.Gameplay.Evaluate("road.buildCost", changed.Value.Length, RoadCosts.Build(surface, Tuning), (int)surface);
         var unavailable = new List<int>();
         foreach (int id in changed.Value) { if (!((IForestHabitat)map).CanSupportForest(id)) unavailable.Add(id); yield return 1; }
         if (!remove && needsLanding) {

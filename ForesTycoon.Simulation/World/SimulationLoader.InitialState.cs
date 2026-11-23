@@ -53,13 +53,6 @@ internal static partial class SimulationLoader
         return project;
     }
 
-    internal static void RestoreInitialState(SimulationWorld world, WorldScenario scenario)
-    {
-        var saved = ReadInitialState(scenario);
-        using var stream = new MemoryStream(); WorldSaveSerializer.Write(stream, saved); stream.Position = 0;
-        world.Load(stream);
-    }
-
     // Pure parsing/remapping. Safe on a worker; never reads or changes the live world or species context.
     internal static WorldSaveData ReadInitialState(WorldScenario scenario)
     {
@@ -78,8 +71,9 @@ internal static partial class SimulationLoader
         var saved = WorldSaveSerializer.Read(unpacked);
         if (saved.Checkpoint == null || saved.Checkpoint.Tick != saved.Tick || saved.Checkpoint.PendingCommands != 0 || saved.Commands.Count != 0)
             throw new InvalidDataException("A kiinduló jelenet teljes, parancselőzmény nélküli állapotmentés legyen.");
-        if (saved.Terrain.Seed != scenario.Seed || saved.Terrain.NodeColumns != scenario.Size + 1 || saved.Terrain.NodeRows != scenario.Size + 1)
-            throw new InvalidDataException("A rögzített jelenet mérete és seedje nem változtatható; ehhez új generált pályát kell létrehozni.");
+        if (saved.Terrain.Seed != scenario.Seed || saved.Terrain.NodeColumns != scenario.Size + 1 || saved.Terrain.NodeRows != scenario.Size + 1
+            || saved.Terrain.MaxHeight != scenario.MaxHeight)
+            throw new InvalidDataException("A rögzített jelenet mérete, seedje és magassági tartománya nem változtatható; ehhez új generált pályát kell létrehozni.");
         saved.ValidateReplay();
         return PrepareSceneSnapshot(saved, scenario);
     }

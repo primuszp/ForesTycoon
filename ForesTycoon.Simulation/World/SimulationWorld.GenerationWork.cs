@@ -9,6 +9,7 @@ partial class SimulationWorld
     private IEnumerator<int> generationWork;
     private object generationSpecies;
     private bool generationCommitted;
+    private Exception generationFailure;
     private readonly HashSet<TaskCompletionSource<TerrainMap>> queuedGenerationRequests = new();
     private TaskCompletionSource<TerrainMap> activeGenerationRequest;
     private readonly List<IWorldCommand> generationInputs = new();
@@ -63,7 +64,7 @@ partial class SimulationWorld
         {
             var project = definition?.Clone() ?? RuleProjectDocument;
             project.World = RuleProject.FromJson(new RuleProject { World = scenario }.ToJson()).World;
-            ValidateRuleProject(project); RequireAlgorithmRuntime(project.Algorithms);
+            project = NormalizeRuleProject(project); RequireAlgorithmRuntime(project.Algorithms);
             return (Project: project, Soils: SoilModel(project.World));
         });
         while (SimulationWork.TaskPending(preparing)) yield return 64;
@@ -79,7 +80,7 @@ partial class SimulationWorld
         generationInputs.Clear(); generationCommitted = false;
         generationWork = work.GetEnumerator();
         generationSpecies = worldSpecies;
-        GenerationError = null; GenerationStage = "Pálya előkészítése";
+        generationFailure = null; GenerationError = null; GenerationStage = "Pálya előkészítése";
     }
 
     internal void CancelGeneration()
@@ -123,7 +124,7 @@ partial class SimulationWorld
         catch (Exception error)
         {
             generationWork.Dispose(); generationWork = null;
-            GenerationError = error.Message; GenerationStage = ""; generationInputs.Clear();
+            generationFailure = error; GenerationError = error.Message; GenerationStage = ""; generationInputs.Clear();
             activeGenerationRequest?.TrySetResult(null); activeGenerationRequest = null;
             return true;
         }
@@ -150,13 +151,16 @@ partial class SimulationWorld
         GenerationStage = "Domborzat és vízrajz";
         var terrainResult = new WorkResult<TerrainMap>();
         foreach (int unit in TerrainMap.CreateWork(settings, terrainResult)) yield return unit;
+        var generated = terrainResult.Value;
+        if (snapshot == null && project?.World.HeightPaint.Count > 0)
+            foreach (int unit in generated.ApplyHeightTargetsWork(project.World.HeightPaint, new WorkResult<int[]>())) yield return unit;
         GenerationStage = "Talaj, erdő és környezet";
         var preparingResponses = Task.Run(() => ForesTycoon.Rules.EcologyResponseProgram.FromModel(project?.Behaviors ?? WorldBehaviorPolicy.DefaultDocument()));
         while (SimulationWork.TaskPending(preparingResponses)) yield return 64;
         var responses = preparingResponses.GetAwaiter().GetResult();
         ForestSpeciesBook.Apply(SpeciesEdits(project?.World));
         // The forest is grown with the ecosystem, before the candidate world exists: give it the scene's zones and biomes now.
-        var scene = project?.World ?? BuiltinZones; var generated = terrainResult.Value;
+        var scene = project?.World ?? BuiltinZones;
         generated.LandscapeClass = id => Landscape(scene, generated, id);
         var ecologyResult = new WorkResult<Ecosystem>();
         foreach (int unit in Ecosystem.CreateWork(terrainResult.Value, yearSeconds, soils, climate, ecologyResult, responses)) yield return unit;

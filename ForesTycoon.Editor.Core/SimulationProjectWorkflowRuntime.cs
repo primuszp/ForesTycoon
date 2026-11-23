@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using System.IO;
 using ForesTycoon.Rules;
 
 namespace ForesTycoon.Editor.Core;
@@ -16,6 +17,8 @@ internal sealed class SimulationProjectWorkflowRuntime(SimulationWorld? world = 
         object? species = world?.WithSpecies(ForestSpeciesBook.CaptureContext);
         return project => ForestSpeciesBook.WithContext(species, () => {
             using var validation = SimulationLoader.CreateProject(EditorDocument.ForSandbox(project));
+            if (validation.SceneProblems.Count > 0)
+                throw new InvalidDataException(string.Join(Environment.NewLine, validation.SceneProblems));
             return 0;
         });
     }

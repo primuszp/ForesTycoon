@@ -200,8 +200,9 @@ public sealed class EditorHistoryServiceTests
         using var world = FoundationPersistenceTests.FlatWorld();
         var view = new RuleEditorView(); Invoke(view, "EnsureProject", world);
         var document = Field<EditorDocument>(view, "document"); var stroke = Field<HashSet<int>>(view, "stroke");
-        stroke.Add(1); Invoke(view, "CommitStroke", world); stroke.Clear();
-        stroke.Add(2); Invoke(view, "CommitStroke", world); stroke.Clear();
+        var map = Field<MapEditorView>(view, "mapEditor");
+        stroke.Add(1); map.CommitStroke(world); stroke.Clear();
+        stroke.Add(2); map.CommitStroke(world); stroke.Clear();
         Assert.Equal(3, document.History.Count); Assert.True(document.World!.SoilPaint.ContainsKey(1)); Assert.True(document.World.SoilPaint.ContainsKey(2));
         Assert.NotNull(document.History.Undo()); Assert.True(document.World.SoilPaint.ContainsKey(1)); Assert.False(document.World.SoilPaint.ContainsKey(2));
         Assert.NotNull(document.History.Undo()); Assert.Empty(document.World.SoilPaint);

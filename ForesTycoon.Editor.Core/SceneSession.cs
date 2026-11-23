@@ -91,7 +91,6 @@ internal sealed class SceneSession
     internal void SetHorizonDepth(SoilView soil, int index, double depth) => editor.SetHorizonDepth(Resolve(soil), index, depth);
     internal void ResetHorizons(SoilView soil) => editor.ResetHorizons(Resolve(soil));
     internal void EditWorld(Action<WorldScenario> change) => editor.EditWorld(change);
-    internal void Replace(WorldScenario scenario) => editor.Replace(scenario);
     internal void SetTuning(string key, double value) => editor.SetTuning(key, value);
     internal SoilView CopySoil(SoilView source) => View(editor.CopySoil(Resolve(source)))!;
     internal void DeleteSoil(SoilView soil, bool usedInRuntime) => editor.DeleteSoil(Resolve(soil), usedInRuntime);
@@ -107,6 +106,7 @@ internal sealed class SceneSession
     internal void SetRelief(int relief) => editor.SetRelief(relief);
     internal void PaintSoil(IEnumerable<int> tiles, string soil) => editor.PaintSoil(tiles, soil);
     internal void PaintForest(IEnumerable<int> eligibleTiles, string species) => editor.PaintForest(eligibleTiles, species);
+    internal void FellForest(IEnumerable<int> tiles) => editor.FellForest(tiles);
     internal void PaintHeights(IEnumerable<KeyValuePair<int, int>> heights) => editor.PaintHeights(heights);
     internal void PaintSprings(IEnumerable<int> tiles, double? rate) => editor.PaintSprings(tiles, rate);
 }

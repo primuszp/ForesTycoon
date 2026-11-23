@@ -9,6 +9,8 @@ namespace ForesTycoon
     // Explicit opt-in GL integration test; the ordinary unit suite stays headless.
     internal static class ForestRenderSmokeTest
     {
+        private const float CloseScale = 20;
+
         internal static void Run()
         {
             using var window = new NativeWindow(new NativeWindowSettings
@@ -30,10 +32,10 @@ namespace ForesTycoon
                 Require(forest.Count > 0, "Test map has no forest.");
                 RenderDevice.SetCamera(Matrix4.Identity);
                 terrain.SynchronousForestBuilds = true; // Explicit fixture preparation; runtime drawing never enables this.
-                int near = Draw(terrain, forest, 12);
+                int near = Draw(terrain, forest, CloseScale);
                 terrain.SynchronousForestBuilds = false;
                 Require(terrain.ForestChunkRebuilds >= terrain.VisibleChunkCount && terrain.ReadyVisibleForestChunks(ForestLod.Near) == terrain.VisibleChunkCount, "Initial requested chunks were not built.");
-                Draw(terrain, forest, 12);
+                Draw(terrain, forest, CloseScale);
                 Require(terrain.ForestChunkRebuilds == 0, "Unchanged frame rebuilt the forest.");
                 // Cold LODs keep drawing a current mesh while their replacement builds.
                 // Compare completed geometry rather than the transitional fallback.
@@ -43,7 +45,7 @@ namespace ForesTycoon
                 Require(far < medium && medium < near, "Forest LOD did not reduce geometry with zoom.");
                 Draw(terrain, forest, 1.5f);
                 Require(terrain.ForestChunkRebuilds == 0, "Zoom inside one LOD rebuilt the forest.");
-                Draw(terrain, forest, 12);
+                Draw(terrain, forest, CloseScale);
                 Require(terrain.ForestChunkRebuilds == 0, "Returning to a cached LOD rebuilt the forest.");
                 Draw(terrain,forest,3.5f);
                 Draw(terrain,forest,9);
@@ -51,9 +53,9 @@ namespace ForesTycoon
                 Require(terrain.ForestChunkRebuilds==0,"LOD blending rebuilt cached meshes.");
                 Require(RenderDevice.LodRange==new Vector2(0,1),"LOD mask leaked to other objects.");
                 forest.Update(ForestSystem.DefaultSecondsPerYear / 12);
-                Draw(terrain, forest, 12);
+                Draw(terrain, forest, CloseScale);
                 Require(terrain.ForestChunkRebuilds == 0, "Monthly growth rebuilt topology instead of refreshing GPU state.");
-                Draw(terrain, forest, 12);
+                Draw(terrain, forest, CloseScale);
                 Require(terrain.ForestChunkRebuilds == 0, "Stable frame rebuilt monthly geometry.");
                 Draw(terrain, forest, 1.5f);
                 // Resource refresh can queue crown-shape work independently of edits.
@@ -99,6 +101,7 @@ namespace ForesTycoon
                 CheckColdWorldScaling();
                 CheckStaticCacheEviction();
                 CheckPreparedMapContinuity();
+                CheckBudgetedMapPreparation();
                 Console.WriteLine($"Forest GL smoke test passed: near={near}, medium={medium}, far={far} vertices; stable frames rebuild 0 chunks.");
             }
             finally
@@ -127,15 +130,15 @@ namespace ForesTycoon
             var forest = new ForestSystem(terrain.Map, stands);
             terrain.WarmIndividualForest(forest, new GraphicsSettings { Enhanced = false });
             terrain.StreamGeometry = true;
-            Draw(terrain, forest, 12);
+            Draw(terrain, forest, CloseScale);
             for (int frame = 0; frame < 180; frame++)
             {
                 forest.Update(256 * Viewport.GamePace / 60);
-                Draw(terrain, forest, 12);
+                Draw(terrain, forest, CloseScale);
                 Require(terrain.ReadyVisibleForestChunks(ForestLod.Near) == terrain.VisibleChunkCount,
                     $"256x fast-forward downgraded detailed crowns at frame {frame}.");
             }
-            for (int frame = 0; frame < 5000 && terrain.HasPendingForestBuild; frame++) Draw(terrain, forest, 12);
+            for (int frame = 0; frame < 5000 && terrain.HasPendingForestBuild; frame++) Draw(terrain, forest, CloseScale);
             Require(!terrain.HasPendingForestBuild, "Forest updates did not settle after fast-forward stopped.");
             Console.WriteLine("256x fast-forward: detailed spruce crowns retained through growth and background LOD publication.");
         }
@@ -147,13 +150,13 @@ namespace ForesTycoon
             Require(forest.Count > 0, "Streaming test map has no forest.");
             terrain.StreamGeometry = true;
             Require(terrain.ForestResidentLods == 0, "Cold streaming terrain allocated forest meshes.");
-            int first = Draw(terrain, forest, 12);
+            int first = Draw(terrain, forest, CloseScale);
             Require(first == 0 && terrain.ForestChunkRebuilds == 0 && terrain.HasPendingForestBuild,
                 "Cold streaming published partial geometry or built trees synchronously.");
             int frames = 0;
             while (terrain.TotalForestChunkRebuilds < terrain.VisibleChunkCount && frames++ < 10000)
             {
-                Draw(terrain, forest, 12);
+                Draw(terrain, forest, CloseScale);
                 Require(terrain.ReadyVisibleForestChunks(ForestLod.Far) == 0,
                     "Cold close-up displayed a distant proxy before its detailed trees.");
             }
@@ -174,9 +177,9 @@ namespace ForesTycoon
                 "Budget pressure retained unused forest levels.");
             Require(terrain.ForestBudgetExcessBytes == terrain.ForestCpuPayloadBytes + terrain.ForestGpuPayloadBytes - 1,
                 "Visible working-set excess was not reported exactly.");
-            int detailedVertices = Draw(terrain, forest, 12);
+            int detailedVertices = Draw(terrain, forest, CloseScale);
             for (int frame = 0; frame < 2000 && terrain.ReadyVisibleForestChunks(ForestLod.Near) < terrain.VisibleChunkCount; frame++)
-                detailedVertices = Draw(terrain, forest, 12);
+                detailedVertices = Draw(terrain, forest, CloseScale);
             Require(detailedVertices > farVertices && terrain.ReadyVisibleForestChunks(ForestLod.Near) == terrain.VisibleChunkCount,
                 "Cache budget pressure permanently downgraded visible tree models.");
             var offscreen = new RenderContext(0, 0, 0, 0, 0, 0, false, false, 1,
@@ -186,14 +189,14 @@ namespace ForesTycoon
             Require(terrain.VisibleChunkCount == 0 && terrain.ForestResidentLods == 0 && terrain.ForestGpuPayloadBytes == 0,
                 "Panning away retained offscreen forest GPU resources under pressure.");
             Require(!terrain.HasPendingForestBuild, "Offscreen build was not cancelled.");
-            Require(Draw(terrain, forest, 12) == 0 && terrain.HasPendingForestBuild,
+            Require(Draw(terrain, forest, CloseScale) == 0 && terrain.HasPendingForestBuild,
                 "Returning to an evicted region did not restart a complete streaming build.");
             bool returned = false;
-            for (int frame = 0; frame < 5000 && !returned; frame++) returned = Draw(terrain, forest, 12) > 0;
+            for (int frame = 0; frame < 5000 && !returned; frame++) returned = Draw(terrain, forest, CloseScale) > 0;
             Require(returned, "Returning to an evicted region never restored visible trees.");
             forest.Clear();
             for (int frame = 0; frame < 8; frame++)
-                Require(Draw(terrain, forest, 12) == 0, "Streaming cancellation resurrected cleared trees.");
+                Require(Draw(terrain, forest, CloseScale) == 0, "Streaming cancellation resurrected cleared trees.");
             Require(GL.GetError() == ErrorCode.NoError, "Streaming/cache eviction produced an OpenGL error.");
             Console.WriteLine($"Streaming forest: cold frame submitted 0 vertices; requested Near coverage in {frames} frames; unused LOD eviction and visible-budget excess passed.");
         }
@@ -206,7 +209,7 @@ namespace ForesTycoon
             terrain.StreamGeometry = true;
             terrain.ForestCacheBudgetBytes = terrain.StaticCacheBudgetBytes = 1;
             float progress = 0;
-            foreach (float next in terrain.PrepareMapGeometry(forest, graphics))
+            foreach (float next in terrain.PrepareMapGeometry(forest, graphics, completeForestCache: true))
             {
                 Require(next >= progress && next <= 1, "Map loading progress regressed.");
                 progress = next;
@@ -215,7 +218,7 @@ namespace ForesTycoon
             int resident = terrain.ForestResidentLods, ground = terrain.StaticResidentChunks;
             Require(resident == ground * 3 && ground > 0, "Preparation missed terrain or a tree LOD.");
             long rebuilds = terrain.TotalForestChunkRebuilds;
-            foreach (float scale in new[] { 12f, 1f, 5f, 20f, 2f, 12f })
+            foreach (float scale in new[] { CloseScale, 1f, 5f, 20f, 2f, CloseScale })
             {
                 var away = new RenderContext(0, 0, 0, 0, 0, 0, false, false, 1,
                     -60, -45, 100000, 100000, 100032, 100032, scale);
@@ -247,7 +250,7 @@ namespace ForesTycoon
                     "World construction warmed forest meshes before its camera was known.");
                 RenderDevice.SetCamera(Matrix4.Identity);
                 var context = new RenderContext(0, 0, 0, 0, 0, 0, false, false, 1,
-                    -60, -45, -32, -32, 32, 32, 12);
+                    -60, -45, -32, -32, 32, 32, CloseScale);
                 timer.Restart();
                 world.Draw(context);
                 GL.Finish();
@@ -267,6 +270,23 @@ namespace ForesTycoon
                 Require(GL.GetError() == ErrorCode.NoError, "Cold world scaling produced an OpenGL error.");
                 Console.WriteLine($"Cold world {nodes - 1}x{nodes - 1}: constructor {constructionMs:F1} ms; first draw {firstDrawMs:F1} ms; streamed readiness {timer.Elapsed.TotalMilliseconds:F1} ms; thread allocations {(GC.GetAllocatedBytesForCurrentThread() - allocated) / 1048576.0:F1} MiB; visible {world.VisibleChunkCount}/{world.TotalChunkCount}, resident forest levels {world.ForestResidentLods}.");
             }
+        }
+
+        private static void CheckBudgetedMapPreparation()
+        {
+            using var world = new GameWorld(TerrainSettings.Default.WithNodeSize(33, 42));
+            var view = new RenderContext(0, 0, 0, 0, 0, 0, false, false, 1,
+                -60, -45, -32, -32, 32, 32, 10);
+            foreach (float _ in world.PrepareMapGeometry(view)) { }
+            Require(world.MapGeometryPrepared && world.VisibleChunkCount > 0, "The initial camera was not prepared.");
+            Require(world.ReadyVisibleForestChunks(ForestLod.Medium) == world.VisibleChunkCount,
+                "The game left the first visible frame waiting for its selected LOD.");
+            Require(world.ForestResidentLods <= world.TotalChunkCount + world.VisibleChunkCount,
+                "The game warmed unused fine forest models.");
+            world.Draw(view);
+            GL.Finish();
+            Require(GL.GetError() == ErrorCode.NoError, "Budgeted forest and shadow preparation produced an OpenGL error.");
+            Console.WriteLine($"Budgeted startup: {world.VisibleChunkCount} Medium chunks, {world.ForestResidentLods} resident levels, {world.ForestGpuPayloadBytes / 1048576.0:F1} MiB forest GPU payload.");
         }
 
         private static void CheckStaticCacheEviction()
@@ -299,13 +319,13 @@ namespace ForesTycoon
             using var terrain = new Terrain(TerrainSettings.Default.WithNodeSize(17, 42), (_, _) => 4);
             var forest = new ForestSystem(terrain.Map);
             var graphics = new GraphicsSettings { Enhanced = false };
-            Draw(terrain, forest, 12);
+            Draw(terrain, forest, CloseScale);
             // Build previously missing LODs much later, while physical tree dimensions have grown.
             forest.Update(.5);
             terrain.WarmIndividualForest(forest, graphics);
             Require(terrain.CheckForestLodConsistency(forest, graphics) > 0, "No cached LODs were compared.");
             string before = System.Text.Json.JsonSerializer.Serialize(forest.Capture());
-            foreach (float zoom in new[] { 1f, 5f, 12f, 3f, 10f, 1f, 12f })
+            foreach (float zoom in new[] { 1f, 5f, CloseScale, 3f, 10f, 1f, CloseScale })
             {
                 Draw(terrain, forest, zoom);
                 Require(terrain.CheckForestLodConsistency(forest, graphics) > 0, "Zoom discarded shared LOD state.");
@@ -313,7 +333,7 @@ namespace ForesTycoon
             Require(before == System.Text.Json.JsonSerializer.Serialize(forest.Capture()), "Zoom modified the forest simulation.");
             // Exercise stale fallback and background publication after a real monthly state change.
             forest.Update(10);
-            foreach (float zoom in new[] { 1f, 12f, 5f, 1f, 12f }) Draw(terrain, forest, zoom);
+            foreach (float zoom in new[] { 1f, CloseScale, 5f, 1f, CloseScale }) Draw(terrain, forest, zoom);
             terrain.WarmIndividualForest(forest, graphics);
             Require(terrain.CheckForestLodConsistency(forest, graphics) > 0, "Growth produced inconsistent LOD snapshots.");
             Console.WriteLine("Living forest LOD: shared tree/site snapshots, current GPU clocks and read-only zoom passed.");
@@ -346,7 +366,7 @@ namespace ForesTycoon
                 terrain.UpdateVisibleTiles(context);
                 Check(true);
                 Check(false);
-                foreach (float zoom in new[] { 1.5f, 5f, 12f })
+                foreach (float zoom in new[] { 1.5f, 5f, CloseScale })
                 {
                     var camera = RenderDevice.ViewProjection;
                     RenderMetrics.BeginFrame();
@@ -419,7 +439,7 @@ namespace ForesTycoon
             {
                 RenderDevice.SetViewport(256, 256);
                 RenderDevice.Clear(new Vector4(0, 0, 0, 1));
-                Draw(terrain, forest, 12);
+                Draw(terrain, forest, CloseScale);
                 GL.Finish();
                 var pixels = new byte[256 * 256 * 4];
                 RenderDevice.ReadPixels(0, 0, 256, 256, pixels);
@@ -444,7 +464,7 @@ namespace ForesTycoon
                     patch.Trees[i] = patch.Trees[i].Settle(forest.ForestYear) with
                         { BirthYear = forest.ForestYear - 2.99, AnnualGrowth = default };
                 forest.NotifyIndividualVisualEdit();
-                Draw(terrain, forest, 12);
+                Draw(terrain, forest, CloseScale);
                 // Remove neighbour-LOD work before measuring the requested stage build.
                 // Otherwise an unrelated pending LOD can publish on the next frame.
                 terrain.SynchronousForestBuilds = true;
@@ -453,25 +473,25 @@ namespace ForesTycoon
             }
             SetBoundary();
             forest.Update(.6);
-            Draw(terrain, forest, 12);
+            Draw(terrain, forest, CloseScale);
             Require(terrain.ForestChunkRebuilds == 0, "Life-stage geometry was built synchronously.");
             bool published = false;
             for (int frame = 0; frame < 5000 && !published; frame++)
             {
-                Draw(terrain, forest, 12);
+                Draw(terrain, forest, CloseScale);
                 published = terrain.ForestChunkRebuilds > 0;
             }
             Require(published, "Deferred forest build never published.");
             terrain.SynchronousForestBuilds = true;
             terrain.WarmIndividualForest(forest, new GraphicsSettings { Enhanced = false });
             terrain.SynchronousForestBuilds = false;
-            Draw(terrain, forest, 12);
+            Draw(terrain, forest, CloseScale);
             Require(terrain.ForestChunkRebuilds == 0, "Completed forest build did not settle.");
-            SetBoundary(); forest.Update(.6); Draw(terrain, forest, 12);
+            SetBoundary(); forest.Update(.6); Draw(terrain, forest, CloseScale);
             forest.Clear();
-            Require(Draw(terrain, forest, 12) == 0, "Clear retained stale deferred geometry.");
+            Require(Draw(terrain, forest, CloseScale) == 0, "Clear retained stale deferred geometry.");
             for (int frame = 0; frame < 5; frame++)
-                Require(Draw(terrain, forest, 12) == 0, "Cancelled build reintroduced old trees.");
+                Require(Draw(terrain, forest, CloseScale) == 0, "Cancelled build reintroduced old trees.");
             Console.WriteLine("Deferred forest geometry: stage publication and cancellation after clear passed.");
         }
 
@@ -492,15 +512,15 @@ namespace ForesTycoon
             terrain.Map.TryGetTileCenter(34, out var root);
             var camera = Matrix4.CreateTranslation(-root) * Matrix4.CreateRotationZ(-MathF.PI/4)
                 * Matrix4.CreateRotationX(-MathF.PI/4) * Matrix4.CreateOrthographic(18,18,-100,100);
-            var standing = Frame(12);
+            var standing = Frame(CloseScale);
             forest.Update(.6); // Cross death+2 years without a month/topology change.
-            var fallen = Frame(12);
+            var fallen = Frame(CloseScale);
             Require(!standing.AsSpan().SequenceEqual(fallen), "Dead spruce did not fall without a mesh rebuild.");
-            foreach (float scale in new[] { 1f, 5f, 12f, 1f })
+            foreach (float scale in new[] { 1f, 5f, CloseScale, 1f })
                 Require(fallen.AsSpan().SequenceEqual(Frame(scale)), "Cached LOD changed fallen spruce back into a snag.");
             graphics.Enhanced = true;
-            var textured = Frame(12);
-            foreach (float scale in new[] { 1f, 5f, 12f })
+            var textured = Frame(CloseScale);
+            foreach (float scale in new[] { 1f, 5f, CloseScale })
                 Require(textured.AsSpan().SequenceEqual(Frame(scale)), "Textured/shadow LOD changed dead-tree fall state.");
             Require(GL.GetError() == ErrorCode.NoError, "Dead tree LOD shader GL error.");
             Console.WriteLine("Dead spruce: exact fallen pixels in all warmed LODs, no topology rebuild at fall threshold.");
@@ -617,7 +637,7 @@ namespace ForesTycoon
             finally { RenderDevice.SetCamera(oldCamera); }
             byte[] Capture() {
                 RenderDevice.SetViewport(256, 256); RenderDevice.Clear(new Vector4(0, 0, 0, 1));
-                Draw(terrain, forest, 12); GL.Finish();
+                Draw(terrain, forest, CloseScale); GL.Finish();
                 var pixels = new byte[256 * 256 * 4]; RenderDevice.ReadPixels(0, 0, 256, 256, pixels); return pixels;
             }
         }

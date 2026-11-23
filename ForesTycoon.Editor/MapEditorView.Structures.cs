@@ -54,16 +54,17 @@ internal sealed partial class MapEditorView
             float radius = Math.Max(2, mapGeometry.Cell * (lit ? .45f : .22f));
             draw.AddCircleFilled(TileCentre(r.From), radius, lit ? hot : end);
             draw.AddCircleFilled(TileCentre(r.To), radius, lit ? hot : end);
-            if (lit) draw.AddLine(TileCentre(r.From), TileCentre(r.To), hot, 1);
+            if (lit) DrawStructureRoute(world, r.From, r.To, r.Surface == nameof(StructureTool.SkidTrail), checkPlacement: false);
         }
         for (int i = 0; i < scene.World.Sawmills.Count; i++) { bool lit = highlighted == "mill:" + i; FootprintOutline(draw, scene.World.Sawmills[i], lit ? hot : mill, lit ? 3 : 2); }
         for (int i = 0; i < scene.World.Depots.Count; i++) { bool lit = highlighted == "depot:" + i; FootprintOutline(draw, scene.World.Depots[i], lit ? hot : depot, lit ? 3 : 2); }
 
         if (ImGui.IsKeyPressed(ImGuiKey.Escape) || ImGui.IsMouseClicked(ImGuiMouseButton.Right)) roadStart = -1;
         bool road = structureTool is StructureTool.Macadam or StructureTool.Asphalt or StructureTool.Dirt or StructureTool.SkidTrail;
-        if (road && roadStart >= 0) {
+        int blocked = -1;
+        if (road && world.Map.IsValidTileId(roadStart)) {
             draw.AddCircleFilled(TileCentre(roadStart), Math.Max(3, mapGeometry.Cell * .4f), EditorStyle.Selection);
-            if (hovered >= 0) draw.AddLine(TileCentre(roadStart), TileCentre(hovered), EditorStyle.Selection, 2);
+            if (hovered >= 0) blocked = DrawStructureRoute(world, roadStart, hovered, structureTool == StructureTool.SkidTrail, checkPlacement: true);
         }
         if (hovered < 0) return;
         bool fits = false;
@@ -73,11 +74,14 @@ internal sealed partial class MapEditorView
             ImGui.SetTooltip(fits ? (structureTool == StructureTool.Depot ? "Telephely ide: kattints." : "Fűrészmalom ide: kattints.")
                 : structureTool == StructureTool.Depot ? "A telephelyhez 2×2 sík, száraz, szabad hely kell út mellett." : "A malomhoz 2×2 sík, száraz, szabad hely kell.");
         }
-        else ImGui.SetTooltip(roadStart < 0 ? "Kattints az út kezdőcsempéjére." : "Kattints a végcsempére · jobb gomb / Esc: befejezés");
+        else ImGui.SetTooltip(roadStart < 0 ? "Kattints az út kezdőcsempéjére."
+            : blocked >= 0 ? $"A nyomvonal akadályba ütközik a #{blocked} csempén. Válassz másik végpontot."
+            : "Kattints a végcsempére · jobb gomb / Esc: befejezés");
         if (!ImGui.IsMouseClicked(ImGuiMouseButton.Left)) return;
         if (road) {
             if (roadStart < 0) { roadStart = hovered; return; }
             if (hovered == roadStart) return;
+            if (blocked >= 0) { message = $"A nyomvonal nem építhető a #{blocked} csempén."; return; }
             scene.EditWorld(scene => scene.Roads.Add(new RoadSegment { From = roadStart, To = hovered, Surface = structureTool.ToString() }));
             int from = roadStart; roadStart = hovered; // the next click continues the road from here
             ApplyScenario(world, $"Út: #{from} → #{hovered}. Kattints tovább a folytatáshoz; jobb gomb vagy Esc: befejezés.");
@@ -87,6 +91,23 @@ internal sealed partial class MapEditorView
             ApplyScenario(world, structureTool == StructureTool.Sawmill ? "Fűrészmalom elhelyezve."
                 : scene.World.Depots.Count == 1 ? "Telephely a kezdő járműparkkal (processzor, forwarder, rönkszállító)." : "Újabb telephely.");
         }
+    }
+
+    private int DrawStructureRoute(GameWorld world, int start, int end, bool trail, bool checkPlacement)
+    {
+        var draw = ImGui.GetWindowDrawList();
+        int blocked = -1, previous = -1;
+        foreach (var step in world.Map.BuildRoadPlan(world.Map.Tiles[start], world.Map.Tiles[end])) {
+            bool valid = !checkPlacement || (trail
+                ? world.Map.IsRoadTile(step.TileId) || world.Map.CanCarrySkidTrail(step.TileId)
+                : world.Map.CanBuildRoadStep(step));
+            if (!valid && blocked < 0) blocked = step.TileId;
+            uint tint = valid ? EditorStyle.Selection : EditorStyle.U(HudTheme.Bad);
+            if (previous >= 0) draw.AddLine(TileCentre(previous), TileCentre(step.TileId), tint, 2);
+            if (!valid) draw.AddCircleFilled(TileCentre(step.TileId), Math.Max(2, mapGeometry.Cell * .25f), tint);
+            previous = step.TileId;
+        }
+        return blocked;
     }
 
     private void StructurePanel(GameWorld world)
@@ -106,7 +127,7 @@ internal sealed partial class MapEditorView
         }
         ImGui.PushTextWrapPos(0);
         EditorStyle.Text(HudTheme.Muted, structureTool is StructureTool.Macadam or StructureTool.Asphalt or StructureTool.Dirt or StructureTool.SkidTrail
-            ? "Kattints a kezdő-, majd a végcsempére; az utat a játék útkeresése vezeti. A további kattintások folytatják. Jobb gomb vagy Esc: befejezés."
+            ? "Kattints a kezdő-, majd a végcsempére. Az előnézet mutatja a nyomvonalat és az akadályokat. A további kattintások folytatják. Jobb gomb vagy Esc: befejezés."
             : "Mutass a térképre: zöld keret – ide építhető, piros – nem. Az épület helyének szabadnak kell lennie.");
         EditorStyle.Text(HudTheme.Muted, "A kezdő építmények ingyen épülnek: a játék nulla egyenleggel indul.");
         ImGui.PopTextWrapPos();

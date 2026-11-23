@@ -72,8 +72,6 @@ namespace ForesTycoon.Map
             if (riverWaterHeight <= 0f) throw new ArgumentOutOfRangeException(nameof(riverWaterHeight));
             if (nodeColumns != nodeRows)
                 throw new ArgumentException("Terrain generation currently requires a square node grid.");
-            if (!IsPowerOfTwoPlusOne(nodeColumns))
-                throw new ArgumentException("Terrain generation currently requires a 2^n + 1 node count.");
             if (maxHeight <= 0) throw new ArgumentOutOfRangeException(nameof(maxHeight));
 
             NodeColumns = nodeColumns;
@@ -90,10 +88,5 @@ namespace ForesTycoon.Map
             ForestPattern = forestPattern;
         }
 
-        private static bool IsPowerOfTwoPlusOne(int value)
-        {
-            int size = value - 1;
-            return size > 0 && (size & (size - 1)) == 0;
-        }
     }
 }

@@ -557,6 +557,7 @@ namespace ForesTycoon
             BindVehicleRoutes();
             BindWorldQueries();
             ruleProjectName = candidate.ruleProjectName; ruleProjectWorld = candidate.ruleProjectWorld;
+            SceneProblems.Clear(); SceneProblems.AddRange(candidate.SceneProblems);
             algorithmGraphs = candidate.algorithmGraphs;
             Presentation = candidate.Presentation; MachineSoundSnapshot = candidate.MachineSoundSnapshot;
             worldSpecies = candidate.worldSpecies;

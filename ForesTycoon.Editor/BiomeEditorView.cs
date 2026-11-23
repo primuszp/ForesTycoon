@@ -24,6 +24,7 @@ internal sealed class BiomeEditorView(EditorPageContext context, MapEditorView m
     internal void Draw(GameWorld world)
     {
         EditorStyle.Tabs("biome-tab", new[] { "Biomok", "Felszínanyagok" }, ref biomeTab);
+        if (!context.WorldCurrent() && ImGui.Button("Tesztvilág építése a pályából")) context.ApplyScenario(world, "");
         if (biomeTab == 1) { GroundMaterialsTab(world); return; }
         EditorStyle.BeginPanel("biome-list", new Vec2(ImGui.GetFontSize() * 15.5f, 0));
         EditorStyle.Section("Biomok");

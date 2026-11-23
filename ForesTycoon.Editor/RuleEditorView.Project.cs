@@ -8,6 +8,7 @@ namespace ForesTycoon.Editor;
 internal sealed partial class RuleEditorView
 {
     private RuleProject pendingProject;
+    private string pendingScenePath;
     private System.Collections.Generic.Dictionary<string, double> pendingTuning;
     private bool projectInitialized, useLiveObjects = true;
     private string projectPath { get => workflow.ProjectPath; set => workflow.ProjectPath = value; }
@@ -28,8 +29,13 @@ internal sealed partial class RuleEditorView
             projectInitialized = true;
             if (pendingProject != null)
             {
-                try { LoadProject(world, pendingProject); projectLoadError = null; }
+                try {
+                    LoadProject(world, pendingProject);
+                    if (pendingScenePath != null) scenePath = pendingScenePath;
+                    projectLoadError = null;
+                }
                 catch (Exception e) when (Expected(e)) { pendingProject = null; projectLoadError = e.Message; }
+                finally { pendingScenePath = null; }
             }
             if (pendingProject == null)
             {
@@ -91,6 +97,7 @@ internal sealed partial class RuleEditorView
         workflow.ResetDocument(document.Revision());
         ruleWorkspace.Reset(project);
         scenarioBuilt = false; appliedScenario = null; appliedScenarioMap = null; previewBuild = default;
+        mapEditor.ResetMapSelection();
         if (document.World != null) seedEdit = document.World.Seed;
         dynamicsEditor.ResetSelection();
         behaviors.Configure(WorldBehaviorPolicy.Hooks, DynamicsRuntime.Keys(project.Dynamics, GameWorld.RuleWorldFields), key => PreviewValue(world, key));

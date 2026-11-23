@@ -4,18 +4,17 @@ namespace ForesTycoon;
 
 internal static partial class SimulationLoader
 {
-    internal static SimulationWorld CreateProject(RuleProject project)
+    internal static SimulationWorld CreateProject(RuleProject project) => CreateProject(project, settings => new SimulationWorld(settings));
+
+    internal static TWorld CreateProject<TWorld>(RuleProject project, Func<TerrainSettings, TWorld> createWorld) where TWorld : SimulationWorld
     {
         ArgumentNullException.ThrowIfNull(project);
-        var copy = SimulationWorld.NormalizeRuleProject(project);
-        SimulationWorld.ValidateRuleProject(copy);
-        var world = copy.World == null ? new SimulationWorld(TerrainSettings.Default) : copy.World.InitialState != null ?
-            new SimulationWorld(TerrainSettings.Default.WithNodeSize(17, 42)) :
-            new SimulationWorld(SimulationWorld.ScenarioSettings(copy.World), soils: SimulationWorld.SoilModel(copy.World), responseRules: ForesTycoon.Rules.EcologyResponseProgram.FromModel(copy.Behaviors), scene: copy.World);
+        bool hasScene = project.World != null;
+        var world = createWorld(hasScene ? TerrainSettings.Default.WithNodeSize(17, 42) : TerrainSettings.Default);
         try
         {
-            if (copy.World?.InitialState != null) RestoreInitialState(world, copy.World);
-            world.InitializeProjectScene(copy);
+            if (hasScene) world.StartScenario(project.World, project);
+            else world.InitializeProjectScene(SimulationWorld.NormalizeRuleProject(project));
             return world;
         }
         catch { world.Dispose(); throw; }

@@ -84,7 +84,8 @@ internal sealed partial class RuleEditorView
         if (previewBuild.Completion.GetAwaiter().GetResult() == world.Map) {
             appliedScenario = previewBuild.Key;
             appliedScenarioMap = world.Map;
-            message = "A tesztvilág felépült.";
+            message = world.SceneProblems.Count == 0 ? "A tesztvilág felépült."
+                : $"A tesztvilág felépült, {world.SceneProblems.Count} építési hibával. {world.SceneProblems[0]}";
         } else {
             message = world.GenerationError ?? "A tesztvilág építése megszakadt.";
         }
@@ -142,7 +143,6 @@ internal sealed partial class RuleEditorView
     private bool scenarioBuilt;
     private void MapTab(GameWorld world) => mapEditor.Draw(world);
     private void CancelStroke() => mapEditor.CancelStroke();
-    private void CommitStroke(GameWorld world) => mapEditor.CommitStroke(world);
 
     internal void ShowBiomes(int index = 0, int tab = 0) => biomeEditor.Show(index, tab);
     internal void ShowMissions(int index = 0) => missionEditor.Show(index);

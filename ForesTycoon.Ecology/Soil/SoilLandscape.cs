@@ -71,6 +71,20 @@ namespace ForesTycoon.Ecology
             Profiles = new RasterField<byte>(pendingGrid, new("soil.profile", "Talajtípus", "profile-id", "soil.landscape", true), indices);
         }
 
+        internal IEnumerable<int> RestoreWork(byte[] indices)
+        {
+            CheckpointGuard.Length(indices, Grid.Count, "soil raster length");
+            foreach (byte index in indices) {
+                CheckpointGuard.Require(index < Definition.Catalog.Profiles.Length, "soil raster profile");
+                yield return 1;
+            }
+            foreach (var (tile, profile) in Definition.Overrides) {
+                CheckpointGuard.Require((uint)tile < (uint)indices.Length && indices[tile] == profile, "painted soil profile");
+                yield return 1;
+            }
+            Profiles = new(Grid, Profiles.Descriptor, indices);
+        }
+
         private static double Texture(int seed, int column, int row)
         {
             // Generator v1: smoothly interpolate independent 12-tile geological patches.

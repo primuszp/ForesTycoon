@@ -113,22 +113,12 @@ namespace ForesTycoon
         internal void StartScenario(WorldScenario scenario, RuleProject definition = null)
         {
             SimulationWork.RequireSynchronousContext();
-            // A new world starts with default rules; the project's rules and formulas carry over as one journaled change.
-            var project = definition?.Clone() ?? RuleProjectDocument;
-            project.World = RuleProject.FromJson(new RuleProject { World = scenario }.ToJson()).World;
-            ValidateRuleProject(project);
-            RequireAlgorithmRuntime(project.Algorithms);
-            if (scenario.InitialState != null) {
-                using var candidate = CreateCandidate(new TerrainMap(TerrainSettings.Default.WithNodeSize(17, 42)),
-                    EcologyTime.DefaultGameSecondsPerYear, SoilLandscapeDefinition.Default, ClimateDefinition.Default);
-                SimulationLoader.RestoreInitialState(candidate, project.World);
-                candidate.InitializeProjectScene(project);
-                if (HasPresentation) candidate.AttachPresentation();
-                Adopt(candidate);
-                return;
-            }
-            Regenerate(ScenarioSettings(scenario), SoilModel(scenario), ForesTycoon.Rules.EcologyResponseProgram.FromModel(project.Behaviors), project.World);
-            InitializeProjectScene(project);
+            EnsureAvailable(allowFaulted: true);
+            VerifyPresentationAccess();
+            ArgumentNullException.ThrowIfNull(scenario);
+            BeginGeneration(PrepareScenarioWork(scenario, definition ?? RuleProjectDocument), null);
+            while (!ContinueGeneration(256)) { }
+            if (generationFailure != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(generationFailure);
         }
 
         internal void InitializeProjectScene(RuleProject project) => WithSpecies(() => {
@@ -150,9 +140,11 @@ namespace ForesTycoon
                 ForestSpeciesBook.Apply(SpeciesEdits(scenario));
                 worldSpecies = ForestSpeciesBook.CaptureContext();
                 worldSpeciesDefinitions = scenario.Species?.ToArray();
-                var changed = new WorkResult<int[]>();
-                foreach (int unit in map.ApplyHeightTargetsWork(scenario.HeightPaint, changed, initialDefinition: scenario.InitialState == null)) yield return unit;
-                foreach (int unit in forest.ClearTerrainTilesWork(changed.Value)) yield return unit;
+                if (scenario.InitialState != null) {
+                    var changed = new WorkResult<int[]>();
+                    foreach (int unit in map.ApplyHeightTargetsWork(scenario.HeightPaint, changed)) yield return unit;
+                    foreach (int unit in forest.ClearTerrainTilesWork(changed.Value)) yield return unit;
+                }
                 foreach (int unit in forest.PaintInitialForestWork(scenario.ForestPaint.ToDictionary(p => p.Key,
                     p => p.Value.Length == 0 ? ForestSpecies.None : Enum.TryParse(p.Value, out ForestSpecies s) ? s : ForestSpecies.None),
                     preserveUnpainted: scenario.InitialState != null)) yield return unit;
@@ -178,12 +170,16 @@ namespace ForesTycoon
         {
             SceneProblems.Clear();
             if (scenario.Roads.Count + scenario.Sawmills.Count + scenario.Depots.Count == 0) yield break;
-            double expenses = Expenses; string status = Logistics?.Status;
+            string status = Logistics?.Status;
             foreach (var road in scenario.Roads.Where(r => r.Surface != "SkidTrail")) {
                 var surface = Enum.Parse<RoadPaving>(road.Surface);
-                int before = RoadCount;
-                foreach (int unit in RoadCommandWork(road.From, road.To, false, surface)) yield return unit;
-                if (RoadCount == before && !map.IsRoadTile(road.From)) SceneProblems.Add($"Az út #{road.From} → #{road.To} nem épülhetett meg (víz vagy meredek).");
+                foreach (int unit in RoadCommandWork(road.From, road.To, false, surface, startingEstate: true)) yield return unit;
+                foreach (var step in map.BuildRoadPlan(map.Tiles[road.From], map.Tiles[road.To])) {
+                    yield return 1;
+                    if (map.HasRoadStep(step) && map.GetRoadPaving(step.TileId) == surface) continue;
+                    SceneProblems.Add($"Az út #{road.From} → #{road.To} nem teljes. Első hiányzó csempe: #{step.TileId}.");
+                    break;
+                }
             }
             foreach (var trail in scenario.Roads.Where(r => r.Surface == "SkidTrail")) {
                 var changed = new WorkResult<int[]>();
@@ -200,7 +196,6 @@ namespace ForesTycoon
                 if (Logistics != null) foreach (int unit in Logistics.PlaceDepotWork(tile, placed)) yield return unit;
                 if (!placed.Value) SceneProblems.Add($"Telephely #{tile}: {Logistics?.Status ?? "nincs logisztika."}");
             }
-            Expenses = expenses;
             if (Logistics != null) Logistics.Status = status;
         }
 

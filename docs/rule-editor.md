@@ -136,14 +136,17 @@ megfelelő oldalakra.
 
 ## Pálya
 
-A világ térképe, felülnézetben. A bal oldalon választod a réteget: **Talaj**, **Domborzat**,
-**Víz**, **Talajvíz**, **Erdő**, **Utak és nyomok**, **Járhatóság**. Az első négy festhető
-(a Talajvíz, az utak és a járhatóság a szimuláció eredménye).
+A világ felülnézeti térképén a **Talaj**, **Domborzat**, **Víz** és **Erdő** réteg festhető.
+Az **Utak és épületek** réteg az induló hálózat és a telephely szerkesztésére szolgál.
+Külön rétegen látszanak a magassági övek, a biomok, a felszín, a talajvíz és a járhatóság.
+
+A **Jelenet… → Új generált pálya** külön célfájlt állít be. A [Kettős-gerinc mintapályán](mountain-scene-editor-review.md)
+a domborzat, a források, a társulások és a szállítási hálózat együtt próbálhatók ki.
 
 - **Generálás:** a pálya seedből készül; az **Új seed** és a **Generálás** új térképet ad.
   A festés megmarad.
-- **Méret:** 32–128 csempe oldalanként (a játék alapértéke 64). Méretváltáskor a festés
-  törlődik, mert a csempék újraszámozódnak.
+- **Méret:** 32, 48, 64, 96 vagy 128 csempe oldalanként. Méretváltáskor a festés, a források,
+  az utak és az épületek törlődnek a csempék újraszámozása miatt. A művelet visszavonható.
 - **Festés:** jobb oldalt választod az ecsetet és a méretét, a térképen bal gombbal húzva
   festesz. Elengedéskor a tesztvilág újraépül a pályából.
   - *Talaj:* talajtípus.
@@ -153,7 +156,9 @@ A világ térképe, felülnézetben. A bal oldalon választod a réteget: **Tala
     **Szárazföld** a vízszint fölé emel. A **Forrás** folyamatosan vizet ad a csempe
     felszínéhez (hozam mm/óra, mellette m³/óra); a **Forrás törlése** megszünteti.
     A Víz réteg a mozgó felszíni víz mélységét is mutatja, a forrásokat fehér pont jelöli.
-  - *Erdő:* kezdő erdő a választott fajból (vegyes korú, természetes állomány), vagy irtás.
+  - *Erdő:* a fajecset induló állományt, a tisztásecset üres területet készít. A kivágás faanyagot hagy a helyszínen.
+  - *Utak és épületek:* kattints az út elejére és végére. Az előnézet mutatja a nyomvonalat és a terepakadályokat.
+    Malomhoz és telephelyhez sík, üres 2×2 csempe kell, a telephelyhez útkapcsolat is.
 - **Szimuláció:** **Indítás / Szünet**, **1 óra előre**, **1 nap előre**: így látod, merre folyik
   a forrás vize, hol áll meg, hol önt ki.
 - **Csempe:** rámutatva vagy kattintva jobb oldalt látszanak a csempe rétegei: növényzet,

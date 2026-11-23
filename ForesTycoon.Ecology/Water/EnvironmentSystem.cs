@@ -21,6 +21,7 @@ namespace ForesTycoon.Ecology
         internal double HoursPerStep => StepSeconds * weather.HoursPerSecond;
         internal double Cover(int id) => (uint)id < (uint)CellCount ? vegetation[id].Cover : 0;
         private double[] springRates;
+        // Current springs enter via the rule ledger. This value is retained for older checkpoints.
         private double springReceived;
         /// <summary>Water springs add to these tiles' surface (mm per environment hour): sources of streams and rivers.</summary>
         internal IReadOnlyDictionary<int, double> Springs
@@ -35,7 +36,6 @@ namespace ForesTycoon.Ecology
                 springRates = rates;
             }
         }
-        internal double SpringReceived => springReceived;
         private EcologyResponseProgram responseRules;
         internal EcologyResponseProgram ResponseRules {
             get => responseRules;
@@ -186,11 +186,10 @@ namespace ForesTycoon.Ecology
         internal IEnumerable<int> InitializeWork()
         {
             foreach (int unit in Climate.InitializeWork()) yield return unit;
+            foreach (int unit in RefreshSoilProfilesWork()) yield return unit;
             for (int i = 0; i < CellCount; i++)
             {
                 yield return 1;
-                soils[i] = habitat.GetSoilProperties(i);
-                soils[i].Validate();
                 soil[i] = Math.Clamp(45 + 100 * habitat.GetMoisture(i), 0, soils[i].Saturation);
                 deep[i] = 20;
             }
@@ -198,6 +197,15 @@ namespace ForesTycoon.Ecology
             for (int i = 0; i < CellCount; i++) { total += canopy[i] + surface[i] + soil[i] + deep[i] + snow[i]; yield return 1; }
             InitialWater = total;
             foreach (int unit in SummarizeWork()) yield return unit;
+        }
+
+        private IEnumerable<int> RefreshSoilProfilesWork()
+        {
+            for (int i = 0; i < CellCount; i++) {
+                soils[i] = habitat.GetSoilProperties(i);
+                soils[i].Validate();
+                yield return 1;
+            }
         }
 
         internal void ForceWeather(WeatherPreset preset, int peak = -1, int duration = -1)

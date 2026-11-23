@@ -30,7 +30,7 @@ namespace ForesTycoon
                 var forest = new ForestSystem(terrain.Map, ForestVisualFixture.CreateStands());
                 var settings = new GraphicsSettings { Quality = GraphicsQuality.High, TimeOfDay = false };
                 using var scene = new TerrainRenderer(terrain, new VehicleSystem(), new WorldEffectSystem(), forest, settings);
-                foreach (float progress in scene.PrepareMapGeometry()) { }
+                foreach (float progress in scene.PrepareMapGeometry(completeForestCache: true)) { }
                 var model = AnimatedGlbModel.Load(Path.Combine(AppContext.BaseDirectory, "Assets", "Vehicles", "log-truck.glb"));
                 using var renderer = new AnimatedModelRenderer(model);
                 var pose = model.CreatePose(); pose.Evaluate(null, 0);

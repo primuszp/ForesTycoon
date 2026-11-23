@@ -15,11 +15,6 @@ internal sealed partial class EditorSceneCommands(EditorDocument document)
         document.History.Execute("pálya módosítása", () => { change(target); document.Invalidate(); });
     }
     internal void EditWorld(Action<WorldScenario> change) => Edit(World, change);
-    internal void Replace(WorldScenario scenario)
-        => document.History.Execute("pálya cseréje", () => {
-            document.World = new RuleProject { World = scenario }.Clone().World;
-            document.Invalidate();
-        });
     internal void SetTuning(string key, double value)
         => document.History.Execute("szám módosítása", () => document.Tuning.Set(key, value));
 

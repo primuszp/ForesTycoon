@@ -112,7 +112,13 @@ internal sealed class EditorDocumentHistory
     {
         var p = RuleProject.FromJson(scenarioJson);
         if (p.World == null) return p.ToJson();
-        p.World.Missions = new(); p.World.ElevationZones = new(); p.World.Biomes = new(); p.World.GroundMaterials = new(); p.World.ProfileScale = 0;
+        p.World.Name = ""; p.World.Missions = new(); p.World.Springs = new();
+        p.World.GroundMaterials = new(); p.World.ProfileScale = 0;
+        foreach (var zone in p.World.ElevationZones) { zone.Name = ""; zone.Color = ""; }
+        foreach (var biome in p.World.Biomes) {
+            biome.Name = ""; biome.Color = ""; biome.Description = "";
+            biome.DryGround = biome.WetGround = biome.SteepGround = "";
+        }
         foreach (var soil in p.World.SoilTypes) soil.Horizons = new();
         return p.ToJson();
     }

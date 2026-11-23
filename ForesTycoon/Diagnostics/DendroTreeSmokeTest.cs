@@ -74,7 +74,7 @@ namespace ForesTycoon
                 visuals.BeginFrame();
                 using var terrain = new Terrain(TerrainSettings.Default.WithNodeSize(17, 42), (_, _) => 4);
                 bool[] shadow = null;
-                visuals.RenderShadows(terrain, () => {
+                visuals.RenderShadows(terrain, _ => {
                     // Cancel only the light-camera projection to test the same UV raster.
                     RenderDevice.SetModel(visuals.ShadowCamera.Inverted());
                     material.Use(); quad.DrawArray(false);
@@ -187,7 +187,7 @@ namespace ForesTycoon
                         settings.Enhanced = true; settings.Lighting = true; visuals.BeginFrame();
                         quad.ForestCurrentYear = shadowYear;
                         int shadowPixels = -1;
-                        visuals.RenderShadows(terrain, () => {
+                        visuals.RenderShadows(terrain, _ => {
                             RenderDevice.SetModel(visuals.ShadowCamera.Inverted());
                             material.Use(); quad.DrawArray(false);
                             GL.GetInteger(GetPName.DrawFramebufferBinding, out int framebuffer);

@@ -24,6 +24,7 @@ namespace ForesTycoon
         private readonly Action<string, bool> previous = RenderPipeline.PassProbe;
         internal RenderPassProfiler() { owner.VerifyAccess(); RenderPipeline.PassProbe = Probe; }
         internal void BeginFrame() { VerifyAccess(); frame.Clear(); }
+        internal void Mark(string name, bool begin) => Probe(name, begin);
         internal int[] CaptureQueries() {
             var result = new int[passes.Count * 2]; int i = 0;
             foreach (var pass in passes.Values) { result[i++] = pass.StartQuery; result[i++] = pass.EndQuery; }

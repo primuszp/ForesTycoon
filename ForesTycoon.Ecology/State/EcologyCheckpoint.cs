@@ -61,6 +61,7 @@ namespace ForesTycoon.Ecology
                 foreach (double value in state.Fields[f]) { yield return 1; CheckpointGuard.NonNegative(value, "water raster value"); }
             }
             if (state.SupplyIntegral != null) CheckpointGuard.Length(state.SupplyIntegral, CellCount, "soil supply integral length");
+            foreach (int unit in RefreshSoilProfilesWork()) yield return unit;
             for (int id = 0; id < CellCount; id++)
             {
                 yield return 1;
@@ -72,9 +73,10 @@ namespace ForesTycoon.Ecology
             CheckpointGuard.Require(state.Remainder >= -1e-9 && state.Remainder < StepSeconds && double.IsFinite(state.Remainder), "water remainder");
             foreach (double v in new[] { state.MonthSeconds, state.RadiationIntegral, state.Evaporated, state.Transpired,
                 state.Outflow, state.InitialWater }) { yield return 1; CheckpointGuard.NonNegative(v, "water scalar"); }
+            // The initial stores depended on the original terrain and can differ from the
+            // freshly allocated terrain. The saved baseline is checked against the full ledger below.
             if (state.InitialWaterBeforeSoilEdit.HasValue)
-                CheckpointGuard.NonNegative(state.InitialWaterBeforeSoilEdit.Value, "initial water before soil edit");
-            CheckpointGuard.Require(state.InitialWater == (state.InitialWaterBeforeSoilEdit ?? InitialWater), "initial water/model mismatch");
+                CheckpointGuard.Require(state.InitialWater == state.InitialWaterBeforeSoilEdit.Value, "initial water before soil edit");
             initialWaterBeforeSoilEdit = state.InitialWaterBeforeSoilEdit;
             InitialWater = state.InitialWater;
             CheckpointGuard.Length(state.Vegetation, CellCount, "vegetation water inputs");
