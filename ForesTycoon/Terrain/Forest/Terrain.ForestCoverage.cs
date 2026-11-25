@@ -14,10 +14,12 @@ namespace ForesTycoon
             float radiusScale = TreeMetresToWorld * (.74f + .26f * TreeArchitecture.LightResponse(tree.Species, bands.Light01));
             var crownForm = DendroCrownMesh.For(tree.Species, phase);
             whorled = DendroCrownMesh.Whorled(crownForm);
-            float cone = crownForm switch {
+            // A negative profile gives the shared crown its lobe strength. Reuse the
+            // detailed model's species/age roundness while keeping the same instance layout.
+            float profile = crownForm switch {
                 CrownForm.Spruce or CrownForm.Fir or CrownForm.Larch or CrownForm.YoungPine or CrownForm.Juniper => 1,
                 CrownForm.Pine => .15f,
-                _ => 0
+                _ => -1 + .65f * LobeCrownMesh.For(tree.Species, phase).GetValueOrDefault().Roundness
             };
             float pigment = ForestTreeVariation.Range(spec.Seed, 601, .90f, 1.08f);
             uint wood = TreeForm.Pack(traits.Bark, tree.Species, pigment);
@@ -25,7 +27,7 @@ namespace ForesTycoon
                 | (uint)TreeScale.CrownSpeciesCode(tree.Species) << 24;
             var season = ForestSeasonRenderState.Create(spec);
             return new(new(x, y, z, spec.Size.CrownRadius * radiusScale),
-                new(spec.Size.Height * TreeMetresToWorld, fraction, spec.Size.Diameter * .5f * TreeMetresToWorld, cone),
+                new(spec.Size.Height * TreeMetresToWorld, fraction, spec.Size.Diameter * .5f * TreeMetresToWorld, profile),
                 new(tree.AnnualGrowth.CrownRadius * radiusScale, tree.AnnualGrowth.Height * TreeMetresToWorld,
                     tree.AnnualGrowth.Diameter * .5f * TreeMetresToWorld, tree.Health),
                 Unpack(crown), Unpack(wood), season.Tint, season.Bounds);

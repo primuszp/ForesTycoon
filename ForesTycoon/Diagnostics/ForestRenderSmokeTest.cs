@@ -29,7 +29,7 @@ namespace ForesTycoon
             {
                 CheckZoomTransitions();
                 CheckResidentForestCoverage();
-                CheckWhorledSilhouette();
+                CheckResidentCrownSilhouettes();
                 CheckAdaptiveForestQuality();
                 if (lodOnly) return;
                 terrain = new Terrain(TerrainSettings.Default.WithNodeSize(33, 42));
@@ -263,30 +263,49 @@ namespace ForesTycoon
             }
         }
 
-        private static void CheckWhorledSilhouette()
+        private static void CheckResidentCrownSilhouettes()
         {
             const int size = 256;
             using var coverage = SceneRenderBackends.Current.CreateForestCoverageBuffer();
-            coverage.SetData(new ForestCoverageInstance[] {
-                new(new(0, 0, 0, 1), new(4, 1, .1f, 1), new(0, 0, 0, 1),
-                    new(0, .7f, 0, 1), default, new(1, 1, 1, -1), default)
-            });
+            var cone = new ForestCoverageInstance(new(0, 0, 0, 1), new(4, 1, .1f, 1), new(0, 0, 0, 1),
+                new(0, .7f, 0, 1), default, new(1, 1, 1, -1), default);
+            var smooth = cone with { Form = new(4, 1, .1f, 0) };
+            var lobed = cone with {
+                Form = new(4, 1, .1f, -.7f), SeasonTint = new(1.2f, .6f, .25f, .10f),
+                SeasonBounds = new(.05f, .26f, .5f, .59f)
+            };
+            coverage.SetData(new[] { cone, smooth, lobed });
             RenderDevice.InitializeFrameState();
             RenderDevice.SetViewport(size, size);
             RenderDevice.SetCamera(Matrix4.CreateRotationX(-MathF.PI / 2) * Matrix4.CreateOrthographicOffCenter(-2, 2, 0, 4, -8, 8));
             var pixels = new byte[size * size * 4];
-            var standard = Measure(ForestCoveragePart.Crown);
-            var whorled = Measure(ForestCoveragePart.WhorledCrown);
+            Capture(0, ForestCoveragePart.Crown);
+            var standard = (Gap: WidthAt(.53f), Upper: WidthAt(.61f));
+            Capture(0, ForestCoveragePart.WhorledCrown);
+            var whorled = (Gap: WidthAt(.53f), Upper: WidthAt(.61f));
             Require(standard.Upper < standard.Gap && whorled.Upper > whorled.Gap * 1.35f,
                 "The resident spruce crown did not form a distinct upper whorl at the same triangle count.");
+            Capture(1, ForestCoveragePart.Crown, .30f);
+            var smoothPixels = (byte[])pixels.Clone();
+            Capture(2, ForestCoveragePart.Crown, .30f);
+            int smoothArea = 0, lobedArea = 0, silhouetteChange = 0;
+            for (int i = 1; i < pixels.Length; i += 4) {
+                bool wasCovered = smoothPixels[i] > 20, isCovered = pixels[i] > 20;
+                if (wasCovered) smoothArea++;
+                if (isCovered) lobedArea++;
+                if (wasCovered != isCovered) silhouetteChange++;
+            }
+            Require(silhouetteChange > smoothArea * .04f && lobedArea > smoothArea * .85f && lobedArea < smoothArea * 1.15f,
+                "The shared broadleaf crown should change the silhouette while keeping a similar projected canopy area.");
+            Capture(2, ForestCoveragePart.Crown, .85f);
+            Require(WidthAt(.5f) == 0, "The resident broadleaf model retained summer foliage in winter.");
 
-            (int Gap, int Upper) Measure(ForestCoveragePart part)
+            void Capture(int first, ForestCoveragePart part, float year = 0)
             {
                 RenderDevice.Clear(new(0, 0, 0, 1));
                 RenderDevice.UseGeometryShader();
-                coverage.Draw(0, 1, part, 0, 0);
+                coverage.Draw(first, 1, part, 0, year);
                 RenderDevice.ReadPixels(0, 0, size, size, pixels);
-                return (WidthAt(.53f), WidthAt(.61f));
             }
 
             int WidthAt(float relativeHeight)
@@ -312,6 +331,7 @@ namespace ForesTycoon
                 * Matrix4.CreateRotationX(-MathF.PI / 4) * Matrix4.CreateOrthographic(24, 24, -100, 100);
             ulong frame = 0;
 
+            long normalCacheBudget = terrain.ForestCacheBudgetBytes;
             terrain.ForestCacheBudgetBytes = 1;
             terrain.SynchronousForestBuilds = true;
             byte[] coldFar = Capture(1);
@@ -328,10 +348,20 @@ namespace ForesTycoon
             for (int i = 0; i < 20; i++) Present(CloseScale, true);
             Require(terrain.ForestLodFadeCount == 0 && terrain.ReadyVisibleForestChunks(ForestLod.Near) == terrain.VisibleChunkCount,
                 "Cache pressure discarded a model before the transition could finish.");
+            terrain.ForestCacheBudgetBytes = normalCacheBudget;
 
             foreach (bool enhanced in new[] { false, true }) {
                 graphics.Enhanced = enhanced;
                 foreach (var _ in scene.PrepareMapGeometry(completeForestCache: true)) { }
+                CheckCachedFade("explicit");
+                foreach (var _ in terrain.PrepareMapGeometry(forest, graphics)) { }
+                foreach (var _ in terrain.PrepareForestView(forest, graphics, View(CloseScale, false))) { }
+                CheckCachedFade("resident");
+            }
+            Require(GL.GetError() == ErrorCode.NoError, "Zoom LOD shader reported an OpenGL error.");
+
+            void CheckCachedFade(string representation)
+            {
                 byte[] near = Capture(CloseScale);
                 byte[] far = Capture(1);
                 long hardCut = Difference(far, near);
@@ -357,9 +387,11 @@ namespace ForesTycoon
                 for (int i = 0; i < 16; i++) Present(1, true);
                 Require(far.AsSpan().SequenceEqual(Capture(1, true)) && terrain.ForestLodFadeCount == 0,
                     "A zoom reversal did not return to the original LOD.");
-                Console.WriteLine($"Zoom LOD ({(enhanced ? "textured/shadows" : "plain")}): worst interframe RGB difference {maxDelta * 100.0 / hardCut:F1}% of a hard cut.");
+                Console.WriteLine($"Zoom LOD ({representation}, {(graphics.Enhanced ? "textured/shadows" : "plain")}): worst interframe RGB difference {maxDelta * 100.0 / hardCut:F1}% of a hard cut.");
             }
-            Require(GL.GetError() == ErrorCode.NoError, "Zoom LOD shader reported an OpenGL error.");
+
+            RenderContext View(float scale, bool timed) => new(0, timed ? 1f / 60 : 0, timed ? ++frame : 0, 0, 0, 0,
+                false, false, 1, -45, -45, -10000, -10000, 10000, 10000, scale);
 
             void Present(float scale, bool timed)
             {
@@ -367,9 +399,7 @@ namespace ForesTycoon
                 RenderDevice.SetViewport(256, 256);
                 RenderDevice.SetCamera(camera);
                 RenderDevice.Clear(new Vector4(0, 0, 0, 1));
-                var context = new RenderContext(0, timed ? 1f / 60 : 0, timed ? ++frame : 0, 0, 0, 0,
-                    false, false, 1, -45, -45, -10000, -10000, 10000, 10000, scale);
-                scene.Draw(context);
+                scene.Draw(View(scale, timed));
                 Require(RenderDevice.LodRange == new Vector2(0, 1), "Forest coverage leaked to later passes.");
             }
 

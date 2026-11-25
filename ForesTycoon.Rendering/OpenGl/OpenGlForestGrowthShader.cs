@@ -118,7 +118,6 @@ vec3 coveragePoint(){
         float z = height * (1.0 - coverage_form.y * (1.0 - t));
         return coverage_root_radius.xyz + vec3(coverageRadial() * radius, z);
     }
-    float cone = coverage_form.w;
     bool bottom = gl_VertexID == 0, top = gl_VertexID == 13, lower = gl_VertexID < 7;
     if(forest_coverage == 2) {
         float bole = max(0.004, coverage_form.z + coverage_growth.z * forest_elapsed);
@@ -127,10 +126,18 @@ vec3 coveragePoint(){
         return coverage_root_radius.xyz + vec3(coverageRadial() * radius, z);
     }
     float reach = max(0.01, coverage_root_radius.w + coverage_growth.x * forest_elapsed);
-    float ringHeight = bottom ? 0.0 : (top ? 1.0 : (lower ? mix(0.25, 0.13, cone) : 0.69));
-    float ringRadius = reach * (lower ? mix(0.94, 1.11, cone) : mix(0.96, 0.40, cone));
+    float profile = coverage_form.w;
+    float cone = max(0.0, profile);
+    float broadleaf = max(0.0, -profile);
+    // Alternate the leaf masses on the original six spokes. With no lobes
+    // the same expressions describe the existing conifer shadow and pine shell.
+    float lobe = (float(gl_VertexID & 1) - 0.5) * broadleaf;
+    float ringHeight = lower ? mix(0.25, 0.13, cone) - 0.16 * lobe : 0.69 + 0.22 * lobe;
+    float ringRadius = lower ? mix(0.94, 1.11, cone) + 0.18 * lobe
+        : mix(0.96, 0.40, cone) - 0.11 * broadleaf + 0.18 * lobe;
+    ringHeight = bottom ? 0.0 : (top ? 1.0 : ringHeight);
     float z = height * (1.0 - coverage_form.y * (1.0 - ringHeight));
-    return coverage_root_radius.xyz + vec3(coverageRadial() * ringRadius, z);
+    return coverage_root_radius.xyz + vec3(coverageRadial() * (reach * ringRadius), z);
 }
 vec3 forestPoint(vec3 p){
     if(forest_coverage != 0) return coveragePoint();
